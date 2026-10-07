@@ -2,6 +2,7 @@
 
 import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
+import { dayEnd } from './days.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -19,12 +20,11 @@ export function cardLevel(state) {
   return state.stability >= 21 ? 'mature' : 'young';
 }
 
-const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); };
 
 // Count cards, due cards, new cards and mastery levels for one deck.
 function summarize(cards, statesById) {
   const s = { total: cards.length, due: 0, new: 0, learning: 0, young: 0, mature: 0 };
-  const cutoff = endOfToday();
+  const cutoff = dayEnd();   // a study day ends at 4am, like Anki
   for (const c of cards) {
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
@@ -113,7 +113,8 @@ export async function renderDeck(el, deckId) {
       <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1></div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
-        <a class="btn primary small" href="#/import/${esc(deck.id)}">+ Add cards</a>
+        <a class="btn ghost small" href="#/import/${esc(deck.id)}">+ Add cards</a>
+        ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
     <div class="card section" style="border-left:6px solid ${esc(deck.color)}">
