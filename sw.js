@@ -5,7 +5,7 @@
 //   (their addresses include a pinned version number, so they never change).
 //
 // When you change the list of files below, bump the version in CACHE so phones throw the old copy away.
-const CACHE = 'study-sprint-v5';
+const CACHE = 'study-sprint-v6';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/import.js', 'js/import-screen.js', 'js/match.js',
