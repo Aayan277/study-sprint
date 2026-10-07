@@ -1,0 +1,156 @@
+// Storage for the whole app, using IndexedDB (a database built into every browser).
+// It can hold far more than localStorage, so big decks are fine.
+//
+// The database has 5 "stores" (think of them as tables):
+//   decks       one row per deck            { id, name, color, created, course }
+//   cards       one row per card            { id, deckId, front, back, tags, created }
+//   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview }
+//   reviewLog   one row per answer          { id (auto), cardId, timestamp, source, mode, correct, ms, rating }
+//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'sumi', mode: 'auto' }
+//
+// Everything here returns a Promise, so callers use `await`.
+
+const DB_NAME = 'study-sprint';
+const DB_VERSION = 1;
+
+export const DEFAULT_SETTINGS = {
+  theme: { skin: 'sumi', mode: 'auto' }, // mode: 'auto' follows the phone, or 'light' / 'dark'
+  targetRetention: 0.9,
+  newPerDay: 20,
+  timer: 8,          // seconds per question in Play
+  seeded: false      // true once the sample deck has been added on first open
+};
+
+let dbPromise = null;
+
+// Open (and on first run, create) the database. Only happens once per page load.
+export function openDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    // Runs only when the database is new or DB_VERSION goes up. This is where tables are created.
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('decks')) db.createObjectStore('decks', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('cards')) {
+        const cards = db.createObjectStore('cards', { keyPath: 'id' });
+        cards.createIndex('deckId', 'deckId');
+      }
+      if (!db.objectStoreNames.contains('cardStates')) {
+        const st = db.createObjectStore('cardStates', { keyPath: 'cardId' });
+        st.createIndex('due', 'due');
+      }
+      if (!db.objectStoreNames.contains('reviewLog')) {
+        const log = db.createObjectStore('reviewLog', { keyPath: 'id', autoIncrement: true });
+        log.createIndex('cardId', 'cardId');
+        log.createIndex('timestamp', 'timestamp');
+      }
+      if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error('Close other Study Sprint tabs and reload.'));
+  });
+  return dbPromise;
+}
+
+// Turn an IndexedDB request into a Promise.
+const done = req => new Promise((resolve, reject) => {
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+// Resolves when a whole transaction has been saved to disk.
+const finished = tx => new Promise((resolve, reject) => {
+  tx.oncomplete = () => resolve();
+  tx.onerror = () => reject(tx.error);
+  tx.onabort = () => reject(tx.error || new Error('Save was cancelled'));
+});
+
+async function store(name, mode = 'readonly') {
+  const db = await openDB();
+  return db.transaction(name, mode).objectStore(name);
+}
+
+// ---------- generic helpers ----------
+export async function getAll(name) { return done((await store(name)).getAll()); }
+export async function get(name, key) { return done((await store(name)).get(key)); }
+export async function getAllByIndex(name, index, value) {
+  return done((await store(name)).index(index).getAll(value));
+}
+export async function put(name, value) { return done((await store(name, 'readwrite')).put(value)); }
+
+// Save many rows in one go (much faster than one at a time, and all-or-nothing).
+export async function putMany(name, values) {
+  const db = await openDB();
+  const tx = db.transaction(name, 'readwrite');
+  const os = tx.objectStore(name);
+  values.forEach(v => os.put(v));
+  return finished(tx);
+}
+
+// ---------- ids ----------
+export function newId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
+// ---------- decks ----------
+export const getDecks = () => getAll('decks');
+export const getDeck = id => get('decks', id);
+export const saveDeck = deck => put('decks', deck);
+export const getCardsInDeck = deckId => getAllByIndex('cards', 'deckId', deckId);
+
+// Create a deck and (optionally) its cards in a single save.
+export async function addDeckWithCards(deck, cards = []) {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards'], 'readwrite');
+  tx.objectStore('decks').put(deck);
+  const cs = tx.objectStore('cards');
+  cards.forEach(c => cs.put(c));
+  return finished(tx);
+}
+
+// Delete a deck plus everything that belongs to it: its cards, their schedules and their review history.
+// All in one transaction, so it can't half-finish.
+export async function deleteDeck(deckId) {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog'], 'readwrite');
+  const cards = tx.objectStore('cards');
+  const states = tx.objectStore('cardStates');
+  const logIndex = tx.objectStore('reviewLog').index('cardId');
+  tx.objectStore('decks').delete(deckId);
+  cards.index('deckId').getAllKeys(deckId).onsuccess = e => {
+    for (const cardId of e.target.result) {
+      cards.delete(cardId);
+      states.delete(cardId);
+      // Walk every log row for this card and delete it.
+      logIndex.openCursor(cardId).onsuccess = ev => {
+        const cur = ev.target.result;
+        if (cur) { cur.delete(); cur.continue(); }
+      };
+    }
+  };
+  return finished(tx);
+}
+
+// ---------- settings ----------
+// Returns every setting, filling in defaults for anything never saved.
+export async function getSettings() {
+  const os = await store('settings');
+  const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
+  const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+  return { ...DEFAULT_SETTINGS, ...saved };
+}
+// The settings store keeps its key outside the value, so the key is passed separately.
+export async function setSetting(key, value) {
+  return done((await store('settings', 'readwrite')).put(value, key));
+}
+
+// ---------- wipe everything ----------
+export async function resetAll() {
+  const db = await openDB();
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
+  const tx = db.transaction(names, 'readwrite');
+  names.forEach(n => tx.objectStore(n).clear());
+  return finished(tx);
+}
