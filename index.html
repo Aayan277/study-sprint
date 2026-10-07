@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Study Sprint</title>
+<meta name="description" content="Flashcards for university courses: spaced repetition plus timed game rounds.">
+<meta name="theme-color" content="#EEF0F4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Study Sprint">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script>
+  // Apply the saved theme before anything is drawn, so there's no flash of the wrong colors.
+  try {
+    var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}');
+    if (t.skin && t.skin !== 'sumi') document.documentElement.setAttribute('data-skin', t.skin);
+    if (t.mode === 'light' || t.mode === 'dark') document.documentElement.setAttribute('data-theme', t.mode);
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@400;600;900&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#/decks"><span class="brand-jp" lang="ja">学</span> Study Sprint</a>
+    <a class="icon-btn" href="#/settings" data-tab="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </a>
+  </div>
+</header>
+
+<!-- Each screen is drawn into here by js/app.js -->
+<main id="screen" aria-live="polite"></main>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-in">
+    <a class="tab" href="#/review" data-tab="review">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/><path d="M7 13l2.5 2.5L14 11"/></svg>Review</a>
+    <a class="tab" href="#/play" data-tab="play">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Play</a>
+    <a class="tab" href="#/decks" data-tab="decks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>Decks</a>
+    <a class="tab" href="#/stats" data-tab="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</a>
+  </div>
+</nav>
+
+<dialog class="sheet" id="sheet"></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>
