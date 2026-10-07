@@ -45,8 +45,10 @@
 html,body{margin:0}
 [hidden]{display:none!important}
 /* touch-action: manipulation turns off double-tap-to-zoom (so quick taps on the card and buttons
-   don't zoom the page) while pinch-to-zoom still works. */
-html{background:var(--paper);-webkit-text-size-adjust:100%;touch-action:manipulation}
+   don't zoom the page) while pinch-to-zoom and scrolling still work. iPhone doesn't pass it down
+   from the page to the text inside buttons, so it's set on every element. */
+html{background:var(--paper);-webkit-text-size-adjust:100%}
+*,*::before,*::after{touch-action:manipulation}
 body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--muted)}

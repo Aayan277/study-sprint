@@ -11,7 +11,7 @@ import { SAMPLE_DECK } from './sample.js';
 import { $, esc, toast, openSheet, closeSheet, initSheet } from './ui.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.3.1 · Milestone 3';
+const APP_VERSION = '0.3.2 · Milestone 3';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
