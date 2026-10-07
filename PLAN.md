@@ -168,3 +168,4 @@ Theme picker, target retention, new cards per day, default timer, export or impo
 - Anki .apkg import
 - Images and audio on cards
 - Sharing decks with friends by link
+- AI-made wrong answers for Play: have the "Make cards with Claude" prompt also write 2–3 believable wrong answers per card (e.g. "operant conditioning" as a trap for "classical conditioning"), stored with the card and used as multiple-choice options, so definition-style decks get exam-like distractors instead of other cards' unrelated backs
