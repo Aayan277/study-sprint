@@ -1,0 +1,8 @@
+{
+  "name": "study-sprint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/import.test.js"
+  }
+}

@@ -60,7 +60,10 @@ export async function renderLibrary(el) {
   el.innerHTML = `
     <div class="screen-head">
       <div><span class="eyebrow mono">LIBRARY</span><h1>Decks</h1></div>
-      <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
+      <div class="head-actions">
+        <a class="btn ghost small" href="#/import">Import</a>
+        <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
+      </div>
     </div>
     <div class="summary">
       <div><div class="v">${sum('due')}</div><div class="l">Due today</div></div>
@@ -108,7 +111,10 @@ export async function renderDeck(el, deckId) {
     <button class="back" type="button" id="back">‹ Decks</button>
     <div class="screen-head">
       <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1></div>
-      <button class="btn ghost small" type="button" id="editDeck">Edit</button>
+      <div class="head-actions">
+        <button class="btn ghost small" type="button" id="editDeck">Edit</button>
+        <a class="btn primary small" href="#/import/${esc(deck.id)}">+ Add cards</a>
+      </div>
     </div>
     <div class="card section" style="border-left:6px solid ${esc(deck.color)}">
       <div class="deck-counts" style="margin-top:0">
@@ -127,7 +133,7 @@ export async function renderDeck(el, deckId) {
     <h2>Cards</h2>
     ${cards.length
       ? `<div class="clist">${cards.map(c => `<div class="citem"><div class="f">${esc(c.front)}</div><div class="b">${esc(c.back)}</div></div>`).join('')}</div>`
-      : `<div class="empty"><b>This deck is empty.</b><br>Importing cards (paste, CSV, Excel, Google Sheets) is coming in the next update.</div>`}
+      : `<div class="empty"><b>This deck is empty.</b><br>Paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
   `;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
