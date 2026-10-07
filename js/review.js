@@ -308,21 +308,6 @@ async function finish(el) {
   $('undoLast')?.addEventListener('click', () => undo(el));
 }
 
-// ---------- stop iPhone double-tap zoom ----------
-// Rating redraws the screen, so two quick taps (card, then a rating button) land on different
-// elements and Safari can treat them as a double-tap and zoom. If a second tap in the review area
-// comes within 350ms of the first, cancel the browser's handling (which cancels the zoom) and press
-// the button ourselves.
-let lastTap = 0;
-document.addEventListener('touchend', e => {
-  const zone = e.target.closest?.('.flash, .ratebar, .rv-head');
-  if (zone && e.timeStamp - lastTap < 350 && e.cancelable) {
-    e.preventDefault();
-    e.target.closest('button, [role="button"]')?.click();
-  }
-  lastTap = zone ? e.timeStamp : 0;
-}, { passive: false });
-
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
 document.addEventListener('keydown', e => {

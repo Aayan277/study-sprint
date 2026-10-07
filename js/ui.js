@@ -35,5 +35,23 @@ export function initSheet() {
   d.addEventListener('click', e => { if (e.target === d) closeSheet(); });
 }
 
+// Stop iPhone double-tap zoom during Review and Play.
+// Answering redraws the screen, so two quick taps (e.g. the card, then a button) land on different
+// elements and Safari can treat them as a double-tap and zoom. If a second tap in one of these areas
+// comes within 350ms of the first, cancel the browser's handling (which cancels the zoom) and press
+// the button ourselves.
+const TAP_ZONES = '.flash, .ratebar, .rv-head, .options, .feedback, .hud';
+export function initTapGuard() {
+  let lastTap = 0;
+  document.addEventListener('touchend', e => {
+    const zone = e.target.closest?.(TAP_ZONES);
+    if (zone && e.timeStamp - lastTap < 350 && e.cancelable) {
+      e.preventDefault();
+      e.target.closest('button, [role="button"]')?.click();
+    }
+    lastTap = zone ? e.timeStamp : 0;
+  }, { passive: false });
+}
+
 // "1 card" / "3 cards"
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

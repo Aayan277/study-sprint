@@ -5,11 +5,11 @@
 //   (their addresses include a pinned version number, so they never change).
 //
 // When you change the list of files below, bump the version in CACHE so phones throw the old copy away.
-const CACHE = 'study-sprint-v6';
+const CACHE = 'study-sprint-v8';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
-  'js/app.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/import.js', 'js/import-screen.js', 'js/match.js',
-  'js/queue.js', 'js/review.js', 'js/sample.js', 'js/srs.js', 'js/themes.js', 'js/ui.js',
+  'js/app.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/match.js',
+  'js/play.js', 'js/queue.js', 'js/review.js', 'js/sample.js', 'js/srs.js', 'js/themes.js', 'js/ui.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
 // The scheduling library, saved at install so reviews work offline from the first launch.
@@ -43,8 +43,11 @@ self.addEventListener('fetch', e => {
   };
 
   if (url.origin === location.origin) {
+    // cache: 'no-cache' makes the browser check GitHub for a newer file every time instead of reusing
+    // its own copy (GitHub lets browsers keep copies for 10 minutes, which delayed updates).
+    const fresh = new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' });
     e.respondWith(
-      fetch(req).then(save).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
+      fetch(fresh).then(save).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
     );
   } else if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
     e.respondWith(caches.match(req).then(r => r || fetch(req).then(save)));
