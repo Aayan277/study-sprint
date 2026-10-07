@@ -12,7 +12,7 @@ import { $, esc, toast, openSheet, closeSheet, initSheet, initTapGuard } from '.
 import { renderPlay } from './play.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.4 · Milestone 4';
+const APP_VERSION = '0.5 · Milestone 5';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
