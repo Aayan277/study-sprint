@@ -136,6 +136,11 @@ export async function deleteDeck(deckId) {
 }
 
 // ---------- reviews ----------
+// Counts schedule changes made while the app is open, so a paused Review session can tell
+// whether Play changed any cards behind its back (and start fresh instead of resuming).
+let scheduleChanges = 0;
+export const scheduleVersion = () => scheduleChanges;
+
 // Save a card's new schedule and its review-log row together. Returns the log row's id (for undo).
 export async function saveReview(state, log) {
   const db = await openDB();
@@ -143,7 +148,13 @@ export async function saveReview(state, log) {
   tx.objectStore('cardStates').put(state);
   const req = tx.objectStore('reviewLog').add(log);
   await finished(tx);
+  scheduleChanges++;
   return req.result;
+}
+
+// Save a review-log row without changing any schedule (e.g. a Play answer on a card that isn't due).
+export async function addLog(log) {
+  return done((await store('reviewLog', 'readwrite')).add(log));
 }
 
 // Undo a review: put the old schedule back (or remove it if the card was new) and delete the log row.
@@ -153,7 +164,8 @@ export async function undoReview(cardId, prevState, logId) {
   if (prevState) tx.objectStore('cardStates').put(prevState);
   else tx.objectStore('cardStates').delete(cardId);
   tx.objectStore('reviewLog').delete(logId);
-  return finished(tx);
+  await finished(tx);
+  scheduleChanges++;
 }
 
 // Every review-log row since a moment in time (e.g. since the start of today).

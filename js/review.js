@@ -41,7 +41,8 @@ function countFor(data, deckIds) {
 // ---------- 1. setup ----------
 export async function renderReview(el, deckId) {
   // Coming back to a session that's still going: carry on where you were.
-  if (R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId)) return renderSession(el);
+  // (Unless Play changed some schedules meanwhile: then start fresh so no card is graded twice.)
+  if (R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId) && R.version === db.scheduleVersion()) return renderSession(el);
 
   const data = await loadAll();
   const allIds = data.decks.map(d => d.id);
@@ -127,7 +128,8 @@ function start(el, data, cards, typing, deckId) {
     current: null, flipped: false, typed: null, suggest: null,
     shownAt: 0, answerMs: 0, busy: false,
     stats: { reviewed: 0, again: 0, spent: 0, started: Date.now() },
-    undo: []
+    undo: [],
+    version: db.scheduleVersion()
   };
   nextCard(el);
 }
@@ -238,6 +240,7 @@ async function answer(el, rating) {
   };
   try {
     const logId = await db.saveReview(next, log);
+    R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
@@ -260,6 +263,7 @@ async function undo(el) {
   try {
     const id = u.item.card.id;
     await db.undoReview(id, u.prev, u.logId);
+    R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
     if (u.requeued) {
       const i = R.waiting.findIndex(w => w.card.id === id);

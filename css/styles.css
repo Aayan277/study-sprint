@@ -276,6 +276,8 @@ dialog.sheet::backdrop{background:rgba(10,12,18,.5)}
 .stats4 .v{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:1.4rem;font-weight:600}
 .stats4 .l{font-size:.75rem;color:var(--muted)}
 .res-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.sched-note{margin:0 0 18px;padding:12px 14px;border:1px dashed var(--rule);border-radius:8px;font-size:.88rem;color:var(--muted)}
+.sched-note b{color:var(--ink)}
 
 /* settings: study options */
 .set-row.column{flex-direction:column;align-items:stretch}

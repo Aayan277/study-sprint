@@ -3,13 +3,16 @@
 //   Questions: Front → pick the back, Back → pick the front, Typing
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
-// Play doesn't change the review schedule yet. That's Milestone 5.
+// Every answer is saved to the review log, and feeds the review schedule following the
+// auto-grading rules in autograde.js.
 
 import * as db from './db.js';
 import {
   questionFor, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
+import { autoRating, scheduleDecision, applies } from './autograde.js';
+import { dayStart } from './days.js';
 import { checkAnswer } from './match.js';
 import { $, esc, plural } from './ui.js';
 
@@ -33,9 +36,16 @@ function stopRound() {
 // ---------- setup ----------
 export async function renderPlay(el) {
   stopRound();
-  const [settings, decks, cards, states] = await Promise.all([db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
+  const [settings, decks, cards, states, logs] = await Promise.all([
+    db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
+  ]);
   decks.sort((a, b) => a.created - b.created);
-  data = { settings, decks, cards, statesById: new Map(states.map(s => [s.cardId, s])) };
+  data = {
+    settings, decks, cards,
+    statesById: new Map(states.map(s => [s.cardId, s])),
+    // Cards whose schedule Play already changed today (Play only changes each card once a day).
+    playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId))
+  };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
   let pace = settings.timer;
@@ -56,7 +66,8 @@ export async function renderPlay(el) {
 
     el.innerHTML = `
       <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1>
-        <p class="lede">A right answer scores <b>100</b>, plus up to <b>100</b> more for speed, multiplied by your streak (up to <b>×1.5</b>).</p></div></div>
+        <p class="lede">A right answer scores <b>100</b>, plus up to <b>100</b> more for speed, multiplied by your streak (up to <b>×1.5</b>).
+          Answers on cards that are due also count as their review.</p></div></div>
 
       ${!cards.length ? `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
       <fieldset><legend>Deck</legend>
@@ -154,7 +165,8 @@ function start(el, opts) {
     ...opts, fmt, all, pool, total, weightOf, source: opts.pool,
     queue: weightedQueue(pool, total || 30, weightOf), i: 0,
     score: 0, streak: 0, bestStreak: 0, log: [], lives: LIVES, clock: LIGHTNING_MS, over: false,
-    answered: false, raf: 0, autoTimer: 0, flashTimer: 0
+    answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
+    saving: Promise.resolve()          // answers are saved one after another in the background
   };
   el.innerHTML = `
     <div class="hud mono">
@@ -310,8 +322,11 @@ function answer(choice) {
     if (G.lives <= 0) G.over = true;
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
-  // Kept for Milestone 5, which feeds these results into the review schedule.
-  G.log.push({ card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given });
+  const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given };
+  G.log.push(entry);
+  // Save in the background so the game never waits for the database.
+  const round = G;
+  G.saving = G.saving.then(() => record(round, entry)).catch(err => console.error('Could not save answer', err));
   updateHud(lightning && !ok);
   $('pCard').classList.add(ok ? 'ok' : 'no');
 
@@ -331,6 +346,43 @@ function answer(choice) {
   }
 }
 
+// Save one answer: always to the review log (for stats), and to the review schedule when the
+// auto-grading rules allow it (see autograde.js).
+async function record(round, entry) {
+  const id = entry.card.id;
+  const now = Date.now();
+  const rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing' });
+  const prev = data.statesById.get(id);
+  let decision = scheduleDecision({ state: prev, rating, alreadyToday: data.playedToday.has(id), now });
+  const log = {
+    cardId: id, timestamp: now, source: 'play',
+    mode: round.qtype, format: round.fmt,
+    correct: entry.ok, ms: entry.ms, rating,
+    state: prev ? prev.state : 0,      // the card's state before this answer
+    applied: false                     // did it change the schedule?
+  };
+  if (applies(decision)) {
+    try {
+      const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
+      const next = rate(id, prev, rating, data.settings.targetRetention, now);
+      log.applied = true;
+      await db.saveReview(next, log);
+      data.statesById.set(id, next);
+      data.playedToday.add(id);
+    } catch (err) {
+      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
+      console.error(err);
+      decision = 'not-due';
+      log.applied = false;
+      await db.addLog(log);
+    }
+  } else {
+    await db.addLog(log);
+  }
+  entry.rating = rating;
+  entry.decision = decision;
+}
+
 function next() {
   if (!G || !G.answered || !$('pCard')) return;
   clearTimeout(G.autoTimer);
@@ -340,6 +392,23 @@ function next() {
 }
 
 // ---------- results ----------
+
+// One line on the results screen saying how the round changed the review schedule.
+async function scheduleSummary(round) {
+  await round.saving;                          // wait for the last answers to finish saving
+  const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
+  const graded = count('due'), sentBack = count('again'), fresh = count('new');
+  if (!round.log.length) return '';
+  const parts = [];
+  if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded from your answers`);
+  if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back for review`);
+  const text = parts.length
+    ? `Review schedule updated: ${parts.join(', ')}.`
+    : 'No cards were due, so your review schedule didn’t change.';
+  const extra = fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review, not here.` : '';
+  return `<p class="sched-note">${text}${extra} Every answer counts toward your stats.</p>`;
+}
+
 async function finish() {
   if (!G || !$('pCard')) return;
   clearTimeout(G.autoTimer); cancelAnimationFrame(G.raf); clearTimeout(G.flashTimer);
@@ -362,6 +431,7 @@ async function finish() {
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
   const deckName = round.deckId === 'all' ? 'All decks' : data.decks.find(d => d.id === round.deckId)?.name || '';
+  const schedule = await scheduleSummary(round);
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
     : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
 
@@ -381,6 +451,7 @@ async function finish() {
       <div><div class="v">${round.bestStreak}</div><div class="l">Best streak</div></div>
       <div><div class="v">${correct}/${total}</div><div class="l">Correct</div></div>
     </div>
+    ${schedule}
     <section class="missed">
       <h2>Missed</h2>
       ${missed.length ? missed.map(l => `
