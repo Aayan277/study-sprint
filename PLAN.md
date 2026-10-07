@@ -28,7 +28,7 @@ A mobile-first flashcard app for studying university course material. It combine
 | Scheduling | FSRS via the `ts-fsrs` library |
 | CSV parsing | Papa Parse |
 | Excel import | SheetJS (load it only when someone imports an .xlsx) |
-| Fonts and themes | Same as kanji-sprint: all 6 themes (Sumi, Sakura, Matcha, Shinkansen, Neon Tokyo, Kuro) with light and dark versions |
+| Fonts and themes | Bricolage Grotesque (headings), DM Sans (text), IBM Plex Mono (numbers). 6 themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx) with light and dark versions. No kanji or Japanese branding |
 
 ### Suggested file structure
 
@@ -116,7 +116,7 @@ Material:
 - **Hard difficulty:** 6 options, smarter distractors (below), −50 per wrong answer, ×1.25 points, no typo forgiveness.
 - **Flash:** the prompt disappears after 1.2s, 0.8s or 0.5s, for ×1.2 points.
 - Timer slider from 3 to 20s. Typing gets 1.8× the time.
-- Same scoring as kanji-sprint: 100 + up to 100 speed bonus, with a streak multiplier up to ×1.5. Same grade stamp (秀 優 良 可 練).
+- Same scoring as kanji-sprint: 100 + up to 100 speed bonus, with a streak multiplier up to ×1.5. Grade stamp uses letters (S, A, B, C, D) instead of kanji.
 - Best scores per deck, format and difficulty.
 
 **Distractors for any deck:** use other cards' backs from the same deck. Prefer cards with a similar length (within ±50%) and shared tags or shared words. On Hard, rank by text similarity so the traps look plausible. A deck needs at least 4 cards for multiple choice. Otherwise, only offer Typing and Review.
@@ -149,7 +149,7 @@ Theme picker, target retention, new cards per day, default timer, export or impo
 
 ## Layout
 - Mobile-first, with a bottom tab bar: **Review · Play · Decks · Stats**. Settings goes behind a gear icon.
-- Reuse kanji-sprint's design tokens, typography and theme system. Replace the kanji practice square with a card component that fits longer text (definitions can be several lines).
+- Reuse kanji-sprint's color tokens and theme system, but with Study Sprint's own branding (lightning-bolt flashcard logo, Latin fonts, no kanji). Use a card component that fits longer text (definitions can be several lines).
 - Everything must work at 375px wide with no sideways scrolling.
 
 ## Milestones
