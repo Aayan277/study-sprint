@@ -5,13 +5,13 @@
 //   (their addresses include a pinned version number, so they never change).
 //
 // When you change the list of files below, bump the version in CACHE so phones throw the old copy away.
-const CACHE = 'study-sprint-v2';
+const CACHE = 'study-sprint-v3';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
-  'js/app.js', 'js/db.js', 'js/decks.js', 'js/sample.js', 'js/themes.js', 'js/ui.js',
+  'js/app.js', 'js/db.js', 'js/decks.js', 'js/import.js', 'js/import-screen.js', 'js/sample.js', 'js/themes.js', 'js/ui.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
-const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com'];
+const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'cdn.sheetjs.com'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));

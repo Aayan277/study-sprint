@@ -6,11 +6,12 @@
 import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
+import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { $, esc, toast, openSheet, closeSheet, initSheet } from './ui.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.1.1 · Milestone 1';
+const APP_VERSION = '0.2 · Milestone 2';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -122,6 +123,7 @@ const ROUTES = {
   play: el => renderSoon(el, { title: 'Play', tab: 'play', text: 'Timed Classic, Survival and Lightning rounds for any deck arrive in Milestone 4.' }),
   decks: el => renderLibrary(el),
   deck: (el, id) => renderDeck(el, id),
+  import: (el, deckId) => renderImport(el, deckId),
   stats: el => renderSoon(el, { title: 'Stats', tab: 'stats', text: 'Mastery grid, retention, charts and your day streak arrive in Milestone 6.' }),
   settings: el => renderSettings(el)
 };
@@ -129,8 +131,8 @@ const ROUTES = {
 async function route() {
   const [, name = 'decks', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   const render = ROUTES[name] || ROUTES.decks;
-  // Highlight the right tab. A single deck's page counts as the Decks tab.
-  const tab = name === 'deck' ? 'decks' : name;
+  // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
+  const tab = name === 'deck' || name === 'import' ? 'decks' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
