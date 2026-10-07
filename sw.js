@@ -5,16 +5,23 @@
 //   (their addresses include a pinned version number, so they never change).
 //
 // When you change the list of files below, bump the version in CACHE so phones throw the old copy away.
-const CACHE = 'study-sprint-v3';
+const CACHE = 'study-sprint-v4';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
-  'js/app.js', 'js/db.js', 'js/decks.js', 'js/import.js', 'js/import-screen.js', 'js/sample.js', 'js/themes.js', 'js/ui.js',
+  'js/app.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/import.js', 'js/import-screen.js', 'js/match.js',
+  'js/queue.js', 'js/review.js', 'js/sample.js', 'js/srs.js', 'js/themes.js', 'js/ui.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
+// The scheduling library, saved at install so reviews work offline from the first launch.
+// Saved separately so a slow CDN can't stop the rest from installing.
+const PRELOAD = ['https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs'];
 const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'cdn.sheetjs.com'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(async c => {
+    await c.addAll(CORE);
+    await Promise.all(PRELOAD.map(url => c.add(url).catch(() => {})));
+  }).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {

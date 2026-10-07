@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS = {
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play
+  reviewDecks: [],   // decks chosen on the Review screen; empty means all decks
+  reviewTyping: false, // type answers instead of flipping
   seeded: false      // true once the sample deck has been added on first open
 };
 
@@ -131,6 +133,32 @@ export async function deleteDeck(deckId) {
     }
   };
   return finished(tx);
+}
+
+// ---------- reviews ----------
+// Save a card's new schedule and its review-log row together. Returns the log row's id (for undo).
+export async function saveReview(state, log) {
+  const db = await openDB();
+  const tx = db.transaction(['cardStates', 'reviewLog'], 'readwrite');
+  tx.objectStore('cardStates').put(state);
+  const req = tx.objectStore('reviewLog').add(log);
+  await finished(tx);
+  return req.result;
+}
+
+// Undo a review: put the old schedule back (or remove it if the card was new) and delete the log row.
+export async function undoReview(cardId, prevState, logId) {
+  const db = await openDB();
+  const tx = db.transaction(['cardStates', 'reviewLog'], 'readwrite');
+  if (prevState) tx.objectStore('cardStates').put(prevState);
+  else tx.objectStore('cardStates').delete(cardId);
+  tx.objectStore('reviewLog').delete(logId);
+  return finished(tx);
+}
+
+// Every review-log row since a moment in time (e.g. since the start of today).
+export async function getLogsSince(timestamp) {
+  return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
 }
 
 // ---------- settings ----------

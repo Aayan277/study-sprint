@@ -2,7 +2,7 @@
 
 A mobile-first flashcard app for university courses: real spaced repetition (like Anki) plus timed game rounds for cramming.
 
-The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 2 (import).**
+The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 3 (spaced-repetition review).**
 
 **Live:** [aayan277.github.io/study-sprint](https://aayan277.github.io/study-sprint/)
 
@@ -12,6 +12,7 @@ The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 2 (import).*
 - A sample Intro to Psychology deck on first open
 - Import cards by pasting text (format detected automatically), uploading .csv / .tsv / .txt / .xlsx, or loading a Google Sheet, with an editable preview and duplicate flags
 - "Make cards with Claude" copies a ready-made prompt with your notes
+- Daily review with FSRS-6 scheduling (via ts-fsrs): flip or type the answer, rate Again / Hard / Good / Easy with the next interval shown, undo, and a summary at the end
 - 6 color themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx), most with light and dark versions
 - Installable on your phone, works offline
 - Everything is saved on your device in IndexedDB
@@ -29,10 +30,14 @@ Plain HTML, CSS and JavaScript modules. No build step, so GitHub Pages serves th
 | `js/decks.js` | Deck list, deck page, create/edit/delete sheet |
 | `js/import.js` | Format detection for pasted text, files and sheets (no page code, so it can be tested) |
 | `js/import-screen.js` | The Import screen and its preview |
+| `js/review.js` | The Review screen |
+| `js/srs.js` | FSRS-6 scheduling (wraps the ts-fsrs library) |
+| `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
+| `js/match.js` | Checking typed answers (typos, alternates, articles) |
 | `js/themes.js` | Theme switching and the theme picker |
 | `js/sample.js` | The starter deck |
 | `js/ui.js` | Small shared helpers |
-| `tests/import.test.js` | Tests for the format detection |
+| `tests/*.test.js` | Tests for import detection, answer checking and the review queue |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
 ## Running it on your computer
@@ -48,7 +53,7 @@ then open the address it prints.
 ## Running the tests
 
 ```
-node tests/import.test.js
+node --test
 ```
 
-No install needed: it uses Node's built-in test runner. (`package.json` only tells Node the files are modules.)
+(or one file, e.g. `node tests/import.test.js`). No install needed: it uses Node's built-in test runner. (`package.json` only tells Node the files are modules.)
