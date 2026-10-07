@@ -10,15 +10,17 @@ import { SAMPLE_DECK } from './sample.js';
 import { $, esc, toast, openSheet, closeSheet, initSheet } from './ui.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.1 · Milestone 1';
+const APP_VERSION = '0.1.1 · Milestone 1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
 // ---------- screens that arrive in later milestones ----------
-function renderSoon(el, { title, glyph, text }) {
+// Reuses the matching icon from the bottom tab bar.
+function renderSoon(el, { title, tab, text }) {
+  const icon = document.querySelector(`.tab[data-tab="${tab}"] svg`)?.outerHTML || '';
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">COMING SOON</span><h1>${title}</h1></div></div>
-    <div class="card soon"><div class="glyph" lang="ja" aria-hidden="true">${glyph}</div><p>${text}</p></div>`;
+    <div class="card soon"><div class="glyph" aria-hidden="true">${icon}</div><p>${text}</p></div>`;
 }
 
 // ---------- settings ----------
@@ -39,7 +41,7 @@ async function renderSettings(el) {
         ${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
-      <p class="note">Neon Tokyo and Kuro are always dark.</p>
+      <p class="note">Neon and Onyx are always dark.</p>
     </section>
 
     <section class="section" aria-labelledby="dataTitle">
@@ -116,11 +118,11 @@ async function seedSampleDeck() {
 
 // ---------- navigation ----------
 const ROUTES = {
-  review: el => renderSoon(el, { title: 'Review', glyph: '復', text: 'Daily spaced-repetition review (flip a card, rate it Again / Hard / Good / Easy) arrives in Milestone 3.' }),
-  play: el => renderSoon(el, { title: 'Play', glyph: '遊', text: 'Classic, Survival and Lightning rounds from Kanji Sprint, for any deck, arrive in Milestone 4.' }),
+  review: el => renderSoon(el, { title: 'Review', tab: 'review', text: 'Daily spaced-repetition review (flip a card, rate it Again / Hard / Good / Easy) arrives in Milestone 3.' }),
+  play: el => renderSoon(el, { title: 'Play', tab: 'play', text: 'Timed Classic, Survival and Lightning rounds for any deck arrive in Milestone 4.' }),
   decks: el => renderLibrary(el),
   deck: (el, id) => renderDeck(el, id),
-  stats: el => renderSoon(el, { title: 'Stats', glyph: '績', text: 'Mastery grid, retention, charts and your day streak arrive in Milestone 6.' }),
+  stats: el => renderSoon(el, { title: 'Stats', tab: 'stats', text: 'Mastery grid, retention, charts and your day streak arrive in Milestone 6.' }),
   settings: el => renderSettings(el)
 };
 

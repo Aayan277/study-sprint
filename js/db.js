@@ -6,7 +6,7 @@
 //   cards       one row per card            { id, deckId, front, back, tags, created }
 //   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview }
 //   reviewLog   one row per answer          { id (auto), cardId, timestamp, source, mode, correct, ms, rating }
-//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'sumi', mode: 'auto' }
+//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'ink', mode: 'auto' }
 //
 // Everything here returns a Promise, so callers use `await`.
 
@@ -14,7 +14,7 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 1;
 
 export const DEFAULT_SETTINGS = {
-  theme: { skin: 'sumi', mode: 'auto' }, // mode: 'auto' follows the phone, or 'light' / 'dark'
+  theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the phone, or 'light' / 'dark'
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play

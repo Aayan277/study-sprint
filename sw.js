@@ -1,11 +1,11 @@
-// Study Sprint offline support (same approach as kanji-sprint's sw.js).
+// Study Sprint offline support.
 // - The app's own files load from the network first, so updates show up right away when you're online,
 //   and fall back to the saved copy when you're offline.
 // - Fonts and CDN libraries are saved the first time they load and then always come from the saved copy
 //   (their addresses include a pinned version number, so they never change).
 //
 // When you change the list of files below, bump the version in CACHE so phones throw the old copy away.
-const CACHE = 'study-sprint-v1';
+const CACHE = 'study-sprint-v2';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/db.js', 'js/decks.js', 'js/sample.js', 'js/themes.js', 'js/ui.js',
