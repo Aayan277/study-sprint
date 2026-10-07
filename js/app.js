@@ -8,10 +8,11 @@ import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
-import { $, esc, toast, openSheet, closeSheet, initSheet } from './ui.js';
+import { $, esc, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
+import { renderPlay } from './play.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.3.2 · Milestone 3';
+const APP_VERSION = '0.4 · Milestone 4';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -73,7 +74,7 @@ async function renderSettings(el) {
         <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
         <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
       </div>
-      <p class="note">Backup export / import and the Play timer arrive with the features that use them.</p>
+      <p class="note">Backup export and import arrive in a later update. The Play timer is set on the Play screen.</p>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -155,7 +156,7 @@ const ROUTES = {
   // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
   // and the rest of the app shouldn't have to wait for it.
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
-  play: el => renderSoon(el, { title: 'Play', tab: 'play', text: 'Timed Classic, Survival and Lightning rounds for any deck arrive in Milestone 4.' }),
+  play: el => renderPlay(el),
   decks: el => renderLibrary(el),
   deck: (el, id) => renderDeck(el, id),
   import: (el, deckId) => renderImport(el, deckId),
@@ -207,6 +208,7 @@ function wireGear() {
 // ---------- start up ----------
 async function start() {
   initSheet();
+  initTapGuard();
   wireGear();
   try {
     settings = await db.getSettings();
@@ -228,7 +230,16 @@ async function start() {
 
 // Offline support and "Add to Home Screen" need the service worker.
 if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {}));
+  // When a new version has installed, reload once so it shows straight away
+  // (instead of only after closing and reopening the app a second time).
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;   // first ever install: nothing old to replace
+    reloaded = true;
+    location.reload();
+  });
 }
 
 start();
