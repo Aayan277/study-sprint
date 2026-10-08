@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSteps, formatSteps, parseMaxInterval, schedulerOptions, SCHED_DEFAULTS, stepWords, stepShort, sortSteps, explainSteps } from '../js/sched-settings.js';
+import { parseSteps, formatSteps, parseMaxInterval, schedulerOptions, SCHED_DEFAULTS, stepWords, sortSteps, explainSteps } from '../js/sched-settings.js';
 
 test('steps: minutes, hours and days, with spaces or commas', () => {
   assert.deepEqual(parseSteps('1m 10m'), { steps: ['1m', '10m'] });
@@ -45,8 +45,6 @@ test('steps in plain words', () => {
   assert.equal(stepWords('10m'), '10 minutes');
   assert.equal(stepWords('1h'), '1 hour');
   assert.equal(stepWords('2d'), '2 days');
-  assert.equal(stepShort('10m'), '10 min');
-  assert.equal(stepShort('1h'), '1 h');
   assert.deepEqual(sortSteps(['1h', '10m', '1d', '1m']), ['1m', '10m', '1h', '1d']);
 });
 

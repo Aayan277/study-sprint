@@ -61,8 +61,6 @@ export function stepWords(step) {
   const [, n, u] = step.match(/^(\d+)([mhd])$/);
   return `${n} ${UNIT_WORDS[u][+n === 1 ? 0 : 1]}`;
 }
-// '10m' → '10 min' (for the small chips)
-export const stepShort = step => step.replace(/^(\d+)m$/, '$1 min').replace(/^(\d+)h$/, '$1 h').replace(/^(\d+)d$/, '$1 d');
 
 // How long a step is in minutes, so steps can be kept in order.
 const stepMinutes = step => { const [, n, u] = step.match(/^(\d+)([mhd])$/); return +n * { m: 1, h: 60, d: 1440 }[u]; };
