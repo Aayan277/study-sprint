@@ -162,10 +162,18 @@ Theme picker, target retention, new cards per day, default timer, export or impo
 6. **Stats:** mastery grid, charts, hardest cards, streak.
 7. **Polish:** backup export and import, built-in kanji decks, README with screenshots, final mobile pass.
 
-## Not in v1 (later)
-- Accounts and syncing between devices
-- One-tap AI card generation through the Claude API (needs a small backend to hide the key)
-- Anki .apkg import
-- Images and audio on cards
-- Sharing decks with friends by link
-- AI-made wrong answers for Play: have the "Make cards with Claude" prompt also write 2–3 believable wrong answers per card (e.g. "operant conditioning" as a trap for "classical conditioning"), stored with the card and used as multiple-choice options, so definition-style decks get exam-like distractors instead of other cards' unrelated backs
+## After v1
+
+Built one at a time, in this order: write a short plan here, get it approved, build it, open a pull request.
+
+1. **Small wins:** Play starts on Back → front for decks with long backs (definition-style decks), and advanced scheduling settings (learning steps, maximum interval, fuzz on/off).
+2. **Accounts and syncing between devices** (e.g. Supabase). Ask before starting: data would also be stored on their servers.
+3. **Tune FSRS to my own reviews** (fit the 21 parameters to my review history), once there's about a month of daily reviews.
+4. **Anki .apkg import.**
+5. **Images and audio on cards.**
+6. **Sharing decks with friends by link** (needs syncing first).
+
+## Parked (not planned for now)
+
+- **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.
+- **AI-made wrong answers for Play:** have Claude also write 2–3 believable wrong answers per card (e.g. "operant conditioning" as a trap for "classical conditioning"), stored with the card and used as multiple-choice options, so definition-style decks get exam-like distractors instead of other cards' unrelated backs. Parked together with the item above.
