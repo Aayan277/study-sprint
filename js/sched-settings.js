@@ -52,3 +52,36 @@ export function schedulerOptions(settings = {}) {
     fuzz: settings.fuzz ?? SCHED_DEFAULTS.fuzz
   };
 }
+
+// ---------- showing steps in plain words ----------
+const UNIT_WORDS = { m: ['minute', 'minutes'], h: ['hour', 'hours'], d: ['day', 'days'] };
+
+// '10m' → '10 minutes', '1h' → '1 hour'
+export function stepWords(step) {
+  const [, n, u] = step.match(/^(\d+)([mhd])$/);
+  return `${n} ${UNIT_WORDS[u][+n === 1 ? 0 : 1]}`;
+}
+// '10m' → '10 min' (for the small chips)
+export const stepShort = step => step.replace(/^(\d+)m$/, '$1 min').replace(/^(\d+)h$/, '$1 h').replace(/^(\d+)d$/, '$1 d');
+
+// How long a step is in minutes, so steps can be kept in order.
+const stepMinutes = step => { const [, n, u] = step.match(/^(\d+)([mhd])$/); return +n * { m: 1, h: 60, d: 1440 }[u]; };
+export const sortSteps = steps => [...steps].sort((a, b) => stepMinutes(a) - stepMinutes(b));
+
+// What each rating button does with these steps, as [button, what happens] pairs.
+// (Checked against ts-fsrs: Again always goes back to step 1, Good moves to the next step, Good on the
+// last step finishes the steps, and Easy skips them.)
+// kind: 'learning' (new cards) or 'relearning' (cards you forgot).
+export function explainSteps(steps, kind) {
+  const done = kind === 'learning' ? 'moves on to normal reviews (days apart)' : 'goes back to normal reviews';
+  if (!steps.length) return [['Any button', `No steps: the card ${done} straight away.`]];
+  const out = [['Again', `back in ${stepWords(steps[0])} (step 1)`]];
+  if (steps.length > 1) {
+    out.push(['Good', `moves to the next step: ${steps.slice(1).map((s, i) => `${stepWords(s)} (step ${i + 2})`).join(', then ')}`]);
+    out.push(['Good on the last step', done]);
+  } else {
+    out.push(['Good', done]);
+  }
+  out.push(['Easy', `skips the steps and ${done}`]);
+  return out;
+}
