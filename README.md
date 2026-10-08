@@ -2,7 +2,7 @@
 
 A mobile-first flashcard app for university courses: real spaced repetition (like Anki) plus timed game rounds for cramming.
 
-The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 5 (auto-grading).**
+The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 6 (stats).**
 
 **Live:** [aayan277.github.io/study-sprint](https://aayan277.github.io/study-sprint/)
 
@@ -15,6 +15,7 @@ The full plan is in [PLAN.md](PLAN.md). **Current status: Milestone 5 (auto-grad
 - Daily review with FSRS-6 scheduling (via ts-fsrs): flip or type the answer, rate Again / Hard / Good / Easy with the next interval shown, undo, and a summary at the end
 - Play: timed Classic, Survival and Lightning rounds (front → back, back → front, or typing), with Hard mode, Flash, streak scoring, letter grades and best scores
 - Auto-grading: Play answers on due cards count as their review (fast, normal, slow or wrong becomes Easy/Good/Hard/Again), misses on any studied card bring it back, and each card changes at most once a day from Play
+- Stats: day streak, retention on due reviews, reviews per day (30 days), due forecast (7 days), hardest cards with a "Drill these" button, and a mastery grid (New / Learning / Young / Mature) with each card's recent answers
 - 6 color themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx), most with light and dark versions
 - Installable on your phone, works offline
 - Everything is saved on your device in IndexedDB
@@ -39,10 +40,11 @@ Plain HTML, CSS and JavaScript modules. No build step, so GitHub Pages serves th
 | `js/srs.js` | FSRS-6 scheduling (wraps the ts-fsrs library) |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
 | `js/match.js` | Checking typed answers (typos, alternates, articles) |
+| `js/stats.js`, `js/stats-calc.js` | The Stats screen, and the numbers behind it |
 | `js/themes.js` | Theme switching and the theme picker |
 | `js/sample.js` | The starter deck |
 | `js/ui.js` | Small shared helpers |
-| `tests/*.test.js` | Tests for import detection, answer checking, the review queue, game rules and auto-grading |
+| `tests/*.test.js` | Tests for import detection, answer checking, the review queue, game rules, auto-grading and stats |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
 ## Running it on your computer

@@ -10,20 +10,12 @@ import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { $, esc, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
 import { renderPlay } from './play.js';
+import { renderStats } from './stats.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.5 · Milestone 5';
+const APP_VERSION = '0.6 · Milestone 6';
 
 let settings = { ...db.DEFAULT_SETTINGS };
-
-// ---------- screens that arrive in later milestones ----------
-// Reuses the matching icon from the bottom tab bar.
-function renderSoon(el, { title, tab, text }) {
-  const icon = document.querySelector(`.tab[data-tab="${tab}"] svg`)?.outerHTML || '';
-  el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">COMING SOON</span><h1>${title}</h1></div></div>
-    <div class="card soon"><div class="glyph" aria-hidden="true">${icon}</div><p>${text}</p></div>`;
-}
 
 // ---------- settings ----------
 async function renderSettings(el) {
@@ -160,7 +152,7 @@ const ROUTES = {
   decks: el => renderLibrary(el),
   deck: (el, id) => renderDeck(el, id),
   import: (el, deckId) => renderImport(el, deckId),
-  stats: el => renderSoon(el, { title: 'Stats', tab: 'stats', text: 'Mastery grid, retention, charts and your day streak arrive in Milestone 6.' }),
+  stats: el => renderStats(el),
   settings: el => renderSettings(el)
 };
 
