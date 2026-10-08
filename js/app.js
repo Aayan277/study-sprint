@@ -8,12 +8,12 @@ import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
-import { $, esc, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '0.6 · Milestone 6';
+const APP_VERSION = '1.0';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -63,10 +63,19 @@ async function renderSettings(el) {
           : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p></div>
       </div>
       <div class="set-row">
+        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
+          ${settings.lastBackup ? `Last backup: ${esc(new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}.` : 'No backup yet.'}</p></div>
+        <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
+      </div>
+      <div class="set-row">
+        <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
+        <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
+      </div>
+      <div class="set-row">
         <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
         <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
       </div>
-      <p class="note">Backup export and import arrive in a later update. The Play timer is set on the Play screen.</p>
+      <p class="note">Your data lives only in this browser. The Play timer is set on the Play screen.</p>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -81,6 +90,8 @@ async function renderSettings(el) {
     $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); // previews switch between light and dark versions
   }));
   $('resetBtn').addEventListener('click', confirmReset);
+  $('exportBtn').addEventListener('click', exportBackup);
+  $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
 
   // New cards per day: typed or changed with − / +, kept between 0 and 999.
   const setNpd = v => {
@@ -102,6 +113,66 @@ async function renderSettings(el) {
 function saveTheme(theme) {
   settings.theme = applyTheme(theme);
   db.setSetting('theme', settings.theme);
+}
+
+// ---------- backup ----------
+async function exportBackup() {
+  const data = await db.exportAll();
+  const d = new Date();
+  const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
+  const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
+  // On phones, the share sheet is the reliable way to save a file ("Save to Files", Drive, email...).
+  // On computers, download it like any other file.
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Study Sprint backup' });
+    } catch (err) {
+      if (err.name === 'AbortError') return;      // closed the share sheet: nothing saved
+      downloadFile(file);
+    }
+  } else {
+    downloadFile(file);
+  }
+  settings.lastBackup = Date.now();
+  await db.setSetting('lastBackup', settings.lastBackup);
+  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}`);
+  if (currentRoute === 'settings') renderSettings($('screen'));
+}
+
+function downloadFile(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function confirmRestore(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
+  const problem = db.checkBackup(data);
+  if (problem) { toast(problem); return; }
+  const when = data.exported ? new Date(data.exported).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'an unknown date';
+  openSheet(`
+    <h2 id="sheetTitle">Restore this backup?</h2>
+    <p style="margin:0">Backup from <b>${esc(when)}</b>: ${plural(data.decks.length, 'deck')}, ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}.</p>
+    <div class="confirm">
+      <p>Everything on this device now is <b>replaced</b> by the backup. Export a backup first if you want to keep it.</p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="rbNo">Cancel</button>
+        <button class="btn danger solid" type="button" id="rbYes">Replace and restore</button>
+      </div>
+    </div>`);
+  $('rbNo').focus();
+  $('rbNo').addEventListener('click', closeSheet);
+  $('rbYes').addEventListener('click', async () => {
+    await db.importAll(data);
+    settings = await db.getSettings();
+    settings.theme = applyTheme(settings.theme);
+    closeSheet();
+    toast(`Restored ${plural(data.cards.length, 'card')}`);
+    location.hash = '#/decks';
+  });
 }
 
 function confirmReset() {
