@@ -14,7 +14,7 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 1;
 
 export const DEFAULT_SETTINGS = {
-  theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the phone, or 'light' / 'dark'
+  theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the device's light/dark setting, or 'light' / 'dark'
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play

@@ -33,7 +33,7 @@ async function renderSettings(el) {
     <section class="section" aria-labelledby="apTitle">
       <h2 id="apTitle">Light or dark</h2>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
-        ${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) =>
+        ${[['auto', 'Match my device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
       <p class="note">Neon and Onyx are always dark.</p>
