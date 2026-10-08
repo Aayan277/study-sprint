@@ -22,6 +22,14 @@ const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: fal
 
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
+let pendingDrill = null;   // card ids sent from another screen (Stats → "Drill these")
+
+// Open Play and start a drill round on these cards straight away.
+export function drillCards(cardIds) {
+  pendingDrill = cardIds;
+  if (location.hash === '#/play') renderPlay(document.getElementById('screen'));
+  else location.hash = '#/play';
+}
 
 const fmtClock = ms => { const s = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const sizeClass = text => (text.length > 120 ? ' xlong' : text.length > 50 ? ' long' : '');
@@ -49,6 +57,19 @@ export async function renderPlay(el) {
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
   let pace = settings.timer;
+
+  // Drill sent from Stats: use your usual question type when it works for these cards, otherwise
+  // Back → front (shows the definition, you pick the term), then Typing.
+  if (pendingDrill) {
+    const ids = new Set(pendingDrill);
+    pendingDrill = null;
+    const drill = cards.filter(c => ids.has(c.id));
+    const decksUsed = new Set(drill.map(c => c.deckId));
+    const pool = cards.filter(c => decksUsed.has(c.deckId));   // wrong options come from the same decks
+    const qtype = [prefs.qtype, 'back', 'typing'].find(q =>
+      q === 'typing' ? playableCards(drill, q).length : canMultipleChoice(pool, q) && playableCards(drill, q).length);
+    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill });
+  }
 
   const draw = () => {
     const pool = prefs.deckId === 'all' ? cards : cards.filter(c => c.deckId === prefs.deckId);
@@ -359,7 +380,8 @@ async function record(round, entry) {
     mode: round.qtype, format: round.fmt,
     correct: entry.ok, ms: entry.ms, rating,
     state: prev ? prev.state : 0,      // the card's state before this answer
-    applied: false                     // did it change the schedule?
+    applied: false,                    // did it change the schedule?
+    reason: decision                   // why or why not: 'due', 'again', 'not-due', 'new' or 'already'
   };
   if (applies(decision)) {
     try {
@@ -374,6 +396,7 @@ async function record(round, entry) {
       console.error(err);
       decision = 'not-due';
       log.applied = false;
+      log.reason = 'not-due';
       await db.addLog(log);
     }
   } else {
