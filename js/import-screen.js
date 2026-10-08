@@ -58,7 +58,7 @@ export async function renderImport(el, deckId) {
 
     <section class="pane" id="pane-file" role="tabpanel" aria-labelledby="tab-file" hidden>
       <label class="drop">
-        <input type="file" id="fileIn" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+        <input type="file" id="fileIn" accept=".csv,.tsv,.txt,.xlsx,.xls,.json,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
         <b>Choose a file</b><span class="muted">.csv, .tsv, .txt or Excel (.xlsx)</span>
         <span class="mono" id="fileName"></span>
       </label>
@@ -171,6 +171,13 @@ function wireFile() {
     $('sheetPickRow').hidden = true;
     try {
       if (/\.xlsx?$/i.test(file.name)) await readExcel(file);
+      else if (/\.json$/i.test(file.name)) {
+        // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
+        let data = null;
+        try { data = JSON.parse(await file.text()); } catch (e) { /* not JSON */ }
+        showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
+          : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
+      }
       else showResult(parseText(await file.text()));
     } catch (err) {
       console.error(err);

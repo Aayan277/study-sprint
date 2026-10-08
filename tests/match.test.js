@@ -42,6 +42,13 @@ test('empty answers are wrong, exact answers are flagged as exact', () => {
   assert.deepEqual(checkAnswer('ribosme', 'ribosome'), { correct: true, exact: false });
 });
 
+test('spaces are ignored, including where brackets were', () => {
+  assert.ok(ok('selfesteem', 'self-esteem'));
+  assert.ok(ok('ひとつ', 'one; いち / ひと(つ)'));
+  assert.ok(ok('ひと', 'one; いち / ひと(つ)'));
+  assert.equal(ok('ひとつ', 'one; いち / ひと(つ)', { forgiving: false }), true);
+});
+
 test('edit distance', () => {
   assert.equal(editDistance('kitten', 'sitting'), 3);
   assert.equal(editDistance('', 'abc'), 3);

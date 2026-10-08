@@ -443,6 +443,13 @@ legend{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppe
 .mtile.lv-mature{border-color:var(--accent)}
 .mtile[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:1px}
 
+/* ---------- starter decks, backup ---------- */
+.starters{margin-top:28px}
+.starter{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--rule)}
+.starter > div{min-width:0}
+.file-btn{position:relative;overflow:hidden}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }

@@ -53,9 +53,11 @@ export function editDistance(a, b) {
 // Is the typed answer right? forgiving: false turns off typo forgiveness (Hard mode in Play).
 // Returns { correct, exact } where exact means no typos were needed.
 export function checkAnswer(typed, back, { forgiving = true } = {}) {
-  const t = normalizeAnswer(typed);
+  // Spaces are ignored, so "self esteem" matches "selfesteem" and ひとつ matches ひと(つ).
+  const squash = s => s.replace(/ /g, '');
+  const t = squash(normalizeAnswer(typed));
   if (!t) return { correct: false, exact: false };
-  const answers = acceptedAnswers(back);
+  const answers = acceptedAnswers(back).map(squash);
   if (answers.includes(t)) return { correct: true, exact: true };
   if (!forgiving) return { correct: false, exact: false };
   const close = answers.some(a => editDistance(t, a) <= allowedTypos(a.length));

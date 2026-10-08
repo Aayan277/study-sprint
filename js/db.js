@@ -194,3 +194,44 @@ export async function resetAll() {
   names.forEach(n => tx.objectStore(n).clear());
   return finished(tx);
 }
+
+// ---------- backup ----------
+// A backup is one JSON file with everything: decks, cards, schedules, review history and settings.
+export const BACKUP_FORMAT = 'study-sprint-backup';
+export const BACKUP_VERSION = 1;
+
+export async function exportAll() {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'settings'], 'readonly');
+  const all = name => done(tx.objectStore(name).getAll());
+  const [decks, cards, cardStates, reviewLog, keys, values] = await Promise.all([
+    all('decks'), all('cards'), all('cardStates'), all('reviewLog'),
+    done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll())
+  ]);
+  const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+  return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings };
+}
+
+// Check a backup before using it. Returns an error message, or null if it looks right.
+export function checkBackup(data) {
+  if (!data || typeof data !== 'object' || data.format !== BACKUP_FORMAT) return "This isn't a Study Sprint backup file.";
+  if (data.version > BACKUP_VERSION) return 'This backup was made by a newer version of the app. Update the app first.';
+  for (const k of ['decks', 'cards', 'cardStates', 'reviewLog']) if (!Array.isArray(data[k])) return 'This backup file is damaged (missing ' + k + ').';
+  return null;
+}
+
+// Replace everything on this device with a backup. All in one transaction: if anything fails,
+// nothing changes.
+export async function importAll(data) {
+  const db = await openDB();
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
+  const tx = db.transaction(names, 'readwrite');
+  names.forEach(n => tx.objectStore(n).clear());
+  data.decks.forEach(x => tx.objectStore('decks').put(x));
+  data.cards.forEach(x => tx.objectStore('cards').put(x));
+  data.cardStates.forEach(x => tx.objectStore('cardStates').put(x));
+  data.reviewLog.forEach(x => tx.objectStore('reviewLog').put(x));
+  Object.entries(data.settings || {}).forEach(([k, v]) => tx.objectStore('settings').put(v, k));
+  await finished(tx);
+  scheduleChanges++;
+}

@@ -3,6 +3,7 @@
 import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 import { dayEnd } from './days.js';
+import { STARTER_DECKS, starterCards } from './jlpt.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -56,6 +57,9 @@ function masteryBar(s) {
 export async function renderLibrary(el) {
   const list = await loadDecks();
   const sum = k => list.reduce((n, x) => n + x.stats[k], 0);
+  // Starter decks you haven't added yet.
+  const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
+  const starters = STARTER_DECKS.filter(s => !added.has(s.key)).map(s => ({ ...s, count: starterCards(s.level).length }));
 
   el.innerHTML = `
     <div class="screen-head">
@@ -87,6 +91,16 @@ export async function renderLibrary(el) {
         ${masteryBar(stats)}
       </article>`).join('')}</div>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
+    ${starters.length ? `
+    <section class="starters" aria-labelledby="startTitle">
+      <h2 id="startTitle">Starter decks</h2>
+      <p class="note">Optional ready-made decks. Add one if it's useful to you.</p>
+      ${starters.map(s => `
+        <div class="starter">
+          <div><b>${esc(s.name)}</b><span class="muted small"> · ${s.count} kanji with meanings and readings</span></div>
+          <button class="btn ghost small" type="button" data-starter="${esc(s.key)}">Add</button>
+        </div>`).join('')}
+    </section>` : ''}
   `;
 
   const create = () => openDeckEditor(null, () => renderLibrary(el));
@@ -96,6 +110,18 @@ export async function renderLibrary(el) {
   el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
     const item = list.find(x => x.deck.id === b.dataset.edit);
     openDeckEditor(item.deck, () => renderLibrary(el), item.stats.total);
+  }));
+  el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
+    const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
+    b.disabled = true;
+    const deckId = db.newId(), now = Date.now();
+    // `starter` remembers which starter deck this is, so it isn't offered again.
+    await db.addDeckWithCards(
+      { id: deckId, name: s.name, course: s.course, color: s.color, created: now, starter: s.key },
+      starterCards(s.level).map((c, i) => ({ id: db.newId(), deckId, ...c, created: now + i }))
+    );
+    toast(`Added ${s.name}`);
+    renderLibrary(el);
   }));
 }
 
