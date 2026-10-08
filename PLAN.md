@@ -166,7 +166,7 @@ Theme picker, target retention, new cards per day, default timer, export or impo
 
 Built one at a time, in this order: write a short plan here, get it approved, build it, open a pull request.
 
-1. **Small wins:** Play starts on Back → front for decks with long backs (definition-style decks), and advanced scheduling settings (learning steps, maximum interval, fuzz on/off).
+1. ✅ **Small wins** (done in v1.1): Play starts on Back → front for decks with long backs (definition-style decks), remembering your own pick per deck; advanced scheduling settings (learning steps, relearning steps, maximum interval with presets, fuzz on/off, reset to defaults).
 2. **Accounts and syncing between devices** (e.g. Supabase). Ask before starting: data would also be stored on their servers.
 3. **Tune FSRS to my own reviews** (fit the 21 parameters to my review history), once there's about a month of daily reviews.
 4. **Anki .apkg import.**

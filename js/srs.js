@@ -18,14 +18,41 @@ export const RATINGS = [
   { rating: Rating.Easy, label: 'Easy', key: '4' }
 ];
 
-// One scheduler per target retention. enable_fuzz adds a little randomness to long intervals so
-// cards added together don't all come due on the same day.
+// The scheduler for a set of options (from schedulerOptions() in sched-settings.js):
+//   retention        target chance of remembering a card when it comes back (0.9 = 90%)
+//   learningSteps    e.g. ['1m', '10m']: short gaps for new cards
+//   relearningSteps  e.g. ['10m']: short gaps after forgetting
+//   maxInterval      longest gap in days
+//   fuzz             spread long gaps a little so cards added together don't all come due together
+// Rebuilt only when the options change.
 let cached = null;
-function scheduler(retention) {
-  if (!cached || cached.retention !== retention) {
-    cached = { retention, f: fsrs(generatorParameters({ request_retention: retention, enable_fuzz: true, enable_short_term: true })) };
+function scheduler(opts) {
+  const key = JSON.stringify(opts);
+  if (!cached || cached.key !== key) {
+    cached = {
+      key,
+      f: fsrs(generatorParameters({
+        request_retention: opts.retention,
+        learning_steps: opts.learningSteps,
+        relearning_steps: opts.relearningSteps,
+        maximum_interval: opts.maxInterval,
+        enable_fuzz: opts.fuzz,
+        enable_short_term: true
+      }))
+    };
   }
   return cached.f;
+}
+
+const DAY = 86400000;
+// The library keeps Easy at least a day longer than Good (and Good longer than Hard), which can push
+// a gap a day or two past the maximum. Pull it back so the maximum is a real limit.
+function capInterval(card, now, maxDays) {
+  if (card.scheduled_days > maxDays) {
+    card.scheduled_days = maxDays;
+    card.due = new Date(now + maxDays * DAY);
+  }
+  return card;
 }
 
 // Our saved state ↔ the library's card object. We save dates as numbers so the database can sort by them.
@@ -62,15 +89,15 @@ function fromLibrary(cardId, c) {
 
 // How long until the card comes back for each button: { 1: ms, 2: ms, 3: ms, 4: ms }.
 // (With fuzz on, the real interval can differ by a day or so on long gaps.)
-export function previewIntervals(state, retention, now = Date.now()) {
-  const preview = scheduler(retention).repeat(toLibrary(state, now), new Date(now));
+export function previewIntervals(state, opts, now = Date.now()) {
+  const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   const out = {};
-  for (const { rating } of RATINGS) out[rating] = preview[rating].card.due.getTime() - now;
+  for (const { rating } of RATINGS) out[rating] = capInterval(preview[rating].card, now, opts.maxInterval).due.getTime() - now;
   return out;
 }
 
 // Apply a rating and return the card's new saved state.
-export function rate(cardId, state, rating, retention, now = Date.now()) {
-  const { card } = scheduler(retention).next(toLibrary(state, now), new Date(now), rating);
-  return fromLibrary(cardId, card);
+export function rate(cardId, state, rating, opts, now = Date.now()) {
+  const { card } = scheduler(opts).next(toLibrary(state, now), new Date(now), rating);
+  return fromLibrary(cardId, capInterval(card, now, opts.maxInterval));
 }

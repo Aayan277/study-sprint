@@ -8,12 +8,13 @@ import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -53,6 +54,28 @@ async function renderSettings(el) {
           <p>How likely you should be to remember a card when it comes back. Higher means you remember more but review more often. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
       </div>
+      <details class="advanced" id="advanced">
+        <summary>Advanced scheduling</summary>
+        <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
+        <label class="adv-row" for="lsteps"><b>Learning steps</b>
+          <span>Short gaps for a new card before it graduates. Use m, h or d, separated by spaces.</span>
+          <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}">
+          <span class="err" id="lstepsErr" hidden></span></label>
+        <label class="adv-row" for="rsteps"><b>Relearning steps</b>
+          <span>Short gaps after you forget a card.</span>
+          <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}">
+          <span class="err" id="rstepsErr" hidden></span></label>
+        <div class="adv-row"><b id="maxLabel">Maximum interval</b>
+          <span>The longest a card can go without being shown. Lower it before an exam so nothing drifts too far out.</span>
+          <div class="chips" role="group" aria-labelledby="maxLabel">${MAX_INTERVAL_PRESETS.map(([d, l]) =>
+            `<button type="button" class="tchip" data-max="${d}" aria-pressed="${settings.maxInterval === d}">${l}</button>`).join('')}</div>
+          <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
+          <span class="err" id="maxErr" hidden></span></div>
+        <label class="adv-row switch-row"><span><b>Spread out due dates</b>
+          <span>Adds a little randomness to longer gaps so cards added together don't all come due on the same day.</span></span>
+          <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
+      </details>
     </section>
 
     <section class="section" aria-labelledby="dataTitle">
@@ -107,6 +130,42 @@ async function renderSettings(el) {
   $('ret').addEventListener('change', e => {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
+  });
+  wireAdvanced(el);
+}
+
+// Advanced scheduling: each box is checked when you leave it, and only saved if it makes sense.
+function wireAdvanced(el) {
+  const showErr = (id, msg) => { $(id).textContent = msg || ''; $(id).hidden = !msg; };
+  const steps = (inputId, key) => $(inputId).addEventListener('change', e => {
+    const r = parseSteps(e.target.value);
+    if (r.error) { showErr(inputId + 'Err', r.error); return; }
+    showErr(inputId + 'Err', '');
+    settings[key] = formatSteps(r.steps);
+    e.target.value = settings[key];
+    db.setSetting(key, settings[key]);
+    toast('Saved');
+  });
+  steps('lsteps', 'learningSteps');
+  steps('rsteps', 'relearningSteps');
+  const setMax = days => {
+    const r = parseMaxInterval(days);
+    if (r.error) { showErr('maxErr', r.error); return; }
+    showErr('maxErr', '');
+    settings.maxInterval = r.days;
+    $('maxDays').value = r.days;
+    el.querySelectorAll('[data-max]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.max === r.days)));
+    db.setSetting('maxInterval', r.days);
+    toast('Saved');
+  };
+  el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
+  $('maxDays').addEventListener('change', e => setMax(e.target.value));
+  $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
+  $('schedReset').addEventListener('click', async () => {
+    for (const [k, v] of Object.entries(SCHED_DEFAULTS)) { settings[k] = v; await db.setSetting(k, v); }
+    await renderSettings($('screen'));
+    $('advanced').open = true;
+    toast('Scheduling reset to defaults');
   });
 }
 
@@ -246,14 +305,20 @@ async function route() {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
   closeSheet();
-  const el = $('screen');
+  // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
+  // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
+  const el = document.createElement('div');
+  el.className = 'view';
+  $('screen').replaceChildren(el);
+  scrollTo(0, 0);
   try {
     await render(el, arg && decodeURIComponent(arg));
   } catch (err) {
+    if (!el.isConnected) return;          // a screen you already left: ignore
     console.error(err);
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  scrollTo(0, 0);
+  if (el.isConnected) scrollTo(0, 0);
 }
 
 let lastHash = '#/decks';

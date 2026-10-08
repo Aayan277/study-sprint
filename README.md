@@ -22,9 +22,10 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Review:** daily spaced repetition with FSRS-6.
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
   - Undo, keyboard shortcuts, and a summary at the end.
+  - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams) and fuzz on/off.
 - **Play:** timed rounds.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
-  - Front → back, back → front, or typing.
+  - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
   - **Hard** mode (6 lookalike options) and **Flash** (the question vanishes).
   - Streak scoring, an S–D grade and best scores.
 - **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
@@ -68,6 +69,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/import-screen.js` | The Import screen and its preview |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
+| `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
 | `js/match.js` | Checking typed answers (typos, alternates, articles, spaces) |
 | `js/play.js` | The Play screen |

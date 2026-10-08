@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS = {
   timer: 8,          // seconds per question in Play
   reviewDecks: [],   // decks chosen on the Review screen; empty means all decks
   reviewTyping: false, // type answers instead of flipping
+  learningSteps: '1m 10m',  // advanced scheduling (see sched-settings.js)
+  relearningSteps: '10m',
+  maxInterval: 36500,        // days
+  fuzz: true,
   seeded: false      // true once the sample deck has been added on first open
 };
 

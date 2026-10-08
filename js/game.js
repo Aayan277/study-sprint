@@ -37,6 +37,16 @@ export function playableCards(cards, qtype) {
   return cards.filter(c => questionFor(c, qtype));
 }
 
+// The question type Play starts on for a deck you haven't picked one for yet.
+// Definition-style decks (most backs longer than 40 characters) start on Back → front: you read the
+// definition and pick the term. Picking among similar-looking terms is harder, and closer to an exam,
+// than spotting the one definition that's about the right topic. Short-back decks start on Front → back.
+export const LONG_BACK = 40;
+export function defaultQuestionType(cards) {
+  const long = cards.filter(c => String(c.back ?? '').length > LONG_BACK).length;
+  return cards.length && long > cards.length / 2 ? 'back' : 'front';
+}
+
 // Multiple choice needs at least 4 different possible answers.
 export function canMultipleChoice(cards, qtype) {
   return new Set(cards.map(c => dupKey(questionFor(c, qtype).answer))).size >= MIN_CARDS;
