@@ -8,13 +8,13 @@ import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, stepShort, stepWords, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -57,14 +57,32 @@ async function renderSettings(el) {
       <details class="advanced" id="advanced">
         <summary>Advanced scheduling</summary>
         <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
-        <label class="adv-row" for="lsteps"><b>Learning steps</b>
-          <span>Short gaps for a new card before it graduates. Use m, h or d, separated by spaces.</span>
-          <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}">
-          <span class="err" id="lstepsErr" hidden></span></label>
-        <label class="adv-row" for="rsteps"><b>Relearning steps</b>
-          <span>Short gaps after you forget a card.</span>
-          <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}">
-          <span class="err" id="rstepsErr" hidden></span></label>
+        <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning" role="group" aria-labelledby="lstepsTitle">
+          <b id="lstepsTitle">Learning steps</b>
+          <span>Short gaps while a card is <b>new</b>. You see it again after each one, until it moves on to normal reviews.</span>
+          <div class="step-chips"></div>
+          <ul class="steps-explain"></ul>
+          <div class="step-add">
+            <span>Add a step:</span>
+            <input type="number" inputmode="numeric" min="1" max="999" value="1" aria-label="How long">
+            <select aria-label="Unit"><option value="m">minutes</option><option value="h" selected>hours</option><option value="d">days</option></select>
+            <button class="btn ghost small" type="button">Add</button>
+          </div>
+          <span class="err" hidden></span>
+        </div>
+        <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning" role="group" aria-labelledby="rstepsTitle">
+          <b id="rstepsTitle">Relearning steps</b>
+          <span>Short gaps after you <b>forget</b> a card (press Again on a normal review), before it goes back to normal reviews.</span>
+          <div class="step-chips"></div>
+          <ul class="steps-explain"></ul>
+          <div class="step-add">
+            <span>Add a step:</span>
+            <input type="number" inputmode="numeric" min="1" max="999" value="1" aria-label="How long">
+            <select aria-label="Unit"><option value="m">minutes</option><option value="h" selected>hours</option><option value="d">days</option></select>
+            <button class="btn ghost small" type="button">Add</button>
+          </div>
+          <span class="err" hidden></span>
+        </div>
         <div class="adv-row"><b id="maxLabel">Maximum interval</b>
           <span>The longest a card can go without being shown. Lower it before an exam so nothing drifts too far out.</span>
           <div class="chips" role="group" aria-labelledby="maxLabel">${MAX_INTERVAL_PRESETS.map(([d, l]) =>
@@ -137,17 +155,44 @@ async function renderSettings(el) {
 // Advanced scheduling: each box is checked when you leave it, and only saved if it makes sense.
 function wireAdvanced(el) {
   const showErr = (id, msg) => { $(id).textContent = msg || ''; $(id).hidden = !msg; };
-  const steps = (inputId, key) => $(inputId).addEventListener('change', e => {
-    const r = parseSteps(e.target.value);
-    if (r.error) { showErr(inputId + 'Err', r.error); return; }
-    showErr(inputId + 'Err', '');
-    settings[key] = formatSteps(r.steps);
-    e.target.value = settings[key];
-    db.setSetting(key, settings[key]);
-    toast('Saved');
+
+  // Learning / relearning steps: each step is a chip you can remove, plus an "Add a step" row.
+  // A sentence above them says what the steps do, so there are no codes to learn.
+  el.querySelectorAll('.steps-editor').forEach(box => {
+    const key = box.dataset.key, kind = box.dataset.kind;
+    const err = box.querySelector('.err');
+    const current = () => parseSteps(settings[key]).steps || parseSteps(SCHED_DEFAULTS[key]).steps;
+    const draw = () => {
+      const steps = current();
+      box.querySelector('.step-chips').innerHTML = steps.length
+        ? steps.map((s, i) => `<span class="step-chip"><small>Step ${i + 1}</small>${esc(stepShort(s))}<button type="button" data-i="${i}" aria-label="Remove step ${i + 1} (${esc(stepWords(s))})">×</button></span>`).join('')
+        : '<span class="muted small">No steps</span>';
+      // What each button does with these steps, in plain words.
+      box.querySelector('.steps-explain').innerHTML = explainSteps(steps, kind)
+        .map(([button, what]) => `<li><b>${esc(button)}</b> → ${esc(what)}</li>`).join('');
+    };
+    const save = steps => {
+      settings[key] = formatSteps(sortSteps([...new Set(steps)]));   // in order, no duplicates
+      db.setSetting(key, settings[key]);
+      err.hidden = true;
+      draw();
+    };
+    box.querySelector('.step-chips').addEventListener('click', e => {
+      const b = e.target.closest('button[data-i]'); if (!b) return;
+      save(current().filter((_, i) => i !== +b.dataset.i));
+    });
+    box.querySelector('.step-add button').addEventListener('click', () => {
+      const n = box.querySelector('.step-add input').value, unit = box.querySelector('.step-add select').value;
+      const r = parseSteps(`${current().join(' ')} ${n}${unit}`);
+      if (r.error) {
+        err.textContent = /too long|10 steps/.test(r.error) ? r.error : 'Enter a whole number, 1 or more.';
+        err.hidden = false;
+        return;
+      }
+      save(r.steps);
+    });
+    draw();
   });
-  steps('lsteps', 'learningSteps');
-  steps('rsteps', 'relearningSteps');
   const setMax = days => {
     const r = parseMaxInterval(days);
     if (r.error) { showErr('maxErr', r.error); return; }

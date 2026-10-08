@@ -470,6 +470,17 @@ legend{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppe
 .switch:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .advanced #schedReset{margin-top:12px}
 
+/* steps editor: chips you can remove, and an add row */
+.step-chips{display:flex;flex-wrap:wrap;gap:8px;min-height:36px;align-items:center}
+.step-chip small{font:600 .68rem var(--f-body);color:var(--muted);margin-right:6px;text-transform:uppercase;letter-spacing:.06em}
+.step-chip{display:inline-flex;align-items:center;gap:2px;padding:4px 4px 4px 12px;border:1.5px solid var(--accent);background:var(--accent-soft);border-radius:999px;font:600 .9rem var(--f-mono)}
+.step-chip button{width:30px;height:30px;border:0;background:none;color:var(--muted);font-size:1.1rem;line-height:1;border-radius:50%;cursor:pointer;padding:0}
+.step-chip button:hover{color:var(--bad);background:var(--bad-soft)}.steps-explain{margin:2px 0 4px;padding:10px 12px 10px 28px;border-radius:8px;background:var(--paper);font-size:.85rem;color:var(--muted);display:grid;gap:3px}
+.steps-explain b{color:var(--ink)}
+.step-add{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.step-add input{width:72px;font:600 1rem var(--f-mono);padding:8px 10px;border:1.5px solid var(--rule);border-radius:8px;background:var(--sheet);color:var(--ink)}
+.step-add select{font-size:1rem;padding:8px 10px;border:1.5px solid var(--rule);border-radius:8px;background:var(--sheet);color:var(--ink)}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
