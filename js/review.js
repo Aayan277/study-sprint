@@ -8,6 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, newStudiedToday, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
+import { schedulerOptions } from './sched-settings.js';
 import { $, esc, plural } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -120,7 +121,7 @@ function start(el, data, cards, typing, deckId) {
   const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft);
   R = {
     active: true, day: dayStart(), deckId, typing,
-    retention: data.settings.targetRetention,
+    sched: schedulerOptions(data.settings),     // retention, learning steps, max interval, fuzz
     deckNames: new Map(data.decks.map(d => [d.id, d.name])),
     deckIds: [...new Set(cards.map(c => c.deckId))],
     statesById: data.statesById,
@@ -191,7 +192,7 @@ function renderSession(el) {
 }
 
 function rateButtonsHTML() {
-  const ivl = previewIntervals(R.statesById.get(R.current.card.id), R.retention);
+  const ivl = previewIntervals(R.statesById.get(R.current.card.id), R.sched);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
       <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span></button>`).join('')}</div>`;
@@ -229,7 +230,7 @@ async function answer(el, rating) {
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
   const now = Date.now();
-  const next = rate(id, prev, rating, R.retention, now);
+  const next = rate(id, prev, rating, R.sched, now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
     mode: R.typed ? 'typing' : 'flip',
@@ -291,6 +292,8 @@ async function finish(el) {
   const ids = new Set(cards.map(c => c.id));
   const tomorrowEnd = dayEnd(Date.now(), 1);
   const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
+  // You may have switched to another screen while that loaded: don't draw over it.
+  if (!location.hash.startsWith('#/review')) return;
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
   const mins = Math.floor(spent / 60000), secs = Math.round((spent % 60000) / 1000);
 

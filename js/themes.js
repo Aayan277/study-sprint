@@ -3,7 +3,7 @@
 //
 // A theme is two choices:
 //   skin  which of the 6 color sets (stored on <html data-skin="...">, Ink is the default with no attribute)
-//   mode  'auto' follows the phone's light/dark setting, or force 'light' / 'dark' (<html data-theme="...">)
+//   mode  'auto' follows the device's light/dark setting, or force 'light' / 'dark' (<html data-theme="...">)
 
 // Colors listed for the picker previews: [background, card, text, accent]
 export const SKINS = {

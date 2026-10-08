@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   questionFor, playableCards, canMultipleChoice, similarity, pickDistractors, weightedQueue,
-  timeLimit, scoreAnswer, gradeFor, bestKey, LIGHTNING_MS
+  timeLimit, scoreAnswer, gradeFor, bestKey, defaultQuestionType, LIGHTNING_MS
 } from '../js/game.js';
 
 // A repeatable "random" number source so tests always give the same result.
@@ -107,4 +107,13 @@ test('grade stamp letters', () => {
 test('best score keys', () => {
   assert.equal(bestKey({ deckId: 'd1', fmt: 'classic', qtype: 'front', hard: true, flash: 800, len: 20 }), 'd1|classic|front|hard|800|20');
   assert.equal(bestKey({ fmt: 'survival', qtype: 'typing', len: 20 }), 'all|survival|typing|normal|0|-');
+});
+
+test('Play starts definition-style decks on Back → front', () => {
+  const short = ['a', 'b', 'c'].map(x => card(x, 'short answer'));
+  const long = ['a', 'b', 'c'].map(x => card(x, 'A definition that is clearly longer than forty characters'));
+  assert.equal(defaultQuestionType(short), 'front');
+  assert.equal(defaultQuestionType(long), 'back');
+  assert.equal(defaultQuestionType([...long.slice(0, 1), ...short]), 'front');    // mostly short
+  assert.equal(defaultQuestionType([]), 'front');
 });

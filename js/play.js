@@ -9,16 +9,18 @@
 import * as db from './db.js';
 import {
   questionFor, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
-  gradeFor, bestKey, shuffle, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
+  gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
+import { schedulerOptions } from './sched-settings.js';
 import { checkAnswer } from './match.js';
 import { $, esc, plural } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
-const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20 };
+// qtypeByDeck remembers the question type you picked for each deck ('all' = All decks).
+const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} };
 
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
@@ -73,6 +75,10 @@ export async function renderPlay(el) {
 
   const draw = () => {
     const pool = prefs.deckId === 'all' ? cards : cards.filter(c => c.deckId === prefs.deckId);
+    // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
+    const picked = prefs.qtypeByDeck[prefs.deckId];
+    prefs.qtype = picked || defaultQuestionType(pool);
+    const suggested = !picked && prefs.qtype === 'back';
     const mcOk = canMultipleChoice(pool, 'front') && canMultipleChoice(pool, 'back');
     const typeCount = playableCards(pool, 'typing').length;
     if (!mcOk && prefs.qtype !== 'typing') prefs.qtype = 'typing';
@@ -116,6 +122,7 @@ export async function renderPlay(el) {
         </div>
         <p class="note">${!mcOk ? 'Multiple choice needs at least 4 cards with different answers. Use Typing, or Review.'
           : typing ? `You type the shorter side (40 characters or less). ${typeCount} of ${pool.length} cards can be typed.`
+          : suggested ? 'Starting on Back → front because this deck has long answers: you read the definition and pick the term, which is closer to an exam.'
           : 'Wrong options come from other cards in the deck.'}</p>
       </fieldset>
 
@@ -155,7 +162,7 @@ export async function renderPlay(el) {
     $('pDeck').addEventListener('change', e => { prefs.deckId = e.target.value; save(); draw(); });
     el.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => {
       if (r.name === 'fmt') prefs.fmt = r.value;
-      if (r.name === 'qtype') prefs.qtype = r.value;
+      if (r.name === 'qtype') { prefs.qtype = r.value; prefs.qtypeByDeck = { ...prefs.qtypeByDeck, [prefs.deckId]: r.value }; }
       if (r.name === 'diff') prefs.hard = r.value === 'hard';
       if (r.name === 'flash') prefs.flash = +r.value;
       if (r.name === 'len') prefs.len = +r.value;
@@ -386,7 +393,7 @@ async function record(round, entry) {
   if (applies(decision)) {
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
-      const next = rate(id, prev, rating, data.settings.targetRetention, now);
+      const next = rate(id, prev, rating, schedulerOptions(data.settings), now);
       log.applied = true;
       await db.saveReview(next, log);
       data.statesById.set(id, next);
@@ -455,6 +462,8 @@ async function finish() {
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
   const deckName = round.deckId === 'all' ? 'All decks' : data.decks.find(d => d.id === round.deckId)?.name || '';
   const schedule = await scheduleSummary(round);
+  // You may have switched to another screen while that saved: don't draw over it.
+  if (!location.hash.startsWith('#/play')) return;
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
     : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
 
