@@ -204,6 +204,9 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
         <div class="swatches" role="group" aria-labelledby="colorLabel">
           ${DECK_COLORS.map(c => `<button type="button" class="swatch" style="--c:${c}" data-color="${c}" aria-pressed="${c === color}" aria-label="Color ${c}"></button>`).join('')}
         </div></div>
+      ${isNew ? '' : `<label class="field"><span>New cards per day for this deck (optional)</span>
+        <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${Number.isFinite(deck.newPerDay) ? deck.newPerDay : ''}">
+        <small class="note" style="margin:4px 0 0">Leave blank to use only the overall limit in Settings. The overall limit still applies on top.</small></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -229,9 +232,12 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     const name = $('deckName').value.trim();
     if (!name) { $('deckErr').textContent = 'Give the deck a name.'; $('deckErr').hidden = false; $('deckName').focus(); return; }
     const course = $('deckCourse').value.trim();
+    // This deck's own new-card limit: blank = none (only the overall limit applies).
+    const raw = $('deckNew')?.value.trim();
+    const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
     const saved = isNew
       ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color };
+      : { ...deck, name, course, color, newPerDay };
     await db.saveDeck(saved);
     closeSheet();
     toast(isNew ? `Created “${name}”` : 'Deck saved');

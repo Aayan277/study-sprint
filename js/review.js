@@ -5,13 +5,13 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, newStudiedToday, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, takeNext, addWaiting, newLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { schedulerOptions } from './sched-settings.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
-import { $, esc, plural, toast } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -31,8 +31,10 @@ async function loadAll() {
   const now = Date.now();
   const hiddenCount = cards.filter(c => isHidden(c, now)).length;
   const visible = cards.filter(c => !isHidden(c, now));
-  const newLeft = Math.max(0, settings.newPerDay - newStudiedToday(logs));
-  return { settings, decks, cards: visible, hiddenCount, statesById: new Map(states.map(s => [s.cardId, s])), newLeft };
+  // New cards left today: the overall limit, each deck's own limit, plus any extra added with Custom study.
+  const extra = extraNewToday(settings.extraNew, now);
+  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(cards.map(c => [c.id, c.deckId])), extra, now });
+  return { settings, decks, cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft };
 }
 
 // How many cards a set of decks has for today.
@@ -78,7 +80,7 @@ export async function renderReview(el, deckId) {
               <i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due}·${dc.fresh}</small></button>`;
           }).join('')}
         </div>
-        <p class="note">Numbers show due · new for each deck. You get up to ${data.settings.newPerDay} new cards a day (change it in Settings).</p>
+        <p class="note">Numbers show due · new for each deck. You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
       </section>
       <section class="section">
         <h2>Answer by</h2>
@@ -91,9 +93,11 @@ export async function renderReview(el, deckId) {
       ${c.total
         ? `<button class="btn primary wide" type="button" id="startBtn">Start review · ${plural(c.total, 'card')}</button>
            <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good · E edit · I info · - bury · @ suspend</p>`
-        : emptyMessage(data, c)}`;
+        : emptyMessage(data, c)}
+      ${data.decks.length ? '<button class="btn ghost wide custom-btn" type="button" id="customBtn">Custom study…</button>' : ''}`;
 
     $('startBtn')?.addEventListener('click', () => start(el, data, c.cards, typing, deckId));
+    $('customBtn')?.addEventListener('click', () => openCustomStudy(el, data, c.cards, typing, deckId));
     el.querySelector('[data-all]')?.addEventListener('click', () => { chosen = []; save(); draw(); });
     el.querySelectorAll('[data-deck]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.deck;
@@ -123,11 +127,87 @@ function emptyMessage(data, c) {
   return `<div class="empty"><b>All caught up.</b><br>Nothing is due right now. ${when}${hidden}</div>`;
 }
 
+// ---------- custom study ----------
+// Extra study beyond today's cards, for the decks chosen on the setup screen (like Anki's Custom study).
+//   cards  the cards in those decks (suspended and buried ones already left out)
+function openCustomStudy(el, data, cards, typing, deckId) {
+  const forgot = forgottenQueue(cards, data.statesById, data.logs);
+  const isNew = c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; };
+  const newAvail = cards.filter(isNew).length;
+  let days = 3, extra = 10;
+
+  openSheet(`
+    <h2 id="sheetTitle">Custom study</h2>
+    <p class="note" style="margin-top:0">For the decks chosen on the Review screen.</p>
+    <div class="cs-opt">
+      <b>More new cards today</b>
+      <p>Raises today's new card limit (each deck's own limit too). It goes back to normal tomorrow. ${plural(newAvail, 'new card')} available.</p>
+      <div class="cs-row">
+        <div class="stepper">
+          <button type="button" class="icon-btn" id="csMinus" aria-label="Fewer">−</button>
+          <input id="csNew" type="number" inputmode="numeric" min="1" max="999" value="${extra}" aria-label="Extra new cards">
+          <button type="button" class="icon-btn" id="csPlus" aria-label="More">+</button>
+        </div>
+        <button class="btn primary small" type="button" id="csNewBtn" ${newAvail ? '' : 'disabled'}>Add</button>
+      </div>
+    </div>
+    <div class="cs-opt">
+      <b id="csAheadLbl">Review ahead</b>
+      <p>Study cards that aren't due yet, for example before an exam. Each one is rescheduled from today.</p>
+      <div class="chips" role="group" aria-labelledby="csAheadLbl">
+        ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
+          `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
+      </div>
+      <button class="btn primary small" type="button" id="csAheadBtn"></button>
+    </div>
+    <div class="cs-opt">
+      <b>Cards I forgot today</b>
+      <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
+      <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
+    </div>
+    <button class="btn ghost" type="button" id="csClose">Close</button>`);
+
+  const drawAhead = () => {
+    const n = aheadQueue(cards, data.statesById, days).queue.length;
+    $('csAheadBtn').textContent = n ? `Review ${plural(n, 'card')}` : 'Nothing due then';
+    $('csAheadBtn').disabled = !n;
+  };
+  drawAhead();
+  document.querySelectorAll('#sheet [data-days]').forEach(b => b.addEventListener('click', () => {
+    days = +b.dataset.days;
+    document.querySelectorAll('#sheet [data-days]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    drawAhead();
+  }));
+  const setExtra = v => { extra = Math.max(1, Math.min(999, Math.round(Number(v) || 1))); $('csNew').value = extra; };
+  $('csNew').addEventListener('change', e => setExtra(e.target.value));
+  $('csMinus').addEventListener('click', () => setExtra(extra - 5));
+  $('csPlus').addEventListener('click', () => setExtra(extra + 5));
+  $('csNewBtn').addEventListener('click', async () => {
+    setExtra($('csNew').value);
+    const n = extraNewToday(data.settings.extraNew) + extra;       // adds to any extras from earlier today
+    await db.setSetting('extraNew', { day: dayStart(), n });
+    closeSheet();
+    toast(`${plural(extra, 'extra new card')} for today`);
+    if (R && !R.active) R = null;
+    renderReview(el, deckId);
+  });
+  $('csAheadBtn').addEventListener('click', () => {
+    closeSheet();
+    start(el, data, cards, typing, deckId, { ...aheadQueue(cards, data.statesById, days), label: 'Review ahead' });
+  });
+  $('csForgotBtn').addEventListener('click', () => {
+    closeSheet();
+    start(el, data, cards, typing, deckId, { ...forgot, label: 'Forgotten today' });
+  });
+  $('csClose').addEventListener('click', closeSheet);
+}
+
 // ---------- 2. session ----------
-function start(el, data, cards, typing, deckId) {
-  const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft);
+// custom: optional { queue, waiting, label } for a Custom study session instead of today's cards.
+function start(el, data, cards, typing, deckId, custom = null) {
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft);
   R = {
-    active: true, day: dayStart(), deckId, typing,
+    active: true, day: dayStart(), deckId, typing, custom: custom?.label || null,
     sched: schedulerOptions(data.settings),     // retention, learning steps, max interval, fuzz
     leech: { threshold: data.settings.leechThreshold, action: data.settings.leechAction },
     decks: data.decks,
@@ -177,7 +257,7 @@ function renderSession(el) {
       <button class="link" type="button" id="endBtn">End</button>
     </div>
     <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
-      <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}</span>
+      <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>
       <div class="flash-front${size}">${esc(card.front)}</div>
       <div class="flash-ans" ${R.flipped ? '' : 'hidden'}>
         ${R.typed ? typedResultHTML() : ''}

@@ -538,3 +538,11 @@ dialog.sheet{overflow-y:auto;overscroll-behavior:contain}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
+
+/* Custom study (Review screen) */
+.custom-btn{margin-top:12px}
+.cs-opt{border-top:1px solid var(--rule);padding:14px 0}
+.cs-opt>b{display:block;margin-bottom:2px}
+.cs-opt>p{margin:0 0 10px;color:var(--muted);font-size:.9rem}
+.cs-opt .chips{margin-bottom:10px}
+.cs-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
