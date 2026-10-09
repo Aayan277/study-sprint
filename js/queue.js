@@ -19,7 +19,7 @@ export function newStudiedToday(logs, now = Date.now()) {
 // Work out today's cards.
 //   cards      the cards in the chosen decks, in the order new cards should appear
 //   statesById Map of cardId → saved FSRS state
-//   newLimit   how many new cards are still allowed today
+//   newLimit   how many new cards are still allowed today: a number, or { total, byDeck } from newLimits()
 // Returns { queue, waiting, newAvailable }:
 //   queue    cards to show now: [{ card, kind: 'review' | 'learn' | 'new' }]
 //   waiting  learning cards due later today, shown when their time comes: [{ card, kind, due }]
@@ -39,8 +39,76 @@ export function buildQueue(cards, statesById, newLimit, now = Date.now()) {
   }
   reviews.sort((a, b) => a.due - b.due);          // most overdue first
   waiting.sort((a, b) => a.due - b.due);
-  const news = fresh.slice(0, Math.max(0, newLimit)).map(card => ({ card, kind: 'new' }));
+  const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
   return { queue: interleave(reviews, news), waiting, newAvailable: fresh.length };
+}
+
+// Today's new cards, in order, within the overall limit and each deck's own limit (if it has one).
+export function pickNew(fresh, newLimit) {
+  const { total, byDeck } = typeof newLimit === 'number' ? { total: newLimit, byDeck: new Map() } : newLimit;
+  const left = new Map(byDeck);
+  const out = [];
+  for (const card of fresh) {
+    if (out.length >= total) break;
+    const deckLeft = left.get(card.deckId);
+    if (deckLeft !== undefined) {               // this deck has its own limit
+      if (deckLeft <= 0) continue;
+      left.set(card.deckId, deckLeft - 1);
+    }
+    out.push(card);
+  }
+  return out;
+}
+
+// How many new cards are still allowed today, overall and for each deck with its own limit.
+//   perDay   the overall limit from Settings
+//   decks    all decks; a deck's optional newPerDay is its own limit
+//   logs     today's answers
+//   deckOf   Map cardId → deckId
+//   extra    extra new cards added for today with Custom study (raises every limit)
+// Returns { total, byDeck: Map deckId → new cards left }.
+export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.now() }) {
+  const start = dayStart(now);
+  const studied = new Map();                    // deckId → Set of new cards studied today
+  for (const l of logs) {
+    if (l.timestamp < start || l.state !== NEW) continue;
+    const d = deckOf.get(l.cardId);
+    if (d === undefined) continue;
+    if (!studied.has(d)) studied.set(d, new Set());
+    studied.get(d).add(l.cardId);
+  }
+  const byDeck = new Map();
+  for (const d of decks) {
+    if (Number.isFinite(d.newPerDay)) byDeck.set(d.id, Math.max(0, d.newPerDay + extra - (studied.get(d.id)?.size || 0)));
+  }
+  return { total: Math.max(0, perDay + extra - newStudiedToday(logs, now)), byDeck };
+}
+
+// Custom study: extra new cards added for today, or 0 if they were added on an earlier day.
+export const extraNewToday = (extraNew, now = Date.now()) => (extraNew && extraNew.day === dayStart(now) ? extraNew.n : 0);
+
+// Custom study: review ahead. Review cards that aren't due today but are due within the next `days` days,
+// soonest first. (Learning cards are left out: they're due again soon anyway.)
+export function aheadQueue(cards, statesById, days, now = Date.now()) {
+  const from = dayEnd(now), to = dayEnd(now, days);
+  const queue = [];
+  for (const card of cards) {
+    const st = statesById.get(card.id);
+    if (st && st.state === REVIEW && st.due > from && st.due <= to) queue.push({ card, kind: 'review', due: st.due });
+  }
+  return { queue: queue.sort((a, b) => a.due - b.due), waiting: [] };
+}
+
+// Custom study: the cards you pressed Again on (or got wrong in Play) today, in the order you forgot them.
+export function forgottenQueue(cards, statesById, logs, now = Date.now()) {
+  const start = dayStart(now);
+  const order = [...new Set(logs.filter(l => l.timestamp >= start && l.rating === 1).map(l => l.cardId))];
+  const byId = new Map(cards.map(c => [c.id, c]));
+  const queue = order.filter(id => byId.has(id)).map(id => {
+    const st = statesById.get(id);
+    return { card: byId.get(id), kind: st && isLearning(st.state) ? 'learn' : st && st.state !== NEW ? 'review' : 'new' };
+  });
+  return { queue, waiting: [] };
 }
 
 // Spread new cards evenly through the reviews, so a session isn't all hard reviews then all new cards.

@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
   fuzz: true,
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
+  extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
   seeded: false      // true once the sample deck has been added on first open
 };
 

@@ -74,3 +74,67 @@ test('interval labels', () => {
   assert.deepEqual([30e3, MIN, 10 * MIN, 5 * HOUR, 4 * DAY, 45 * DAY, 400 * DAY].map(formatInterval),
     ['<1m', '1m', '10m', '5h', '4d', '1.5mo', '1.1y']);
 });
+
+import { pickNew, newLimits, extraNewToday, aheadQueue, forgottenQueue } from '../js/queue.js';
+const inDeck = (id, deckId) => ({ id, deckId, front: id, back: id });
+
+test('each deck can have its own new card limit, inside the overall one', () => {
+  const fresh = [inDeck('a1', 'A'), inDeck('a2', 'A'), inDeck('a3', 'A'), inDeck('b1', 'B'), inDeck('b2', 'B')];
+  const ids = l => pickNew(fresh, l).map(c => c.id);
+  assert.deepEqual(ids(3), ['a1', 'a2', 'a3']);
+  assert.deepEqual(ids({ total: 10, byDeck: new Map([['A', 1]]) }), ['a1', 'b1', 'b2']);
+  assert.deepEqual(ids({ total: 2, byDeck: new Map([['A', 1]]) }), ['a1', 'b1']);
+  assert.deepEqual(ids({ total: 10, byDeck: new Map([['A', 0], ['B', 0]]) }), []);
+});
+
+test('new limits count what was already studied today, plus extras', () => {
+  const decks = [{ id: 'A', newPerDay: 3 }, { id: 'B' }];
+  const deckOf = new Map([['a1', 'A'], ['a2', 'A'], ['b1', 'B']]);
+  const logs = [
+    { cardId: 'a1', timestamp: NOW - HOUR, state: NEW }, { cardId: 'a1', timestamp: NOW - 30 * MIN, state: LEARNING },
+    { cardId: 'a2', timestamp: NOW - DAY, state: NEW },        // yesterday: doesn't count
+    { cardId: 'b1', timestamp: NOW - HOUR, state: NEW }
+  ];
+  const l = newLimits({ perDay: 20, decks, logs, deckOf, now: NOW });
+  assert.equal(l.total, 18);
+  assert.deepEqual([...l.byDeck], [['A', 2]]);
+  const more = newLimits({ perDay: 20, decks, logs, deckOf, extra: 5, now: NOW });
+  assert.equal(more.total, 23);
+  assert.equal(more.byDeck.get('A'), 7);
+  // buildQueue takes the same limits
+  const { queue } = buildQueue([inDeck('x', 'A'), inDeck('y', 'A'), inDeck('z', 'A'), inDeck('w', 'B')], new Map(), l, NOW);
+  assert.deepEqual(queue.map(q => q.card.id), ['x', 'y', 'w']);
+});
+
+test('extra new cards only count on the day they were added', () => {
+  assert.equal(extraNewToday({ day: dayStart(NOW), n: 10 }, NOW), 10);
+  assert.equal(extraNewToday({ day: dayStart(NOW - DAY), n: 10 }, NOW), 0);
+  assert.equal(extraNewToday(undefined, NOW), 0);
+});
+
+test('review ahead: review cards due in the next few days, soonest first', () => {
+  const cards = ['today', 'in1', 'in3', 'in9', 'learn', 'new'].map(card);
+  const states = new Map([
+    ['today', { state: REVIEW, due: NOW + HOUR }],
+    ['in1', { state: REVIEW, due: NOW + DAY }],
+    ['in3', { state: REVIEW, due: NOW + 3 * DAY }],
+    ['in9', { state: REVIEW, due: NOW + 9 * DAY }],
+    ['learn', { state: LEARNING, due: NOW + DAY }]
+  ]);
+  assert.deepEqual(aheadQueue(cards, states, 3, NOW).queue.map(q => q.card.id), ['in1', 'in3']);
+  assert.deepEqual(aheadQueue(cards, states, 1, NOW).queue.map(q => q.card.id), ['in1']);
+});
+
+test('forgotten today: cards rated Again today, once each', () => {
+  const cards = ['a', 'b', 'c', 'gone'].map(card);
+  const states = new Map([['a', { state: 3, due: NOW }], ['b', { state: REVIEW, due: NOW + DAY }]]);
+  const logs = [
+    { cardId: 'b', timestamp: NOW - 2 * HOUR, rating: 1 },
+    { cardId: 'a', timestamp: NOW - HOUR, rating: 1 },
+    { cardId: 'b', timestamp: NOW - 30 * MIN, rating: 1 },
+    { cardId: 'c', timestamp: NOW - HOUR, rating: 3 },
+    { cardId: 'a', timestamp: NOW - DAY, rating: 1 },
+    { cardId: 'deleted', timestamp: NOW - HOUR, rating: 1 }
+  ];
+  assert.deepEqual(forgottenQueue(cards, states, logs, NOW).queue.map(q => [q.card.id, q.kind]), [['b', 'review'], ['a', 'learn']]);
+});
