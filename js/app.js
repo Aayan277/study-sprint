@@ -15,7 +15,7 @@ import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 

@@ -22,6 +22,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
   - Upload .csv, .tsv, .txt or Excel (.xlsx) files, or load a shared Google Sheet.
+  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes become one card per blank, and formatting, images and sounds are left out. Cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Review:** daily spaced repetition with FSRS-6.
@@ -65,7 +66,7 @@ Everything is saved in your browser (IndexedDB), on your device only. There are 
 
 ## How it's built
 
-Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages serves the files exactly as they are. Libraries come from a CDN at pinned versions: [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) 5.4.2 for scheduling, and SheetJS, loaded only when you import an Excel file.
+Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages serves the files exactly as they are. Libraries come from a CDN at pinned versions: [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) 5.4.2 for scheduling, SheetJS, loaded only when you import an Excel file, and fflate, fzstd and sql.js, loaded only when you import an Anki deck.
 
 | File | What it does |
 | --- | --- |
@@ -77,6 +78,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/browse.js`, `js/browse-logic.js` | The card list: search, filters, sorting, and every card action |
 | `js/import.js` | Format detection for pasted text, files and sheets |
 | `js/import-screen.js` | The Import screen and its preview |
+| `js/anki.js` | Turns Anki notes into cards (HTML to text, cloze, decks, tags) |
+| `js/anki-read.js` | Opens .apkg files (unzip, decompress, read the SQLite database) |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
