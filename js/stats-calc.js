@@ -36,13 +36,16 @@ export function dayStreak(logs, now = Date.now()) {
   return { days: n, studiedToday: today, week };
 }
 
+// An answer from Review, Play, or a review history imported from Anki.
+export const isAnswerLog = l => l.source === 'review' || l.source === 'play' || l.source === 'anki';
+
 // ---------- retention ----------
 // Of the due reviews in the last 30 days, how many did you remember?
 // A "due review" is a card that had already graduated (Review state) and came due: from the Review
 // tab, or a Play answer that counted as the card's review.
 export function isDueReview(log) {
   if (log.state !== REVIEW) return false;
-  if (log.source === 'review') return true;
+  if (log.source === 'review' || log.source === 'anki') return true;     // anki: imported with an Anki deck
   if (log.source === 'play') return log.reason ? log.reason === 'due' : !!log.applied;
   return false;
 }
@@ -66,8 +69,9 @@ export function reviewsPerDay(logs, now = Date.now(), days = 30) {
   }
   for (const l of logs) {
     const row = index.get(dayKey(l.timestamp));
-    if (!row || (l.source !== 'review' && l.source !== 'play')) continue;
-    row[l.source]++;
+    const src = l.source === 'anki' ? 'review' : l.source;    // reviews done in Anki count as reviews
+    if (!row || (src !== 'review' && src !== 'play')) continue;
+    row[src]++;
     row.total++;
   }
   return out;
@@ -93,7 +97,7 @@ export function hardestCards(cards, statesById, logs, now = Date.now(), limit = 
   const since = daysAgoStart(29, now);
   const misses = new Map();
   for (const l of logs) {
-    if (l.timestamp >= since && !l.correct && (l.source === 'review' || l.source === 'play')) {
+    if (l.timestamp >= since && !l.correct && isAnswerLog(l)) {
       misses.set(l.cardId, (misses.get(l.cardId) || 0) + 1);
     }
   }

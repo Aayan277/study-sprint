@@ -3,6 +3,8 @@
 
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
+import { notesToImport, onlyDeck, deckList, replayHistory } from './anki.js';
+import { schedulerOptions } from './sched-settings.js';
 import { DECK_COLORS } from './decks.js';
 import { $, esc, plural, toast } from './ui.js';
 
@@ -58,11 +60,11 @@ export async function renderImport(el, deckId) {
 
     <section class="pane" id="pane-file" role="tabpanel" aria-labelledby="tab-file" hidden>
       <label class="drop">
-        <input type="file" id="fileIn" accept=".csv,.tsv,.txt,.xlsx,.xls,.json,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
-        <b>Choose a file</b><span class="muted">.csv, .tsv, .txt or Excel (.xlsx)</span>
+        <input type="file" id="fileIn" accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.apkg,.colpkg,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+        <b>Choose a file</b><span class="muted">.csv, .tsv, .txt, Excel (.xlsx) or an Anki deck (.apkg)</span>
         <span class="mono" id="fileName"></span>
       </label>
-      <label class="field" id="sheetPickRow" hidden style="margin-top:12px"><span>Sheet</span><select id="sheetPick"></select></label>
+      <label class="field" id="sheetPickRow" hidden style="margin-top:12px"><span id="sheetPickLbl">Sheet</span><select id="sheetPick"></select></label>
     </section>
 
     <section class="pane" id="pane-sheet" role="tabpanel" aria-labelledby="tab-sheet" hidden>
@@ -82,6 +84,9 @@ export async function renderImport(el, deckId) {
         <label class="field"><span>Front</span><select id="frontCol"></select></label>
         <label class="field"><span>Back</span><select id="backCol"></select></label>
       </div>
+      <label class="adv-row switch-row prog-row" id="progRow" hidden><span><b>Bring over my Anki progress</b>
+        <span id="progInfo"></span></span>
+        <input id="ankiProg" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
         <button class="btn ghost small" type="button" id="swapBtn">⇄ Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
@@ -171,6 +176,7 @@ function wireFile() {
     $('sheetPickRow').hidden = true;
     try {
       if (/\.xlsx?$/i.test(file.name)) await readExcel(file);
+      else if (/\.(apkg|colpkg)$/i.test(file.name)) await readAnki(file);
       else if (/\.json$/i.test(file.name)) {
         // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
         let data = null;
@@ -181,7 +187,9 @@ function wireFile() {
       else showResult(parseText(await file.text()));
     } catch (err) {
       console.error(err);
-      showError(`Couldn't read ${file.name}. ${navigator.onLine ? 'Is it a .csv, .txt or .xlsx file?' : 'Excel files need an internet connection the first time.'}`);
+      const anki = /\.(apkg|colpkg)$/i.test(file.name);
+      showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
+        : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
     }
   });
 }
@@ -192,6 +200,7 @@ async function readExcel(file) {
   const book = XLSX.read(await file.arrayBuffer());
   // Each sheet as rows of cell text.
   const sheetRows = name => XLSX.utils.sheet_to_json(book.Sheets[name], { header: 1, raw: false, defval: '' });
+  $('sheetPickLbl').textContent = 'Sheet';
   const names = book.SheetNames.filter(n => sheetRows(n).length);
   if (!names.length) { showError('That spreadsheet is empty.'); return; }
   if (names.length > 1) {
@@ -200,6 +209,27 @@ async function readExcel(file) {
     $('sheetPick').onchange = () => showResult(parseRows(sheetRows($('sheetPick').value)));
   }
   showResult(parseRows(sheetRows(names[0])));
+}
+
+// Anki deck files (.apkg): see anki-read.js and anki.js. Cards come in as new cards, with their tags;
+// formatting, images and sounds are left out.
+async function readAnki(file) {
+  $('found').textContent = '';
+  $('fileName').textContent = `${file.name} · reading…`;
+  const { readAnkiFile } = await import('./anki-read.js');
+  const all = notesToImport(...Object.values(await readAnkiFile(file)));
+  $('fileName').textContent = file.name;
+  if (!all.rows.length) { showError('That Anki file has no cards in it.'); return; }
+  // Several Anki decks inside: let the user pick one, or take them all.
+  const decks = deckList(all);
+  if (decks.length > 1) {
+    $('sheetPickLbl').textContent = 'Anki deck';
+    $('sheetPick').innerHTML = `<option value="">All decks (${all.rows.length})</option>` +
+      decks.map(d => `<option value="${esc(d.name)}">${esc(d.name.split('::').join(' › '))} (${d.count})</option>`).join('');
+    $('sheetPickRow').hidden = false;
+    $('sheetPick').onchange = () => showResult(onlyDeck(all, $('sheetPick').value));
+  }
+  showResult(all);
 }
 
 // ---------- Google Sheets ----------
@@ -269,7 +299,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => ({ front: c.back, back: c.front }));
+    S.cards = S.cards.map(c => ({ ...c, front: c.back, back: c.front }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -343,6 +373,11 @@ function refreshFlags() {
 
   const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
   if (S.result.headerSkipped) parts.push('The header row was skipped.');
+  if (S.result.images) parts.push(`<span class="warn">${plural(S.result.images, 'note')} had images, which were left out.</span>`);
+  const prog = S.result.progress;
+  if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
+  $('progRow').hidden = !prog?.cards;
+  if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
   $('found').innerHTML = parts.join(' ');
@@ -355,8 +390,21 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim() }));
+  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId }));
   if (!toAdd.length) return;
+  // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
+  let replay = null;
+  if (S.result?.progress?.cards && $('ankiProg').checked) {
+    try {
+      const [{ rate }, settings] = await Promise.all([import('./srs.js'), db.getSettings()]);
+      const opts = schedulerOptions(settings);
+      replay = (cardId, entries) => replayHistory(entries, (state, rating, when) => rate(cardId, state, rating, opts, when));
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't load the scheduler for your Anki progress. Connect to the internet and try again.");
+      return;
+    }
+  }
   let deckId = S.deckId;
   let deckName;
   if (deckId === NEW_DECK) {
@@ -374,7 +422,7 @@ async function save() {
   $('saveBtn').disabled = true;
   const now = Date.now();
   // created + i keeps the cards in the order they were pasted.
-  const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: [], created: now + i }));
+  const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
   if (deckId === NEW_DECK) {
     deckId = db.newId();
     cards.forEach(c => { c.deckId = deckId; });
@@ -384,7 +432,21 @@ async function save() {
     cards.forEach(c => { c.deckId = deckId; });
     await db.putMany('cards', cards);
   }
-  toast(`Added ${plural(cards.length, 'card')} to ${deckName}`);
+  let withHistory = 0;
+  if (replay) {
+    const states = [], logs = [];
+    cards.forEach((card, i) => {
+      const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
+      if (!entries) return;
+      const { state, logs: cardLogs } = replay(card.id, entries);
+      if (state) states.push(state);
+      if (cardLogs.length) withHistory++;
+      cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
+    });
+    if (logs.length) await db.putMany('reviewLog', logs);
+    if (states.length) await db.putStates(states);
+  }
+  toast(`Added ${plural(cards.length, 'card')} to ${deckName}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
   // replace() so the back gesture from the deck doesn't land on this finished import.
   location.replace(`#/deck/${deckId}`);
 }
