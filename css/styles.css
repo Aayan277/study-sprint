@@ -231,6 +231,7 @@ dialog.sheet::backdrop{background:rgba(10,12,18,.5)}
 .c-rev{color:var(--good)}
 .link{background:none;border:0;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:.88rem;padding:10px 8px;min-height:44px}
 .link:disabled{opacity:.4;cursor:default}
+.link.more{text-decoration:none;font-size:1.3rem;line-height:1;min-width:44px;color:var(--ink)}
 .flash{position:relative;display:flex;flex-direction:column;gap:14px;min-height:min(46vh,340px);padding:26px 20px 22px;background:var(--sheet);border:1px solid var(--rule);border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.07),0 0 34px var(--glow);margin-bottom:14px;cursor:default}
 .flash[role="button"]{cursor:pointer}
 /* Quick taps on the card or rating buttons shouldn't select text or show the iPhone tap menu. */
@@ -355,6 +356,8 @@ legend{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppe
 .fb-detail{font-size:.8rem;color:var(--muted)}
 .fb-info{margin:6px 0 12px;font-size:.95rem;overflow-wrap:anywhere}
 .fb-info .given{color:var(--muted);font-size:.88rem;display:block}
+.fb-btns{display:flex;gap:8px;flex-wrap:wrap}
+.fb-btns #nextBtn{flex:1 1 auto}
 .feedback .btn{margin-top:10px;scroll-margin-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 
 .res-head{display:flex;align-items:center;gap:18px;margin-bottom:22px}

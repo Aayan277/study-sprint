@@ -9,8 +9,9 @@ import { buildQueue, takeNext, addWaiting, newStudiedToday, formatInterval, NEW,
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { schedulerOptions } from './sched-settings.js';
-import { isHidden } from './browse-logic.js';
-import { $, esc, plural } from './ui.js';
+import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
+import { openCardPanel } from './browse.js';
+import { $, esc, plural, toast } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -89,7 +90,7 @@ export async function renderReview(el, deckId) {
       </section>` : ''}
       ${c.total
         ? `<button class="btn primary wide" type="button" id="startBtn">Start review · ${plural(c.total, 'card')}</button>
-           <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good</p>`
+           <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good · E edit · I info · - bury · @ suspend</p>`
         : emptyMessage(data, c)}`;
 
     $('startBtn')?.addEventListener('click', () => start(el, data, c.cards, typing, deckId));
@@ -128,6 +129,8 @@ function start(el, data, cards, typing, deckId) {
   R = {
     active: true, day: dayStart(), deckId, typing,
     sched: schedulerOptions(data.settings),     // retention, learning steps, max interval, fuzz
+    leech: { threshold: data.settings.leechThreshold, action: data.settings.leechAction },
+    decks: data.decks,
     deckNames: new Map(data.decks.map(d => [d.id, d.name])),
     deckIds: [...new Set(cards.map(c => c.deckId))],
     statesById: data.statesById,
@@ -160,6 +163,7 @@ function countsHTML() {
 }
 
 function renderSession(el) {
+  R.el = el;
   if (!R.current) return finish(el);
   const { card } = R.current;
   const typeThis = R.typing && canType(card.back);
@@ -169,6 +173,7 @@ function renderSession(el) {
     <div class="rv-head">
       <div class="rv-counts mono" aria-label="Cards left: new, learning, review">${countsHTML()}</div>
       <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
+      <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">⋯</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>
     <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
@@ -190,6 +195,7 @@ function renderSession(el) {
 
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
+  $('moreBtn').addEventListener('click', () => openCardMenu());
   $('showBtn')?.addEventListener('click', () => flip(el));
   if (!R.flipped && !typeThis) $('flash').addEventListener('click', () => flip(el));
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
@@ -252,8 +258,18 @@ async function answer(el, rating) {
     // Still learning and due again today (in a few minutes)? It comes back this session.
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
+    // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
+    let cardBefore = null;
+    if (isNewLeech(prev?.lapses || 0, next.lapses, R.leech.threshold)) {
+      cardBefore = item.card;
+      const leech = markLeech(item.card, R.leech.action);
+      await db.saveCards([leech]);
+      R.version = db.scheduleVersion();
+      if (leech.suspended) dropFromSession(id); else replaceInSession(leech);
+      toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+    }
     const spent = Math.min(now - R.shownAt, MAX_CARD_MS);
-    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent });
+    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent, cardBefore });
     R.stats.reviewed++; R.stats.spent += spent;
     if (rating === Rating.Again) R.stats.again++;
     nextCard(el);
@@ -270,6 +286,7 @@ async function undo(el) {
   try {
     const id = u.item.card.id;
     await db.undoReview(id, u.prev, u.logId);
+    if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
     R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
     if (u.requeued) {
@@ -286,6 +303,46 @@ async function undo(el) {
   } finally {
     R.busy = false;
   }
+}
+
+// ---------- card actions during a session ----------
+// Take a card out of this session (it was suspended, buried, deleted, reset or given a new due date).
+function dropFromSession(id) {
+  R.queue = R.queue.filter(q => q.card.id !== id);
+  R.waiting = R.waiting.filter(q => q.card.id !== id);
+  R.undo = R.undo.filter(u => u.item.card.id !== id);     // its old ratings can't be undone any more
+}
+// Swap in a card's new version (it was edited, flagged or moved) wherever the session holds it.
+function replaceInSession(card) {
+  const swap = q => (q.card.id === card.id ? { ...q, card } : q);
+  R.queue = R.queue.map(swap);
+  R.waiting = R.waiting.map(swap);
+  if (R.current?.card.id === card.id) R.current = { ...R.current, card };
+}
+
+// The ⋯ button (and E / I keys): the same card panel as the card list.
+const LEAVES = ['suspend', 'bury', 'delete', 'reset', 'due'];
+function openCardMenu(showInfo = false) {
+  if (!R?.current) return;
+  openCardPanel(R.current.card, {
+    decks: R.decks, statesById: R.statesById, showInfo, closeAfter: LEAVES,
+    onAction: (act, fresh) => {
+      R.version = db.scheduleVersion();
+      if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
+      else { replaceInSession(fresh); renderSession(R.el); }
+    }
+  });
+}
+
+// Quick keys: bury (-) or suspend (@) the card on screen without opening the panel.
+async function quick(act) {
+  if (!R?.current || R.busy) return;
+  const { card } = R.current;
+  await db.saveCards([act === 'bury' ? { ...card, buriedUntil: buryUntil() } : { ...card, suspended: true }]);
+  R.version = db.scheduleVersion();
+  toast(act === 'bury' ? 'Buried until tomorrow' : 'Suspended');
+  dropFromSession(card.id);
+  nextCard(R.el);
 }
 
 // ---------- 3. finish ----------
@@ -323,14 +380,20 @@ async function finish(el) {
 
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
+// Like Anki: E edits, I shows card info, - buries, @ suspends.
 document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const inInput = e.target.matches('input, textarea, select');
+  if (!inInput) {
+    const k = e.key.toLowerCase();
+    if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i'); return; }
+    if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
+  }
   if (!R.flipped) {
-    if (!inInput && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip($('screen')); }
+    if (!inInput && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
     return;
   }
-  if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer($('screen'), +e.key); }
-  else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); answer($('screen'), R.suggest || Rating.Good); }
+  if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
+  else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
 });

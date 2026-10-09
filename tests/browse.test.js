@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, SORTS } from '../js/browse-logic.js';
+import * as leechFns from '../js/browse-logic.js';
 import { dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 9, 15, 0).getTime();
@@ -82,4 +83,26 @@ test('tags', () => {
 
 test('every filter and sort has a label', () => {
   assert.ok(FILTERS.every(([k, l]) => k && l) && SORTS.every(([k, l]) => k && l));
+});
+
+test('leeches: caught at the threshold, then every half-threshold', () => {
+  const { isNewLeech, markLeech } = leechFns;
+  assert.equal(isNewLeech(6, 7, 8), false);
+  assert.equal(isNewLeech(7, 8, 8), true);
+  assert.equal(isNewLeech(8, 8, 8), false);     // no new lapse
+  assert.equal(isNewLeech(8, 9, 8), false);
+  assert.equal(isNewLeech(11, 12, 8), true);    // 8 + 4
+  assert.equal(isNewLeech(15, 16, 8), true);    // 8 + 8
+  assert.equal(isNewLeech(2, 3, 3), true);
+  assert.equal(isNewLeech(3, 4, 3), false);
+  assert.equal(isNewLeech(4, 5, 3), true);      // 3 + 2
+  assert.equal(isNewLeech(0, 1, 0), false);     // 0 = leeches turned off
+});
+
+test('leeches: tagged, and suspended unless tag-only', () => {
+  const { markLeech } = leechFns;
+  const c = { id: 'a', tags: ['exam'] };
+  assert.deepEqual(markLeech(c, 'suspend'), { id: 'a', tags: ['exam', 'leech'], suspended: true });
+  assert.deepEqual(markLeech(c, 'tag'), { id: 'a', tags: ['exam', 'leech'] });
+  assert.deepEqual(markLeech({ id: 'b', tags: ['leech'] }, 'tag').tags, ['leech']);
 });

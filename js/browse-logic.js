@@ -89,3 +89,18 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
 export function parseTags(text) {
   return [...new Set(String(text ?? '').split(/[,\n]/).map(t => t.trim().toLowerCase()).filter(Boolean))];
 }
+
+// ---------- leeches ----------
+// A leech is a card you keep forgetting. Like Anki: it's flagged when its forgotten count ("lapses")
+// reaches the threshold (8 by default), and again every half-threshold after that (12, 16, ...),
+// so a suspended leech you bring back gets another chance before it's caught again.
+export const LEECH_DEFAULTS = { leechThreshold: 8, leechAction: 'suspend' };   // action: 'suspend' or 'tag'
+export function isNewLeech(prevLapses, nextLapses, threshold = LEECH_DEFAULTS.leechThreshold) {
+  if (!(threshold > 0) || nextLapses <= prevLapses || nextLapses < threshold) return false;
+  return (nextLapses - threshold) % Math.max(1, Math.ceil(threshold / 2)) === 0;
+}
+// What happens to a card that just became a leech: tagged "leech", and suspended unless the action is tag-only.
+export function markLeech(card, action = LEECH_DEFAULTS.leechAction) {
+  const tags = [...new Set([...(card.tags || []), 'leech'])];
+  return { ...card, tags, ...(action === 'suspend' ? { suspended: true } : {}) };
+}

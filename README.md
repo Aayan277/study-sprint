@@ -26,13 +26,16 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Review:** daily spaced repetition with FSRS-6.
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
-  - Undo, keyboard shortcuts, and a summary at the end.
+  - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend), and a summary at the end.
+  - The ⋯ button opens the card's panel mid-review: edit, flag, suspend, bury, move, reset, set due date, delete or see its info.
+  - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki.
   - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams) and fuzz on/off.
 - **Play:** timed rounds.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
   - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
   - **Hard** mode (6 lookalike options) and **Flash** (the question vanishes).
   - Streak scoring, an S–D grade and best scores.
+  - **Card ⋯** after each answer opens the same card panel (pauses the round).
 - **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
 - **Stats:**
   - day streak and retention
