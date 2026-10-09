@@ -14,6 +14,11 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 ## Features
 
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, and a mastery bar.
+- **Card list** (each deck's page, or Decks → Browse all cards):
+  - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
+  - Tap a card to edit it, suspend it, bury it until tomorrow, flag it, move it, reset it to new, set its due date, delete it, or see its full history (Card info).
+  - Select several cards to do any of these to all of them at once, and add single cards with + Add card.
+  - Suspended and buried cards are left out of Review and Play.
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
   - Upload .csv, .tsv, .txt or Excel (.xlsx) files, or load a shared Google Sheet.
@@ -65,6 +70,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/app.js` | Starts the app, switches screens, Settings and backups |
 | `js/db.js` | Saving and loading (IndexedDB), backup export and restore |
 | `js/decks.js` | Deck list, deck page, create/edit/delete, starter decks |
+| `js/browse.js`, `js/browse-logic.js` | The card list: search, filters, sorting, and every card action |
 | `js/import.js` | Format detection for pasted text, files and sheets |
 | `js/import-screen.js` | The Import screen and its preview |
 | `js/review.js` | The Review screen |

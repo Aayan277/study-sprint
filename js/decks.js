@@ -4,6 +4,8 @@ import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
+import { isHidden } from './browse-logic.js';
+import { mountBrowser } from './browse.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -24,13 +26,16 @@ export function cardLevel(state) {
 
 // Count cards, due cards, new cards and mastery levels for one deck.
 function summarize(cards, statesById) {
-  const s = { total: cards.length, due: 0, new: 0, learning: 0, young: 0, mature: 0 };
+  const s = { total: cards.length, due: 0, new: 0, learning: 0, young: 0, mature: 0, hidden: 0 };
   const cutoff = dayEnd();   // a study day ends at 4am, like Anki
+  const now = Date.now();
   for (const c of cards) {
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
     s[lvl]++;
-    if (lvl !== 'new' && st.due <= cutoff) s.due++;
+    // Suspended and buried cards don't count as due (Review skips them).
+    if (isHidden(c, now)) s.hidden++;
+    else if (lvl !== 'new' && st.due <= cutoff) s.due++;
   }
   return s;
 }
@@ -91,6 +96,7 @@ export async function renderLibrary(el) {
         ${masteryBar(stats)}
       </article>`).join('')}</div>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
+    ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
     ${starters.length ? `
     <section class="starters" aria-labelledby="startTitle">
       <h2 id="startTitle">Starter decks</h2>
@@ -139,15 +145,38 @@ export async function renderDeck(el, deckId) {
       <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1></div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
-        <a class="btn ghost small" href="#/import/${esc(deck.id)}">+ Add cards</a>
+        <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
         ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
-    <div class="card section" style="border-left:6px solid ${esc(deck.color)}">
+    <div class="card section deck-summary" style="border-left:6px solid ${esc(deck.color)}">${summaryHTML(s)}</div>
+    <section id="browser"></section>
+    ${cards.length ? '' : `<div class="empty"><b>This deck is empty.</b><br>Add cards one at a time with + Add card, or paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
+  `;
+  $('back').addEventListener('click', () => { location.hash = '#/decks'; });
+  $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
+    if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
+  }, s.total));
+  // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
+  await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
+}
+
+// Redraw the counts card at the top of a deck page after the card list changes something.
+async function refreshCounts(el, deckId) {
+  const box = el.querySelector('.deck-summary');
+  if (!box) return;
+  const [cards, states] = await Promise.all([db.getCardsInDeck(deckId), db.getAll('cardStates')]);
+  const s = summarize(cards, new Map(states.map(x => [x.cardId, x])));
+  box.innerHTML = summaryHTML(s);
+}
+
+function summaryHTML(s) {
+  return `
       <div class="deck-counts" style="margin-top:0">
         <span><b>${s.total}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
         <span class="due"><b>${s.due}</b> due today</span>
         <span><b>${s.new}</b> new</span>
+        ${s.hidden ? `<span><b>${s.hidden}</b> suspended or buried</span>` : ''}
       </div>
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">
@@ -155,17 +184,7 @@ export async function renderDeck(el, deckId) {
         <span><i class="sw lv-learning"></i>Learning <b>${s.learning}</b></span>
         <span><i class="sw lv-young"></i>Young <b>${s.young}</b></span>
         <span><i class="sw lv-mature"></i>Mature <b>${s.mature}</b></span>
-      </div>
-    </div>
-    <h2>Cards</h2>
-    ${cards.length
-      ? `<div class="clist">${cards.map(c => `<div class="citem"><div class="f">${esc(c.front)}</div><div class="b">${esc(c.back)}</div></div>`).join('')}</div>`
-      : `<div class="empty"><b>This deck is empty.</b><br>Paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
-  `;
-  $('back').addEventListener('click', () => { location.hash = '#/decks'; });
-  $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
-    if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
-  }, s.total));
+      </div>`;
 }
 
 // ---------- create / rename / recolor / delete ----------

@@ -9,6 +9,7 @@ import { buildQueue, takeNext, addWaiting, newStudiedToday, formatInterval, NEW,
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { schedulerOptions } from './sched-settings.js';
+import { isHidden } from './browse-logic.js';
 import { $, esc, plural } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -25,8 +26,12 @@ async function loadAll() {
   // New cards come in deck order, then in the order they were added.
   const order = new Map(decks.map((d, i) => [d.id, i]));
   cards.sort((a, b) => order.get(a.deckId) - order.get(b.deckId) || a.created - b.created);
+  // Suspended cards, and cards buried until tomorrow, sit out of Review.
+  const now = Date.now();
+  const hiddenCount = cards.filter(c => isHidden(c, now)).length;
+  const visible = cards.filter(c => !isHidden(c, now));
   const newLeft = Math.max(0, settings.newPerDay - newStudiedToday(logs));
-  return { settings, decks, cards, statesById: new Map(states.map(s => [s.cardId, s])), newLeft };
+  return { settings, decks, cards: visible, hiddenCount, statesById: new Map(states.map(s => [s.cardId, s])), newLeft };
 }
 
 // How many cards a set of decks has for today.
@@ -106,14 +111,15 @@ export async function renderReview(el, deckId) {
 }
 
 function emptyMessage(data, c) {
-  if (!data.cards.length) {
+  if (!data.cards.length && !data.hiddenCount) {
     return `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>`;
   }
   // When does the next card in these decks come due?
   const ids = new Set(c.cards.map(x => x.id));
   const next = Math.min(...[...data.statesById.values()].filter(s => ids.has(s.cardId) && s.state !== NEW).map(s => s.due));
   const when = Number.isFinite(next) ? `The next card is due in <b>${formatInterval(next - Date.now())}</b>.` : '';
-  return `<div class="empty"><b>All caught up.</b><br>Nothing is due right now. ${when}</div>`;
+  const hidden = data.hiddenCount ? `<br><span class="muted">${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.</span>` : '';
+  return `<div class="empty"><b>All caught up.</b><br>Nothing is due right now. ${when}${hidden}</div>`;
 }
 
 // ---------- 2. session ----------

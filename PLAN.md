@@ -173,6 +173,13 @@ Built one at a time, in this order: write a short plan here, get it approved, bu
 5. **Images and audio on cards.**
 6. **Sharing decks with friends by link** (needs syncing first).
 
+## Anki features (requested after v1)
+
+Built in 3 parts:
+1. ✅ **Card list and actions** (v1.4): browse every card in a deck or all decks; search, filter, sort; edit; add a single card; select several; suspend, bury until tomorrow, delete, move, reset to new, set due date, flags, card info. Suspended and buried cards are left out of Review and Play.
+2. **Review and Play:** a ⋯ menu during Review (edit, suspend, bury, flag, delete, card info) and keyboard shortcuts; leeches (cards forgotten 8 times are suspended and tagged automatically).
+3. **Study options:** custom study (extra new cards today, review ahead, re-study cards forgotten today), new cards per day for each deck, reverse cards (also quiz back → front as its own card).
+
 ## Parked (not planned for now)
 
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.

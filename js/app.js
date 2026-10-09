@@ -12,9 +12,10 @@ import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMax
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
+import { renderBrowseAll } from './browse.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -317,6 +318,7 @@ const ROUTES = {
   play: el => renderPlay(el),
   decks: el => renderLibrary(el),
   deck: (el, id) => renderDeck(el, id),
+  browse: el => renderBrowseAll(el),
   import: (el, deckId) => renderImport(el, deckId),
   stats: el => renderStats(el),
   settings: el => renderSettings(el)
@@ -336,7 +338,7 @@ async function route() {
   $('gearBtn').setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings');
   const render = ROUTES[name] || ROUTES.decks;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
-  const tab = name === 'deck' || name === 'import' ? 'decks' : name;
+  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });

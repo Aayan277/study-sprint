@@ -177,6 +177,42 @@ export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
 }
 
+// ---------- card list actions ----------
+// Delete cards with their schedules and review history, all in one go.
+export async function deleteCards(cardIds) {
+  const db = await openDB();
+  const tx = db.transaction(['cards', 'cardStates', 'reviewLog'], 'readwrite');
+  const logIndex = tx.objectStore('reviewLog').index('cardId');
+  for (const id of cardIds) {
+    tx.objectStore('cards').delete(id);
+    tx.objectStore('cardStates').delete(id);
+    logIndex.openCursor(id).onsuccess = ev => { const cur = ev.target.result; if (cur) { cur.delete(); cur.continue(); } };
+  }
+  await finished(tx);
+  scheduleChanges++;
+}
+
+// Change schedules directly (set a due date), or remove them (reset a card to new).
+// The review history is kept either way.
+export async function putStates(states) { await putMany('cardStates', states); scheduleChanges++; }
+export async function clearStates(cardIds) {
+  const db = await openDB();
+  const tx = db.transaction('cardStates', 'readwrite');
+  cardIds.forEach(id => tx.objectStore('cardStates').delete(id));
+  await finished(tx);
+  scheduleChanges++;
+}
+
+// Every review-log row for one card (its history), oldest first.
+export async function getCardLogs(cardId) {
+  const rows = await getAllByIndex('reviewLog', 'cardId', cardId);
+  return rows.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+// Save edited cards (front, back, tags, suspended, buried, flag, deck). Counts as a schedule change
+// because suspending or burying changes what Review shows.
+export async function saveCards(cards) { await putMany('cards', cards); scheduleChanges++; }
+
 // ---------- settings ----------
 // Returns every setting, filling in defaults for anything never saved.
 export async function getSettings() {
