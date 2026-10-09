@@ -14,6 +14,7 @@ import {
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
 import { schedulerOptions } from './sched-settings.js';
+import { isHidden } from './browse-logic.js';
 import { checkAnswer } from './match.js';
 import { $, esc, plural } from './ui.js';
 
@@ -46,9 +47,11 @@ function stopRound() {
 // ---------- setup ----------
 export async function renderPlay(el) {
   stopRound();
-  const [settings, decks, cards, states, logs] = await Promise.all([
+  const [settings, decks, allCards, states, logs] = await Promise.all([
     db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
   ]);
+  // Suspended cards, and cards buried until tomorrow, sit out of Play too.
+  const cards = allCards.filter(c => !isHidden(c));
   decks.sort((a, b) => a.created - b.created);
   data = {
     settings, decks, cards,
