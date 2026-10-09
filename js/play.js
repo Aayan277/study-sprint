@@ -14,9 +14,10 @@ import {
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
 import { schedulerOptions } from './sched-settings.js';
-import { isHidden } from './browse-logic.js';
+import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
+import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
-import { $, esc, plural } from './ui.js';
+import { $, esc, plural, toast } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
@@ -242,6 +243,7 @@ function showQuestion() {
   clearTimeout(G.autoTimer);
   if (G.i >= G.queue.length) G.queue.push(...weightedQueue(G.pool, 30, G.weightOf));
   const card = G.queue[G.i];
+  if (!card) { finish(); return; }      // every card in the round was suspended, buried or deleted
   const q = questionFor(card, G.qtype);
   Object.assign(G, { card, q, answered: false });
   updateHud();
@@ -366,8 +368,11 @@ function answer(choice) {
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
   const yours = !ok && given ? `<span class="given">You answered: ${esc(given)}</span>` : '';
   const info = ok ? '' : `<p class="fb-info"><b>${esc(G.q.answer)}</b>${yours}</p>`;
-  $('feedback').innerHTML = `${head}${info}<button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">↵</span></button>`;
+  $('feedback').innerHTML = `${head}${info}<div class="fb-btns">
+    <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">↵</span></button>
+    <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ⋯</button></div>`;
   $('nextBtn').addEventListener('click', next);
+  $('cardBtn').addEventListener('click', openCardMenu);
   if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
   else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : 750);
   else {
@@ -401,6 +406,7 @@ async function record(round, entry) {
       await db.saveReview(next, log);
       data.statesById.set(id, next);
       data.playedToday.add(id);
+      await checkLeech(round, entry.card, prev, next);
     } catch (err) {
       // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
       console.error(err);
@@ -414,6 +420,42 @@ async function record(round, entry) {
   }
   entry.rating = rating;
   entry.decision = decision;
+}
+
+// Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
+async function checkLeech(round, card, prev, next) {
+  if (!isNewLeech(prev?.lapses || 0, next.lapses, data.settings.leechThreshold)) return;
+  const leech = markLeech(card, data.settings.leechAction);
+  await db.saveCards([leech]);
+  if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, leech);
+  toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+}
+
+// Take a card out of the rest of the round (suspended, buried or deleted), or swap in its edited version.
+function dropFromRound(round, id) {
+  const keep = c => c.id !== id;
+  round.queue = [...round.queue.slice(0, round.i + 1), ...round.queue.slice(round.i + 1).filter(keep)];
+  round.pool = round.pool.filter(keep);
+  round.all = round.all.filter(keep);
+}
+function replaceInRound(round, card) {
+  const swap = c => (c.id === card.id ? card : c);
+  round.queue = round.queue.map(swap); round.pool = round.pool.map(swap); round.all = round.all.map(swap);
+  if (round.card?.id === card.id) round.card = card;
+}
+
+// The "Card ⋯" button after answering: the same card panel as the card list. Pauses the auto "Next".
+function openCardMenu() {
+  if (!G?.answered) return;
+  clearTimeout(G.autoTimer);
+  const round = G;
+  openCardPanel(round.card, {
+    decks: data.decks, statesById: data.statesById, closeAfter: ['suspend', 'bury', 'delete'],
+    onAction: (act, fresh) => {
+      if (['suspend', 'bury', 'delete'].includes(act) || !fresh) dropFromRound(round, round.card.id);
+      else replaceInRound(round, fresh);
+    }
+  });
 }
 
 function next() {
@@ -511,7 +553,7 @@ async function finish() {
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', e => {
-  if (!G || !$('pCard') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!G || !$('pCard') || e.ctrlKey || e.metaKey || e.altKey || document.getElementById('sheet')?.open) return;
   if (e.key === 'Escape') { e.preventDefault(); const el = G.el; stopRound(); renderPlay(el); return; }
   if (G.answered) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); }

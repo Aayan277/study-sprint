@@ -122,8 +122,13 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
 }
 
 // ---------- one card's panel ----------
-export async function openCardPanel(card, { decks, statesById, refresh }) {
+// ctx: { decks, statesById, refresh, onAction, closeAfter, showInfo }
+//   onAction(act, freshCard, freshState)  optional: told about each change (used by Review and Play)
+//   closeAfter  actions that close the panel instead of reopening it (e.g. Review skips a suspended card)
+//   showInfo    open the "Card info" section straight away
+export async function openCardPanel(card, ctx) {
   if (!card) return;
+  const { decks, statesById, refresh = async () => {}, onAction, closeAfter = [], showInfo = false } = ctx;
   const state = statesById.get(card.id);
   const studied = state && state.state !== 0;
   const logs = await db.getCardLogs(card.id);
@@ -152,7 +157,7 @@ export async function openCardPanel(card, { decks, statesById, refresh }) {
     <div class="field"><span>Move to deck</span>${moveRow(decks, card.deckId)}</div>
     <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review this card once first, then you can set its due date.</p>'}</div>
 
-    <details class="card-info">
+    <details class="card-info" ${showInfo ? 'open' : ''}>
       <summary>Card info</summary>
       <dl class="info-grid">
         <dt>Added</dt><dd>${card.created > 1e12 ? shortDate(card.created) : '–'}</dd>
@@ -172,33 +177,34 @@ export async function openCardPanel(card, { decks, statesById, refresh }) {
     </details>
     <button class="btn ghost" type="button" id="ceClose">Close</button>`);
 
-  const again = async msg => {      // after a change: save, refresh the list, reopen with fresh data
+  const again = async (msg, act) => {      // after a change: refresh the list, tell the caller, reopen with fresh data
     if (msg) toast(msg);
     await refresh();
     const fresh = (await db.get('cards', card.id));
     const st = await db.get('cardStates', card.id);
     if (st) statesById.set(card.id, st); else statesById.delete(card.id);
-    if (fresh) openCardPanel(fresh, { decks, statesById, refresh }); else closeSheet();
+    if (onAction) await onAction(act, fresh, st);
+    if (fresh && !closeAfter.includes(act)) openCardPanel(fresh, { ...ctx, showInfo: false }); else closeSheet();
   };
-  const save = (changes, msg) => db.saveCards([{ ...card, ...changes }]).then(() => again(msg));
+  const save = (changes, msg, act) => db.saveCards([{ ...card, ...changes }]).then(() => again(msg, act));
 
   $('ceClose').addEventListener('click', closeSheet);
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
     const front = $('ceFront').value.trim(), back = $('ceBack').value.trim();
     if (!front || !back) { $('ceErr').textContent = 'A card needs a front and a back.'; $('ceErr').hidden = false; return; }
-    save({ front, back, tags: parseTags($('ceTags').value) }, 'Saved');
+    save({ front, back, tags: parseTags($('ceTags').value) }, 'Saved', 'edit');
   });
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
-    if (act === 'suspend') save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended');
-    if (act === 'bury') save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow');
-    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new')));
-    if (act === 'delete') confirmIn('ceConfirm', 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted')));
+    if (act === 'suspend') save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
+    if (act === 'bury') save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');
+    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
+    if (act === 'delete') confirmIn('ceConfirm', 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
   }));
-  wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed'));
-  wireMove(deckId => save({ deckId }, `Moved to ${decks.find(d => d.id === deckId).name}`));
-  if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today')));
+  wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
+  wireMove(deckId => save({ deckId }, `Moved to ${decks.find(d => d.id === deckId).name}`, 'move'));
+  if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
 }
 
 // ---------- acting on several cards ----------

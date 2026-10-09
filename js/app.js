@@ -15,7 +15,7 @@ import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.5';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -54,6 +54,22 @@ async function renderSettings(el) {
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you should be to remember a card when it comes back. Higher means you remember more but review more often. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+      </div>
+      <div class="set-row">
+        <div><b>Leech after</b><p>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</p></div>
+        <div class="stepper">
+          <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
+          <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
+          <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
+        </div>
+      </div>
+      <div class="set-row column">
+        <div><b id="leechActLbl">When a card becomes a leech</b></div>
+        <div class="chips" role="group" aria-labelledby="leechActLbl">
+          <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
+          <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
+        </div>
+        <p class="note" style="margin:0">Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</p>
       </div>
       <details class="advanced" id="advanced">
         <summary>Advanced scheduling</summary>
@@ -141,6 +157,21 @@ async function renderSettings(el) {
   $('npd').addEventListener('change', e => setNpd(e.target.value));
   $('npdMinus').addEventListener('click', () => setNpd(settings.newPerDay - 5));
   $('npdPlus').addEventListener('click', () => setNpd(settings.newPerDay + 5));
+  // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
+  const setLeech = v => {
+    const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
+    $('leech').value = n;
+    settings.leechThreshold = n;
+    db.setSetting('leechThreshold', n);
+  };
+  $('leech').addEventListener('change', e => setLeech(e.target.value));
+  $('leechMinus').addEventListener('click', () => setLeech(settings.leechThreshold - 1));
+  $('leechPlus').addEventListener('click', () => setLeech(settings.leechThreshold + 1));
+  document.querySelectorAll('[data-leech]').forEach(btn => btn.addEventListener('click', () => {
+    settings.leechAction = btn.dataset.leech;
+    db.setSetting('leechAction', settings.leechAction);
+    document.querySelectorAll('[data-leech]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  }));
   $('ret').addEventListener('input', e => { $('retOut').textContent = `${e.target.value}%`; });
   $('ret').addEventListener('change', e => {
     settings.targetRetention = Number(e.target.value) / 100;

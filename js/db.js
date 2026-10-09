@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS = {
   relearningSteps: '10m',
   maxInterval: 36500,        // days
   fuzz: true,
+  leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
+  leechAction: 'suspend',    // 'suspend' or 'tag'
   seeded: false      // true once the sample deck has been added on first open
 };
 
