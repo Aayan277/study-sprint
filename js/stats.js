@@ -5,9 +5,12 @@
 
 import * as db from './db.js';
 import { cardLevel } from './decks.js';
-import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey } from './stats-calc.js';
+import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { $, esc, plural } from './ui.js';
+
+// Where an answer came from, for tooltips.
+const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
 
 const LEVELS = [['mature', 'Mature'], ['young', 'Young'], ['learning', 'Learning'], ['new', 'New']];
 const LEVEL_NOTE = {
@@ -34,7 +37,7 @@ export async function renderStats(el) {
   const cards = deckFilter === 'all' ? allCards : allCards.filter(c => c.deckId === deckFilter);
   const ids = new Set(cards.map(c => c.id));
   const logs = allLogs.filter(l => ids.has(l.cardId));
-  const streak = dayStreak(allLogs.filter(l => l.source === 'review' || l.source === 'play'), now);
+  const streak = dayStreak(allLogs.filter(isAnswerLog), now);
   const ret = retention(logs, now);
   const perDay = reviewsPerDay(logs, now);
   const forecast = dueForecast(cards.map(c => statesById.get(c.id)), now);
@@ -133,7 +136,7 @@ export async function renderStats(el) {
     if (!c) { $('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
-    const recent = (logsByCard.get(c.id) || []).filter(l => l.source === 'review' || l.source === 'play').sort((a, b) => a.timestamp - b.timestamp).slice(-10);
+    const recent = (logsByCard.get(c.id) || []).filter(isAnswerLog).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
     const due = !st || st.state === 0 ? '' : st.due <= now ? 'Due now' : `Due in ${formatInterval(st.due - now)}`;
     $('mDetail').innerHTML = `
       <div class="f">${esc(c.front)}</div>
@@ -141,7 +144,7 @@ export async function renderStats(el) {
       <div class="meta"><span><i class="sw lv-${lvl}"></i>${LEVEL_NOTE[lvl]}</span>${due ? `<span>${due}</span>` : ''}
         ${st && st.state !== 0 ? `<span>${plural(st.reps, 'review')}, forgotten ${st.lapses}×</span>` : ''}</div>
       <div class="meta">${recent.length ? `<span aria-label="Last ${recent.length} answers, oldest first: ${recent.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${recent.map(l =>
-        `<i class="hd ${l.correct ? 'y' : 'n'}" title="${l.source === 'play' ? 'Play' : 'Review'}, ${l.correct ? 'right' : 'wrong'}"></i>`).join('')}</span>` : '<span>No answers yet</span>'}</div>`;
+        `<i class="hd ${l.correct ? 'y' : 'n'}" title="${SOURCE_NAMES[l.source] || 'Review'}, ${l.correct ? 'right' : 'wrong'}"></i>`).join('')}</span>` : '<span>No answers yet</span>'}</div>`;
   };
   $('mGrid').addEventListener('click', e => {
     const b = e.target.closest('.mtile'); if (!b) return;

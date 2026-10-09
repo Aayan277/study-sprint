@@ -546,3 +546,4 @@ dialog.sheet{overflow-y:auto;overscroll-behavior:contain}
 .cs-opt>p{margin:0 0 10px;color:var(--muted);font-size:.9rem}
 .cs-opt .chips{margin-bottom:10px}
 .cs-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.prog-row{border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin:6px 0 12px;background:var(--accent-soft)}

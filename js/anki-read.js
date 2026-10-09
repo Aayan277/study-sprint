@@ -4,7 +4,7 @@
 //   fflate   unzips the file
 //   fzstd    unpacks the database in newer Anki files (2.1.50+), which is compressed
 //   sql.js   reads the SQLite database
-// readAnkiFile() returns { notes, models } for notesToImport() in anki.js.
+// readAnkiFile() returns { notes, models, reviews } for notesToImport() in anki.js.
 
 const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
 const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
@@ -73,15 +73,33 @@ function readCollection(db) {
     for (const [id, d] of Object.entries(JSON.parse(decksJson || '{}'))) deckNames.set(String(id), d.name);
   }
 
-  // A note's deck is the deck of its first card.
-  const deckOfNote = new Map();
-  for (const [nid, did] of q('SELECT nid, did FROM cards ORDER BY ord DESC')) deckOfNote.set(nid, did);
+  // A note's deck is the deck of its first card. Each note also keeps its cards' ids by card number (ord),
+  // so their review history can be matched up: ord 0 is the front → back card, and for cloze notes
+  // ord n - 1 is blank number n.
+  const deckOfNote = new Map(), cardsOfNote = new Map();
+  for (const [id, nid, did, ord] of q('SELECT id, nid, did, ord FROM cards ORDER BY ord DESC')) {
+    deckOfNote.set(nid, did);
+    if (!cardsOfNote.has(nid)) cardsOfNote.set(nid, {});
+    cardsOfNote.get(nid)[ord] = String(id);
+  }
+
+  // Review history (only there when the deck was exported with "Include scheduling information").
+  //   id = when (ms), ease = button (1 Again … 4 Easy, 0 = changed by hand), time = ms taken, type 4/5 = manual change
+  const reviews = new Map();
+  if (tables.has('revlog')) {
+    for (const [id, cid, ease, ivl, time, type] of q('SELECT id, cid, ease, ivl, time, type FROM revlog ORDER BY id')) {
+      const key = String(cid);
+      if (!reviews.has(key)) reviews.set(key, []);
+      reviews.get(key).push({ timestamp: id, ease, ivl, ms: time, type });
+    }
+  }
 
   const notes = q('SELECT id, mid, flds, tags FROM notes ORDER BY id').map(([id, mid, flds, tags]) => ({
     mid: String(mid),
     fields: String(flds).split('\x1f'),
     tags: String(tags || '').trim().split(/\s+/).filter(Boolean),
-    deck: deckNames.get(String(deckOfNote.get(id))) || ''
+    deck: deckNames.get(String(deckOfNote.get(id))) || '',
+    cards: cardsOfNote.get(id) || {}
   }));
-  return { notes, models };
+  return { notes, models, reviews };
 }

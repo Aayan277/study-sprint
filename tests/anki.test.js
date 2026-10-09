@@ -2,7 +2,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList } from '../js/anki.js';
+import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory } from '../js/anki.js';
+import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
   assert.equal(htmlToText('Learning by <b>association</b>&nbsp;(Pavlov)'), 'Learning by association (Pavlov)');
@@ -63,4 +64,39 @@ test('picking one Anki deck includes its subdecks', () => {
   assert.deepEqual(deckList(r), [
     { name: 'Bio', count: 1 }, { name: 'Psych', count: 2 }, { name: 'Psych::Unit 2', count: 1 }, { name: 'Psychology', count: 1 }
   ]);
+});
+
+test('rows remember which Anki card they came from, and its history', () => {
+  const reviews = new Map([['c10', [{ timestamp: 1, ease: 3 }, { timestamp: 2, ease: 0, type: 4, ivl: 5 }]], ['c21', [{ timestamp: 5, ease: 1 }]], ['c20', []]]);
+  const r = notesToImport([
+    { mid: '1', fields: ['a', '1'], cards: { 0: 'c10', 1: 'c11' } },
+    { mid: '2', fields: ['x {{c1::y}} {{c2::z}}', ''], cards: { 0: 'c20', 1: 'c21' } },
+    { mid: '1', fields: ['b', '2'] }
+  ], models, reviews);
+  assert.deepEqual(r.ankiIds, ['c10', 'c20', 'c21', null]);
+  assert.deepEqual([...r.reviews.keys()], ['c10', 'c21']);
+  assert.deepEqual(r.progress, { cards: 2, reviews: 2 });       // the hand-made change isn't a review
+  assert.deepEqual(onlyDeck({ ...r, decks: ['A', 'B', 'B', 'A'] }, 'B').progress, { cards: 1, reviews: 1 });
+});
+
+test('replaying Anki reviews: ratings, hand-made changes and Forget', () => {
+  // A fake scheduler that just counts reviews, so the replay order is easy to check.
+  const rate = (st, rating, when) => ({ state: rating === 1 ? 3 : 2, n: (st?.n || 0) + 1, last: when });
+  const { state, logs } = replayHistory([
+    { timestamp: 100, ease: 3, ms: 4000, type: 0 },
+    { timestamp: 200, ease: 0, ivl: 9, type: 4 },             // "Set due date": skipped
+    { timestamp: 300, ease: 1, ms: 90000, type: 1 },
+    { timestamp: 400, ease: 0, ivl: 0, type: 4 },             // "Forget": back to new
+    { timestamp: 500, ease: 4, ms: 2000, type: 0 }
+  ], rate);
+  assert.deepEqual(state, { state: 2, n: 1, last: 500 });
+  assert.deepEqual(logs.map(l => [l.timestamp, l.rating, l.correct, l.state, l.ms]), [[100, 3, true, 0, 4000], [300, 1, false, 2, 60000], [500, 4, true, 0, 2000]]);
+  assert.ok(logs.every(l => l.source === 'anki'));
+  assert.equal(replayHistory([{ timestamp: 1, ease: 0, ivl: 0, type: 4 }], rate).state, null);
+});
+
+test('reviews from Anki count in the stats', () => {
+  const l = { source: 'anki', state: 2, correct: true, timestamp: Date.now() };
+  assert.ok(isAnswerLog(l) && isDueReview(l));
+  assert.equal(reviewsPerDay([l]).at(-1).review, 1);
 });

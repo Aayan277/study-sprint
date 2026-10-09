@@ -3,7 +3,8 @@
 
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
-import { notesToImport, onlyDeck, deckList } from './anki.js';
+import { notesToImport, onlyDeck, deckList, replayHistory } from './anki.js';
+import { schedulerOptions } from './sched-settings.js';
 import { DECK_COLORS } from './decks.js';
 import { $, esc, plural, toast } from './ui.js';
 
@@ -83,6 +84,9 @@ export async function renderImport(el, deckId) {
         <label class="field"><span>Front</span><select id="frontCol"></select></label>
         <label class="field"><span>Back</span><select id="backCol"></select></label>
       </div>
+      <label class="adv-row switch-row prog-row" id="progRow" hidden><span><b>Bring over my Anki progress</b>
+        <span id="progInfo"></span></span>
+        <input id="ankiProg" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
         <button class="btn ghost small" type="button" id="swapBtn">⇄ Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
@@ -370,7 +374,10 @@ function refreshFlags() {
   const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
   if (S.result.headerSkipped) parts.push('The header row was skipped.');
   if (S.result.images) parts.push(`<span class="warn">${plural(S.result.images, 'note')} had images, which were left out.</span>`);
-  if (S.result.format.id === 'anki') parts.push('They come in as new cards, with their tags.');
+  const prog = S.result.progress;
+  if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
+  $('progRow').hidden = !prog?.cards;
+  if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
   $('found').innerHTML = parts.join(' ');
@@ -383,8 +390,21 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [] }));
+  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId }));
   if (!toAdd.length) return;
+  // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
+  let replay = null;
+  if (S.result?.progress?.cards && $('ankiProg').checked) {
+    try {
+      const [{ rate }, settings] = await Promise.all([import('./srs.js'), db.getSettings()]);
+      const opts = schedulerOptions(settings);
+      replay = (cardId, entries) => replayHistory(entries, (state, rating, when) => rate(cardId, state, rating, opts, when));
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't load the scheduler for your Anki progress. Connect to the internet and try again.");
+      return;
+    }
+  }
   let deckId = S.deckId;
   let deckName;
   if (deckId === NEW_DECK) {
@@ -412,7 +432,21 @@ async function save() {
     cards.forEach(c => { c.deckId = deckId; });
     await db.putMany('cards', cards);
   }
-  toast(`Added ${plural(cards.length, 'card')} to ${deckName}`);
+  let withHistory = 0;
+  if (replay) {
+    const states = [], logs = [];
+    cards.forEach((card, i) => {
+      const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
+      if (!entries) return;
+      const { state, logs: cardLogs } = replay(card.id, entries);
+      if (state) states.push(state);
+      if (cardLogs.length) withHistory++;
+      cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
+    });
+    if (logs.length) await db.putMany('reviewLog', logs);
+    if (states.length) await db.putStates(states);
+  }
+  toast(`Added ${plural(cards.length, 'card')} to ${deckName}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
   // replace() so the back gesture from the deck doesn't land on this finished import.
   location.replace(`#/deck/${deckId}`);
 }

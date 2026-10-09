@@ -22,7 +22,8 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
   - Upload .csv, .tsv, .txt or Excel (.xlsx) files, or load a shared Google Sheet.
-  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes become one card per blank, and formatting, images and sounds are left out. Cards start as new.
+  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes become one card per blank, and formatting, images and sounds are left out.
+  - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS. Off, or with no history, cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Review:** daily spaced repetition with FSRS-6.
