@@ -5,26 +5,14 @@
 //   note       one fact, with several fields (e.g. Front and Back), plus tags
 //   note type  says which fields a note has. "Cloze" notes hide parts of one text: {{c1::answer::hint}}
 //   deck       where the note's cards live. Subdecks are written "Parent::Child"
-// Fields are HTML. Study Sprint cards are plain text, so formatting is dropped and images and sounds are left out.
+// Fields are HTML. Bold, italics and lists are kept (as format.js marks); other formatting, images and sounds
+// are left out.
 
-// HTML → plain text, keeping line breaks.
-export function htmlToText(html) {
-  return String(html ?? '')
-    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/\[sound:[^\]]*\]/g, '')                          // audio
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(div|p|li|tr|h\d)>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
-    .replace(/<[^>]+>/g, '')                                   // every other tag, images included
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
-      if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1));
-      return ENTITIES[e.toLowerCase()] ?? m;
-    })
-    .split('\n').map(l => l.replace(/[ \t ]+/g, ' ').trim()).join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-const ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ndash: '–', mdash: '—', hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“' };
+import { htmlToMarks } from './format.js';
+
+// HTML → plain text, keeping line breaks (formatting dropped). Fields themselves keep their bold,
+// italics and lists as marks: see htmlToMarks in format.js.
+export const htmlToText = html => htmlToMarks(html, { marks: false });
 
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
@@ -64,7 +52,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const usedTypes = new Set();
   for (const note of notes) {
     const model = models.get(String(note.mid)) || { name: '', fields: [], cloze: false };
-    const text = note.fields.map(htmlToText);
+    const text = note.fields.map(f => htmlToMarks(f));       // bold, italics and lists kept as marks
     if (note.fields.some(hasImage)) images++;
     const noteTags = (note.tags || []).map(t => t.toLowerCase());
     const nums = clozeNumbers(note.fields[0] ?? '');

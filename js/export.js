@@ -4,6 +4,8 @@
 // The pure parts (CSV text, the Anki deck's contents) are tested by tests/export.test.js.
 // makeApkg() packs the Anki file in the browser, with the same libraries the Anki import uses.
 
+import { formatHTML, plainText } from './format.js';
+
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
 const cell = v => {
@@ -20,10 +22,9 @@ export function toCSV(cards) {
 export const fileName = (name, ext) => `${String(name || 'deck').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'deck'}.${ext}`;
 
 // ---------- Anki ----------
-// Card text → Anki's HTML: special characters escaped, line breaks as <br>.
-export const toAnkiHTML = text => String(text ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  .replace(/\r?\n/g, '<br>');
+// Card text → Anki's HTML: special characters escaped, line breaks as <br>, and bold, italics and lists
+// as real formatting (format.js).
+export const toAnkiHTML = text => formatHTML(text);
 
 // Anki's duplicate check: the first 8 hex digits of the SHA-1 of the first field (as plain text), as a number.
 export async function ankiChecksum(text) {
@@ -78,7 +79,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     const noteId = now + i, cardId = now + cards.length + i;
     notes.push({ id: noteId, guid: ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1,
       tags: (c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '',
-      flds: `${front}\x1f${back}`, sfld: c.front, csum: await ankiChecksum(c.front), flags: 0, data: '' });
+      flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' });
     // New cards, in the deck's order.
     ankiCards.push({ id: cardId, nid: noteId, did: deckId, ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: i + 1,
       ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });

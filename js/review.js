@@ -8,6 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, newLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
+import { formatHTML, plainText } from './format.js';
 import { schedulerOptions } from './sched-settings.js';
 import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
@@ -277,8 +278,9 @@ function renderSession(el) {
   R.el = el;
   if (!R.current) return finish(el);
   const { card } = R.current;
-  const typeThis = R.typing && canType(card.back);
-  const size = card.front.length > 120 ? ' xlong' : card.front.length > 50 ? ' long' : '';
+  // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
+  const typeThis = R.typing && canType(plainText(card.back));
+  const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
 
   el.innerHTML = `
     <div class="rv-head">
@@ -289,10 +291,10 @@ function renderSession(el) {
     </div>
     <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
       <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>
-      <div class="flash-front${size}">${esc(card.front)}</div>
+      <div class="flash-front${size}">${formatHTML(card.front)}</div>
       <div class="flash-ans" ${R.flipped ? '' : 'hidden'}>
         ${R.typed ? typedResultHTML() : ''}
-        <div class="flash-back">${esc(card.back)}</div>
+        <div class="flash-back">${formatHTML(card.back)}</div>
       </div>
       ${!R.flipped && !typeThis ? `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>` : ''}
     </article>
@@ -332,7 +334,7 @@ function flip(el) {
   R.flipped = true;
   R.answerMs = Date.now() - R.shownAt;
   // "I don't know" while typing counts as a miss.
-  if (R.typing && canType(R.current.card.back) && !R.typed) R.suggest = Rating.Again;
+  if (R.typing && canType(plainText(R.current.card.back)) && !R.typed) R.suggest = Rating.Again;
   renderSession(el);
   $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
 }
@@ -340,7 +342,7 @@ function flip(el) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const result = checkAnswer(value, R.current.card.back);
+  const result = checkAnswer(value, plainText(R.current.card.back));
   R.typed = { value, result };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();

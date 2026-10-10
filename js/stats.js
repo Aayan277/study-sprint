@@ -7,6 +7,7 @@ import * as db from './db.js';
 import { cardLevel } from './decks.js';
 import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar } from './stats-calc.js';
 import { formatInterval } from './queue.js';
+import { plainText } from './format.js';
 import { $, esc, plural } from './ui.js';
 
 // Where an answer came from, for tooltips.
@@ -148,8 +149,8 @@ export async function renderStats(el) {
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
         ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
       ${hardest.length ? `<ol class="hard-list">${hardest.map(h => `
-        <li><div class="f">${esc(h.card.front)}</div>
-          <div class="b">${esc(h.card.back)}</div>
+        <li><div class="f">${esc(plainText(h.card.front))}</div>
+          <div class="b">${esc(plainText(h.card.back))}</div>
           <div class="n mono">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
     </section>
@@ -164,7 +165,7 @@ export async function renderStats(el) {
         if (!dc.length) return '';
         return `<div class="mdeck">${deckFilter === 'all' ? `<h3>${esc(d.name)}</h3>` : ''}<div class="mtiles">${dc.map(c => {
           const lvl = cardLevel(statesById.get(c.id));
-          return `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(c.front)}: ${lvl}"></button>`;
+          return `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(plainText(c.front))}: ${lvl}"></button>`;
         }).join('')}</div></div>`;
       }).join('')}</div>
       <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
@@ -187,8 +188,8 @@ export async function renderStats(el) {
     const recent = (logsByCard.get(c.id) || []).filter(isAnswerLog).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
     const due = !st || st.state === 0 ? '' : st.due <= now ? 'Due now' : `Due in ${formatInterval(st.due - now)}`;
     $('mDetail').innerHTML = `
-      <div class="f">${esc(c.front)}</div>
-      <div class="b">${esc(c.back)}</div>
+      <div class="f">${esc(plainText(c.front))}</div>
+      <div class="b">${esc(plainText(c.back))}</div>
       <div class="meta"><span><i class="sw lv-${lvl}"></i>${LEVEL_NOTE[lvl]}</span>${due ? `<span>${due}</span>` : ''}
         ${st && st.state !== 0 ? `<span>${plural(st.reps, 'review')}, forgotten ${st.lapses}×</span>` : ''}</div>
       <div class="meta">${recent.length ? `<span aria-label="Last ${recent.length} answers, oldest first: ${recent.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${recent.map(l =>

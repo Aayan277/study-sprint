@@ -36,7 +36,7 @@ test('notes become rows, with tags and decks', () => {
     { mid: '1', fields: ['Hippocampus', 'Memory <img src="a.png">'], tags: [], deck: 'Psych::Unit 2' }
   ], models);
   assert.deepEqual(r.columns, ['Front', 'Back']);       // one note type: its field names
-  assert.deepEqual(r.rows, [['Classical conditioning', 'Pavlov'], ['Hippocampus', 'Memory']]);
+  assert.deepEqual(r.rows, [['Classical **conditioning**', 'Pavlov'], ['Hippocampus', 'Memory']]);   // bold kept as marks
   assert.deepEqual(r.tags, [['exam1', 'learning'], []]);
   assert.equal(r.images, 1);
   assert.equal(r.format.id, 'anki');

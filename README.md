@@ -14,6 +14,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 ## Features
 
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, and a mastery bar. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
+- **Formatting:** **bold**, *italics* and bullet lists on cards. On a phone, the B / I / • buttons add simple marks (`**bold**`, `*italic*`, `- item`) with a live preview; on a computer, the box shows formatting as you type (Ctrl/⌘+B, Ctrl/⌘+I). Typed answers and Play use the plain text. Anki imports keep bold, italics and lists, and Anki exports turn them back into formatting.
 - **Exam date mode** (Edit deck → Exam date): until the exam, no card in the deck is scheduled past it (cards already scheduled later are brought forward), retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, weakest first. A countdown shows on the deck; after the exam it goes back to normal.
 - **Export** (a deck's page → Export): save a deck as a spreadsheet (.csv) or an Anki deck (.apkg), with tags. Re-exporting updates the cards in Anki instead of duplicating them.
 - **Card list** (each deck's page, or Decks → Browse all cards):
@@ -91,6 +92,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/password.js` | Password rules for new passwords (8+ characters, a letter and a number) |
 | `js/export.js` | Exporting a deck as CSV or an Anki deck |
 | `js/exam.js` | Exam date mode: limits, pulling cards in, Exam prep |
+| `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
 | `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
