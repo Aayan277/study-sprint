@@ -5,13 +5,14 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, newLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, takeNext, addWaiting, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
-import { schedulerOptions } from './sched-settings.js';
+import { deckSchedulerOptions } from './sched-settings.js';
+import { loadByDay } from './balance.js';
 import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
@@ -39,15 +40,18 @@ async function loadAll() {
   const visible = cards.filter(c => !isHidden(c, now));
   // New cards left today: the overall limit, each deck's own limit, plus any extra added with Custom study.
   const extra = extraNewToday(settings.extraNew, now);
-  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(cards.map(c => [c.id, c.deckId])), extra, now });
-  return { settings, decks, cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft };
+  const deckOf = new Map(cards.map(c => [c.id, c.deckId]));
+  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf, extra, now });
+  // Reviews left today: the overall daily review limit and each deck's own (none by default).
+  const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now });
+  return { settings, decks, cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft, reviewLeft };
 }
 
 // How many cards a set of decks has for today.
 function countFor(data, deckIds) {
   const ids = new Set(deckIds);
   const cards = data.cards.filter(c => ids.has(c.deckId));
-  const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft);
+  const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
   const due = queue.filter(q => q.kind !== 'new').length + waiting.length;
   const fresh = queue.filter(q => q.kind === 'new').length;
   return { cards, due, fresh, total: due + fresh };
@@ -236,10 +240,12 @@ function openCustomStudy(el, data, cards, typing, deckId) {
 // ---------- 2. session ----------
 // custom: optional { queue, waiting, label } for a Custom study session instead of today's cards.
 function start(el, data, cards, typing, deckId, custom = null) {
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
   R = {
     active: true, day: dayStart(), deckId, typing, custom: custom?.label || null,
-    sched: schedulerOptions(data.settings),     // retention, learning steps, max interval, fuzz
+    settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
+    // Reviews already due on each day, to even them out (and keep easy days light): balance.js.
+    balance: { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays },
     leech: { threshold: data.settings.leechThreshold, action: data.settings.leechAction },
     decks: data.decks,
     deckNames: new Map(data.decks.map(d => [d.id, d.name])),
@@ -256,7 +262,12 @@ function start(el, data, cards, typing, deckId, custom = null) {
 }
 
 // The scheduling options for a card: the normal ones, plus its deck's exam limits (exam.js).
-const schedFor = (card, now = Date.now()) => examOptions(R.sched, R.decks.find(d => d.id === card.deckId), now);
+// The scheduling options for a card: its deck's settings (or the overall ones), its deck's exam limits,
+// and evening out the reviews.
+const schedFor = (card, now = Date.now()) => {
+  const deck = R.decks.find(d => d.id === card.deckId);
+  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance };
+};
 
 const deckOf = card => R.decks.find(d => d.id === card.deckId);
 // Read the side showing (the back once flipped) in the deck's language.

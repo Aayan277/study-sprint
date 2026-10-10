@@ -19,7 +19,7 @@ import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '2.7';
+const APP_VERSION = '2.8';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -47,12 +47,16 @@ async function renderSettings(el) {
     <section class="section" aria-labelledby="studyTitle">
       <h2 id="studyTitle">Study</h2>
       <div class="set-row">
-        <div><b>New cards per day</b><p>Across all decks. Due reviews are never limited.</p></div>
+        <div><b>New cards per day</b><p>Across all decks. A deck can have its own limit too (Edit deck).</p></div>
         <div class="stepper">
           <button type="button" class="icon-btn" id="npdMinus" aria-label="Fewer new cards">−</button>
           <input id="npd" type="number" inputmode="numeric" min="0" max="999" value="${settings.newPerDay}" aria-label="New cards per day">
           <button type="button" class="icon-btn" id="npdPlus" aria-label="More new cards">+</button>
         </div>
+      </div>
+      <div class="set-row">
+        <div><b>Reviews per day</b><p>Most reviews to show in a day, across all decks. Leave it blank for no limit, which works best with FSRS: held-back cards come back later than planned.</p></div>
+        <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
@@ -107,8 +111,16 @@ async function renderSettings(el) {
           <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
           <span class="err" id="maxErr" hidden></span></div>
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
-          <span>Adds a little randomness to longer gaps so cards added together don't all come due on the same day.</span></span>
+          <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <div class="adv-row"><b id="easyLbl">Easy days</b>
+          <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
+          <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
+            <label class="easy-day"><span>${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'short' }))}</span>
+              <select data-easy="${d}" aria-label="${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'long' }))}">
+                ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
+              </select></label>`).join('')}
+          </div></div>
         <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
       </details>
     </section>
@@ -181,6 +193,19 @@ async function renderSettings(el) {
     settings.leechAction = btn.dataset.leech;
     db.setSetting('leechAction', settings.leechAction);
     document.querySelectorAll('[data-leech]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  }));
+  // Reviews per day: blank = no limit.
+  $('rpd').addEventListener('change', e => {
+    const v = e.target.value.trim();
+    settings.reviewLimit = v ? Math.max(1, Math.min(9999, Math.round(Number(v) || 1))) : null;
+    e.target.value = settings.reviewLimit ?? '';
+    db.setSetting('reviewLimit', settings.reviewLimit);
+  });
+  el.querySelectorAll('[data-easy]').forEach(sel => sel.addEventListener('change', () => {
+    const week = [...(settings.easyDays || db.DEFAULT_SETTINGS.easyDays)];
+    week[+sel.dataset.easy] = sel.value;
+    settings.easyDays = week;
+    db.setSetting('easyDays', week);
   }));
   $('ret').addEventListener('input', e => { $('retOut').textContent = `${e.target.value}%`; });
   $('ret').addEventListener('change', e => {

@@ -24,7 +24,9 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   queue    cards to show now: [{ card, kind: 'review' | 'learn' | 'new' }]
 //   waiting  learning cards due later today, shown when their time comes: [{ card, kind, due }]
 //   newAvailable  how many new cards exist in total (before the daily limit)
-export function buildQueue(cards, statesById, newLimit, now = Date.now()) {
+//   reviewLimit  optional: how many reviews (of graduated cards) are still allowed today, a number or
+//                { total, byDeck } from reviewLimits(). Learning cards are never held back.
+export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity) {
   const end = dayEnd(now);
   const reviews = [], waiting = [], fresh = [];
   for (const card of cards) {
@@ -40,7 +42,41 @@ export function buildQueue(cards, statesById, newLimit, now = Date.now()) {
   reviews.sort((a, b) => a.due - b.due);          // most overdue first
   waiting.sort((a, b) => a.due - b.due);
   const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
-  return { queue: interleave(reviews, news), waiting, newAvailable: fresh.length };
+  return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable: fresh.length };
+}
+
+// Keep reviews within today's review limit (overall and per deck), most overdue first.
+function capReviews(items, limit) {
+  const { total, byDeck } = typeof limit === 'number' ? { total: limit, byDeck: new Map() } : limit;
+  if (total === Infinity && !byDeck.size) return items;
+  const left = new Map(byDeck);
+  let n = 0;
+  return items.filter(x => {
+    if (x.kind !== 'review') return true;
+    if (n >= total) return false;
+    const d = left.get(x.card.deckId);
+    if (d !== undefined) { if (d <= 0) return false; left.set(x.card.deckId, d - 1); }
+    n++;
+    return true;
+  });
+}
+
+// How many reviews are still allowed today, overall and for each deck with its own limit. Like newLimits:
+//   perDay  the overall limit (null = no limit)       decks  each deck's optional reviewPerDay
+// Reviews of graduated cards done today (in Review, or Play answers that counted) use up the limits.
+export function reviewLimits({ perDay, decks, logs, deckOf, now = Date.now() }) {
+  const start = dayStart(now);
+  const done = new Map();
+  let total = 0;
+  for (const l of logs) {
+    if (l.timestamp < start || l.state !== REVIEW || !(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    total++;
+    const d = deckOf.get(l.cardId);
+    if (d !== undefined) done.set(d, (done.get(d) || 0) + 1);
+  }
+  const byDeck = new Map();
+  for (const d of decks) if (Number.isFinite(d.reviewPerDay)) byDeck.set(d.id, Math.max(0, d.reviewPerDay - (done.get(d.id) || 0)));
+  return { total: Number.isFinite(perDay) ? Math.max(0, perDay - total) : Infinity, byDeck };
 }
 
 // Today's new cards, in order, within the overall limit and each deck's own limit (if it has one).

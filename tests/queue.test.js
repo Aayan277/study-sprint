@@ -75,7 +75,7 @@ test('interval labels', () => {
     ['<1m', '1m', '10m', '5h', '4d', '1.5mo', '1.1y']);
 });
 
-import { pickNew, newLimits, extraNewToday, aheadQueue, forgottenQueue } from '../js/queue.js';
+import { pickNew, newLimits, extraNewToday, aheadQueue, forgottenQueue, reviewLimits } from '../js/queue.js';
 const inDeck = (id, deckId) => ({ id, deckId, front: id, back: id });
 
 test('each deck can have its own new card limit, inside the overall one', () => {
@@ -137,4 +137,31 @@ test('forgotten today: cards rated Again today, once each', () => {
     { cardId: 'deleted', timestamp: NOW - HOUR, rating: 1 }
   ];
   assert.deepEqual(forgottenQueue(cards, states, logs, NOW).queue.map(q => [q.card.id, q.kind]), [['b', 'review'], ['a', 'learn']]);
+});
+
+
+test('daily review limit: overall and per deck, learning cards never held back', () => {
+  const cs = [inDeck('r1', 'A'), inDeck('r2', 'A'), inDeck('r3', 'B'), inDeck('r4', 'B'), inDeck('l1', 'A')];
+  const states = new Map([
+    ['r1', { state: REVIEW, due: NOW - 4 * DAY }], ['r2', { state: REVIEW, due: NOW - 3 * DAY }],
+    ['r3', { state: REVIEW, due: NOW - 2 * DAY }], ['r4', { state: REVIEW, due: NOW - DAY }],
+    ['l1', { state: LEARNING, due: NOW - 60000 }]
+  ]);
+  const ids = lim => buildQueue(cs, states, 0, NOW, lim).queue.map(q => q.card.id);
+  assert.deepEqual(ids(Infinity), ['r1', 'r2', 'r3', 'r4', 'l1']);
+  assert.deepEqual(ids(2), ['r1', 'r2', 'l1']);                                         // most overdue first
+  assert.deepEqual(ids({ total: 10, byDeck: new Map([['A', 1]]) }), ['r1', 'r3', 'r4', 'l1']);
+  const decks = [{ id: 'A', reviewPerDay: 2 }, { id: 'B' }];
+  const deckOf = new Map([['r1', 'A'], ['r3', 'B']]);
+  const logs = [
+    { cardId: 'r1', timestamp: NOW - HOUR, state: REVIEW, source: 'review' },
+    { cardId: 'r3', timestamp: NOW - HOUR, state: REVIEW, source: 'play', applied: true },
+    { cardId: 'r3', timestamp: NOW - HOUR, state: REVIEW, source: 'play', applied: false },     // didn't count
+    { cardId: 'r1', timestamp: NOW - HOUR, state: LEARNING, source: 'review' },                // not a review
+    { cardId: 'r1', timestamp: NOW - DAY, state: REVIEW, source: 'review' }                    // yesterday
+  ];
+  const l = reviewLimits({ perDay: 10, decks, logs, deckOf, now: NOW });
+  assert.equal(l.total, 8);
+  assert.deepEqual([...l.byDeck], [['A', 1]]);
+  assert.equal(reviewLimits({ perDay: null, decks: [], logs, deckOf, now: NOW }).total, Infinity);
 });

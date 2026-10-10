@@ -8,6 +8,7 @@ import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, pullIn } from './exam.js';
 import { SPEECH_LANGS } from './speech.js';
+import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -234,6 +235,62 @@ async function openExport(deck) {
   });
 }
 
+// ---------- a deck's study options (Edit deck) ----------
+// Limits for this deck, and (optionally) its own scheduling settings instead of the overall ones in Settings.
+//   deck.newPerDay / deck.reviewPerDay   null = only the overall limits apply
+//   deck.options                         null = use the overall settings; otherwise
+//                                        { targetRetention, learningSteps, relearningSteps, maxInterval }
+function studyOptionsHTML(deck) {
+  const own = !!deck.options, o = deck.options || {};
+  const num = v => (Number.isFinite(v) ? v : '');
+  return `<details class="card-info" id="deckOpts" ${own || Number.isFinite(deck.newPerDay) || Number.isFinite(deck.reviewPerDay) ? 'open' : ''}>
+      <summary>Study options for this deck</summary>
+      <div class="deck-opts">
+        <label class="field"><span>New cards per day</span>
+          <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${num(deck.newPerDay)}"></label>
+        <label class="field"><span>Reviews per day</span>
+          <input id="deckRev" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit of its own" value="${num(deck.reviewPerDay)}"></label>
+        <p class="note" style="margin:0">Blank = only the overall limits in Settings apply. They still cap the total.</p>
+        <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Use my overall settings</b>
+          <span>Retention, steps and maximum interval from Settings. Turn off to give this deck its own.</span></span>
+          <input id="deckOwnOff" type="checkbox" class="switch" ${own ? '' : 'checked'}></label>
+        <div id="deckOwn" ${own ? '' : 'hidden'}>
+          <label class="field"><span>Target retention: <b id="deckRetOut">${Math.round((o.targetRetention ?? 0.9) * 100)}%</b></span>
+            <input id="deckRet" type="range" min="80" max="97" step="1" value="${Math.round((o.targetRetention ?? 0.9) * 100)}"></label>
+          <label class="field"><span>Learning steps</span><input id="deckLs" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(o.learningSteps ?? '')}" placeholder="${SCHED_DEFAULTS.learningSteps}"></label>
+          <label class="field"><span>Relearning steps</span><input id="deckRs" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(o.relearningSteps ?? '')}" placeholder="${SCHED_DEFAULTS.relearningSteps}"></label>
+          <label class="field"><span>Maximum interval (days)</span><input id="deckMax" type="number" inputmode="numeric" min="1" max="36500" value="${num(o.maxInterval)}" placeholder="36500"></label>
+        </div>
+      </div>
+    </details>`;
+}
+function wireStudyOptions() {
+  $('deckRet').addEventListener('input', e => { $('deckRetOut').textContent = `${e.target.value}%`; });
+  $('deckOwnOff').addEventListener('change', async e => {
+    $('deckOwn').hidden = e.target.checked;
+    if (e.target.checked || $('deckLs').value || $('deckRs').value) return;
+    // Starting your own: begin from the current overall settings.
+    const s = await db.getSettings();
+    $('deckRet').value = Math.round(s.targetRetention * 100); $('deckRetOut').textContent = `${$('deckRet').value}%`;
+    $('deckLs').value = s.learningSteps; $('deckRs').value = s.relearningSteps; $('deckMax').value = s.maxInterval;
+  });
+}
+// { reviewPerDay, options } from the form, or { error }.
+function readStudyOptions() {
+  const rev = $('deckRev').value.trim();
+  const reviewPerDay = rev ? Math.max(1, Math.min(9999, Math.round(Number(rev) || 1))) : null;
+  if ($('deckOwnOff').checked) return { reviewPerDay, options: null };
+  const ls = parseSteps($('deckLs').value || SCHED_DEFAULTS.learningSteps), rs = parseSteps($('deckRs').value || SCHED_DEFAULTS.relearningSteps);
+  if (ls.error) return { error: `Learning steps: ${ls.error}` };
+  if (rs.error) return { error: `Relearning steps: ${rs.error}` };
+  const mi = parseMaxInterval($('deckMax').value || 36500);
+  if (mi.error) return { error: `Maximum interval: ${mi.error}` };
+  return { reviewPerDay, options: {
+    targetRetention: +$('deckRet').value / 100,
+    learningSteps: formatSteps(ls.steps), relearningSteps: formatSteps(rs.steps), maxInterval: mi.days
+  } };
+}
+
 // ---------- create / rename / recolor / delete ----------
 // deck = null means "make a new deck". onDone is called after any change.
 export function openDeckEditor(deck, onDone, cardCount = 0) {
@@ -251,9 +308,7 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
         <div class="swatches" role="group" aria-labelledby="colorLabel">
           ${DECK_COLORS.map(c => `<button type="button" class="swatch" style="--c:${c}" data-color="${c}" aria-pressed="${c === color}" aria-label="Color ${c}"></button>`).join('')}
         </div></div>
-      ${isNew ? '' : `<label class="field"><span>New cards per day for this deck (optional)</span>
-        <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${Number.isFinite(deck.newPerDay) ? deck.newPerDay : ''}">
-        <small class="note" style="margin:4px 0 0">Leave blank to use only the overall limit in Settings. The overall limit still applies on top.</small></label>`}
+      ${isNew ? '' : studyOptionsHTML(deck)}
       ${isNew ? '' : `<label class="field"><span>Read aloud in</span>
         <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
@@ -281,6 +336,7 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     sheet.querySelectorAll('.swatch').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   }));
   $('deckCancel').addEventListener('click', closeSheet);
+  if (!isNew) wireStudyOptions(deck);
 
   $('deckForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -290,9 +346,16 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     // This deck's own new-card limit: blank = none (only the overall limit applies).
     const raw = $('deckNew')?.value.trim();
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
+    let options = null;
+    if (!isNew) {
+      const read = readStudyOptions();
+      if (read.error) { $('deckErr').textContent = read.error; $('deckErr').hidden = false; $('deckOpts').open = true; return; }
+      options = read;
+    }
     const saved = isNew
       ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color, newPerDay, examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto: !!$('deckTtsAuto')?.checked };
+      : { ...deck, name, course, color, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
+        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto: !!$('deckTtsAuto')?.checked };
     await db.saveDeck(saved);
     // A new exam date: bring forward cards that were scheduled after it.
     let moved = 0;

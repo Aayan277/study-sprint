@@ -7,6 +7,8 @@
 // it drops to your target retention (90% by default).
 
 import { fsrs, generatorParameters, createEmptyCard, Rating } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
+import { pickDay } from './balance.js';
+import { dayKey } from './stats-calc.js';
 
 export { Rating };
 
@@ -27,7 +29,7 @@ export const RATINGS = [
 // Rebuilt only when the options change.
 let cached = null;
 function scheduler(opts) {
-  const { maxDue, ...lib } = opts;      // maxDue is applied by capInterval, not the library
+  const { maxDue, balance, ...lib } = opts;      // maxDue and balance are applied here, not by the library
   const key = JSON.stringify(lib);
   if (!cached || cached.key !== key) {
     cached = {
@@ -103,7 +105,17 @@ export function previewIntervals(state, opts, now = Date.now()) {
 }
 
 // Apply a rating and return the card's new saved state.
+//   opts.balance (optional): { load, easyDays } to even out reviews instead of random fuzz (balance.js).
 export function rate(cardId, state, rating, opts, now = Date.now()) {
-  const { card } = scheduler(opts).next(toLibrary(state, now), new Date(now), rating);
+  const balanced = !!(opts.balance && opts.fuzz);
+  // Evening out needs the exact gap first (no random fuzz); it then picks a day within the fuzz range.
+  const { card } = scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
+  capInterval(card, now, opts.maxInterval);
+  if (balanced && card.state === 2 && card.scheduled_days >= 3) {
+    const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now });
+    card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
+    card.scheduled_days = d;
+    opts.balance.load?.set(dayKey(card.due.getTime()), (opts.balance.load.get(dayKey(card.due.getTime())) || 0) + 1);
+  }
   return fromLibrary(cardId, capInterval(card, now, opts.maxInterval, opts.maxDue));
 }

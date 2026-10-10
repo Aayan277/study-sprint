@@ -195,7 +195,7 @@ Built in 3 parts:
 Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlusion is "hide all, guess one"; cards from the same note don't show on the same day; subdecks (a parent includes its subdecks; its limits cap the group); per-deck settings (default "use my overall settings"); no daily review limit by default; easy days (Normal / Reduced / Minimum per weekday) and load balancing within fuzz; read aloud per deck.
 
 - A. ✅ (v2.7) **Read aloud** (🔊 / R, deck language or auto-detect, auto-read), **card list tools** (Duplicates filter, Find and replace, Tags: rename or remove everywhere), **more stats** (answer buttons, time of day, difficulty).
-- B. **Per-deck settings**, **daily review limit**, **easy days**.
+- B. ✅ (v2.8) **Per-deck settings** (deck.options, deck.reviewPerDay), **daily review limit** (settings.reviewLimit), **easy days** and evening out (settings.easyDays; balance.js picks the least busy day within the fuzz range).
 - C. **Subdecks**.
 - D. **Cloze cards**.
 - E. **Image occlusion**.

@@ -40,6 +40,12 @@ export function parseMaxInterval(value) {
 }
 
 // Everything the scheduler needs, from the saved settings. Anything unreadable falls back to the default.
+// A deck's options: its own scheduling settings (deck.options, same names as Settings) where it has them,
+// otherwise the overall ones.
+export function deckSchedulerOptions(settings, deck) {
+  return schedulerOptions(deck?.options ? { ...settings, ...deck.options } : settings);
+}
+
 export function schedulerOptions(settings = {}) {
   const ls = parseSteps(settings.learningSteps ?? SCHED_DEFAULTS.learningSteps);
   const rs = parseSteps(settings.relearningSteps ?? SCHED_DEFAULTS.relearningSteps);

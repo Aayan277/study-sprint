@@ -687,3 +687,9 @@ dialog.sheet.side .sheet-in{padding:24px 22px 32px}
 .b3{background:var(--good)}
 .b4{background:var(--accent)}
 .legend .sw.b1,.legend .sw.b2,.legend .sw.b3,.legend .sw.b4{display:inline-block}
+
+/* Settings: reviews per day, easy days */
+.num-box{width:110px;font:600 1rem var(--f-mono);padding:9px 10px;border:1.5px solid var(--rule);border-radius:8px;background:var(--sheet);color:var(--ink)}
+.easy-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.easy-day{display:grid;gap:4px;font-size:.8rem;color:var(--muted)}
+.easy-day select{font-size:.9rem;padding:7px 8px;border:1.5px solid var(--rule);border-radius:8px;background:var(--sheet);color:var(--ink)}

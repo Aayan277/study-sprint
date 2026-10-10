@@ -38,7 +38,9 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - The ⋯ button opens the card's panel mid-review: edit, flag, suspend, bury, move, reset, set due date, delete or see its info.
   - **Custom study** (on the Review screen): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
   - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki.
-  - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams) and fuzz on/off.
+  - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams), spreading due dates onto the least busy days, and **easy days** (Normal / Reduced / Minimum per weekday).
+  - **Reviews per day** (optional; no limit by default), overall and per deck.
+  - **Per-deck settings** (Edit deck → Study options): a deck can have its own retention, steps, maximum interval, and new and review limits, or use the overall ones.
 - **Play:** timed rounds.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
   - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
@@ -99,6 +101,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
 | `js/media.js` | Pictures: shrinking, saving and showing them |
 | `js/speech.js` | Reading cards aloud |
+| `js/balance.js` | Evening out reviews across days, and easy days |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
