@@ -120,11 +120,12 @@ export async function renderLibrary(el) {
   el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
     const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
     b.disabled = true;
-    const deckId = db.newId(), now = Date.now();
+    // Fixed ids, so the same starter deck added on two devices is one deck once they sync.
+    const deckId = `starter-${s.key}`, now = Date.now();
     // `starter` remembers which starter deck this is, so it isn't offered again.
     await db.addDeckWithCards(
       { id: deckId, name: s.name, course: s.course, color: s.color, created: now, starter: s.key },
-      starterCards(s.level).map((c, i) => ({ id: db.newId(), deckId, ...c, created: now + i }))
+      starterCards(s.level).map((c, i) => ({ id: `${deckId}-${i}`, deckId, ...c, created: now + i }))
     );
     toast(`Added ${s.name}`);
     renderLibrary(el);
