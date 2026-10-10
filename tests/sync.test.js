@@ -1,8 +1,9 @@
-// Tests for js/sync-data.js (sync groundwork). Run with: node tests/sync.test.js
+// Tests for js/sync-data.js and js/sync-merge.js (syncing between devices). Run with: node tests/sync.test.js
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS } from '../js/sync-data.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks } from '../js/sync-merge.js';
 
 const NOW = 1_800_000_000_000;
 
@@ -35,4 +36,47 @@ test('upgrading old data keeps what is there and fills in the rest', () => {
 test('what syncs', () => {
   assert.deepEqual(Object.keys(SYNC_ID), ['decks', 'cards', 'cardStates', 'reviewLog']);
   assert.ok(SYNCED_SETTINGS.includes('newPerDay') && !SYNCED_SETTINGS.includes('theme'));
+});
+
+
+test('records become server rows without device-only fields', () => {
+  assert.deepEqual(rowFromRecord('cards', { id: 'c1', front: 'f', updatedAt: 5, syncedAt: 3 }),
+    { store: 'cards', id: 'c1', data: { id: 'c1', front: 'f' }, deleted: false, updated_at: 5 });
+  assert.deepEqual(rowFromRecord('reviewLog', { id: 42, uid: 'u9', cardId: 'c1', rating: 3, updatedAt: 6 }),
+    { store: 'reviewLog', id: 'u9', data: { uid: 'u9', cardId: 'c1', rating: 3 }, deleted: false, updated_at: 6 });   // the local counter stays here
+  assert.equal(rowFromRecord('cardStates', { cardId: 'c1', due: 1, updatedAt: 7 }).id, 'c1');
+  assert.deepEqual(rowFromTombstone({ key: 'cards:c1', store: 'cards', id: 'c1', deletedAt: 9 }),
+    { store: 'cards', id: 'c1', data: null, deleted: true, updated_at: 9 });
+  assert.deepEqual(rowFromSetting('newPerDay', 30, 11), { store: 'settings', id: 'newPerDay', data: { value: 30 }, deleted: false, updated_at: 11 });
+});
+
+test('rows from the server are marked as already synced', () => {
+  const rec = recordFromRow({ store: 'cards', id: 'c1', data: { id: 'c1', front: 'f' }, updated_at: 8 });
+  assert.deepEqual(rec, { id: 'c1', front: 'f', updatedAt: 8, syncedAt: 8 });
+  assert.equal(needsPush(rec, 0), false);                                   // not sent straight back
+  assert.equal(needsPush({ ...rec, updatedAt: 12 }, 0), true);              // edited here afterwards: sent
+  assert.equal(needsPush({ id: 'x', updatedAt: 5 }, 5), false);             // already pushed
+  assert.equal(tombstoneNeedsPush({ deletedAt: 9 }, 5), true);
+  assert.equal(tombstoneNeedsPush({ deletedAt: 9, synced: true }, 5), false);
+});
+
+test('the newest change wins, and deletes are changes too', () => {
+  assert.equal(decide({ updated_at: 10, deleted: false }, 0), 'put');       // not here yet
+  assert.equal(decide({ updated_at: 10, deleted: false }, 12), 'skip');     // this device's is newer
+  assert.equal(decide({ updated_at: 10, deleted: false }, 10), 'skip');     // the same version
+  assert.equal(decide({ updated_at: 15, deleted: true }, 12), 'delete');    // deleted elsewhere after
+  assert.equal(decide({ updated_at: 11, deleted: true }, 12), 'skip');      // edited here after it was deleted elsewhere
+  assert.equal(decide({ updated_at: 20, deleted: false }, 12), 'put');      // brought back elsewhere after a delete here
+  assert.equal(decide({ updated_at: 2, deleted: true }, 1), 'delete');      // the sample deck (stamped 1) loses to any delete
+});
+
+test('only the newest of a record and its delete marker is sent; sending in batches', () => {
+  const rows = newestOnly([
+    { store: 'decks', id: 's', deleted: true, updated_at: 5 },
+    { store: 'decks', id: 's', deleted: false, updated_at: 9 },
+    { store: 'cards', id: 's', deleted: false, updated_at: 1 }
+  ]);
+  assert.deepEqual(rows.map(r => [r.store, r.deleted]), [['decks', false], ['cards', false]]);
+  assert.deepEqual(chunks([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(chunks([], 2), []);
 });

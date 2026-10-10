@@ -16,7 +16,8 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 2;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync)
 
-import { stamp, tombstone, upgradeRecord, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the device's light/dark setting, or 'light' / 'dark'
@@ -64,6 +65,13 @@ export function openDB() {
       if (!db.objectStoreNames.contains('deleted')) db.createObjectStore('deleted', { keyPath: 'key' });
       const logs = req.transaction.objectStore('reviewLog');
       if (!logs.indexNames.contains('uid')) logs.createIndex('uid', 'uid');
+      // "What changed since the last sync?" is answered with these indexes instead of reading everything.
+      for (const name of ['decks', 'cards', 'cardStates', 'reviewLog']) {
+        const os = req.transaction.objectStore(name);
+        if (!os.indexNames.contains('updatedAt')) os.createIndex('updatedAt', 'updatedAt');
+      }
+      const del = req.transaction.objectStore('deleted');
+      if (!del.indexNames.contains('deletedAt')) del.createIndex('deletedAt', 'deletedAt');
       // Data saved by version 1: give every record its updatedAt (and every review its uid).
       if (e.oldVersion >= 1 && e.oldVersion < 2) {
         const now = Date.now();
@@ -108,7 +116,11 @@ export async function getAllByIndex(name, index, value) {
   return done((await store(name)).index(index).getAll(value));
 }
 // Saves here are made on this device, so they're stamped with the time (see sync-data.js).
-export async function put(name, value) { return done((await store(name, 'readwrite')).put(stamp(name, value))); }
+export async function put(name, value) {
+  const key = await done((await store(name, 'readwrite')).put(stamp(name, value)));
+  changed();
+  return key;
+}
 
 // Save many rows in one go (much faster than one at a time, and all-or-nothing).
 export async function putMany(name, values) {
@@ -117,7 +129,8 @@ export async function putMany(name, values) {
   const os = tx.objectStore(name);
   const now = Date.now();
   values.forEach(v => os.put(stamp(name, v, now)));
-  return finished(tx);
+  await finished(tx);
+  changed();
 }
 
 // ---------- ids ----------
@@ -133,14 +146,17 @@ export const saveDeck = deck => put('decks', deck);
 export const getCardsInDeck = deckId => getAllByIndex('cards', 'deckId', deckId);
 
 // Create a deck and (optionally) its cards in a single save.
-export async function addDeckWithCards(deck, cards = []) {
+// at: the change time to record (normally now). The sample deck uses 1, "older than anything", so after
+// syncing, a delete or edit made on another device always wins over a fresh device's untouched copy.
+export async function addDeckWithCards(deck, cards = [], { at = Date.now() } = {}) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards'], 'readwrite');
-  const now = Date.now();
+  const now = at;
   tx.objectStore('decks').put(stamp('decks', deck, now));
   const cs = tx.objectStore('cards');
   cards.forEach(c => cs.put(stamp('cards', c, now)));
-  return finished(tx);
+  await finished(tx);
+  changed();
 }
 
 // Delete a deck plus everything that belongs to it: its cards, their schedules and their review history.
@@ -155,7 +171,8 @@ export async function deleteDeck(deckId) {
   cards.index('deckId').getAllKeys(deckId).onsuccess = e => {
     for (const cardId of e.target.result) deleteCardIn(tx, cardId, now);
   };
-  return finished(tx);
+  await finished(tx);
+  changed();
 }
 
 // Delete one card with its schedule and every review-log row, leaving deleted markers. Inside a transaction
@@ -197,12 +214,15 @@ export async function saveReview(state, log) {
   const req = tx.objectStore('reviewLog').add(stamp('reviewLog', log, now));
   await finished(tx);
   scheduleChanges++;
+  changed();
   return req.result;
 }
 
 // Save a review-log row without changing any schedule (e.g. a Play answer on a card that isn't due).
 export async function addLog(log) {
-  return done((await store('reviewLog', 'readwrite')).add(stamp('reviewLog', log)));
+  const id = await done((await store('reviewLog', 'readwrite')).add(stamp('reviewLog', log)));
+  changed();
+  return id;
 }
 
 // Undo a review: put the old schedule back (or remove it if the card was new) and delete the log row.
@@ -219,6 +239,7 @@ export async function undoReview(cardId, prevState, logId) {
   };
   await finished(tx);
   scheduleChanges++;
+  changed();
 }
 
 // Every review-log row since a moment in time (e.g. since the start of today).
@@ -235,6 +256,7 @@ export async function deleteCards(cardIds) {
   for (const id of cardIds) deleteCardIn(tx, id, now);
   await finished(tx);
   scheduleChanges++;
+  changed();
 }
 
 // Change schedules directly (set a due date), or remove them (reset a card to new).
@@ -247,6 +269,7 @@ export async function clearStates(cardIds) {
   cardIds.forEach(id => deleteStateIn(tx, id, now));
   await finished(tx);
   scheduleChanges++;
+  changed();
 }
 
 // Every review-log row for one card (its history), oldest first.
@@ -277,7 +300,8 @@ export async function setSetting(key, value) {
   if (SYNCED_SETTINGS.includes(key)) {
     os.get(SETTING_TIMES).onsuccess = e => os.put({ ...(e.target.result || {}), [key]: Date.now() }, SETTING_TIMES);
   }
-  return finished(tx);
+  await finished(tx);
+  if (SYNCED_SETTINGS.includes(key)) changed();
 }
 
 // ---------- wipe everything ----------
@@ -302,7 +326,8 @@ export async function exportAll() {
     all('decks'), all('cards'), all('cardStates'), all('reviewLog'),
     done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll())
   ]);
-  const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+  // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
+  const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !LOCAL_ONLY.includes(k)));
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings };
 }
 
@@ -320,13 +345,96 @@ export async function importAll(data) {
   const db = await openDB();
   const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
   const tx = db.transaction(names, 'readwrite');
-  names.forEach(n => tx.objectStore(n).clear());
+  ['decks', 'cards', 'cardStates', 'reviewLog'].forEach(n => tx.objectStore(n).clear());
   // Backups from before sync existed are filled in the same way as the version 2 upgrade.
   const now = Date.now();
   for (const name of ['decks', 'cards', 'cardStates', 'reviewLog']) {
     data[name].forEach(x => tx.objectStore(name).put(upgradeRecord(name, x, now)));
   }
-  Object.entries(data.settings || {}).forEach(([k, v]) => tx.objectStore('settings').put(v, k));
+  // Settings are replaced too, except this device's sign-in and sync bookmarks:
+  // first remove the old ones, then (once that's done) put the backup's in.
+  const settings = tx.objectStore('settings');
+  settings.getAllKeys().onsuccess = e => {
+    e.target.result.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
+    Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k)).forEach(([k, v]) => settings.put(v, k));
+  };
   await finished(tx);
   scheduleChanges++;
+  changed();
+}
+
+// ---------- syncing (used by sync.js) ----------
+// Settings that belong to this device only: never synced, never in backups.
+//   syncAuth   who's signed in (and their sign-in tokens)
+//   syncState  sync bookmarks: the last server change seen, and when this device last sent its changes
+export const LOCAL_ONLY = ['syncAuth', 'syncState'];
+
+// Tell sync.js when something changed on this device, so it can send it.
+const listeners = new Set();
+export const onLocalChange = fn => { listeners.add(fn); };
+function changed() { listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
+
+// Everything changed on this device since a moment (ms), that the server doesn't have yet:
+// { records: { decks: [...], ... }, tombstones: [...], settings: [{ key, value, time }] }
+export async function localChangesSince(since) {
+  const db = await openDB();
+  const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted', 'settings'], 'readonly');
+  const after = IDBKeyRange.lowerBound(since, true);
+  const records = {};
+  for (const name of Object.keys(SYNC_ID)) {
+    records[name] = (await done(tx.objectStore(name).index('updatedAt').getAll(after))).filter(r => needsPush(r, since));
+  }
+  const tombstones = (await done(tx.objectStore('deleted').index('deletedAt').getAll(after))).filter(t => tombstoneNeedsPush(t, since));
+  const os = tx.objectStore('settings');
+  const times = (await done(os.get(SETTING_TIMES))) || {};
+  const settings = [];
+  for (const key of SYNCED_SETTINGS) {
+    if (times[key] > since) settings.push({ key, value: await done(os.get(key)), time: times[key] });
+  }
+  return { records, tombstones, settings };
+}
+
+// Save changes that came from the server. Each row only wins if it's newer than this device's version
+// (see decide() in sync-merge.js). Not stamped and not reported as a local change, so it isn't sent back.
+// Returns how many rows changed something here.
+export async function applyRemote(rows) {
+  if (!rows.length) return 0;
+  const db = await openDB();
+  const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted', 'settings'], 'readwrite');
+  const saved = finished(tx);
+  let applied = 0, schedules = false;
+  const settingsStore = tx.objectStore('settings');
+  const deleted = tx.objectStore('deleted');
+  let times = (await done(settingsStore.get(SETTING_TIMES))) || {};
+  for (const row of rows) {
+    if (row.store === 'settings') {
+      if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
+      settingsStore.put(row.data?.value, row.id);
+      times = { ...times, [row.id]: row.updated_at };
+      applied++;
+      continue;
+    }
+    if (!(row.store in SYNC_ID)) continue;
+    const os = tx.objectStore(row.store);
+    // Review-log rows are found by uid; everything else by its id.
+    const local = row.store === 'reviewLog' ? await done(os.index('uid').get(row.id)) : await done(os.get(row.id));
+    const tomb = await done(deleted.get(tombstoneKey(row.store, row.id)));
+    const action = decide(row, Math.max(local?.updatedAt || 0, tomb?.deletedAt || 0));
+    if (action === 'skip') continue;
+    if (action === 'delete') {
+      if (local) os.delete(row.store === 'reviewLog' ? local.id : row.id);
+      deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
+    } else {
+      const record = recordFromRow(row);
+      if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
+      os.put(record);
+      if (tomb) deleted.delete(tomb.key);
+    }
+    if (row.store === 'cardStates' || row.store === 'cards') schedules = true;
+    applied++;
+  }
+  settingsStore.put(times, SETTING_TIMES);
+  await saved;
+  if (schedules) scheduleChanges++;
+  return applied;
 }

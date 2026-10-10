@@ -13,9 +13,11 @@ import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard }
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
+import * as sync from './sync.js';
+import { formatInterval } from './queue.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -109,6 +111,11 @@ async function renderSettings(el) {
       </details>
     </section>
 
+    <section class="section" aria-labelledby="syncTitle">
+      <h2 id="syncTitle">Sync</h2>
+      <div id="syncBox"></div>
+    </section>
+
     <section class="section" aria-labelledby="dataTitle">
       <h2 id="dataTitle">Your data</h2>
       <div class="set-row">
@@ -129,7 +136,7 @@ async function renderSettings(el) {
         <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
         <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
       </div>
-      <p class="note">Your data lives only in this browser. The Play timer is set on the Play screen.</p>
+      <p class="note"><span id="whereNote"></span> The Play timer is set on the Play screen.</p>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -143,6 +150,7 @@ async function renderSettings(el) {
     saveTheme({ ...settings.theme, mode: r.value });
     $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); // previews switch between light and dark versions
   }));
+  drawSync();
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
   $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
@@ -326,6 +334,95 @@ function confirmReset() {
   });
 }
 
+// ---------- sync ----------
+// The Sync section of Settings: sign in or create an account, or (signed in) the sync status.
+async function drawSync() {
+  const box = $('syncBox');
+  if (!box) return;
+  const acct = await sync.account();
+  if (!$('syncBox')) return;
+  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
+    : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
+  if (!acct) {
+    box.innerHTML = `
+      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one.</p>
+      <form id="syncForm" novalidate>
+        <label class="field"><span>Email</span>
+          <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+        <label class="field"><span>Password</span>
+          <input id="syncPw" type="password" autocomplete="current-password" minlength="6" required></label>
+        <p class="err" id="syncErr" hidden></p>
+        <div class="sheet-actions">
+          <button class="btn ghost" type="button" id="syncCreate">Create account</button>
+          <button class="btn primary" type="submit">Sign in</button>
+        </div>
+      </form>
+      <p class="note">First time? Use <b>Create account</b> once, then <b>Sign in</b> on your other devices.</p>`;
+    const go = async create => {
+      const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
+      const err = $('syncErr');
+      err.hidden = true;
+      if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email address.'; err.hidden = false; return; }
+      if (pw.length < 6) { err.textContent = 'The password needs at least 6 characters.'; err.hidden = false; return; }
+      box.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      try {
+        await (create ? sync.createAccount(email, pw) : sync.signIn(email, pw));
+        toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
+        drawSync();
+      } catch (e) {
+        err.textContent = e.message; err.hidden = false;
+        box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+      }
+    };
+    $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
+    $('syncCreate').addEventListener('click', () => go(true));
+    return;
+  }
+  box.innerHTML = `
+    <div class="set-row">
+      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p></div>
+      <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
+    </div>
+    <div class="set-row">
+      <div><b>Sign out</b><p>Stops syncing on this device. Everything stays on this device and in your account.</p></div>
+      <button class="btn ghost small" type="button" id="signOutBtn">Sign out</button>
+    </div>`;
+  showSyncStatus(acct.lastSync);
+  $('syncNowBtn').addEventListener('click', () => sync.syncNow());
+  $('signOutBtn').addEventListener('click', async () => { await sync.signOut(); toast('Signed out'); drawSync(); });
+}
+
+// "Synced 2m ago", "Syncing…" or what went wrong.
+function showSyncStatus(lastSync) {
+  const el = $('syncStatus');
+  if (!el) return;
+  const st = sync.lastStatus();
+  const when = st.at || lastSync;
+  const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
+  el.className = st.state === 'error' ? 'warn' : 'muted';
+  el.textContent = st.state === 'syncing' ? 'Syncing…'
+    : st.state === 'error' ? `Couldn't sync: ${st.error}`
+    : when ? `Synced ${ago}` : 'Not synced yet';
+  if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
+}
+
+// After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
+addEventListener('sync', async e => {
+  const { state, applied } = e.detail;
+  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else showSyncStatus(); }
+  if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
+  if (state !== 'done' || !applied) return;
+  settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
+  const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
+  if (busy) return;
+  if (['decks', 'deck', 'browse', 'stats'].includes(currentRoute)) route();
+  else if (currentRoute === 'settings') {
+    // Redraw Settings in place (keeping your scroll position) so synced study settings show.
+    const view = $('screen').querySelector('.view'), y = scrollY;
+    if (view) { await renderSettings(view); scrollTo(0, y); }
+  }
+});
+
 // ---------- first run ----------
 // Add the sample deck once. A saved flag stops it coming back after you delete it.
 async function seedSampleDeck() {
@@ -336,7 +433,8 @@ async function seedSampleDeck() {
   await db.addDeckWithCards(
     { id: deckId, name: SAMPLE_DECK.name, course: SAMPLE_DECK.course, color: SAMPLE_DECK.color, created: now },
     // created + i keeps the cards in their original order.
-    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: `sample-${i}`, deckId, front, back, tags: [], created: now + i }))
+    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: `sample-${i}`, deckId, front, back, tags: [], created: now + i })),
+    { at: 1 }
   );
   settings.seeded = true;
   await db.setSetting('seeded', true);
@@ -416,6 +514,7 @@ async function start() {
   }
   settings.theme = applyTheme(settings.theme);
   await seedSampleDeck();
+  sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Opening the app with no "#/..." in the address shows the deck library.
   if (!location.hash) history.replaceState(null, '', '#/decks');
   addEventListener('hashchange', route);

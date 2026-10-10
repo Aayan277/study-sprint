@@ -40,6 +40,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - Streak scoring, an S–D grade and best scores.
   - **Card ⋯** after each answer opens the same card panel (pauses the round).
 - **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
+- **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
   - day streak and retention
   - reviews per day for 30 days, and cards due over the next 7 days
@@ -82,6 +83,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/anki.js` | Turns Anki notes into cards (HTML to text, cloze, decks, tags) |
 | `js/anki-read.js` | Opens .apkg files (unzip, decompress, read the SQLite database) |
 | `js/sync-data.js` | Sync groundwork: change times, review ids and deleted markers on every save |
+| `js/sync.js`, `js/sync-merge.js`, `js/supa.js`, `js/sync-config.js` | Syncing: when to sync, which version wins, the small Supabase client, and which project |
 | `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
