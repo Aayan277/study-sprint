@@ -31,6 +31,15 @@ instead of the installed app.)
 2. Make sure **Enable Email provider** is on.
 3. Turn **Confirm email** **off**, then click **Save**.
 
+## 3b. Let password reset emails open the app
+
+"Forgot password?" in the app has Supabase email a reset link. For that link to open Study Sprint
+(and not a page that doesn't exist):
+
+1. Open **Authentication → URL Configuration**.
+2. Set **Site URL** to `https://aayan277.github.io/study-sprint/` and click **Save**.
+3. Under **Redirect URLs**, click **Add URL**, add `https://aayan277.github.io/study-sprint/` and save.
+
 ## 4. Copy two values for the app
 
 Open **Project Settings → API Keys** (on older projects, **Project Settings → API**) and copy:
@@ -52,5 +61,7 @@ You can then sign in with the same email and password on every other device.
 ## Good to know
 
 - **Free projects pause after 7 days with no use.** If that happens, open the project in Supabase and click **Restore**. The app keeps working offline meanwhile and catches up afterwards.
-- **Forgot your password?** In Supabase, open **Authentication → Users**, click your account's **⋯** menu and send a password recovery email (it opens the website, where you can set a new one). Don't delete the user: that deletes your synced data too (your devices still keep their own copy).
+- **Forgot your password?** On the Sync sign-in form, type your email and tap **Forgot password?**. Open the link in the email: it opens Study Sprint in your browser, where you set a new one. Then sign in with it on your other devices. (Supabase's free email sends only a few emails an hour.)
+- **Friends:** each person signs in with their own account and only ever sees their own data. With sign-ups off, add them in **Authentication → Users → Add user → Create new user** (tick **Auto Confirm User**), and give them the email and starting password; they can change it in Settings → Sync. As the project owner, you can see everyone's data in the Table Editor, so tell them.
+- **Removing an account:** Settings → Sync → **Delete my synced data** clears what's stored on the server. To remove the account itself, delete the user in **Authentication → Users** (that deletes their synced data too; their devices keep their own copy).
 - **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB.

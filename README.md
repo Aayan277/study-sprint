@@ -40,7 +40,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - Streak scoring, an S–D grade and best scores.
   - **Card ⋯** after each answer opens the same card panel (pauses the round).
 - **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
-- **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Setup: [docs/sync-setup.md](docs/sync-setup.md).
+- **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
   - day streak and retention
   - reviews per day for 30 days, and cards due over the next 7 days

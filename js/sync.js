@@ -14,7 +14,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -51,12 +51,56 @@ async function signedIn(session) {
   return syncNow();
 }
 
+// ---------- passwords ----------
+// The app's own address, which the reset email links back to.
+const appUrl = () => location.origin + location.pathname;
+
+export const sendPasswordReset = email => supa.sendPasswordReset(email.trim(), appUrl());
+
+// Opened from a password-reset email? The link's address holds a sign-in (see parseAuthLink).
+// Returns { session } to set a new password with, { error } if the link didn't work, or null.
+export function recoveryFromLink(hash = location.hash) {
+  return parseAuthLink(hash);
+}
+// Set the new password from a reset link, and sign in with it.
+export async function finishPasswordReset(linkSession, password) {
+  await supa.setPassword(linkSession.access_token, password);
+  const user = await supa.getUser(linkSession.access_token);
+  return signedIn({ ...linkSession, user });
+}
+// Change the password while signed in.
+export async function changePassword(password) {
+  const auth = await session();
+  if (!auth) throw new supa.SupaError('Sign in first.');
+  await supa.setPassword(auth.access_token, password);
+}
+
+// ---------- leaving ----------
+// How many changes made here haven't reached the server yet.
+export async function pendingChanges() {
+  const { syncState } = await db.getSettings();
+  const c = await db.localChangesSince(syncState?.pushedUntil || 0);
+  return Object.values(c.records).reduce((n, list) => n + list.length, 0) + c.tombstones.length + c.settings.length;
+}
+
+// Delete everything in this account on the server, and sign this device out. Devices keep their own data.
+// (Signing in again later sends this device's data back up, starting from scratch.)
+export async function deleteServerData() {
+  const auth = await session();
+  if (!auth) throw new supa.SupaError('Sign in first.');
+  await supa.deleteAllRows(auth.access_token, auth.user.id);
+  await signOut({ forget: true });
+}
+
 // Sign out on this device. Its data stays here. (Signing back in to the same account carries on where it
 // left off; changes made meanwhile are sent then.)
-export async function signOut() {
+//   forget: also forget this device's sync bookmarks, so signing in again starts from scratch
+//           (used when this device's data is removed, or the server's is)
+export async function signOut({ forget = false } = {}) {
   const { syncAuth } = await db.getSettings();
   if (syncAuth) await supa.signOut(syncAuth.access_token);
   await db.setSetting('syncAuth', null);
+  if (forget) await db.setSetting('syncState', null);
   emit({ state: 'signed-out', error: null });
 }
 
@@ -94,16 +138,18 @@ export function syncNow() {
 async function run() {
   const auth = await session();
   if (!auth) return;
-  emit({ state: 'syncing', error: null });
+  emit({ state: 'syncing', error: null, progress: null });
   const token = auth.access_token;
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time.
-  let applied = 0;
+  let applied = 0, pulled = 0;
   for (;;) {
     const rows = await supa.getChanges(token, st.lastSeq, PAGE);
     if (!rows.length) break;
     applied += await db.applyRemote(rows);
+    pulled += rows.length;
+    if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
     st = { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => Number(r.seq))) };
     await db.setSetting('syncState', st);
     if (rows.length < PAGE) break;
@@ -117,11 +163,16 @@ async function run() {
     ...changes.tombstones.map(rowFromTombstone),
     ...changes.settings.map(s => rowFromSetting(s.key, s.value, s.time))
   ]);
-  for (const part of chunks(rows, BATCH)) await supa.putRows(token, part);
+  let sent = 0;
+  for (const part of chunks(rows, BATCH)) {
+    if (rows.length > BATCH) emit({ progress: `Sending ${sent.toLocaleString()} of ${rows.length.toLocaleString()} changes…` });
+    await supa.putRows(token, part);
+    sent += part.length;
+  }
 
   st = { ...st, pushedUntil: pushStart - 1, lastSync: Date.now() };
   await db.setSetting('syncState', st);
-  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null });
+  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null });
 }
 
 // ---------- when to sync ----------

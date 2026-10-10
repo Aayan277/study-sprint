@@ -57,3 +57,24 @@ export function chunks(list, size) {
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
   return out;
 }
+
+// A sign-in link from a Supabase email (forgot password) opens the app with the sign-in after the #:
+//   #access_token=…&refresh_token=…&expires_at=…&type=recovery
+// or, if the link expired: #error=access_denied&error_code=otp_expired&error_description=…
+// Returns { session } (without the user, which is looked up afterwards), { error }, or null for a normal address.
+export function parseAuthLink(hash) {
+  const text = String(hash || '').replace(/^#/, '');
+  if (!/(^|&)(access_token|error)=/.test(text)) return null;
+  const p = new URLSearchParams(text);
+  if (p.get('error')) {
+    const code = p.get('error_code') || p.get('error');
+    return { error: code === 'otp_expired' ? 'That reset link has expired or was already used. Ask for a new one.' : (p.get('error_description') || 'That link didn’t work.').replace(/\+/g, ' ') };
+  }
+  if (p.get('type') !== 'recovery') return null;
+  const expiresIn = Number(p.get('expires_in')) || 3600;
+  return { session: {
+    access_token: p.get('access_token'),
+    refresh_token: p.get('refresh_token'),
+    expires_at: Number(p.get('expires_at')) || Math.floor(Date.now() / 1000) + expiresIn
+  } };
+}

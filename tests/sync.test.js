@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS } from '../js/sync-data.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks } from '../js/sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
 
 const NOW = 1_800_000_000_000;
 
@@ -79,4 +79,15 @@ test('only the newest of a record and its delete marker is sent; sending in batc
   assert.deepEqual(rows.map(r => [r.store, r.deleted]), [['decks', false], ['cards', false]]);
   assert.deepEqual(chunks([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.deepEqual(chunks([], 2), []);
+});
+
+
+test('reading a password reset link', () => {
+  const link = parseAuthLink('#access_token=abc&expires_at=1900000000&expires_in=3600&refresh_token=r1&token_type=bearer&type=recovery');
+  assert.deepEqual(link, { session: { access_token: 'abc', refresh_token: 'r1', expires_at: 1900000000 } });
+  assert.match(parseAuthLink('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid').error, /expired/);
+  assert.equal(parseAuthLink('#error=server_error&error_description=Something+broke').error, 'Something broke');
+  assert.equal(parseAuthLink('#/decks'), null);
+  assert.equal(parseAuthLink(''), null);
+  assert.equal(parseAuthLink('#access_token=abc&type=signup'), null);      // only reset links are handled
 });
