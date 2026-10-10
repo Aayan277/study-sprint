@@ -14,6 +14,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 ## Features
 
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, and a mastery bar. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
+- **Export** (a deck's page → Export): save a deck as a spreadsheet (.csv) or an Anki deck (.apkg), with tags. Re-exporting updates the cards in Anki instead of duplicating them.
 - **Card list** (each deck's page, or Decks → Browse all cards):
   - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
   - Tap a card to edit it, suspend it, bury it until tomorrow, flag it, move it, reset it to new, set its due date, delete it, or see its full history (Card info).
@@ -87,6 +88,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/sync-data.js` | Sync groundwork: change times, review ids and deleted markers on every save |
 | `js/sync.js`, `js/sync-merge.js`, `js/supa.js`, `js/sync-config.js` | Syncing: when to sync, which version wins, the small Supabase client, and which project |
 | `js/password.js` | Password rules for new passwords (8+ characters, a letter and a number) |
+| `js/export.js` | Exporting a deck as CSV or an Anki deck |
 | `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |

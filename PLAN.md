@@ -187,7 +187,7 @@ Built in 3 parts:
 
 1. ✅ **Desktop layout** (v2.1): one app that adapts (not a separate version). From 1024px: sidebar instead of bottom tabs, wider pages, decks and Stats in grids, bigger Review card with keyboard hints. From 1200px: a card's panel opens beside the list (click from card to card; Escape closes). Phones unchanged.
 2. ✅ **Study calendar** in Stats (v2.2): a year of study days, one column per week, darker = more answers; tap a day to see it; best streak.
-3. **Export a deck** as CSV or an Anki deck.
+3. ✅ **Export a deck** (v2.3) as CSV (Excel-friendly, imports back in) or an Anki deck (.apkg, Anki's widely supported older layout; checked by importing into the real Anki library). Cards only: progress stays in Study Sprint.
 4. **Exam date mode** (full: nothing scheduled past the exam, retention rises near it, Exam prep session, countdown), **card formatting** (saved as simple marks; B / I / • toolbar on phones, Word-style editing on computers) and **images on cards** (1 per side, synced through Supabase Storage). Choices made.
 
 ## Parked (not planned for now)

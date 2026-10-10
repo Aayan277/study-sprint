@@ -147,6 +147,7 @@ export async function renderDeck(el, deckId) {
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
+        ${cards.length ? '<button class="btn ghost small" type="button" id="exportDeck">Export</button>' : ''}
         ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
@@ -155,6 +156,7 @@ export async function renderDeck(el, deckId) {
     ${cards.length ? '' : `<div class="empty"><b>This deck is empty.</b><br>Add cards one at a time with + Add card, or paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
   `;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
+  $('exportDeck')?.addEventListener('click', () => openExport(deck));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
   }, s.total));
@@ -186,6 +188,44 @@ function summaryHTML(s) {
         <span><i class="sw lv-young"></i>Young <b>${s.young}</b></span>
         <span><i class="sw lv-mature"></i>Mature <b>${s.mature}</b></span>
       </div>`;
+}
+
+// ---------- export ----------
+// Save a deck's cards as a spreadsheet (CSV) or an Anki deck. Progress isn't included (cards start as new).
+async function openExport(deck) {
+  const cards = (await db.getCardsInDeck(deck.id)).sort((a, b) => a.created - b.created);
+  openSheet(`
+    <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
+    <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).</p>
+    <div class="export-opts">
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
+      <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
+    </div>
+    <p class="err" id="exErr" hidden></p>
+    <button class="btn ghost" type="button" id="exClose">Close</button>`);
+  const ex = await import('./export.js');
+  $('exClose').addEventListener('click', closeSheet);
+  $('exCsv').addEventListener('click', () => {
+    ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
+    closeSheet();
+    toast(`Exported ${plural(cards.length, 'card')} as a spreadsheet`);
+  });
+  $('exApkg').addEventListener('click', async () => {
+    const btn = $('exApkg');
+    btn.disabled = true;
+    btn.querySelector('b').textContent = 'Making the Anki deck…';
+    try {
+      ex.download(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'));
+      closeSheet();
+      toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
+    } catch (err) {
+      console.error(err);
+      $('exErr').textContent = navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.';
+      $('exErr').hidden = false;
+      btn.disabled = false;
+      btn.querySelector('b').textContent = 'Anki deck (.apkg)';
+    }
+  });
 }
 
 // ---------- create / rename / recolor / delete ----------

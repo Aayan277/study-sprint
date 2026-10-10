@@ -6,7 +6,7 @@
 //   sql.js   reads the SQLite database
 // readAnkiFile() returns { notes, models, reviews } for notesToImport() in anki.js.
 
-const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
+export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
 const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
 const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
 
@@ -34,9 +34,9 @@ export async function readAnkiFile(file) {
   }
 }
 
-// sql.js isn't an ES module, so it's added as a <script> once.
+// sql.js isn't an ES module, so it's added as a <script> once. (Also used to make Anki files: export.js.)
 let sqlPromise = null;
-function loadSqlJs() {
+export function loadSqlJs() {
   if (!sqlPromise) {
     sqlPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
