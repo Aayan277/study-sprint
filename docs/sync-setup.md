@@ -21,20 +21,15 @@ It uses a free Supabase project that belongs to you. This takes about 10 minutes
 
 This makes one table, and turns on rules so every account can only ever read or change its own data.
 
-## 3. Send sign-in codes, not links
+## 3. Turn off email confirmation
 
-The app signs you in with a 6-digit code from your email. Links would open in Safari instead of the installed app.
+The app signs you in with your email and a password, so Supabase doesn't need to send any emails.
+(The free plan can't change its email templates, and its emails contain links that would open Safari
+instead of the installed app.)
 
-1. In the sidebar, open **Authentication → Emails** (it may be called *Email Templates*).
-2. Edit **both** of these templates, **Confirm signup** and **Magic Link**:
-   - **Subject:** `Your Study Sprint code`
-   - **Body:**
-     ```html
-     <h2>Your Study Sprint sign-in code</h2>
-     <p style="font-size:28px;letter-spacing:4px"><b>{{ .Token }}</b></p>
-     <p>Type it into Study Sprint. It works for one hour.</p>
-     ```
-3. Save each one.
+1. In the sidebar, open **Authentication → Sign In / Providers** and click **Email**.
+2. Make sure **Enable Email provider** is on.
+3. Turn **Confirm email** **off**, then click **Save**.
 
 ## 4. Copy two values for the app
 
@@ -48,11 +43,14 @@ Both are meant to be public: the table rules from step 2 are what protect your d
 
 ## 5. After you've signed in once
 
-Turn off new sign-ups so nobody else can make an account on your project:
+After creating your account in the app (Settings → Sync → Create account), turn off new sign-ups
+so nobody else can make an account on your project:
 **Authentication → Sign In / Providers → Allow new users to sign up → off**.
+
+You can then sign in with the same email and password on every other device.
 
 ## Good to know
 
 - **Free projects pause after 7 days with no use.** If that happens, open the project in Supabase and click **Restore**. The app keeps working offline meanwhile and catches up afterwards.
-- Supabase's built-in email sends only a few emails an hour, which is plenty for signing in on your own devices.
+- **Forgot your password?** In Supabase, open **Authentication → Users**, click your account's **⋯** menu and send a password recovery email (it opens the website, where you can set a new one). Don't delete the user: that deletes your synced data too (your devices still keep their own copy).
 - **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB.
