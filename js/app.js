@@ -19,7 +19,7 @@ import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '2.3';
+const APP_VERSION = '2.4';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 

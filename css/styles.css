@@ -635,3 +635,8 @@ dialog.sheet.side .sheet-in{padding:24px 22px 32px}
 .export-opts{display:grid;gap:10px}
 .export-opt{flex-direction:column;align-items:flex-start;text-align:left;gap:3px;padding:14px 16px}
 .export-opt span{font-weight:400;font-size:.88rem;color:var(--muted)}
+
+/* Exam date mode: countdown badge on decks */
+.exam-badge{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--bad-soft);color:var(--bad);font-size:.75rem;font-weight:700;white-space:nowrap}
+.deck .exam-badge{margin-top:4px;justify-self:start}
+.exam-line{margin:8px 0 0;font-size:.88rem;color:var(--muted)}

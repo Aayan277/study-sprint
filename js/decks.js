@@ -6,6 +6,7 @@ import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
+import { examInfo, countdown, pullIn } from './exam.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -84,6 +85,7 @@ export async function renderLibrary(el) {
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
+          ${examInfo(deck) ? `<span class="exam-badge">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
             <span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due"><b>${stats.due}</b> due</span>
@@ -139,11 +141,13 @@ export async function renderDeck(el, deckId) {
   const [cards, states] = await Promise.all([db.getCardsInDeck(deckId), db.getAll('cardStates')]);
   const s = summarize(cards, new Map(states.map(x => [x.cardId, x])));
   cards.sort((a, b) => a.created - b.created);
+  const exam = examInfo(deck);
 
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ Decks</button>
     <div class="screen-head">
-      <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1></div>
+      <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
+        ${exam ? `<p class="exam-line"><span class="exam-badge">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
@@ -157,6 +161,7 @@ export async function renderDeck(el, deckId) {
   `;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
   $('exportDeck')?.addEventListener('click', () => openExport(deck));
+  $('prepBtn')?.addEventListener('click', async () => (await import('./review.js')).examPrep(deck.id));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
   }, s.total));
@@ -248,6 +253,9 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
       ${isNew ? '' : `<label class="field"><span>New cards per day for this deck (optional)</span>
         <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${Number.isFinite(deck.newPerDay) ? deck.newPerDay : ''}">
         <small class="note" style="margin:4px 0 0">Leave blank to use only the overall limit in Settings. The overall limit still applies on top.</small></label>`}
+      ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
+        <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">
+        <small class="note" style="margin:4px 0 0">Until then, every card in this deck comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.</small></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -278,10 +286,18 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
     const saved = isNew
       ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color, newPerDay };
+      : { ...deck, name, course, color, newPerDay, examDate: $('deckExam')?.value || null };
     await db.saveDeck(saved);
+    // A new exam date: bring forward cards that were scheduled after it.
+    let moved = 0;
+    if (!isNew && saved.examDate && saved.examDate !== deck.examDate) {
+      const ids = new Set((await db.getCardsInDeck(saved.id)).map(c => c.id));
+      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), saved);
+      if (changed.length) await db.putStates(changed);
+      moved = changed.length;
+    }
     closeSheet();
-    toast(isNew ? `Created “${name}”` : 'Deck saved');
+    toast(isNew ? `Created “${name}”` : moved ? `Deck saved. ${plural(moved, 'card')} brought forward to before the exam` : 'Deck saved');
     onDone(saved);
   });
 

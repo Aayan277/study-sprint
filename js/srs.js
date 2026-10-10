@@ -27,16 +27,17 @@ export const RATINGS = [
 // Rebuilt only when the options change.
 let cached = null;
 function scheduler(opts) {
-  const key = JSON.stringify(opts);
+  const { maxDue, ...lib } = opts;      // maxDue is applied by capInterval, not the library
+  const key = JSON.stringify(lib);
   if (!cached || cached.key !== key) {
     cached = {
       key,
       f: fsrs(generatorParameters({
-        request_retention: opts.retention,
-        learning_steps: opts.learningSteps,
-        relearning_steps: opts.relearningSteps,
-        maximum_interval: opts.maxInterval,
-        enable_fuzz: opts.fuzz,
+        request_retention: lib.retention,
+        learning_steps: lib.learningSteps,
+        relearning_steps: lib.relearningSteps,
+        maximum_interval: lib.maxInterval,
+        enable_fuzz: lib.fuzz,
         enable_short_term: true
       }))
     };
@@ -47,10 +48,15 @@ function scheduler(opts) {
 const DAY = 86400000;
 // The library keeps Easy at least a day longer than Good (and Good longer than Hard), which can push
 // a gap a day or two past the maximum. Pull it back so the maximum is a real limit.
-function capInterval(card, now, maxDays) {
+// maxDue (optional, from exam date mode: see exam.js): the latest the card may come back.
+function capInterval(card, now, maxDays, maxDue) {
   if (card.scheduled_days > maxDays) {
     card.scheduled_days = maxDays;
     card.due = new Date(now + maxDays * DAY);
+  }
+  if (maxDue > now && card.due.getTime() > maxDue) {
+    card.due = new Date(maxDue);
+    card.scheduled_days = Math.max(0, Math.round((maxDue - now) / DAY));
   }
   return card;
 }
@@ -92,12 +98,12 @@ function fromLibrary(cardId, c) {
 export function previewIntervals(state, opts, now = Date.now()) {
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   const out = {};
-  for (const { rating } of RATINGS) out[rating] = capInterval(preview[rating].card, now, opts.maxInterval).due.getTime() - now;
+  for (const { rating } of RATINGS) out[rating] = capInterval(preview[rating].card, now, opts.maxInterval, opts.maxDue).due.getTime() - now;
   return out;
 }
 
 // Apply a rating and return the card's new saved state.
 export function rate(cardId, state, rating, opts, now = Date.now()) {
   const { card } = scheduler(opts).next(toLibrary(state, now), new Date(now), rating);
-  return fromLibrary(cardId, capInterval(card, now, opts.maxInterval));
+  return fromLibrary(cardId, capInterval(card, now, opts.maxInterval, opts.maxDue));
 }

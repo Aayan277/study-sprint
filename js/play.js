@@ -14,6 +14,7 @@ import {
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
 import { schedulerOptions } from './sched-settings.js';
+import { examOptions } from './exam.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
@@ -401,7 +402,8 @@ async function record(round, entry) {
   if (applies(decision)) {
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
-      const next = rate(id, prev, rating, schedulerOptions(data.settings), now);
+      const deck = data.decks.find(d => d.id === entry.card.deckId);     // exam date mode limits (exam.js)
+      const next = rate(id, prev, rating, examOptions(schedulerOptions(data.settings), deck, now), now);
       log.applied = true;
       await db.saveReview(next, log);
       data.statesById.set(id, next);
