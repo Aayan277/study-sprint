@@ -84,6 +84,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/anki-read.js` | Opens .apkg files (unzip, decompress, read the SQLite database) |
 | `js/sync-data.js` | Sync groundwork: change times, review ids and deleted markers on every save |
 | `js/sync.js`, `js/sync-merge.js`, `js/supa.js`, `js/sync-config.js` | Syncing: when to sync, which version wins, the small Supabase client, and which project |
+| `js/password.js` | Password rules for new passwords (8+ characters, a letter and a number) |
 | `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |

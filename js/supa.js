@@ -51,7 +51,7 @@ function explain(status, code, raw) {
     user_already_exists: 'There’s already an account with that email. Sign in instead.',
     email_exists: 'There’s already an account with that email. Sign in instead.',
     signup_disabled: 'New accounts are turned off for this project. Sign in with your existing account.',
-    weak_password: 'That password is too short. Use at least 6 characters.',
+    weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',
     validation_failed: 'Check the email and password.',
     email_not_confirmed: 'This account is waiting for email confirmation. In Supabase, turn off “Confirm email” (see docs/sync-setup.md), then try again.',

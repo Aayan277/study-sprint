@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS } from '../js/sync-data.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
 const NOW = 1_800_000_000_000;
 
@@ -90,4 +91,17 @@ test('reading a password reset link', () => {
   assert.equal(parseAuthLink('#/decks'), null);
   assert.equal(parseAuthLink(''), null);
   assert.equal(parseAuthLink('#access_token=abc&type=signup'), null);      // only reset links are handled
+});
+
+test('password rules for new passwords: 8+ characters, a letter and a number', () => {
+  assert.equal(passwordOk('secret123'), true);
+  assert.equal(passwordOk('Ünïcode99'), true);                     // any letter counts
+  assert.equal(passwordOk('abc123'), false);                        // too short
+  assert.equal(passwordOk('abcdefgh'), false);                      // no number
+  assert.equal(passwordOk('12345678'), false);                      // no letter
+  assert.deepEqual(checkPassword('abc').map(r => r.ok), [false, true, false]);
+  assert.equal(passwordMissing('abc'), 'at least 8 characters and a number');
+  assert.equal(passwordMissing(''), 'at least 8 characters, a letter and a number');
+  assert.equal(passwordMissing('12345678'), 'a letter');
+  assert.equal(passwordMissing('secret123'), '');
 });

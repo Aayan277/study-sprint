@@ -16,6 +16,7 @@ import { renderBrowseAll } from './browse.js';
 import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
+import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '2.0';
@@ -383,8 +384,9 @@ async function drawSync() {
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
           <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
-        <label class="field"><span>Password</span>
-          <input id="syncPw" type="password" autocomplete="current-password" minlength="6" required></label>
+        ${passwordField('syncPw', 'Password', 'current-password')}
+        <p class="pw-rules-title">New accounts need:</p>
+        ${rulesList('syncRules')}
         <p class="err" id="syncErr" hidden></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="syncCreate">Create account</button>
@@ -398,7 +400,9 @@ async function drawSync() {
       const err = $('syncErr');
       err.hidden = true;
       if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email address.'; err.hidden = false; return; }
-      if (pw.length < 6) { err.textContent = 'The password needs at least 6 characters.'; err.hidden = false; return; }
+      // New accounts follow the password rules; signing in doesn't check them (older passwords still work).
+      if (!pw) { err.textContent = 'Type your password.'; err.hidden = false; return; }
+      if (create && !passwordOk(pw)) { err.textContent = `Your password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
       box.querySelectorAll('button').forEach(b => { b.disabled = true; });
       try {
         await (create ? sync.createAccount(email, pw) : sync.signIn(email, pw));
@@ -409,6 +413,7 @@ async function drawSync() {
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
       }
     };
+    wireRules('syncPw', 'syncRules');
     $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
     $('syncCreate').addEventListener('click', () => go(true));
     $('forgotBtn').addEventListener('click', async () => {
@@ -451,14 +456,43 @@ async function drawSync() {
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
 }
 
+// A password box with a Show / Hide button (handy on phones).
+function passwordField(id, label, autocomplete) {
+  return `<label class="field"><span>${esc(label)}</span>
+    <span class="pw-wrap"><input id="${id}" type="password" autocomplete="${autocomplete}" autocapitalize="off" spellcheck="false">
+      <button type="button" class="pw-show" data-show="${id}" aria-label="Show password" aria-pressed="false">Show</button></span></label>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-show]');
+  if (!b) return;
+  e.preventDefault();
+  const input = $(b.dataset.show), showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  b.textContent = showing ? 'Show' : 'Hide';
+  b.setAttribute('aria-pressed', String(!showing));
+  b.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+});
+
+// The password rules as a checklist that ticks off as you type (see password.js).
+const rulesList = id => `<ul class="pw-rules" id="${id}" aria-live="polite"></ul>`;
+function wireRules(inputId, listId) {
+  const draw = () => {
+    $(listId).innerHTML = checkPassword($(inputId).value).map(r =>
+      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${r.ok ? '✓' : '○'}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
+  };
+  $(inputId).addEventListener('input', draw);
+  draw();
+}
+
 // A sheet asking for a new password (twice). save(pw) does the work; done is the message afterwards.
 function openPasswordSheet({ title, intro = '', save, done }) {
   openSheet(`
     <h2 id="sheetTitle">${esc(title)}</h2>
     ${intro}
     <form id="pwForm" novalidate>
-      <label class="field"><span>New password</span><input id="pw1" type="password" autocomplete="new-password" minlength="6"></label>
-      <label class="field"><span>Type it again</span><input id="pw2" type="password" autocomplete="new-password" minlength="6"></label>
+      ${passwordField('pw1', 'New password', 'new-password')}
+      ${rulesList('pwRules')}
+      ${passwordField('pw2', 'Type it again', 'new-password')}
       <p class="err" id="pwErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="pwCancel">Cancel</button>
@@ -466,11 +500,12 @@ function openPasswordSheet({ title, intro = '', save, done }) {
       </div>
     </form>`);
   $('pwCancel').addEventListener('click', closeSheet);
+  wireRules('pw1', 'pwRules');
   $('pwForm').addEventListener('submit', async e => {
     e.preventDefault();
     const pw = $('pw1').value, err = $('pwErr');
     err.hidden = true;
-    if (pw.length < 6) { err.textContent = 'Use at least 6 characters.'; err.hidden = false; return; }
+    if (!passwordOk(pw)) { err.textContent = `The password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
     if (pw !== $('pw2').value) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
     const btn = e.submitter || $('pwForm').querySelector('[type=submit]');
     btn.disabled = true;

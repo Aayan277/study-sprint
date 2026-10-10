@@ -31,6 +31,17 @@ instead of the installed app.)
 2. Make sure **Enable Email provider** is on.
 3. Turn **Confirm email** **off**, then click **Save**.
 
+## 3a. Password rules
+
+The app asks new passwords for **at least 8 characters, with a letter and a number**. Make Supabase
+enforce the same, so the rule holds even outside the app:
+
+1. Open **Authentication → Sign In / Providers** and click **Email**.
+2. Set **Minimum password length** to `8`.
+3. Set **Password requirements** to **Letters and digits**, then click **Save**.
+
+(Existing passwords keep working; the rule applies when a password is created or changed.)
+
 ## 3b. Let password reset emails open the app
 
 "Forgot password?" in the app has Supabase email a reset link. For that link to open Study Sprint
