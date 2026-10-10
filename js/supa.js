@@ -51,11 +51,15 @@ function explain(status, code, raw) {
     user_already_exists: 'There’s already an account with that email. Sign in instead.',
     email_exists: 'There’s already an account with that email. Sign in instead.',
     signup_disabled: 'New accounts are turned off for this project. Sign in with your existing account.',
-    weak_password: 'That password is too short. Use at least 6 characters.',
+    weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',
     validation_failed: 'Check the email and password.',
     email_not_confirmed: 'This account is waiting for email confirmation. In Supabase, turn off “Confirm email” (see docs/sync-setup.md), then try again.',
     over_request_rate_limit: 'Too many tries. Wait a minute and try again.',
+    over_email_send_rate_limit: 'Supabase can only send a few emails an hour. Wait a while and try again.',
+    same_password: 'That’s already your password. Pick a different one.',
+    user_not_found: 'There’s no account with that email.',
+    otp_expired: 'That link has expired. Ask for a new one.',
     refresh_token_not_found: 'You’ve been signed out. Sign in again to keep syncing.',
     refresh_token_already_used: 'You’ve been signed out. Sign in again to keep syncing.',
     session_not_found: 'You’ve been signed out. Sign in again to keep syncing.',
@@ -97,6 +101,19 @@ export async function refresh(refreshToken) {
   const s = session(await call('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: refreshToken } }));
   if (!s) throw new SupaError('You’ve been signed out. Sign in again to keep syncing.', { status: 401, code: 'session_not_found' });
   return s;
+}
+// Forgot password: Supabase emails a link that opens the app (redirectTo) signed in, ready to set a new
+// password. The app reads the sign-in from the link: see recoveryFromLink() in sync.js.
+export async function sendPasswordReset(email, redirectTo) {
+  await call(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', body: { email } });
+}
+export async function setPassword(accessToken, password) {
+  await call('/auth/v1/user', { method: 'PUT', token: accessToken, body: { password } });
+}
+// Who a sign-in belongs to ({ id, email }).
+export async function getUser(accessToken) {
+  const u = await call('/auth/v1/user', { token: accessToken });
+  return { id: u.id, email: u.email };
 }
 export async function signOut(accessToken) {
   try { await call('/auth/v1/logout', { method: 'POST', token: accessToken }); } catch { /* signed out here either way */ }

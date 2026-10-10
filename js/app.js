@@ -15,9 +15,11 @@ import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
 import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
+import { SYNCED_SETTINGS } from './sync-data.js';
+import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.9';
+const APP_VERSION = '2.0';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -283,6 +285,7 @@ function downloadFile(file) {
 }
 
 async function confirmRestore(file) {
+  const synced = !!(await sync.account());
   let data;
   try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
   const problem = db.checkBackup(data);
@@ -292,7 +295,7 @@ async function confirmRestore(file) {
     <h2 id="sheetTitle">Restore this backup?</h2>
     <p style="margin:0">Backup from <b>${esc(when)}</b>: ${plural(data.decks.length, 'deck')}, ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}.</p>
     <div class="confirm">
-      <p>Everything on this device now is <b>replaced</b> by the backup. Export a backup first if you want to keep it.</p>
+      <p>Everything on this device now is <b>replaced</b> by the backup${synced ? ', <b>and in your sync account too</b>: your other devices change to match when they sync' : ''}. Export a backup first if you want to keep it.</p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="rbNo">Cancel</button>
         <button class="btn danger solid" type="button" id="rbYes">Replace and restore</button>
@@ -301,7 +304,9 @@ async function confirmRestore(file) {
   $('rbNo').focus();
   $('rbNo').addEventListener('click', closeSheet);
   $('rbYes').addEventListener('click', async () => {
-    await db.importAll(data);
+    if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
+    await db.importAll(data, { everywhere: synced });
+    if (synced) sync.syncNow();
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
     closeSheet();
@@ -310,7 +315,8 @@ async function confirmRestore(file) {
   });
 }
 
-function confirmReset() {
+async function confirmReset() {
+  if (await sync.account()) return confirmResetSynced();
   openSheet(`
     <h2 id="sheetTitle">Reset all data?</h2>
     <div class="confirm">
@@ -323,13 +329,42 @@ function confirmReset() {
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
   $('rsYes').addEventListener('click', async () => {
-    const theme = settings.theme;
-    await db.resetAll();
-    await db.setSetting('theme', theme);
-    settings = { ...db.DEFAULT_SETTINGS, theme };
-    await seedSampleDeck();
+    await wipeThisDevice();
     closeSheet();
     toast('All data reset');
+    location.hash = '#/decks';
+  });
+}
+
+// Signed in, Reset can mean "everywhere" or "just this device".
+function confirmResetSynced() {
+  openSheet(`
+    <h2 id="sheetTitle">Reset all data?</h2>
+    <div class="confirm">
+      <p><b>Everywhere</b> deletes every deck, card and review on this device <b>and in your account</b>, so your other devices delete them too when they sync. It can't be undone.</p>
+      <p><b>Just this device</b> signs this device out and clears it. Your account and other devices keep everything (sign in again to get it back).</p>
+      <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
+      <button class="btn danger" type="button" id="rsHere">Just this device</button>
+      <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+    </div>`);
+  $('rsNo').focus();
+  $('rsNo').addEventListener('click', closeSheet);
+  $('rsAll').addEventListener('click', async () => {
+    await sync.syncNow();                 // first catch up, so nothing from another device is missed
+    await db.deleteEverything();
+    // Study settings back to their defaults (they sync); the theme stays.
+    for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
+    settings = { ...(await db.getSettings()), theme: settings.theme };
+    await sync.syncNow();
+    closeSheet();
+    toast('Everything deleted on all your devices');
+    location.hash = '#/decks';
+  });
+  $('rsHere').addEventListener('click', async () => {
+    await sync.signOut({ forget: true });
+    await wipeThisDevice();
+    closeSheet();
+    toast('This device was reset and signed out');
     location.hash = '#/decks';
   });
 }
@@ -340,7 +375,7 @@ async function drawSync() {
   const box = $('syncBox');
   if (!box) return;
   const acct = await sync.account();
-  if (!$('syncBox')) return;
+  if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
   $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
     : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
   if (!acct) {
@@ -349,21 +384,25 @@ async function drawSync() {
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
           <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
-        <label class="field"><span>Password</span>
-          <input id="syncPw" type="password" autocomplete="current-password" minlength="6" required></label>
+        ${passwordField('syncPw', 'Password', 'current-password')}
+        <p class="pw-rules-title">New accounts need:</p>
+        ${rulesList('syncRules')}
         <p class="err" id="syncErr" hidden></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="syncCreate">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">First time? Use <b>Create account</b> once, then <b>Sign in</b> on your other devices.</p>`;
+      <p class="note">First time? Use <b>Create account</b> once, then <b>Sign in</b> on your other devices.
+        <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
       const err = $('syncErr');
       err.hidden = true;
       if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email address.'; err.hidden = false; return; }
-      if (pw.length < 6) { err.textContent = 'The password needs at least 6 characters.'; err.hidden = false; return; }
+      // New accounts follow the password rules; signing in doesn't check them (older passwords still work).
+      if (!pw) { err.textContent = 'Type your password.'; err.hidden = false; return; }
+      if (create && !passwordOk(pw)) { err.textContent = `Your password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
       box.querySelectorAll('button').forEach(b => { b.disabled = true; });
       try {
         await (create ? sync.createAccount(email, pw) : sync.signIn(email, pw));
@@ -374,8 +413,23 @@ async function drawSync() {
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
       }
     };
+    wireRules('syncPw', 'syncRules');
     $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
     $('syncCreate').addEventListener('click', () => go(true));
+    $('forgotBtn').addEventListener('click', async () => {
+      const email = $('syncEmail').value.trim(), err = $('syncErr');
+      if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email above first, then tap Forgot password.'; err.hidden = false; $('syncEmail').focus(); return; }
+      try {
+        await sync.sendPasswordReset(email);
+        err.hidden = true;
+        openSheet(`
+          <h2 id="sheetTitle">Check your email</h2>
+          <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
+          <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
+          <button class="btn primary" type="button" id="fpOk">OK</button>`);
+        $('fpOk').addEventListener('click', closeSheet);
+      } catch (e) { err.textContent = e.message; err.hidden = false; }
+    });
     return;
   }
   box.innerHTML = `
@@ -384,12 +438,151 @@ async function drawSync() {
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
     <div class="set-row">
-      <div><b>Sign out</b><p>Stops syncing on this device. Everything stays on this device and in your account.</p></div>
-      <button class="btn ghost small" type="button" id="signOutBtn">Sign out</button>
+      <div><b>Password</b><p>Change the password you sign in with.</p></div>
+      <button class="btn ghost small" type="button" id="pwBtn">Change…</button>
+    </div>
+    <div class="set-row">
+      <div><b>Sign out</b><p>Stops syncing on this device. You choose whether to keep this device's copy.</p></div>
+      <button class="btn ghost small" type="button" id="signOutBtn">Sign out…</button>
+    </div>
+    <div class="set-row">
+      <div><b>Delete my synced data</b><p>Removes everything stored in your account on the server. Your devices keep their own copy.</p></div>
+      <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
   showSyncStatus(acct.lastSync);
   $('syncNowBtn').addEventListener('click', () => sync.syncNow());
-  $('signOutBtn').addEventListener('click', async () => { await sync.signOut(); toast('Signed out'); drawSync(); });
+  $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
+  $('signOutBtn').addEventListener('click', confirmSignOut);
+  $('delServerBtn').addEventListener('click', confirmDeleteServer);
+}
+
+// A password box with a Show / Hide button (handy on phones).
+function passwordField(id, label, autocomplete) {
+  return `<label class="field"><span>${esc(label)}</span>
+    <span class="pw-wrap"><input id="${id}" type="password" autocomplete="${autocomplete}" autocapitalize="off" spellcheck="false">
+      <button type="button" class="pw-show" data-show="${id}" aria-label="Show password" aria-pressed="false">Show</button></span></label>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-show]');
+  if (!b) return;
+  e.preventDefault();
+  const input = $(b.dataset.show), showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  b.textContent = showing ? 'Show' : 'Hide';
+  b.setAttribute('aria-pressed', String(!showing));
+  b.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+});
+
+// The password rules as a checklist that ticks off as you type (see password.js).
+const rulesList = id => `<ul class="pw-rules" id="${id}" aria-live="polite"></ul>`;
+function wireRules(inputId, listId) {
+  const draw = () => {
+    $(listId).innerHTML = checkPassword($(inputId).value).map(r =>
+      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${r.ok ? '✓' : '○'}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
+  };
+  $(inputId).addEventListener('input', draw);
+  draw();
+}
+
+// A sheet asking for a new password (twice). save(pw) does the work; done is the message afterwards.
+function openPasswordSheet({ title, intro = '', save, done }) {
+  openSheet(`
+    <h2 id="sheetTitle">${esc(title)}</h2>
+    ${intro}
+    <form id="pwForm" novalidate>
+      ${passwordField('pw1', 'New password', 'new-password')}
+      ${rulesList('pwRules')}
+      ${passwordField('pw2', 'Type it again', 'new-password')}
+      <p class="err" id="pwErr" hidden></p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="pwCancel">Cancel</button>
+        <button class="btn primary" type="submit">Save password</button>
+      </div>
+    </form>`);
+  $('pwCancel').addEventListener('click', closeSheet);
+  wireRules('pw1', 'pwRules');
+  $('pwForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pw = $('pw1').value, err = $('pwErr');
+    err.hidden = true;
+    if (!passwordOk(pw)) { err.textContent = `The password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
+    if (pw !== $('pw2').value) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
+    const btn = e.submitter || $('pwForm').querySelector('[type=submit]');
+    btn.disabled = true;
+    try {
+      await save(pw);
+      closeSheet();
+      toast(done);
+      if (currentRoute === 'settings') drawSync();
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  });
+}
+
+// Sign out: keep this device's copy, or remove it (e.g. on a shared computer).
+async function confirmSignOut() {
+  openSheet(`
+    <h2 id="sheetTitle">Sign out?</h2>
+    <p>This device stops syncing. Your account and your other devices keep everything.</p>
+    <p class="note" id="soNote">Checking for changes that haven't synced yet…</p>
+    <div class="confirm">
+      <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
+      <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
+      <button class="btn ghost" type="button" id="soNo">Cancel</button>
+    </div>`);
+  $('soNo').addEventListener('click', closeSheet);
+  $('soKeep').addEventListener('click', async () => { await sync.signOut(); closeSheet(); toast('Signed out'); drawSync(); });
+  let armed = false;
+  $('soRemove').addEventListener('click', async () => {
+    const pending = await sync.pendingChanges().catch(() => 0);
+    if (pending && !armed) {             // a second tap confirms losing them
+      armed = true;
+      $('soNote').innerHTML = `<span class="warn">${plural(pending, 'change')} on this device ${pending === 1 ? "hasn't" : "haven't"} synced yet and would be lost.</span> Tap Remove again to remove anyway, or go back and Sync now first.`;
+      return;
+    }
+    await sync.signOut({ forget: true });
+    await wipeThisDevice();
+    closeSheet();
+    toast('Signed out and removed from this device');
+    location.hash = '#/decks';
+  });
+  // Send anything waiting first, so signing out loses nothing.
+  await sync.syncNow();
+  const pending = await sync.pendingChanges().catch(() => 0);
+  if ($('soNote') && !armed) $('soNote').textContent = pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
+}
+
+// Delete everything in the account on the server (devices keep their copy). Signs this device out.
+function confirmDeleteServer() {
+  openSheet(`
+    <h2 id="sheetTitle">Delete your synced data?</h2>
+    <div class="confirm">
+      <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress and settings. It can't be undone.</p>
+      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, delete the user in Supabase → Authentication → Users.)</p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="dsNo">Cancel</button>
+        <button class="btn danger solid" type="button" id="dsYes">Delete from server</button>
+      </div>
+    </div>`);
+  $('dsNo').focus();
+  $('dsNo').addEventListener('click', closeSheet);
+  $('dsYes').addEventListener('click', async () => {
+    $('dsYes').disabled = true;
+    try {
+      await sync.deleteServerData();
+      closeSheet();
+      toast('Your synced data was deleted from the server');
+      drawSync();
+    } catch (e) { toast(e.message); $('dsYes').disabled = false; }
+  });
+}
+
+// Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
+async function wipeThisDevice() {
+  const theme = settings.theme;
+  await db.resetAll();
+  await db.setSetting('theme', theme);
+  settings = { ...db.DEFAULT_SETTINGS, theme };
+  await seedSampleDeck();
 }
 
 // "Synced 2m ago", "Syncing…" or what went wrong.
@@ -400,17 +593,24 @@ function showSyncStatus(lastSync) {
   const when = st.at || lastSync;
   const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
   el.className = st.state === 'error' ? 'warn' : 'muted';
-  el.textContent = st.state === 'syncing' ? 'Syncing…'
+  el.textContent = st.state === 'syncing' ? (st.progress || 'Syncing…')
     : st.state === 'error' ? `Couldn't sync: ${st.error}`
     : when ? `Synced ${ago}` : 'Not synced yet';
   if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
 }
 
+let warnedStale = false;
 // After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else showSyncStatus(); }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
+  if (state === 'error' && !warnedStale) {
+    // Failing for days (e.g. the free Supabase project paused): say so once per visit.
+    const acct = await sync.account();
+    const days = acct?.lastSync ? Math.floor((Date.now() - acct.lastSync) / 86400000) : 0;
+    if (days >= 3) { warnedStale = true; toast(`Sync hasn't worked for ${days} days. See Settings → Sync.`); }
+  }
   if (state !== 'done' || !applied) return;
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
@@ -459,6 +659,7 @@ let currentRoute = null;     // name of the screen showing now, e.g. 'decks'
 let beforeSettings = null;   // address of the screen you were on before opening Settings
 
 async function route() {
+  const resetLink = takeResetLink();      // opened from a password reset email? (see below)
   const [, name = 'decks', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
@@ -487,6 +688,7 @@ async function route() {
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
   if (el.isConnected) scrollTo(0, 0);
+  if (resetLink) showResetLink(resetLink);
 }
 
 let lastHash = '#/decks';
@@ -499,6 +701,34 @@ function wireGear() {
     if (beforeSettings) history.back();                 // came from another screen: step back to it
     else location.hash = '#/decks';                     // opened straight onto Settings: go to Decks
   });
+}
+
+// ---------- password reset links ----------
+// A "reset your password" email opens the app with a sign-in after the # (see parseAuthLink in sync-merge.js).
+// Take it out of the address straight away (and keep it for this tab, in case the app reloads to update).
+function takeResetLink() {
+  const link = sync.recoveryFromLink();
+  if (!link) return null;
+  history.replaceState(null, '', location.pathname + '#/settings');
+  if (link.session) { try { sessionStorage.setItem('resetLink', JSON.stringify(link)); } catch { /* fine without */ } }
+  return link;
+}
+function keptResetLink() {
+  try { return JSON.parse(sessionStorage.getItem('resetLink') || 'null'); } catch { return null; }
+}
+let resetShown = false;
+function showResetLink(link) {
+  resetShown = true;
+  const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
+  if (link.error) { forget(); toast(link.error); return; }
+  openPasswordSheet({
+    title: 'Set a new password',
+    intro: '<p class="note" style="margin-top:0">You opened a password reset link. Choose a new password, then use it to sign in on your other devices.</p>',
+    save: async pw => { await sync.finishPasswordReset(link.session, pw); forget(); },
+    done: 'Password saved. You\'re signed in.'
+  });
+  // Cancelling just closes it; the link can't be used again after that.
+  $('pwCancel')?.addEventListener('click', forget);
 }
 
 // ---------- start up ----------
@@ -520,6 +750,8 @@ async function start() {
   addEventListener('hashchange', route);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
+  // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
+  if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
 
   // Ask the browser not to clear our data when the phone is low on space.
   navigator.storage?.persist?.().catch(() => {});

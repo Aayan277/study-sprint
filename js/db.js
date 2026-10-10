@@ -341,24 +341,70 @@ export function checkBackup(data) {
 
 // Replace everything on this device with a backup. All in one transaction: if anything fails,
 // nothing changes.
-export async function importAll(data) {
+//   everywhere: also replace what's in your sync account. The backup's records count as changed now (so
+//               they're sent and win), and everything that was here but isn't in the backup gets a deleted
+//               marker (so other devices delete it too).
+export async function importAll(data, { everywhere = false } = {}) {
   const db = await openDB();
-  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted'];
   const tx = db.transaction(names, 'readwrite');
+  const saved = finished(tx);
+  const now = Date.now();
+  // What's here now, to mark as deleted if the backup doesn't have it.
+  const before = {};
+  if (everywhere) {
+    for (const name of Object.keys(SYNC_ID)) {
+      before[name] = (await done(tx.objectStore(name).getAll())).map(r => String(r[SYNC_ID[name]])).filter(id => id !== 'undefined');
+    }
+  }
+  const oldKeys = await done(tx.objectStore('settings').getAllKeys());
   ['decks', 'cards', 'cardStates', 'reviewLog'].forEach(n => tx.objectStore(n).clear());
   // Backups from before sync existed are filled in the same way as the version 2 upgrade.
-  const now = Date.now();
-  for (const name of ['decks', 'cards', 'cardStates', 'reviewLog']) {
-    data[name].forEach(x => tx.objectStore(name).put(upgradeRecord(name, x, now)));
+  const kept = {};
+  for (const name of Object.keys(SYNC_ID)) {
+    kept[name] = new Set();
+    for (const x of data[name]) {
+      let rec = upgradeRecord(name, x, now);
+      if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
+      tx.objectStore(name).put(rec);
+      kept[name].add(String(rec[SYNC_ID[name]]));
+    }
   }
-  // Settings are replaced too, except this device's sign-in and sync bookmarks:
-  // first remove the old ones, then (once that's done) put the backup's in.
+  if (everywhere) {
+    for (const name of Object.keys(SYNC_ID)) {
+      for (const id of before[name]) if (!kept[name].has(id)) markDeleted(tx, name, id, now);
+    }
+  }
+  // Settings are replaced too, except this device's sign-in and sync bookmarks.
   const settings = tx.objectStore('settings');
-  settings.getAllKeys().onsuccess = e => {
-    e.target.result.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
-    Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k)).forEach(([k, v]) => settings.put(v, k));
-  };
-  await finished(tx);
+  oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
+  const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
+  restored.forEach(([k, v]) => settings.put(v, k));
+  if (everywhere) {
+    // The backup's study settings win in the account too.
+    settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
+  }
+  await saved;
+  scheduleChanges++;
+  changed();
+}
+
+// Delete every deck, card, schedule and review on this device and (when synced) on every device:
+// each one leaves a deleted marker, which syncing sends to the others.
+export async function deleteEverything() {
+  const db = await openDB();
+  const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted'], 'readwrite');
+  const saved = finished(tx);
+  const now = Date.now();
+  for (const name of Object.keys(SYNC_ID)) {
+    const os = tx.objectStore(name);
+    for (const r of await done(os.getAll())) {
+      const id = r[SYNC_ID[name]];
+      if (id !== undefined) markDeleted(tx, name, id, now);
+    }
+    os.clear();
+  }
+  await saved;
   scheduleChanges++;
   changed();
 }
