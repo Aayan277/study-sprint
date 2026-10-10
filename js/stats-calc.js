@@ -36,6 +36,40 @@ export function dayStreak(logs, now = Date.now()) {
   return { days: n, studiedToday: today, week };
 }
 
+// ---------- study calendar ----------
+// A year of study days, like GitHub's contribution chart: one column per week (Monday at the top),
+// the newest week on the right. Each day: { time, count (answers), level 0–4 (how dark), future }.
+// Also: how many days you studied in that time, and your longest run of days in a row.
+export function studyCalendar(logs, now = Date.now(), weeks = 53) {
+  const perDay = new Map();
+  for (const l of logs) { const k = dayKey(l.timestamp); perDay.set(k, (perDay.get(k) || 0) + 1); }
+  // Start on the Monday `weeks - 1` weeks before this week's Monday.
+  const todayStart = daysAgoStart(0, now);
+  const fromMonday = (new Date(todayStart).getDay() + 6) % 7;      // Mon = 0 … Sun = 6
+  const first = fromMonday + (weeks - 1) * 7;
+  const days = [];
+  for (let i = first; i >= first - (weeks * 7 - 1); i--) {
+    const t = daysAgoStart(i, now);
+    days.push({ time: t, count: i < 0 ? 0 : perDay.get(dayKey(t)) || 0, future: i < 0 });
+  }
+  const max = Math.max(0, ...days.map(d => d.count));
+  for (const d of days) d.level = !d.count ? 0 : Math.min(4, Math.max(1, Math.ceil((d.count / max) * 4)));
+  const cols = [];
+  for (let w = 0; w < weeks; w++) cols.push(days.slice(w * 7, w * 7 + 7));
+  // Longest run of study days in a row, over all time.
+  const keys = [...perDay.keys()].sort();
+  let longest = 0, run = 0, prev = null;
+  for (const k of keys) {
+    const t = new Date(`${k}T12:00:00`).getTime();
+    run = prev !== null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
+    longest = Math.max(longest, run);
+    prev = t;
+  }
+  const shown = days.filter(d => !d.future);
+  return { weeks: cols, max, daysStudied: shown.filter(d => d.count).length, daysShown: shown.length,
+    answers: shown.reduce((n, d) => n + d.count, 0), longest };
+}
+
 // An answer from Review, Play, or a review history imported from Anki.
 export const isAnswerLog = l => l.source === 'review' || l.source === 'play' || l.source === 'anki';
 

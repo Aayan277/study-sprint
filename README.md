@@ -44,6 +44,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
   - day streak and retention
+  - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
   - a mastery grid you can tap card by card

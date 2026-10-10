@@ -5,7 +5,7 @@
 
 import * as db from './db.js';
 import { cardLevel } from './decks.js';
-import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog } from './stats-calc.js';
+import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { $, esc, plural } from './ui.js';
 
@@ -26,6 +26,50 @@ let selected = null;       // card shown in the mastery detail panel
 const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const weekday = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short' });
 
+// ---------- study calendar ----------
+// A year of study days as a grid of squares (darker = more answers). Tap or hover a day to see it.
+const longDate = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}`;
+function calendarHTML(cal, now) {
+  const todayKey = dayKey(now);
+  let lastMonth = -1;
+  const cols = cal.weeks.map(week => {
+    // A month's name over the first week that starts in it.
+    const m = new Date(week[0].time).getMonth();
+    const label = m !== lastMonth ? new Date(week[0].time).toLocaleDateString(undefined, { month: 'short' }) : '';
+    lastMonth = m;
+    return `<span class="cal-m">${esc(label)}</span>` + week.map(d => d.future ? '<i class="fut"></i>'
+      : `<i class="lv${d.level}${dayKey(d.time) === todayKey ? ' today' : ''}" data-t="${d.time}" data-n="${d.count}" title="${esc(dayText(d))}"></i>`).join('');
+  }).join('');
+  return `
+    <section class="card section cal-card" aria-labelledby="calTitle">
+      <div class="mhead"><h2 id="calTitle">Study calendar</h2>
+        <span class="muted small">Studied ${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
+      <div class="cal-scroll" id="calScroll">
+        <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.`)}">
+          <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
+          <div class="cal-grid" id="calGrid" aria-hidden="true">${cols}</div>
+        </div>
+      </div>
+      <div class="cal-foot">
+        <span class="muted small" id="calInfo" aria-live="polite">Tap a day to see it.</span>
+        <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
+      </div>
+    </section>`;
+}
+function wireCalendar() {
+  const box = $('calScroll');
+  if (!box) return;
+  box.scrollLeft = box.scrollWidth;            // newest weeks are on the right
+  $('calGrid').addEventListener('click', e => {
+    const cell = e.target.closest('i[data-t]');
+    if (!cell) return;
+    $('calGrid').querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
+    cell.classList.add('sel');
+    $('calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n });
+  });
+}
+
 export async function renderStats(el) {
   const [decks, allCards, states, allLogs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getAll('reviewLog')]);
   decks.sort((a, b) => a.created - b.created);
@@ -45,6 +89,7 @@ export async function renderStats(el) {
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
+  const cal = studyCalendar(logs.filter(isAnswerLog), now);
 
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
@@ -72,6 +117,8 @@ export async function renderStats(el) {
         <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
       </div>
     </div>
+
+    ${calendarHTML(cal, now)}
 
     <section class="card section">
       <div class="mhead"><h2>Reviews per day</h2><span class="muted small">${plural(total30, 'answer')} in 30 days</span></div>
@@ -126,6 +173,7 @@ export async function renderStats(el) {
   if (!allCards.length) return;
   $('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   el.querySelectorAll('.chart').forEach(wireChart);
+  wireCalendar();
   $('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
 
   // Mastery grid: tap a card to see its details and recent answers.

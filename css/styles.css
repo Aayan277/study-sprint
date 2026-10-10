@@ -604,3 +604,29 @@ dialog.sheet{overflow-y:auto;overscroll-behavior:contain}
 dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--rule);box-shadow:-12px 0 32px rgba(0,0,0,.10);z-index:6;overflow:auto}
 dialog.sheet.side .sheet-in{padding:24px 22px 32px}
 @media (min-width:1024px){ .top .brand{white-space:nowrap;font-size:1.15rem} }
+
+/* Study calendar (Stats): a year of days, one column per week, Monday at the top */
+.cal-card{--c:12px}
+.cal-scroll{overflow-x:auto;margin:6px -4px 0;padding:0 4px 6px}
+.cal{display:flex;gap:6px;width:max-content}
+.cal-wd{position:sticky;left:-4px;z-index:1;display:grid;grid-template-rows:14px repeat(7,var(--c));gap:3px;padding:0 4px;background:var(--sheet);font:500 .62rem var(--f-mono);color:var(--muted)}
+.cal-wd b{font-weight:500;line-height:var(--c)}
+.cal-grid{display:grid;grid-template-rows:14px repeat(7,var(--c));grid-auto-flow:column;grid-auto-columns:var(--c);gap:3px}
+.cal-m{font:500 .62rem var(--f-mono);color:var(--muted);white-space:nowrap;overflow:visible;line-height:14px}
+.cal-grid i,.cal-key i{display:block;width:var(--c);height:var(--c);border-radius:3px;background:var(--rule)}
+.cal-key i{display:inline-block;width:11px;height:11px;vertical-align:-1px;margin:0 1px}
+.cal-grid i.fut{background:transparent}
+.cal-grid i.lv1,.cal-key i.lv1{background:color-mix(in srgb,var(--accent) 30%,var(--sheet))}
+.cal-grid i.lv2,.cal-key i.lv2{background:color-mix(in srgb,var(--accent) 55%,var(--sheet))}
+.cal-grid i.lv3,.cal-key i.lv3{background:color-mix(in srgb,var(--accent) 78%,var(--sheet))}
+.cal-grid i.lv4,.cal-key i.lv4{background:var(--accent)}
+.cal-grid i[data-t]{cursor:pointer}
+.cal-grid i.today{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-grid i.sel{outline:2px solid var(--stamp);outline-offset:1px}
+.cal-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+@media (min-width:1024px){
+  main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
+}
+@media (min-width:1360px){
+  main[data-route="stats"] .cal-card{--c:16px}
+}
