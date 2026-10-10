@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, SORTS } from '../js/browse-logic.js';
+import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, SORTS, replaceInCards, tagCounts, renameTag } from '../js/browse-logic.js';
 import * as leechFns from '../js/browse-logic.js';
 import { dayEnd } from '../js/days.js';
 
@@ -105,4 +105,27 @@ test('leeches: tagged, and suspended unless tag-only', () => {
   assert.deepEqual(markLeech(c, 'suspend'), { id: 'a', tags: ['exam', 'leech'], suspended: true });
   assert.deepEqual(markLeech(c, 'tag'), { id: 'a', tags: ['exam', 'leech'] });
   assert.deepEqual(markLeech({ id: 'b', tags: ['leech'] }, 'tag').tags, ['leech']);
+});
+
+
+test('duplicates filter: same front, listed together', () => {
+  const cs = [card('Mitosis', { created: 1 }), card('Meiosis', { created: 2 }), card('**mitosis**', { created: 3 }), card('Mitosis!', { created: 4 }), card('Osmosis', { created: 5 })];
+  assert.deepEqual(browseCards(cs, new Map(), { filter: 'dupes', now: NOW }).map(x => x.card.id), ['Mitosis', '**mitosis**', 'Mitosis!']);
+});
+
+test('find and replace', () => {
+  const cs = [{ id: 'a', front: 'Pavlov dog', back: 'pavlov ran tests' }, { id: 'b', front: 'Skinner', back: 'box (1.5)' }];
+  assert.deepEqual(replaceInCards(cs, { find: 'pavlov', replace: 'Pavlov’s' }).map(c => [c.front, c.back]), [['Pavlov’s dog', 'Pavlov’s ran tests']]);
+  assert.deepEqual(replaceInCards(cs, { find: 'pavlov', replace: 'X', matchCase: true }).map(c => [c.front, c.back]), [['Pavlov dog', 'X ran tests']]);
+  assert.deepEqual(replaceInCards(cs, { find: 'Pavlov', replace: 'X', field: 'back' }).map(c => c.back), ['X ran tests']);
+  assert.deepEqual(replaceInCards(cs, { find: '(1.5)', replace: '$&' }).map(c => c.back), ['box $&']);      // literal, not a pattern
+  assert.deepEqual(replaceInCards(cs, { find: '' }), []);
+});
+
+test('tags: counts, rename and remove everywhere', () => {
+  const cs = [{ id: 'a', tags: ['exam1', 'cells'] }, { id: 'b', tags: ['exam1'] }, { id: 'c', tags: ['cells', 'exam 1'] }, { id: 'd', tags: [] }];
+  assert.deepEqual(tagCounts(cs), [{ tag: 'cells', count: 2 }, { tag: 'exam1', count: 2 }, { tag: 'exam 1', count: 1 }]);
+  assert.deepEqual(renameTag(cs, 'exam1', 'Exam 1').map(c => [c.id, c.tags]), [['a', ['exam 1', 'cells']], ['b', ['exam 1']]]);
+  assert.deepEqual(renameTag(cs, 'cells', 'exam 1').map(c => [c.id, c.tags]), [['a', ['exam1', 'exam 1']], ['c', ['exam 1']]]);   // merging doesn't double up
+  assert.deepEqual(renameTag(cs, 'cells', '').map(c => c.tags), [['exam1'], ['exam 1']]);                                       // removing
 });

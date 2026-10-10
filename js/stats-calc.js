@@ -151,3 +151,42 @@ export function niceMax(max) {
   return 10 * pow;
 }
 
+// ---------- answer buttons ----------
+// How often you pressed Again / Hard / Good / Easy in the last `days` days, for cards you were still
+// learning and for normal reviews. { learning: [again, hard, good, easy], review: [...] } plus the share of
+// reviews you got right (anything but Again).
+export function buttonCounts(logs, now = Date.now(), days = 30) {
+  const since = daysAgoStart(days - 1, now);
+  const out = { learning: [0, 0, 0, 0], review: [0, 0, 0, 0] };
+  for (const l of logs) {
+    if (l.timestamp < since || !(l.rating >= 1 && l.rating <= 4) || !isAnswerLog(l)) continue;
+    out[l.state === REVIEW ? 'review' : 'learning'][l.rating - 1]++;
+  }
+  const pct = list => { const n = list.reduce((a, b) => a + b, 0); return n ? Math.round(((n - list[0]) / n) * 100) : null; };
+  return { ...out, learningRight: pct(out.learning), reviewRight: pct(out.review) };
+}
+
+// ---------- time of day ----------
+// Answers in each hour of the day (0–23) over the last `days` days, and how many were right.
+export function hourly(logs, now = Date.now(), days = 30) {
+  const since = daysAgoStart(days - 1, now);
+  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: 0, right: 0 }));
+  for (const l of logs) {
+    if (l.timestamp < since || !isAnswerLog(l)) continue;
+    const h = hours[new Date(l.timestamp).getHours()];
+    h.total++;
+    if (l.correct) h.right++;
+  }
+  return hours;
+}
+
+// ---------- difficulty ----------
+// How many studied cards sit at each FSRS difficulty, in 10 bands from 1 (easiest) to 10 (hardest).
+export function difficultyBands(states) {
+  const bands = Array.from({ length: 10 }, (_, i) => ({ band: i + 1, count: 0 }));
+  for (const s of states) {
+    if (!s || s.state === NEW || !(s.difficulty > 0)) continue;
+    bands[Math.min(9, Math.max(0, Math.ceil(s.difficulty) - 1))].count++;
+  }
+  return bands;
+}

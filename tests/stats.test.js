@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -115,4 +115,28 @@ test('study calendar with no answers', () => {
   const cal = studyCalendar([], NOW);
   assert.equal(cal.weeks.length, 53);
   assert.deepEqual([cal.max, cal.daysStudied, cal.longest], [0, 0, 0]);
+});
+
+
+test('answer buttons: learning vs review, last 30 days', () => {
+  const logs = [log(0, { rating: 3, state: 2 }), log(1, { rating: 1, state: 2, correct: false }), log(2, { rating: 4, state: 2 }), log(3, { rating: 2, state: 0 }),
+    log(40, { rating: 1, state: 2 }), log(1, { source: 'play', rating: 3, state: 2 }), log(1, { source: 'review', rating: 3, state: 1 })];
+  const b = buttonCounts(logs, NOW);
+  assert.deepEqual(b.review, [1, 0, 2, 1]);
+  assert.deepEqual(b.learning, [0, 1, 1, 0]);
+  assert.equal(b.reviewRight, 75);
+  assert.equal(buttonCounts([], NOW).reviewRight, null);
+});
+
+test('time of day', () => {
+  const at9 = d => { const t = new Date(daysAgoStart(d, NOW)); t.setHours(9, 30); return t.getTime(); };
+  const h = hourly([{ ...log(0), timestamp: at9(0) }, { ...log(1), timestamp: at9(1), correct: false }, log(0)], NOW);
+  assert.equal(h.length, 24);
+  assert.deepEqual([h[9].total, h[9].right], [2, 1]);
+  assert.equal(h[12].total, 1);
+});
+
+test('difficulty bands', () => {
+  const b = difficultyBands([{ state: 2, difficulty: 1 }, { state: 2, difficulty: 5.5 }, { state: 3, difficulty: 10 }, { state: 0, difficulty: 5 }, null]);
+  assert.deepEqual(b.filter(x => x.count).map(x => [x.band, x.count]), [[1, 1], [6, 1], [10, 1]]);
 });

@@ -22,6 +22,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
   - Tap a card to edit it, suspend it, bury it until tomorrow, flag it, move it, reset it to new, set its due date, delete it, or see its full history (Card info).
   - Select several cards to do any of these to all of them at once, and add single cards with + Add card.
+  - **Tools:** a Duplicates filter (same front, written differently), **Find and replace** across selected cards, and **Tags** to rename or remove a tag everywhere.
   - Suspended and buried cards are left out of Review and Play.
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
@@ -32,7 +33,8 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Review:** daily spaced repetition with FSRS-6.
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
-  - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend), and a summary at the end.
+  - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend, R read aloud), and a summary at the end.
+  - **Read aloud:** 🔊 (or R) reads the card with your device's voices; each deck picks a language (or works it out from the text) and can read cards out automatically.
   - The ⋯ button opens the card's panel mid-review: edit, flag, suspend, bury, move, reset, set due date, delete or see its info.
   - **Custom study** (on the Review screen): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
   - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki.
@@ -51,6 +53,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
+  - answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, and how FSRS difficulty is spread across your cards
   - a mastery grid you can tap card by card
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
 - **Starter decks:** optional JLPT N5 and N4 kanji decks (Decks tab → Starter decks).
@@ -95,6 +98,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/exam.js` | Exam date mode: limits, pulling cards in, Exam prep |
 | `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
 | `js/media.js` | Pictures: shrinking, saving and showing them |
+| `js/speech.js` | Reading cards aloud |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |

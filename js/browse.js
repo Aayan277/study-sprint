@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, SORTS } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
@@ -48,6 +48,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     <div class="mhead br-head">
       <h2>Cards <span class="count mono" id="brTotal"></span></h2>
       <div class="head-actions">
+        <button class="btn ghost small" type="button" id="brTags">Tags</button>
         <button class="btn ghost small" type="button" id="brSelect">Select</button>
         <button class="btn primary small" type="button" id="brAdd">+ Add card</button>
       </div>
@@ -116,6 +117,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
+  $('brTags').addEventListener('click', () => openTagTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
   $('brActions').addEventListener('click', () => {
     if (!B.selected.size) { toast('Select some cards first'); return; }
     openBulkActions(cards.filter(c => B.selected.has(c.id)), { decks, statesById, refresh, clear: () => { B.selected.clear(); } });
@@ -230,6 +232,19 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     <div id="ceConfirm"></div>
     <div class="field"><span>Flag</span>${flagButtons(-1)}</div>
     <div class="field"><span>Move to deck</span>${moveRow(decks, null)}</div>
+    <details class="card-info" id="frBox">
+      <summary>Find and replace</summary>
+      <form id="frForm" class="fr-form">
+        <label class="field"><span>Find</span><input id="frFind" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span>Replace with</span><input id="frWith" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <div class="chips" role="group" aria-label="Where">
+          ${[['both', 'Front and back'], ['front', 'Front'], ['back', 'Back']].map(([v, l], i) => `<label class="chip"><input type="radio" name="frIn" value="${v}" ${i ? '' : 'checked'}><span>${l}</span></label>`).join('')}
+        </div>
+        <label class="check"><input type="checkbox" id="frCase"> Match capitals</label>
+        <p class="note" id="frCount" aria-live="polite">Type what to find.</p>
+        <button class="btn primary small" type="submit" id="frGo" disabled>Replace</button>
+      </form>
+    </details>
     <div class="field"><span>Set due date</span>${studied.length ? dueRow() + (studied.length < n ? `<p class="note">Applies to the ${studied.length} you've studied. New cards are skipped.</p>` : '') : '<p class="note" style="margin:0">None of these have been reviewed yet.</p>'}</div>
     <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
   const done = async msg => { toast(msg); closeSheet(); await refresh(); };
@@ -244,9 +259,61 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, () => db.deleteCards(selected.map(c => c.id)).then(() => { clear(); return done(`Deleted ${plural(n, 'card')}`); }));
   }));
+  // Find and replace: shows how many cards would change as you type.
+  const frChanges = () => replaceInCards(selected, { find: $('frFind').value, replace: $('frWith').value,
+    field: document.querySelector('#sheet [name=frIn]:checked').value, matchCase: $('frCase').checked });
+  const frCount = () => {
+    const n2 = $('frFind').value ? frChanges().length : 0;
+    $('frCount').textContent = !$('frFind').value ? 'Type what to find.' : n2 ? `Changes ${plural(n2, 'card')}.` : 'No matches in these cards.';
+    $('frGo').disabled = !n2;
+  };
+  $('frForm').addEventListener('input', frCount);
+  $('frForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const changed = frChanges();
+    if (!changed.length) return;
+    await db.saveCards(changed);
+    done(`Replaced in ${plural(changed.length, 'card')}`);
+  });
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
   wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${decks.find(d => d.id === deckId).name}`));
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
+}
+
+// ---------- tags ----------
+// Every tag in the list's cards: rename one everywhere (merging with an existing tag is fine), or remove it.
+function openTagTools(cards, { scope, refresh }) {
+  const tags = tagCounts(cards);
+  openSheet(`
+    <h2 id="sheetTitle">Tags in ${esc(scope)}</h2>
+    ${tags.length ? `<ul class="tag-list">${tags.map(({ tag, count }) => `
+      <li data-tag="${esc(tag)}"><span class="tag-name">${esc(tag)}</span><span class="muted small">${plural(count, 'card')}</span>
+        <button class="btn ghost small" type="button" data-tag-rename>Rename</button>
+        <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
+      : '<p class="note">No tags yet. Add them when editing a card.</p>'}
+    <div id="tagEdit"></div>
+    <button class="btn ghost" type="button" id="tagClose">Close</button>`, { side: true });
+  $('tagClose').addEventListener('click', closeSheet);
+  const apply = async (from, to) => {
+    const changed = renameTag(cards, from, to);
+    await db.saveCards(changed);
+    toast(to ? `Renamed “${from}” on ${plural(changed.length, 'card')}` : `Removed “${from}” from ${plural(changed.length, 'card')}`);
+    await refresh();
+    closeSheet();
+  };
+  document.querySelectorAll('#sheet .tag-list li').forEach(li => {
+    const tag = li.dataset.tag;
+    li.querySelector('[data-tag-rename]').addEventListener('click', () => {
+      $('tagEdit').innerHTML = `<form class="confirm" id="tagForm"><label class="field"><span>Rename “${esc(tag)}” to</span>
+        <input id="tagNew" value="${esc(tag)}" autocomplete="off" autocapitalize="off"></label>
+        <div class="sheet-actions"><button class="btn ghost" type="button" id="tagNo">Cancel</button><button class="btn primary" type="submit">Rename</button></div></form>`;
+      $('tagNew').select();
+      $('tagNo').addEventListener('click', () => { $('tagEdit').innerHTML = ''; });
+      $('tagForm').addEventListener('submit', e => { e.preventDefault(); const to = $('tagNew').value.trim(); if (to && to.toLowerCase() !== tag) apply(tag, to); });
+    });
+    li.querySelector('[data-tag-remove]').addEventListener('click', () =>
+      confirmIn('tagEdit', `Remove the tag “${tag}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(tag, '')));
+  });
 }
 
 // ---------- adding one card ----------

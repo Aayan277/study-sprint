@@ -5,7 +5,7 @@
 
 import * as db from './db.js';
 import { cardLevel } from './decks.js';
-import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar } from './stats-calc.js';
+import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText } from './format.js';
 import { $, esc, plural } from './ui.js';
@@ -91,6 +91,10 @@ export async function renderStats(el) {
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
   const cal = studyCalendar(logs.filter(isAnswerLog), now);
+  const buttons = buttonCounts(logs, now);
+  const hours = hourly(logs, now);
+  const bands = difficultyBands(cards.map(c => statesById.get(c.id)));
+  const hourName = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
 
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
@@ -143,6 +147,47 @@ export async function renderStats(el) {
         tableRow: (d, i) => [i === 0 ? 'Today' : `${weekday(d.time)} ${shortDate(d.time)}`, d.count],
         label: 'Cards due on each of the next 7 days'
       })}
+    </section>
+
+    <section class="card section" aria-labelledby="btnTitle">
+      <div class="mhead"><h2 id="btnTitle">Answer buttons</h2><span class="muted small">Last 30 days</span></div>
+      ${[['learning', 'Learning', buttons.learningRight], ['review', 'Reviews', buttons.reviewRight]].map(([k, name, right]) => {
+        const row = buttons[k], n = row.reduce((a, b) => a + b, 0);
+        return `<div class="btn-row"><div class="btn-row-head"><b>${name}</b><span class="muted small">${n ? `${right}% right · ${plural(n, 'answer')}` : 'No answers yet'}</span></div>
+          <div class="btn-bar" role="img" aria-label="${esc(`${name}: ${['Again', 'Hard', 'Good', 'Easy'].map((b, i) => `${b} ${row[i]}`).join(', ')}`)}">
+            ${n ? row.map((c, i) => c ? `<span class="b${i + 1}" style="width:${(c / n * 100).toFixed(2)}%" title="${['Again', 'Hard', 'Good', 'Easy'][i]}: ${c}">${c / n >= 0.12 ? c : ''}</span>` : '').join('') : ''}</div></div>`;
+      }).join('')}
+      <div class="legend"><span><i class="sw b1"></i>Again</span><span><i class="sw b2"></i>Hard</span><span><i class="sw b3"></i>Good</span><span><i class="sw b4"></i>Easy</span></div>
+      <p class="note">Mostly Good is normal. Lots of Again on reviews means cards are coming back too late: try a higher retention in Settings.</p>
+    </section>
+
+    <section class="card section">
+      <div class="mhead"><h2>Time of day</h2><span class="muted small">Last 30 days</span></div>
+      ${columnChart({
+        id: 'hours', rows: hours, value: d => d.total,
+        x: d => (d.hour % 6 === 0 ? hourName(d.hour) : ''),
+        tip: d => [plural(d.total, 'answer'), `${hourName(d.hour)}${d.total ? ` · ${Math.round(d.right / d.total * 100)}% right` : ''}`],
+        tableHead: ['Hour', 'Answers', 'Right'],
+        tableRow: d => [hourName(d.hour), d.total, d.total ? `${Math.round(d.right / d.total * 100)}%` : '–'],
+        label: 'Answers in each hour of the day over the last 30 days'
+      })}
+      ${(() => {
+        const best = hours.filter(h => h.total >= 10).sort((a, b) => b.right / b.total - a.right / a.total)[0];
+        return best ? `<p class="note">You remember most around <b>${hourName(best.hour)}</b> (${Math.round(best.right / best.total * 100)}% right).</p>` : '';
+      })()}
+    </section>
+
+    <section class="card section">
+      <div class="mhead"><h2>Difficulty</h2><span class="muted small">${plural(bands.reduce((n, b) => n + b.count, 0), 'studied card')}</span></div>
+      ${columnChart({
+        id: 'difficulty', rows: bands, value: d => d.count,
+        x: d => (d.band === 1 ? 'Easy' : d.band === 10 ? 'Hard' : d.band === 5 ? '5' : ''),
+        tip: d => [plural(d.count, 'card'), `Difficulty ${d.band} of 10`],
+        tableHead: ['Difficulty', 'Cards'],
+        tableRow: d => [`${d.band} of 10`, d.count],
+        label: 'How many studied cards are at each FSRS difficulty, from 1 (easiest) to 10 (hardest)'
+      })}
+      <p class="note">FSRS's difficulty for each card you've studied. Hard cards come back more often.</p>
     </section>
 
     <section class="card section" aria-labelledby="hardTitle">

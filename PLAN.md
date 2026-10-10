@@ -190,6 +190,16 @@ Built in 3 parts:
 3. ✅ **Export a deck** (v2.3) as CSV (Excel-friendly, imports back in) or an Anki deck (.apkg, Anki's widely supported older layout; checked by importing into the real Anki library). Cards only: progress stays in Study Sprint.
 4. ✅ **Exam date mode** (v2.4) (full: nothing scheduled past the exam, retention rises near it, Exam prep session, countdown), ✅ **card formatting** (v2.5) (saved as simple marks; B / I / • toolbar on phones, Word-style editing on computers) and ✅ **images on cards** (v2.6) (1 per side, shrunk to 1280px JPEG, synced through Supabase Storage with `supabase/media.sql`, in backups, Anki import (both file formats) and export). All done.
 
+## More from Anki (requested after v2.6)
+
+Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlusion is "hide all, guess one"; cards from the same note don't show on the same day; subdecks (a parent includes its subdecks; its limits cap the group); per-deck settings (default "use my overall settings"); no daily review limit by default; easy days (Normal / Reduced / Minimum per weekday) and load balancing within fuzz; read aloud per deck.
+
+- A. ✅ (v2.7) **Read aloud** (🔊 / R, deck language or auto-detect, auto-read), **card list tools** (Duplicates filter, Find and replace, Tags: rename or remove everywhere), **more stats** (answer buttons, time of day, difficulty).
+- B. **Per-deck settings**, **daily review limit**, **easy days**.
+- C. **Subdecks**.
+- D. **Cloze cards**.
+- E. **Image occlusion**.
+
 ## Parked (not planned for now)
 
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.

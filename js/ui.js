@@ -37,6 +37,12 @@ export function openSheet(html, { side = false } = {}) {
 export function closeSheet() {
   const d = $('sheet');
   if (d.open) d.close();
+  afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
+}
+// The page gets its full width back, and the card list stops highlighting the card that was open.
+function afterClose() {
+  document.body.classList.remove('has-side');
+  document.querySelectorAll('.crow.sel').forEach(r => r.classList.remove('sel'));
 }
 
 // Tapping the dim area outside the sheet closes it. Escape closes a side panel too
@@ -44,10 +50,7 @@ export function closeSheet() {
 export function initSheet() {
   const d = $('sheet');
   d.addEventListener('click', e => { if (e.target === d) closeSheet(); });
-  d.addEventListener('close', () => {
-    document.body.classList.remove('has-side');
-    document.querySelectorAll('.crow.sel').forEach(r => r.classList.remove('sel'));
-  });
+  d.addEventListener('close', afterClose);          // closed another way (e.g. Escape on a pop-up)
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
   });

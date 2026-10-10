@@ -7,6 +7,7 @@ import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, pullIn } from './exam.js';
+import { SPEECH_LANGS } from './speech.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -253,6 +254,11 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
       ${isNew ? '' : `<label class="field"><span>New cards per day for this deck (optional)</span>
         <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${Number.isFinite(deck.newPerDay) ? deck.newPerDay : ''}">
         <small class="note" style="margin:4px 0 0">Leave blank to use only the overall limit in Settings. The overall limit still applies on top.</small></label>`}
+      ${isNew ? '' : `<label class="field"><span>Read aloud in</span>
+        <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
+        <span>In Review: the front when it appears, the back when you flip. (🔊 or R reads it any time.)</span></span>
+        <input id="deckTtsAuto" type="checkbox" class="switch" ${deck.ttsAuto ? 'checked' : ''}></label>`}
       ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
         <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">
         <small class="note" style="margin:4px 0 0">Until then, every card in this deck comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.</small></label>`}
@@ -286,7 +292,7 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
     const saved = isNew
       ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color, newPerDay, examDate: $('deckExam')?.value || null };
+      : { ...deck, name, course, color, newPerDay, examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto: !!$('deckTtsAuto')?.checked };
     await db.saveDeck(saved);
     // A new exam date: bring forward cards that were scheduled after it.
     let moved = 0;

@@ -668,3 +668,22 @@ dialog.sheet.side .sheet-in{padding:24px 22px 32px}
 .fmt-tools button svg{display:block}
 .pic-mark{color:var(--accent);font-size:.85em}
 @media (min-width:1024px){ main[data-route="review"] .flash-front .card-img{max-height:36vh} }
+
+/* Card list tools: tags and find and replace */
+.tag-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.tag-list li{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--rule);border-radius:8px;background:var(--sheet);flex-wrap:wrap}
+.tag-name{font-weight:600;margin-right:auto;overflow-wrap:anywhere}
+.fr-form{display:grid;gap:10px;margin-top:10px}
+.check{display:flex;align-items:center;gap:8px;font-size:.92rem}
+.check input{width:18px;height:18px}
+
+/* Stats: answer buttons */
+.btn-row{margin:10px 0}
+.btn-row-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px}
+.btn-bar{display:flex;height:22px;border-radius:6px;overflow:hidden;background:var(--rule)}
+.btn-bar span{display:flex;align-items:center;justify-content:center;font:600 .72rem var(--f-mono);color:#fff;min-width:0}
+.b1{background:var(--bad)}
+.b2{background:#a0a7b4}
+.b3{background:var(--good)}
+.b4{background:var(--accent)}
+.legend .sw.b1,.legend .sw.b2,.legend .sw.b3,.legend .sw.b4{display:inline-block}

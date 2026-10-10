@@ -10,6 +10,7 @@ import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
+import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { schedulerOptions } from './sched-settings.js';
 import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
@@ -110,7 +111,7 @@ export async function renderReview(el, deckId) {
       </section>` : ''}
       ${c.total
         ? `<button class="btn primary wide" type="button" id="startBtn">Start review · ${plural(c.total, 'card')}</button>
-           <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good · E edit · I info · - bury · @ suspend</p>`
+           <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good · E edit · I info · - bury · @ suspend · R read aloud</p>`
         : emptyMessage(data, c)}
       ${data.decks.length ? '<button class="btn ghost wide custom-btn" type="button" id="customBtn">Custom study…</button>' : ''}`;
 
@@ -257,7 +258,16 @@ function start(el, data, cards, typing, deckId, custom = null) {
 // The scheduling options for a card: the normal ones, plus its deck's exam limits (exam.js).
 const schedFor = (card, now = Date.now()) => examOptions(R.sched, R.decks.find(d => d.id === card.deckId), now);
 
+const deckOf = card => R.decks.find(d => d.id === card.deckId);
+// Read the side showing (the back once flipped) in the deck's language.
+function readAloud() {
+  if (!R?.current) return;
+  const { card } = R.current;
+  speak(R.flipped ? card.back : card.front, deckOf(card)?.ttsLang || '');
+}
+
 function nextCard(el) {
+  stopSpeaking();
   R.current = takeNext(R.queue, R.waiting);
   R.flipped = false; R.typed = null; R.suggest = null;
   R.shownAt = Date.now(); R.answerMs = 0;
@@ -287,6 +297,7 @@ function renderSession(el) {
     <div class="rv-head">
       <div class="rv-counts mono" aria-label="Cards left: new, learning, review">${countsHTML()}</div>
       <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
+      ${canSpeak() ? '<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">🔊</button>' : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">⋯</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>
@@ -310,6 +321,10 @@ function renderSession(el) {
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu());
+  $('speakBtn')?.addEventListener('click', () => readAloud());
+  // Decks set to read aloud: the front when a card appears, the back when it's flipped (once each).
+  const key = `${card.id}:${R.flipped}`;
+  if (deckOf(card)?.ttsAuto && R.spoken !== key) { R.spoken = key; readAloud(); }
   $('showBtn')?.addEventListener('click', () => flip(el));
   if (!R.flipped && !typeThis) $('flash').addEventListener('click', () => flip(el));
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
@@ -494,7 +509,7 @@ async function finish(el) {
 
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
-// Like Anki: E edits, I shows card info, - buries, @ suspends.
+// Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.
 document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -503,6 +518,7 @@ document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
+    if (k === 'r') { e.preventDefault(); readAloud(); return; }
   }
   if (!R.flipped) {
     if (!inInput && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
