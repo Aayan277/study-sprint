@@ -1,17 +1,22 @@
 // Storage for the whole app, using IndexedDB (a database built into every browser).
 // It can hold far more than localStorage, so big decks are fine.
 //
-// The database has 5 "stores" (think of them as tables):
-//   decks       one row per deck            { id, name, color, created, course }
-//   cards       one row per card            { id, deckId, front, back, tags, created }
-//   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview }
-//   reviewLog   one row per answer          { id (auto), cardId, timestamp, source, mode, correct, ms, rating }
+// The database has 6 "stores" (think of them as tables):
+//   decks       one row per deck            { id, name, color, created, course, updatedAt }
+//   cards       one row per card            { id, deckId, front, back, tags, created, updatedAt }
+//   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview, updatedAt }
+//   reviewLog   one row per answer          { id (auto), uid, cardId, timestamp, source, mode, correct, ms, rating, updatedAt }
 //   settings    simple key → value pairs    e.g. 'theme' → { skin: 'ink', mode: 'auto' }
+//   deleted     what was deleted, and when  { key, store, id, deletedAt }
+// updatedAt, uid and the deleted store are there for syncing between devices: see sync-data.js.
+// Every save below stamps them, so other files never need to.
 //
 // Everything here returns a Promise, so callers use `await`.
 
 const DB_NAME = 'study-sprint';
-const DB_VERSION = 1;
+const DB_VERSION = 2;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync)
+
+import { stamp, tombstone, upgradeRecord, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the device's light/dark setting, or 'light' / 'dark'
@@ -38,7 +43,7 @@ export function openDB() {
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     // Runs only when the database is new or DB_VERSION goes up. This is where tables are created.
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = e => {
       const db = req.result;
       if (!db.objectStoreNames.contains('decks')) db.createObjectStore('decks', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('cards')) {
@@ -55,6 +60,22 @@ export function openDB() {
         log.createIndex('timestamp', 'timestamp');
       }
       if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
+      // Version 2: syncing groundwork.
+      if (!db.objectStoreNames.contains('deleted')) db.createObjectStore('deleted', { keyPath: 'key' });
+      const logs = req.transaction.objectStore('reviewLog');
+      if (!logs.indexNames.contains('uid')) logs.createIndex('uid', 'uid');
+      // Data saved by version 1: give every record its updatedAt (and every review its uid).
+      if (e.oldVersion >= 1 && e.oldVersion < 2) {
+        const now = Date.now();
+        for (const name of ['decks', 'cards', 'cardStates', 'reviewLog']) {
+          req.transaction.objectStore(name).openCursor().onsuccess = ev => {
+            const cur = ev.target.result;
+            if (!cur) return;
+            cur.update(upgradeRecord(name, cur.value, now));
+            cur.continue();
+          };
+        }
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -86,22 +107,24 @@ export async function get(name, key) { return done((await store(name)).get(key))
 export async function getAllByIndex(name, index, value) {
   return done((await store(name)).index(index).getAll(value));
 }
-export async function put(name, value) { return done((await store(name, 'readwrite')).put(value)); }
+// Saves here are made on this device, so they're stamped with the time (see sync-data.js).
+export async function put(name, value) { return done((await store(name, 'readwrite')).put(stamp(name, value))); }
 
 // Save many rows in one go (much faster than one at a time, and all-or-nothing).
 export async function putMany(name, values) {
   const db = await openDB();
   const tx = db.transaction(name, 'readwrite');
   const os = tx.objectStore(name);
-  values.forEach(v => os.put(v));
+  const now = Date.now();
+  values.forEach(v => os.put(stamp(name, v, now)));
   return finished(tx);
 }
 
 // ---------- ids ----------
-export function newId() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-}
+export const newId = randomId;
+
+// Record that something was deleted, inside a transaction that includes the 'deleted' store.
+const markDeleted = (tx, storeName, id, now) => tx.objectStore('deleted').put(tombstone(storeName, id, now));
 
 // ---------- decks ----------
 export const getDecks = () => getAll('decks');
@@ -113,9 +136,10 @@ export const getCardsInDeck = deckId => getAllByIndex('cards', 'deckId', deckId)
 export async function addDeckWithCards(deck, cards = []) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards'], 'readwrite');
-  tx.objectStore('decks').put(deck);
+  const now = Date.now();
+  tx.objectStore('decks').put(stamp('decks', deck, now));
   const cs = tx.objectStore('cards');
-  cards.forEach(c => cs.put(c));
+  cards.forEach(c => cs.put(stamp('cards', c, now)));
   return finished(tx);
 }
 
@@ -123,23 +147,39 @@ export async function addDeckWithCards(deck, cards = []) {
 // All in one transaction, so it can't half-finish.
 export async function deleteDeck(deckId) {
   const db = await openDB();
-  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog'], 'readwrite');
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
   const cards = tx.objectStore('cards');
-  const states = tx.objectStore('cardStates');
-  const logIndex = tx.objectStore('reviewLog').index('cardId');
   tx.objectStore('decks').delete(deckId);
+  markDeleted(tx, 'decks', deckId, now);
   cards.index('deckId').getAllKeys(deckId).onsuccess = e => {
-    for (const cardId of e.target.result) {
-      cards.delete(cardId);
-      states.delete(cardId);
-      // Walk every log row for this card and delete it.
-      logIndex.openCursor(cardId).onsuccess = ev => {
-        const cur = ev.target.result;
-        if (cur) { cur.delete(); cur.continue(); }
-      };
-    }
+    for (const cardId of e.target.result) deleteCardIn(tx, cardId, now);
   };
   return finished(tx);
+}
+
+// Delete one card with its schedule and every review-log row, leaving deleted markers. Inside a transaction
+// that includes cards, cardStates, reviewLog and deleted.
+function deleteCardIn(tx, cardId, now) {
+  tx.objectStore('cards').delete(cardId);
+  markDeleted(tx, 'cards', cardId, now);
+  deleteStateIn(tx, cardId, now);
+  tx.objectStore('reviewLog').index('cardId').openCursor(cardId).onsuccess = ev => {
+    const cur = ev.target.result;
+    if (!cur) return;
+    if (cur.value.uid) markDeleted(tx, 'reviewLog', cur.value.uid, now);
+    cur.delete();
+    cur.continue();
+  };
+}
+// Remove a card's schedule (if it has one), leaving a deleted marker.
+function deleteStateIn(tx, cardId, now) {
+  const states = tx.objectStore('cardStates');
+  states.getKey(cardId).onsuccess = e => {
+    if (e.target.result === undefined) return;
+    states.delete(cardId);
+    markDeleted(tx, 'cardStates', cardId, now);
+  };
 }
 
 // ---------- reviews ----------
@@ -152,8 +192,9 @@ export const scheduleVersion = () => scheduleChanges;
 export async function saveReview(state, log) {
   const db = await openDB();
   const tx = db.transaction(['cardStates', 'reviewLog'], 'readwrite');
-  tx.objectStore('cardStates').put(state);
-  const req = tx.objectStore('reviewLog').add(log);
+  const now = Date.now();
+  tx.objectStore('cardStates').put(stamp('cardStates', state, now));
+  const req = tx.objectStore('reviewLog').add(stamp('reviewLog', log, now));
   await finished(tx);
   scheduleChanges++;
   return req.result;
@@ -161,16 +202,21 @@ export async function saveReview(state, log) {
 
 // Save a review-log row without changing any schedule (e.g. a Play answer on a card that isn't due).
 export async function addLog(log) {
-  return done((await store('reviewLog', 'readwrite')).add(log));
+  return done((await store('reviewLog', 'readwrite')).add(stamp('reviewLog', log)));
 }
 
 // Undo a review: put the old schedule back (or remove it if the card was new) and delete the log row.
 export async function undoReview(cardId, prevState, logId) {
   const db = await openDB();
-  const tx = db.transaction(['cardStates', 'reviewLog'], 'readwrite');
-  if (prevState) tx.objectStore('cardStates').put(prevState);
-  else tx.objectStore('cardStates').delete(cardId);
-  tx.objectStore('reviewLog').delete(logId);
+  const tx = db.transaction(['cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  if (prevState) tx.objectStore('cardStates').put(stamp('cardStates', prevState, now));
+  else deleteStateIn(tx, cardId, now);
+  const logs = tx.objectStore('reviewLog');
+  logs.get(logId).onsuccess = e => {
+    if (e.target.result?.uid) markDeleted(tx, 'reviewLog', e.target.result.uid, now);
+    logs.delete(logId);
+  };
   await finished(tx);
   scheduleChanges++;
 }
@@ -184,13 +230,9 @@ export async function getLogsSince(timestamp) {
 // Delete cards with their schedules and review history, all in one go.
 export async function deleteCards(cardIds) {
   const db = await openDB();
-  const tx = db.transaction(['cards', 'cardStates', 'reviewLog'], 'readwrite');
-  const logIndex = tx.objectStore('reviewLog').index('cardId');
-  for (const id of cardIds) {
-    tx.objectStore('cards').delete(id);
-    tx.objectStore('cardStates').delete(id);
-    logIndex.openCursor(id).onsuccess = ev => { const cur = ev.target.result; if (cur) { cur.delete(); cur.continue(); } };
-  }
+  const tx = db.transaction(['cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  for (const id of cardIds) deleteCardIn(tx, id, now);
   await finished(tx);
   scheduleChanges++;
 }
@@ -200,8 +242,9 @@ export async function deleteCards(cardIds) {
 export async function putStates(states) { await putMany('cardStates', states); scheduleChanges++; }
 export async function clearStates(cardIds) {
   const db = await openDB();
-  const tx = db.transaction('cardStates', 'readwrite');
-  cardIds.forEach(id => tx.objectStore('cardStates').delete(id));
+  const tx = db.transaction(['cardStates', 'deleted'], 'readwrite');
+  const now = Date.now();
+  cardIds.forEach(id => deleteStateIn(tx, id, now));
   await finished(tx);
   scheduleChanges++;
 }
@@ -225,14 +268,22 @@ export async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...saved };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
+// Settings that sync also note when they changed, in the '_times' setting.
 export async function setSetting(key, value) {
-  return done((await store('settings', 'readwrite')).put(value, key));
+  const db = await openDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const os = tx.objectStore('settings');
+  os.put(value, key);
+  if (SYNCED_SETTINGS.includes(key)) {
+    os.get(SETTING_TIMES).onsuccess = e => os.put({ ...(e.target.result || {}), [key]: Date.now() }, SETTING_TIMES);
+  }
+  return finished(tx);
 }
 
 // ---------- wipe everything ----------
 export async function resetAll() {
   const db = await openDB();
-  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted'];
   const tx = db.transaction(names, 'readwrite');
   names.forEach(n => tx.objectStore(n).clear());
   return finished(tx);
@@ -270,10 +321,11 @@ export async function importAll(data) {
   const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings'];
   const tx = db.transaction(names, 'readwrite');
   names.forEach(n => tx.objectStore(n).clear());
-  data.decks.forEach(x => tx.objectStore('decks').put(x));
-  data.cards.forEach(x => tx.objectStore('cards').put(x));
-  data.cardStates.forEach(x => tx.objectStore('cardStates').put(x));
-  data.reviewLog.forEach(x => tx.objectStore('reviewLog').put(x));
+  // Backups from before sync existed are filled in the same way as the version 2 upgrade.
+  const now = Date.now();
+  for (const name of ['decks', 'cards', 'cardStates', 'reviewLog']) {
+    data[name].forEach(x => tx.objectStore(name).put(upgradeRecord(name, x, now)));
+  }
   Object.entries(data.settings || {}).forEach(([k, v]) => tx.objectStore('settings').put(v, k));
   await finished(tx);
   scheduleChanges++;

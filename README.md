@@ -81,6 +81,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/import-screen.js` | The Import screen and its preview |
 | `js/anki.js` | Turns Anki notes into cards (HTML to text, cloze, decks, tags) |
 | `js/anki-read.js` | Opens .apkg files (unzip, decompress, read the SQLite database) |
+| `js/sync-data.js` | Sync groundwork: change times, review ids and deleted markers on every save |
+| `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |

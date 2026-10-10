@@ -15,7 +15,7 @@ import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -330,12 +330,13 @@ function confirmReset() {
 // Add the sample deck once. A saved flag stops it coming back after you delete it.
 async function seedSampleDeck() {
   if (settings.seeded) return;
-  const deckId = db.newId();
+  // Fixed ids (not random), so the sample deck added on two devices is the same deck once they sync.
+  const deckId = 'sample';
   const now = Date.now();
   await db.addDeckWithCards(
     { id: deckId, name: SAMPLE_DECK.name, course: SAMPLE_DECK.course, color: SAMPLE_DECK.color, created: now },
     // created + i keeps the cards in their original order.
-    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: db.newId(), deckId, front, back, tags: [], created: now + i }))
+    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: `sample-${i}`, deckId, front, back, tags: [], created: now + i }))
   );
   settings.seeded = true;
   await db.setSetting('seeded', true);
