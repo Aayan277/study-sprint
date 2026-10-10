@@ -239,3 +239,9 @@ test('Claude prompt: the plan\'s prompt followed by the material', () => {
   assert.ok(CLAUDE_PROMPT.startsWith('Turn the study material below into flashcards for an exam.'));
   assert.ok(claudePrompt('  my notes \r\n').endsWith('Material:\nmy notes'));
 });
+
+test('a side can be just a picture (Anki imports)', () => {
+  assert.equal(isComplete({ front: '', back: 'Heart', pictures: { front: 'heart.png', back: null } }), true);
+  assert.equal(isComplete({ front: '', back: 'Heart', pictures: { front: null, back: null } }), false);
+  assert.equal(isComplete({ front: '', back: 'Heart' }), false);
+});

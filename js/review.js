@@ -8,7 +8,10 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, newLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
+import { formatHTML, plainText } from './format.js';
+import { imgHTML } from './media.js';
 import { schedulerOptions } from './sched-settings.js';
+import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
@@ -50,12 +53,25 @@ function countFor(data, deckIds) {
 }
 
 // ---------- 1. setup ----------
+// Exam prep for one deck (from its page): open Review straight into the session.
+let prepFor = null;
+export function examPrep(deckId) {
+  prepFor = deckId;
+  location.hash = `#/review/${encodeURIComponent(deckId)}`;
+}
+
 export async function renderReview(el, deckId) {
   // Coming back to a session that's still going: carry on where you were.
   // (Unless Play changed some schedules meanwhile: then start fresh so no card is graded twice.)
   if (R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId) && R.version === db.scheduleVersion()) return renderSession(el);
 
   const data = await loadAll();
+  if (prepFor && prepFor === deckId) {
+    prepFor = null;
+    const cards = data.cards.filter(c => c.deckId === deckId);
+    const prep = examPrepQueue(cards, data.statesById);
+    if (prep.queue.length) return start(el, data, cards, data.settings.reviewTyping, deckId, { ...prep, label: 'Exam prep' });
+  }
   const allIds = data.decks.map(d => d.id);
   let chosen = deckId ? [deckId] : data.settings.reviewDecks.filter(id => allIds.includes(id));
   let typing = data.settings.reviewTyping;
@@ -137,6 +153,9 @@ function openCustomStudy(el, data, cards, typing, deckId) {
   const isNew = c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; };
   const newAvail = cards.filter(isNew).length;
   let days = 3, extra = 10;
+  // Decks here with an exam coming up, and their exam prep session.
+  const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info && cards.some(c => c.deckId === e.deck.id));
+  const prep = examPrepQueue(cards.filter(c => exams.some(e => e.deck.id === c.deckId)), data.statesById);
 
   openSheet(`
     <h2 id="sheetTitle">Custom study</h2>
@@ -162,6 +181,11 @@ function openCustomStudy(el, data, cards, typing, deckId) {
       </div>
       <button class="btn primary small" type="button" id="csAheadBtn"></button>
     </div>
+    ${exams.length ? `<div class="cs-opt">
+      <b>Exam prep</b>
+      <p>${esc(exams.map(e => `${e.deck.name}: ${countdown(e.info).toLowerCase()}`).join(' · '))}. Go over every card you haven't seen in the last 3 days, weakest first, then any you haven't started.</p>
+      <button class="btn primary small" type="button" id="csPrepBtn" ${prep.queue.length ? '' : 'disabled'}>${prep.queue.length ? `Review ${plural(prep.queue.length, 'card')}` : 'All seen recently'}</button>
+    </div>` : ''}
     <div class="cs-opt">
       <b>Cards I forgot today</b>
       <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
@@ -197,6 +221,10 @@ function openCustomStudy(el, data, cards, typing, deckId) {
     closeSheet();
     start(el, data, cards, typing, deckId, { ...aheadQueue(cards, data.statesById, days), label: 'Review ahead' });
   });
+  $('csPrepBtn')?.addEventListener('click', () => {
+    closeSheet();
+    start(el, data, cards, typing, deckId, { ...prep, label: 'Exam prep' });
+  });
   $('csForgotBtn').addEventListener('click', () => {
     closeSheet();
     start(el, data, cards, typing, deckId, { ...forgot, label: 'Forgotten today' });
@@ -226,6 +254,9 @@ function start(el, data, cards, typing, deckId, custom = null) {
   nextCard(el);
 }
 
+// The scheduling options for a card: the normal ones, plus its deck's exam limits (exam.js).
+const schedFor = (card, now = Date.now()) => examOptions(R.sched, R.decks.find(d => d.id === card.deckId), now);
+
 function nextCard(el) {
   R.current = takeNext(R.queue, R.waiting);
   R.flipped = false; R.typed = null; R.suggest = null;
@@ -248,8 +279,9 @@ function renderSession(el) {
   R.el = el;
   if (!R.current) return finish(el);
   const { card } = R.current;
-  const typeThis = R.typing && canType(card.back);
-  const size = card.front.length > 120 ? ' xlong' : card.front.length > 50 ? ' long' : '';
+  // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
+  const typeThis = R.typing && canType(plainText(card.back));
+  const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
 
   el.innerHTML = `
     <div class="rv-head">
@@ -260,10 +292,10 @@ function renderSession(el) {
     </div>
     <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
       <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>
-      <div class="flash-front${size}">${esc(card.front)}</div>
+      <div class="flash-front${size}">${imgHTML(card.frontImage)}${formatHTML(card.front)}</div>
       <div class="flash-ans" ${R.flipped ? '' : 'hidden'}>
         ${R.typed ? typedResultHTML() : ''}
-        <div class="flash-back">${esc(card.back)}</div>
+        <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
       </div>
       ${!R.flipped && !typeThis ? `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>` : ''}
     </article>
@@ -286,7 +318,7 @@ function renderSession(el) {
 }
 
 function rateButtonsHTML() {
-  const ivl = previewIntervals(R.statesById.get(R.current.card.id), R.sched);
+  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card));
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
       <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span><kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
@@ -303,7 +335,7 @@ function flip(el) {
   R.flipped = true;
   R.answerMs = Date.now() - R.shownAt;
   // "I don't know" while typing counts as a miss.
-  if (R.typing && canType(R.current.card.back) && !R.typed) R.suggest = Rating.Again;
+  if (R.typing && canType(plainText(R.current.card.back)) && !R.typed) R.suggest = Rating.Again;
   renderSession(el);
   $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
 }
@@ -311,7 +343,7 @@ function flip(el) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const result = checkAnswer(value, R.current.card.back);
+  const result = checkAnswer(value, plainText(R.current.card.back));
   R.typed = { value, result };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();
@@ -324,7 +356,7 @@ async function answer(el, rating) {
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
   const now = Date.now();
-  const next = rate(id, prev, rating, R.sched, now);
+  const next = rate(id, prev, rating, schedFor(item.card, now), now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
     mode: R.typed ? 'typing' : 'flip',

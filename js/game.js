@@ -23,18 +23,23 @@ export function shuffle(a, rnd = Math.random) {
 // 'back'   show the back, pick the front
 // 'typing' show one side, type the other (the short side, so you never type a long definition)
 
-// What a question asks: the prompt shown and the answer expected.
+// What a question asks: the prompt shown and the answer expected, plus the prompt side's picture (if any).
 export function questionFor(card, qtype) {
-  if (qtype === 'front') return { prompt: card.front, answer: card.back };
-  if (qtype === 'back') return { prompt: card.back, answer: card.front };
-  if (canType(card.back)) return { prompt: card.front, answer: card.back };
-  if (canType(card.front)) return { prompt: card.back, answer: card.front };
+  const q = (front, image) => {
+    const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
+    return image ? { prompt, answer, image } : { prompt, answer };
+  };
+  if (qtype === 'front') return q(true, card.frontImage);
+  if (qtype === 'back') return q(false, card.backImage);
+  if (canType(card.back)) return q(true, card.frontImage);
+  if (canType(card.front)) return q(false, card.backImage);
   return null;   // both sides too long to type
 }
 
-// Which cards can be used for a question type.
+// Which cards can be used for a question type. The answer has to be text (the options are text),
+// so a side that's only a picture can be shown but not asked for.
 export function playableCards(cards, qtype) {
-  return cards.filter(c => questionFor(c, qtype));
+  return cards.filter(c => { const q = questionFor(c, qtype); return q && String(q.answer ?? '').trim(); });
 }
 
 // The question type Play starts on for a deck you haven't picked one for yet.

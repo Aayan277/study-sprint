@@ -6,6 +6,7 @@ import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
+import { examInfo, countdown, pullIn } from './exam.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -84,6 +85,7 @@ export async function renderLibrary(el) {
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
+          ${examInfo(deck) ? `<span class="exam-badge">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
             <span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due"><b>${stats.due}</b> due</span>
@@ -139,14 +141,17 @@ export async function renderDeck(el, deckId) {
   const [cards, states] = await Promise.all([db.getCardsInDeck(deckId), db.getAll('cardStates')]);
   const s = summarize(cards, new Map(states.map(x => [x.cardId, x])));
   cards.sort((a, b) => a.created - b.created);
+  const exam = examInfo(deck);
 
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ Decks</button>
     <div class="screen-head">
-      <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1></div>
+      <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
+        ${exam ? `<p class="exam-line"><span class="exam-badge">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
+        ${cards.length ? '<button class="btn ghost small" type="button" id="exportDeck">Export</button>' : ''}
         ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
@@ -155,6 +160,8 @@ export async function renderDeck(el, deckId) {
     ${cards.length ? '' : `<div class="empty"><b>This deck is empty.</b><br>Add cards one at a time with + Add card, or paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
   `;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
+  $('exportDeck')?.addEventListener('click', () => openExport(deck));
+  $('prepBtn')?.addEventListener('click', async () => (await import('./review.js')).examPrep(deck.id));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
   }, s.total));
@@ -188,6 +195,44 @@ function summaryHTML(s) {
       </div>`;
 }
 
+// ---------- export ----------
+// Save a deck's cards as a spreadsheet (CSV) or an Anki deck. Progress isn't included (cards start as new).
+async function openExport(deck) {
+  const cards = (await db.getCardsInDeck(deck.id)).sort((a, b) => a.created - b.created);
+  openSheet(`
+    <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
+    <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${cards.some(c => c.frontImage || c.backImage) ? ' Pictures go in the Anki deck (a spreadsheet can only hold text).' : ''}</p>
+    <div class="export-opts">
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
+      <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
+    </div>
+    <p class="err" id="exErr" hidden></p>
+    <button class="btn ghost" type="button" id="exClose">Close</button>`);
+  const ex = await import('./export.js');
+  $('exClose').addEventListener('click', closeSheet);
+  $('exCsv').addEventListener('click', () => {
+    ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
+    closeSheet();
+    toast(`Exported ${plural(cards.length, 'card')} as a spreadsheet`);
+  });
+  $('exApkg').addEventListener('click', async () => {
+    const btn = $('exApkg');
+    btn.disabled = true;
+    btn.querySelector('b').textContent = 'Making the Anki deck…';
+    try {
+      ex.download(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'));
+      closeSheet();
+      toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
+    } catch (err) {
+      console.error(err);
+      $('exErr').textContent = navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.';
+      $('exErr').hidden = false;
+      btn.disabled = false;
+      btn.querySelector('b').textContent = 'Anki deck (.apkg)';
+    }
+  });
+}
+
 // ---------- create / rename / recolor / delete ----------
 // deck = null means "make a new deck". onDone is called after any change.
 export function openDeckEditor(deck, onDone, cardCount = 0) {
@@ -208,6 +253,9 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
       ${isNew ? '' : `<label class="field"><span>New cards per day for this deck (optional)</span>
         <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${Number.isFinite(deck.newPerDay) ? deck.newPerDay : ''}">
         <small class="note" style="margin:4px 0 0">Leave blank to use only the overall limit in Settings. The overall limit still applies on top.</small></label>`}
+      ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
+        <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">
+        <small class="note" style="margin:4px 0 0">Until then, every card in this deck comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.</small></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -238,10 +286,18 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
     const saved = isNew
       ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color, newPerDay };
+      : { ...deck, name, course, color, newPerDay, examDate: $('deckExam')?.value || null };
     await db.saveDeck(saved);
+    // A new exam date: bring forward cards that were scheduled after it.
+    let moved = 0;
+    if (!isNew && saved.examDate && saved.examDate !== deck.examDate) {
+      const ids = new Set((await db.getCardsInDeck(saved.id)).map(c => c.id));
+      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), saved);
+      if (changed.length) await db.putStates(changed);
+      moved = changed.length;
+    }
     closeSheet();
-    toast(isNew ? `Created “${name}”` : 'Deck saved');
+    toast(isNew ? `Created “${name}”` : moved ? `Deck saved. ${plural(moved, 'card')} brought forward to before the exam` : 'Deck saved');
     onDone(saved);
   });
 

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -90,4 +90,29 @@ test('hardest cards: most lapses, then most misses', () => {
 
 test('clean axis tops', () => {
   assert.deepEqual([0, 3, 7, 12, 48, 51, 180, 1000].map(niceMax), [5, 5, 10, 20, 50, 100, 200, 1000]);
+});
+
+test('study calendar: weeks start on Monday, newest on the right, darker on busier days', () => {
+  // 7 Oct 2026 is a Wednesday. Answers: 2 today, 1 yesterday, 1 three days ago, and 3 days in a row a while back.
+  const logs = [log(0), log(0), log(1), log(3), log(8), log(9), log(10)];
+  const cal = studyCalendar(logs, NOW, 3);
+  assert.equal(cal.weeks.length, 3);
+  assert.ok(cal.weeks.every(w => w.length === 7));
+  assert.equal(new Date(cal.weeks[0][0].time).getDay(), 1);                     // a Monday
+  assert.equal(new Date(cal.weeks[0][0].time).getDate(), 21);                   // 21 Sep
+  const today = cal.weeks[2][2];                                                 // this week's Wednesday
+  assert.equal(dayKey(today.time), dayKey(NOW));
+  assert.deepEqual([today.count, today.level], [2, 4]);
+  assert.deepEqual([cal.weeks[2][1].count, cal.weeks[2][1].level], [1, 2]);     // yesterday
+  assert.ok(cal.weeks[2].slice(3).every(d => d.future && d.count === 0));         // Thu–Sun haven't happened yet
+  assert.equal(cal.daysStudied, 6);
+  assert.equal(cal.answers, 7);
+  assert.equal(cal.daysShown, 17);
+  assert.equal(cal.longest, 3);
+});
+
+test('study calendar with no answers', () => {
+  const cal = studyCalendar([], NOW);
+  assert.equal(cal.weeks.length, 53);
+  assert.deepEqual([cal.max, cal.daysStudied, cal.longest], [0, 0, 0]);
 });

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory } from '../js/anki.js';
+import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, imageNames, mediaList } from '../js/anki.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -36,7 +36,7 @@ test('notes become rows, with tags and decks', () => {
     { mid: '1', fields: ['Hippocampus', 'Memory <img src="a.png">'], tags: [], deck: 'Psych::Unit 2' }
   ], models);
   assert.deepEqual(r.columns, ['Front', 'Back']);       // one note type: its field names
-  assert.deepEqual(r.rows, [['Classical conditioning', 'Pavlov'], ['Hippocampus', 'Memory']]);
+  assert.deepEqual(r.rows, [['Classical **conditioning**', 'Pavlov'], ['Hippocampus', 'Memory']]);   // bold kept as marks
   assert.deepEqual(r.tags, [['exam1', 'learning'], []]);
   assert.equal(r.images, 1);
   assert.equal(r.format.id, 'anki');
@@ -99,4 +99,35 @@ test('reviews from Anki count in the stats', () => {
   const l = { source: 'anki', state: 2, correct: true, timestamp: Date.now() };
   assert.ok(isAnswerLog(l) && isDueReview(l));
   assert.equal(reviewsPerDay([l]).at(-1).review, 1);
+});
+
+
+test('picture names in Anki fields', () => {
+  assert.deepEqual(imageNames('Text <img src="brain.png"> and <IMG alt="x" src=\'heart 2.jpg\'>'), ['brain.png', 'heart 2.jpg']);
+  assert.deepEqual(imageNames('<img src=cell%20diagram.png>'), ['cell diagram.png']);
+  assert.deepEqual(imageNames('<img src="a&amp;b.png">'), ['a&b.png']);
+  assert.deepEqual(imageNames('no pictures'), []);
+});
+
+test('each row keeps the first picture on each side', () => {
+  const r = notesToImport([
+    { mid: '1', fields: ['Brain <img src="brain.png">', 'Thinks <img src="a.png"><img src="b.png">'] },
+    { mid: '1', fields: ['<img src="only.png">', 'Answer'] },
+    { mid: '1', fields: ['Plain', 'Text'] }
+  ], models);
+  assert.deepEqual(r.pictures, [{ front: 'brain.png', back: 'a.png' }, { front: 'only.png', back: null }, { front: null, back: null }]);
+  assert.equal(r.images, 2);
+  assert.equal(r.extraImages, 1);
+  assert.deepEqual(r.rows[1], ['', 'Answer']);                  // a picture-only front
+});
+
+test('the picture list in newer Anki files', () => {
+  // Hand-made protobuf: entries "brain.png" and "heart.jpg" (the second with zip name 7).
+  const enc = new TextEncoder();
+  const str = (field, s) => { const b = enc.encode(s); return [field * 8 + 2, b.length, ...b]; };
+  const entry = bytes => [1 * 8 + 2, bytes.length, ...bytes];
+  const e1 = [...str(1, 'brain.png'), 2 * 8, 123];
+  const e2 = [...str(1, 'heart.jpg'), 2 * 8, 5, 0xf8, 0x0f, 7];          // field 255 (key 2040 = 0xf8 0x0f), value 7
+  const list = mediaList(new Uint8Array([...entry(e1), ...entry(e2)]));
+  assert.deepEqual(list, [{ name: 'brain.png', zipName: undefined }, { name: 'heart.jpg', zipName: '7' }]);
 });

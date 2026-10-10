@@ -135,3 +135,55 @@ export function putRows(token, rows) {
 export function deleteAllRows(token, userId) {
   return call(`/rest/v1/sync_items?user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE', token });
 }
+
+// ---------- pictures (Supabase Storage: bucket "media", one folder per account) ----------
+// Set up by supabase/media.sql. Pictures are files, so these send and receive bytes, not JSON.
+const MEDIA_MISSING = 'Pictures can’t sync yet: run supabase/media.sql in your Supabase project (see docs/sync-setup.md). Everything else is syncing.';
+async function storage(path, { method = 'GET', token, body, type } = {}) {
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
+      method,
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, ...(type ? { 'Content-Type': type } : {}), ...(method === 'POST' && type && !type.includes('json') ? { 'x-upsert': 'true' } : {}) },
+      body
+    });
+  } catch {
+    throw new SupaError("Couldn't reach the sync server.", { code: 'network' });
+  }
+  if (!res.ok) {
+    let json = null;
+    try { json = await res.json(); } catch { /* not JSON */ }
+    const msg = String(json?.message || json?.error || '');
+    if (/bucket not found/i.test(msg)) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'bucket_missing' });
+    if (/row-level security|unauthorized/i.test(msg) && res.status !== 401) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'media_policy' });
+    throw new SupaError(explain(res.status, json?.error || '', msg), { status: res.status, code: String(json?.statusCode || json?.error || '') });
+  }
+  return res;
+}
+export async function uploadMedia(token, userId, id, type, data) {
+  await storage(`object/media/${userId}/${encodeURIComponent(id)}`, { method: 'POST', token, body: data, type });
+}
+// { type, data } of a picture, or null if the account doesn't have it.
+export async function downloadMedia(token, userId, id) {
+  try {
+    const res = await storage(`object/authenticated/media/${userId}/${encodeURIComponent(id)}`, { token });
+    return { type: res.headers.get('content-type') || 'image/jpeg', data: await res.arrayBuffer() };
+  } catch (err) {
+    if (err.status === 400 || err.status === 404) return null;
+    throw err;
+  }
+}
+export async function deleteMedia(token, userId, ids) {
+  if (!ids.length) return;
+  await storage('object/media', { method: 'DELETE', token, type: 'application/json', body: JSON.stringify({ prefixes: ids.map(id => `${userId}/${id}`) }) });
+}
+// The ids of every picture in the account (for Delete my synced data).
+export async function listMedia(token, userId) {
+  const ids = [];
+  for (let offset = 0; ; offset += 1000) {
+    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset }) });
+    const page = await res.json();
+    ids.push(...page.map(f => f.name));
+    if (page.length < 1000) return ids;
+  }
+}

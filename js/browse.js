@@ -7,6 +7,8 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, SORTS } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
+import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
+import { plainText } from './format.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
@@ -77,7 +79,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${esc(card.front)}</span><span class="b">${esc(card.back)}</span>
+          <span class="crow-main"><span class="f">${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${esc(plainText(card.front))}</span><span class="b">${esc(plainText(card.back))}</span>
             ${deckId ? '' : `<span class="d">${esc(deckById.get(card.deckId)?.name || '')}</span>`}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -140,8 +142,8 @@ export async function openCardPanel(card, ctx) {
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      <label class="field"><span>Front</span><textarea id="ceFront" rows="2" required>${esc(card.front)}</textarea></label>
-      <label class="field"><span>Back</span><textarea id="ceBack" rows="3" required>${esc(card.back)}</textarea></label>
+      ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
+      ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       <p class="err" id="ceErr" hidden></p>
       <button class="btn primary" type="submit">Save changes</button>
@@ -193,9 +195,11 @@ export async function openCardPanel(card, ctx) {
   $('ceClose').addEventListener('click', closeSheet);
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
-    const front = $('ceFront').value.trim(), back = $('ceBack').value.trim();
-    if (!front || !back) { $('ceErr').textContent = 'A card needs a front and a back.'; $('ceErr').hidden = false; return; }
-    save({ front, back, tags: parseTags($('ceTags').value) }, 'Saved', 'edit');
+    const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
+    const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
+    // Each side needs something on it: text, a picture, or both.
+    if (!(front || frontImage) || !(back || backImage)) { $('ceErr').textContent = 'A card needs a front and a back (text or a picture).'; $('ceErr').hidden = false; return; }
+    save({ front, back, frontImage, backImage, tags: parseTags($('ceTags').value) }, 'Saved', 'edit');
   });
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
@@ -253,8 +257,8 @@ export function openAddCard({ decks, deckId, refresh }) {
     <h2 id="sheetTitle">Add a card</h2>
     <form id="acForm" class="sheet-in" style="padding:0">
       ${deckId ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${decks.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>`}
-      <label class="field"><span>Front</span><textarea id="acFront" rows="2" required placeholder="e.g. Mitosis"></textarea></label>
-      <label class="field"><span>Back</span><textarea id="acBack" rows="3" required placeholder="e.g. Division into two identical cells"></textarea></label>
+      ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
+      ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
       <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
@@ -266,11 +270,12 @@ export function openAddCard({ decks, deckId, refresh }) {
   $('acDone').addEventListener('click', closeSheet);
   $('acForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const front = $('acFront').value.trim(), back = $('acBack').value.trim();
-    if (!front || !back) { $('acErr').textContent = 'A card needs a front and a back.'; $('acErr').hidden = false; return; }
-    await db.saveCards([{ id: db.newId(), deckId: deckId || $('acDeck').value, front, back, tags: parseTags($('acTags').value), created: Date.now() }]);
+    const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
+    const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
+    if (!(front || frontImage) || !(back || backImage)) { $('acErr').textContent = 'A card needs a front and a back (text or a picture).'; $('acErr').hidden = false; return; }
+    await db.saveCards([{ id: db.newId(), deckId: deckId || $('acDeck').value, front, back, frontImage, backImage, tags: parseTags($('acTags').value), created: Date.now() }]);
     // Stay open for the next card, like Anki.
-    $('acFront').value = ''; $('acBack').value = ''; $('acErr').hidden = true;
+    setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acErr').hidden = true;
     $('acFront').focus();
     toast('Card added');
     refresh();

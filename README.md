@@ -14,6 +14,10 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 ## Features
 
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, and a mastery bar. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
+- **Formatting:** **bold**, *italics* and bullet lists on cards. On a phone, the B / I / • buttons add simple marks (`**bold**`, `*italic*`, `- item`) with a live preview; on a computer, the box shows formatting as you type (Ctrl/⌘+B, Ctrl/⌘+I). Typed answers and Play use the plain text. Anki imports keep bold, italics and lists, and Anki exports turn them back into formatting.
+- **Pictures:** one picture on each side of a card (the picture button next to B / I / •). Photos are shrunk automatically (longest side 1280px), shown in Review and Play, synced between devices (Supabase Storage: run `supabase/media.sql`), kept in backups, and brought along by Anki imports and exports.
+- **Exam date mode** (Edit deck → Exam date): until the exam, no card in the deck is scheduled past it (cards already scheduled later are brought forward), retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, weakest first. A countdown shows on the deck; after the exam it goes back to normal.
+- **Export** (a deck's page → Export): save a deck as a spreadsheet (.csv) or an Anki deck (.apkg), with tags. Re-exporting updates the cards in Anki instead of duplicating them.
 - **Card list** (each deck's page, or Decks → Browse all cards):
   - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
   - Tap a card to edit it, suspend it, bury it until tomorrow, flag it, move it, reset it to new, set its due date, delete it, or see its full history (Card info).
@@ -44,6 +48,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
   - day streak and retention
+  - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
   - a mastery grid you can tap card by card
@@ -86,7 +91,11 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/sync-data.js` | Sync groundwork: change times, review ids and deleted markers on every save |
 | `js/sync.js`, `js/sync-merge.js`, `js/supa.js`, `js/sync-config.js` | Syncing: when to sync, which version wins, the small Supabase client, and which project |
 | `js/password.js` | Password rules for new passwords (8+ characters, a letter and a number) |
-| `supabase/setup.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
+| `js/export.js` | Exporting a deck as CSV or an Anki deck |
+| `js/exam.js` | Exam date mode: limits, pulling cards in, Exam prep |
+| `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
+| `js/media.js` | Pictures: shrinking, saving and showing them |
+| `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |

@@ -8,13 +8,15 @@
 //   reviewLog   one row per answer          { id (auto), uid, cardId, timestamp, source, mode, correct, ms, rating, updatedAt }
 //   settings    simple key → value pairs    e.g. 'theme' → { skin: 'ink', mode: 'auto' }
 //   deleted     what was deleted, and when  { key, store, id, deletedAt }
+//   media       pictures on cards           { id, type, data (the file's bytes), size, created, uploaded }
+//               (a card points to its pictures with frontImage / backImage = a media id: see media.js)
 // updatedAt, uid and the deleted store are there for syncing between devices: see sync-data.js.
 // Every save below stamps them, so other files never need to.
 //
 // Everything here returns a Promise, so callers use `await`.
 
 const DB_NAME = 'study-sprint';
-const DB_VERSION = 2;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync)
+const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
 import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
@@ -63,6 +65,8 @@ export function openDB() {
       if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
       // Version 2: syncing groundwork.
       if (!db.objectStoreNames.contains('deleted')) db.createObjectStore('deleted', { keyPath: 'key' });
+      // Version 3: pictures.
+      if (!db.objectStoreNames.contains('media')) db.createObjectStore('media', { keyPath: 'id' });
       const logs = req.transaction.objectStore('reviewLog');
       if (!logs.indexNames.contains('uid')) logs.createIndex('uid', 'uid');
       // "What changed since the last sync?" is answered with these indexes instead of reading everything.
@@ -307,28 +311,30 @@ export async function setSetting(key, value) {
 // ---------- wipe everything ----------
 export async function resetAll() {
   const db = await openDB();
-  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted'];
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted', 'media'];
   const tx = db.transaction(names, 'readwrite');
   names.forEach(n => tx.objectStore(n).clear());
   return finished(tx);
 }
 
 // ---------- backup ----------
-// A backup is one JSON file with everything: decks, cards, schedules, review history and settings.
+// A backup is one JSON file with everything: decks, cards, schedules, review history, settings and pictures
+// (as text: base64).
 export const BACKUP_FORMAT = 'study-sprint-backup';
 export const BACKUP_VERSION = 1;
 
 export async function exportAll() {
   const db = await openDB();
-  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'settings'], 'readonly');
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'media'], 'readonly');
   const all = name => done(tx.objectStore(name).getAll());
-  const [decks, cards, cardStates, reviewLog, keys, values] = await Promise.all([
+  const [decks, cards, cardStates, reviewLog, keys, values, mediaRows] = await Promise.all([
     all('decks'), all('cards'), all('cardStates'), all('reviewLog'),
-    done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll())
+    done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll()), all('media')
   ]);
+  const media = mediaRows.map(m => ({ id: m.id, type: m.type, data: toBase64(m.data) }));
   // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
   const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !LOCAL_ONLY.includes(k)));
-  return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings };
+  return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
 }
 
 // Check a backup before using it. Returns an error message, or null if it looks right.
@@ -346,10 +352,15 @@ export function checkBackup(data) {
 //               marker (so other devices delete it too).
 export async function importAll(data, { everywhere = false } = {}) {
   const db = await openDB();
-  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted'];
+  const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted', 'media'];
   const tx = db.transaction(names, 'readwrite');
   const saved = finished(tx);
   const now = Date.now();
+  // Pictures from the backup (older backups have none). Ones already here are kept.
+  for (const m of data.media || []) {
+    const bytes = fromBase64(m.data);
+    tx.objectStore('media').put({ id: m.id, type: m.type, data: bytes, size: bytes.byteLength, created: now, uploaded: false });
+  }
   // What's here now, to mark as deleted if the backup doesn't have it.
   const before = {};
   if (everywhere) {
@@ -483,4 +494,54 @@ export async function applyRemote(rows) {
   await saved;
   if (schedules) scheduleChanges++;
   return applied;
+}
+
+// ---------- pictures (used by media.js and sync.js) ----------
+// Saved as the file's bytes (an ArrayBuffer), which every browser stores reliably.
+//   uploaded: whether the sync server has it yet
+export const getMedia = id => get('media', id);
+export async function putMedia(m) {
+  await done((await store('media', 'readwrite')).put(m));
+  changed();
+}
+// Pictures that came from the server (not reported as a change, so they aren't sent back).
+export async function putRemoteMedia(m) { await done((await store('media', 'readwrite')).put({ ...m, uploaded: true })); }
+export async function mediaToUpload() { return (await getAll('media')).filter(m => !m.uploaded); }
+export async function markUploaded(ids) {
+  const db = await openDB();
+  const tx = db.transaction('media', 'readwrite');
+  const os = tx.objectStore('media');
+  for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) os.put({ ...e.target.result, uploaded: true }); };
+  return finished(tx);
+}
+// Remove pictures no card uses any more (replaced, removed, or their card deleted). Pictures added in the
+// last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.
+export async function cleanMedia(now = Date.now()) {
+  const db = await openDB();
+  const tx = db.transaction(['cards', 'media'], 'readwrite');
+  const saved = finished(tx);
+  const used = new Set();
+  for (const c of await done(tx.objectStore('cards').getAll())) { if (c.frontImage) used.add(c.frontImage); if (c.backImage) used.add(c.backImage); }
+  const removed = [];
+  for (const m of await done(tx.objectStore('media').getAll())) {
+    if (used.has(m.id) || now - (m.created || 0) < 3600000) continue;
+    tx.objectStore('media').delete(m.id);
+    if (m.uploaded) removed.push(m.id);
+  }
+  await saved;
+  return removed;
+}
+
+// Bytes ↔ base64 text, for backups.
+function toBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromBase64(text) {
+  const s = atob(text);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+  return bytes.buffer;
 }

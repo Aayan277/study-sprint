@@ -14,9 +14,12 @@ import {
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
 import { schedulerOptions } from './sched-settings.js';
+import { examOptions } from './exam.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
+import { plainText } from './format.js';
+import { imgHTML } from './media.js';
 import { $, esc, plural, toast } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
@@ -46,13 +49,17 @@ function stopRound() {
 }
 
 // ---------- setup ----------
+const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back) });
+
 export async function renderPlay(el) {
   stopRound();
   const [settings, decks, allCards, states, logs] = await Promise.all([
     db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
   ]);
   // Suspended cards, and cards buried until tomorrow, sit out of Play too.
-  const cards = allCards.filter(c => !isHidden(c));
+  // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
+  // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
+  const cards = allCards.filter(c => !isHidden(c)).map(playCopy);
   decks.sort((a, b) => a.created - b.created);
   data = {
     settings, decks, cards,
@@ -253,7 +260,7 @@ function showQuestion() {
   $('pLabel').textContent = { front: 'Pick the matching answer', back: 'Which card is this?', typing: 'Type the answer' }[G.qtype];
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
-  p.textContent = q.prompt;
+  p.innerHTML = imgHTML(q.image) + esc(q.prompt);      // the prompt side's picture, if it has one
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
@@ -401,7 +408,8 @@ async function record(round, entry) {
   if (applies(decision)) {
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
-      const next = rate(id, prev, rating, schedulerOptions(data.settings), now);
+      const deck = data.decks.find(d => d.id === entry.card.deckId);     // exam date mode limits (exam.js)
+      const next = rate(id, prev, rating, examOptions(schedulerOptions(data.settings), deck, now), now);
       log.applied = true;
       await db.saveReview(next, log);
       data.statesById.set(id, next);
@@ -425,9 +433,9 @@ async function record(round, entry) {
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
 async function checkLeech(round, card, prev, next) {
   if (!isNewLeech(prev?.lapses || 0, next.lapses, data.settings.leechThreshold)) return;
-  const leech = markLeech(card, data.settings.leechAction);
+  const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
   await db.saveCards([leech]);
-  if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, leech);
+  if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
   toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
 }
 
@@ -445,15 +453,15 @@ function replaceInRound(round, card) {
 }
 
 // The "Card ⋯" button after answering: the same card panel as the card list. Pauses the auto "Next".
-function openCardMenu() {
+async function openCardMenu() {
   if (!G?.answered) return;
   clearTimeout(G.autoTimer);
   const round = G;
-  openCardPanel(round.card, {
+  openCardPanel((await db.get('cards', round.card.id)) || round.card, {
     decks: data.decks, statesById: data.statesById, closeAfter: ['suspend', 'bury', 'delete'],
     onAction: (act, fresh) => {
       if (['suspend', 'bury', 'delete'].includes(act) || !fresh) dropFromRound(round, round.card.id);
-      else replaceInRound(round, fresh);
+      else replaceInRound(round, playCopy(fresh));
     }
   });
 }
