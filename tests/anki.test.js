@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, imageNames, mediaList } from '../js/anki.js';
+import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, imageNames, mediaList, subdeckPaths } from '../js/anki.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -130,4 +130,12 @@ test('the picture list in newer Anki files', () => {
   const e2 = [...str(1, 'heart.jpg'), 2 * 8, 5, 0xf8, 0x0f, 7];          // field 255 (key 2040 = 0xf8 0x0f), value 7
   const list = mediaList(new Uint8Array([...entry(e1), ...entry(e2)]));
   assert.deepEqual(list, [{ name: 'brain.png', zipName: undefined }, { name: 'heart.jpg', zipName: '7' }]);
+});
+
+test('keeping Anki subdecks: paths below what all rows share', () => {
+  assert.deepEqual(subdeckPaths(['Psych', 'Psych::Unit 1', 'Psych::Unit 1::Lecture 3']), [[], ['Unit 1'], ['Unit 1', 'Lecture 3']]);
+  assert.deepEqual(subdeckPaths(['Psych::Unit 1', 'Psych::Unit 2']), [['Unit 1'], ['Unit 2']]);
+  assert.deepEqual(subdeckPaths(['Bio', 'Chem::Acids']), [['Bio'], ['Chem', 'Acids']]);
+  assert.deepEqual(subdeckPaths(['Psych', 'Psych']), [[], []]);
+  assert.deepEqual(subdeckPaths(['', 'A']), [[], ['A']]);
 });

@@ -4,6 +4,7 @@
 // work with the keyboard, and pick up the theme's colors.
 
 import * as db from './db.js';
+import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
 import { cardLevel } from './decks.js';
 import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
@@ -79,7 +80,9 @@ export async function renderStats(el) {
   const now = Date.now();
 
   // Everything below the filter uses the chosen deck. The streak counts studying in any deck.
-  const cards = deckFilter === 'all' ? allCards : allCards.filter(c => c.deckId === deckFilter);
+  // A deck includes its subdecks.
+  const inside = deckFilter === 'all' ? null : subtreeIds(decks, deckFilter);
+  const cards = inside ? allCards.filter(c => inside.has(c.deckId)) : allCards;
   const ids = new Set(cards.map(c => c.id));
   const logs = allLogs.filter(l => ids.has(l.cardId));
   const streak = dayStreak(allLogs.filter(isAnswerLog), now);
@@ -102,7 +105,7 @@ export async function renderStats(el) {
     <div class="filter-row">
       <select id="sDeck" class="select" aria-label="Show stats for">
         <option value="all">All decks</option>
-        ${decks.map(d => `<option value="${esc(d.id)}" ${d.id === deckFilter ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+        ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === deckFilter ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
       </select>
     </div>
 
@@ -205,10 +208,10 @@ export async function renderStats(el) {
       <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
       <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
       <div class="mdetail" id="mDetail" aria-live="polite"></div>
-      <div id="mGrid">${(deckFilter === 'all' ? decks : decks.filter(d => d.id === deckFilter)).map(d => {
+      <div id="mGrid">${deckChoices(decks, inside).map(({ id }) => decks.find(d => d.id === id)).map(d => {
         const dc = cards.filter(c => c.deckId === d.id).sort((a, b) => a.created - b.created);
         if (!dc.length) return '';
-        return `<div class="mdeck">${deckFilter === 'all' ? `<h3>${esc(d.name)}</h3>` : ''}<div class="mtiles">${dc.map(c => {
+        return `<div class="mdeck">${inside?.size === 1 ? '' : `<h3>${esc(deckPath(decks, d.id))}</h3>`}<div class="mtiles">${dc.map(c => {
           const lvl = cardLevel(statesById.get(c.id));
           return `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(plainText(c.front))}: ${lvl}"></button>`;
         }).join('')}</div></div>`;

@@ -8,12 +8,15 @@ import { formatHTML, plainText } from './format.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
+// Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
 const cell = v => {
   const s = String(v ?? '');
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function toCSV(cards) {
-  const rows = [['Front', 'Back', 'Tags'], ...cards.map(c => [c.front, c.back, (c.tags || []).join(' ')])];
+  const several = new Set(cards.map(c => c.deckName)).size > 1;
+  const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : [])],
+    ...cards.map(c => [c.front, c.back, (c.tags || []).join(' '), ...(several ? [c.deckName] : [])])];
   // The invisible mark at the start (a "BOM") tells Excel the file is UTF-8, so accents and emoji survive.
   return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
@@ -49,11 +52,21 @@ const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-export
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
 
 // Everything that goes in the Anki database, as plain values (no database yet).
-//   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile? }]    now  ms
+//   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile?, deckName? }]    now  ms
+// deckName (e.g. "Psych 101::Unit 1") puts a card in that Anki deck (subdecks); otherwise it's deck.name.
 // Returns { col, notes, cards } rows for the tables of Anki's older (and widely supported) file layout.
 export async function ankiContents(deck, cards, now = Date.now()) {
   const secs = Math.floor(now / 1000);
-  const deckId = now;                                  // any unique number other than 1 (Anki's Default deck)
+  // One Anki deck per name, plus the parents of subdecks ("A::B" needs "A"). Ids: any unique numbers other
+  // than 1 (Anki's Default deck).
+  const names = [];
+  for (const c of cards) {
+    const parts = (c.deckName || deck.name).split('::');
+    parts.forEach((_, i) => { const n = parts.slice(0, i + 1).join('::'); if (!names.includes(n)) names.push(n); });
+  }
+  if (!names.length) names.push(deck.name);
+  const deckIds = new Map(names.map((n, i) => [n, now + i]));
+  const deckId = deckIds.get(deck.name) ?? now;
   const model = {
     id: BASIC_ID, name: 'Study Sprint Basic', type: 0, mod: secs, usn: -1, sortf: 0, did: deckId,
     tmpls: [{ name: 'Card 1', ord: 0, qfmt: '{{Front}}', afmt: '{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}', did: null, bqfmt: '', bafmt: '' }],
@@ -70,7 +83,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const col = {
     id: 1, crt: secs - (secs % 86400), mod: now, scm: now, ver: 11, dty: 0, usn: 0, ls: 0,
     conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model }),
-    decks: JSON.stringify({ 1: deckRow(1, 'Default'), [deckId]: deckRow(deckId, deck.name) }),
+    decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
   const notes = [], ankiCards = [];
@@ -83,7 +96,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       tags: (c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '',
       flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' });
     // New cards, in the deck's order.
-    ankiCards.push({ id: cardId, nid: noteId, did: deckId, ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: i + 1,
+    ankiCards.push({ id: cardId, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: i + 1,
       ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
   }
   return { col, notes, cards: ankiCards };

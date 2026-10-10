@@ -165,3 +165,18 @@ test('daily review limit: overall and per deck, learning cards never held back',
   assert.deepEqual([...l.byDeck], [['A', 1]]);
   assert.equal(reviewLimits({ perDay: null, decks: [], logs, deckOf, now: NOW }).total, Infinity);
 });
+
+test('subdecks: a parent deck\'s limits cap everything inside it', () => {
+  // Psych (limit 3 new) › Unit 1 (limit 2) and Unit 2 (no limit of its own); Bio has no limit.
+  const decks = [{ id: 'P', newPerDay: 3 }, { id: 'U1', parentId: 'P', newPerDay: 2 }, { id: 'U2', parentId: 'P' }, { id: 'B' }];
+  const chains = new Map([['P', ['P']], ['U1', ['U1', 'P']], ['U2', ['U2', 'P']], ['B', ['B']]]);
+  const fresh = ['u1a', 'u1b', 'u1c', 'u2a', 'u2b', 'b1'].map(id => inDeck(id, id.startsWith('u1') ? 'U1' : id.startsWith('u2') ? 'U2' : 'B'));
+  const studiedToday = [{ cardId: 'old', timestamp: NOW - HOUR, state: NEW }];          // one new card done in Unit 2
+  const deckOf = new Map([['old', 'U2']]);
+  const l = newLimits({ perDay: 20, decks, logs: studiedToday, deckOf, now: NOW, chains });
+  assert.deepEqual([...l.byDeck], [['P', 2], ['U1', 2]]);                               // Psych has 2 left (3 − 1 in Unit 2)
+  assert.deepEqual(pickNew(fresh, l).map(c => c.id), ['u1a', 'u1b', 'b1']);            // Psych's 2 used by Unit 1, so none from Unit 2
+  // reviews done in a subdeck count toward the parent
+  const r = reviewLimits({ perDay: null, decks: [{ id: 'P', reviewPerDay: 5 }], logs: [{ cardId: 'x', timestamp: NOW - HOUR, state: REVIEW, source: 'review' }], deckOf: new Map([['x', 'U1']]), now: NOW, chains });
+  assert.equal(r.byDeck.get('P'), 4);
+});

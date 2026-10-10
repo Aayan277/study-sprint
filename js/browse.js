@@ -9,6 +9,7 @@ import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
 import { plainText } from './format.js';
+import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
@@ -29,17 +30,17 @@ export async function renderBrowseAll(el) {
 }
 
 // ---------- the list ----------
-// Draws the card list into `box`. deckId = null means all decks. onChange runs after anything changes
-// (the deck page uses it to refresh its counts).
+// Draws the card list into `box`. deckId = null means all decks; a deck's list includes its subdecks.
+// onChange runs after anything changes (the deck page uses it to refresh its counts).
 export async function mountBrowser(box, { deckId, onChange = () => {} }) {
   const B = { deckId, selecting: false, selected: new Set(), shown: PAGE, ...memory };
-  let decks, cards, statesById, deckById;
+  let decks, cards, statesById, inside;
 
   const load = async () => {
-    const [d, c, s] = await Promise.all([db.getDecks(), deckId ? db.getCardsInDeck(deckId) : db.getAll('cards'), db.getAll('cardStates')]);
+    const [d, c, s] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
     decks = d.sort((a, b) => a.created - b.created);
-    deckById = new Map(decks.map(x => [x.id, x]));
-    cards = c;
+    inside = deckId ? subtreeIds(decks, deckId) : null;      // this deck and its subdecks
+    cards = inside ? c.filter(x => inside.has(x.deckId)) : c;
     statesById = new Map(s.map(x => [x.cardId, x]));
   };
   await load();
@@ -67,6 +68,12 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       <button class="btn primary small" type="button" id="brActions">Actions…</button>
     </div>`;
 
+  // Which deck a row is in: the full path in All cards; on a deck's page, the subdeck below it (if any).
+  const where = card => {
+    if (!deckId) return deckPath(decks, card.deckId);
+    const chain = ancestors(decks, card.deckId);
+    return chain.slice(0, chain.findIndex(d => d.id === deckId)).reverse().map(d => d.name).join(' › ');
+  };
   const draw = () => {
     const list = browseCards(cards, statesById, B);
     B.visible = list;
@@ -81,7 +88,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
           <span class="crow-main"><span class="f">${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${esc(plainText(card.front))}</span><span class="b">${esc(plainText(card.back))}</span>
-            ${deckId ? '' : `<span class="d">${esc(deckById.get(card.deckId)?.name || '')}</span>`}</span>
+            ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
         </button></li>`;
@@ -211,7 +218,7 @@ export async function openCardPanel(card, ctx) {
     if (act === 'delete') confirmIn('ceConfirm', 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
   }));
   wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
-  wireMove(deckId => save({ deckId }, `Moved to ${decks.find(d => d.id === deckId).name}`, 'move'));
+  wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
   if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
 }
 
@@ -276,7 +283,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     done(`Replaced in ${plural(changed.length, 'card')}`);
   });
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
-  wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${decks.find(d => d.id === deckId).name}`));
+  wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${deckPath(decks, deckId)}`));
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
 }
 
@@ -320,10 +327,12 @@ function openTagTools(cards, { scope, refresh }) {
 export function openAddCard({ decks, deckId, refresh }) {
   if (!decks.length) { toast('Make a deck first'); return; }
   const target = deckId || decks[0].id;
+  // A deck with subdecks asks which one (starting with the deck itself).
+  const choices = deckChoices(decks, deckId ? subtreeIds(decks, deckId) : null);
   openSheet(`
     <h2 id="sheetTitle">Add a card</h2>
     <form id="acForm" class="sheet-in" style="padding:0">
-      ${deckId ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${decks.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>`}
+      ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
       ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
       <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
@@ -340,7 +349,7 @@ export function openAddCard({ decks, deckId, refresh }) {
     const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
     const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
     if (!(front || frontImage) || !(back || backImage)) { $('acErr').textContent = 'A card needs a front and a back (text or a picture).'; $('acErr').hidden = false; return; }
-    await db.saveCards([{ id: db.newId(), deckId: deckId || $('acDeck').value, front, back, frontImage, backImage, tags: parseTags($('acTags').value), created: Date.now() }]);
+    await db.saveCards([{ id: db.newId(), deckId: $('acDeck')?.value || target, front, back, frontImage, backImage, tags: parseTags($('acTags').value), created: Date.now() }]);
     // Stay open for the next card, like Anki.
     setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acErr').hidden = true;
     $('acFront').focus();
@@ -360,7 +369,7 @@ function wireFlags(fn) {
   document.querySelectorAll('#sheet [data-flag]').forEach(b => b.addEventListener('click', () => fn(+b.dataset.flag)));
 }
 function moveRow(decks, currentId) {
-  return `<div class="row-form"><select id="ceMove" class="select" aria-label="Deck">${decks.map(d => `<option value="${esc(d.id)}" ${d.id === currentId ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+  return `<div class="row-form"><select id="ceMove" class="select" aria-label="Deck">${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === currentId ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select>
     <button class="btn ghost small" type="button" id="ceMoveBtn">Move</button></div>`;
 }
 function wireMove(fn) {

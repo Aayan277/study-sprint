@@ -196,7 +196,7 @@ Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlu
 
 - A. ✅ (v2.7) **Read aloud** (🔊 / R, deck language or auto-detect, auto-read), **card list tools** (Duplicates filter, Find and replace, Tags: rename or remove everywhere), **more stats** (answer buttons, time of day, difficulty).
 - B. ✅ (v2.8) **Per-deck settings** (deck.options, deck.reviewPerDay), **daily review limit** (settings.reviewLimit), **easy days** and evening out (settings.easyDays; balance.js picks the least busy day within the fuzz range).
-- C. **Subdecks**.
+- C. ✅ (v2.9) **Subdecks** (deck.parentId; deck-tree.js). A deck includes its subdecks everywhere (card list, Review, Play, Stats, Export); a parent's limits cap the group; subdecks inherit study options, exam date and read aloud unless they set their own; deleting a parent asks to delete or move up the subdecks; Anki imports can keep their subdecks and Anki exports keep them.
 - D. **Cloze cards**.
 - E. **Image occlusion**.
 

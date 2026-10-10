@@ -16,6 +16,7 @@ import { dayStart } from './days.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions } from './exam.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
@@ -86,7 +87,9 @@ export async function renderPlay(el) {
   }
 
   const draw = () => {
-    const pool = prefs.deckId === 'all' ? cards : cards.filter(c => c.deckId === prefs.deckId);
+    // A deck includes its subdecks.
+    const inside = prefs.deckId === 'all' ? null : subtreeIds(decks, prefs.deckId);
+    const pool = inside ? cards.filter(c => inside.has(c.deckId)) : cards;
     // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || defaultQuestionType(pool);
@@ -112,7 +115,7 @@ export async function renderPlay(el) {
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
           <option value="all" ${prefs.deckId === 'all' ? 'selected' : ''}>All decks (${plural(cards.length, 'card')})</option>
-          ${decks.map(d => `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.name)} (${cards.filter(c => c.deckId === d.id).length})</option>`).join('')}
+          ${deckChoices(decks).map(d => { const ids = subtreeIds(decks, d.id); return `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.label)} (${cards.filter(c => ids.has(c.deckId)).length})</option>`; }).join('')}
         </select>
       </fieldset>
 
@@ -409,7 +412,7 @@ async function record(round, entry) {
   if (applies(decision)) {
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
-      const deck = data.decks.find(d => d.id === entry.card.deckId);     // exam date mode limits (exam.js)
+      const deck = effectiveDeck(data.decks, entry.card.deckId);     // with what it inherits from its parent decks
       // The deck's own settings (or the overall ones), its exam limits, and evening out the reviews.
       data.balance ||= { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };
       const next = rate(id, prev, rating, { ...examOptions(deckSchedulerOptions(data.settings, deck), deck, now), balance: data.balance }, now);
@@ -516,7 +519,7 @@ async function finish() {
   }
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
-  const deckName = round.deckId === 'all' ? 'All decks' : data.decks.find(d => d.id === round.deckId)?.name || '';
+  const deckName = round.deckId === 'all' ? 'All decks' : deckPath(data.decks, round.deckId);
   const schedule = await scheduleSummary(round);
   // You may have switched to another screen while that saved: don't draw over it.
   if (!location.hash.startsWith('#/play')) return;

@@ -16,6 +16,7 @@ import { loadByDay } from './balance.js';
 import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
+import { chainMap, subtreeIds, treeOrder, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -31,6 +32,8 @@ async function loadAll() {
     db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
   ]);
   decks.sort((a, b) => a.created - b.created);
+  const tree = treeOrder(decks);
+  decks.splice(0, decks.length, ...tree.map(x => x.deck));      // each deck followed by its subdecks
   // New cards come in deck order, then in the order they were added.
   const order = new Map(decks.map((d, i) => [d.id, i]));
   cards.sort((a, b) => order.get(a.deckId) - order.get(b.deckId) || a.created - b.created);
@@ -41,15 +44,20 @@ async function loadAll() {
   // New cards left today: the overall limit, each deck's own limit, plus any extra added with Custom study.
   const extra = extraNewToday(settings.extraNew, now);
   const deckOf = new Map(cards.map(c => [c.id, c.deckId]));
-  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf, extra, now });
+  // A parent deck's limits cap its subdecks too (chains).
+  const chains = chainMap(decks);
+  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf, extra, now, chains });
   // Reviews left today: the overall daily review limit and each deck's own (none by default).
-  const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now });
-  return { settings, decks, cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft, reviewLeft };
+  const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
+  return { settings, decks, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft, reviewLeft };
 }
 
-// How many cards a set of decks has for today.
+// A set of decks and everything inside them.
+const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
+
+// How many cards a set of decks (and their subdecks) has for today.
 function countFor(data, deckIds) {
-  const ids = new Set(deckIds);
+  const ids = withSubdecks(data, deckIds);
   const cards = data.cards.filter(c => ids.has(c.deckId));
   const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
   const due = queue.filter(q => q.kind !== 'new').length + waiting.length;
@@ -73,7 +81,8 @@ export async function renderReview(el, deckId) {
   const data = await loadAll();
   if (prepFor && prepFor === deckId) {
     prepFor = null;
-    const cards = data.cards.filter(c => c.deckId === deckId);
+    const inside = withSubdecks(data, [deckId]);
+    const cards = data.cards.filter(c => inside.has(c.deckId));
     const prep = examPrepQueue(cards, data.statesById);
     if (prep.queue.length) return start(el, data, cards, data.settings.reviewTyping, deckId, { ...prep, label: 'Exam prep' });
   }
@@ -99,11 +108,12 @@ export async function renderReview(el, deckId) {
           <button type="button" class="tchip" data-all aria-pressed="${!chosen.length}">All decks</button>
           ${data.decks.map(d => {
             const dc = countFor(data, [d.id]);
-            return `<button type="button" class="tchip" data-deck="${esc(d.id)}" aria-pressed="${chosen.includes(d.id)}">
-              <i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due}·${dc.fresh}</small></button>`;
+            const depth = data.depth.get(d.id);
+            return `<button type="button" class="tchip" data-deck="${esc(d.id)}" aria-pressed="${chosen.includes(d.id)}" ${depth ? `title="${esc(deckPath(data.decks, d.id))}"` : ''}>
+              ${depth ? '<span class="sub-mark" aria-hidden="true">↳</span>' : ''}<i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due}·${dc.fresh}</small></button>`;
           }).join('')}
         </div>
-        <p class="note">Numbers show due · new for each deck. You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
+        <p class="note">Numbers show due · new for each deck (with its subdecks). You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
       </section>
       <section class="section">
         <h2>Answer by</h2>
@@ -158,9 +168,12 @@ function openCustomStudy(el, data, cards, typing, deckId) {
   const isNew = c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; };
   const newAvail = cards.filter(isNew).length;
   let days = 3, extra = 10;
-  // Decks here with an exam coming up, and their exam prep session.
-  const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info && cards.some(c => c.deckId === e.deck.id));
-  const prep = examPrepQueue(cards.filter(c => exams.some(e => e.deck.id === c.deckId)), data.statesById);
+  // Decks here with an exam coming up (subdecks use their parent's date unless they set one), and their
+  // exam prep session.
+  const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
+  const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) }))
+    .filter(e => e.info && cards.some(c => subtreeIds(data.decks, e.deck.id).has(c.deckId) && examOf.get(c.deckId)));
+  const prep = examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById);
 
   openSheet(`
     <h2 id="sheetTitle">Custom study</h2>
@@ -248,7 +261,9 @@ function start(el, data, cards, typing, deckId, custom = null) {
     balance: { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays },
     leech: { threshold: data.settings.leechThreshold, action: data.settings.leechAction },
     decks: data.decks,
-    deckNames: new Map(data.decks.map(d => [d.id, d.name])),
+    deckNames: new Map(data.decks.map(d => [d.id, deckPath(data.decks, d.id)])),
+    // Each deck with the settings it inherits from the decks it's inside (study options, exam, read aloud).
+    effective: new Map(data.decks.map(d => [d.id, effectiveDeck(data.decks, d.id)])),
     deckIds: [...new Set(cards.map(c => c.deckId))],
     statesById: data.statesById,
     queue, waiting,
@@ -261,15 +276,14 @@ function start(el, data, cards, typing, deckId, custom = null) {
   nextCard(el);
 }
 
-// The scheduling options for a card: the normal ones, plus its deck's exam limits (exam.js).
 // The scheduling options for a card: its deck's settings (or the overall ones), its deck's exam limits,
 // and evening out the reviews.
 const schedFor = (card, now = Date.now()) => {
-  const deck = R.decks.find(d => d.id === card.deckId);
+  const deck = deckOf(card);
   return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance };
 };
 
-const deckOf = card => R.decks.find(d => d.id === card.deckId);
+const deckOf = card => R.effective.get(card.deckId);
 // Read the side showing (the back once flipped) in the deck's language.
 function readAloud() {
   if (!R?.current) return;

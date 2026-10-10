@@ -47,15 +47,14 @@ export function buildQueue(cards, statesById, newLimit, now = Date.now(), review
 
 // Keep reviews within today's review limit (overall and per deck), most overdue first.
 function capReviews(items, limit) {
-  const { total, byDeck } = typeof limit === 'number' ? { total: limit, byDeck: new Map() } : limit;
+  const { total, byDeck, chains } = typeof limit === 'number' ? { total: limit, byDeck: new Map() } : limit;
   if (total === Infinity && !byDeck.size) return items;
   const left = new Map(byDeck);
   let n = 0;
   return items.filter(x => {
     if (x.kind !== 'review') return true;
     if (n >= total) return false;
-    const d = left.get(x.card.deckId);
-    if (d !== undefined) { if (d <= 0) return false; left.set(x.card.deckId, d - 1); }
+    if (!takeFromChain(left, chains?.get(x.card.deckId) || [x.card.deckId])) return false;
     n++;
     return true;
   });
@@ -64,7 +63,7 @@ function capReviews(items, limit) {
 // How many reviews are still allowed today, overall and for each deck with its own limit. Like newLimits:
 //   perDay  the overall limit (null = no limit)       decks  each deck's optional reviewPerDay
 // Reviews of graduated cards done today (in Review, or Play answers that counted) use up the limits.
-export function reviewLimits({ perDay, decks, logs, deckOf, now = Date.now() }) {
+export function reviewLimits({ perDay, decks, logs, deckOf, now = Date.now(), chains }) {
   const start = dayStart(now);
   const done = new Map();
   let total = 0;
@@ -72,28 +71,42 @@ export function reviewLimits({ perDay, decks, logs, deckOf, now = Date.now() }) 
     if (l.timestamp < start || l.state !== REVIEW || !(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
     total++;
     const d = deckOf.get(l.cardId);
-    if (d !== undefined) done.set(d, (done.get(d) || 0) + 1);
+    if (d !== undefined) for (const a of chains?.get(d) || [d]) done.set(a, (done.get(a) || 0) + 1);
   }
   const byDeck = new Map();
   for (const d of decks) if (Number.isFinite(d.reviewPerDay)) byDeck.set(d.id, Math.max(0, d.reviewPerDay - (done.get(d.id) || 0)));
-  return { total: Number.isFinite(perDay) ? Math.max(0, perDay - total) : Infinity, byDeck };
+  return { total: Number.isFinite(perDay) ? Math.max(0, perDay - total) : Infinity, byDeck, chains };
 }
 
 // Today's new cards, in order, within the overall limit and each deck's own limit (if it has one).
+// With subdecks, a card counts against its deck's limit and every parent deck's limit (chains).
 export function pickNew(fresh, newLimit) {
-  const { total, byDeck } = typeof newLimit === 'number' ? { total: newLimit, byDeck: new Map() } : newLimit;
+  const { total, byDeck, chains } = typeof newLimit === 'number' ? { total: newLimit, byDeck: new Map() } : newLimit;
   const left = new Map(byDeck);
   const out = [];
   for (const card of fresh) {
     if (out.length >= total) break;
-    const deckLeft = left.get(card.deckId);
-    if (deckLeft !== undefined) {               // this deck has its own limit
-      if (deckLeft <= 0) continue;
-      left.set(card.deckId, deckLeft - 1);
-    }
+    if (!takeFromChain(left, chains?.get(card.deckId) || [card.deckId])) continue;
     out.push(card);
   }
   return out;
+}
+// Use one from the limit of each deck in the chain that has one; false (and nothing used) if any is used up.
+function takeFromChain(left, chain) {
+  const limited = chain.filter(id => left.has(id));
+  if (limited.some(id => left.get(id) <= 0)) return false;
+  limited.forEach(id => left.set(id, left.get(id) - 1));
+  return true;
+}
+// How many per deck, counting each one in its deck and every deck it sits inside.
+function countUpChains(ids, deckOf, chains) {
+  const counts = new Map();
+  for (const id of ids) {
+    const d = deckOf.get(id);
+    if (d === undefined) continue;
+    for (const a of chains?.get(d) || [d]) counts.set(a, (counts.get(a) || 0) + 1);
+  }
+  return counts;
 }
 
 // How many new cards are still allowed today, overall and for each deck with its own limit.
@@ -103,21 +116,17 @@ export function pickNew(fresh, newLimit) {
 //   deckOf   Map cardId → deckId
 //   extra    extra new cards added for today with Custom study (raises every limit)
 // Returns { total, byDeck: Map deckId → new cards left }.
-export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.now() }) {
+//   chains   optional (subdecks): deck id → [it, its parent, …] from deck-tree.js chainMap(). A subdeck's
+//            new cards count toward its parents' limits too.
+export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.now(), chains }) {
   const start = dayStart(now);
-  const studied = new Map();                    // deckId → Set of new cards studied today
-  for (const l of logs) {
-    if (l.timestamp < start || l.state !== NEW) continue;
-    const d = deckOf.get(l.cardId);
-    if (d === undefined) continue;
-    if (!studied.has(d)) studied.set(d, new Set());
-    studied.get(d).add(l.cardId);
-  }
+  const ids = new Set(logs.filter(l => l.timestamp >= start && l.state === NEW).map(l => l.cardId));   // new cards studied today
+  const studied = countUpChains(ids, deckOf, chains);
   const byDeck = new Map();
   for (const d of decks) {
-    if (Number.isFinite(d.newPerDay)) byDeck.set(d.id, Math.max(0, d.newPerDay + extra - (studied.get(d.id)?.size || 0)));
+    if (Number.isFinite(d.newPerDay)) byDeck.set(d.id, Math.max(0, d.newPerDay + extra - (studied.get(d.id) || 0)));
   }
-  return { total: Math.max(0, perDay + extra - newStudiedToday(logs, now)), byDeck };
+  return { total: Math.max(0, perDay + extra - newStudiedToday(logs, now)), byDeck, chains };
 }
 
 // Custom study: extra new cards added for today, or 0 if they were added on an earlier day.

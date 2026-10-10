@@ -9,6 +9,7 @@ import { mountBrowser } from './browse.js';
 import { examInfo, countdown, pullIn } from './exam.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
+import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices } from './deck-tree.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -43,14 +44,48 @@ function summarize(cards, statesById) {
   return s;
 }
 
-// Load every deck with its counts. Reads all cards once, which is fast even for a few thousand.
+// Load every deck with its counts, in tree order (each deck followed by its subdecks). A deck's counts
+// include its subdecks. Reads all cards once, which is fast even for a few thousand.
 async function loadDecks() {
   const [decks, cards, states] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
   const statesById = new Map(states.map(s => [s.cardId, s]));
   const byDeck = new Map(decks.map(d => [d.id, []]));
-  for (const c of cards) byDeck.get(c.deckId)?.push(c);
+  const chains = chainMap(decks);
+  for (const c of cards) for (const id of chains.get(c.deckId) || []) byDeck.get(id).push(c);
   decks.sort((a, b) => a.created - b.created);
-  return decks.map(d => ({ deck: d, cards: byDeck.get(d.id), stats: summarize(byDeck.get(d.id), statesById) }));
+  return treeOrder(decks).map(({ deck, depth }) => ({ deck, depth, cards: byDeck.get(deck.id), stats: summarize(byDeck.get(deck.id), statesById) }));
+}
+
+// Subdecks inside a deck's tile or page: one row each, indented by depth. Folded ones are remembered
+// on this device.
+const FOLD_KEY = 'study-sprint-folded';
+const folded = () => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY)) || []); } catch { return new Set(); } };
+function setFolded(id, isFolded) {
+  const f = folded();
+  isFolded ? f.add(id) : f.delete(id);
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify([...f])); } catch { /* private mode: just not remembered */ }
+}
+function subdeckRows(items, baseDepth) {
+  return items.map(({ deck, depth, stats }) => `
+    <button class="subdeck" type="button" data-open="${esc(deck.id)}" style="--depth:${depth - baseDepth - 1};--deck:${esc(deck.color)}">
+      <span class="sd-name">${esc(deck.name)}</span>
+      <span class="sd-counts"><span class="due"><b>${stats.due}</b> due</span> <span><b>${stats.new}</b> new</span></span>
+    </button>`).join('');
+}
+// The items inside `id` (everything after it in tree order that's deeper).
+function inside(list, id) {
+  const i = list.findIndex(x => x.deck.id === id);
+  const out = [];
+  for (let j = i + 1; j < list.length && list[j].depth > list[i].depth; j++) out.push(list[j]);
+  return out;
+}
+function subdeckBox(list, item, open) {
+  const kids = inside(list, item.deck.id);
+  if (!kids.length) return '';
+  return `<details class="subdecks" data-fold="${esc(item.deck.id)}" ${open ? 'open' : ''}>
+      <summary>${plural(kids.filter(k => k.depth === item.depth + 1).length, 'subdeck')}</summary>
+      ${subdeckRows(kids, item.depth)}
+    </details>`;
 }
 
 // The thin colored bar showing New / Learning / Young / Mature.
@@ -64,7 +99,9 @@ function masteryBar(s) {
 // ---------- the deck list ----------
 export async function renderLibrary(el) {
   const list = await loadDecks();
-  const sum = k => list.reduce((n, x) => n + x.stats[k], 0);
+  const top = list.filter(x => x.depth === 0);            // counts already include subdecks
+  const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
+  const fold = folded();
   // Starter decks you haven't added yet.
   const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
   const starters = STARTER_DECKS.filter(s => !added.has(s.key)).map(s => ({ ...s, count: starterCards(s.level).length }));
@@ -82,7 +119,7 @@ export async function renderLibrary(el) {
       <div><div class="v">${sum('new')}</div><div class="l">New</div></div>
       <div><div class="v">${sum('total')}</div><div class="l">Cards</div></div>
     </div>
-    ${list.length ? `<div class="decks">${list.map(({ deck, stats }) => `
+    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
@@ -98,7 +135,8 @@ export async function renderLibrary(el) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
         </button>
         ${masteryBar(stats)}
-      </article>`).join('')}</div>`
+        ${subdeckBox(list, item, !fold.has(deck.id))}
+      </article>`; }).join('')}</div>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
     ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
     ${starters.length ? `
@@ -117,9 +155,9 @@ export async function renderLibrary(el) {
   $('newDeck').addEventListener('click', create);
   $('newDeck2')?.addEventListener('click', create);
   el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
+  el.querySelectorAll('[data-fold]').forEach(d => d.addEventListener('toggle', () => setFolded(d.dataset.fold, !d.open)));
   el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
-    const item = list.find(x => x.deck.id === b.dataset.edit);
-    openDeckEditor(item.deck, () => renderLibrary(el), item.stats.total);
+    openDeckEditor(list.find(x => x.deck.id === b.dataset.edit).deck, () => renderLibrary(el));
   }));
   el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
     const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
@@ -138,35 +176,44 @@ export async function renderLibrary(el) {
 
 // ---------- one deck and its cards ----------
 export async function renderDeck(el, deckId) {
-  const deck = await db.getDeck(deckId);
-  if (!deck) { location.hash = '#/decks'; return; }
-  const [cards, states] = await Promise.all([db.getCardsInDeck(deckId), db.getAll('cardStates')]);
-  const s = summarize(cards, new Map(states.map(x => [x.cardId, x])));
-  cards.sort((a, b) => a.created - b.created);
-  const exam = examInfo(deck);
+  const list = await loadDecks();
+  const item = list.find(x => x.deck.id === deckId);
+  if (!item) { location.hash = '#/decks'; return; }
+  const { deck, cards, stats: s } = item;
+  const decks = list.map(x => x.deck);
+  const parents = ancestors(decks, deckId).slice(1).reverse();      // top level first
+  const parent = parents.at(-1);
+  const exam = examInfo(effectiveDeck(decks, deckId));
+  const kids = inside(list, deckId);
 
   el.innerHTML = `
-    <button class="back" type="button" id="back">‹ Decks</button>
+    <button class="back" type="button" id="back">‹ ${parent ? esc(parent.name) : 'Decks'}</button>
     <div class="screen-head">
-      <div>${deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
+      <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
+        : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
         ${exam ? `<p class="exam-line"><span class="exam-badge">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
+        <button class="btn ghost small" type="button" id="addSub">+ Subdeck</button>
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
         ${cards.length ? '<button class="btn ghost small" type="button" id="exportDeck">Export</button>' : ''}
         ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
     <div class="card section deck-summary" style="border-left:6px solid ${esc(deck.color)}">${summaryHTML(s)}</div>
+    ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth)}
+      <p class="note" style="margin:8px 0 0">Everything below includes the subdecks' cards too.</p></section>` : ''}
     <section id="browser"></section>
     ${cards.length ? '' : `<div class="empty"><b>This deck is empty.</b><br>Add cards one at a time with + Add card, or paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
   `;
-  $('back').addEventListener('click', () => { location.hash = '#/decks'; });
-  $('exportDeck')?.addEventListener('click', () => openExport(deck));
+  $('back').addEventListener('click', () => { location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; });
+  el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
+  $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }, { parentId: deckId }));
+  $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('prepBtn')?.addEventListener('click', async () => (await import('./review.js')).examPrep(deck.id));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
-    if (saved === 'deleted') location.hash = '#/decks'; else renderDeck(el, deckId);
-  }, s.total));
+    if (saved === 'deleted') location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; else renderDeck(el, deckId);
+  }));
   // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
   await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
 }
@@ -175,9 +222,8 @@ export async function renderDeck(el, deckId) {
 async function refreshCounts(el, deckId) {
   const box = el.querySelector('.deck-summary');
   if (!box) return;
-  const [cards, states] = await Promise.all([db.getCardsInDeck(deckId), db.getAll('cardStates')]);
-  const s = summarize(cards, new Map(states.map(x => [x.cardId, x])));
-  box.innerHTML = summaryHTML(s);
+  const item = (await loadDecks()).find(x => x.deck.id === deckId);
+  if (item) box.innerHTML = summaryHTML(item.stats);
 }
 
 function summaryHTML(s) {
@@ -198,9 +244,12 @@ function summaryHTML(s) {
 }
 
 // ---------- export ----------
-// Save a deck's cards as a spreadsheet (CSV) or an Anki deck. Progress isn't included (cards start as new).
-async function openExport(deck) {
-  const cards = (await db.getCardsInDeck(deck.id)).sort((a, b) => a.created - b.created);
+// Save a deck's cards (and its subdecks') as a spreadsheet (CSV) or an Anki deck. Progress isn't included
+// (cards start as new). Subdecks stay subdecks in Anki ("Psych 101::Unit 1").
+async function openExport(deck, decks, deckCards) {
+  // Each card's deck, named from the exported deck down: "Unit 1::Lecture 3" when exporting Unit 1.
+  const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
+  const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
     <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${cards.some(c => c.frontImage || c.backImage) ? ' Pictures go in the Anki deck (a spreadsheet can only hold text).' : ''}</p>
@@ -252,7 +301,7 @@ function studyOptionsHTML(deck) {
           <input id="deckRev" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit of its own" value="${num(deck.reviewPerDay)}"></label>
         <p class="note" style="margin:0">Blank = only the overall limits in Settings apply. They still cap the total.</p>
         <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Use my overall settings</b>
-          <span>Retention, steps and maximum interval from Settings. Turn off to give this deck its own.</span></span>
+          <span>Retention, steps and maximum interval from Settings (a subdeck uses the deck it's inside). Turn off to give this deck its own.</span></span>
           <input id="deckOwnOff" type="checkbox" class="switch" ${own ? '' : 'checked'}></label>
         <div id="deckOwn" ${own ? '' : 'hidden'}>
           <label class="field"><span>Target retention: <b id="deckRetOut">${Math.round((o.targetRetention ?? 0.9) * 100)}%</b></span>
@@ -291,11 +340,17 @@ function readStudyOptions() {
   } };
 }
 
-// ---------- create / rename / recolor / delete ----------
-// deck = null means "make a new deck". onDone is called after any change.
-export function openDeckEditor(deck, onDone, cardCount = 0) {
+// ---------- create / rename / recolor / move / delete ----------
+// deck = null means "make a new deck" (parentId: inside that deck). onDone is called after any change.
+export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
   const isNew = !deck;
-  let color = deck?.color || DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
+  const decks = (await db.getDecks()).sort((a, b) => a.created - b.created);
+  const parentNow = isNew ? parentId : deck.parentId || '';
+  let color = deck?.color || decks.find(d => d.id === parentNow)?.color || DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
+  // Where it can go: top level, or inside any deck that isn't this one or inside it.
+  const places = deckChoices(decks).filter(c => isNew || canNest(decks, deck.id, c.id));
+  // What a subdeck gets when it doesn't set its own (from the deck it's inside).
+  const inherited = () => effectiveDeck(decks, $('deckParent').value);
 
   const sheet = openSheet(`
     <h2 id="sheetTitle">${isNew ? 'New deck' : 'Edit deck'}</h2>
@@ -304,19 +359,21 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
         <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}"></label>
       <label class="field"><span>Course code (optional)</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
+      ${places.length ? `<label class="field"><span>Inside</span>
+        <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
         <div class="swatches" role="group" aria-labelledby="colorLabel">
           ${DECK_COLORS.map(c => `<button type="button" class="swatch" style="--c:${c}" data-color="${c}" aria-pressed="${c === color}" aria-label="Color ${c}"></button>`).join('')}
         </div></div>
       ${isNew ? '' : studyOptionsHTML(deck)}
       ${isNew ? '' : `<label class="field"><span>Read aloud in</span>
-        <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+        <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(code || !parentNow ? name : 'Same as the deck it’s inside')}</option>`).join('')}</select></label>
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
         <span>In Review: the front when it appears, the back when you flip. (🔊 or R reads it any time.)</span></span>
-        <input id="deckTtsAuto" type="checkbox" class="switch" ${deck.ttsAuto ? 'checked' : ''}></label>`}
+        <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>`}
       ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
         <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">
-        <small class="note" style="margin:4px 0 0">Until then, every card in this deck comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.</small></label>`}
+        <small class="note" style="margin:4px 0 0">Until then, every card in this deck (and its subdecks) comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).` : ''}</small></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -343,6 +400,10 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     const name = $('deckName').value.trim();
     if (!name) { $('deckErr').textContent = 'Give the deck a name.'; $('deckErr').hidden = false; $('deckName').focus(); return; }
     const course = $('deckCourse').value.trim();
+    const parentId = $('deckParent').value;
+    // Read aloud automatically: a subdeck only stores it when it differs from the deck it's inside.
+    const auto = !!$('deckTtsAuto')?.checked;
+    const ttsAuto = parentId && auto === inherited()?.ttsAuto ? null : auto;
     // This deck's own new-card limit: blank = none (only the overall limit applies).
     const raw = $('deckNew')?.value.trim();
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
@@ -353,15 +414,19 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
       options = read;
     }
     const saved = isNew
-      ? { id: db.newId(), name, course, color, created: Date.now() }
-      : { ...deck, name, course, color, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
-        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto: !!$('deckTtsAuto')?.checked };
+      ? { id: db.newId(), name, course, color, parentId, created: Date.now() }
+      : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
+        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto };
     await db.saveDeck(saved);
-    // A new exam date: bring forward cards that were scheduled after it.
+    // A new exam date (its own, or from the deck it's moved into): bring forward cards scheduled after it.
+    // Covers the subdecks that use this date too.
     let moved = 0;
-    if (!isNew && saved.examDate && saved.examDate !== deck.examDate) {
-      const ids = new Set((await db.getCardsInDeck(saved.id)).map(c => c.id));
-      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), saved);
+    const after = decks.map(d => (d.id === saved.id ? saved : d)).concat(isNew ? [saved] : []);
+    const exam = effectiveDeck(after, saved.id).examDate;
+    if (!isNew && exam && exam !== effectiveDeck(decks, saved.id).examDate) {
+      const dIds = [...subtreeIds(after, saved.id)].filter(id => effectiveDeck(after, id).examDate === exam);
+      const ids = new Set((await db.getAll('cards')).filter(c => dIds.includes(c.deckId)).map(c => c.id));
+      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam });
       if (changed.length) await db.putStates(changed);
       moved = changed.length;
     }
@@ -370,23 +435,36 @@ export function openDeckEditor(deck, onDone, cardCount = 0) {
     onDone(saved);
   });
 
-  // Deleting is a two-step, in-page confirmation.
-  $('deckDelete')?.addEventListener('click', () => {
+  // Deleting is a two-step, in-page confirmation. A deck with subdecks asks what happens to them:
+  // delete them too, or move them up a level (into the deck this one is inside, or the top level).
+  $('deckDelete')?.addEventListener('click', async () => {
+    const tree = [...subtreeIds(decks, deck.id)];
+    const subs = tree.length - 1, kids = decks.filter(x => x.parentId === deck.id).length;
+    const all = await db.getAll('cards');
+    const own = all.filter(c => c.deckId === deck.id).length, total = all.filter(c => tree.includes(c.deckId)).length;
+    const up = deck.parentId ? `into “${esc(decks.find(d => d.id === deck.parentId)?.name || '')}”` : 'to the top level';
     $('dangerZone').innerHTML = `
       <div class="confirm" role="alertdialog" aria-labelledby="delMsg">
-        <p id="delMsg"><b>Delete “${esc(deck.name)}”?</b><br>This removes ${plural(cardCount, 'card')} and all their review history. It can't be undone.</p>
+        <p id="delMsg"><b>Delete “${esc(deck.name)}”?</b><br>${subs
+          ? `It has ${plural(subs, 'subdeck')}. Deleting everything removes ${plural(total, 'card')} and all their review history; keeping the subdecks removes this deck's own ${plural(own, 'card')} and moves ${kids === 1 ? 'its subdeck' : `its ${kids} subdecks`} ${up}.`
+          : `This removes ${plural(own, 'card')} and all their review history.`} It can't be undone.</p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="delNo">Keep it</button>
-          <button class="btn danger solid" type="button" id="delYes">Delete deck</button>
+          ${subs ? '<button class="btn danger" type="button" id="delKeep">Delete, keep subdecks</button>' : ''}
+          <button class="btn danger solid" type="button" id="delYes">${subs ? 'Delete everything' : 'Delete deck'}</button>
         </div>
       </div>`;
     $('delNo').focus();
-    $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone, cardCount); });
+    $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone); });
+    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); onDone('deleted'); };
     $('delYes').addEventListener('click', async () => {
+      for (const id of tree) await db.deleteDeck(id);
+      done();
+    });
+    $('delKeep')?.addEventListener('click', async () => {
+      for (const d of decks.filter(x => x.parentId === deck.id)) await db.saveDeck({ ...d, parentId: deck.parentId || '' });
       await db.deleteDeck(deck.id);
-      closeSheet();
-      toast(`Deleted “${deck.name}”`);
-      onDone('deleted');
+      done();
     });
   });
 }

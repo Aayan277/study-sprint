@@ -41,6 +41,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams), spreading due dates onto the least busy days, and **easy days** (Normal / Reduced / Minimum per weekday).
   - **Reviews per day** (optional; no limit by default), overall and per deck.
   - **Per-deck settings** (Edit deck → Study options): a deck can have its own retention, steps, maximum interval, and new and review limits, or use the overall ones.
+  - **Subdecks**: put a deck inside another (+ Subdeck, or Edit deck → Inside), e.g. Psych 101 › Unit 1. A deck includes its subdecks in its card list, Review, Play, Stats and Export; its limits cap them all; and they use its settings, exam date and read-aloud language unless they set their own. Anki imports can keep their subdecks.
 - **Play:** timed rounds.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
   - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
@@ -102,6 +103,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/media.js` | Pictures: shrinking, saving and showing them |
 | `js/speech.js` | Reading cards aloud |
 | `js/balance.js` | Evening out reviews across days, and easy days |
+| `js/deck-tree.js` | Subdecks: paths, what's inside a deck, and inherited settings |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/review.js` | The Review screen |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
