@@ -7,23 +7,40 @@
 // setCardText(id, ''). The buttons and shortcuts are wired once, below, for every box.
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
-import { esc } from './ui.js';
+import { esc, toast } from './ui.js';
+import { addImage, imgHTML } from './media.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
 
-export function cardTextField(id, label, value = '', { rows = 2, placeholder = '' } = {}) {
+//   image: the side's picture (a media id), shown under the box with Remove; the toolbar's picture
+//          button adds or replaces it. Read it back with readCardImage(id).
+export function cardTextField(id, label, value = '', { rows = 2, placeholder = '', image = null } = {}) {
+  const pics = `<div class="img-row" id="${id}Img" data-media-id="${esc(image || '')}">${pictureHTML(id, image)}</div>
+      <input type="file" id="${id}File" accept="image/*" hidden data-img-file="${id}">`;
   const tools = `<span class="fmt-tools" role="toolbar" aria-label="Formatting">
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
       <button type="button" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
-      <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button></span>`;
+      <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
+      <button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button></span>`;
   if (RICH.matches) {
     return `<div class="field fmt-field"><span class="fmt-head"><span id="${id}Lbl">${esc(label)}</span>${tools}</span>
       <div class="rich" id="${id}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${id}Lbl"
-        data-rich="1" data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value)}</div></div>`;
+        data-rich="1" data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value)}</div>${pics}</div>`;
   }
   return `<div class="field fmt-field"><span class="fmt-head"><label for="${id}">${esc(label)}</label>${tools}</span>
       <textarea id="${id}" rows="${rows}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>
-      <div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) ? '' : 'hidden'}>${formatHTML(value)}</div></div>`;
+      <div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) ? '' : 'hidden'}>${formatHTML(value)}</div>${pics}</div>`;
+}
+
+const pictureHTML = (id, image) => (image
+  ? `${imgHTML(image, 'img-thumb')}<button type="button" class="btn ghost small" data-img-remove="${id}">Remove picture</button>` : '');
+
+// The side's picture (a media id), or null.
+export const readCardImage = id => document.getElementById(id + 'Img')?.dataset.mediaId || null;
+export function setCardImage(id, image) {
+  const row = document.getElementById(id + 'Img');
+  row.dataset.mediaId = image || '';
+  row.innerHTML = pictureHTML(id, image);
 }
 
 // The box's text, with formatting as marks.
@@ -53,6 +70,29 @@ function applyFormat(id, kind) {
   el.setSelectionRange(r.start, r.end);
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
+
+// Pictures: the toolbar button opens the photo picker; the chosen photo is shrunk and saved straight away.
+document.addEventListener('click', e => {
+  const add = e.target.closest?.('[data-img-add]');
+  if (add) document.getElementById(add.dataset.imgAdd + 'File')?.click();
+  const rm = e.target.closest?.('[data-img-remove]');
+  if (rm) setCardImage(rm.dataset.imgRemove, null);
+});
+document.addEventListener('change', async e => {
+  const id = e.target.dataset?.imgFile;
+  if (!id || !e.target.files[0]) return;
+  const file = e.target.files[0];
+  e.target.value = '';
+  const row = document.getElementById(id + 'Img');
+  row.innerHTML = '<span class="muted small">Adding picture…</span>';
+  try {
+    setCardImage(id, await addImage(file));
+  } catch (err) {
+    console.error(err);
+    setCardImage(id, row.dataset.mediaId || null);
+    toast(err.message || "Couldn't add that picture");
+  }
+});
 
 // Pressing a button mustn't take the focus (and the selection) away from the box.
 document.addEventListener('mousedown', e => { if (e.target.closest?.('[data-fmt]')) e.preventDefault(); });

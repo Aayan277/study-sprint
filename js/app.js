@@ -19,7 +19,7 @@ import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.6';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -592,10 +592,11 @@ function showSyncStatus(lastSync) {
   const st = sync.lastStatus();
   const when = st.at || lastSync;
   const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
-  el.className = st.state === 'error' ? 'warn' : 'muted';
+  const note = st.state === 'done' && st.note;          // e.g. pictures can't sync yet
+  el.className = st.state === 'error' || note ? 'warn' : 'muted';
   el.textContent = st.state === 'syncing' ? (st.progress || 'Syncing…')
     : st.state === 'error' ? `Couldn't sync: ${st.error}`
-    : when ? `Synced ${ago}` : 'Not synced yet';
+    : (when ? `Synced ${ago}` : 'Not synced yet') + (note ? `. ${note}` : '');
   if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
 }
 
@@ -747,6 +748,8 @@ async function start() {
   settings.theme = applyTheme(settings.theme);
   await seedSampleDeck();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
+  // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
+  sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
   // Opening the app with no "#/..." in the address shows the deck library.
   if (!location.hash) history.replaceState(null, '', '#/decks');
   addEventListener('hashchange', route);

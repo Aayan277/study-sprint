@@ -9,6 +9,7 @@ import { buildQueue, takeNext, addWaiting, newLimits, extraNewToday, aheadQueue,
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
+import { imgHTML } from './media.js';
 import { schedulerOptions } from './sched-settings.js';
 import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
@@ -291,10 +292,10 @@ function renderSession(el) {
     </div>
     <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
       <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>
-      <div class="flash-front${size}">${formatHTML(card.front)}</div>
+      <div class="flash-front${size}">${imgHTML(card.frontImage)}${formatHTML(card.front)}</div>
       <div class="flash-ans" ${R.flipped ? '' : 'hidden'}>
         ${R.typed ? typedResultHTML() : ''}
-        <div class="flash-back">${formatHTML(card.back)}</div>
+        <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
       </div>
       ${!R.flipped && !typeThis ? `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>` : ''}
     </article>

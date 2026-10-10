@@ -4,7 +4,9 @@
 //   fflate   unzips the file
 //   fzstd    unpacks the database in newer Anki files (2.1.50+), which is compressed
 //   sql.js   reads the SQLite database
-// readAnkiFile() returns { notes, models, reviews } for notesToImport() in anki.js.
+// readAnkiFile() returns { notes, models, reviews, media } for notesToImport() in anki.js.
+
+import { mediaList } from './anki.js';
 
 export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
 const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
@@ -12,27 +14,56 @@ const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
 
 export async function readAnkiFile(file) {
   const { unzipSync } = await import(FFLATE_URL);
+  const zip = new Uint8Array(await file.arrayBuffer());
   let files;
   try {
-    // Only unpack the database: the media (images, audio) can be large and isn't used.
-    files = unzipSync(new Uint8Array(await file.arrayBuffer()), { filter: f => /^collection\.anki2(1b?)?$/.test(f.name) });
+    // Unpack just the database and the list of pictures for now: the pictures themselves can be large,
+    // so they're unpacked one by one later, only the ones the cards use (see media.get below).
+    files = unzipSync(zip, { filter: f => /^(collection\.anki2(1b?)?|media)$/.test(f.name) });
   } catch (err) {
     throw new Error('not-anki');
   }
   // Newest format first. Newer files also hold an old-format collection.anki2 that only says "please update Anki".
+  const newFormat = !!files['collection.anki21b'];
+  const zstd = newFormat ? await import(FZSTD_URL) : null;
   let bytes = null;
-  if (files['collection.anki21b']) bytes = (await import(FZSTD_URL)).decompress(files['collection.anki21b']);
+  if (newFormat) bytes = zstd.decompress(files['collection.anki21b']);
   else bytes = files['collection.anki21'] || files['collection.anki2'];
   if (!bytes) throw new Error('not-anki');
 
   const SQL = await loadSqlJs();
   const db = new SQL.Database(bytes);
+  let result;
   try {
-    return readCollection(db);
+    result = readCollection(db);
   } finally {
     db.close();
   }
+
+  // The pictures: which file in the zip holds each one. Older files list them as JSON ({"0": "brain.png"});
+  // newer ones as a small compressed binary list, in zip order (see mediaList in anki.js).
+  const members = new Map();      // picture name → zip member name
+  try {
+    if (newFormat && files.media) mediaList(zstd.decompress(files.media)).forEach((name, i) => members.set(name.name, name.zipName ?? String(i)));
+    else if (files.media) Object.entries(JSON.parse(new TextDecoder().decode(files.media))).forEach(([member, name]) => members.set(name, member));
+  } catch (err) {
+    console.error('Could not read the list of pictures', err);
+  }
+  result.media = {
+    has: name => members.has(name),
+    // A picture's bytes and type, or null.
+    async get(name) {
+      const member = members.get(name);
+      if (member === undefined) return null;
+      const got = unzipSync(zip, { filter: f => f.name === member })[member];
+      if (!got) return null;
+      return { data: newFormat ? zstd.decompress(got) : got, type: imageType(name) };
+    }
+  };
+  return result;
 }
+
+const imageType = name => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' })[String(name).split('.').pop().toLowerCase()] || 'application/octet-stream';
 
 // sql.js isn't an ES module, so it's added as a <script> once. (Also used to make Anki files: export.js.)
 let sqlPromise = null;

@@ -117,3 +117,12 @@ test('Play starts definition-style decks on Back → front', () => {
   assert.equal(defaultQuestionType([...long.slice(0, 1), ...short]), 'front');    // mostly short
   assert.equal(defaultQuestionType([]), 'front');
 });
+
+test('questions carry the prompt side\'s picture; a picture-only answer can\'t be asked', () => {
+  const c = { id: 'p', front: 'Heart', back: 'Pumps blood', frontImage: 'img1', backImage: 'img2' };
+  assert.deepEqual(questionFor(c, 'front'), { prompt: 'Heart', answer: 'Pumps blood', image: 'img1' });
+  assert.deepEqual(questionFor(c, 'back'), { prompt: 'Pumps blood', answer: 'Heart', image: 'img2' });
+  const picOnly = { id: 'q', front: '', back: 'Lung', frontImage: 'img3' };
+  assert.equal(playableCards([picOnly], 'front').length, 1);         // see the picture, pick "Lung"
+  assert.equal(playableCards([picOnly], 'back').length, 0);          // can't pick a picture from text options
+});

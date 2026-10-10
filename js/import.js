@@ -223,16 +223,18 @@ export function parseRows(rows) {
 
 // Pick which columns are the front and back.
 export function buildCards(result, frontCol = 0, backCol = 1) {
-  // tags and ankiId: only Anki imports have them, one per row (ankiId links a row to its Anki review history).
+  // tags, ankiId and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki review history).
   return result.rows.map((r, i) => ({
     front: r[frontCol] ?? '', back: r[backCol] ?? '',
     ...(result.tags ? { tags: result.tags[i] } : {}),
-    ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {})
+    ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
+    ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {})
   }));
 }
 
 // A card only counts if both sides have something on them.
-export const isComplete = c => !!(c.front.trim() && c.back.trim());
+// (A side can also be just a picture: Anki imports bring their pictures along.)
+export const isComplete = c => !!((c.front.trim() || c.pictures?.front) && (c.back.trim() || c.pictures?.back));
 
 // Two fronts that differ only in capitals, spaces or punctuation count as the same.
 export function dupKey(s) {

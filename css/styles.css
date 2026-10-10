@@ -656,3 +656,15 @@ dialog.sheet.side .sheet-in{padding:24px 22px 32px}
 .rich{min-height:calc(var(--rows,2) * 1.55em + 24px);padding:11px 13px;border:1.5px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);font-size:1rem;line-height:1.55;overflow-wrap:anywhere;cursor:text}
 .rich:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .rich:empty::before{content:attr(data-placeholder);color:var(--muted)}
+
+/* Pictures on cards (media.js) */
+.card-img{display:block;max-width:100%;max-height:38vh;margin:0 auto 10px;border-radius:10px;object-fit:contain;background:var(--paper)}
+.card-img.missing,.img-thumb.missing{min-height:48px;min-width:120px;border:1px dashed var(--rule);font-size:.8rem;color:var(--muted)}
+.flash-front .card-img{max-height:32vh}
+.play-card .card-img{max-height:26vh}
+.img-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.img-row:empty{display:none}
+.img-thumb{max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--rule);object-fit:cover}
+.fmt-tools button svg{display:block}
+.pic-mark{color:var(--accent);font-size:.85em}
+@media (min-width:1024px){ main[data-route="review"] .flash-front .card-img{max-height:36vh} }

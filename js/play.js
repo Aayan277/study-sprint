@@ -19,6 +19,7 @@ import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
+import { imgHTML } from './media.js';
 import { $, esc, plural, toast } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
@@ -259,7 +260,7 @@ function showQuestion() {
   $('pLabel').textContent = { front: 'Pick the matching answer', back: 'Which card is this?', typing: 'Type the answer' }[G.qtype];
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
-  p.textContent = q.prompt;
+  p.innerHTML = imgHTML(q.image) + esc(q.prompt);      // the prompt side's picture, if it has one
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);

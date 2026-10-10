@@ -48,3 +48,8 @@ test('Anki: deck, note type and new cards', async () => {
   assert.deepEqual(ac.map(c => [c.nid, c.type, c.queue, c.due]), [[notes[0].id, 0, 0, 1], [notes[1].id, 0, 0, 2]]);
   assert.ok(ac.every(c => c.did === NOW));
 });
+
+test('Anki export: a side\'s picture goes after its text', async () => {
+  const { notes } = await ankiContents({ id: 'd', name: 'P' }, [{ id: 'c', front: 'Heart', back: '', tags: [], frontImageFile: 'a1.jpg', backImageFile: 'b2.png' }], 1_800_000_000_000);
+  assert.equal(notes[0].flds, 'Heart<br><img src="a1.jpg">\x1f<img src="b2.png">');
+});

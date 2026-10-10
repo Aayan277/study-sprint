@@ -217,7 +217,9 @@ async function readAnki(file) {
   $('found').textContent = '';
   $('fileName').textContent = `${file.name} · reading…`;
   const { readAnkiFile } = await import('./anki-read.js');
-  const all = notesToImport(...Object.values(await readAnkiFile(file)));
+  const { notes, models, reviews, media } = await readAnkiFile(file);
+  const all = notesToImport(notes, models, reviews);
+  S.ankiMedia = media;                 // the file's pictures, unpacked when the cards are added
   $('fileName').textContent = file.name;
   if (!all.rows.length) { showError('That Anki file has no cards in it.'); return; }
   // Several Anki decks inside: let the user pick one, or take them all.
@@ -299,7 +301,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => ({ ...c, front: c.back, back: c.front }));
+    S.cards = S.cards.map(c => ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -373,7 +375,9 @@ function refreshFlags() {
 
   const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
   if (S.result.headerSkipped) parts.push('The header row was skipped.');
-  if (S.result.images) parts.push(`<span class="warn">${plural(S.result.images, 'note')} had images, which were left out.</span>`);
+  if (S.result.images) {
+    parts.push(`${plural(S.result.images, 'note')} ${S.result.images === 1 ? 'has' : 'have'} pictures, which come along too${S.result.extraImages ? ' (the first one on each side)' : ''}.`);
+  }
   const prog = S.result.progress;
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
@@ -390,7 +394,7 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId }));
+  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, pictures: c.pictures }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -423,6 +427,30 @@ async function save() {
   const now = Date.now();
   // created + i keeps the cards in the order they were pasted.
   const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
+  // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
+  const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
+  if (withPics.length) {
+    const { processImage, saveImage } = await import('./media.js');
+    const done = new Map();          // a picture used on several cards is saved once
+    const picture = async name => {
+      if (!name) return null;
+      if (!done.has(name)) {
+        done.set(name, (async () => {
+          const got = await S.ankiMedia.get(name);
+          if (!got) return null;
+          const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
+          return saveImage(type, data);
+        })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+      }
+      return done.get(name);
+    };
+    for (const [n, [pics, card]] of withPics.entries()) {
+      $('saveBtn').textContent = `Adding pictures: ${n + 1} of ${withPics.length}…`;
+      const [f, b] = [await picture(pics.front), await picture(pics.back)];
+      if (f) card.frontImage = f;
+      if (b) card.backImage = b;
+    }
+  }
   if (deckId === NEW_DECK) {
     deckId = db.newId();
     cards.forEach(c => { c.deckId = deckId; });

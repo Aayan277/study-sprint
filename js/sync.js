@@ -89,6 +89,7 @@ export async function deleteServerData() {
   const auth = await session();
   if (!auth) throw new supa.SupaError('Sign in first.');
   await supa.deleteAllRows(auth.access_token, auth.user.id);
+  try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
 }
 
@@ -155,7 +156,13 @@ async function run() {
     if (rows.length < PAGE) break;
   }
 
-  // 2. Push what changed here. Anything changed while this runs is caught by the next sync.
+  // 2. Pictures first: send new ones before the cards that use them, and fetch ones that cards from other
+  //    devices use (so they work offline). A picture problem (e.g. storage not set up yet) doesn't stop the
+  //    rest of the sync; it's reported as a note.
+  let mediaNote = null;
+  try { await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
+
+  // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
   const changes = await db.localChangesSince(st.pushedUntil);
   const rows = newestOnly([
@@ -172,7 +179,40 @@ async function run() {
 
   st = { ...st, pushedUntil: pushStart - 1, lastSync: Date.now() };
   await db.setSetting('syncState', st);
-  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null });
+  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null, note: mediaNote });
+}
+
+// ---------- pictures ----------
+async function syncMedia(auth) {
+  const token = auth.access_token, uid = auth.user.id;
+  const pending = await db.mediaToUpload();
+  for (const [i, m] of pending.entries()) {
+    if (pending.length > 3) emit({ progress: `Sending pictures: ${i + 1} of ${pending.length}…` });
+    await supa.uploadMedia(token, uid, m.id, m.type, m.data);
+    await db.markUploaded([m.id]);
+  }
+  // Pictures that cards here use but this device doesn't have yet.
+  const have = new Set((await db.getAll('media')).map(m => m.id));
+  const want = [...new Set((await db.getAll('cards')).flatMap(c => [c.frontImage, c.backImage]).filter(id => id && !have.has(id)))];
+  for (const [i, id] of want.entries()) {
+    if (want.length > 3) emit({ progress: `Downloading pictures: ${i + 1} of ${want.length}…` });
+    await fetchMedia(token, uid, id);
+  }
+  // Pictures no card uses any more: remove them here and from the account.
+  const removed = await db.cleanMedia();
+  if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
+}
+async function fetchMedia(token, uid, id) {
+  const got = await supa.downloadMedia(token, uid, id);
+  if (!got) return null;
+  const m = { id, type: got.type, data: got.data, size: got.data.byteLength, created: Date.now() };
+  await db.putRemoteMedia(m);
+  return m;
+}
+// One picture, straight away (a card on screen needs it). null if signed out or the account doesn't have it.
+export async function downloadMedia(id) {
+  const auth = await session().catch(() => null);
+  return auth ? fetchMedia(auth.access_token, auth.user.id, id) : null;
 }
 
 // ---------- when to sync ----------

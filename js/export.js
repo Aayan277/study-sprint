@@ -49,7 +49,7 @@ const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-export
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
 
 // Everything that goes in the Anki database, as plain values (no database yet).
-//   deck   { id, name }    cards  [{ id, front, back, tags }]    now  ms
+//   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile? }]    now  ms
 // Returns { col, notes, cards } rows for the tables of Anki's older (and widely supported) file layout.
 export async function ankiContents(deck, cards, now = Date.now()) {
   const secs = Math.floor(now / 1000);
@@ -75,7 +75,9 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   };
   const notes = [], ankiCards = [];
   for (const [i, c] of cards.entries()) {
-    const front = toAnkiHTML(c.front), back = toAnkiHTML(c.back);
+    // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
+    const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
+    const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
     const noteId = now + i, cardId = now + cards.length + i;
     notes.push({ id: noteId, guid: ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1,
       tags: (c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '',
@@ -102,9 +104,26 @@ CREATE INDEX ix_cards_sched on cards (did, queue, due);
 CREATE INDEX ix_revlog_cid on revlog (cid);
 CREATE INDEX ix_notes_csum on notes (csum);`;
 
-// Build the .apkg file (a zip with the database and an empty media list). Browser only.
+// Build the .apkg file: a zip with the database, the pictures (files "0", "1", …) and the list saying which
+// is which ("media": {"0": "abc.jpg"}). Browser only.
 export async function makeApkg(deck, cards) {
-  const [{ loadSqlJs, FFLATE_URL }, contents] = await Promise.all([import('./anki-read.js'), ankiContents(deck, cards)]);
+  const { getMedia } = await import('./db.js');
+  const files = {}, names = {};
+  const fileFor = async id => {
+    if (!id) return null;
+    const m = await getMedia(id);
+    if (!m) return null;
+    const name = `${id}.${m.type === 'image/png' ? 'png' : m.type === 'image/gif' ? 'gif' : m.type === 'image/webp' ? 'webp' : 'jpg'}`;
+    if (!Object.values(names).includes(name)) {
+      const n = String(Object.keys(names).length);
+      names[n] = name;
+      files[n] = new Uint8Array(m.data);
+    }
+    return name;
+  };
+  const withFiles = [];
+  for (const c of cards) withFiles.push({ ...c, frontImageFile: await fileFor(c.frontImage), backImageFile: await fileFor(c.backImage) });
+  const [{ loadSqlJs, FFLATE_URL }, contents] = await Promise.all([import('./anki-read.js'), ankiContents(deck, withFiles)]);
   const [SQL, { zipSync }] = await Promise.all([loadSqlJs(), import(FFLATE_URL)]);
   const db = new SQL.Database();
   try {
@@ -117,7 +136,7 @@ export async function makeApkg(deck, cards) {
     contents.notes.forEach(n => insert('notes', n));
     contents.cards.forEach(c => insert('cards', c));
     const bytes = db.export();
-    return new Blob([zipSync({ 'collection.anki2': bytes, media: new TextEncoder().encode('{}') })], { type: 'application/octet-stream' });
+    return new Blob([zipSync({ 'collection.anki2': bytes, media: new TextEncoder().encode(JSON.stringify(names)), ...files })], { type: 'application/octet-stream' });
   } finally {
     db.close();
   }

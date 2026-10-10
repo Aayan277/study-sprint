@@ -16,6 +16,44 @@ export const htmlToText = html => htmlToMarks(html, { marks: false });
 
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
+// The picture file names in a field, in order: <img src="brain.png"> → ['brain.png'].
+export function imageNames(html) {
+  return [...String(html ?? '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)]
+    .map(m => htmlToMarks(m[1] ?? m[2] ?? m[3], { marks: false }))
+    .map(n => { try { return decodeURIComponent(n); } catch { return n; } })
+    .filter(Boolean);
+}
+
+// The list of pictures in a newer Anki file (after unzipping and decompressing its "media" file). It's a
+// small "protobuf" record: a list of entries, each with the picture's name (field 1) and, sometimes, the
+// zip file it's stored in (field 255); otherwise entry number i is in zip file "i".
+// Returns [{ name, zipName }].
+export function mediaList(bytes) {
+  const read = (buf, fields) => {
+    let i = 0;
+    const varint = () => { let n = 0, shift = 0, b; do { b = buf[i++]; n += (b & 0x7f) * 2 ** shift; shift += 7; } while (b & 0x80); return n; };
+    while (i < buf.length) {
+      const key = varint(), field = Math.floor(key / 8), wire = key & 7;
+      if (wire === 0) fields(field, varint());
+      else if (wire === 2) { const len = varint(); fields(field, buf.subarray(i, i + len)); i += len; }
+      else if (wire === 5) i += 4;
+      else if (wire === 1) i += 8;
+      else break;
+    }
+  };
+  const out = [];
+  read(bytes, (field, value) => {
+    if (field !== 1 || !(value instanceof Uint8Array)) return;
+    const entry = { name: '', zipName: undefined };
+    read(value, (f, v) => {
+      if (f === 1) entry.name = new TextDecoder().decode(v);
+      if (f === 255 && typeof v === 'number') entry.zipName = String(v);
+    });
+    out.push(entry);
+  });
+  return out;
+}
+
 // Cloze: which numbers does a text use? "{{c1::a}} {{c2::b}} {{c1::c}}" → [1, 2]
 const CLOZE = /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g;
 export function clozeNumbers(text) {
@@ -40,32 +78,38 @@ export function clozeCard(text, n) {
 // Returns the same shape as the other importers ({ columns, rows, format }), plus:
 //   tags    tags for each row
 //   decks   the Anki deck each row came from
-//   images  how many notes had images (left out)
+//   images  how many notes had pictures
+//   pictures  each row's picture names { front, back } (the first picture on each side; extraImages counts
+//             notes with more than that, which are left out)
 //   ankiIds   the Anki card each row came from, so its review history can come along
 //   reviews   Map Anki card id → its review history, for the rows' cards that have one
 //   progress  { cards, reviews }: how many rows have history, and how many reviews in all
 // Rows are [front, back, any other fields]. Cloze notes give one row per cloze number, with their
 // other fields (like Back Extra) after the back.
 export function notesToImport(notes, models, reviews = new Map()) {
-  const rows = [], tags = [], decks = [], ankiIds = [];
-  let images = 0;
+  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [];
+  let images = 0, extraImages = 0;
   const usedTypes = new Set();
   for (const note of notes) {
     const model = models.get(String(note.mid)) || { name: '', fields: [], cloze: false };
     const text = note.fields.map(f => htmlToMarks(f));       // bold, italics and lists kept as marks
     if (note.fields.some(hasImage)) images++;
+    // One picture per side: the first in the front field, and the first in the other fields for the back.
+    const frontPics = imageNames(note.fields[0]), backPics = note.fields.slice(1).flatMap(imageNames);
+    const pics = { front: frontPics[0] || null, back: backPics[0] || null };
+    if (frontPics.length > 1 || backPics.length > 1) extraImages++;
     const noteTags = (note.tags || []).map(t => t.toLowerCase());
     const nums = clozeNumbers(note.fields[0] ?? '');
     if (model.cloze || nums.length) {
       // Cloze text is in the first field. Turn it to text first so hidden answers lose their formatting too.
       for (const n of nums) {
         const { front, back } = clozeCard(text[0], n);
-        rows.push([front, back, ...text.slice(1)]); tags.push(noteTags); decks.push(note.deck || '');
+        rows.push([front, back, ...text.slice(1)]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
       }
       usedTypes.add('cloze');
     } else {
-      rows.push(text); tags.push(noteTags); decks.push(note.deck || '');
+      rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics);
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card (a reverse card's history isn't used)
       usedTypes.add(String(note.mid));
     }
@@ -77,7 +121,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const columns = Array.from({ length: width }, (_, i) =>
     (only && only.fields[i]) || (i === 0 ? 'Front (field 1)' : i === 1 ? 'Back (field 2)' : `Field ${i + 1}`));
   const used = new Map(ankiIds.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
-  return { columns, rows: padded, tags, decks, images, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
+  return { columns, rows: padded, tags, decks, images, extraImages, pictures, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
 }
 
@@ -121,7 +165,7 @@ export function onlyDeck(result, deck) {
   const keep = result.decks.map(d => d === deck || d.startsWith(deck + '::'));
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
-  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), ankiIds,
+  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), ankiIds,
     progress: progressOf(ankiIds, result.reviews || new Map()) };
 }
 
