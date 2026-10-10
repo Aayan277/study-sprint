@@ -183,6 +183,13 @@ Built in 3 parts:
 2. ✅ **Review and Play** (v1.5): a ⋯ menu during Review (edit, suspend, bury, flag, delete, card info) and keyboard shortcuts; leeches (cards forgotten 8 times are suspended and tagged automatically). Play gets a Card ⋯ button after each answer.
 3. ✅ **Study options** (v1.6): custom study (extra new cards today, review ahead, re-study cards forgotten today) and new cards per day for each deck. Reverse cards were skipped for now (Play already quizzes back → front).
 
+## Next batch (requested after sync)
+
+1. ✅ **Desktop layout** (v2.1): one app that adapts (not a separate version). From 1024px: sidebar instead of bottom tabs, wider pages, decks and Stats in grids, bigger Review card with keyboard hints. From 1200px: a card's panel opens beside the list (click from card to card; Escape closes). Phones unchanged.
+2. **Study calendar** in Stats (heatmap of study days).
+3. **Export a deck** as CSV or an Anki deck.
+4. **Exam date mode**, **card formatting** and **images on cards**: waiting on three design choices (how formatting is saved, how images sync, how strict exam mode is).
+
 ## Parked (not planned for now)
 
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.

@@ -19,7 +19,7 @@ import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -679,6 +679,8 @@ async function route() {
   const el = document.createElement('div');
   el.className = 'view';
   $('screen').replaceChildren(el);
+  // Which screen this is, for the desktop layout (some screens use the full width: see styles.css).
+  $('screen').dataset.route = ROUTES[name] ? name : 'decks';
   scrollTo(0, 0);
   try {
     await render(el, arg && decodeURIComponent(arg));

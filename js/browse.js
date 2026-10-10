@@ -134,6 +134,8 @@ export async function openCardPanel(card, ctx) {
   const logs = await db.getCardLogs(card.id);
   const now = Date.now();
   const status = cardStatus(card, state, now);
+  // In a side panel (wide screens), highlight the card it's showing.
+  document.querySelectorAll('.crow').forEach(r => r.classList.toggle('sel', r.dataset.id === card.id));
 
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
@@ -175,7 +177,7 @@ export async function openCardPanel(card, ctx) {
           <td class="${l.correct ? 'ok' : 'no'}">${RATING[l.rating] || (l.correct ? 'Right' : 'Wrong')}</td><td class="mono">${l.ms ? (l.ms / 1000).toFixed(1) + 's' : ''}</td></tr>`).join('')}
       </tbody></table>${logs.length > 30 ? '<p class="note">Showing the last 30.</p>' : ''}` : '<p class="note">No answers yet.</p>'}
     </details>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`);
+    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
 
   const again = async (msg, act) => {      // after a change: refresh the list, tell the caller, reopen with fresh data
     if (msg) toast(msg);
@@ -225,7 +227,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     <div class="field"><span>Flag</span>${flagButtons(-1)}</div>
     <div class="field"><span>Move to deck</span>${moveRow(decks, null)}</div>
     <div class="field"><span>Set due date</span>${studied.length ? dueRow() + (studied.length < n ? `<p class="note">Applies to the ${studied.length} you've studied. New cards are skipped.</p>` : '') : '<p class="note" style="margin:0">None of these have been reviewed yet.</p>'}</div>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`);
+    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
   const done = async msg => { toast(msg); closeSheet(); await refresh(); };
   const update = (changes, msg) => db.saveCards(selected.map(c => ({ ...c, ...changes }))).then(() => done(msg));
   $('ceClose').addEventListener('click', closeSheet);
@@ -259,7 +261,7 @@ export function openAddCard({ decks, deckId, refresh }) {
         <button class="btn ghost" type="button" id="acDone">Done</button>
         <button class="btn primary" type="submit">Add card</button>
       </div>
-    </form>`);
+    </form>`, { side: true });
   $('acFront').focus();
   $('acDone').addEventListener('click', closeSheet);
   $('acForm').addEventListener('submit', async e => {

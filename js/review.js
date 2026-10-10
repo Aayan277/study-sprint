@@ -15,6 +15,8 @@ import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
+// A computer with a mouse (vs a touchscreen): changes a hint's wording.
+const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
 const MAX_CARD_MS = 2 * 60 * 1000;
 
@@ -263,7 +265,7 @@ function renderSession(el) {
         ${R.typed ? typedResultHTML() : ''}
         <div class="flash-back">${esc(card.back)}</div>
       </div>
-      ${!R.flipped && !typeThis ? '<p class="flash-hint">Tap to show the answer</p>' : ''}
+      ${!R.flipped && !typeThis ? `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>` : ''}
     </article>
     ${typeThis && !R.flipped ? `
       <form class="typeform" id="typeForm" autocomplete="off">
@@ -271,7 +273,7 @@ function renderSession(el) {
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
     ${R.typing && !typeThis && !R.flipped ? '<p class="note center">Long answer: say it in your head, then flip.</p>' : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}</button>`}</div>`;
+    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`}</div>`;
 
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
@@ -287,7 +289,7 @@ function rateButtonsHTML() {
   const ivl = previewIntervals(R.statesById.get(R.current.card.id), R.sched);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
-      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span></button>`).join('')}</div>`;
+      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span><kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
 }
 
 function typedResultHTML() {

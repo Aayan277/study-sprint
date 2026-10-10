@@ -558,3 +558,49 @@ dialog.sheet{overflow-y:auto;overscroll-behavior:contain}
 .pw-rules li span[aria-hidden]{display:inline-block;width:1em;text-align:center}
 .pw-rules li.ok{color:var(--good)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ---------- Desktop layout ----------
+   The same app on a computer: from 1024px wide, the tabs become a sidebar and pages get more room.
+   Phones and narrow windows are unchanged. (JS side: openSheet's side panels in ui.js, data-route in app.js.) */
+.key-hint{display:none}
+.crow.sel .crow-btn{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+@media (hover:hover) and (pointer:fine){
+  /* Keyboard shortcuts on the buttons, only where there's a keyboard and mouse */
+  .key-hint{display:inline-block;margin-top:3px;padding:0 6px;border:1px solid var(--rule);border-bottom-width:2px;border-radius:5px;font:600 .7rem var(--f-mono);color:var(--muted);background:var(--paper);line-height:1.5}
+  #showBtn .key-hint{margin:0 0 0 8px;background:transparent;color:inherit;border-color:currentColor;opacity:.7}
+  .deck:hover{border-color:var(--accent)}
+  .rate:hover{border-color:var(--accent)}
+}
+@media (min-width:1024px){
+  :root{--side:232px}
+  /* The sidebar: logo and gear at the top, the four sections below */
+  .top{position:fixed;left:0;top:0;width:var(--side);border-bottom:0;border-right:1px solid var(--rule);background:var(--sheet)}
+  .top-in{max-width:none;padding:16px 12px 16px 18px}
+  .tabs{top:68px;right:auto;bottom:0;width:var(--side);border-top:0;border-right:1px solid var(--rule);padding:8px 0 0}
+  .tabs-in{display:flex;flex-direction:column;gap:2px;max-width:none;padding:0 10px}
+  .tab{flex-direction:row;justify-content:flex-start;gap:12px;min-height:44px;padding:0 12px;border-radius:8px;font-size:.95rem;font-weight:600;letter-spacing:0;color:var(--ink)}
+  .tab:hover{background:var(--accent-soft)}
+  .tab svg{width:20px;height:20px}
+  .tab[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+  /* Pages: next to the sidebar, roomier. Lists and Stats use the full width; the rest stay readable. */
+  main{max-width:none;margin:0 0 0 var(--side);padding:32px 40px 56px}
+  main > .view{max-width:1120px;margin:0 auto}
+  main[data-route="review"] > .view, main[data-route="play"] > .view, main[data-route="settings"] > .view, main[data-route="import"] > .view{max-width:760px}
+  body.has-side main{margin-right:var(--panel)}
+  .toast{left:calc(50% + var(--side) / 2);bottom:28px}
+  /* Decks: a grid of decks */
+  main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+  /* Stats: two columns of panels */
+  main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px;align-items:start}
+  main[data-route="stats"] > .view > :not(.card),
+  main[data-route="stats"] > .view > .card:last-child:nth-child(odd){grid-column:1 / -1}
+  /* Review: a bigger card */
+  main[data-route="review"] .flash{min-height:380px;padding:34px 32px 28px}
+  main[data-route="review"] .flash-front{font-size:2.5rem}
+  main[data-route="review"] .rate{min-height:72px}
+}
+/* Side panel (a card's panel next to the card list), from 1200px wide */
+:root{--panel:440px}
+dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--rule);box-shadow:-12px 0 32px rgba(0,0,0,.10);z-index:6;overflow:auto}
+dialog.sheet.side .sheet-in{padding:24px 22px 32px}
+@media (min-width:1024px){ .top .brand{white-space:nowrap;font-size:1.15rem} }
