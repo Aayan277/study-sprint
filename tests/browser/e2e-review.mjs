@@ -49,6 +49,13 @@ ok(await page.waitForFunction(f => document.querySelector('.flash-front')?.textC
 st = await dbq(db => db.getAll('cardStates')); logs = await dbq(db => db.getAll('reviewLog'));
 ok(st.length === 0 && logs.length === 0, 'undo removed the saved state and log');
 ok(JSON.stringify(await counts()) === '[12,0,0]', 'undo restored counts');
+// Enter on the focused card flips it; Enter on a focused rating button presses that button (Again), not the suggested Good
+await page.focus('#flash'); await page.keyboard.press('Enter'); await page.waitForSelector('.rate');
+await page.focus('.rate.r1'); await page.keyboard.press('Enter');
+await page.waitForFunction(() => !document.querySelector('.rate'));
+logs = await dbq(db => db.getAll('reviewLog'));
+ok(logs.length === 1 && logs[0].rating === 1, 'Enter on the Again button rates Again: ' + JSON.stringify(logs.map(l => l.rating)));
+await page.click('#undoBtn'); await page.waitForFunction(() => document.querySelector('.rv-counts')?.textContent.trim().split(/\s+/)[0] === '12');
 // tap card to flip, Again via button
 await page.click('#flash'); await page.click('.rate.r1');
 await page.waitForFunction(() => !document.querySelector('.rate'));

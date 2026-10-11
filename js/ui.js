@@ -75,4 +75,11 @@ export function initTapGuard() {
 }
 
 // "1 card" / "3 cards"
+// True when a key press is aimed at a button, link or form field. Those handle Enter and Space themselves,
+// so a screen-wide shortcut must leave them alone. `except` is the id of one element that should still count
+// as "not a control" (Review's card, which is focusable but has no key handling of its own).
+export const onControl = (e, except) => {
+  const control = e.target.closest?.('button, a, input, select, textarea, [role=button]');
+  return !!control && control.id !== except;
+};
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

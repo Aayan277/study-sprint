@@ -17,7 +17,7 @@ import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { chainMap, subtreeIds, treeOrder, deckPath, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, onControl } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -539,6 +539,7 @@ document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const inInput = e.target.matches('input, textarea, select');
+  const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {
     const k = e.key.toLowerCase();
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i'); return; }
@@ -546,9 +547,9 @@ document.addEventListener('keydown', e => {
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
   }
   if (!R.flipped) {
-    if (!inInput && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
+    if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
     return;
   }
   if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
-  else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
+  else if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
 });

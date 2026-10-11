@@ -22,7 +22,7 @@ import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
-import { $, esc, plural, toast } from './ui.js';
+import { $, esc, plural, toast, onControl } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
@@ -570,7 +570,7 @@ document.addEventListener('keydown', e => {
   if (!G || !$('pCard') || e.ctrlKey || e.metaKey || e.altKey || document.getElementById('sheet')?.open) return;
   if (e.key === 'Escape') { e.preventDefault(); const el = G.el; stopRound(); renderPlay(el); return; }
   if (G.answered) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); }
+    if ((e.key === 'Enter' || e.key === ' ') && !onControl(e)) { e.preventDefault(); next(); }
     return;
   }
   if (G.qtype !== 'typing' && /^[1-6]$/.test(e.key) && +e.key <= G.opts.length) { e.preventDefault(); answer(+e.key - 1); }

@@ -95,7 +95,9 @@ await setup(['input[name=qtype][value=front]']);
 await page.click('#startBtn'); await page.waitForSelector('#pCard');
 await page.waitForSelector('.fb.no', { timeout: 6000 });
 ok((await page.textContent('.fb-mark')).includes('Out of time'), 'timer runs out after 3s');
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+// Enter on a focused button presses that button (Quit), not "next question"
+await page.focus('#quitBtn'); await page.keyboard.press('Enter');
+ok(await page.waitForSelector('#startBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button quits');
 ok((await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).timer)) === 3, 'timer setting saved');
 
 // Lightning: wrong answer costs 3s
