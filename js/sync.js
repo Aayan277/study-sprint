@@ -46,6 +46,7 @@ async function signedIn(session) {
   // A different account than last time on this device (or the first): start from the beginning, so
   // everything here is sent and everything on the server is merged in.
   if (!syncState || syncState.userId !== session.user.id) {
+    await db.forgetSyncedMarks();   // records that came from other devices count as unsent too
     await db.setSetting('syncState', { userId: session.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 });
   }
   return syncNow();

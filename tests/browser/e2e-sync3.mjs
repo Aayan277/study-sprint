@@ -151,6 +151,16 @@ b = await snapshot(B);
 ok(fake.userRows('me@example.com').length === 0 && !b.signedIn && b.decks.includes('Geography'), 'delete synced data: server empty, B signed out, B keeps its copy');
 await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
 ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'geo'), 'signing in again sends this device\'s data back up');
+// A deck that came from another device (A) must be sent again too, not only B's own
+await run(A, async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'hist', name: 'History', color: '#46A758', created: Date.now() }, [{ id: 'hist-0', deckId: 'hist', front: 'Rome', back: 'x', tags: [], created: Date.now() }]); });
+await syncNow(A); await syncNow(B);
+ok((await snapshot(B)).decks.includes('History'), 'B pulled the History deck from A');
+await openSettings(B);
+await B.click('#delServerBtn'); await B.click('#dsYes'); await B.waitForSelector('#syncEmail');
+ok(fake.userRows('me@example.com').length === 0, 'server emptied again');
+await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
+ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'hist') && fake.userRows('me@example.com').some(r => r.store === 'cards' && r.id === 'hist-0'),
+  'signing in again also re-sends a deck and card that came from another device');
 await openSettings(B);
 await B.click('#resetBtn'); await B.click('#rsHere'); await B.waitForSelector('.deck');
 b = await snapshot(B);

@@ -476,6 +476,25 @@ export async function localChangesSince(since) {
   return { records, tombstones, settings };
 }
 
+// Forget which records and deleted markers the server already has, so the next sync sends all of them
+// again (including ones that came from other devices). Used when the sync bookmarks start over.
+export async function forgetSyncedMarks() {
+  const db = await openDB();
+  const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted'], 'readwrite');
+  await inTx(tx, async () => {
+    for (const name of Object.keys(SYNC_ID)) {
+      const os = tx.objectStore(name);
+      for (const r of await done(os.getAll())) {
+        if (r.syncedAt === undefined) continue;
+        const { syncedAt, ...rest } = r;
+        os.put(rest);
+      }
+    }
+    const deleted = tx.objectStore('deleted');
+    for (const t of await done(deleted.getAll())) if (t.synced) deleted.put({ ...t, synced: false });
+  });
+}
+
 // Save changes that came from the server. Each row only wins if it's newer than this device's version
 // (see decide() in sync-merge.js). Not stamped and not reported as a local change, so it isn't sent back.
 // Returns how many rows changed something here.
