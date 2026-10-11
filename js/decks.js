@@ -369,7 +369,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       ${isNew ? '' : `<label class="field"><span>Read aloud in</span>
         <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(code || !parentNow ? name : 'Same as the deck it’s inside')}</option>`).join('')}</select></label>
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
-        <span>In Review: the front when it appears, the back when you flip. (🔊 or R reads it any time.)</span></span>
+        <span>In Review: the front when it appears, the back when you flip. (The speaker button or R reads it any time.)</span></span>
         <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>`}
       ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
         <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">

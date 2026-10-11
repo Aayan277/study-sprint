@@ -17,6 +17,16 @@ export function toast(msg) {
   toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
 }
 
+// Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
+// (styles.css hides them when <body> has the class "focus"). Each screen turns it on when a round starts
+// and off when the round ends; going to any other screen also turns it off (see route() in app.js).
+export function setFocusMode(on) {
+  document.body.classList.toggle('focus', !!on);
+}
+
+// The speaker button's picture (it replaces the 🔊 emoji, which looks different on every phone).
+export const SPEAKER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+
 // Big screens (computers) get the desktop layout: a sidebar, wider pages, and side panels. See styles.css.
 const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side panel next to the page
 

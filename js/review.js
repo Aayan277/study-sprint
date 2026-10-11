@@ -17,7 +17,7 @@ import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { chainMap, subtreeIds, treeOrder, deckPath, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, onControl } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, onControl, setFocusMode, SPEAKER_ICON } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -305,14 +305,17 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  return `<span class="c-new${cls('new')}" title="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" title="Learning">${n('learn')}</span>
-    <span class="c-rev${cls('review')}" title="Review">${n('review')}</span>`;
+  // The word in front of each number (New, Lrn, Due) is drawn by the CSS from data-label, so the
+  // text inside each span stays just the number.
+  return `<span class="c-new${cls('new')}" data-label="New" title="New">${n('new')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Lrn" title="Learning">${n('learn')}</span>
+    <span class="c-rev${cls('review')}" data-label="Due" title="Review">${n('review')}</span>`;
 }
 
 function renderSession(el) {
   R.el = el;
   if (!R.current) return finish(el);
+  setFocusMode(true);
   const { card } = R.current;
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = R.typing && canType(plainText(card.back));
@@ -320,9 +323,9 @@ function renderSession(el) {
 
   el.innerHTML = `
     <div class="rv-head">
-      <div class="rv-counts mono" aria-label="Cards left: new, learning, review">${countsHTML()}</div>
+      <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, review">${countsHTML()}</div>
       <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
-      ${canSpeak() ? '<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">🔊</button>' : ''}
+      ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">⋯</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>
@@ -502,6 +505,7 @@ async function quick(act) {
 // ---------- 3. finish ----------
 async function finish(el) {
   R.active = false;
+  setFocusMode(false);
   const { reviewed, again, spent } = R.stats;
   // Reviews due by the end of tomorrow in the decks you just studied.
   const decks = new Set(R.deckIds);

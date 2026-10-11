@@ -9,7 +9,7 @@ import { renderLibrary, renderDeck } from './decks.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
@@ -26,7 +26,7 @@ let settings = { ...db.DEFAULT_SETTINGS };
 // ---------- settings ----------
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  const { skin, mode } = settings.theme;
+  const { skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">SETTINGS</span><h1>Settings</h1></div></div>
 
@@ -38,10 +38,12 @@ async function renderSettings(el) {
     <section class="section" aria-labelledby="apTitle">
       <h2 id="apTitle">Light or dark</h2>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
-        ${[['auto', 'Match my device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) =>
+        ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
-      <p class="note">Neon and Onyx are always dark.</p>
+      <label class="adv-row switch-row"><span><b>OLED black</b>
+        <span>Pure black page in dark mode, to save battery on OLED screens.</span></span>
+        <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -160,10 +162,16 @@ async function renderSettings(el) {
     saveTheme({ ...settings.theme, skin: b.dataset.skin });
     el.querySelectorAll('.skin').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   });
+  // The previews are redrawn after a light/dark or OLED change, so they show the new look
+  const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
   el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, mode: r.value });
-    $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); // previews switch between light and dark versions
+    redrawSkins();
   }));
+  $('oled').addEventListener('change', e => {
+    saveTheme({ ...settings.theme, oled: e.target.checked });
+    redrawSkins();
+  });
   drawSync();
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
@@ -707,6 +715,7 @@ async function route() {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
   closeSheet();
+  setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');

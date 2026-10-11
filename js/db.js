@@ -6,7 +6,7 @@
 //   cards       one row per card            { id, deckId, front, back, tags, created, updatedAt }
 //   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview, updatedAt }
 //   reviewLog   one row per answer          { id (auto), uid, cardId, timestamp, source, mode, correct, ms, rating, updatedAt }
-//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'ink', mode: 'auto' }
+//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'violet', mode: 'dark', oled: false }
 //   deleted     what was deleted, and when  { key, store, id, deletedAt }
 //   media       pictures on cards           { id, type, data (the file's bytes), size, created, uploaded }
 //               (a card points to its pictures with frontImage / backImage = a media id: see media.js)
@@ -22,7 +22,7 @@ import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS
 import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 
 export const DEFAULT_SETTINGS = {
-  theme: { skin: 'ink', mode: 'auto' }, // mode: 'auto' follows the device's light/dark setting, or 'light' / 'dark'
+  theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play

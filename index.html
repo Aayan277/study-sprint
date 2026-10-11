@@ -5,25 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Study Sprint</title>
 <meta name="description" content="Flashcards for university courses: spaced repetition plus timed game rounds.">
-<meta name="theme-color" content="#EEF0F4">
+<meta name="theme-color" content="#08090C">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Study Sprint">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <script>
   // Apply the saved theme before anything is drawn, so there's no flash of the wrong colors.
+  // This mirrors cleanTheme() in js/themes.js (keep the two in step): unknown or old theme names become
+  // Violet, and with nothing saved the app is Violet Dark, even when the device is set to light.
   try {
-    var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}');
-    if (t.skin && t.skin !== 'ink' && t.skin !== 'sumi') document.documentElement.setAttribute('data-skin', t.skin);
-    if (t.mode === 'light' || t.mode === 'dark') document.documentElement.setAttribute('data-theme', t.mode);
-  } catch (e) {}
+    var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}'), r = document.documentElement;
+    var skins = { violet: 1, ocean: 1, forest: 1, ember: 1, rose: 1 };
+    var old = { sage: 'forest', matcha: 'forest', cobalt: 'ocean', shinkansen: 'ocean', blossom: 'rose', sakura: 'rose' };
+    var skin = skins[t.skin] ? t.skin : (old[t.skin] || 'violet');
+    var dark = ['neon', 'onyx', 'kuro'].indexOf(t.skin) >= 0;
+    var mode = dark ? 'dark' : (t.mode === 'light' || t.mode === 'auto') ? t.mode : 'dark';
+    if (mode === 'auto') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    r.setAttribute('data-skin', skin);
+    r.setAttribute('data-theme', mode);
+    if (t.oled === true || t.skin === 'onyx' || t.skin === 'kuro') r.setAttribute('data-oled', 'on');
+  } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=DM+Sans:opsz,wght@9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">
 <link rel="stylesheet" href="css/styles.css">
 <script type="module" src="js/app.js"></script>
 </head>
@@ -32,7 +41,7 @@
   <div class="top-in">
     <a class="brand" href="#/decks">
       <!-- Logo: a flashcard with a lightning bolt (study + sprint) -->
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="3" width="22" height="24" rx="4" fill="var(--m3)"/><rect x="3" y="6" width="22" height="24" rx="4" fill="var(--accent)"/><path d="M15.5 10l-6 9h4.5l-1 6 6-9h-4.5z" fill="var(--accent-ink)"/></svg>
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="3" width="22" height="24" rx="4" fill="var(--accent-line)"/><rect x="3" y="6" width="22" height="24" rx="4" fill="var(--accent)"/><path d="M15.5 10l-6 9h4.5l-1 6 6-9h-4.5z" fill="var(--on-accent)"/></svg>
       Study Sprint</a>
     <a class="icon-btn" href="#/settings" id="gearBtn" data-tab="settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>

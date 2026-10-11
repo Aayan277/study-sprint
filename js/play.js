@@ -22,7 +22,7 @@ import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
-import { $, esc, plural, toast, onControl } from './ui.js';
+import { $, esc, plural, toast, onControl, setFocusMode } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
@@ -45,6 +45,7 @@ const sizeClass = text => (text.length > 120 ? ' xlong' : text.length > 50 ? ' l
 
 // Stop timers when a round is abandoned (leaving the tab, or quitting).
 function stopRound() {
+  setFocusMode(false);
   if (!G) return;
   cancelAnimationFrame(G.raf); clearTimeout(G.autoTimer); clearTimeout(G.flashTimer);
   G = null;
@@ -211,6 +212,7 @@ function start(el, opts) {
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
+  setFocusMode(true);
   el.innerHTML = `
     <div class="hud mono">
       <span id="hudA"></span>
@@ -506,6 +508,7 @@ async function finish() {
   clearTimeout(G.autoTimer); cancelAnimationFrame(G.raf); clearTimeout(G.flashTimer);
   const el = G.el, round = G;
   G = null;
+  setFocusMode(false);
   const total = round.log.length, correct = round.log.filter(l => l.ok).length;
   const acc = total ? correct / total : 0;
   const oks = round.log.filter(l => l.ok);
