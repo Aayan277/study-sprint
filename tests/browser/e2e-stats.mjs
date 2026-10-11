@@ -1,0 +1,79 @@
+import { chromium } from './pw.mjs';
+const SP = process.argv[2];
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', e => errors.push('pageerror ' + e.message));
+page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
+const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
+
+await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+// empty-ish state first: stats with no history
+await page.click('.tab[data-tab=stats]'); await page.waitForSelector('.pgrid');
+ok((await page.textContent('.pgrid')).includes('Review or play today'), 'no history: friendly streak message');
+ok((await page.textContent('.pgrid')).includes('–'), 'no history: retention shows a dash');
+
+// Seed: second deck, states at every level, 30 days of logs with a 5-day streak.
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const DAY = 86400000, now = Date.now();
+  const cs = (await db.getAll('cards')).sort((a, b) => a.created - b.created);
+  const st = (c, state, stability, dueIn, lapses) => ({ cardId: c.id, due: now + dueIn * DAY, stability, difficulty: 5, elapsedDays: 1, scheduledDays: 1, learningSteps: 0, reps: 4, lapses, state, lastReview: now - DAY });
+  await db.putMany('cardStates', [
+    st(cs[0], 2, 40, 12, 0), st(cs[1], 2, 30, 3, 1), st(cs[2], 2, 8, 1, 4), st(cs[3], 2, 5, 0, 2),
+    st(cs[4], 3, 1, 0.01, 3), st(cs[5], 1, 1, 0.005, 0), st(cs[6], 2, 3, -2, 1), st(cs[7], 2, 25, 6, 0)
+  ]);
+  const logs = [];
+  for (let d = 0; d < 30; d++) {
+    if (d >= 5 && d % 3 === 0) continue;               // gaps, but the last 5 days are all studied
+    const n = 3 + ((d * 7) % 11);
+    for (let i = 0; i < n; i++) {
+      const c = cs[(d + i) % 8];
+      logs.push({ cardId: c.id, timestamp: now - d * DAY - i * 60000, source: i % 4 === 0 ? 'play' : 'review', mode: 'flip', correct: (d + i) % 5 !== 0, ms: 4000, rating: 3, state: 2, applied: true, reason: 'due' });
+    }
+  }
+  await db.putMany('reviewLog', logs);
+  await db.addDeckWithCards({ id: 'chem', name: 'Chemistry', color: '#46A758', created: now + 1 },
+    ['Atom', 'Ion', 'Isotope', 'Molecule', 'Acid'].map((f, i) => ({ id: 'chem' + i, deckId: 'chem', front: f, back: f + ' definition', tags: [], created: i })));
+});
+await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=stats]'); await page.waitForSelector('.chart');
+ok((await page.textContent('.pgrid .big')).trim().startsWith('6'), 'streak of 6 days (days 0-5 studied): ' + (await page.textContent('.pgrid .big')).trim());
+ok((await page.locator('.wd.on').count()) === 6 && (await page.locator('.wd.today.on').count()) === 1, '7-day dots: 6 of 7 on (day 6 skipped), today highlighted');
+const retText = await page.locator('.pgrid .card').nth(1).textContent();
+ok(/\d+%/.test(retText) && /remembered \d+ of \d+ due reviews/.test(retText), 'retention shown: ' + retText.replace(/\s+/g, ' ').trim());
+ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#forecast .col').count()) === 7, '30-day and 7-day charts drawn');
+ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column is labeled');
+await noHScroll('stats');
+await page.screenshot({ path: SP + '/s-top.png' });
+// tooltip by tap
+await page.locator('#forecast .col').first().tap();
+ok(!(await page.isHidden('#forecast .chart-tip')) && (await page.textContent('#forecast .chart-tip')).includes('Due today'), 'tapping a column shows its tooltip: ' + await page.textContent('#forecast .chart-tip'));
+await page.locator('#forecast').scrollIntoViewIfNeeded(); await page.screenshot({ path: SP + '/s-forecast.png' });
+// table view
+await page.locator('#perDay + .chart-table summary').click();
+ok((await page.locator('#perDay + .chart-table tbody tr').count()) === 30, 'table view lists all 30 days');
+// hardest cards + drill
+ok((await page.locator('.hard-list li').count()) >= 5, 'hardest cards listed');
+ok((await page.locator('.hard-list li .f').first().textContent()) === 'Negative reinforcement', 'most-forgotten card first (4 lapses)');
+// mastery
+ok((await page.locator('.mtile').count()) === 17, 'mastery grid has every card (12 + 5)');
+ok((await page.locator('.mdeck h3').count()) === 2, 'grid grouped by deck');
+await page.locator('.mtile').nth(2).click();
+ok((await page.textContent('#mDetail')).includes('Negative reinforcement') && (await page.locator('#mDetail .hd').count()) > 0, 'tapping a square shows the card and its last answers');
+await page.locator('.mdeck').first().scrollIntoViewIfNeeded(); await page.screenshot({ path: SP + '/s-mastery.png' });
+// deck filter
+await page.selectOption('#sDeck', 'chem'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 5);
+ok((await page.textContent('.pgrid .card:nth-child(2)')).includes('–'), 'filter: Chemistry has no reviews yet');
+ok((await page.locator('.mdeck h3').count()) === 0, 'filter: single deck has no deck heading');
+await page.selectOption('#sDeck', 'all'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 17);
+// full page in dark mode
+await page.evaluate(async () => { const t = await import('./js/themes.js'); t.applyTheme({ skin: 'ink', mode: 'dark' }); });
+await page.screenshot({ path: SP + '/s-dark.png', fullPage: true });
+// drill these -> Play round of the hardest cards
+await page.click('#drillBtn'); await page.waitForSelector('#pCard');
+const hud = await page.textContent('#hudA');
+ok(page.url().endsWith('#/play') && /Q 1\/\d+/.test(hud), 'Drill these starts a Play round: ' + hud.trim());
+ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
+await browser.close();

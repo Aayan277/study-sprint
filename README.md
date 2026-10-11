@@ -138,3 +138,18 @@ node --test
 ```
 
 To run one file, use for example `node tests/import.test.js`. No install is needed: it uses Node's built-in test runner. `package.json` only tells Node the files are modules.
+
+### Browser tests
+
+`tests/browser` has tests that open the app in a real (hidden) browser and click through it: Review, Play,
+import and export, sync (against a fake Supabase), subdecks and more. Each check prints PASS or FAIL.
+
+```
+npm run test:browser            # all of them (a few minutes)
+npm run test:browser review     # only the ones with "review" in the name
+```
+
+On Claude Code's cloud computers this works as is. On your own computer, install the browser tools once:
+`npm install --no-save playwright && npx playwright install chromium`. Screenshots and downloads go in
+`tests/browser/out`. `tests/browser/files` has the sample files the tests import (Anki decks, a spreadsheet);
+`make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package).
