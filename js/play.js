@@ -410,24 +410,27 @@ async function record(round, entry) {
     reason: decision                   // why or why not: 'due', 'again', 'not-due', 'new' or 'already'
   };
   if (applies(decision)) {
+    let next = null;
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
       const deck = effectiveDeck(data.decks, entry.card.deckId);     // with what it inherits from its parent decks
       // The deck's own settings (or the overall ones), its exam limits, and evening out the reviews.
       data.balance ||= { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };
-      const next = rate(id, prev, rating, { ...examOptions(deckSchedulerOptions(data.settings, deck), deck, now), balance: data.balance }, now);
+      next = rate(id, prev, rating, { ...examOptions(deckSchedulerOptions(data.settings, deck), deck, now), balance: data.balance }, now);
+    } catch (err) {
+      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
+      console.error(err);
+      decision = 'not-due';
+      log.reason = 'not-due';
+      await db.addLog(log);
+    }
+    // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
+    if (next) {
       log.applied = true;
       await db.saveReview(next, log);
       data.statesById.set(id, next);
       data.playedToday.add(id);
       await checkLeech(round, entry.card, prev, next);
-    } catch (err) {
-      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
-      console.error(err);
-      decision = 'not-due';
-      log.applied = false;
-      log.reason = 'not-due';
-      await db.addLog(log);
     }
   } else {
     await db.addLog(log);

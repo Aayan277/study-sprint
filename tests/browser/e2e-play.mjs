@@ -5,7 +5,7 @@ const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, de
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror ' + e.message));
-page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
+page.on('console', m => { if (m.type() === 'error' && !m.text().includes('failing on purpose') && !m.text().includes('Could not save answer')) errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
@@ -120,5 +120,25 @@ await page.evaluate(async () => {
 await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
 await page.selectOption('#pDeck', 'tiny');
 ok(await page.isDisabled('input[name=qtype][value=front]') && await page.isChecked('input[name=qtype][value=typing]'), 'small deck: only Typing');
+// An error after the review is saved (here: the leech check can't save the card) must not log the answer twice
+await page.evaluate(async () => {
+  const db = await import('./js/db.js'); const day = 86400000;
+  await db.addDeckWithCards({ id: 'lk', name: 'Leechy', color: '#E5484D', created: Date.now() },
+    ['a', 'b', 'c', 'd'].map((f, i) => ({ id: 'lk' + i, deckId: 'lk', front: 'q' + f, back: 'ans' + f, tags: [], created: i })));
+  await db.putStates(['a', 'b', 'c', 'd'].map((f, i) => ({ cardId: 'lk' + i, due: Date.now() - day, stability: 5, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: Date.now() - 10 * day })));
+  await db.setSetting('leechThreshold', 1);
+});
+await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
+await page.selectOption('#pDeck', 'lk');
+await setup(['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]']);
+await page.click('#startBtn'); await page.waitForSelector('#pCard');
+await page.evaluate(() => { window.__put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'cards') throw new Error('failing on purpose'); return window.__put.apply(this, a); }; });
+const lkPrompt = await page.textContent('#pPrompt');
+const lkRight = await pick(null, 'ans' + lkPrompt.slice(1));
+await page.keyboard.press(String(((lkRight + 1) % 4) + 1)); await page.waitForSelector('.fb.no');
+await page.waitForTimeout(800);
+await page.evaluate(() => { IDBObjectStore.prototype.put = window.__put; });
+const lkLogs = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.cardId.startsWith('lk')));
+ok(lkLogs.length === 1 && lkLogs[0].applied === true, 'one review-log row for the answer, not two: ' + JSON.stringify(lkLogs.map(l => [l.applied, l.reason])));
 ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
 await browser.close();
