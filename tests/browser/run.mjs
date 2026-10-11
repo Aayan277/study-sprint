@@ -15,7 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const OUT = path.join(HERE, 'out');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain' };
+  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain', '.md': 'text/plain; charset=utf-8' };
 
 // Output folder, with the input files the tests read from out/files.
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -53,6 +53,7 @@ for (const t of tests) {
   if (bad) failed++;
   console.log(`${bad ? '✗' : '✓'} ${t}: ${passes} passed${bad ? `, ${problems.length || 'crashed'} problem(s)` : ''}`);
   problems.slice(0, 8).forEach(l => console.log('    ' + l));
+  if (out.code && !problems.length) out.text.trim().split('\n').slice(-6).forEach(l => console.log('    ' + l));   // a crash: its last lines
 }
 server.close();
 console.log(failed ? `\n${failed} of ${tests.length} test files had problems.` : `\nAll ${tests.length} test files passed.`);
