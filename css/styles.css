@@ -56,9 +56,9 @@
   --line:rgb(255 255 255 / .07); --line-strong:rgb(255 255 255 / .13); --hi:rgb(255 255 255 / .06);
   /* Rating colors. Fixed: they do not change with the accent. */
   --again:#FF6B5E; --again-tint:rgb(255 107 94 / .13); --again-line:rgb(255 107 94 / .38);
-  --hard:#FFB547;  --hard-tint:rgb(255 181 71 / .12);  --hard-line:rgb(255 181 71 / .34);
+  --hard:#FFC53D;  --hard-tint:rgb(255 197 61 / .12);  --hard-line:rgb(255 197 61 / .34);
   --good:#34D9A5;  --good-tint:rgb(52 217 165 / .12);  --good-line:rgb(52 217 165 / .34);
-  --easy:#4DA3FF;  --easy-tint:rgb(77 163 255 / .13);  --easy-line:rgb(77 163 255 / .36);
+  --easy:#5C9DFF;  --easy-tint:rgb(92 157 255 / .13);  --easy-line:rgb(92 157 255 / .36);
   --on-role:#0A0C12;                    /* text on a solid rating color (the Stats answer bars) */
   --pattern:rgb(255 255 255 / .3);      /* stripes and dots drawn on a solid color, a second cue besides the color */
   --e-1:inset 0 1px 0 var(--hi),0 0 0 1px var(--line);
@@ -73,7 +73,7 @@
   --line:rgb(11 13 18 / .09); --line-strong:rgb(11 13 18 / .15); --hi:rgb(255 255 255 / .7);
   --again:#C42B2B; --again-tint:#FDECEB; --again-line:#F3BDBA;
   --hard:#8F5300;  --hard-tint:#FFF3DF;  --hard-line:#EBCF9E;
-  --good:#0B7A5A;  --good-tint:#E3F5EF;  --good-line:#B3E0D0;
+  --good:#087054;  --good-tint:#E3F5EF;  --good-line:#B3E0D0;
   --easy:#1F5FC2;  --easy-tint:#E8F0FD;  --easy-line:#BCD3F6;
   --on-role:#FFFFFF;
   --pattern:rgb(0 0 0 / .22);
@@ -120,7 +120,7 @@
 .pv[data-skin="forest"]{
   --bg:#080C0A; --surface-1:#111A16; --surface-2:#17241E; --surface-3:#202F28; --surface-sunken:#0B110E;
   --text:#F2F8F5; --text-2:#A8BDB3; --text-3:#8FA39A; --control:#677E74;
-  --accent:#5ED08A; --accent-text:#8FE3AE; --accent-hover:#78D99D; --on-accent:#03150B; --acc:94 208 138;
+  --accent:#69D16F; --accent-text:#96E49A; --accent-hover:#82D987; --on-accent:#03150B; --acc:105 209 111;
 }
 /* Forest light */
 :root[data-skin="forest"][data-theme="light"],
@@ -134,7 +134,7 @@
 .pv[data-skin="ember"]{
   --bg:#0C0A08; --surface-1:#1A1411; --surface-2:#241C17; --surface-3:#2F2620; --surface-sunken:#110D0B;
   --text:#F8F4F2; --text-2:#BDB0A8; --text-3:#A3978F; --control:#7E7067;
-  --accent:#FF9548; --accent-text:#FFB47A; --accent-hover:#FFA561; --on-accent:#1A0B02; --acc:255 149 72;
+  --accent:#FF8A3D; --accent-text:#FFAE78; --accent-hover:#FF9C57; --on-accent:#1A0B02; --acc:255 138 61;
 }
 /* Ember light */
 :root[data-skin="ember"][data-theme="light"],
@@ -148,14 +148,14 @@
 .pv[data-skin="rose"]{
   --bg:#0C080A; --surface-1:#1A1115; --surface-2:#24171D; --surface-3:#2F2027; --surface-sunken:#110B0E;
   --text:#F8F2F5; --text-2:#BDA8B2; --text-3:#A38F98; --control:#7E6772;
-  --accent:#F26BB5; --accent-text:#FF9BD0; --accent-hover:#F784C3; --on-accent:#1C0612; --acc:242 107 181;
+  --accent:#EE6AC4; --accent-text:#FF9EDF; --accent-hover:#F384CF; --on-accent:#1C0616; --acc:238 106 196;
 }
 /* Rose light */
 :root[data-skin="rose"][data-theme="light"],
 .pv[data-skin="rose"][data-theme="light"]{
   --bg:#F6F1F3; --surface-1:#FFFFFF; --surface-2:#FAF7F9; --surface-3:#F1EAED; --surface-sunken:#EEE7EA;
   --text:#150A0F; --text-2:#59464E; --text-3:#67565E; --control:#8B747F;
-  --accent:#C02675; --accent-text:#A81E65; --accent-hover:#A81E65; --on-accent:#FFFFFF; --acc:192 38 117;
+  --accent:#B8238F; --accent-text:#A21C7E; --accent-hover:#A21C7E; --on-accent:#FFFFFF; --acc:184 35 143;
 }
 
 /* OLED black: dark mode only, pure black page. Placed after the themes so it wins. */
@@ -793,6 +793,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .inline-num input{width:96px;font:600 var(--fs-md) var(--f-num);padding:9px 10px}
 .switch-row{grid-template-columns:minmax(0,1fr) auto;align-items:center;cursor:pointer}
 .switch-row > span{display:grid;gap:4px}
+.chips + .switch-row{margin-top:var(--s-4)}
 .switch-row > span > span{font-size:var(--fs-sm);color:var(--text-2)}
 /* A switch: its edge is a 3:1 color, and a checked switch is accent with the knob on the right */
 .switch{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:var(--r-pill);background:var(--surface-3);border:1px solid var(--control);position:relative;cursor:pointer;margin:0;flex:none;transition:background var(--t-fast)}
