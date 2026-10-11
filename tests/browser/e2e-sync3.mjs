@@ -55,6 +55,7 @@ await C.click('#fpOk');
 await C.goto(fake.recoveryLink('me@example.com', APP));
 await C.waitForSelector('#pwForm');
 ok(new URL(C.url()).hash === '#/settings', 'the sign-in is taken out of the address');
+ok((await C.textContent('#sheet')).includes('Set a new password for me@example.com'), 'the reset sheet names the account');
 await C.fill('#pw1', 'newpass456'); await C.fill('#pw2', 'newpass45'); await C.click('#pwForm [type=submit]');
 ok((await C.textContent('#pwErr')).includes("don't match"), 'mismatched passwords caught');
 await C.screenshot({ path: SP + '/s3-newpw.png' });
@@ -66,6 +67,17 @@ ok(await run(C, () => sessionStorage.getItem('resetLink')) === null, 'reset link
 await C.goto(APP + '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
 await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('expired'));
 ok(new URL(C.url()).hash === '#/settings', 'an expired link is explained');
+// the link's own error text is never shown
+await C.goto(APP + '#error=server_error&error_description=Visit+evil.example+to+fix+this');
+await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes("didn’t work"));
+ok(!(await toastText(C)).includes('evil'), 'text from the link is not displayed');
+// a link for another account is refused while this device is signed in to a different one
+const X = await device('X');
+await run(X, async () => { const s = await import('./js/sync.js'); await s.createAccount('other@example.com', 'secret123'); });
+await C.goto(fake.recoveryLink('other@example.com', APP));
+await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('other@example.com'));
+ok((await toastText(C)).includes('signed in as me@example.com') && !(await C.isVisible('#pwForm')), 'a link for a different account is refused, with no password form');
+ok(fake.users.get('other@example.com').password === 'secret123' && (await run(C, async () => (await (await import('./js/sync.js')).account()).email)) === 'me@example.com', 'nothing changed: still signed in as me@example.com');
 // change password while signed in
 await openSettings(C);
 await C.click('#pwBtn'); await C.fill('#pw1', 'changed789'); await C.fill('#pw2', 'changed789'); await C.click('#pwForm [type=submit]');

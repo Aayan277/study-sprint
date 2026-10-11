@@ -752,13 +752,16 @@ function keptResetLink() {
   try { return JSON.parse(sessionStorage.getItem('resetLink') || 'null'); } catch { return null; }
 }
 let resetShown = false;
-function showResetLink(link) {
+async function showResetLink(link) {
   resetShown = true;
   const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
   if (link.error) { forget(); toast(link.error); return; }
+  // Show whose account the link is for, and refuse a link for a different account than this device's.
+  let user;
+  try { user = await sync.lookUpResetLink(link.session); } catch (err) { forget(); toast(err.message); return; }
   openPasswordSheet({
     title: 'Set a new password',
-    intro: '<p class="note" style="margin-top:0">You opened a password reset link. Choose a new password, then use it to sign in on your other devices.</p>',
+    intro: `<p class="note" style="margin-top:0">Set a new password for <b>${esc(user.email)}</b>. Then use it to sign in on your other devices.</p>`,
     save: async pw => { await sync.finishPasswordReset(link.session, pw); forget(); },
     done: 'Password saved. You\'re signed in.'
   });

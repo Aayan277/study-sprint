@@ -87,7 +87,7 @@ test('reading a password reset link', () => {
   const link = parseAuthLink('#access_token=abc&expires_at=1900000000&expires_in=3600&refresh_token=r1&token_type=bearer&type=recovery');
   assert.deepEqual(link, { session: { access_token: 'abc', refresh_token: 'r1', expires_at: 1900000000 } });
   assert.match(parseAuthLink('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid').error, /expired/);
-  assert.equal(parseAuthLink('#error=server_error&error_description=Something+broke').error, 'Something broke');
+  assert.match(parseAuthLink('#error=server_error&error_description=Click+evil.example+now').error, /^That link didn’t work/);   // the link's own text is never shown
   assert.equal(parseAuthLink('#/decks'), null);
   assert.equal(parseAuthLink(''), null);
   assert.equal(parseAuthLink('#access_token=abc&type=signup'), null);      // only reset links are handled

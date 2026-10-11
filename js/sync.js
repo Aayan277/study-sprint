@@ -63,10 +63,23 @@ export const sendPasswordReset = email => supa.sendPasswordReset(email.trim(), a
 export function recoveryFromLink(hash = location.hash) {
   return parseAuthLink(hash);
 }
+// Whose account a reset link is for: { id, email }. Anyone can make a link for their own account, so this
+// refuses (with a message to show) if the link is for someone else than the account signed in on this device.
+export async function lookUpResetLink(linkSession) {
+  let user;
+  try { user = await supa.getUser(linkSession.access_token); } catch {
+    throw new supa.SupaError('That reset link has expired, was already used, or couldn’t be checked. Ask for a new one.');
+  }
+  const current = await account();
+  if (current && current.id !== user.id) {
+    throw new supa.SupaError(`That link is for ${user.email}, but this device is signed in as ${current.email}. Sign out here first, then open the link again.`);
+  }
+  return user;
+}
 // Set the new password from a reset link, and sign in with it.
 export async function finishPasswordReset(linkSession, password) {
+  const user = await lookUpResetLink(linkSession);   // checked again here, right before anything changes
   await supa.setPassword(linkSession.access_token, password);
-  const user = await supa.getUser(linkSession.access_token);
   return signedIn({ ...linkSession, user });
 }
 // Change the password while signed in.
