@@ -54,6 +54,13 @@ const after = { decks: await count('decks'), cards: await count('cards'), states
 ok(JSON.stringify(after) === JSON.stringify(before), 'restore brings everything back: ' + JSON.stringify(after));
 ok(await page.evaluate(() => document.documentElement.dataset.skin === 'sage' && document.documentElement.dataset.theme === 'dark'), 'restore brings the theme back');
 
+// Restoring something deleted since the backup: its old delete marker goes too (or syncing would delete it again)
+const deckId = await page.evaluate(async () => { const db = await import('./js/db.js'); const d = (await db.getDecks())[0]; await db.deleteDeck(d.id); return d.id; });
+ok(await page.evaluate(async id => !!(await (await import('./js/db.js')).get('deleted', 'decks:' + id)), deckId), 'deleting a deck leaves a delete marker');
+await page.click('#gearBtn'); await page.waitForSelector('#importIn');
+await page.setInputFiles('#importIn', file); await page.waitForSelector('#rbYes'); await page.click('#rbYes'); await page.waitForSelector('.deck');
+ok(await page.evaluate(async id => { const db = await import('./js/db.js'); return !(await db.get('deleted', 'decks:' + id)) && !!(await db.get('decks', id)); }, deckId), 'restore brings the deck back and removes its delete marker');
+
 // A bad backup is refused or fails safely: the data stays as it was
 await page.click('#gearBtn'); await page.waitForSelector('#importIn');
 fs.writeFileSync(SP + '/bad-card.json', JSON.stringify({ ...data, cards: [{ deckId: 'x', front: 'no id' }, ...data.cards] }));

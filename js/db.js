@@ -419,6 +419,7 @@ export async function importAll(data, { everywhere = false } = {}) {
         let rec = upgradeRecord(name, x, now);
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
+        tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing
         kept[name].add(String(rec[SYNC_ID[name]]));
       }
     }
