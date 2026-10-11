@@ -434,84 +434,94 @@ async function save() {
     deckName = $('deckSel').selectedOptions[0].textContent;
   }
 
-  $('saveBtn').disabled = true;
-  const now = Date.now();
-  // created + i keeps the cards in the order they were pasted.
-  const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
-  // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
-  const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
-  if (withPics.length) {
-    const { processImage, saveImage } = await import('./media.js');
-    const done = new Map();          // a picture used on several cards is saved once
-    const picture = async name => {
-      if (!name) return null;
-      if (!done.has(name)) {
-        done.set(name, (async () => {
-          const got = await S.ankiMedia.get(name);
-          if (!got) return null;
-          const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
-          return saveImage(type, data);
-        })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
-      }
-      return done.get(name);
-    };
-    for (const [n, [pics, card]] of withPics.entries()) {
-      $('saveBtn').textContent = `Adding pictures: ${n + 1} of ${withPics.length}…`;
-      const [f, b] = [await picture(pics.front), await picture(pics.back)];
-      if (f) card.frontImage = f;
-      if (b) card.backImage = b;
-    }
-  }
-  let color;
-  if (deckId === NEW_DECK) {
-    deckId = db.newId();
-    color = DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
-    await db.addDeckWithCards({ id: deckId, name: deckName, course: '', color, parentId: '', created: now });
-  }
-  cards.forEach(c => { c.deckId = deckId; });
-  // Anki subdecks: make (or reuse) the same subdecks inside the chosen deck, and put each card in its own.
-  let made = 0;
-  if (!$('subRow').hidden && $('ankiSubs').checked) {
-    const all = await db.getDecks();
-    color ||= all.find(d => d.id === deckId)?.color;
-    const paths = subdeckPaths(toAdd.map(c => c.ankiDeck));
-    const found = new Map();                     // 'parentId/name' → deck id
-    const subdeck = async (parentId, name) => {
-      const key = `${parentId}/${name}`;
-      if (!found.has(key)) {
-        const existing = all.find(d => d.parentId === parentId && d.name === name);
-        if (existing) found.set(key, existing.id);
-        else {
-          const deck = { id: db.newId(), name, course: '', color, parentId, created: now + 1 + made++ };
-          await db.saveDeck(deck);
-          all.push(deck);
-          found.set(key, deck.id);
+  // Read what we need from the page now: the picture step below takes a while, and you may leave the screen meanwhile.
+  const saveBtn = $('saveBtn');
+  const makeSubdecks = !$('subRow').hidden && $('ankiSubs').checked;
+  saveBtn.disabled = true;
+  try {
+    const now = Date.now();
+    // created + i keeps the cards in the order they were pasted.
+    const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
+    // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
+    const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
+    if (withPics.length) {
+      const { processImage, saveImage } = await import('./media.js');
+      const done = new Map();          // a picture used on several cards is saved once
+      const picture = async name => {
+        if (!name) return null;
+        if (!done.has(name)) {
+          done.set(name, (async () => {
+            const got = await S.ankiMedia.get(name);
+            if (!got) return null;
+            const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
+            return saveImage(type, data);
+          })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
         }
+        return done.get(name);
+      };
+      for (const [n, [pics, card]] of withPics.entries()) {
+        saveBtn.textContent = `Adding pictures: ${n + 1} of ${withPics.length}…`;
+        const [f, b] = [await picture(pics.front), await picture(pics.back)];
+        if (f) card.frontImage = f;
+        if (b) card.backImage = b;
       }
-      return found.get(key);
-    };
-    for (const [i, path] of paths.entries()) {
-      let id = deckId;
-      for (const name of path) id = await subdeck(id, name);
-      cards[i].deckId = id;
     }
-  }
-  await db.putMany('cards', cards);
-  let withHistory = 0;
-  if (replay) {
+    // Nothing is saved until everything is ready; then it all goes in together (see db.addImport).
+    const newDecks = [];
+    let color;
+    if (deckId === NEW_DECK) {
+      deckId = db.newId();
+      color = DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
+      newDecks.push({ id: deckId, name: deckName, course: '', color, parentId: '', created: now });
+    }
+    cards.forEach(c => { c.deckId = deckId; });
+    // Anki subdecks: make (or reuse) the same subdecks inside the chosen deck, and put each card in its own.
+    let made = 0;
+    if (makeSubdecks) {
+      const all = await db.getDecks();
+      color ||= all.find(d => d.id === deckId)?.color;
+      const paths = subdeckPaths(toAdd.map(c => c.ankiDeck));
+      const found = new Map();                     // 'parentId/name' → deck id
+      const subdeck = (parentId, name) => {
+        const key = `${parentId}/${name}`;
+        if (!found.has(key)) {
+          const existing = all.find(d => d.parentId === parentId && d.name === name);
+          if (existing) found.set(key, existing.id);
+          else {
+            const deck = { id: db.newId(), name, course: '', color, parentId, created: now + 1 + made++ };
+            newDecks.push(deck);
+            all.push(deck);
+            found.set(key, deck.id);
+          }
+        }
+        return found.get(key);
+      };
+      for (const [i, path] of paths.entries()) {
+        let id = deckId;
+        for (const name of path) id = subdeck(id, name);
+        cards[i].deckId = id;
+      }
+    }
+    let withHistory = 0;
     const states = [], logs = [];
-    cards.forEach((card, i) => {
-      const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
-      if (!entries) return;
-      const { state, logs: cardLogs } = replay(card.id, entries);
-      if (state) states.push(state);
-      if (cardLogs.length) withHistory++;
-      cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
-    });
-    if (logs.length) await db.putMany('reviewLog', logs);
-    if (states.length) await db.putStates(states);
+    if (replay) {
+      cards.forEach((card, i) => {
+        const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
+        if (!entries) return;
+        const { state, logs: cardLogs } = replay(card.id, entries);
+        if (state) states.push(state);
+        if (cardLogs.length) withHistory++;
+        cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
+      });
+    }
+    await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
+    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
+    // replace() so the back gesture from the deck doesn't land on this finished import.
+    location.replace(`#/deck/${deckId}`);
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't add the cards. Nothing was saved, so you can try again.");
+    saveBtn.disabled = false;
+    if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
-  toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
-  // replace() so the back gesture from the deck doesn't land on this finished import.
-  location.replace(`#/deck/${deckId}`);
 }

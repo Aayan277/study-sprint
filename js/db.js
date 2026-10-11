@@ -174,6 +174,22 @@ export async function addDeckWithCards(deck, cards = [], { at = Date.now() } = {
   changed();
 }
 
+// Save a whole import in one go: new decks, the cards, and (from Anki) review history and schedules.
+// All or nothing, so a failure never leaves an empty deck behind.
+export async function addImport({ decks = [], cards = [], reviewLog = [], cardStates = [] }) {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'reviewLog', 'cardStates'], 'readwrite');
+  const now = Date.now();
+  await inTx(tx, () => {
+    for (const [name, rows] of Object.entries({ decks, cards, reviewLog, cardStates })) {
+      const os = tx.objectStore(name);
+      rows.forEach(r => os.put(stamp(name, r, now)));
+    }
+  });
+  scheduleChanges++;
+  changed();
+}
+
 // Delete a deck plus everything that belongs to it: its cards, their schedules and their review history.
 // All in one transaction, so it can't half-finish.
 export async function deleteDeck(deckId) {

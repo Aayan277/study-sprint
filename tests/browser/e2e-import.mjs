@@ -5,7 +5,7 @@ const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, de
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror ' + e.message));
-page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
+page.on('console', m => { if (m.type() === 'error' && !m.text().includes('failing on purpose')) errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
@@ -94,5 +94,16 @@ await page.click('#tab-paste'); await page.fill('#pasteBox', 'a - b'); await pag
 await page.fill('#newName', ''); await page.click('#saveBtn');
 ok(page.url().includes('#/import'), 'needs a deck name before saving');
 await noHScroll('import with preview');
+// a save that fails half way: toast, nothing saved (no empty deck), button usable again, and a retry works
+const decksBefore = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).length);
+await page.fill('#newName', 'Doomed');
+await page.evaluate(() => { window.__put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'cards') throw new Error('failing on purpose'); return window.__put.apply(this, a); }; });
+await page.click('#saveBtn');
+await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes("Couldn't add the cards"));
+const decksAfter = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).length);
+ok(decksAfter === decksBefore && !(await page.isDisabled('#saveBtn')) && page.url().includes('#/import'), 'failed import saves nothing (no empty deck), keeps the screen and re-enables the button');
+await page.evaluate(() => { IDBObjectStore.prototype.put = window.__put; });
+await page.click('#saveBtn'); await page.waitForSelector('.crow');
+ok((await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).length)) === decksBefore + 1, 'retry saves one deck');
 ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
 await browser.close();
