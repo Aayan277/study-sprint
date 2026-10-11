@@ -6,7 +6,7 @@ const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, de
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror ' + e.message));
-page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
+page.on('console', m => { if (m.type() === 'error' && !m.text().includes('InvalidCharacterError')) errors.push('console ' + m.text()); });   // the bad-picture restore test logs one on purpose
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const count = name => page.evaluate(async n => (await (await import('./js/db.js')).getAll(n)).length, name);
 
@@ -53,6 +53,20 @@ await page.click('#rbYes'); await page.waitForSelector('.deck');
 const after = { decks: await count('decks'), cards: await count('cards'), states: await count('cardStates'), logs: await count('reviewLog') };
 ok(JSON.stringify(after) === JSON.stringify(before), 'restore brings everything back: ' + JSON.stringify(after));
 ok(await page.evaluate(() => document.documentElement.dataset.skin === 'sage' && document.documentElement.dataset.theme === 'dark'), 'restore brings the theme back');
+
+// A bad backup is refused or fails safely: the data stays as it was
+await page.click('#gearBtn'); await page.waitForSelector('#importIn');
+fs.writeFileSync(SP + '/bad-card.json', JSON.stringify({ ...data, cards: [{ deckId: 'x', front: 'no id' }, ...data.cards] }));
+await page.setInputFiles('#importIn', SP + '/bad-card.json');
+await page.waitForSelector('#toast:not([hidden])');
+ok((await page.textContent('#toast')).includes('damaged'), 'a backup with a card that has no id is refused');
+// Passes the checks, but the picture's bytes can't be read: the save fails half way and must change nothing
+fs.writeFileSync(SP + '/bad-pic.json', JSON.stringify({ ...data, media: [{ id: 'm1', type: 'image/png', data: '!!!not base64!!!' }] }));
+await page.setInputFiles('#importIn', SP + '/bad-pic.json'); await page.waitForSelector('#rbYes');
+await page.click('#rbYes');
+await page.waitForFunction(() => document.querySelector('#toast').textContent.includes("Couldn't restore"));
+const afterBad = { decks: await count('decks'), cards: await count('cards'), states: await count('cardStates'), logs: await count('reviewLog') };
+ok(JSON.stringify(afterBad) === JSON.stringify(before), 'failed restore leaves the data untouched: ' + JSON.stringify(afterBad));
 
 // Backup file dropped into Import
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox');

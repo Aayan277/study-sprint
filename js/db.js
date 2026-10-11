@@ -109,6 +109,15 @@ const finished = tx => new Promise((resolve, reject) => {
   tx.onerror = () => reject(tx.error);
   tx.onabort = () => reject(tx.error || new Error('Save was cancelled'));
 });
+// Runs the steps that fill a transaction, then waits for it to be saved. If a step throws, the transaction
+// is cancelled so nothing is saved, and the error is passed on. (IndexedDB doesn't do this by itself when
+// the code is inside an async function: it would save whatever was done before the error.)
+async function inTx(tx, steps) {
+  const saved = finished(tx);
+  saved.catch(() => {});   // the cancel below makes this fail too: the error we rethrow is the one that matters
+  try { await steps(); } catch (e) { try { tx.abort(); } catch (e2) { /* already finished */ } throw e; }
+  await saved;
+}
 
 async function store(name, mode = 'readonly') {
   const db = await openDB();
@@ -134,8 +143,7 @@ export async function putMany(name, values) {
   const tx = db.transaction(name, 'readwrite');
   const os = tx.objectStore(name);
   const now = Date.now();
-  values.forEach(v => os.put(stamp(name, v, now)));
-  await finished(tx);
+  await inTx(tx, () => values.forEach(v => os.put(stamp(name, v, now))));
   changed();
 }
 
@@ -158,10 +166,11 @@ export async function addDeckWithCards(deck, cards = [], { at = Date.now() } = {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards'], 'readwrite');
   const now = at;
-  tx.objectStore('decks').put(stamp('decks', deck, now));
-  const cs = tx.objectStore('cards');
-  cards.forEach(c => cs.put(stamp('cards', c, now)));
-  await finished(tx);
+  await inTx(tx, () => {
+    tx.objectStore('decks').put(stamp('decks', deck, now));
+    const cs = tx.objectStore('cards');
+    cards.forEach(c => cs.put(stamp('cards', c, now)));
+  });
   changed();
 }
 
@@ -344,8 +353,22 @@ export function checkBackup(data) {
   if (!data || typeof data !== 'object' || data.format !== BACKUP_FORMAT) return "This isn't a Study Sprint backup file.";
   if (data.version > BACKUP_VERSION) return 'This backup was made by a newer version of the app. Update the app first.';
   for (const k of ['decks', 'cards', 'cardStates', 'reviewLog']) if (!Array.isArray(data[k])) return 'This backup file is damaged (missing ' + k + ').';
+  // Every record needs its key (the field it's stored under), or saving it would fail halfway.
+  const keyField = { decks: 'id', cards: 'id', cardStates: 'cardId' };
+  for (const [k, field] of Object.entries(keyField)) {
+    if (!data[k].every(r => r && typeof r === 'object' && validKey(r[field]))) return 'This backup file is damaged (a record in ' + k + ' has no ' + field + ').';
+  }
+  if (!data.reviewLog.every(r => r && typeof r === 'object')) return 'This backup file is damaged (a record in reviewLog is broken).';
+  // Deck colors go into style attributes, so only plain hex colors are allowed.
+  if (!data.decks.every(d => d.color === undefined || SAFE_COLOR.test(d.color))) return 'This backup file is damaged (a deck has an invalid color).';
+  if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {
+    return 'This backup file is damaged (a picture is invalid or not a supported image type).';
+  }
   return null;
 }
+const validKey = v => (typeof v === 'string' && v !== '') || (typeof v === 'number' && Number.isFinite(v));
+const SAFE_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];   // no SVG: it can contain scripts
 
 // Replace everything on this device with a backup. All in one transaction: if anything fails,
 // nothing changes.
@@ -356,48 +379,48 @@ export async function importAll(data, { everywhere = false } = {}) {
   const db = await openDB();
   const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted', 'media'];
   const tx = db.transaction(names, 'readwrite');
-  const saved = finished(tx);
-  const now = Date.now();
-  // Pictures from the backup (older backups have none). Ones already here are kept.
-  for (const m of data.media || []) {
-    const bytes = fromBase64(m.data);
-    tx.objectStore('media').put({ id: m.id, type: m.type, data: bytes, size: bytes.byteLength, created: now, uploaded: false });
-  }
-  // What's here now, to mark as deleted if the backup doesn't have it.
-  const before = {};
-  if (everywhere) {
+  await inTx(tx, async () => {
+    const now = Date.now();
+    // Pictures from the backup (older backups have none). Ones already here are kept.
+    for (const m of data.media || []) {
+      const bytes = fromBase64(m.data);
+      tx.objectStore('media').put({ id: m.id, type: m.type, data: bytes, size: bytes.byteLength, created: now, uploaded: false });
+    }
+    // What's here now, to mark as deleted if the backup doesn't have it.
+    const before = {};
+    if (everywhere) {
+      for (const name of Object.keys(SYNC_ID)) {
+        before[name] = (await done(tx.objectStore(name).getAll())).map(r => String(r[SYNC_ID[name]])).filter(id => id !== 'undefined');
+      }
+    }
+    const oldKeys = await done(tx.objectStore('settings').getAllKeys());
+    ['decks', 'cards', 'cardStates', 'reviewLog'].forEach(n => tx.objectStore(n).clear());
+    // Backups from before sync existed are filled in the same way as the version 2 upgrade.
+    const kept = {};
     for (const name of Object.keys(SYNC_ID)) {
-      before[name] = (await done(tx.objectStore(name).getAll())).map(r => String(r[SYNC_ID[name]])).filter(id => id !== 'undefined');
+      kept[name] = new Set();
+      for (const x of data[name]) {
+        let rec = upgradeRecord(name, x, now);
+        if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
+        tx.objectStore(name).put(rec);
+        kept[name].add(String(rec[SYNC_ID[name]]));
+      }
     }
-  }
-  const oldKeys = await done(tx.objectStore('settings').getAllKeys());
-  ['decks', 'cards', 'cardStates', 'reviewLog'].forEach(n => tx.objectStore(n).clear());
-  // Backups from before sync existed are filled in the same way as the version 2 upgrade.
-  const kept = {};
-  for (const name of Object.keys(SYNC_ID)) {
-    kept[name] = new Set();
-    for (const x of data[name]) {
-      let rec = upgradeRecord(name, x, now);
-      if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
-      tx.objectStore(name).put(rec);
-      kept[name].add(String(rec[SYNC_ID[name]]));
+    if (everywhere) {
+      for (const name of Object.keys(SYNC_ID)) {
+        for (const id of before[name]) if (!kept[name].has(id)) markDeleted(tx, name, id, now);
+      }
     }
-  }
-  if (everywhere) {
-    for (const name of Object.keys(SYNC_ID)) {
-      for (const id of before[name]) if (!kept[name].has(id)) markDeleted(tx, name, id, now);
+    // Settings are replaced too, except this device's sign-in and sync bookmarks.
+    const settings = tx.objectStore('settings');
+    oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
+    const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
+    restored.forEach(([k, v]) => settings.put(v, k));
+    if (everywhere) {
+      // The backup's study settings win in the account too.
+      settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
     }
-  }
-  // Settings are replaced too, except this device's sign-in and sync bookmarks.
-  const settings = tx.objectStore('settings');
-  oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
-  const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
-  restored.forEach(([k, v]) => settings.put(v, k));
-  if (everywhere) {
-    // The backup's study settings win in the account too.
-    settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
-  }
-  await saved;
+  });
   scheduleChanges++;
   changed();
 }
@@ -407,17 +430,17 @@ export async function importAll(data, { everywhere = false } = {}) {
 export async function deleteEverything() {
   const db = await openDB();
   const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted'], 'readwrite');
-  const saved = finished(tx);
-  const now = Date.now();
-  for (const name of Object.keys(SYNC_ID)) {
-    const os = tx.objectStore(name);
-    for (const r of await done(os.getAll())) {
-      const id = r[SYNC_ID[name]];
-      if (id !== undefined) markDeleted(tx, name, id, now);
+  await inTx(tx, async () => {
+    const now = Date.now();
+    for (const name of Object.keys(SYNC_ID)) {
+      const os = tx.objectStore(name);
+      for (const r of await done(os.getAll())) {
+        const id = r[SYNC_ID[name]];
+        if (id !== undefined) markDeleted(tx, name, id, now);
+      }
+      os.clear();
     }
-    os.clear();
-  }
-  await saved;
+  });
   scheduleChanges++;
   changed();
 }
@@ -460,40 +483,40 @@ export async function applyRemote(rows) {
   if (!rows.length) return 0;
   const db = await openDB();
   const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted', 'settings'], 'readwrite');
-  const saved = finished(tx);
   let applied = 0, schedules = false;
-  const settingsStore = tx.objectStore('settings');
-  const deleted = tx.objectStore('deleted');
-  let times = (await done(settingsStore.get(SETTING_TIMES))) || {};
-  for (const row of rows) {
-    if (row.store === 'settings') {
-      if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
-      settingsStore.put(row.data?.value, row.id);
-      times = { ...times, [row.id]: row.updated_at };
+  await inTx(tx, async () => {
+    const settingsStore = tx.objectStore('settings');
+    const deleted = tx.objectStore('deleted');
+    let times = (await done(settingsStore.get(SETTING_TIMES))) || {};
+    for (const row of rows) {
+      if (row.store === 'settings') {
+        if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
+        settingsStore.put(row.data?.value, row.id);
+        times = { ...times, [row.id]: row.updated_at };
+        applied++;
+        continue;
+      }
+      if (!(row.store in SYNC_ID)) continue;
+      const os = tx.objectStore(row.store);
+      // Review-log rows are found by uid; everything else by its id.
+      const local = row.store === 'reviewLog' ? await done(os.index('uid').get(row.id)) : await done(os.get(row.id));
+      const tomb = await done(deleted.get(tombstoneKey(row.store, row.id)));
+      const action = decide(row, Math.max(local?.updatedAt || 0, tomb?.deletedAt || 0));
+      if (action === 'skip') continue;
+      if (action === 'delete') {
+        if (local) os.delete(row.store === 'reviewLog' ? local.id : row.id);
+        deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
+      } else {
+        const record = recordFromRow(row);
+        if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
+        os.put(record);
+        if (tomb) deleted.delete(tomb.key);
+      }
+      if (row.store === 'cardStates' || row.store === 'cards') schedules = true;
       applied++;
-      continue;
     }
-    if (!(row.store in SYNC_ID)) continue;
-    const os = tx.objectStore(row.store);
-    // Review-log rows are found by uid; everything else by its id.
-    const local = row.store === 'reviewLog' ? await done(os.index('uid').get(row.id)) : await done(os.get(row.id));
-    const tomb = await done(deleted.get(tombstoneKey(row.store, row.id)));
-    const action = decide(row, Math.max(local?.updatedAt || 0, tomb?.deletedAt || 0));
-    if (action === 'skip') continue;
-    if (action === 'delete') {
-      if (local) os.delete(row.store === 'reviewLog' ? local.id : row.id);
-      deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
-    } else {
-      const record = recordFromRow(row);
-      if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
-      os.put(record);
-      if (tomb) deleted.delete(tomb.key);
-    }
-    if (row.store === 'cardStates' || row.store === 'cards') schedules = true;
-    applied++;
-  }
-  settingsStore.put(times, SETTING_TIMES);
-  await saved;
+    settingsStore.put(times, SETTING_TIMES);
+  });
   if (schedules) scheduleChanges++;
   return applied;
 }
@@ -521,16 +544,16 @@ export async function markUploaded(ids) {
 export async function cleanMedia(now = Date.now()) {
   const db = await openDB();
   const tx = db.transaction(['cards', 'media'], 'readwrite');
-  const saved = finished(tx);
-  const used = new Set();
-  for (const c of await done(tx.objectStore('cards').getAll())) { if (c.frontImage) used.add(c.frontImage); if (c.backImage) used.add(c.backImage); }
   const removed = [];
-  for (const m of await done(tx.objectStore('media').getAll())) {
-    if (used.has(m.id) || now - (m.created || 0) < 3600000) continue;
-    tx.objectStore('media').delete(m.id);
-    if (m.uploaded) removed.push(m.id);
-  }
-  await saved;
+  await inTx(tx, async () => {
+    const used = new Set();
+    for (const c of await done(tx.objectStore('cards').getAll())) { if (c.frontImage) used.add(c.frontImage); if (c.backImage) used.add(c.backImage); }
+    for (const m of await done(tx.objectStore('media').getAll())) {
+      if (used.has(m.id) || now - (m.created || 0) < 3600000) continue;
+      tx.objectStore('media').delete(m.id);
+      if (m.uploaded) removed.push(m.id);
+    }
+  });
   return removed;
 }
 

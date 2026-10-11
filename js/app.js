@@ -329,8 +329,15 @@ async function confirmRestore(file) {
   $('rbNo').focus();
   $('rbNo').addEventListener('click', closeSheet);
   $('rbYes').addEventListener('click', async () => {
-    if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
-    await db.importAll(data, { everywhere: synced });
+    try {
+      if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
+      await db.importAll(data, { everywhere: synced });
+    } catch (e) {
+      console.error(e);
+      closeSheet();
+      toast("Couldn't restore that backup. Nothing was changed.");
+      return;
+    }
     if (synced) sync.syncNow();
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
