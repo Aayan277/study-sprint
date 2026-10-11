@@ -12,6 +12,7 @@ const dbq = fn => page.evaluate(async src => { const db = await import('./js/db.
 const counts = async () => (await page.textContent('.rv-counts')).trim().split(/\s+/).map(Number);
 
 await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+ok((await page.getAttribute('#screen', 'aria-live')) === null && (await page.getAttribute('#toast', 'role')) === 'status', 'the whole screen is not a live region; the toast still announces');
 // gear toggle: deck page -> settings -> gear -> back to deck page
 await page.click('.deck-open'); await page.waitForSelector('.crow'); const deckUrl = page.url();
 await page.click('#gearBtn'); await page.waitForSelector('#npd');
