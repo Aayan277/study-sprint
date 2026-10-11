@@ -67,12 +67,20 @@ export function recoveryFromLink(hash = location.hash) {
 // refuses (with a message to show) if the link is for someone else than the account signed in on this device.
 export async function lookUpResetLink(linkSession) {
   let user;
-  try { user = await supa.getUser(linkSession.access_token); } catch {
-    throw new supa.SupaError('That reset link has expired, was already used, or couldn’t be checked. Ask for a new one.');
+  try { user = await supa.getUser(linkSession.access_token); } catch (err) {
+    // Only a refused token means the link is spent. Offline or a server hiccup: keep the link and try again later.
+    if (err.status === 401 || err.status === 403) throw new supa.SupaError('That reset link has expired or was already used. Ask for a new one.', { code: 'expired' });
+    throw new supa.SupaError('Couldn’t check that reset link. Check your connection and open it again.', { code: 'offline' });
   }
   const current = await account();
   if (current && current.id !== user.id) {
-    throw new supa.SupaError(`That link is for ${user.email}, but this device is signed in as ${current.email}. Sign out here first, then open the link again.`);
+    throw new supa.SupaError(`That link is for ${user.email}, but this device is signed in as ${current.email}. Sign out here first, then ask for a new reset email.`);
+  }
+  // Signed out, but this device last synced with a different account: setting the password would sign in and
+  // copy everything here into the link's account, so refuse.
+  const { syncState } = await db.getSettings();
+  if (!current && syncState?.userId && syncState.userId !== user.id) {
+    throw new supa.SupaError(`That link is for ${user.email}, but this device's cards belong to a different account. Sign in to that account first, or clear this device (Settings → Your data → Reset all data).`);
   }
   return user;
 }

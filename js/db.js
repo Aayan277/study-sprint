@@ -374,7 +374,8 @@ export function checkBackup(data) {
   for (const [k, field] of Object.entries(keyField)) {
     if (!data[k].every(r => r && typeof r === 'object' && validKey(r[field]))) return 'This backup file is damaged (a record in ' + k + ' has no ' + field + ').';
   }
-  if (!data.reviewLog.every(r => r && typeof r === 'object')) return 'This backup file is damaged (a record in reviewLog is broken).';
+  // A review's id can be missing (one is given when it's saved), but otherwise must be a number.
+  if (!data.reviewLog.every(r => r && typeof r === 'object' && (r.id === undefined || Number.isFinite(r.id)))) return 'This backup file is damaged (a record in reviewLog is broken).';
   // Deck colors go into style attributes, so only plain hex colors are allowed.
   if (!data.decks.every(d => d.color === undefined || SAFE_COLOR.test(d.color))) return 'This backup file is damaged (a deck has an invalid color).';
   if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {

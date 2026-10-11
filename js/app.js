@@ -758,7 +758,11 @@ async function showResetLink(link) {
   if (link.error) { forget(); toast(link.error); return; }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
   let user;
-  try { user = await sync.lookUpResetLink(link.session); } catch (err) { forget(); toast(err.message); return; }
+  try { user = await sync.lookUpResetLink(link.session); } catch (err) {
+    if (err.code !== 'offline') forget();   // offline: keep the link for this tab, so reopening the app tries again
+    toast(err.message);
+    return;
+  }
   openPasswordSheet({
     title: 'Set a new password',
     intro: `<p class="note" style="margin-top:0">Set a new password for <b>${esc(user.email)}</b>. Then use it to sign in on your other devices.</p>`,
