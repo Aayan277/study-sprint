@@ -21,7 +21,7 @@ import { isHidden } from './browse-logic.js';
 import { formatInterval } from './queue.js';
 import { formatHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
-import { $, esc, plural, toast, icon, setFocusMode } from './ui.js';
+import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
 
 const GUIDE_CARDS = 3;
 // Handed to the Import screen: after it saves cards into this deck, it offers the guided review (see import-screen.js).
@@ -167,6 +167,8 @@ function drawAdd(el, api) {
 // ----- 4. the guided review -----
 // A real first review of a few cards: each rating is saved (so the cards are scheduled), with hints on what to do.
 let G = null;
+// The face that is turned away is hidden from screen readers and can't be focused (like Review).
+const HIDDEN = 'aria-hidden="true" inert';
 
 async function renderGuide(el, deckId, api) {
   const [settings, decks, allCards, states] = await Promise.all([db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
@@ -206,29 +208,45 @@ function drawGuide() {
       <p class="coach" id="coach" role="status">${flipped
         ? '<b>2</b> Now rate how well you knew it. This tells the app when to show the card again.'
         : '<b>1</b> Read the question, try to recall the answer, then tap the card to flip it.'}</p>
-      <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" ${flipped ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
+      <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" tabindex="-1">
         <div class="rv-turn">
-          <div class="rv-face rv-front" ${flipped ? 'aria-hidden="true"' : ''}>${deckLabel}
+          <div class="rv-face rv-front" ${flipped ? HIDDEN : ''}>${deckLabel}
             <div class="flash-front${size}">${front}</div>
             <p class="flash-hint">Tap to flip</p></div>
-          <div class="rv-face rv-back" ${flipped ? '' : 'aria-hidden="true"'}>${deckLabel}
+          <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
             <div class="flash-recap">${front}</div>
             <div class="flash-ans"><div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div></div></div>
         </div>
       </article>
       <div class="ratebar" id="ratebar">${flipped ? `
         <div class="rates">${[[1, 'Again'], [2, 'Hard'], [3, 'Good'], [4, 'Easy']].map(([r, label]) => `
-          <button type="button" class="rate r${r}" data-rate="${r}"><b>${label}</b>${ivl ? `<span class="mono">${formatInterval(ivl[r])}</span>` : ''}</button>`).join('')}</div>`
+          <button type="button" class="rate r${r}" data-rate="${r}" aria-keyshortcuts="${r}"><b>${label}</b>${ivl ? `<span class="mono">${formatInterval(ivl[r])}</span>` : ''}</button>`).join('')}</div>`
         : '<button class="btn primary wide" type="button" id="showBtn">Show answer</button>'}</div>
     </div>`;
   setFocusMode(true);
   $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
-  const flip = () => { G.flipped = true; G.answerMs = Date.now() - G.shownAt; drawGuide(); $('ratebar').querySelector('.rate')?.focus({ preventScroll: true }); };
-  $('showBtn')?.addEventListener('click', flip);
-  $('flash').addEventListener('click', () => { if (!G.flipped) flip(); });
-  $('flash').addEventListener('keydown', e => { if (!G.flipped && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(); } });
+  $('showBtn')?.addEventListener('click', flipGuide);
+  $('flash').addEventListener('click', () => { if (!G.flipped) flipGuide(); });
   el.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => rateGuide(+b.dataset.rate)));
+  // Keep focus on the card (the page was just redrawn). After a flip it goes to the answer, so screen readers read it out.
+  (flipped ? $('flash').querySelector('.rv-back') : $('flash')).focus({ preventScroll: true });
 }
+
+function flipGuide() {
+  if (G.flipped) return;
+  G.flipped = true;
+  G.answerMs = Date.now() - G.shownAt;
+  drawGuide();
+}
+
+// Keys, like Review: Space or Enter flips, 1–4 rate.
+document.addEventListener('keydown', e => {
+  if (!G?.el.isConnected || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches('input, textarea, select')) return;
+  if (!G.flipped) {
+    if (!onControl(e, 'flash') && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flipGuide(); }
+  } else if (['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); rateGuide(+e.key); }
+});
 
 async function rateGuide(rating) {
   if (G.busy) return;

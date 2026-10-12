@@ -65,14 +65,20 @@ ok((await p.textContent('.wl-count')).includes('Card 1 of 3'), 'the guided revie
 ok((await p.textContent('#coach')).toLowerCase().includes('tap the card to flip'), 'hint: tap to flip');
 ok(!(await p.locator('.tabs').isVisible()), 'the tab bar stays hidden in the guided review');
 await noHScroll(p, 'guided front'); await p.screenshot({ path: SP + '/onb-4a.png' });
+// accessible flip, like Review: the question is readable (the card is not one big "Show answer" button), a separate Show answer button, the hidden face is inert
+ok(await p.evaluate(() => { const f = document.getElementById('flash'); return !f.getAttribute('role') && !f.getAttribute('aria-label') && !f.querySelector('.rv-front').closest('[aria-hidden]') && !!f.querySelector('.flash-front').textContent.trim(); }), 'guided card: the question is readable, the card is not a "Show answer" button');
+ok(await p.evaluate(() => { const b = document.querySelector('.rv-back'); return b.inert && b.getAttribute('aria-hidden') === 'true'; }), 'guided card: the answer face is hidden and inert before the flip');
+ok((await p.textContent('#showBtn')).trim() === 'Show answer', 'guided card: a separate Show answer button');
 await p.click('#flash');
 await p.waitForSelector('.rate');
+ok(await p.evaluate(() => { const f = document.querySelector('.rv-front'), b = document.querySelector('.rv-back'); return f.inert && f.getAttribute('aria-hidden') === 'true' && !b.inert && !b.hasAttribute('aria-hidden') && document.activeElement === b; }), 'guided card: after the flip the question face is inert and focus is on the answer');
 ok((await p.textContent('#coach')).toLowerCase().includes('rate how well you knew it'), 'hint: rate how well you knew it');
 ok(await p.locator('.rate').count() === 4 && (await p.textContent('.rate.r3 span')).length > 0, 'four rating buttons with intervals');
 await noHScroll(p, 'guided back'); await p.screenshot({ path: SP + '/onb-4b.png' });
 await p.click('.rate.r3'); await p.waitForSelector('#showBtn');
 ok((await p.textContent('.wl-count')).includes('Card 2 of 3'), 'next card');
-await p.click('#showBtn'); await p.click('.rate.r1');
+await p.keyboard.press('Space'); await p.waitForSelector('.rate');   // keys work like Review: Space flips, 1-4 rate
+await p.keyboard.press('1');
 await p.waitForSelector('#showBtn'); await p.click('#showBtn'); await p.click('.rate.r4');
 await p.waitForSelector('#wlGo');
 c = await counts(p);
