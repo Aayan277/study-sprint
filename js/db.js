@@ -526,19 +526,33 @@ export async function applyRemote(rows) {
     const settingsStore = tx.objectStore('settings');
     const deleted = tx.objectStore('deleted');
     let times = (await done(settingsStore.get(SETTING_TIMES))) || {};
+    // Settings first. Everything else waits in `todo`: one row per record (if a page holds two versions of
+    // the same record, the newer one wins), so the reads below can all be sent at once.
+    const todo = new Map();
     for (const row of rows) {
       if (row.store === 'settings') {
         if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
         settingsStore.put(row.data?.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
-        continue;
+      } else if (row.store in SYNC_ID) {
+        const key = `${row.store}:${row.id}`;
+        if (!todo.has(key) || row.updated_at >= todo.get(key).updated_at) todo.set(key, row);
       }
-      if (!(row.store in SYNC_ID)) continue;
+    }
+    // Look up what this device has for every row in one go (waiting for each row in turn was the slow part).
+    // Only IndexedDB requests are awaited in here, so the transaction stays open.
+    const found = await Promise.all([...todo.values()].map(async row => {
       const os = tx.objectStore(row.store);
       // Review-log rows are found by uid; everything else by its id.
-      const local = row.store === 'reviewLog' ? await done(os.index('uid').get(row.id)) : await done(os.get(row.id));
-      const tomb = await done(deleted.get(tombstoneKey(row.store, row.id)));
+      const [local, tomb] = await Promise.all([
+        done(row.store === 'reviewLog' ? os.index('uid').get(row.id) : os.get(row.id)),
+        done(deleted.get(tombstoneKey(row.store, row.id)))
+      ]);
+      return { row, local, tomb };
+    }));
+    for (const { row, local, tomb } of found) {
+      const os = tx.objectStore(row.store);
       const action = decide(row, Math.max(local?.updatedAt || 0, tomb?.deletedAt || 0));
       if (action === 'skip') continue;
       if (action === 'delete') {
