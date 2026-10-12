@@ -15,7 +15,7 @@ import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
-import { examOptions, examInfo, nearestExamDeck } from './exam.js';
+import { examOptions, examInfo, nearestExamDeck, examSchedule } from './exam.js';
 import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
@@ -72,6 +72,8 @@ export async function renderPlay(el) {
   data = {
     settings, decks, cards,
     statesById: new Map(states.map(s => [s.cardId, s])),
+    // Cards that an exam's final pass brings forward count as due today (see exam.js).
+    examCaps: examSchedule(decks, allCards, new Map(states.map(s => [s.cardId, s]))).caps,
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
     playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
@@ -435,7 +437,9 @@ async function record(round, entry) {
   // and its parents'), it's only logged and starts in Review as before.
   const examDeck = !!examInfo(effectiveDeck(data.decks, entry.card.deckId), now);
   const newRoom = newRoomFor(data.newLeft, entry.card.deckId);
-  let decision = scheduleDecision({ state: prev, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom });
+  const cap = data.examCaps.get(id);
+  const dueState = prev && cap !== undefined ? { ...prev, due: Math.min(prev.due, cap) } : prev;
+  let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = {
     cardId: id, timestamp: now, source: 'play',

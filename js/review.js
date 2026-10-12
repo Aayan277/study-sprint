@@ -6,14 +6,14 @@
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
-import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
-import { examOptions } from './exam.js';
+import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
@@ -73,7 +73,11 @@ export async function renderReview(el, deckId) {
 // ---------- 2. session ----------
 // custom: optional { queue, waiting, label } for a Custom study session instead of today's cards.
 function start(el, data, cards, typing, deckId, custom = null, scope = '') {
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
+  // Decks with an exam: the final pass brings cards forward, and the reviews that add most on exam day come first.
+  const now = Date.now();
+  const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
+    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))));
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor

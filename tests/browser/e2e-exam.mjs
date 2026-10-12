@@ -23,10 +23,19 @@ await page.fill('#deckExam', examDate);
 await page.screenshot({ path: SP + '/exam-editor.png', fullPage: true });
 await page.click('#deckForm button[type=submit]');
 await page.waitForFunction(() => /brought forward/.test(document.querySelector('#toast')?.textContent || ''));
-ok((await page.textContent('#toast')).includes('3 cards brought forward'), 'setting the date pulls in cards scheduled after it: ' + await page.textContent('#toast'));
+// v3.1: only cards that would be below 95% on exam day are pulled in. Here 1 of the 3 cards due after the exam (stability 20, ~90%);
+// the other two (stability 80 and 200) stay where they are.
+ok((await page.textContent('#toast')).includes('1 card brought forward'), 'setting the date pulls in the card that needs it: ' + await page.textContent('#toast'));
 const examStart = await page.evaluate(async d => (await import('./js/exam.js')).examStart(d), examDate);
+// Cards due after the exam must be ones expected to be at 95% or better on exam day.
+const lateNeedy = () => page.evaluate(async d => {
+  const { examStart, recallAt, EXAM_RETENTION } = await import('./js/exam.js');
+  const start = examStart(d);
+  return (await (await import('./js/db.js')).getAll('cardStates')).filter(s => s.due > start && recallAt(s, start) < EXAM_RETENTION).map(s => s.cardId);
+}, examDate);
 let states = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')));
-ok(states.every(s => s.due <= examStart), 'no card in the deck is due after the exam');
+ok(!(await lateNeedy()).length, 'no card that needs a review is due after the exam');
+ok(states.filter(s => s.due > examStart).length === 2, 'the two cards at 95%+ on exam day keep their dates after it');
 ok((await page.textContent('.exam-line')).includes('Exam in 10 days'), 'deck page shows the countdown');
 await page.screenshot({ path: SP + '/exam-deck.png' });
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
@@ -43,8 +52,9 @@ await page.keyboard.press(' '); await page.waitForSelector('.rate');
 const easyLabel = await page.$eval('.rate.r4 span', s => s.textContent);
 await page.keyboard.press('4'); await page.waitForTimeout(300);
 states = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')));
-ok(states.every(s => s.due <= examStart), `Easy on "${first}" (${easyLabel}) still comes back before the exam`);
-ok(/^(\d+d|1[0-9]?d|[1-9]d)$/.test(easyLabel) && parseInt(easyLabel) <= 10, 'the Easy button shows the capped gap: ' + easyLabel);
+ok(!(await lateNeedy()).length, `Easy on "${first}" (${easyLabel}) leaves no card that needs a review waiting until after the exam`);
+// Easy on this long-unseen card makes it stable enough to be 95%+ on exam day, so it may go past the exam.
+ok(/mo$/.test(easyLabel) || parseInt(easyLabel) <= 10, 'the Easy button shows the real gap when the card will be remembered on exam day: ' + easyLabel);
 await page.click('#endBtn');
 // custom study offers exam prep too
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
@@ -77,5 +87,27 @@ await page.fill('#deckName', 'Chem'); await page.fill('#deckExam', inDays(20)); 
 await page.waitForFunction(() => /Created/.test(document.querySelector('#toast')?.textContent || ''));
 ok(await page.evaluate(async d => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Chem')?.examDate === d, inDays(20)), 'a new deck saves its exam date');
 ok((await page.textContent('.deck:has-text("Chem")')).includes('Exam in 20 days'), 'and shows the exam countdown');
+// Cards that arrive after the date was set (an import, a move, a new subdeck) are covered when the queue is built:
+// no write happens, but the weak ones that were saved far after the exam are due now, the strong one is not.
+await page.evaluate(async d => {
+  const db = await import('./js/db.js'); const D = 86400000, now = Date.now();
+  const cards = ['w1', 'w2', 'strong'].map((id, i) => ({ id: 'late-' + id, deckId: 'late', front: 'Q' + id, back: 'A' + id, created: now + i }));
+  await db.addDeckWithCards({ id: 'late', name: 'Late', course: '', color: '#8b5cf6', parentId: '', created: now + 50, examDate: d }, cards);
+  const st = (id, due, stability) => ({ cardId: 'late-' + id, due, stability, difficulty: 5, reps: 4, lapses: 0, state: 2, lastReview: now - D, elapsedDays: 1, scheduledDays: 30, learningSteps: 0 });
+  await db.putStates([st('w1', now + 60 * D, 2), st('w2', now + 70 * D, 3), st('strong', now + 90 * D, 400)]);
+}, inDays(3));
+await page.goto('http://localhost:8123/#/today'); await page.reload(); await page.waitForSelector('.tdeck');
+const lateRow = (await page.textContent('.tdeck:has-text("Late")')).replace(/\s+/g, ' ');
+// 3 days left: the 2 weak cards go on different days (1 today, 1 tomorrow), the weakest later; the strong one is left alone.
+ok(/ 1 due/.test(lateRow), 'cards that arrive in an exam deck later are covered: one weak card is due today: ' + lateRow);
+const plan = await page.evaluate(async () => {
+  const db = await import('./js/db.js'); const { examSchedule } = await import('./js/exam.js');
+  const [decks, cards, states] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
+  const { caps } = examSchedule(decks, cards, new Map(states.map(s => [s.cardId, s])));
+  return Object.fromEntries([...caps]);
+});
+ok(plan['late-w2'] < plan['late-w1'] && !('late-strong' in plan), 'the weakest card is planned closest to the exam, the strong one not at all');
+const lateDates = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')).filter(s => s.cardId.startsWith('late-')).map(s => s.due > Date.now() + 30 * 86400000));
+ok(lateDates.every(Boolean), 'and nothing was rewritten: the saved dates are unchanged');
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
