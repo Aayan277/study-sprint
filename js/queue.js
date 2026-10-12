@@ -120,6 +120,8 @@ function countUpChains(ids, deckOf, chains) {
 //            new cards count toward its parents' limits too.
 export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.now(), chains }) {
   const start = dayStart(now);
+  // Play answers that were only logged (not applied) did not start a card, so they don't use up a new-card slot.
+  logs = logs.filter(l => l.source !== 'play' || l.applied);
   const ids = new Set(logs.filter(l => l.timestamp >= start && l.state === NEW).map(l => l.cardId));   // new cards studied today
   const studied = countUpChains(ids, deckOf, chains);
   const byDeck = new Map();
@@ -141,6 +143,12 @@ export function takeNewFor(limit, deckId) {
   takeFromChain(limit.byDeck, limit.chains?.get(deckId) || [deckId]);
   limit.total--;
   return true;
+}
+
+// Give a slot back (a 'first' answer that then couldn't be scheduled).
+export function giveBackNewFor(limit, deckId) {
+  for (const id of limit.chains?.get(deckId) || [deckId]) if (limit.byDeck.has(id)) limit.byDeck.set(id, limit.byDeck.get(id) + 1);
+  limit.total++;
 }
 
 // Custom study: extra new cards added for today, or 0 if they were added on an earlier day.

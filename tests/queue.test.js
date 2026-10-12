@@ -106,6 +106,16 @@ test('new limits count what was already studied today, plus extras', () => {
   assert.deepEqual(queue.map(q => q.card.id), ['x', 'y', 'w']);
 });
 
+test('Play answers that were only logged do not use up new cards, applied ones do', () => {
+  const decks = [{ id: 'A' }], deckOf = new Map([['p1', 'A'], ['p2', 'A'], ['p3', 'A']]);
+  const logs = [
+    { cardId: 'p1', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: false, reason: 'new' },
+    { cardId: 'p2', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: false, reason: 'new-limit' },
+    { cardId: 'p3', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: true, reason: 'first' }
+  ];
+  assert.equal(newLimits({ perDay: 20, decks, logs, deckOf, now: NOW }).total, 19);
+});
+
 test('extra new cards only count on the day they were added', () => {
   assert.equal(extraNewToday({ day: dayStart(NOW), n: 10 }, NOW), 10);
   assert.equal(extraNewToday({ day: dayStart(NOW - DAY), n: 10 }, NOW), 0);

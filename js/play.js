@@ -16,7 +16,7 @@ import { dayStart } from './days.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examInfo, nearestExamDeck } from './exam.js';
-import { newLimits, extraNewToday, newRoomFor, takeNewFor } from './queue.js';
+import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
@@ -75,8 +75,8 @@ export async function renderPlay(el) {
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
     playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
-    // Only new cards really started today count (Review, or Play in an exam deck), not Play answers that were just logged.
-    newLeft: newLimits({ perDay: settings.newPerDay, decks, logs: logs.filter(l => l.source !== 'play' || l.applied), deckOf: new Map(allCards.map(c => [c.id, c.deckId])),
+    // Only new cards really started today count (newLimits ignores Play answers that were only logged).
+    newLeft: newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(allCards.map(c => [c.id, c.deckId])),
       extra: extraNewToday(settings.extraNew), chains: chainMap(decks) })
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
@@ -456,8 +456,9 @@ async function record(round, entry) {
     } catch (err) {
       // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
       console.error(err);
-      decision = 'not-due';
-      log.reason = 'not-due';
+      if (decision === 'first') { giveBackNewFor(data.newLeft, entry.card.deckId); decision = 'new'; }    // not started: slot back
+      else decision = 'not-due';
+      log.reason = decision;
       await db.addLog(log);
     }
     // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
