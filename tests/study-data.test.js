@@ -50,14 +50,57 @@ test('time per card comes from the gaps between reviews in a session', () => {
   // ten reviews, 20 seconds apart, but only 3 seconds to turn each card over
   const logs = Array.from({ length: 10 }, (_, i) => ({ source: 'review', timestamp: at(i * 20000), ms: 3000 }));
   assert.equal(typicalCardMs(logs, now), 20000);
-  // a long pause (a break) is not counted, and a slow card counts as at most a minute
+  // a long pause (a break) is not counted
   const withBreak = [...logs, { source: 'review', timestamp: at(10 * 20000 + 600000), ms: 1 }, { source: 'review', timestamp: at(10 * 20000 + 600000 + 100000), ms: 1 }];
   assert.equal(typicalCardMs(withBreak, now), 20000);
+  // a minute or more between answers is not "a card": no gap counts, so the 8-second default stays
   const slow = Array.from({ length: 8 }, (_, i) => ({ source: 'review', timestamp: at(i * 100000), ms: 1 }));
-  assert.equal(typicalCardMs(slow, now), 60000);                 // 100 seconds a card counts as a minute at most
+  assert.equal(typicalCardMs(slow, now), DEFAULT_CARD_MS);
   const breaks = Array.from({ length: 8 }, (_, i) => ({ source: 'review', timestamp: at(i * 300000), ms: 1 }));
-  assert.equal(typicalCardMs(breaks, now), DEFAULT_CARD_MS);    // every gap is a break: nothing to go on
+  assert.equal(typicalCardMs(breaks, now), DEFAULT_CARD_MS);
   assert.equal(typicalCardMs(logs.map(l => ({ ...l, source: 'play' })), now), DEFAULT_CARD_MS);
+  assert.equal(typicalCardMs(logs.map(l => ({ ...l, source: 'anki' })), now), DEFAULT_CARD_MS);
+});
+
+// A deterministic wobble so the "real" logs below are not perfectly regular.
+const wobble = i => ((i * 7919) % 11) / 10;          // 0 .. 1
+const session = (start, n, base, spread) => Array.from({ length: n }, (_, i) => ({ source: 'review', timestamp: start += Math.round(base + wobble(i) * spread), ms: 4000 }));
+
+test('time per card on realistic logs: 5 to 15 seconds a card, sessions hours apart', () => {
+  const HOUR = 3600000;
+  const logs = [];
+  for (let d = 1; d <= 20; d++) {
+    logs.push(...session(now - d * DAY, 25, 5000, 10000));            // a morning session
+    logs.push(...session(now - d * DAY + 9 * HOUR, 25, 5000, 10000)); // an evening one, 9 hours later
+  }
+  const ms = typicalCardMs(logs, now);
+  assert.ok(ms >= 7000 && ms <= 13000, `got ${ms}`);
+  // 76 cards is then a quarter of an hour at most, not 76 minutes
+  assert.ok(76 * ms / 60000 < 16);
+});
+
+test('time per card ignores Play rounds, imported Anki history and a few slow cards', () => {
+  const HOUR = 3600000;
+  const real = [];
+  for (let d = 1; d <= 10; d++) real.push(...session(now - d * DAY, 30, 6000, 8000));
+  const base = typicalCardMs(real, now);
+  // imported Anki history with made-up times (70 seconds a card, thousands of rows) and a Play round, 2 seconds an answer
+  const anki = Array.from({ length: 3000 }, (_, i) => ({ source: 'anki', timestamp: now - 30 * DAY + i * 70000, ms: 0 }));
+  const play = Array.from({ length: 200 }, (_, i) => ({ source: 'play', timestamp: now - 3 * DAY + i * 2000, ms: 500 }));
+  assert.equal(typicalCardMs([...real, ...anki, ...play], now), base);
+  // a few cards that took a minute and a half (looked something up) are not counted
+  const withLookups = [...real, ...Array.from({ length: 6 }, (_, i) => ({ source: 'review', timestamp: now - 12 * HOUR + i * 90000, ms: 1 }))];
+  assert.equal(typicalCardMs(withLookups, now), base);
+});
+
+test('time per card follows recent habits when there are enough recent reviews', () => {
+  const old = session(now - 50 * DAY, 100, 30000, 8000);             // 50 days ago: slow, 30 to 38 seconds a card
+  const recent = session(now - 2 * DAY, 60, 6000, 4000);            // lately: 6 to 10 seconds
+  const ms = typicalCardMs([...old, ...recent], now);
+  assert.ok(ms >= 6000 && ms <= 10000, `got ${ms}`);
+  // with only a few recent reviews, the older history is still used
+  const fewRecent = typicalCardMs([...old, ...session(now - DAY, 4, 6000, 0)], now);
+  assert.ok(fewRecent >= 30000, `got ${fewRecent}`);
 });
 
 test('review ahead by 3 days and by 7 days are different sessions', () => {
