@@ -59,11 +59,39 @@ ok((await C.textContent('#sheet')).includes('Set a new password for me@example.c
 await C.fill('#pw1', 'newpass456'); await C.fill('#pw2', 'newpass45'); await C.click('#pwForm [type=submit]');
 ok((await C.textContent('#pwErr')).includes("don't match"), 'mismatched passwords caught');
 await C.screenshot({ path: SP + '/s3-newpw.png' });
+const rowsBefore = fake.userRows('me@example.com').length;
 await C.fill('#pw2', 'newpass456'); await C.click('#pwForm [type=submit]');
-await waitSynced(C);
-ok(fake.users.get('me@example.com').password === 'newpass456' && (await toastText(C)).includes('Password saved'), 'new password saved, signed in');
-ok((await snapshot(C)).decks.includes('Biology'), 'and synced');
+// C has the sample deck and never signed in: the password is set, but it must not sign in and send that deck
+await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('Password saved for me@example.com'));
+ok((await toastText(C)).includes('sign in from Settings') && fake.users.get('me@example.com').password === 'newpass456', 'never-synced device with data: password saved, told to sign in from Settings');
+{
+  const c = await snapshot(C);
+  ok(!c.signedIn && !c.settings.syncState && fake.userRows('me@example.com').length === rowsBefore, 'and it is not signed in, nothing was pushed');
+}
 ok(await run(C, () => sessionStorage.getItem('resetLink')) === null, 'reset link forgotten after use');
+// Open a reset link on a page, set the password, and give back the toast it ends with.
+const resetVia = async (page, password) => {
+  await page.waitForSelector('#toast[hidden]', { state: 'attached' });   // the last toast is gone, so the next one is new
+  await page.goto(fake.recoveryLink('me@example.com', APP));
+  await page.waitForSelector('#sheet[open] #pwForm');   // the old, closed sheet is still in the page
+  await page.fill('#pw1', password); await page.fill('#pw2', password); await page.click('#pwForm [type=submit]');
+  await page.waitForSelector('#toast:not([hidden])');
+  return toastText(page);
+};
+// an empty device (no decks, cards or reviews) signs in after the reset and gets the account's data
+const E = await device('E');
+await run(E, async () => { const db = await import('./js/db.js'); await db.resetAll(); await db.setSetting('seeded', true); });   // seeded: the sample deck doesn't come back
+ok((await resetVia(E, 'emptypass1')).includes("You're signed in"), 'empty device: password saved and signed in');
+await waitSynced(E);
+ok((await snapshot(E)).decks.includes('Biology'), 'and it synced the account\'s data');
+// a device already signed in as that account stays signed in
+ok((await resetVia(E, 'emptypass2')).includes("You're signed in") && (await snapshot(E)).signedIn, 'same account already signed in: still signed in');
+// a device that last synced as that account (signed out since) signs in again, even with data
+await run(E, async () => (await import('./js/sync.js')).signOut({}));
+ok((await resetVia(E, 'newpass456')).includes("You're signed in") && (await snapshot(E)).signedIn, 'device that last synced as that account: signed in again');
+// now sign C in the normal way, so the rest of this test has a device signed in as me
+await signInUI(C, { pw: 'newpass456' }); await waitSynced(C);
+ok((await snapshot(C)).decks.includes('Biology'), 'C signed in from Settings and synced');
 await C.goto(APP + '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
 await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('expired'));
 ok(new URL(C.url()).hash === '#/settings', 'an expired link is explained');

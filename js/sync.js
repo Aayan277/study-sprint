@@ -84,11 +84,21 @@ export async function lookUpResetLink(linkSession) {
   }
   return user;
 }
-// Set the new password from a reset link, and sign in with it.
+// Set the new password from a reset link. Normally that signs in too. Not on a device that has cards
+// but never signed in: a link for someone else's account would copy everything here into it.
+// Returns { signedIn, email } so the screen can say which happened.
 export async function finishPasswordReset(linkSession, password) {
   const user = await lookUpResetLink(linkSession);   // checked again here, right before anything changes
   await supa.setPassword(linkSession.access_token, password);
-  return signedIn({ ...linkSession, user });
+  const { syncAuth, syncState } = await db.getSettings();
+  const known = syncAuth?.user?.id === user.id || syncState?.userId === user.id;
+  if (!known && !syncState && await hasLocalData()) return { signedIn: false, email: user.email };
+  await signedIn({ ...linkSession, user });
+  return { signedIn: true, email: user.email };
+}
+async function hasLocalData() {
+  for (const name of ['decks', 'cards', 'reviewLog']) if ((await db.getAll(name)).length) return true;
+  return false;
 }
 // Change the password while signed in.
 export async function changePassword(password) {

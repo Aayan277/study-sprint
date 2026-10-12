@@ -567,7 +567,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
     try {
       await save(pw);
       closeSheet();
-      toast(done);
+      toast(typeof done === 'function' ? done() : done);
       if (currentRoute === 'settings') drawSync();
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
   });
@@ -844,11 +844,13 @@ async function showResetLink(link) {
     toast(err.message);
     return;
   }
+  let result;
   openPasswordSheet({
     title: 'Set a new password',
     intro: `<p class="note" style="margin-top:0">Set a new password for <b>${esc(user.email)}</b>. Then use it to sign in on your other devices.</p>`,
-    save: async pw => { await sync.finishPasswordReset(link.session, pw); forget(); },
-    done: 'Password saved. You\'re signed in.'
+    save: async pw => { result = await sync.finishPasswordReset(link.session, pw); forget(); },
+    done: () => result.signedIn ? 'Password saved. You\'re signed in.'
+      : `Password saved for ${result.email}. To sync this device with that account, sign in from Settings → Sync.`
   });
   // Cancelling just closes it; the link can't be used again after that.
   $('pwCancel')?.addEventListener('click', forget);
