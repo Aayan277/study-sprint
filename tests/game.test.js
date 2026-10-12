@@ -136,3 +136,15 @@ test('questions carry the prompt side\'s picture; a picture-only answer can\'t b
   assert.equal(playableCards([picOnly], 'front').length, 1);         // see the picture, pick "Lung"
   assert.equal(playableCards([picOnly], 'back').length, 0);          // can't pick a picture from text options
 });
+
+test('a big pool mostly of Yes/No still gives enough different wrong options', () => {
+  // 2000 cards: 1990 answer Yes/No, 10 have their own answers. A sample of 300 usually misses most of those 10.
+  const pool = [];
+  for (let i = 0; i < 1990; i++) pool.push(card(`Q${i}`, i % 2 ? 'Yes' : 'No'));
+  for (let i = 0; i < 10; i++) pool.push(card(`Odd${i}`, `Other answer ${i}`));
+  for (let seed = 1; seed <= 20; seed++) {
+    const target = pool[seed * 7];
+    assert.equal(pickDistractors(target, pool, 'front', { hard: true, rnd: seeded(seed) }).length, 5, `hard, seed ${seed}`);
+    assert.equal(pickDistractors(target, pool, 'front', { rnd: seeded(seed) }).length, 3, `normal, seed ${seed}`);
+  }
+});

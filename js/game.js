@@ -100,11 +100,11 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
   const words = contentWords(answer);
   const tags = new Set(card.tags || []);
   const scored = [];
-  for (const other of candidatesFor(card, pool, rnd)) {
-    if (other.id === card.id) continue;
+  const consider = other => {
+    if (other.id === card.id) return;
     const label = questionFor(other, qtype).answer;
     const key = dupKey(label);
-    if (!key || seen.has(key)) continue;      // no duplicate options, and never the right answer twice
+    if (!key || seen.has(key)) return;      // no duplicate options, and never the right answer twice
     seen.add(key);
     let score = 0;
     if (other.deckId === card.deckId) score += 2;
@@ -114,7 +114,11 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
     score += Math.min(2, [...contentWords(label)].filter(w => words.has(w)).length);
     score = hard ? similarity(label, answer) * 10 + score * 0.5 + rnd() * 0.5 : score + rnd() * 2.5;
     scored.push({ label, score });
-  }
+  };
+  const sample = candidatesFor(card, pool, rnd);
+  sample.forEach(consider);
+  // A sample of a big pool can hold too few different answers (e.g. mostly Yes/No): look through the rest.
+  if (scored.length < count && pool.length > sample.length) shuffle(pool.slice(), rnd).forEach(consider);
   return scored.sort((a, b) => b.score - a.score).slice(0, count).map(s => s.label);
 }
 
