@@ -6,10 +6,11 @@
 import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
+import { renderToday } from './today.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
@@ -518,7 +519,7 @@ const rulesList = id => `<ul class="pw-rules" id="${id}" aria-live="polite"></ul
 function wireRules(inputId, listId) {
   const draw = () => {
     $(listId).innerHTML = checkPassword($(inputId).value).map(r =>
-      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${r.ok ? '✓' : '○'}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
+      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${icon(r.ok ? 'check' : 'circle')}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
   };
   $(inputId).addEventListener('input', draw);
   draw();
@@ -656,7 +657,7 @@ addEventListener('sync', async e => {
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
   if (busy) return;
-  if (['decks', 'deck', 'browse', 'stats'].includes(currentRoute)) route();
+  if (['today', 'decks', 'deck', 'browse', 'stats'].includes(currentRoute)) route();
   else if (currentRoute === 'settings') {
     // Redraw Settings in place (keeping your scroll position) so synced study settings show.
     const view = $('screen').querySelector('.view'), y = scrollY;
@@ -685,6 +686,7 @@ async function seedSampleDeck() {
 const ROUTES = {
   // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
   // and the rest of the app shouldn't have to wait for it.
+  today: el => renderToday(el),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
   play: el => renderPlay(el),
   decks: el => renderLibrary(el),
@@ -701,16 +703,17 @@ let beforeSettings = null;   // address of the screen you were on before opening
 
 async function route() {
   const resetLink = takeResetLink();      // opened from a password reset email? (see below)
-  const [, name = 'decks', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
+  const [, name = 'today', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
   currentRoute = name;
   lastHash = location.hash;
   // The gear doubles as a close button while Settings is open.
   $('gearBtn').setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings');
-  const render = ROUTES[name] || ROUTES.decks;
+  const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
-  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name;
+  // (A running Review session counts as Today.)
+  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name === 'review' ? 'today' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -722,7 +725,7 @@ async function route() {
   el.className = 'view';
   $('screen').replaceChildren(el);
   // Which screen this is, for the desktop layout (some screens use the full width: see styles.css).
-  $('screen').dataset.route = ROUTES[name] ? name : 'decks';
+  $('screen').dataset.route = ROUTES[name] ? name : 'today';
   scrollTo(0, 0);
   try {
     await render(el, arg && decodeURIComponent(arg));
@@ -736,7 +739,7 @@ async function route() {
   if (resetLink) showResetLink(resetLink);
 }
 
-let lastHash = '#/decks';
+let lastHash = '#/today';
 
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
 function wireGear() {
@@ -744,7 +747,7 @@ function wireGear() {
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
     e.preventDefault();
     if (beforeSettings) history.back();                 // came from another screen: step back to it
-    else location.hash = '#/decks';                     // opened straight onto Settings: go to Decks
+    else location.hash = '#/today';                     // opened straight onto Settings: go home
   });
 }
 
@@ -799,8 +802,8 @@ async function start() {
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
   sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
-  // Opening the app with no "#/..." in the address shows the deck library.
-  if (!location.hash) history.replaceState(null, '', '#/decks');
+  // Opening the app with no "#/..." in the address shows Today.
+  if (!location.hash) history.replaceState(null, '', '#/today');
   addEventListener('hashchange', route);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();

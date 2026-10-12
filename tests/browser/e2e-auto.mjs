@@ -79,7 +79,7 @@ const twice = logs2.filter(l => appliedFirst.has(l.cardId));
 ok(twice.length > 0 && twice.every(l => !l.applied) && twice.every(l => before[l.cardId] === after[l.cardId]), `cards already changed today were not changed again (${twice.length} checked)`);
 
 // A paused Review session doesn't resume after Play changed schedules
-await page.click('.tab[data-tab=review]'); await page.waitForSelector('#startBtn, .empty');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn, .empty');
 if (await page.$('#startBtn')) {
   await page.click('#startBtn'); await page.waitForSelector('#flash');
   // make a due card for play to change

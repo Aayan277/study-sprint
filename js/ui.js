@@ -27,6 +27,36 @@ export function setFocusMode(on) {
 // The speaker button's picture (it replaces the 🔊 emoji, which looks different on every phone).
 export const SPEAKER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 
+// Small line icons (same style as the tab icons: 24px grid, 1.8 stroke) for buttons and labels.
+// icon('check') returns an <svg> that takes its color and size from the text around it (see .ico in styles.css).
+const ICON_PATHS = {
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  swap: '<path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
+  flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.2 1 2 2 2.2C10.5 8.5 11 5.5 12 3z"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  play: '<path d="M8 5.5v13l11-6.5z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  circle: '<circle cx="12" cy="12" r="6"/>',
+  sub: '<path d="M6 4v9a3 3 0 0 0 3 3h9M14 12l4 4-4 4"/>',
+  enter: '<path d="M20 6v6a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/>'
+};
+export const icon = (name, cls = '') =>
+  `<svg class="ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+
+// A progress ring (SVG). frac is 0 to 1; `inner` is drawn in the middle. Colors come from .ring-bg / .ring-fg in styles.css.
+export function ring(frac, size, stroke, inner = '', cls = '') {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac || 0));
+  return `<span class="ring${cls ? ' ' + cls : ''}" style="width:${size}px;height:${size}px">
+    <svg viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle class="ring-bg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}"/>
+    ${f > 0 ? `<circle class="ring-fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}" stroke-dasharray="${(c * f).toFixed(2)} ${c.toFixed(2)}" stroke-linecap="round" transform="rotate(-90 ${size / 2} ${size / 2})"/>` : ''}</svg>
+    <span class="ring-in">${inner}</span></span>`;
+}
+
 // Big screens (computers) get the desktop layout: a sidebar, wider pages, and side panels. See styles.css.
 const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side panel next to the page
 

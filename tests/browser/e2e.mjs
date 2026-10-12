@@ -47,7 +47,7 @@ ok(left.cards === 0 && left.decks === 1, 'delete removed deck and its cards ' + 
 await page.reload(); await page.waitForSelector('.deck');
 ok((await page.locator('.deck').count()) === 1, 'sample deck does not come back after delete');
 // tabs
-for (const t of ['review', 'play', 'stats']) { await page.click(`.tab[data-tab=${t}]`); await page.waitForSelector('#screen h1'); await noHScroll(t); }
+for (const t of ['today', 'play', 'stats']) { await page.click(`.tab[data-tab=${t}]`); await page.waitForSelector('#screen h1'); await noHScroll(t); }
 // settings + theme
 await page.click('[data-tab=settings]'); await page.waitForSelector('.skin'); await noHScroll('settings');
 await page.click('.skin[data-skin=rose]'); await page.click('input[name=mode][value=dark]', { force: true });

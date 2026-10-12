@@ -1,11 +1,11 @@
-// The Review tab: daily spaced-repetition review.
-//   1. Setup: choose decks, see how many cards are due, start.
+// Review: the spaced-repetition session. (Choosing what to study happens on Today: js/today.js.)
+//   1. Starting: from Today (all decks, one deck, or Custom study) or straight from a deck's page.
 //   2. Session: see the front, flip (tap or Space) or type the answer, rate Again / Hard / Good / Easy.
-//   3. Finish: cards reviewed, accuracy, time spent and what's due tomorrow.
+//   3. Finish: cards reviewed, accuracy, time spent, streak and what's due tomorrow.
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
@@ -13,11 +13,13 @@ import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
-import { examOptions, examInfo, examPrepQueue, countdown } from './exam.js';
+import { examOptions } from './exam.js';
+import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, live } from './study-data.js';
+import { dayStreak } from './stats-calc.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
-import { chainMap, subtreeIds, treeOrder, deckPath, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, onControl, setFocusMode, SPEAKER_ICON } from './ui.js';
+import { deckPath, effectiveDeck } from './deck-tree.js';
+import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -26,46 +28,8 @@ const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
 const MAX_CARD_MS = 2 * 60 * 1000;
 
-// ---------- loading ----------
-async function loadAll() {
-  const [settings, decks, cards, states, logs] = await Promise.all([
-    db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
-  ]);
-  decks.sort((a, b) => a.created - b.created);
-  const tree = treeOrder(decks);
-  decks.splice(0, decks.length, ...tree.map(x => x.deck));      // each deck followed by its subdecks
-  // New cards come in deck order, then in the order they were added.
-  const order = new Map(decks.map((d, i) => [d.id, i]));
-  cards.sort((a, b) => order.get(a.deckId) - order.get(b.deckId) || a.created - b.created);
-  // Suspended cards, and cards buried until tomorrow, sit out of Review.
-  const now = Date.now();
-  const hiddenCount = cards.filter(c => isHidden(c, now)).length;
-  const visible = cards.filter(c => !isHidden(c, now));
-  // New cards left today: the overall limit, each deck's own limit, plus any extra added with Custom study.
-  const extra = extraNewToday(settings.extraNew, now);
-  const deckOf = new Map(cards.map(c => [c.id, c.deckId]));
-  // A parent deck's limits cap its subdecks too (chains).
-  const chains = chainMap(decks);
-  const newLeft = newLimits({ perDay: settings.newPerDay, decks, logs, deckOf, extra, now, chains });
-  // Reviews left today: the overall daily review limit and each deck's own (none by default).
-  const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
-  return { settings, decks, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, extra, statesById: new Map(states.map(s => [s.cardId, s])), newLeft, reviewLeft };
-}
-
-// A set of decks and everything inside them.
-const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
-
-// How many cards a set of decks (and their subdecks) has for today.
-function countFor(data, deckIds) {
-  const ids = withSubdecks(data, deckIds);
-  const cards = data.cards.filter(c => ids.has(c.deckId));
-  const { queue, waiting } = buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
-  const due = queue.filter(q => q.kind !== 'new').length + waiting.length;
-  const fresh = queue.filter(q => q.kind === 'new').length;
-  return { cards, due, fresh, total: due + fresh };
-}
-
-// ---------- 1. setup ----------
+// ---------- 1. starting ----------
+// Today (js/today.js) decides what to study and hands it over with setLaunch(); this screen starts it.
 // Exam prep for one deck (from its page): open Review straight into the session.
 let prepFor = null;
 export function examPrep(deckId) {
@@ -76,178 +40,44 @@ export function examPrep(deckId) {
 export async function renderReview(el, deckId) {
   // Coming back to a session that's still going: carry on where you were.
   // (Unless Play changed some schedules meanwhile: then start fresh so no card is graded twice.)
-  if (R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId) && R.version === db.scheduleVersion()) return renderSession(el);
+  const launch = takeLaunch();         // Today may be starting something new: then don't resume the old session
+  if (!launch && R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId) && R.version === db.scheduleVersion()) return renderSession(el);
 
   const data = await loadAll();
+  if (!el.isConnected) return;                 // you already moved to another screen
+  const typing = data.settings.reviewTyping;
+
+  // From Today: its decks, or one of Custom study's sessions.
+  if (launch) {
+    const allIds = data.decks.map(d => d.id);
+    const chosen = launch.deckIds.filter(id => allIds.includes(id));
+    const c = countFor(data, chosen.length ? chosen : allIds);
+    return start(el, data, c.cards, typing, launch.deckId, launch.kind ? customQueue(launch.kind, data, c.cards, launch.days) : null);
+  }
+  // No deck and nothing started: the home screen is Today.
+  if (!deckId) { location.replace('#/today'); return; }
+
+  // From a deck's page: straight into its cards (no setup screen).
+  const inside = withSubdecks(data, [deckId]);
+  const deckCards = data.cards.filter(c => inside.has(c.deckId));
   if (prepFor && prepFor === deckId) {
     prepFor = null;
-    const inside = withSubdecks(data, [deckId]);
-    const cards = data.cards.filter(c => inside.has(c.deckId));
-    const prep = examPrepQueue(cards, data.statesById);
-    if (prep.queue.length) return start(el, data, cards, data.settings.reviewTyping, deckId, { ...prep, label: 'Exam prep' });
+    const prep = customQueue('prep', data, deckCards);
+    if (prep.queue.length) return start(el, data, deckCards, typing, deckId, prep);
+    toast('You have seen every card in this deck in the last 3 days');
+    location.replace(`#/deck/${encodeURIComponent(deckId)}`);
+    return;
   }
-  const allIds = data.decks.map(d => d.id);
-  let chosen = deckId ? [deckId] : data.settings.reviewDecks.filter(id => allIds.includes(id));
-  let typing = data.settings.reviewTyping;
-
-  const draw = () => {
-    const ids = chosen.length ? chosen : allIds;
-    const c = countFor(data, ids);
-    const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
-    el.innerHTML = `
-      <div class="screen-head"><div><span class="eyebrow mono">${esc(today.toUpperCase())}</span><h1>Review</h1></div></div>
-      <div class="summary">
-        <div><div class="v">${c.due}</div><div class="l">Due</div></div>
-        <div><div class="v">${c.fresh}</div><div class="l">New today</div></div>
-        <div><div class="v">${c.total}</div><div class="l">Total</div></div>
-      </div>
-      ${data.decks.length ? `
-      <section class="section">
-        <h2>Decks</h2>
-        <div class="chips" id="deckChips">
-          <button type="button" class="tchip" data-all aria-pressed="${!chosen.length}">All decks</button>
-          ${data.decks.map(d => {
-            const dc = countFor(data, [d.id]);
-            const depth = data.depth.get(d.id);
-            return `<button type="button" class="tchip" data-deck="${esc(d.id)}" aria-pressed="${chosen.includes(d.id)}" ${depth ? `title="${esc(deckPath(data.decks, d.id))}"` : ''}>
-              ${depth ? '<span class="sub-mark" aria-hidden="true">↳</span>' : ''}<i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due}·${dc.fresh}</small></button>`;
-          }).join('')}
-        </div>
-        <p class="note">Numbers show due · new for each deck (with its subdecks). You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
-      </section>
-      <section class="section">
-        <h2>Answer by</h2>
-        <div class="chips" id="modeChips">
-          <button type="button" class="tchip" data-typing="0" aria-pressed="${!typing}">Flipping the card</button>
-          <button type="button" class="tchip" data-typing="1" aria-pressed="${typing}">Typing the answer</button>
-        </div>
-        <p class="note">Typing is used for answers of 40 characters or less. Longer ones are flipped.</p>
-      </section>` : ''}
-      ${c.total
-        ? `<button class="btn primary wide" type="button" id="startBtn">Start review · ${plural(c.total, 'card')}</button>
-           <p class="hint mono">Space to flip · 1–4 to rate · Enter for Good · E edit · I info · - bury · @ suspend · R read aloud</p>`
-        : emptyMessage(data, c)}
-      ${data.decks.length ? '<button class="btn ghost wide custom-btn" type="button" id="customBtn">Custom study…</button>' : ''}`;
-
-    $('startBtn')?.addEventListener('click', () => start(el, data, c.cards, typing, deckId));
-    $('customBtn')?.addEventListener('click', () => openCustomStudy(el, data, c.cards, typing, deckId));
-    el.querySelector('[data-all]')?.addEventListener('click', () => { chosen = []; save(); draw(); });
-    el.querySelectorAll('[data-deck]').forEach(b => b.addEventListener('click', () => {
-      const id = b.dataset.deck;
-      chosen = chosen.includes(id) ? chosen.filter(x => x !== id) : [...chosen, id];
-      save(); draw();
-    }));
-    el.querySelectorAll('[data-typing]').forEach(b => b.addEventListener('click', () => {
-      typing = b.dataset.typing === '1';
-      db.setSetting('reviewTyping', typing);
-      draw();
-    }));
-  };
-  // Opening Review from one deck doesn't change your saved deck choice.
-  const save = () => { if (!deckId) db.setSetting('reviewDecks', chosen); };
-  draw();
-}
-
-function emptyMessage(data, c) {
-  if (!data.cards.length && !data.hiddenCount) {
-    return `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>`;
-  }
-  // When does the next card in these decks come due?
-  const ids = new Set(c.cards.map(x => x.id));
-  const next = Math.min(...[...data.statesById.values()].filter(s => ids.has(s.cardId) && s.state !== NEW).map(s => s.due));
-  const when = Number.isFinite(next) ? `The next card is due in <b>${formatInterval(next - Date.now())}</b>.` : '';
-  const hidden = data.hiddenCount ? `<br><span class="muted">${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.</span>` : '';
-  return `<div class="empty"><b>All caught up.</b><br>Nothing is due right now. ${when}${hidden}</div>`;
-}
-
-// ---------- custom study ----------
-// Extra study beyond today's cards, for the decks chosen on the setup screen (like Anki's Custom study).
-//   cards  the cards in those decks (suspended and buried ones already left out)
-function openCustomStudy(el, data, cards, typing, deckId) {
-  const forgot = forgottenQueue(cards, data.statesById, data.logs);
-  const isNew = c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; };
-  const newAvail = cards.filter(isNew).length;
-  let days = 3, extra = 10;
-  // Decks here with an exam coming up (subdecks use their parent's date unless they set one), and their
-  // exam prep session.
-  const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
-  const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) }))
-    .filter(e => e.info && cards.some(c => subtreeIds(data.decks, e.deck.id).has(c.deckId) && examOf.get(c.deckId)));
-  const prep = examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById);
-
-  openSheet(`
-    <h2 id="sheetTitle">Custom study</h2>
-    <p class="note" style="margin-top:0">For the decks chosen on the Review screen.</p>
-    <div class="cs-opt">
-      <b>More new cards today</b>
-      <p>Raises today's new card limit (each deck's own limit too). It goes back to normal tomorrow. ${plural(newAvail, 'new card')} available.</p>
-      <div class="cs-row">
-        <div class="stepper">
-          <button type="button" class="icon-btn" id="csMinus" aria-label="Fewer">−</button>
-          <input id="csNew" type="number" inputmode="numeric" min="1" max="999" value="${extra}" aria-label="Extra new cards">
-          <button type="button" class="icon-btn" id="csPlus" aria-label="More">+</button>
-        </div>
-        <button class="btn primary small" type="button" id="csNewBtn" ${newAvail ? '' : 'disabled'}>Add</button>
-      </div>
-    </div>
-    <div class="cs-opt">
-      <b id="csAheadLbl">Review ahead</b>
-      <p>Study cards that aren't due yet, for example before an exam. Each one is rescheduled from today.</p>
-      <div class="chips" role="group" aria-labelledby="csAheadLbl">
-        ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
-          `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
-      </div>
-      <button class="btn primary small" type="button" id="csAheadBtn"></button>
-    </div>
-    ${exams.length ? `<div class="cs-opt">
-      <b>Exam prep</b>
-      <p>${esc(exams.map(e => `${e.deck.name}: ${countdown(e.info).toLowerCase()}`).join(' · '))}. Go over every card you haven't seen in the last 3 days, weakest first, then any you haven't started.</p>
-      <button class="btn primary small" type="button" id="csPrepBtn" ${prep.queue.length ? '' : 'disabled'}>${prep.queue.length ? `Review ${plural(prep.queue.length, 'card')}` : 'All seen recently'}</button>
-    </div>` : ''}
-    <div class="cs-opt">
-      <b>Cards I forgot today</b>
-      <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
-      <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
-    </div>
-    <button class="btn ghost" type="button" id="csClose">Close</button>`);
-
-  const drawAhead = () => {
-    const n = aheadQueue(cards, data.statesById, days).queue.length;
-    $('csAheadBtn').textContent = n ? `Review ${plural(n, 'card')}` : 'Nothing due then';
-    $('csAheadBtn').disabled = !n;
-  };
-  drawAhead();
-  document.querySelectorAll('#sheet [data-days]').forEach(b => b.addEventListener('click', () => {
-    days = +b.dataset.days;
-    document.querySelectorAll('#sheet [data-days]').forEach(x => x.setAttribute('aria-pressed', x === b));
-    drawAhead();
-  }));
-  const setExtra = v => { extra = Math.max(1, Math.min(999, Math.round(Number(v) || 1))); $('csNew').value = extra; };
-  $('csNew').addEventListener('change', e => setExtra(e.target.value));
-  $('csMinus').addEventListener('click', () => setExtra(extra - 5));
-  $('csPlus').addEventListener('click', () => setExtra(extra + 5));
-  $('csNewBtn').addEventListener('click', async () => {
-    setExtra($('csNew').value);
-    const n = extraNewToday(data.settings.extraNew) + extra;       // adds to any extras from earlier today
-    await db.setSetting('extraNew', { day: dayStart(), n });
-    closeSheet();
-    toast(`${plural(extra, 'extra new card')} for today`);
-    if (R && !R.active) R = null;
-    renderReview(el, deckId);
-  });
-  $('csAheadBtn').addEventListener('click', () => {
-    closeSheet();
-    start(el, data, cards, typing, deckId, { ...aheadQueue(cards, data.statesById, days), label: 'Review ahead' });
-  });
-  $('csPrepBtn')?.addEventListener('click', () => {
-    closeSheet();
-    start(el, data, cards, typing, deckId, { ...prep, label: 'Exam prep' });
-  });
-  $('csForgotBtn').addEventListener('click', () => {
-    closeSheet();
-    start(el, data, cards, typing, deckId, { ...forgot, label: 'Forgotten today' });
-  });
-  $('csClose').addEventListener('click', closeSheet);
+  const c = countFor(data, [deckId]);
+  if (c.total) return start(el, data, c.cards, typing, deckId);
+  const name = data.decks.find(d => d.id === deckId)?.name || 'This deck';
+  el.innerHTML = `
+    <div class="screen-head"><div><span class="eyebrow mono">REVIEW</span><h1>${esc(name)}</h1></div></div>
+    <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}</div>
+    <div class="res-actions">
+      <a class="btn primary" href="#/today">Back to Today</a>
+      <a class="btn ghost" href="#/deck/${esc(deckId)}">Open deck</a>
+    </div>`;
 }
 
 // ---------- 2. session ----------
@@ -297,7 +127,7 @@ function nextCard(el) {
   R.flipped = false; R.typed = null; R.suggest = null;
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
-  renderSession(el);
+  renderSession(el, true);
 }
 
 // Cards left, split like Anki: new · learning · review. The current card's kind is underlined.
@@ -312,53 +142,86 @@ function countsHTML() {
     <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
-function renderSession(el) {
+// Draw the card on screen. Both faces are in the page from the start: the front, and the back (the
+// question again, small, with the answer), so flip() only has to turn the card over.
+//   enter: a new card is coming in, so it rises into place
+function renderSession(el, enter = false) {
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
   if (!R.current) return finish(el);
-  setFocusMode(true);
   const { card } = R.current;
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = R.typing && canType(plainText(card.back));
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
+  const deckLabel = `<span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
+  const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
 
   el.innerHTML = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
       ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
-      <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">⋯</button>
+      <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>
-    <article class="flash${R.flipped ? ' flipped' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
-      <span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>
-      <div class="flash-front${size}">${imgHTML(card.frontImage)}${formatHTML(card.front)}</div>
-      <div class="flash-ans" ${R.flipped ? '' : 'hidden'}>
-        ${R.typed ? typedResultHTML() : ''}
-        <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
+      <div class="rv-turn">
+        <div class="rv-face rv-front" ${R.flipped ? 'aria-hidden="true"' : ''}>
+          ${deckLabel}
+          <div class="flash-front${size}">${front}</div>
+          ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
+        </div>
+        <div class="rv-face rv-back" ${R.flipped ? '' : 'aria-hidden="true"'}>
+          ${deckLabel}
+          <div class="flash-recap">${front}</div>
+          <div class="flash-ans">
+            <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
+            <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+          </div>
+        </div>
       </div>
-      ${!R.flipped && !typeThis ? `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>` : ''}
     </article>
     ${typeThis && !R.flipped ? `
       <form class="typeform" id="typeForm" autocomplete="off">
         <input id="typeIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !R.flipped ? '<p class="note center">Long answer: say it in your head, then flip.</p>' : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`}</div>`;
+    ${R.typing && !typeThis && !R.flipped ? '<p class="note center" id="longNote">Long answer: say it in your head, then flip.</p>' : ''}
+    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>`;
+  setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu());
   $('speakBtn')?.addEventListener('click', () => readAloud());
-  // Decks set to read aloud: the front when a card appears, the back when it's flipped (once each).
+  autoSpeak(card);
+  wireRatebar(el);
+  $('flash').addEventListener('click', () => { if (!R.flipped && !typeThis) flip(el); });
+  $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
+  if (typeThis && !R.flipped) $('typeIn').focus();
+  publishLive();
+}
+
+const showButtonHTML = typeThis =>
+  `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`;
+
+// The buttons under the card: Show answer, or the four ratings.
+function wireRatebar(el) {
+  $('showBtn')?.addEventListener('click', () => flip(el));
+  $('ratebar').querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => answer(el, +b.dataset.rate)));
+}
+
+// Decks set to read aloud: the front when a card appears, the back when it's flipped (once each).
+function autoSpeak(card) {
   const key = `${card.id}:${R.flipped}`;
   if (deckOf(card)?.ttsAuto && R.spoken !== key) { R.spoken = key; readAloud(); }
-  $('showBtn')?.addEventListener('click', () => flip(el));
-  if (!R.flipped && !typeThis) $('flash').addEventListener('click', () => flip(el));
-  $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
-  $('ratebar').querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => answer(el, +b.dataset.rate)));
-  if (typeThis && !R.flipped) $('typeIn').focus();
+}
+
+// Tell Today whether a session is in progress, so it can offer to resume it.
+function publishLive() {
+  live.resume = R?.active
+    ? { left: R.queue.length + R.waiting.length + (R.current ? 1 : 0), deckId: R.deckId, day: R.day, version: R.version }
+    : null;
 }
 
 function rateButtonsHTML() {
@@ -370,17 +233,29 @@ function rateButtonsHTML() {
 
 function typedResultHTML() {
   const { value, result } = R.typed;
-  if (result.correct) return `<p class="typed ok">✓ ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact ? '' : `: <span class="given">${esc(value)}</span>`}</p>`;
-  return `<p class="typed no">✗ ${value.trim() ? `Not quite. You typed <span class="given">${esc(value)}</span>` : 'No answer'}</p>`;
+  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact ? '' : `: <span class="given">${esc(value)}</span>`}</p>`;
+  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite. You typed <span class="given">${esc(value)}</span>` : 'No answer'}</p>`;
 }
 
+// Turn the card over. Only the parts that change are touched (the card stays in the page, so the CSS
+// turn can play), and nothing waits for it: 1–4 work the moment this returns.
 function flip(el) {
   if (R.flipped) return;
   R.flipped = true;
   R.answerMs = Date.now() - R.shownAt;
   // "I don't know" while typing counts as a miss.
   if (R.typing && canType(plainText(R.current.card.back)) && !R.typed) R.suggest = Rating.Again;
-  renderSession(el);
+  const flash = $('flash');
+  flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
+  flash.classList.add('flipped');
+  ['role', 'tabindex', 'aria-label'].forEach(a => flash.removeAttribute(a));
+  flash.querySelector('.rv-front').setAttribute('aria-hidden', 'true');
+  flash.querySelector('.rv-back').removeAttribute('aria-hidden');
+  $('typeForm')?.remove();
+  $('longNote')?.remove();
+  $('ratebar').innerHTML = rateButtonsHTML();
+  wireRatebar(el);
+  autoSpeak(R.current.card);
   $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
 }
 
@@ -457,7 +332,7 @@ async function undo(el) {
     R.active = true;
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null;
     R.shownAt = Date.now(); R.answerMs = 0;
-    renderSession(el);
+    renderSession(el, true);
   } finally {
     R.busy = false;
   }
@@ -506,6 +381,7 @@ async function quick(act) {
 // ---------- 3. finish ----------
 async function finish(el) {
   R.active = false;
+  publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   const { reviewed, again, spent } = R.stats;
   // Reviews due by the end of tomorrow in the decks you just studied.
@@ -514,6 +390,7 @@ async function finish(el) {
   const ids = new Set(cards.map(c => c.id));
   const tomorrowEnd = dayEnd(Date.now(), 1);
   const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
+  const streak = dayStreak((await db.getAll('reviewLog')).filter(l => l.source === 'review' || l.source === 'play' || l.source === 'anki'));
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!location.hash.startsWith('#/review')) return;
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
@@ -528,12 +405,19 @@ async function finish(el) {
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
     <p class="note">${R.current ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <section class="finish-next" aria-label="What's next">
+      <p class="streak ${streak.studiedToday ? 'kept' : ''}">${icon('flame')}<b class="mono">${streak.days}</b> day streak
+        <span>${streak.studiedToday ? 'Kept for today' : streak.days ? 'Study today to keep it' : 'Study today to start one'}</span></p>
+      <p class="fn-line">${icon('calendar')} <span>${dueTomorrow ? `<b>${plural(dueTomorrow, 'card')}</b> due tomorrow.` : 'Nothing due tomorrow.'}</span></p>
+      <p class="fn-line">${icon('bolt')} <span>Lock it in with a quick Play round. Right answers on due cards count toward your schedule.</span></p>
+      <a class="btn ghost" href="#/play">Play a round</a>
+    </section>
     <div class="res-actions">
-      <a class="btn primary" href="#/decks">Back to decks</a>
-      <button class="btn ghost" type="button" id="againBtn">Review screen</button>
+      <button class="btn primary" type="button" id="againBtn">Back to Today</button>
+      <a class="btn ghost" href="#/decks">Decks</a>
       ${R.undo.length ? '<button class="btn ghost" type="button" id="undoLast">Undo last</button>' : ''}
     </div>`;
-  $('againBtn').addEventListener('click', () => { R = null; renderReview(el); });
+  $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
   $('undoLast')?.addEventListener('click', () => undo(el));
 }
 

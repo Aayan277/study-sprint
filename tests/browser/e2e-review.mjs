@@ -21,12 +21,12 @@ await page.click('#gearBtn'); await page.waitForSelector('.crow');
 ok(page.url() === deckUrl, 'gear closes settings and returns to the deck page');
 // opened straight onto settings -> gear goes to decks
 { const p2 = await ctx.newPage(); await p2.goto('http://localhost:8123/#/settings'); await p2.waitForSelector('#npd');
-  await p2.click('#gearBtn'); await p2.waitForSelector('.deck');
-  ok(p2.url().endsWith('#/decks'), 'gear from a direct settings link goes to decks'); await p2.close(); }
+  await p2.click('#gearBtn'); await p2.waitForSelector('.today-hero');
+  ok(p2.url().endsWith('#/today'), 'gear from a direct settings link goes to Today'); await p2.close(); }
 await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
 
 // review setup
-await page.click('.tab[data-tab=review]'); await page.waitForSelector('#startBtn');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
 ok((await page.textContent('#startBtn')).includes('12 cards'), 'setup: 12 new cards from the sample deck');
 await page.screenshot({ path: SP + '/r-setup.png', fullPage: true }); await noHScroll('review setup');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
@@ -73,7 +73,9 @@ ok(easy && easy.due - Date.now() > 3 * 86400000, 'Easy card scheduled days ahead
 await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // the tab bar is hidden during a round on phones
 const dueText = await page.textContent('.deck-counts .due');
 ok(dueText.includes('1'), 'deck list shows the learning card as due today: ' + dueText);
-await page.click('.tab[data-tab=review]'); await page.waitForSelector('#flash');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn');
+ok((await page.textContent('.resume')).includes('left'), 'Today offers to resume the session: ' + (await page.textContent('.resume')).replace(/\s+/g, ' ').trim());
+await page.click('#resumeBtn'); await page.waitForSelector('#flash');
 ok(JSON.stringify(await counts()) === '[10,1,0]', 'session resumes after visiting another tab');
 // end
 await page.click('#endBtn'); await page.waitForSelector('.stats4');
@@ -85,7 +87,7 @@ await page.screenshot({ path: SP + '/r-finish.png' });
 
 // typing mode
 await page.click('#againBtn'); await page.waitForSelector('#startBtn');
-await page.click('[data-typing="1"]'); await page.click('#startBtn'); await page.waitForSelector('#flash');
+await page.click('#optBtn'); await page.click('[data-typing="1"]'); await page.click('#optDone'); await page.click('#startBtn'); await page.waitForSelector('#flash');
 const card = await page.evaluate(async () => {
   const db = await import('./js/db.js'); const f = document.querySelector('.flash-front').textContent;
   return (await db.getAll('cards')).find(c => c.front === f);

@@ -1,7 +1,8 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
+import { loadAll, countFor, launchStudy } from './study-data.js';
 import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
@@ -98,7 +99,7 @@ function masteryBar(s) {
 
 // ---------- the deck list ----------
 export async function renderLibrary(el) {
-  const list = await loadDecks();
+  const [list, today] = await Promise.all([loadDecks(), loadAll()]);
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
   const fold = folded();
@@ -114,12 +115,13 @@ export async function renderLibrary(el) {
         <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
       </div>
     </div>
-    <div class="summary">
-      <div><div class="v">${sum('due')}</div><div class="l">Due today</div></div>
-      <div><div class="v">${sum('new')}</div><div class="l">New</div></div>
-      <div><div class="v">${sum('total')}</div><div class="l">Cards</div></div>
+    <div class="dsum" aria-label="All decks">
+      <span><b class="mono">${sum('due')}</b> due today</span>
+      <span><b class="mono">${sum('new')}</b> new</span>
+      <span><b class="mono">${sum('total')}</b> cards</span>
+      <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>
-    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; return `
+    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; const go = countFor(today, [deck.id]).total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0; return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
@@ -131,10 +133,12 @@ export async function renderLibrary(el) {
             <span><b>${stats.new}</b> new</span>
           </span>
         </button>
-        <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
-        </button>
-        ${masteryBar(stats)}
+        <span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 40, 4, `<small class="mono">${Math.round(mastered * 100)}</small>`)}<span class="sr-only">${Math.round(mastered * 100)}% mastered</span></span>
+        <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
+        <div class="deck-act">
+          ${go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
+                : `<span class="deck-done">${icon('check')} Done for today</span>`}
+        </div>
         ${subdeckBox(list, item, !fold.has(deck.id))}
       </article>`; }).join('')}</div>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
@@ -155,6 +159,7 @@ export async function renderLibrary(el) {
   $('newDeck').addEventListener('click', create);
   $('newDeck2')?.addEventListener('click', create);
   el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
+  el.querySelectorAll('[data-study]').forEach(b => b.addEventListener('click', () => launchStudy({ deckIds: [b.dataset.study], deckId: b.dataset.study })));
   el.querySelectorAll('[data-fold]').forEach(d => d.addEventListener('toggle', () => setFolded(d.dataset.fold, !d.open)));
   el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
     openDeckEditor(list.find(x => x.deck.id === b.dataset.edit).deck, () => renderLibrary(el));

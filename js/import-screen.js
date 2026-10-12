@@ -7,7 +7,7 @@ import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from '
 import { deckChoices, subtreeIds } from './deck-tree.js';
 import { schedulerOptions } from './sched-settings.js';
 import { DECK_COLORS } from './decks.js';
-import { $, esc, plural, toast } from './ui.js';
+import { $, esc, plural, toast, icon } from './ui.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -92,7 +92,7 @@ export async function renderImport(el, deckId) {
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
-        <button class="btn ghost small" type="button" id="swapBtn">⇄ Swap front and back</button>
+        <button class="btn ghost small" type="button" id="swapBtn">${icon('swap')} Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
       </div>
       <ol class="plist" id="plist"></ol>

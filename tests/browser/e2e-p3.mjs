@@ -30,7 +30,8 @@ await page.screenshot({ path: SP + '/p3-deck.png', fullPage: true });
 await page.fill('#deckNew', '1'); await page.click('#deckForm button[type=submit]'); await page.waitForTimeout(300);
 ok((await page.evaluate(async () => (await import('./js/db.js')).getDeck('B'))).newPerDay === 1, 'deck limit saved');
 
-await page.goto('http://localhost:8123/#/review'); await page.waitForSelector('#customBtn');
+const openOpts = async () => { await page.click('#optBtn'); await page.waitForSelector('#customBtn'); };
+await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#optBtn'); await openOpts();
 ok(await chip('Second') === '0·1', 'Second deck limited to 1 new card: ' + await chip('Second'));
 ok(await chip('Intro') === '0·9', 'sample deck: 9 new: ' + await chip('Intro'));
 
@@ -42,7 +43,8 @@ ok(await page.textContent('#csAheadBtn') === 'Review 2 cards', '1 week ahead: 2 
 ok(await page.textContent('#csForgotBtn') === 'Review 1 card', 'forgotten today: 1 card');
 await noH('custom study'); await page.screenshot({ path: SP + '/p3-custom.png', fullPage: true });
 await page.fill('#csNew', '5'); await page.dispatchEvent('#csNew', 'change'); await page.click('#csNewBtn');
-await page.waitForFunction(() => document.querySelector('.note')?.textContent.includes('+ 5 extra'));
+await page.waitForSelector('#sheet:not([open])', { state: 'attached' }); await openOpts();
+await page.waitForFunction(() => document.querySelector('#sheet .note')?.textContent.includes('+ 5 extra'));
 ok(await chip('Second') === '0·3' && await chip('Intro') === '0·9', 'extra new raises limits: ' + await chip('Second'));
 const s = await page.evaluate(async () => (await import('./js/db.js')).getSettings());
 ok(s.extraNew.n === 5, 'extra saved for today');
@@ -57,7 +59,7 @@ await page.waitForSelector('#againBtn');
 const due = await page.evaluate(async f => { const db = await import('./js/db.js'); const c = (await db.getAll('cards')).find(c => c.front === f); return (await db.get('cardStates', c.id)).due; }, ids[0]);
 ok(due > Date.now() + 2 * 86400000, 'reviewed-ahead card rescheduled');
 // back to setup: normal day not affected
-await page.click('#againBtn'); await page.waitForSelector('#customBtn');
+await page.click('#againBtn'); await page.waitForSelector('#optBtn'); await openOpts();
 await page.click('#customBtn'); await page.waitForSelector('#csForgotBtn'); await page.click('#csForgotBtn');
 await page.waitForSelector('.flash');
 ok((await page.textContent('.flash-deck')).includes('Forgotten today') && await page.textContent('.flash-front') === ids[2], 'forgotten today session');

@@ -48,7 +48,7 @@ ok(/^(\d+d|1[0-9]?d|[1-9]d)$/.test(easyLabel) && parseInt(easyLabel) <= 10, 'the
 await page.click('#endBtn');
 // custom study offers exam prep too
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
-await page.goto('http://localhost:8123/#/review'); await page.waitForSelector('#customBtn'); await page.click('#customBtn');
+await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#optBtn'); await page.click('#optBtn'); await page.waitForSelector('#customBtn'); await page.click('#customBtn');
 await page.waitForSelector('#csPrepBtn');
 ok((await page.textContent('.cs-opt:has(#csPrepBtn)')).includes('exam in 10 days'), 'Custom study offers Exam prep');
 await page.click('#csClose');

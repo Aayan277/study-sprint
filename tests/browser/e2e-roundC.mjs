@@ -70,12 +70,12 @@ await p.click('#deckCancel');
 
 // limits: parent's new-card limit caps its subdecks
 await DB(async ([u]) => { const db = await import('./js/db.js'); await db.saveDeck({ ...(await db.getDeck('sample')), newPerDay: 3 }); await db.saveDeck({ ...(await db.getDeck(u)), newPerDay: 1 }); }, [u1.id]);
-await go('#/review', '#deckChips');
+await go('#/today', '#optBtn'); await p.click('#optBtn'); await p.waitForSelector('#deckChips');
 const chips = await p.$$eval('#deckChips [data-deck]', b => b.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
-ok(chips.length === 3 && chips[1].includes('↳'), 'chips in tree order: ' + chips.join(' | '));
-ok(+(await p.$$eval('.summary .v', v => v[1].textContent)) === 3, "parent's limit of 3 caps the group");
+ok(chips.length === 3 && chips[1].length > 0 && (await p.$$('#deckChips .sub-mark')).length === 2, 'chips in tree order: ' + chips.join(' | '));
+ok(+(await p.$eval('[data-count=new]', v => v.textContent)) === 3, "parent's limit of 3 caps the group");
 await p.click(`[data-deck="${u1.id}"]`);
-const u1new = +(await p.$$eval('.summary .v', v => v[1].textContent));
+const u1new = +(await p.$eval('[data-count=new]', v => v.textContent));
 ok(u1new === 1, `choosing Unit 1 (limit 1, includes Lecture 3): ${u1new} new`);
 await p.click('[data-all]');
 
@@ -87,7 +87,7 @@ const eff = await DB(async ([l]) => {
 }, [l3.id]);
 ok(eff.options?.learningSteps === '3m' && eff.ttsLang === 'fr-FR', 'Lecture 3 inherits options and language');
 await DB(async () => { const db = await import('./js/db.js'); await db.clearStates((await db.getAll('cards')).map(c => c.id)); });
-await go('#/review', '#deckChips'); await p.click(`[data-deck="${l3.id}"]`); await p.click('#startBtn'); await p.waitForSelector('.flash');
+await go('#/today', '#optBtn'); await p.click('#optBtn'); await p.waitForSelector('#deckChips'); await p.click(`[data-deck="${l3.id}"]`); await p.click('#optDone'); await p.click('#startBtn'); await p.waitForSelector('.flash');
 ok((await p.textContent('.flash-deck')).includes('Unit 1 › Lecture 3'), 'review shows the subdeck path');
 await p.keyboard.press(' '); await p.waitForSelector('.rate');
 ok(await p.$eval('.rate.r1 span', s => s.textContent) === '3m' || console.log(await p.$$eval('.rate span', s => s.map(x => x.textContent))), "a subdeck card's Again follows the parent's steps (3m)");

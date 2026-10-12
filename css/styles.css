@@ -272,7 +272,7 @@ body.focus .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
 
 .card{background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-4);min-width:0}
 .section{margin-bottom:var(--s-6)}
-.link{background:none;border:0;color:var(--text-2);cursor:pointer;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm);padding:8px 9px;min-height:40px}
+.link{text-decoration:none;background:none;border:0;color:var(--text-2);cursor:pointer;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm);padding:8px 9px;min-height:40px}
 .link:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
 .link:disabled{opacity:.4;cursor:default}
 .link.more{min-width:38px;color:var(--text-2);font-size:1.2rem;line-height:1}
@@ -289,20 +289,74 @@ body.focus .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
 .crumbs a{color:var(--text-2);text-decoration:none}
 .crumbs a:hover{color:var(--accent-text)}
 
-/* ---------- 7. Deck library: the Today card and the deck tiles ---------- */
-/* .summary is the "Today" card: the due count is big and glows, the other two numbers sit beside it */
-.summary{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:end;background:var(--hero);border-radius:var(--r-lg);box-shadow:var(--e-2);margin-bottom:var(--s-6);overflow:hidden}
-.summary > div{padding:var(--s-4);display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:2px;min-width:0}
-.summary > div:first-child{padding:var(--s-5) var(--s-4) var(--s-4) var(--s-5)}
-.summary > div + div{padding-left:var(--s-5);padding-right:var(--s-5);box-shadow:inset 1px 0 0 var(--line)}
-.summary .v{font:600 var(--fs-xl)/1 var(--f-num);letter-spacing:-.04em;color:var(--text)}
-.summary > div:first-child .v{font-size:3.25rem;letter-spacing:-.06em;text-shadow:0 0 28px var(--glow)}
-.summary .l{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin-bottom:6px;white-space:nowrap}
-.summary > div:first-child .l{color:var(--accent-text)}
-main[data-route="review"] .summary{margin-bottom:var(--s-5)}
+/* ---------- 7. Today, and the deck library ---------- */
+/* Decks: a slim summary row above the tiles (the big numbers live on Today) */
+.dsum{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-4);padding:6px var(--s-4);margin-bottom:var(--s-4);background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);font-size:var(--fs-sm);color:var(--text-2)}
+.dsum b{color:var(--text);font-weight:600}
+.dsum .link{margin-left:auto;display:inline-flex;align-items:center;gap:2px;padding:6px 4px;min-height:36px}
+.dsum .link .ico{width:14px;height:14px}
+
+/* Line icons (js/ui.js icon()): they size to the text around them and take its color */
+.ico{width:1.15em;height:1.15em;flex:none}
+.btn .ico{width:18px;height:18px}
+/* Progress ring (js/ui.js ring()) */
+.ring{position:relative;display:inline-grid;place-items:center;flex:none}
+.ring > svg{position:absolute;inset:0;width:100%;height:100%}
+.ring-bg{fill:none;stroke:color-mix(in srgb,var(--text) 13%,transparent)}
+.ring-fg{fill:none;stroke:var(--accent);filter:drop-shadow(0 0 4px var(--glow))}
+.ring-in{position:relative;display:flex;flex-direction:column;align-items:center;line-height:1;color:var(--text)}
+.ring-check{width:30px;height:30px;color:var(--good)}
+
+/* Today: goal ring, streak and one big Start button, then a row per course */
+.today-hero{background:var(--hero);border-radius:var(--r-lg);box-shadow:var(--e-2);padding:var(--s-5);margin-bottom:var(--s-4)}
+.th-main{display:flex;align-items:center;gap:var(--s-4)}
+.th-main .ring-in b{font-size:1.5rem;font-weight:600;letter-spacing:-.04em}
+.th-main .ring-in small{font-size:var(--fs-2xs);color:var(--text-2);margin-top:3px}
+.th-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.th-label{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;color:var(--accent-text)}
+.th-big{font-size:var(--fs-xl);font-weight:650;letter-spacing:-.035em;line-height:1.1;text-shadow:0 0 28px var(--glow)}
+.th-sub{font-size:var(--fs-sm);color:var(--text-2)}
+.th-sub b{color:var(--text);font-weight:600}
+.streak{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:var(--s-4) 0;font-size:var(--fs-sm);color:var(--text-2)}
+.streak .ico{width:18px;height:18px;color:var(--text-3)}
+.streak b{color:var(--text);font-size:var(--fs-md)}
+.streak span{flex-basis:100%;padding-left:24px;color:var(--text-2)}
+.streak.kept .ico{color:var(--hard);filter:drop-shadow(0 0 6px var(--hard-line))}
+.btn.big{min-height:56px;font-size:var(--fs-md)}
+.th-done b{display:block;font-size:var(--fs-md);margin-bottom:2px}
+.th-done p{margin:0 0 var(--s-3);color:var(--text-2);font-size:var(--fs-sm)}
+.resume{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);margin-bottom:var(--s-3);background:var(--accent-tint);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:var(--fs-sm)}
+.resume .ico{vertical-align:-3px;margin-right:4px}
+.filtered{margin:calc(var(--s-1) * -1) 0 var(--s-5)}
+.filtered .link{padding:4px 6px;min-height:32px;color:var(--accent-text)}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-3);margin-bottom:var(--s-3)}
+.sec-head h2{margin:0}
+.sec-head .link{padding:4px 6px;min-height:32px}
+.exams{display:grid;gap:var(--s-2)}
+.exam-row{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);padding:var(--s-2) var(--s-3) var(--s-2) var(--s-4);background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);overflow:hidden}
+.exam-row::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
+.exam-link{display:flex;align-items:center;gap:var(--s-2);flex:1 1 140px;min-width:0;color:var(--text);text-decoration:none;font-weight:600}
+.exam-link .ico{color:var(--text-2)}
+.exam-name{overflow-wrap:anywhere}
+.tdecks{display:grid;gap:var(--s-2)}
+.tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
+.tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
+.tdeck:hover{background:var(--surface-2);box-shadow:var(--e-2)}
+.tdeck:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.td-main{flex:1;min-width:0;display:grid;gap:2px}
+.td-name{font-weight:600;font-size:var(--fs-md);letter-spacing:-.02em;line-height:1.3;overflow-wrap:anywhere}
+.td-counts{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-3);font-size:var(--fs-xs);color:var(--text-2)}
+.td-counts b{font-family:var(--f-num);font-weight:500;color:var(--text)}
+.td-counts .due{padding:0 8px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
+.td-counts .due b{color:var(--accent-text)}
+.td-go{display:flex;align-items:center;gap:var(--s-2);flex:none}
+.td-min{font-size:var(--fs-xs);color:var(--text-2)}
+.td-go .ico{width:36px;height:36px;padding:9px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
+.tdeck.done .td-go .ico{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good)}
+.tdeck.done .td-name{color:var(--text-2)}
 
 .decks{display:grid;gap:var(--s-2)}
-.deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
+.deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
 .deck:hover{background:var(--surface-2);box-shadow:var(--e-2)}
 .deck-open{all:unset;cursor:pointer;min-width:0;display:block}
@@ -314,7 +368,11 @@ main[data-route="review"] .summary{margin-bottom:var(--s-5)}
 .deck-counts .due{order:-1;padding:0 8px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .deck-counts .due b{color:var(--accent-text)}
 .deck .icon-btn{width:36px;height:36px}
-.deck .mbar{grid-column:1 / -1;margin:var(--s-3) var(--s-3) 2px 0}
+.deck-ring{grid-row:1;grid-column:2;margin-top:2px}
+.deck-ring small{font-size:.625rem;font-weight:500;color:var(--text)}
+.deck-act{grid-column:1 / -1;align-self:end;margin:var(--s-3) var(--s-3) 2px 0}
+.deck-act .btn{width:100%}
+.deck-done{display:flex;align-items:center;justify-content:center;gap:6px;min-height:34px;font-size:var(--fs-sm);color:var(--good)}
 /* Subdecks: rows inside a deck's tile (folding) and on its page, indented by depth */
 .subdecks{grid-column:1 / -1;margin:var(--s-2) var(--s-3) 0 0;border-top:1px solid var(--line);padding-top:6px}
 .subdecks summary{cursor:pointer;font-size:var(--fs-sm);font-weight:600;color:var(--text-2);padding:4px 0}
@@ -511,15 +569,23 @@ main[data-route="import"] > .view > .savebar{order:5}
 .flash-front{font-weight:600;font-size:clamp(1.75rem,8vw,2.5rem);letter-spacing:-.035em;line-height:1.15;text-align:center;margin:auto 0;overflow-wrap:anywhere;white-space:pre-line}
 .flash-front.long{font-size:clamp(1.3rem,5.6vw,1.7rem);letter-spacing:-.02em}
 .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0;text-align:left}
-.flash.flipped .flash-front{margin:0;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em}
+/* Review's card turns over: a front face and a back face, both always in the page. The flash itself
+   is just the stage; each face is drawn like a card. A new card rises in. */
+.flash.rv-card{display:flex;flex-direction:column;gap:0;padding:0;background:none;box-shadow:none;perspective:1400px}
+.flash.rv-card.enter{animation:card-in 300ms var(--ease)}
+.rv-turn{flex:1 1 auto;display:grid;transform-style:preserve-3d;transition:transform 350ms var(--ease)}
+.rv-card.flipped .rv-turn{transform:rotateY(180deg)}
+.rv-face{grid-area:1 / 1;min-width:0;display:flex;flex-direction:column;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.rv-back{transform:rotateY(180deg)}
+.rv-card:not(.flipped) .rv-back,.rv-card.flipped .rv-front{pointer-events:none}
+/* The question again, smaller, above the answer */
+.flash-recap{margin:0;font-weight:600;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em;line-height:1.15;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
+@keyframes card-in{from{opacity:0;transform:translateY(16px) scale(.985)}}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
 .flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
-.flash.flipped{animation:flip-in 380ms var(--ease)}
-.flash.flipped .flash-ans{animation:fade-up 420ms var(--ease) 60ms both}
-@keyframes flip-in{from{transform:perspective(1000px) rotateY(-8deg) scale(.98);filter:brightness(1.15)}}
-@keyframes fade-up{from{opacity:0;transform:translateY(8px)}}
+.rv-typed:empty{display:none}
 .flash-hint{margin:auto 0 0;text-align:center;font:500 var(--fs-xs) var(--f-ui);color:var(--text-2)}
 .typed{margin:0 0 10px;text-align:center;font-weight:700}
 .typed.ok{color:var(--good)}
@@ -554,6 +620,13 @@ main[data-route="import"] > .view > .savebar{order:5}
 .stats4 .v{font:600 1.4rem var(--f-num);letter-spacing:-.03em}
 .stats4 .l{font-size:var(--fs-xs);color:var(--text-2)}
 .res-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:var(--s-5)}
+/* Review's finish screen: streak, tomorrow and a Play suggestion */
+.finish-next{margin-top:var(--s-4);padding:var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1)}
+.finish-next .streak{margin:0 0 var(--s-3)}
+.fn-line{display:flex;align-items:flex-start;gap:var(--s-2);margin:0 0 var(--s-2);font-size:var(--fs-sm);color:var(--text-2)}
+.fn-line .ico{width:18px;height:18px;margin-top:1px;color:var(--text-3)}
+.fn-line b{color:var(--text)}
+.finish-next .btn{margin-top:var(--s-2)}
 .sched-note,.lightning-note{margin:0 0 18px;padding:12px 14px;border:1px dashed var(--control);border-radius:var(--r-sm);font-size:var(--fs-base);color:var(--text-2)}
 .lightning-note{margin:0}
 .sched-note b,.lightning-note b{color:var(--text)}
@@ -831,9 +904,9 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .export-opt span{font-weight:400;font-size:var(--fs-base);color:var(--text-2)}
 
 /* Card formatting (format.js, card-editor.js) */
-.flash-front b,.flash-back b{font-weight:800}
-.flash-front ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
-.flash-front ul{font-size:.8em}
+.flash-front b,.flash-recap b,.flash-back b{font-weight:800}
+.flash-front ul,.flash-recap ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
+.flash-front ul,.flash-recap ul{font-size:.8em}
 .fmt-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
 .field > .fmt-head{font-size:var(--fs-xs)}
 .fmt-head label{cursor:default}
@@ -849,7 +922,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 /* Pictures on cards (media.js) */
 .card-img{display:block;max-width:100%;max-height:38vh;margin:0 auto 10px;border-radius:var(--r-md);object-fit:contain;background:var(--surface-sunken)}
 .card-img.missing,.img-thumb.missing{min-height:48px;min-width:120px;border:1px dashed var(--control);font-size:var(--fs-sm);color:var(--text-2)}
-.flash-front .card-img{max-height:32vh}
+.flash-front .card-img,.flash-recap .card-img{max-height:32vh}
 .play-card .card-img{max-height:26vh}
 .img-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .img-row:empty{display:none}
@@ -874,6 +947,12 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
+  /* The card doesn't turn: the two faces cross-fade instead (a short fade is fine for most motion settings) */
+  .rv-turn,.rv-card.flipped .rv-turn{transform:none!important}
+  .rv-face{backface-visibility:visible;-webkit-backface-visibility:visible;transition:opacity 160ms linear!important}
+  .rv-back{transform:none;opacity:0}
+  .rv-card.flipped .rv-front{opacity:0}
+  .rv-card.flipped .rv-back{opacity:1}
 }
 
 /* ---------- 15. Desktop layout ----------
@@ -902,15 +981,19 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   .ratebar,.savebar{bottom:0}
   .ratebar{padding-bottom:var(--s-5)}
   .bulkbar{bottom:var(--s-4)}
-  .summary{grid-template-columns:minmax(0,1fr) 180px 180px}
-  .summary > div:first-child .v{font-size:4rem}
   /* Decks: a grid of decks */
   main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--s-3)}
-  main[data-route="decks"] .deck{min-height:132px;grid-template-rows:auto 1fr;padding:var(--s-4) var(--s-2) var(--s-4) var(--s-5)}
-  main[data-route="decks"] .deck .mbar{align-self:end}
+  main[data-route="decks"] .deck{min-height:150px;grid-template-rows:auto 1fr;padding:var(--s-4) var(--s-2) var(--s-4) var(--s-5)}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
   main[data-route="deck"] .screen-head .head-actions{display:flex;gap:var(--s-2)}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{order:0;min-height:34px;font-size:var(--fs-sm);padding:6px 14px}
+  /* Today: the goal and streak on the left, the big Start button beside them */
+  main[data-route="today"] > .view{max-width:960px}
+  .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:var(--s-8);align-items:center;padding:var(--s-6)}
+  .today-hero .th-main{grid-column:1;grid-row:1}
+  .today-hero .streak{grid-column:1;grid-row:2;margin-bottom:0}
+  .today-hero .btn.big,.today-hero .th-done{grid-column:2;grid-row:1 / span 2}
+  .tdecks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s-3)}
   /* Stats: two columns of panels */
   main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-3);align-items:start}
   main[data-route="stats"] > .view > :not(.card),
@@ -919,24 +1002,17 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   /* Review: a bigger card, centered while a session runs */
   main[data-route="review"] > .view{max-width:780px}
   body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 88px);display:flex;flex-direction:column;justify-content:center}
-  main[data-route="review"] .flash{min-height:440px;padding:var(--s-6) var(--s-10)}
+  main[data-route="review"] .flash{min-height:440px}
+  main[data-route="review"] .rv-face{padding:var(--s-6) var(--s-10)}
   main[data-route="review"] .flash-front{font-size:3rem}
-  main[data-route="review"] .flash.flipped .flash-front{font-size:1.75rem}
+  main[data-route="review"] .flash-recap{font-size:1.75rem}
   main[data-route="review"] .flash-back{font-size:1.5rem}
   main[data-route="review"] .rate{min-height:68px}
   main[data-route="review"] .rate b{font-size:var(--fs-md)}
-  main[data-route="review"] .flash-front .card-img{max-height:36vh}
+  main[data-route="review"] .flash-front .card-img,main[data-route="review"] .flash-recap .card-img{max-height:36vh}
 }
-/* Wide desktop: Today becomes a right-hand rail next to the deck grid */
+/* Wide desktop */
 @media (min-width:1200px){
-  main[data-route="decks"] > .view{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:var(--s-5);align-items:start}
-  main[data-route="decks"] > .view > *{grid-column:1}
-  main[data-route="decks"] .screen-head{grid-column:1 / -1}
-  main[data-route="decks"] .summary{grid-column:2;grid-row:2 / span 4;position:sticky;top:32px;grid-template-columns:1fr 1fr;margin:0}
-  main[data-route="decks"] .summary > div:first-child{grid-column:1 / -1;padding:var(--s-6) var(--s-5) var(--s-5)}
-  main[data-route="decks"] .summary > div:nth-child(2){box-shadow:inset 0 1px 0 var(--line)}
-  main[data-route="decks"] .summary > div:nth-child(3){box-shadow:inset 1px 0 0 var(--line),inset 0 1px 0 var(--line)}
-  main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
   main[data-route="stats"] .cal-card{--c:16px}
 }
 /* A card's panel next to the card list, from 1200px wide */

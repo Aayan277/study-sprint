@@ -12,7 +12,7 @@ async function device(name) {
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(`${name} pageerror ${e.stack}`));
   page.on('console', m => { if (m.type() === 'error' && !/status of (400|401|422)|Sync failed|ERR_CONNECTION_REFUSED/.test(m.text())) errors.push(`${name} console ${m.text()}`); });
-  await page.goto(APP); await page.waitForSelector('.deck');
+  await page.goto(APP + '#/decks'); await page.waitForSelector('.deck');
   return page;
 }
 const run = (page, fn, arg) => page.evaluate(fn, arg);

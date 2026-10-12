@@ -11,7 +11,7 @@ await p.evaluate(async () => {
   const db = await import('./js/db.js'); const D = 86400000, now = Date.now();
   await db.putStates(Array.from({ length: 6 }, (_, i) => ({ cardId: `sample-${i}`, due: now - (i + 1) * D, stability: 8, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now - 9 * D, elapsedDays: 9, scheduledDays: 8, learningSteps: 0 })));
 });
-const dueCount = async () => { await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('.summary'); return +(await p.textContent('.summary .v')); };
+const dueCount = async () => { await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await p.goto('http://localhost:8123/#/today'); await p.waitForSelector('[data-count=due]'); return +(await p.textContent('[data-count=due]')); };
 ok(await dueCount() === 6, 'no review limit by default: 6 due');
 // overall limit
 await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#rpd');

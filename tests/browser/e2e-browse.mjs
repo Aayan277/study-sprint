@@ -62,7 +62,7 @@ ok(!st, 'reset to new removes the schedule');
 await page.click('#ceClose');
 
 // Review and Play skip suspended / buried
-await page.click('.tab[data-tab=review]'); await page.waitForSelector('#startBtn');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
 ok((await page.textContent('#startBtn')).includes('9 cards'), 'Review leaves out the suspended and buried cards (12 − 2 hidden − 1 not due): ' + await page.textContent('#startBtn'));
 await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
 ok((await page.textContent('#pDeck option')).includes('10 cards'), 'Play leaves them out too');
