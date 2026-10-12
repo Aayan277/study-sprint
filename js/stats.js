@@ -4,6 +4,7 @@
 // work with the keyboard, and pick up the theme's colors.
 
 import * as db from './db.js';
+import { dayStart } from './days.js';
 import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
 import { cardLevel } from './decks.js';
 import { streakFromDays, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
@@ -31,15 +32,27 @@ PHONE.addEventListener('change', () => { try { onPhoneChange?.(); } catch { /* s
 let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
 
-// The whole review log is big, so it is read once and kept until something changes it
-// (a review or Play answer on this device, or changes coming in from another one).
-let logsCache = null;
-const forgetLogs = () => { logsCache = null; };
+// The review log is big, so Stats avoids reading all of it. The streak and calendar only need how many answers
+// each day had (counted by the database, no rows read), and the charts only need the last 30 days.
+// The whole log is read only when a deck is picked (to know which answers belong to its cards).
+// What was read is kept until something changes it: an answer on this device, or changes from another one.
+let cache = null;       // { day, days, recent, full }: each a promise, filled in as needed
+const forgetLogs = () => { cache = null; };
 db.onLocalChange(forgetLogs);
 addEventListener('sync', e => { if (e.detail?.applied) forgetLogs(); });
-function loadLogs() {
-  if (!logsCache) logsCache = db.getAll('reviewLog').catch(err => { logsCache = null; throw err; });
-  return logsCache;
+async function loadLogs(needAll) {
+  if (cache && cache.day !== dayStart()) cache = null;           // a new day: "the last 30 days" moved
+  const mine = cache = cache || { day: dayStart() };
+  const keep = (name, read) => {
+    if (!mine[name]) mine[name] = read().catch(err => { mine[name] = null; throw err; });
+    return mine[name];
+  };
+  const [days, recent, full] = await Promise.all([
+    keep('days', async () => new Map((await db.getDayCounts()).map(([t, n]) => [dayKey(t), n]))),
+    keep('recent', () => db.getLogsSince(daysAgoStart(29))),
+    needAll ? keep('full', () => db.getAll('reviewLog')) : null
+  ]);
+  return { days, recent, full };
 }
 
 // The mastery grid draws at most this many squares up front; "Show more" adds the rest of a deck.
@@ -118,7 +131,7 @@ function masteryGridHTML(decks, inside, cards, statesById) {
 }
 
 export async function renderStats(el) {
-  const [decks, allCards, states, allLogs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs()]);
+  const [decks, allCards, states, logs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs(deckFilter !== 'all')]);
   if (!el.isConnected) return;
   decks.sort((a, b) => a.created - b.created);
   if (deckFilter !== 'all' && !decks.some(d => d.id === deckFilter)) deckFilter = 'all';
@@ -130,10 +143,10 @@ export async function renderStats(el) {
   const inside = deckFilter === 'all' ? null : subtreeIds(decks, deckFilter);
   const cards = inside ? allCards.filter(c => inside.has(c.deckId)) : allCards;
   const ids = inside ? new Set(cards.map(c => c.id)) : null;
-  // The streak and calendar need every day; the other numbers only look at the last 30 days, so they get just those.
-  const { all: allDays, picked: pickedDays } = answerDays(allLogs, ids);
-  const since = daysAgoStart(29, now);
-  const recent = allLogs.filter(l => l.timestamp >= since && (!ids || ids.has(l.cardId)));
+  // The streak counts every deck. The calendar and charts use the chosen deck's answers.
+  const allDays = logs.days;
+  const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
+  const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
   const streak = streakFromDays(allDays, now);
   const ret = retention(recent, now);
   const perDay = reviewsPerDay(recent, now);
@@ -287,12 +300,13 @@ export async function renderStats(el) {
   q('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
 
   // Mastery grid: tap a card to see its details and recent answers.
-  const showDetail = () => {
+  const showDetail = async () => {
     const c = selected && cards.find(x => x.id === selected);
     if (!c) { q('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
-    const last10 = allLogs.filter(l => l.cardId === c.id && isAnswerLog(l)).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
+    const last10 = (await db.getCardLogs(c.id)).filter(isAnswerLog).slice(-10);
+    if (selected !== c.id || !el.isConnected) return;         // tapped something else while that loaded
     const due = !st || st.state === 0 ? '' : st.due <= now ? 'Due now' : `Due in ${formatInterval(st.due - now)}`;
     q('mDetail').innerHTML = `
       <div class="f">${esc(plainText(c.front))}</div>

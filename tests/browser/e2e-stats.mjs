@@ -73,7 +73,7 @@ await page.click('#moreBtn');
 // mastery
 ok((await page.locator('.mtile').count()) === 17, 'mastery grid has every card (12 + 5)');
 ok((await page.locator('.mdeck h3').count()) === 2, 'grid grouped by deck');
-await page.locator('.mtile').nth(2).click();
+await page.locator('.mtile').nth(2).click(); await page.waitForSelector('#mDetail .hd');
 ok((await page.textContent('#mDetail')).includes('Negative reinforcement') && (await page.locator('#mDetail .hd').count()) > 0, 'tapping a square shows the card and its last answers');
 await page.locator('.mdeck').first().scrollIntoViewIfNeeded(); await page.screenshot({ path: SP + '/s-mastery.png' });
 // deck filter

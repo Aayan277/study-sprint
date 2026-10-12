@@ -20,6 +20,7 @@ const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted
 
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
 import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { dayStart, dayEnd } from './days.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -277,6 +278,21 @@ export async function undoReview(cardId, prevState, logId) {
 // Every review-log row since a moment in time (e.g. since the start of today).
 export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
+}
+
+// How many answers were logged on each study day, as [[start of the day, count], …] for days that have any.
+// Counts with the timestamp index, so none of the (many) rows are read. Stats uses it for the streak and calendar.
+export async function getDayCounts() {
+  const index = (await store('reviewLog')).index('timestamp');
+  const first = await done(index.openKeyCursor());
+  if (!first) return [];
+  const days = [];
+  for (let t = dayStart(Math.max(first.key, Date.UTC(2000, 0, 1))); t <= Date.now(); t = dayEnd(t)) {
+    // All the counts are asked for together (before waiting for any answer), so the transaction stays open.
+    days.push([t, done(index.count(IDBKeyRange.bound(t, dayEnd(t), false, true)))]);
+  }
+  const counts = await Promise.all(days.map(d => d[1]));
+  return days.map((d, i) => [d[0], counts[i]]).filter(d => d[1] > 0);
 }
 
 // ---------- card list actions ----------
