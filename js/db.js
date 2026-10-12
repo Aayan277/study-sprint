@@ -25,6 +25,8 @@ import { dayStart, dayEnd } from './days.js';
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
+  compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
+  statsReadiness: true,  // Stats for one course: a readiness header with an Exam prep button, Mastery on top (off = no header). This device only
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play

@@ -1,7 +1,7 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold } from './ui.js';
 import { loadAll, countFor } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
@@ -102,9 +102,18 @@ function masteryBar(s) {
 }
 
 // ---------- the deck list ----------
+// Two layouts, chosen by Settings → Appearance → "Compact deck list" (on by default, this device only):
+//   compact  a search box and a sort (Due first / Exam / A–Z) above the tiles, subdecks folded under their course
+//            (the open ones are remembered), and a small round play button instead of a full-width Study button
+//   classic  the earlier layout: a summary strip, every subdeck showing, and "Study N" buttons
+const SORTS = [['due', 'Due first'], ['exam', 'Exam'], ['az', 'A–Z']];
+const SORT_KEY = 'study-sprint-decks-sort';
+const savedSort = () => { try { const v = localStorage.getItem(SORT_KEY); return SORTS.some(x => x[0] === v) ? v : 'due'; } catch { return 'due'; } };
+
 // showStarters: open the Starter decks section (the Import screen's "Ready-made decks" link does this).
 export async function renderLibrary(el, showStarters = false) {
   const [list, today] = await Promise.all([loadDecks(), loadAll()]);
+  const compact = today.settings.compactDecks !== false;
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
   const todayAll = countFor(today, top.map(x => x.deck.id));      // today's numbers: daily limits applied
@@ -112,22 +121,12 @@ export async function renderLibrary(el, showStarters = false) {
   // Starter decks you haven't added yet.
   const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
   const starters = STARTER_DECKS.filter(s => !added.has(s.key)).map(s => ({ ...s, count: starterCards(s.level).length }));
+  const view = { query: '', sort: savedSort() };
 
-  el.innerHTML = `
-    <div class="screen-head">
-      <div><span class="eyebrow mono">LIBRARY</span><h1>Decks</h1></div>
-      <div class="head-actions">
-        <a class="btn ghost small" href="#/import">Import</a>
-        <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
-      </div>
-    </div>
-    <div class="dsum" aria-label="All decks">
-      <span><b class="mono">${todayAll.due}</b> due today</span>
-      <span><b class="mono">${todayAll.fresh}</b> new today</span>
-      <span><b class="mono">${sum('total')}</b> cards</span>
-      <a class="link" href="#/today">Today ${icon('chevron')}</a>
-    </div>
-    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; const c = countFor(today, [deck.id]), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0; return `
+  // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
+  const tile = (item, q = '', first = false) => {
+    const { deck, stats } = item; const c = countFor(today, [deck.id]), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0;
+    return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
@@ -142,11 +141,62 @@ export async function renderLibrary(el, showStarters = false) {
         <span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 40, 4, `<small class="mono">${Math.round(mastered * 100)}</small>`)}<span class="sr-only">${Math.round(mastered * 100)}% mastered</span></span>
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
-          ${go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
-                : `<span class="deck-done">${icon('check')} Done for today</span>`}
+          ${compact
+            ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
+                  : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)
+            : (go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
+                  : `<span class="deck-done">${icon('check')} Done for today</span>`)}
         </div>
-        ${subdeckBox(list, item, !fold.has(deck.id), today)}
-      </article>`; }).join('')}</div>`
+        ${compact ? compactSubdecks(item, q) : subdeckBox(list, item, !fold.has(deck.id), today)}
+      </article>`;
+  };
+  // Compact: the subdecks start folded under their course, and what you open is remembered on this device.
+  const compactSubdecks = (item, q) => {
+    let kids = inside(list, item.deck.id);
+    if (!kids.length) return '';
+    const direct = kids.filter(k => k.depth === item.depth + 1).length;
+    const selfHit = !q || matches(item, q);
+    if (!selfHit) kids = kids.filter(k => matches(k, q));
+    const open = q ? true : foldOpen('deck-' + item.deck.id);
+    return `<details class="subdecks" data-xfold="${esc(item.deck.id)}" ${q ? 'data-forced' : ''} ${open ? 'open' : ''}>
+      <summary>${icon('layers')}<span>${plural(direct, 'subdeck')}${kids.length > direct ? ` · ${kids.length} in all` : ''}</span>${icon('chevron', 'sub-chev')}</summary>
+      ${subdeckRows(kids, item.depth, today)}
+    </details>`;
+  };
+  const matches = (item, q) => `${item.deck.name} ${item.deck.course || ''}`.toLowerCase().includes(q);
+  // The courses to show, in the chosen order (the numbers are today's: the same ones Today and the play button use).
+  const shown = () => {
+    const q = view.query.trim().toLowerCase();
+    const due = x => countFor(today, [x.deck.id]).due;
+    const tot = x => countFor(today, [x.deck.id]).total;
+    const days = x => examInfo(x.deck)?.daysLeft ?? Infinity;
+    const by = {
+      due: (a, b) => due(b) - due(a) || tot(b) - tot(a),
+      exam: (a, b) => days(a) - days(b) || due(b) - due(a),
+      az: (a, b) => a.deck.name.localeCompare(b.deck.name, undefined, { sensitivity: 'base', numeric: true })
+    }[view.sort];
+    const rows = top.filter(x => !q || matches(x, q) || inside(list, x.deck.id).some(k => matches(k, q)));
+    return { q, rows: compact ? rows.map((x, i) => [x, i]).sort((a, b) => by(a[0], b[0]) || a[1] - b[1]).map(a => a[0]) : rows };
+  };
+
+  el.innerHTML = `
+    <div class="screen-head">
+      <div><span class="eyebrow mono">LIBRARY</span><h1>Decks</h1></div>
+      <div class="head-actions">
+        <a class="btn ghost small" href="#/import">Import</a>
+        <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
+      </div>
+    </div>
+    ${compact ? (list.length ? `<div class="deck-tools">
+      <label class="deck-search">${icon('search')}<input id="deckSearch" type="search" placeholder="Search ${plural(list.length, 'deck')}" aria-label="Search decks" autocomplete="off"></label>
+      <div class="deck-sort" role="group" aria-label="Sort decks">${SORTS.map(([k, l]) => `<button type="button" data-sort="${k}" aria-pressed="${k === view.sort}">${l}</button>`).join('')}</div>
+    </div>` : '') : `<div class="dsum" aria-label="All decks">
+      <span><b class="mono">${todayAll.due}</b> due today</span>
+      <span><b class="mono">${todayAll.fresh}</b> new today</span>
+      <span><b class="mono">${sum('total')}</b> cards</span>
+      <a class="link" href="#/today">Today ${icon('chevron')}</a>
+    </div>`}
+    ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
     ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
     ${starters.length ? `
@@ -161,15 +211,41 @@ export async function renderLibrary(el, showStarters = false) {
     </details>` : ''}
   `;
 
+  // The tiles are drawn from the search text and the sort, so both just redraw this part.
+  const grid = $('deckGrid');
+  const drawGrid = () => {
+    if (!grid) return;
+    const { q, rows } = shown();
+    const firstDue = view.sort === 'due' ? rows.find(x => countFor(today, [x.deck.id]).total) : null;
+    grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
+    $('deckNone').hidden = rows.length > 0;
+    $('deckNone').textContent = rows.length ? '' : `No decks match “${view.query.trim()}”.`;
+  };
+  drawGrid();
+  $('deckSearch')?.addEventListener('input', e => { view.query = e.target.value; drawGrid(); });
+  el.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
+    view.sort = b.dataset.sort;
+    try { localStorage.setItem(SORT_KEY, view.sort); } catch { /* not remembered: fine */ }
+    el.querySelectorAll('[data-sort]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    drawGrid();
+  }));
+  // One listener for all the tiles, so redrawing them needs no re-wiring.
+  grid?.addEventListener('click', e => {
+    const open = e.target.closest('[data-open]'), study = e.target.closest('[data-study]'), edit = e.target.closest('[data-edit]');
+    if (open) location.hash = `#/deck/${open.dataset.open}`;
+    else if (study) startStudy({ deckIds: [study.dataset.study], deckId: study.dataset.study });
+    else if (edit) openDeckEditor(list.find(x => x.deck.id === edit.dataset.edit).deck, () => renderLibrary(el));
+  });
+  // 'toggle' doesn't bubble, so it is caught on the way down. A fold the search opened is not remembered.
+  grid?.addEventListener('toggle', e => {
+    const d = e.target;
+    if (d.dataset.fold) setFolded(d.dataset.fold, !d.open);
+    else if (d.dataset.xfold && !('forced' in d.dataset)) saveFold('deck-' + d.dataset.xfold, d.open);
+  }, true);
+
   const create = () => openDeckEditor(null, () => renderLibrary(el));
   $('newDeck').addEventListener('click', create);
   $('newDeck2')?.addEventListener('click', create);
-  el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
-  el.querySelectorAll('[data-study]').forEach(b => b.addEventListener('click', () => startStudy({ deckIds: [b.dataset.study], deckId: b.dataset.study })));
-  el.querySelectorAll('[data-fold]').forEach(d => d.addEventListener('toggle', () => setFolded(d.dataset.fold, !d.open)));
-  el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
-    openDeckEditor(list.find(x => x.deck.id === b.dataset.edit).deck, () => renderLibrary(el));
-  }));
   if (showStarters) $('startersBox')?.scrollIntoView({ block: 'center' });
   el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
     const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);

@@ -36,13 +36,14 @@ ok((await p.locator('article.deck').count()) === 1, 'subdecks are not separate t
 ok((await p.textContent('article.deck .deck-counts')).includes(`${total} cards`), 'parent tile counts everything inside');
 const rows = await p.$$eval('.subdecks .subdeck .sd-name', r => r.map(x => x.textContent));
 ok(rows.join('|') === 'Unit 1|Lecture 3', 'subdeck rows: ' + rows.join('|'));
-ok((await p.textContent('.subdecks summary')).trim() === '1 subdeck', 'summary counts direct subdecks');
+ok((await p.textContent('.subdecks summary')).trim() === '1 subdeck · 2 in all', 'summary counts direct subdecks, and all of them');
+ok(!(await p.$eval('.subdecks', d => d.open)), 'compact list: subdecks start folded under their course');
+await p.click('.subdecks summary');           // (the rows below are read from the page, folded or not)
 await p.screenshot({ path: SP + '/C-library.png', fullPage: true });
-// fold is remembered
-await p.click('.subdecks summary'); await p.waitForTimeout(100);
+// the open fold is remembered on this device (folded is the default)
+await p.waitForTimeout(100);
 await go('#/decks', '.deck');
-ok(!(await p.$eval('.subdecks', d => d.open)), 'folding is remembered');
-await p.click('.subdecks summary');
+ok(await p.$eval('.subdecks', d => d.open), 'an opened fold is remembered');
 await p.click('.subdeck >> text=Lecture 3'); await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Lecture 3');
 ok((await p.locator('.crow').count()) === 2, 'subdeck page lists its own cards');
 

@@ -10,7 +10,7 @@
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
 const CACHE = 'study-sprint-v44';
-// files-hash: 304bac38c876fb7c
+// files-hash: 82a79cc41b2c51e4
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/format.js', 'js/card-editor.js', 'js/media.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js',

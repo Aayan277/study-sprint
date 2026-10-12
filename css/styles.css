@@ -374,6 +374,31 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .tdeck.done .td-go .ico{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good)}
 .tdeck.done .td-name{color:var(--text-2)}
 
+/* Compact deck list (Settings → Appearance): search and sort on top, a small round play button, subdecks folded */
+.deck-tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:var(--s-3)}
+.deck-search{position:relative;flex:1 1 220px;display:flex;align-items:center}
+.deck-search .ico{position:absolute;left:12px;width:17px;height:17px;color:var(--text-3);pointer-events:none}
+.deck-search input{width:100%;min-width:0;height:42px;padding:0 12px 0 38px;border-radius:var(--r-md);border:1px solid var(--control);background:var(--surface-sunken);color:var(--text);font-size:var(--fs-md)}
+.deck-sort{display:flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1)}
+.deck-sort button{border:0;background:none;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);padding:0 12px;min-height:36px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.deck-sort button:hover{color:var(--text)}
+.deck-sort button[aria-pressed="true"]{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-strong)}
+@media (max-width:520px){.deck-sort{flex:1 1 100%}.deck-sort button{flex:1}}
+.decks.compact .deck{padding-bottom:var(--s-3)}
+.decks.compact .deck-act{grid-column:2 / 4;grid-row:2;align-self:end;justify-self:end;margin:0 4px 0 0}
+.decks.compact .deck-open{grid-row:1 / 3}
+.deck-go{all:unset;box-sizing:border-box;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);cursor:pointer}
+.deck-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deck-go .ico{width:17px;height:17px;margin-left:2px}
+.deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:0 6px 18px -6px var(--glow)}
+.deck-go.done{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good);cursor:default}
+.deck-go.done .ico{margin:0}
+.decks.compact .subdecks{margin-top:var(--s-2)}
+.decks.compact .subdecks summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:36px;color:var(--text-2);font-weight:500}
+.decks.compact .subdecks summary::-webkit-details-marker{display:none}
+.decks.compact .subdecks summary .ico{width:16px;height:16px;color:var(--text-3)}
+.decks.compact .subdecks summary .sub-chev{margin-left:auto;transition:transform var(--t-fast)}
+.decks.compact .subdecks[open] summary .sub-chev{transform:rotate(90deg)}
 .decks{display:grid;gap:var(--s-2)}
 .deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
@@ -1112,6 +1137,9 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   /* Decks: a grid of decks */
   main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--s-3)}
   main[data-route="decks"] .deck{min-height:150px;grid-template-rows:auto 1fr;padding:var(--s-4) var(--s-2) var(--s-4) var(--s-5)}
+  /* Compact: tiles keep their own height instead of stretching to the tallest one in the row */
+  main[data-route="decks"] .decks.compact{align-items:start}
+  main[data-route="decks"] .decks.compact .deck{min-height:0}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
   main[data-route="deck"] .screen-head .head-actions{display:flex;gap:var(--s-2)}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{order:0;min-height:34px;font-size:var(--fs-sm);padding:6px 14px}

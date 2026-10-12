@@ -51,6 +51,12 @@ async function renderSettings(el) {
           ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
         </div>
       </div>
+      <label class="adv-row switch-row"><span><b>Compact deck list</b>
+        <span>Decks gets a search box and a sort (due, exam or A–Z), folds subdecks under their course and uses small play buttons. Turn it off for the old list. This device only.</span></span>
+        <input id="compactDecks" type="checkbox" class="switch" ${settings.compactDecks !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
+        <span>Pick one course in Stats and see how much of it you are ready to remember on exam day (or today, with no exam), with an Exam prep button. Mastery moves to the top. This device only.</span></span>
+        <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -186,6 +192,10 @@ async function renderSettings(el) {
     settings.cardAlign = applyCardAlign(r.value);
     db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
   }));
+  // These two are per device too (not in SYNCED_SETTINGS): Decks and Stats read them when they are drawn.
+  for (const key of ['compactDecks', 'statsReadiness']) {
+    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); });
+  }
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
     redrawSkins();
@@ -652,11 +662,13 @@ function confirmDeleteServer() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const { theme, cardAlign } = settings;
+  const { theme, cardAlign, compactDecks, statsReadiness } = settings;
   await db.resetAll();
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign };
+  await db.setSetting('compactDecks', compactDecks);
+  await db.setSetting('statsReadiness', statsReadiness);
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
