@@ -629,6 +629,8 @@ main[data-route="import"] > .view > .savebar{order:5}
 /* The toolbar: Undo, Read aloud and ⋯ are square icon buttons, End has a word */
 .rv-head{gap:6px}
 .rv-head .link{width:40px;height:40px;min-height:40px;padding:0;display:grid;place-items:center;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1);color:var(--text-2)}
+.rv-head .link{flex:none}
+.rv-head .link.more{min-width:0}
 .rv-head .link:hover:not(:disabled){background:var(--surface-2)}
 .rv-head .link .ico,.rv-head .link svg{width:19px;height:19px}
 #endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
@@ -636,6 +638,15 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-prog{height:2px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-3)}
 .rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);box-shadow:0 0 8px var(--glow);transition:width 350ms var(--ease)}
 @media (prefers-reduced-motion:reduce){.rv-prog i{transition:none}}
+/* Very narrow phones: shorter label, tighter buttons, so the whole toolbar fits */
+@media (max-width:359px){
+  .rv-head{gap:3px}
+  .rv-head .link{width:36px;min-height:36px;height:36px}
+  #endBtn{width:auto;padding:0 10px}
+  .rv-counts{padding:2px}
+  .rv-counts span{padding:7px 3px;gap:3px}
+  .rv-counts span[data-short]::before{content:attr(data-short)}
+}
 
 .flash{position:relative;display:flex;flex-direction:column;gap:var(--s-3);min-height:min(58dvh,520px);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);margin-bottom:var(--s-2);cursor:default}
 .flash[role="button"]{cursor:pointer}

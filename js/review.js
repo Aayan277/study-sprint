@@ -133,7 +133,7 @@ function countsHTML() {
   // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
   // text inside each span stays just the number.
   return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Learn">${n('learn')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
     <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
