@@ -4,8 +4,9 @@
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
-import { deckChoices, subtreeIds } from './deck-tree.js';
-import { schedulerOptions } from './sched-settings.js';
+import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
+import { deckSchedulerOptions } from './sched-settings.js';
+import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { $, esc, plural, toast, icon } from './ui.js';
@@ -391,6 +392,8 @@ function refreshFlags() {
     parts.push(`${plural(S.result.images, 'note')} ${S.result.images === 1 ? 'has' : 'have'} pictures, which come along too${S.result.extraImages ? ' (the first one on each side)' : ''}.`);
   }
   const prog = S.result.progress;
+  const occluded = (S.result.occluded || []).filter(Boolean).length;
+  if (occluded) parts.push(`<span class="warn">${plural(occluded, 'image-occlusion note')} ${occluded === 1 ? 'comes' : 'come'} in as ${occluded === 1 ? 'a plain picture card' : 'plain picture cards'}: the heading on the front, the whole picture on the back. Hiding parts of a picture comes in a later update.</span>`);
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
@@ -417,8 +420,16 @@ async function save() {
   if (S.result?.progress?.cards && $('ankiProg').checked) {
     try {
       const [{ rate }, settings] = await Promise.all([import('./srs.js'), db.getSettings()]);
-      const opts = schedulerOptions(settings);
-      replay = (cardId, entries) => replayHistory(entries, (state, rating, when) => rate(cardId, state, rating, opts, when));
+      // Each card is replayed with the scheduling settings of the deck it goes into (its own, or inherited from the
+      // decks it is inside). The exam only matters for the last review, which sets the due date: its retention rises
+      // near the exam date. Where the card is placed before the exam is worked out when the queue is built, so it is
+      // the same for cards that arrive later.
+      replay = (card, entries, decks) => {
+        const deck = effectiveDeck(decks, card.deckId);
+        const own = deckSchedulerOptions(settings, deck);
+        const last = { ...own, retention: examOptions(own, deck).retention };
+        return replayHistory(entries, (state, rating, when, isLast) => rate(card.id, state, rating, isLast ? last : own, when), card.id);
+      };
     } catch (err) {
       console.error(err);
       toast("Couldn't load the scheduler for your Anki progress. Connect to the internet and try again.");
@@ -510,10 +521,11 @@ async function save() {
     let withHistory = 0;
     const states = [], logs = [];
     if (replay) {
+      const decksNow = [...await db.getDecks(), ...newDecks];
       cards.forEach((card, i) => {
         const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
         if (!entries) return;
-        const { state, logs: cardLogs } = replay(card.id, entries);
+        const { state, logs: cardLogs } = replay(card, entries, decksNow);
         if (state) states.push(state);
         if (cardLogs.length) withHistory++;
         cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
