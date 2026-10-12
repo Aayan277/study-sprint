@@ -43,6 +43,12 @@ ok((await page.textContent('.pgrid .big')).trim().startsWith('6'), 'streak of 6 
 ok((await page.locator('.wd.on').count()) === 6 && (await page.locator('.wd.today.on').count()) === 1, '7-day dots: 6 of 7 on (day 6 skipped), today highlighted');
 const retText = await page.locator('.pgrid .card').nth(1).textContent();
 ok(/\d+%/.test(retText) && /remembered \d+ of \d+ due reviews/.test(retText), 'retention shown: ' + retText.replace(/\s+/g, ' ').trim());
+// Retention counts recall only: the Play answers here are multiple choice (mode 'flip' is not typing), so they are left out.
+const shownTotal = +/of (\d+) due reviews/.exec(retText)[1];
+const reviewLogs = await page.evaluate(async () => { const { daysAgoStart } = await import('./js/stats-calc.js'); const since = daysAgoStart(29);
+  return (await (await import('./js/db.js')).getLogsSince(since)).filter(l => l.source === 'review' && l.state === 2).length; });
+ok(shownTotal === reviewLogs, `retention counts the ${reviewLogs} Review answers, not the Play multiple choice ones: ${shownTotal}`);
+ok(/Multiple choice isn.t counted/.test(retText), 'the Retention card says multiple choice is not counted');
 ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#forecast .col').count()) === 7, '30-day and 7-day charts drawn');
 ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column is labeled');
 await noHScroll('stats');

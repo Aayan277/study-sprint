@@ -118,7 +118,7 @@ export function answerDays(logs, cardIds = null) {
 }
 
 // ---------- retention ----------
-// Of the due reviews in the last 30 days, how many did you remember?
+// Of the due reviews in the last 30 days where you had to recall the answer, how many did you remember?
 // A "due review" is a card that had already graduated (Review state) and came due: from the Review
 // tab, or a Play answer that counted as the card's review.
 export function isDueReview(log) {
@@ -127,9 +127,13 @@ export function isDueReview(log) {
   if (log.source === 'play') return log.reason ? log.reason === 'due' : !!log.applied;
   return false;
 }
+// Retention counts recall only: flipping a card and rating it, typing the answer (in Review or Play) and Anki
+// history. A multiple choice answer in Play is left out: with four options you can guess right, so it would
+// make you look better than you are.
+export const isRecallReview = log => isDueReview(log) && !(log.source === 'play' && log.mode !== 'typing');
 export function retention(logs, now = Date.now(), days = 30) {
   const since = daysAgoStart(days - 1, now);
-  const due = logs.filter(l => l.timestamp >= since && isDueReview(l));
+  const due = logs.filter(l => l.timestamp >= since && isRecallReview(l));
   const remembered = due.filter(l => l.correct).length;
   return { total: due.length, remembered, rate: due.length ? remembered / due.length : null };
 }
