@@ -282,17 +282,22 @@ export async function getLogsSince(timestamp) {
 
 // How many answers were logged on each study day, as [[start of the day, count], …] for days that have any.
 // Counts with the timestamp index, so none of the (many) rows are read. Stats uses it for the streak and calendar.
+// Every row in the log is an answer (review, play or anki: see isAnswerLog), so none are filtered out here:
+// filtering by source would mean reading every row, or a new index (a data format change).
+// Days without answers are jumped over with a key cursor, so the work follows the days studied, not the years passed.
 export async function getDayCounts() {
   const index = (await store('reviewLog')).index('timestamp');
-  const first = await done(index.openKeyCursor());
-  if (!first) return [];
   const days = [];
-  for (let t = dayStart(Math.max(first.key, Date.UTC(2000, 0, 1))); t <= Date.now(); t = dayEnd(t)) {
-    // All the counts are asked for together (before waiting for any answer), so the transaction stays open.
-    days.push([t, done(index.count(IDBKeyRange.bound(t, dayEnd(t), false, true)))]);
+  let t = Date.UTC(2000, 0, 1);
+  // Only IndexedDB requests are awaited in this loop, so the transaction stays open.
+  for (;;) {
+    const next = await done(index.openKeyCursor(IDBKeyRange.lowerBound(t)));
+    if (!next || dayStart(next.key) > Date.now()) break;
+    t = dayStart(next.key);
+    days.push([t, await done(index.count(IDBKeyRange.bound(t, dayEnd(t), false, true)))]);
+    t = dayEnd(t);
   }
-  const counts = await Promise.all(days.map(d => d[1]));
-  return days.map((d, i) => [d[0], counts[i]]).filter(d => d[1] > 0);
+  return days;
 }
 
 // ---------- card list actions ----------
