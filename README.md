@@ -16,7 +16,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, a mastery ring and a Study button. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
 - **Formatting:** **bold**, *italics* and bullet lists on cards. On a phone, the B / I / • buttons add simple marks (`**bold**`, `*italic*`, `- item`) with a live preview; on a computer, the box shows formatting as you type (Ctrl/⌘+B, Ctrl/⌘+I). Typed answers and Play use the plain text. Anki imports keep bold, italics and lists, and Anki exports turn them back into formatting.
 - **Pictures:** one picture on each side of a card (the picture button next to B / I / •). Photos are shrunk automatically (longest side 1280px), shown in Review and Play, synced between devices (Supabase Storage: run `supabase/media.sql`), kept in backups, and brought along by Anki imports and exports.
-- **Exam date mode** (Edit deck → Exam date): until the exam, no card in the deck is scheduled past it (cards already scheduled later are brought forward), retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, weakest first. A countdown shows on the deck; after the exam it goes back to normal.
+- **Exam date mode** (Edit deck → Exam date): cards you should still remember at 99% or better on exam day are left alone, even if their next review falls after the exam. The rest get a **final pass**: spread over the last 3 days (fewer if the exam is closer), the weakest closest to the exam, with the reviews that add most to your exam-day recall first. It is worked out whenever the day's queue is built, so cards added later (Anki import, moved in, a new subdeck) are covered too. Retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, the ones you're least likely to remember first. Today also says how many **new cards a day** finish the deck by the exam, with one tap to set it (it asks first). A countdown shows on the deck; after the exam it goes back to normal.
 - **Export** (a deck's page → Export): save a deck as a spreadsheet (.csv) or an Anki deck (.apkg), with tags. Re-exporting updates the cards in Anki instead of duplicating them.
 - **Card list** (each deck's page, or Decks → Browse all cards):
   - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
@@ -27,8 +27,8 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
   - Upload .csv, .tsv, .txt or Excel (.xlsx) files, or load a shared Google Sheet.
-  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes become one card per blank, and formatting, images and sounds are left out.
-  - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS. Off, or with no history, cards start as new.
+  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes become one card per blank, image-occlusion notes become plain picture cards (hiding parts of the picture comes later), and formatting and sounds are left out.
+  - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS with the deck's own settings, the way Anki's own FSRS reads them: cram reviews from filtered decks are ignored, Forget resets the card, and a history that starts partway starts from Anki's interval and ease. Off, or with no history, cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Today** (the home screen): your day streak, a daily goal ring, one **Start** button for everything due (with a time estimate from your own answer speed), a row per course to study just that deck, and your upcoming exams. **Options** on Today holds which decks to study, answering by flipping or typing, and Custom study.
@@ -38,7 +38,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Read aloud:** 🔊 (or R) reads the card with your device's voices; each deck picks a language (or works it out from the text) and can read cards out automatically.
   - The ⋯ button opens the card's panel mid-review: edit, flag, suspend, bury, move, reset, set due date, delete or see its info.
   - **Custom study** (Today → Options): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
-  - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki.
+  - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki. Misses in Play on cards that weren't due don't count.
   - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams), spreading due dates onto the least busy days, and **easy days** (Normal / Reduced / Minimum per weekday).
   - **Reviews per day** (optional; no limit by default), overall and per deck.
   - **Per-deck settings** (Edit deck → Study options): a deck can have its own retention, steps, maximum interval, and new and review limits, or use the overall ones.
@@ -49,11 +49,11 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Hard** mode (6 lookalike options) and **Flash** (the question vanishes).
   - Streak scoring, an S–D grade and best scores.
   - **Card ⋯** after each answer opens the same card panel (pauses the round).
-- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back. In a deck with an exam coming up, a new card's first Play answer is its first review too (within the new-cards-per-day limit).
+- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on a card that isn't due still brings it back, but doesn't count toward the leech limit, and a Survival timeout with under 3 seconds allowed is only logged. In a deck with an exam coming up, a new card's first Play answer is its first review too (within the new-cards-per-day limit).
 - **Works on phones and computers:** on a computer (1024px and wider) the tabs become a sidebar, lists and Stats use the full width, a card's panel opens beside the card list (1200px+), and Review shows a bigger card with its keyboard shortcuts. Phones keep the bottom tabs and pop-up sheets.
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
-  - day streak and retention
+  - day streak and retention (recall answers only: flipping, typing and Anki, not multiple choice)
   - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
@@ -99,7 +99,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/sync.js`, `js/sync-merge.js`, `js/supa.js`, `js/sync-config.js` | Syncing: when to sync, which version wins, the small Supabase client, and which project |
 | `js/password.js` | Password rules for new passwords (8+ characters, a letter and a number) |
 | `js/export.js` | Exporting a deck as CSV or an Anki deck |
-| `js/exam.js` | Exam date mode: limits, pulling cards in, Exam prep |
+| `js/exam.js` | Exam date mode: the final pass, limits, pulling cards in, Exam prep, new cards a day |
 | `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
 | `js/media.js` | Pictures: shrinking, saving and showing them |
 | `js/speech.js` | Reading cards aloud |
@@ -146,7 +146,7 @@ in `sw.js`. `npm test` fails with a reminder until you do both.
 node --test
 ```
 
-To run one file, use for example `node tests/import.test.js`. No install is needed: it uses Node's built-in test runner. `package.json` only tells Node the files are modules.
+`node tests/sim/exam-sim.mjs` simulates 300 cards up to an exam and prints the reviews per day and the predicted exam-day recall (it needs `npm install --no-save ts-fsrs@5.4.2` once). To run one file, use for example `node tests/import.test.js`. No install is needed: it uses Node's built-in test runner. `package.json` only tells Node the files are modules.
 
 ### Browser tests
 

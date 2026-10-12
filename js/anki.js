@@ -83,11 +83,23 @@ export function clozeCard(text, n) {
 //             notes with more than that, which are left out)
 //   ankiIds   the Anki card each row came from, so its review history can come along
 //   reviews   Map Anki card id → its review history, for the rows' cards that have one
+//   occluded  for each row, true if it came from an image-occlusion note (see below)
 //   progress  { cards, reviews }: how many rows have history, and how many reviews in all
 // Rows are [front, back, any other fields]. Cloze notes give one row per cloze number, with their
 // other fields (like Back Extra) after the back.
+//
+// Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Study
+// Sprint can't do that yet, so each one comes in as a plain picture card: the heading (or "Diagram") on the front,
+// the picture on the back. Without this they became broken "[…]" cards.
+// The note type must be a cloze type or called "...Occlusion...", so an ordinary note that happens to quote the text isn't taken for one.
+export const isOcclusionNote = (note, model = {}) =>
+  String(note.fields?.[0] ?? '').includes('image-occlusion:') && (!!model.cloze || /occlusion/i.test(model.name || ''));
+const fieldIndex = (model, name, fallback) => {
+  const i = (model.fields || []).findIndex(f => String(f).trim().toLowerCase() === name);
+  return i >= 0 ? i : fallback;
+};
 export function notesToImport(notes, models, reviews = new Map()) {
-  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [];
+  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [];
   let images = 0, extraImages = 0;
   const usedTypes = new Set();
   for (const note of notes) {
@@ -99,17 +111,27 @@ export function notesToImport(notes, models, reviews = new Map()) {
     const pics = { front: frontPics[0] || null, back: backPics[0] || null };
     if (frontPics.length > 1 || backPics.length > 1) extraImages++;
     const noteTags = (note.tags || []).map(t => t.toLowerCase());
+    if (isOcclusionNote(note, model)) {
+      // Fields of the Image Occlusion note type: Occlusion, Image, Header, Back Extra, Comments.
+      const image = imageNames(note.fields[fieldIndex(model, 'image', 1)])[0] || null;
+      const header = text[fieldIndex(model, 'header', 2)]?.trim();
+      const extra = text[fieldIndex(model, 'back extra', 3)]?.trim();
+      rows.push([header || 'Diagram', extra || '']); tags.push(noteTags); decks.push(note.deck || '');
+      pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true);       // its masks' history doesn't fit a plain picture card
+      usedTypes.add('occlusion');
+      continue;
+    }
     const nums = clozeNumbers(note.fields[0] ?? '');
     if (model.cloze || nums.length) {
       // Cloze text is in the first field. Turn it to text first so hidden answers lose their formatting too.
       for (const n of nums) {
         const { front, back } = clozeCard(text[0], n);
-        rows.push([front, back, ...text.slice(1)]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics);
+        rows.push([front, back, ...text.slice(1)]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
       }
       usedTypes.add('cloze');
     } else {
-      rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics);
+      rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card (a reverse card's history isn't used)
       usedTypes.add(String(note.mid));
     }
@@ -121,7 +143,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const columns = Array.from({ length: width }, (_, i) =>
     (only && only.fields[i]) || (i === 0 ? 'Front (field 1)' : i === 1 ? 'Back (field 2)' : `Field ${i + 1}`));
   const used = new Map(ankiIds.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
-  return { columns, rows: padded, tags, decks, images, extraImages, pictures, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
+  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
 }
 
@@ -129,35 +151,86 @@ export function notesToImport(notes, models, reviews = new Map()) {
 function progressOf(ankiIds, reviews) {
   let cards = 0, count = 0;
   for (const id of ankiIds) {
-    const n = (id && reviews.get(id)?.filter(isAnswer).length) || 0;
+    const n = (id && reviews.get(id)?.filter(countsAsReview).length) || 0;
     if (n) { cards++; count += n; }
   }
   return { cards, reviews: count };
 }
 const isAnswer = e => e.ease >= 1 && e.ease <= 4;
 
+// What Anki's own FSRS code makes of the history rows (rslib: revlog/mod.rs and scheduler/fsrs/params.rs):
+//   cram     an answer in a filtered deck that doesn't touch the schedule (type 3, factor 0): ignored
+//   reset    "Forget" (type 4, factor 0): the card is new again, so the history before it no longer counts.
+//            A manual change that leaves the card with no gap at all (ivl 0) is a reset too: that is how earlier
+//            versions of this app read it, and some exports carry a factor on those rows.
+// Everything else with a button (1-4) is a real review. Changes made by hand ("Set due date") are skipped.
+export const isCram = e => e.type === 3 && e.factor === 0;
+export const isReset = e => e.ease === 0 && e.type === 4 && (e.factor === 0 || e.ivl === 0);
+export const countsAsReview = e => isAnswer(e) && !isCram(e);
+
+// FSRS-6's default weights w8, w9, w10 (the same ts-fsrs 5.4.2 uses): how fast a Good answer grows the stability.
+const W8 = 1.8722, W9 = 0.1666, W10 = 0.796;
+const DAY = 86400000;
+
+// A card state to start from when Anki's history is cut off (the first row we have isn't the card's first
+// learning step, so earlier reviews are missing). Like Anki's own FSRS import, it turns Anki's interval and ease
+// into FSRS memory: stability ~ the interval (a card is due at 90% recall), and the difficulty that makes a Good
+// answer multiply the interval by the card's ease. The state is as of that row's review.
+// maxInterval is the deck's longest gap (days): the card comes back no later than that, whatever Anki's gap was.
+export function seedFromAnki(cardId, e, maxInterval = 36500) {
+  const ivl = Math.max(0.1, e.ivl);
+  const ease = e.factor >= 1300 && e.factor <= 9999 ? e.factor / 1000 : 2.5;      // unknown or odd: Anki's default
+  const growth = Math.exp(W8) * ivl ** -W9 * (Math.exp(W10 * 0.1) - 1);            // how much a Good answer grows S per point of (11 - D)
+  const difficulty = Math.min(10, Math.max(1, 11 - (ease - 1) / growth));
+  const gap = Math.min(ivl, maxInterval);
+  return { cardId, due: e.timestamp + gap * DAY, stability: ivl, difficulty, elapsedDays: 0, scheduledDays: Math.round(gap), learningSteps: 0,
+    reps: 1, lapses: 0, state: 2, lastReview: e.timestamp };
+}
+
 // Rebuild a card's progress by replaying its Anki reviews, oldest first, through Study Sprint's FSRS.
-//   entries  one card's Anki review history [{ timestamp, ease, ivl, ms, type }]
-//   rate     (state, rating, timestamp) → new state: Study Sprint's scheduler (srs.js rate)
+//   entries  one card's Anki review history [{ timestamp, ease, ivl, ms, type, factor }]
+//   rate     (state, rating, timestamp, isLast) → new state: Study Sprint's scheduler (srs.js rate).
+//            isLast is true for the card's final review, which sets the due date.
+//   cardId   for the seeded state of a cut-off history       maxInterval  the deck's longest gap, for that seed
 // Returns { state, logs }: the card's final schedule (null if it ends up new) and review log rows
 // (source 'anki') for its history and the stats. Anki's buttons 1–4 are the same as ours.
-// Entries with no button (ease 0) are changes made by hand in Anki: "Forget" (interval 0) resets the
-// card to new, others (like "Set due date") are skipped.
-export function replayHistory(entries, rate) {
-  let state = null;
-  const logs = [];
+// Like Anki:
+//   - cram reviews (filtered decks) are left out;
+//   - "Forget" resets the card: only what comes after it sets the schedule (earlier reviews stay in the log);
+//   - old Anki versions didn't log resets, so a new learning step after reviews starts the card again;
+//   - a history that starts after the card's first learning step is cut off: it starts from Anki's interval
+//     and ease at that row (seedFromAnki) instead of from a new card.
+export function replayHistory(entries, rate, cardId = '', maxInterval) {
+  // Split the reviews into runs, each starting from a new card. The last run is the card's schedule.
+  const runs = [{ rows: [], canSeed: true }];
   for (const e of entries) {
-    if (!isAnswer(e)) {
-      if ((e.type === 4 || e.type === 5) && e.ivl === 0) state = null;
-      continue;
-    }
-    const before = state ? state.state : 0;
-    state = rate(state, e.ease, e.timestamp);
-    logs.push({ timestamp: e.timestamp, source: 'anki', mode: 'flip', correct: e.ease > 1,
-      ms: Math.max(0, Math.min(e.ms || 0, 60000)), rating: e.ease, state: before });
+    if (isReset(e)) { runs.push({ rows: [], canSeed: false }); continue; }
+    if (!countsAsReview(e)) continue;
+    const run = runs.at(-1);
+    if (e.type === 0 && run.rows.length && run.rows.at(-1).type !== 0) runs.push({ rows: [e], canSeed: false });
+    else run.rows.push(e);
   }
+  const logs = [];
+  let state = null;
+  runs.forEach((run, r) => {
+    state = null;
+    const { rows } = run;
+    let from = 0;
+    if (run.canSeed && rows.length && rows[0].type !== 0 && rows[0].ivl > 0) {      // cut off: start from the first row's interval and ease
+      state = seedFromAnki(cardId, rows[0], maxInterval);
+      logs.push(logOf(rows[0], 2));
+      from = 1;
+    }
+    for (let i = from; i < rows.length; i++) {
+      const before = state ? state.state : 0;
+      state = rate(state, rows[i].ease, rows[i].timestamp, r === runs.length - 1 && i === rows.length - 1);
+      logs.push(logOf(rows[i], before));
+    }
+  });
   return { state, logs };
 }
+const logOf = (e, before) => ({ timestamp: e.timestamp, source: 'anki', mode: 'flip', correct: e.ease > 1,
+  ms: Math.max(0, Math.min(e.ms || 0, 60000)), rating: e.ease, state: before });
 
 // Only the rows from one Anki deck (and its subdecks). deck = '' means all of them.
 export function onlyDeck(result, deck) {
@@ -165,7 +238,7 @@ export function onlyDeck(result, deck) {
   const keep = result.decks.map(d => d === deck || d.startsWith(deck + '::'));
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
-  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), ankiIds,
+  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), ankiIds,
     progress: progressOf(ankiIds, result.reviews || new Map()) };
 }
 

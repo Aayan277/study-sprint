@@ -190,7 +190,8 @@ export async function renderStats(el) {
       <div class="card">
         <h2>Retention</h2>
         <div class="big">${ret.rate === null ? '–' : Math.round(ret.rate * 100)}<small>${ret.rate === null ? '' : '%'}</small></div>
-        <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
+        <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}
+          <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></p>
       </div>
     </div>
 

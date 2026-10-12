@@ -9,9 +9,9 @@
 import * as db from './db.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
-import { examInfo, countdown } from './exam.js';
+import { examInfo, countdown, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
-import { subtreeIds, deckPath, effectiveDeck } from './deck-tree.js';
+import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
@@ -98,6 +98,7 @@ export async function renderToday(el) {
             <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span></a>
             <span class="exam-badge">${esc(countdown(info))}</span>
             <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
+            ${newPlanHTML(deck, info)}
           </div>`).join('')}</div>
       </section>` : ''}
       <section class="section" aria-labelledby="tdTitle">
@@ -105,6 +106,62 @@ export async function renderToday(el) {
         <div class="tdecks">${top.map(deckRow).join('')}</div>
       </section>`}`;
     wire(c);
+  };
+
+  // "24 new a day to finish by 6 Nov", with a button to set the deck's limit to that (it asks first).
+  // Cards not started yet are counted in the deck and its subdecks. Nothing shows when there are none left.
+  const newPlan = (deck, info) => {
+    const inside = subtreeIds(data.decks, deck.id);
+    const unstarted = data.cards.filter(c => inside.has(c.deckId) && !(data.statesById.get(c.id)?.state > NEW)).length;
+    const n = newPerDayToFinish(unstarted, info.daysLeft);
+    // What a day allows: the lowest of the limits that apply, each raised by today's Custom study extra.
+    // Limits other than the deck's own are listed in `others`; the deck's own limit is the one the button sets.
+    const own = d => (Number.isFinite(d.newPerDay) ? d.newPerDay + data.extra : Infinity);
+    const left = new Map();                                 // deck id → unstarted cards sitting directly in it
+    for (const c of data.cards) if (!(data.statesById.get(c.id)?.state > NEW)) left.set(c.deckId, (left.get(c.deckId) || 0) + 1);
+    // How many new cards a day a deck and its subdecks can start: its own limit, or what its cards and subdecks allow.
+    const startable = (d, ownToo = true) =>
+      Math.min(ownToo ? own(d) : Infinity, (left.get(d.id) || 0) + data.decks.filter(k => k.parentId === d.id).reduce((t, k) => t + startable(k), 0));
+    const others = [
+      { limit: data.settings.newPerDay + data.extra, text: `Raise New cards per day in Settings to ${n}.` },
+      ...ancestors(data.decks, deck.id).slice(1).filter(d => Number.isFinite(d.newPerDay))
+        .map(d => ({ limit: own(d), text: `${d.name} limits it to ${own(d)} a day: raise that in its Edit deck.` })),
+      { limit: startable(deck, false), text: 'A subdeck\'s own limit holds it back: raise that in its Edit deck.' }
+    ];
+    const lowest = others.reduce((a, b) => (b.limit < a.limit ? b : a));
+    return { unstarted, n, now: Math.min(own(deck), lowest.limit), blocked: lowest.limit < n ? lowest.text : '' };
+  };
+  const newPlanHTML = (deck, info) => {
+    const { unstarted, n, now, blocked } = newPlan(deck, info);
+    if (!unstarted || info.daysLeft < 1) return '';
+    const by = new Date(info.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
+    return `<p class="exam-new" data-newplan="${esc(deck.id)}">
+      <span><b>${n} new a day</b> to start all ${plural(unstarted, 'unstarted card')} by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}.</span>
+      ${now >= n ? '<span class="mono small">On track</span>'
+        : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
+        : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
+  };
+  // The confirm is a sheet in the page (not the browser's confirm box).
+  const askSetNew = deckId => {
+    const deck = data.decks.find(d => d.id === deckId);
+    const info = examInfo(deck);
+    if (!deck || !info) return;
+    const { n } = newPlan(deck, info);
+    openSheet(`
+      <h2 id="sheetTitle">Set ${n} new cards a day?</h2>
+      <p><b>${esc(deck.name)}</b> will give you up to ${n} new cards a day, enough to start every card with ${info.daysLeft === 1 ? '1 day' : info.daysLeft + ' days'} to go. Now it allows ${Number.isFinite(deck.newPerDay) ? deck.newPerDay : 'the overall limit of ' + data.settings.newPerDay}. You can change it any time in Edit deck.</p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="snNo">Cancel</button>
+        <button class="btn primary" type="button" id="snYes">Set ${n} a day</button>
+      </div>`);
+    $('snNo').addEventListener('click', closeSheet);
+    $('snYes').addEventListener('click', async () => {
+      await db.saveDeck({ ...deck, newPerDay: n });
+      closeSheet();
+      toast(`${deck.name}: ${n} new cards a day`);
+      renderToday(el);
+    });
   };
 
   // One course: counts for the deck and its subdecks. A tap starts it (or opens it, when nothing is due).
@@ -129,6 +186,7 @@ export async function renderToday(el) {
     $('optBtn')?.addEventListener('click', () => openOptions());
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
+    el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));
     el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.prep], deckId: b.dataset.prep, kind: 'prep' })));
   };
 

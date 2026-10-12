@@ -9,6 +9,7 @@
 import { fsrs, generatorParameters, createEmptyCard, Rating } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
+import { examGainFrom, examClamp } from './exam.js';
 
 export { Rating };
 
@@ -50,15 +51,10 @@ function scheduler(opts) {
 const DAY = 86400000;
 // The library keeps Easy at least a day longer than Good (and Good longer than Hard), which can push
 // a gap a day or two past the maximum. Pull it back so the maximum is a real limit.
-// maxDue (optional, from exam date mode: see exam.js): the latest the card may come back.
-function capInterval(card, now, maxDays, maxDue) {
+function capInterval(card, now, maxDays) {
   if (card.scheduled_days > maxDays) {
     card.scheduled_days = maxDays;
     card.due = new Date(now + maxDays * DAY);
-  }
-  if (maxDue > now && card.due.getTime() > maxDue) {
-    card.due = new Date(maxDue);
-    card.scheduled_days = Math.max(0, Math.round((maxDue - now) / DAY));
   }
   return card;
 }
@@ -100,7 +96,7 @@ function fromLibrary(cardId, c) {
 export function previewIntervals(state, opts, now = Date.now()) {
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   const out = {};
-  for (const { rating } of RATINGS) out[rating] = capInterval(preview[rating].card, now, opts.maxInterval, opts.maxDue).due.getTime() - now;
+  for (const { rating } of RATINGS) out[rating] = examClamp(capInterval(preview[rating].card, now, opts.maxInterval), now, opts, opts.balance?.load).due.getTime() - now;
   return out;
 }
 
@@ -111,11 +107,29 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // Evening out needs the exact gap first (no random fuzz); it then picks a day within the fuzz range.
   const { card } = scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
   capInterval(card, now, opts.maxInterval);
+  const load = opts.balance?.load;
+  let counted = false;                          // did balancing add this card to the load?
   if (balanced && card.state === 2 && card.scheduled_days >= 3) {
     const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now });
     card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
     card.scheduled_days = d;
-    opts.balance.load?.set(dayKey(card.due.getTime()), (opts.balance.load.get(dayKey(card.due.getTime())) || 0) + 1);
+    load?.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
+    counted = true;
   }
-  return fromLibrary(cardId, capInterval(card, now, opts.maxInterval, opts.maxDue));
+  // The exam can move the card to another day: take it off the day balancing chose, and put it on the new one.
+  const chosen = card.due.getTime();
+  examClamp(card, now, opts, load);
+  if (load && card.due.getTime() !== chosen) {
+    const was = dayKey(chosen);
+    if (counted && load.get(was) > 0) load.set(was, load.get(was) - 1);
+    load.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
+  }
+  return fromLibrary(cardId, card);
+}
+
+// How much a review now would add to the chance of remembering the card on exam day (see examGainFrom in exam.js).
+// opts: the card's scheduler options. Used to put the cards that gain most first.
+export function examGain(state, examStart, now, opts) {
+  const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
+  return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now);
 }

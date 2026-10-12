@@ -344,6 +344,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-link{display:flex;align-items:center;gap:var(--s-2);flex:1 1 140px;min-width:0;color:var(--text);text-decoration:none;font-weight:600}
 .exam-link .ico{color:var(--text-2)}
 .exam-name{overflow-wrap:anywhere}
+.exam-new{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2);margin:0;font-size:var(--fs-sm);color:var(--text-2)}
+.exam-new b{color:var(--text)}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}

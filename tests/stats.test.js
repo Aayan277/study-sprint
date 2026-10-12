@@ -42,7 +42,8 @@ test('retention: due reviews in the last 30 days', () => {
     log(1, { state: 0, correct: false }),                                // new card: not a due review
     log(1, { state: 1, correct: false }),                                // learning step: not counted
     log(40, { correct: false }),                                         // too old
-    log(0, { source: 'play', reason: 'due', correct: true }),            // Play answer that was the card's review
+    log(0, { source: 'play', mode: 'typing', reason: 'due', correct: true }),   // Play typing that was the card's review
+    log(0, { source: 'play', mode: 'front', reason: 'due', correct: true }),    // Play multiple choice on a due card: guessable, not counted
     log(0, { source: 'play', reason: 'not-due', correct: true }),        // Play on a card not due: not counted
     log(0, { source: 'play', reason: 'again', correct: false })          // not due, missed: not a due review
   ];

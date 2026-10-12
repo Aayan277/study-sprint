@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, imageNames, mediaList, subdeckPaths } from '../js/anki.js';
+import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote } from '../js/anki.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -138,4 +138,124 @@ test('keeping Anki subdecks: paths below what all rows share', () => {
   assert.deepEqual(subdeckPaths(['Bio', 'Chem::Acids']), [['Bio'], ['Chem', 'Acids']]);
   assert.deepEqual(subdeckPaths(['Psych', 'Psych']), [[], []]);
   assert.deepEqual(subdeckPaths(['', 'A']), [[], ['A']]);
+});
+
+// ---------- replay, the way Anki's own FSRS code reads a history ----------
+// A fake scheduler that records what it was asked, so the order and the flags are easy to check.
+const fakeRate = (st, rating, when, isLast) => ({ state: rating === 1 ? 3 : 2, n: (st?.n || 0) + 1, last: when, isLast });
+const DAYMS = 86400000;
+
+test('cram reviews from filtered decks are ignored (type 3 with factor 0)', () => {
+  assert.ok(isCram({ type: 3, factor: 0, ease: 1 }));
+  assert.ok(!isCram({ type: 3, factor: 2300, ease: 3 }));         // a filtered-deck review that did reschedule: real
+  assert.ok(!isCram({ type: 3, ease: 1 }));                        // unknown factor (older rows): can't tell, so real
+  const { state, logs } = replayHistory([
+    { timestamp: 1, ease: 3, ivl: -600, type: 0, factor: 0 },
+    { timestamp: 2, ease: 3, ivl: 4, type: 1, factor: 2500 },
+    { timestamp: 3, ease: 1, ivl: 0, type: 3, factor: 0 }          // a miss while cramming
+  ], fakeRate);
+  assert.equal(state.n, 2);
+  assert.equal(state.state, 2);                                     // not sent to relearning by the cram miss
+  assert.deepEqual(logs.map(l => l.timestamp), [1, 2]);
+  assert.equal(replayHistory([{ timestamp: 1, ease: 1, ivl: 0, type: 3, factor: 0 }], fakeRate).state, null);   // only cram: still new
+});
+
+test('Forget (type 4, factor 0) resets the card; "Set due date" does not', () => {
+  assert.ok(isReset({ ease: 0, type: 4, factor: 0, ivl: 0 }));
+  assert.ok(!isReset({ ease: 0, type: 4, factor: 2500, ivl: 12 }));   // moved by hand
+  assert.ok(!isReset({ ease: 0, type: 5, factor: 0, ivl: 0 }));       // rescheduled, not forgotten
+  assert.ok(isReset({ ease: 0, type: 4, ivl: 0 }));                   // older rows without a factor: a gap of 0
+  assert.ok(isReset({ ease: 0, type: 4, factor: 2500, ivl: 0 }));     // some exports keep a factor on it
+  const rows = [
+    { timestamp: 1, ease: 3, ivl: -600, type: 0, factor: 0 }, { timestamp: 2, ease: 3, ivl: 5, type: 1, factor: 2500 },
+    { timestamp: 3, ease: 0, ivl: 12, type: 4, factor: 2500 },        // set due date
+    { timestamp: 4, ease: 3, ivl: 9, type: 1, factor: 2500 },
+    { timestamp: 5, ease: 0, ivl: 0, type: 4, factor: 0 },            // Forget
+    { timestamp: 6, ease: 3, ivl: -600, type: 0, factor: 0 }, { timestamp: 7, ease: 4, ivl: 6, type: 1, factor: 2500 }
+  ];
+  const { state, logs } = replayHistory(rows, fakeRate);
+  assert.deepEqual([state.n, state.last, state.isLast], [2, 7, true]);        // only what came after the Forget sets the schedule
+  assert.deepEqual(logs.map(l => [l.timestamp, l.state]), [[1, 0], [2, 2], [4, 2], [6, 0], [7, 2]]);   // the earlier reviews stay in the log
+  assert.equal(replayHistory(rows.slice(0, 5), fakeRate).state, null);        // ends with a Forget: new
+});
+
+test('old Anki did not log resets: a new learning group after reviews starts the card again', () => {
+  const rows = [
+    { timestamp: 1, ease: 3, ivl: -600, type: 0, factor: 0 }, { timestamp: 2, ease: 1, ivl: -600, type: 0, factor: 0 },   // one group (several steps)
+    { timestamp: 3, ease: 3, ivl: 3, type: 1, factor: 2500 }, { timestamp: 4, ease: 3, ivl: 8, type: 1, factor: 2500 },
+    { timestamp: 5, ease: 3, ivl: -600, type: 0, factor: 0 }, { timestamp: 6, ease: 3, ivl: 2, type: 1, factor: 2500 }       // learned again
+  ];
+  const { state, logs } = replayHistory(rows, fakeRate);
+  assert.equal(state.n, 2);                                         // only the last group counts
+  assert.equal(logs.length, 6);
+  assert.deepEqual(logs.map(l => l.state), [0, 2, 3, 2, 0, 2]);          // the state before each answer (the fake scheduler sends a miss to relearning)
+  // learning steps repeated at the start of a normal history do not restart it
+  assert.equal(replayHistory(rows.slice(0, 4), fakeRate).state.n, 4);
+});
+
+test('a cut-off history starts from the interval and ease Anki has, not from a new card', () => {
+  const cut = [{ timestamp: 1000, ease: 3, ivl: 30, type: 1, factor: 2500 }, { timestamp: 2000, ease: 3, ivl: 75, type: 1, factor: 2500 }];
+  const asked = [];
+  const { state, logs } = replayHistory(cut, (st, rating, when, isLast) => { asked.push(st); return { ...st, n: (st.n || 1) + 1, last: when, isLast }; }, 'c1');
+  assert.equal(asked.length, 1);                                    // the first row seeds the card, only the second is replayed
+  assert.equal(asked[0].state, 2);
+  assert.equal(asked[0].stability, 30);
+  assert.equal(asked[0].lastReview, 1000);
+  assert.equal(asked[0].cardId, 'c1');
+  assert.equal(state.n, 2);
+  assert.deepEqual(logs.map(l => [l.timestamp, l.state, l.rating]), [[1000, 2, 3], [2000, 2, 3]]);   // both reviews were from a card in review
+  // one row only: the card is just the seed
+  assert.equal(replayHistory([cut[0]], fakeRate, 'c1').state.stability, 30);
+  // the deck's longest gap still applies to a seed that is the whole history: it comes back by then
+  const capped = replayHistory([cut[0]], fakeRate, 'c1', 20).state;
+  assert.equal(capped.due, 1000 + 20 * DAYMS);
+  assert.equal(capped.scheduledDays, 20);
+  // a first row that is a miss (no positive gap), or that is a learning step, replays as a new card
+  assert.equal(replayHistory([{ timestamp: 1, ease: 1, ivl: -600, type: 2, factor: 2300 }], fakeRate).state.state, 3);
+  assert.equal(replayHistory([{ timestamp: 1, ease: 3, ivl: 5, type: 0, factor: 0 }], fakeRate).state.n, 1);
+});
+
+test('seeding: stability from the interval, difficulty from the ease (higher ease = easier)', () => {
+  const at = (ivl, factor) => seedFromAnki('c', { timestamp: 0, ivl, factor });
+  assert.equal(at(30, 2500).stability, 30);
+  assert.equal(at(30, 2500).due, 30 * DAYMS);
+  assert.equal(at(30, 2500).state, 2);
+  assert.ok(at(30, 1800).difficulty > at(30, 2500).difficulty && at(30, 2500).difficulty > at(30, 3200).difficulty);
+  assert.ok(at(30, 1300).difficulty <= 10 && at(30, 9000).difficulty >= 1);
+  assert.deepEqual(at(30, 0).difficulty, at(30, 2500).difficulty);        // an unknown ease is Anki's usual 250%
+});
+
+test('the reviews counted for progress leave out cram rows and hand-made changes', () => {
+  const reviews = new Map([['c1', [{ timestamp: 1, ease: 3, type: 0, factor: 0 }, { timestamp: 2, ease: 1, type: 3, factor: 0 }, { timestamp: 3, ease: 0, type: 4, factor: 0, ivl: 0 }]]]);
+  const r = notesToImport([{ mid: '1', fields: ['a', '1'], cards: { 0: 'c1' } }], models, reviews);
+  assert.deepEqual(r.progress, { cards: 1, reviews: 1 });
+});
+
+// ---------- image-occlusion notes ----------
+const ioModels = new Map([['9', { name: 'Image Occlusion', fields: ['Occlusion', 'Image', 'Header', 'Back Extra', 'Comments'], cloze: true }]]);
+const ioNote = (header, extra = '') => ({ mid: '9', fields: ['{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2}}{{c2::image-occlusion:rect:left=.5:top=.5:width=.2:height=.2}}',
+  '<img src="heart.png">', header, extra, ''], tags: ['Anatomy'], deck: 'Bio', cards: { 0: 'x1', 1: 'x2' } });
+
+test('image-occlusion notes become one plain picture card, not broken cloze cards', () => {
+  assert.ok(isOcclusionNote(ioNote('H'), ioModels.get('9')));
+  assert.ok(!isOcclusionNote({ fields: ['A {{c1::b}}'] }, ioModels.get('9')));
+  assert.ok(!isOcclusionNote(ioNote('H'), { name: 'Basic', fields: ['Front', 'Back'], cloze: false }));      // text alone is not enough
+  const r = notesToImport([ioNote('Heart anatomy', 'Left side pumps'), ioNote('')], ioModels, new Map([['x1', [{ timestamp: 1, ease: 3, type: 0, factor: 0 }]]]));
+  assert.equal(r.rows.length, 2);                                    // one per note, not one per mask
+  assert.deepEqual(r.rows[0], ['Heart anatomy', 'Left side pumps']);
+  assert.deepEqual(r.rows[1], ['Diagram', '']);                      // no heading: "Diagram"
+  assert.deepEqual(r.pictures, [{ front: null, back: 'heart.png' }, { front: null, back: 'heart.png' }]);
+  assert.ok(r.rows.every(row => !row.join(' ').includes('[…]') && !row.join(' ').includes('image-occlusion')));
+  assert.deepEqual(r.occluded, [true, true]);
+  assert.deepEqual(r.ankiIds, [null, null]);                         // masks' history does not fit a plain picture card
+  assert.deepEqual(r.tags, [['anatomy'], ['anatomy']]);
+  assert.equal(r.progress.cards, 0);
+  assert.equal(r.images, 2);
+});
+
+test('occlusion and other notes together; picking a deck keeps the flags in step', () => {
+  const r = notesToImport([{ mid: '1', fields: ['Q', 'A'], deck: 'Other' }, ioNote('Heart')], new Map([...models, ...ioModels]));
+  assert.deepEqual(r.occluded, [false, true]);
+  assert.deepEqual(onlyDeck(r, 'Bio').occluded, [true]);
+  assert.deepEqual(onlyDeck(r, 'Bio').rows, [['Heart', '']]);
 });

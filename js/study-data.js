@@ -6,7 +6,7 @@ import { dayStart } from './days.js';
 import { splitCards, queueFrom, buildQueue, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
-import { examInfo, examPrepQueue } from './exam.js';
+import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { lazyStreak, daysAgoStart } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
@@ -38,8 +38,10 @@ export async function loadAll({ history = false } = {}) {
   // Reviews left today: the overall daily review limit and each deck's own (none by default).
   const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
   const statesById = new Map(states.map(s => [s.cardId, s]));
+  // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
+  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
   return { settings, decks, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
-    split: splitCards(visible, statesById, now), splitAt: now };
+    exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
 
 // A set of decks and everything inside them.
@@ -50,7 +52,7 @@ export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [..
 // lists (not every card), however many decks are counted.
 export function countFor(data, deckIds) {
   const ids = withSubdecks(data, deckIds);
-  if (Date.now() - data.splitAt > 60000) { data.split = splitCards(data.cards, data.statesById); data.splitAt = Date.now(); }   // a minute old: learning cards may have come due
+  if (Date.now() - data.splitAt > 60000) { data.split = splitCards(data.cards, data.statesById, Date.now(), data.exam); data.splitAt = Date.now(); }   // a minute old: learning cards may have come due
   const { split } = data;
   const { queue, waiting } = queueFrom({
     reviews: split.reviews.filter(x => ids.has(x.card.deckId)),
@@ -72,7 +74,7 @@ export function answeredToday(data, deckIds) {
 // "The next card is due in 3h." (or '' when there's nothing scheduled), for cards that are all done today.
 export function nextDueText(data, cards) {
   const ids = new Set(cards.map(x => x.id));
-  const next = Math.min(...[...data.statesById.values()].filter(s => ids.has(s.cardId) && s.state !== NEW).map(s => s.due));
+  const next = Math.min(...[...data.statesById.values()].filter(s => ids.has(s.cardId) && s.state !== NEW).map(s => Math.min(s.due, data.exam.caps.get(s.cardId) ?? Infinity)));
   return Number.isFinite(next) ? `The next card is due in <b>${formatInterval(Math.max(0, next - Date.now()))}</b>.` : '';
 }
 
@@ -80,7 +82,7 @@ export function nextDueText(data, cards) {
 // kind: 'ahead' (cards due in the next `days` days), 'prep' (exam prep) or 'forgot' (cards forgotten today).
 // Returns { queue, waiting, label } like a normal session, from the cards of the chosen decks.
 export function customQueue(kind, data, cards, days = 3) {
-  if (kind === 'ahead') return { ...aheadQueue(cards, data.statesById, days), label: 'Review ahead' };
+  if (kind === 'ahead') return { ...aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps), label: 'Review ahead' };
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));

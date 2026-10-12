@@ -121,6 +121,18 @@ export function isNewLeech(prevLapses, nextLapses, threshold = LEECH_DEFAULTS.le
   if (!(threshold > 0) || nextLapses <= prevLapses || nextLapses < threshold) return false;
   return (nextLapses - threshold) % Math.max(1, Math.ceil(threshold / 2)) === 0;
 }
+// Play can bring a card back with Again when you miss it before it is due. FSRS counts that as a lapse (so the
+// card's schedule and "forgotten N times" stay right), but it doesn't count toward the leech limit: only Review
+// answers, answers on due cards in Play and imported history do. This counts the misses to leave out, from the card's log.
+export function notDueMisses(logs) {
+  return logs.filter(l => l.source === 'play' && l.applied && l.reason === 'again' && l.state === 2 && l.rating === 1).length;
+}
+// isNewLeech for a card that was just answered, leaving out the Play misses on cards that weren't due.
+//   logs  the card's review log (db.getCardLogs); the answer just given must not be a not-due Play miss
+export function isNewLeechCounted(prevLapses, nextLapses, logs, threshold) {
+  const skip = notDueMisses(logs);
+  return isNewLeech(Math.max(0, prevLapses - skip), Math.max(0, nextLapses - skip), threshold);
+}
 // What happens to a card that just became a leech: tagged "leech", and suspended unless the action is tag-only.
 export function markLeech(card, action = LEECH_DEFAULTS.leechAction) {
   const tags = [...new Set([...(card.tags || []), 'leech'])];

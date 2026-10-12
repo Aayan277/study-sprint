@@ -26,13 +26,17 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   newAvailable  how many new cards exist in total (before the daily limit)
 //   reviewLimit  optional: how many reviews (of graduated cards) are still allowed today, a number or
 //                { total, byDeck } from reviewLimits(). Learning cards are never held back.
-export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity) {
-  return queueFrom(splitCards(cards, statesById, now), newLimit, reviewLimit);
+//   exam      optional, from examSchedule() in exam.js: the exam's final pass (see splitCards)
+export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null) {
+  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit);
 }
 
 // Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
 // Kept apart so Today can do this once and then count any set of decks from the short lists.
-export function splitCards(cards, statesById, now = Date.now()) {
+// exam (optional) is the exam's final pass: { caps, gain } from examSchedule() in exam.js.
+//   caps  a card planned for a review before its exam counts as due on that day, whatever its saved due date
+//   gain  reviews for an exam come first, the ones that add most to the chance of remembering on exam day first
+export function splitCards(cards, statesById, now = Date.now(), exam = null) {
   const end = dayEnd(now);
   const reviews = [], waiting = [], fresh = [];
   for (const card of cards) {
@@ -41,11 +45,19 @@ export function splitCards(cards, statesById, now = Date.now()) {
     if (isLearning(st.state)) {
       if (st.due <= now + LEARN_AHEAD) reviews.push({ card, kind: 'learn', due: st.due });
       else if (st.due <= end) waiting.push({ card, kind: 'learn', due: st.due });
-    } else if (st.due <= end) {
-      reviews.push({ card, kind: 'review', due: st.due });
+    } else {
+      const due = Math.min(st.due, exam?.caps.get(card.id) ?? Infinity);
+      if (due <= end) reviews.push({ card, kind: 'review', due });
     }
   }
-  reviews.sort((a, b) => a.due - b.due);          // most overdue first
+  const gain = exam?.gain;
+  if (gain?.size) {
+    // Learning cards first (they're on a timer), then reviews for an exam by what a review adds, then the rest.
+    const rank = x => (x.kind === 'learn' ? 0 : gain.has(x.card.id) ? 1 : 2);
+    reviews.sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? gain.get(b.card.id) - gain.get(a.card.id) : 0) || a.due - b.due);
+  } else {
+    reviews.sort((a, b) => a.due - b.due);          // most overdue first
+  }
   waiting.sort((a, b) => a.due - b.due);
   return { reviews, waiting, fresh };
 }
@@ -166,12 +178,13 @@ export const extraNewToday = (extraNew, now = Date.now()) => (extraNew && extraN
 
 // Custom study: review ahead. Review cards that aren't due today but are due within the next `days` days,
 // soonest first. (Learning cards are left out: they're due again soon anyway.)
-export function aheadQueue(cards, statesById, days, now = Date.now()) {
+export function aheadQueue(cards, statesById, days, now = Date.now(), caps = null) {
   const from = dayEnd(now), to = dayEnd(now, days);
   const queue = [];
   for (const card of cards) {
     const st = statesById.get(card.id);
-    if (st && st.state === REVIEW && st.due > from && st.due <= to) queue.push({ card, kind: 'review', due: st.due });
+    const due = st ? Math.min(st.due, caps?.get(card.id) ?? Infinity) : 0;      // an exam may have brought it forward
+    if (st && st.state === REVIEW && due > from && due <= to) queue.push({ card, kind: 'review', due });
   }
   return { queue: queue.sort((a, b) => a.due - b.due), waiting: [] };
 }

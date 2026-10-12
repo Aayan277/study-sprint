@@ -127,14 +127,15 @@ Material:
 
 | Result | Typing | Multiple choice |
 | --- | --- | --- |
-| Wrong or timed out | Again | Again |
+| Wrong or timed out | Again | Again (a Survival timeout with under 3 seconds allowed is only logged) |
 | Correct, slow (more than 70% of the time used) | Hard | Hard |
 | Correct, normal | Good | Good |
 | Correct, fast (less than 30% of the time used) | Easy | Good (never Easy, since recognizing is easier than recalling) |
 
 **Rules so playing doesn't break the schedule:**
-- If a card is **due or overdue**, apply the rating to FSRS normally.
-- If a card is **not due yet**, only an **Again** changes its schedule. Correct answers get logged for stats but don't push the card further out.
+- If a card is **due or overdue** (including a card the exam's final pass has planned for today), apply the rating to FSRS normally.
+- If a card is **not due yet**, only an **Again** changes its schedule: it brings the card back. Correct answers get logged for stats but don't push the card further out. Such a miss is a lapse for FSRS (the schedule and "forgotten N times" stay right) but **does not count toward the leech limit**: only Review answers, Play answers on due cards and imported history do (the review log says which, `reason: 'again'`). Wrong taps in a quick game say little about whether you forgot the card.
+- A **Survival timeout while under 3 seconds were allowed** (the timer shrinks to a 2s floor) is only logged, never graded.
 - Apply at most one schedule update per card per day from Play.
 - **New cards** (never reviewed) are left for Review, with one exception: in a deck whose **exam date** is coming up (its own, or the deck it's inside), a Play answer counts as the card's **first review**: correct uses the table above, wrong is Again. These respect the new-cards-per-day limits (overall, the deck's own, and parent decks' limits). Only new cards really started today count against them, so Play answers that were just logged don't use them up. Over the limit, the card is only logged and starts in Review. The results screen says how many new cards were started and why.
 
@@ -222,6 +223,20 @@ Done on the `experiment` branch, in three steps. All of it keeps the no-build-st
    - **Speed pass and Today follow-ups:** Stats counts answers per day in the database (the whole log is read only when a deck is picked), draws 500 mastery squares at a time, and redraws once after a sync; Today reads 60 days of the log and finds the streak by walking back only as far as it goes (`lazyStreak`, shared with Stats and the finish screen); deck counts come from one sorted pass (`splitCards`); Browse sorts with one `Intl.Collator`; Play samples ~300 candidates for wrong options; `applyRemote` reads a whole page at once; the service worker is stale-while-revalidate (bump `CACHE` for a release: it installs fresh files and reloads once), `index.html` preloads the boot modules (a test keeps the list in step with `app.js`), and screens other than Today load on demand. Review: the turned-away face is `inert` and focus moves to the answer; Today's Start resumes a same-deck session or asks "Start over?"; exam prep is a normal launch (`kind: 'prep'`); a deck's session lives at `#/review/<deck>`; the time estimate is the median gap between reviews in a session.
 
 Known leftovers: Reset all data still re-adds the sample deck afterwards (as before), and the first-run start does not appear on a second device that is about to sign in (its "Already use Study Sprint?" link goes to Settings).
+
+## After v3.0 (research by three review agents, approved order)
+
+Research covered the scheduling algorithm, competitors (Anki, Quizlet, Knowt, RemNote, Brainscape…) and learning science. Courses: maths/science, bio/diagrams, text-heavy and languages. Not wanted for now: sharing decks. One-tap AI cards: maybe later. Built one round at a time, in this order:
+
+1. ✅ **Smarter exams and fixes (v3.1).** Exam final pass (cards ≥99% on exam day left alone, the rest spread over the last 3 days weakest-closest, worked out when the queue is built; the 300-card simulation went from 300 reviews on the eve to about 156 at most on any day), "N new a day to finish by the exam" on Today, pull-in and Exam prep by recall probability, Play misses on cards not due don't count toward leeches (short Survival timeouts only logged), Anki replay like Anki's own (cram, Forget, cut-off histories, deck options), image-occlusion notes import as picture cards, and Retention counts recall answers only. Left for later from the review: speed relative to the person (B6), MC on due cards only in exam or Hard decks, backlog order by recall (B9).
+   - Final pass tuned after a simulation with real forgetting (13 scenarios × 3 learners × 30 seeds): skipping a card's last review at ≥95% predicted lost 1–2 points of exam-day recall against v3.0, so a card is now left alone only at ≥99% (`FINAL_R`) and the pass is spread over the last 3 days; recall stays within 0.2 points of v3.0 in every exam case, total reviews are within about ±10% of v3.0's, and the busiest day is about 156 instead of 300 in the 300-card case.
+2. **Cloze cards (v3.2)**, the old round D. Blanks are linked cards: each card keeps its `front`/`back` (so older versions, backups and sync keep working) plus `noteId`, `cloze` and `noteText`. A note editor with […] buttons. Siblings: one card per note per day. Anki cloze import and export. An opt-in "Link cloze cards" tool for older imports.
+3. **Image occlusion (v3.3)**, the old round E. "Hide all, guess one". Masks are stored as fractions of the picture on each card, drawn with the finger (rectangles), and Anki image-occlusion notes import properly.
+4. **Quick wins (v3.4).** Stats by tag or lecture with "Drill this topic"; KaTeX maths on cards; a streak freeze (one a week) and exam rest days; typed answers show which letters were wrong; optional confidence before the reveal ("sure but wrong" stats); a Pretest button for a new lecture deck; new cards mixed across subdecks; a study plan as a calendar file (.ics).
+5. **My own algorithm (v3.5).** Tune FSRS to my reviews (fsrs-rs WASM, @open-spaced-repetition/binding, on a separate page, at about 400+ reviews, kept only if it predicts better); an exam-day forecast ("you'll remember ~78%; do 25 a day for 90%"); predicted vs actual recall chart; workload forecast.
+6. **Exam practice (v3.6).** Test mode (mock exam, mixed question types, score by tag, Drill missed); lecture PDFs into the "Make cards with Claude" prompt (pdf.js); reverse cards.
+
+Later: audio cards, one-tap AI cards (Supabase Edge Function, about $3 a semester), sharing decks.
 
 ## Parked (not planned for now)
 

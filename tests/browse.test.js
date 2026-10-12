@@ -136,3 +136,17 @@ test('every filter is in exactly one dropdown group', () => {
   assert.equal(new Set(grouped).size, grouped.length);
   assert.deepEqual(FILTER_GROUPS.map(([g]) => g), [null, 'Status', 'Flags', 'Problems']);
 });
+
+test('leeches: Play misses on cards that were not due do not count', () => {
+  const { isNewLeechCounted, notDueMisses } = leechFns;
+  const miss = { source: 'play', applied: true, reason: 'again', state: 2, rating: 1 };
+  const logs = [miss, miss, miss, { source: 'play', applied: true, reason: 'due', state: 2, rating: 1 }, { source: 'review', state: 2, rating: 1 },
+    { source: 'play', applied: false, reason: 'not-due', state: 2, rating: 1 }];
+  assert.equal(notDueMisses(logs), 3);
+  // FSRS says 8 lapses, but 3 were Play misses: 5 count, so the 8th lapse is not yet a leech
+  assert.equal(isNewLeechCounted(7, 8, logs, 8), false);
+  // once the counted lapses reach 8, it is one
+  assert.equal(isNewLeechCounted(10, 11, logs, 8), true);
+  assert.equal(isNewLeechCounted(7, 8, [], 8), true);                                  // no Play misses: as before
+  assert.equal(notDueMisses([{ source: 'play', applied: true, reason: 'again', state: 1, rating: 1 }]), 0);   // a learning step is no lapse
+});

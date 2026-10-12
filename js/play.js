@@ -12,13 +12,13 @@ import {
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies } from './autograde.js';
-import { dayStart } from './days.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
+import { loadAll } from './study-data.js';
 import { examOptions, examInfo, nearestExamDeck } from './exam.js';
-import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
-import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
-import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
+import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
+import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
@@ -60,24 +60,22 @@ const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back
 
 export async function renderPlay(el) {
   stopRound();
-  const [settings, decks, allCards, states, logs] = await Promise.all([
-    db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
-  ]);
+  // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
+  const { settings, decks, cards: visible, logs, statesById, exam, newLeft } = await loadAll();
   if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
-  // Suspended cards, and cards buried until tomorrow, sit out of Play too.
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
-  const cards = allCards.filter(c => !isHidden(c)).map(playCopy);
-  decks.sort((a, b) => a.created - b.created);
+  // (loadAll leaves out suspended cards, and cards buried until tomorrow.)
+  const cards = visible.map(playCopy);
   data = {
-    settings, decks, cards,
-    statesById: new Map(states.map(s => [s.cardId, s])),
+    settings, decks, cards, statesById,
+    // Cards that an exam's final pass brings forward count as due today (see exam.js).
+    examCaps: exam.caps,
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
     playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
     // Only new cards really started today count (newLimits ignores Play answers that were only logged).
-    newLeft: newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(allCards.map(c => [c.id, c.deckId])),
-      extra: extraNewToday(settings.extraNew), chains: chainMap(decks) })
+    newLeft
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
@@ -435,7 +433,11 @@ async function record(round, entry) {
   // and its parents'), it's only logged and starts in Review as before.
   const examDeck = !!examInfo(effectiveDeck(data.decks, entry.card.deckId), now);
   const newRoom = newRoomFor(data.newLeft, entry.card.deckId);
-  let decision = scheduleDecision({ state: prev, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom });
+  const cap = data.examCaps.get(id);
+  const dueState = prev && cap !== undefined ? { ...prev, due: Math.min(prev.due, cap) } : prev;
+  // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
+  let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
+    timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = {
     cardId: id, timestamp: now, source: 'play',
@@ -443,7 +445,7 @@ async function record(round, entry) {
     correct: entry.ok, ms: entry.ms, rating,
     state: prev ? prev.state : 0,      // the card's state before this answer
     applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit' or 'already'
+    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
   };
   if (applies(decision)) {
     let next = null;
@@ -467,7 +469,7 @@ async function record(round, entry) {
       await db.saveReview(next, log);
       data.statesById.set(id, next);
       data.playedToday.add(id);
-      await checkLeech(round, entry.card, prev, next);
+      await checkLeech(round, entry.card, prev, next, log);
     }
   } else {
     await db.addLog(log);
@@ -477,8 +479,10 @@ async function record(round, entry) {
 }
 
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
-async function checkLeech(round, card, prev, next) {
-  if (!isNewLeech(prev?.lapses || 0, next.lapses, data.settings.leechThreshold)) return;
+async function checkLeech(round, card, prev, next, log) {
+  // A miss on a card that wasn't due still brings it back, but doesn't count toward the leech limit.
+  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return;
+  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
   const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
   await db.saveCards([leech]);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));

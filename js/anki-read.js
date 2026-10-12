@@ -115,13 +115,15 @@ function readCollection(db) {
   }
 
   // Review history (only there when the deck was exported with "Include scheduling information").
-  //   id = when (ms), ease = button (1 Again … 4 Easy, 0 = changed by hand), time = ms taken, type 4/5 = manual change
+  //   id = when (ms), ease = button (1 Again … 4 Easy, 0 = changed by hand), ivl = the new gap (days; negative = seconds),
+  //   time = ms taken, type = 0 learning, 1 review, 2 relearning, 3 filtered deck (cram), 4 manual change, 5 rescheduled,
+  //   factor = the card's ease in permille after the answer (0 for a cram review and for "Forget": see replayHistory in anki.js)
   const reviews = new Map();
   if (tables.has('revlog')) {
-    for (const [id, cid, ease, ivl, time, type] of q('SELECT id, cid, ease, ivl, time, type FROM revlog ORDER BY id')) {
+    for (const [id, cid, ease, ivl, time, type, factor] of q('SELECT id, cid, ease, ivl, time, type, factor FROM revlog ORDER BY id')) {
       const key = String(cid);
       if (!reviews.has(key)) reviews.set(key, []);
-      reviews.get(key).push({ timestamp: id, ease, ivl, ms: time, type });
+      reviews.get(key).push({ timestamp: id, ease, ivl, ms: time, type, factor });
     }
   }
 

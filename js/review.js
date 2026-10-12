@@ -6,16 +6,16 @@
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
-import { RATINGS, Rating, previewIntervals, rate } from './srs.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
-import { examOptions } from './exam.js';
+import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
-import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
+import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
@@ -73,7 +73,12 @@ export async function renderReview(el, deckId) {
 // ---------- 2. session ----------
 // custom: optional { queue, waiting, label } for a Custom study session instead of today's cards.
 function start(el, data, cards, typing, deckId, custom = null, scope = '') {
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
+  // Decks with an exam: the final pass brings cards forward, and the reviews that add most on exam day come first.
+  const now = Date.now();
+  // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
+  const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
+    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -294,7 +299,7 @@ async function answer(el, rating) {
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
     // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
     let cardBefore = null;
-    if (isNewLeech(prev?.lapses || 0, next.lapses, R.leech.threshold)) {
+    if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
       await db.saveCards([leech]);

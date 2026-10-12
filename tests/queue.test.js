@@ -204,3 +204,32 @@ test('newRoomFor / takeNewFor: Play in an exam deck respects the new-card limits
   assert.equal(takeNewFor(limit, 'other'), true);         // another deck still has the overall limit
   assert.equal(newRoomFor(limit, 'other'), false);        // overall limit now 0
 });
+
+test('exam final pass: a card planned for today is due today, and the biggest gains come first', () => {
+  const cards = ['planned', 'later', 'big', 'small', 'learnNow'].map(card);
+  const states = new Map([
+    ['planned', { state: REVIEW, due: NOW + 40 * DAY }],       // saved far away, but the exam plan brings it to today
+    ['later', { state: REVIEW, due: NOW + 40 * DAY }],         // not planned: stays where it is
+    ['big', { state: REVIEW, due: NOW - DAY }],
+    ['small', { state: REVIEW, due: NOW - 5 * DAY }],
+    ['learnNow', { state: LEARNING, due: NOW }]
+  ]);
+  const exam = { caps: new Map([['planned', dayStart(NOW)]]), gain: new Map([['planned', 0.2], ['big', 0.3], ['small', 0.01]]) };
+  const { queue } = buildQueue(cards, states, 0, NOW, Infinity, exam);
+  assert.deepEqual(queue.map(q => q.card.id), ['learnNow', 'big', 'planned', 'small']);     // 'later' is not due
+  // without the exam: the usual order, most overdue first, and the far-off card stays away
+  assert.deepEqual(buildQueue(cards, states, 0, NOW).queue.map(q => q.card.id), ['small', 'big', 'learnNow']);
+});
+
+test('exam final pass: the review limit keeps the biggest gains', () => {
+  const cards = ['a', 'b', 'c'].map(card);
+  const states = new Map(cards.map((c, i) => [c.id, { state: REVIEW, due: NOW - (i + 1) * DAY }]));
+  const exam = { caps: new Map(), gain: new Map([['a', 0.01], ['b', 0.05], ['c', 0.2]]) };
+  assert.deepEqual(buildQueue(cards, states, 0, NOW, 2, exam).queue.map(q => q.card.id), ['c', 'b']);
+});
+
+test('review ahead leaves out cards the exam brought to today', () => {
+  const states = new Map([['a', { state: REVIEW, due: NOW + 40 * DAY }], ['b', { state: REVIEW, due: NOW + 2 * DAY }]]);
+  assert.deepEqual(aheadQueue(['a', 'b'].map(card), states, 3, NOW).queue.map(q => q.card.id), ['b']);
+  assert.deepEqual(aheadQueue(['a', 'b'].map(card), states, 3, NOW, new Map([['a', dayEnd(NOW) + HOUR]])).queue.map(q => q.card.id), ['a', 'b']);
+});

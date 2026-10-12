@@ -35,8 +35,10 @@ ok((await page.textContent('#toast')).includes('3 with Anki progress'), 'toast: 
 let d = await deckData('Bio new');
 const m = d['Mitochondria'];
 ok(m.state?.state === 2 && m.logs.length === 5 && m.logs.every(l => l.source === 'anki'), 'Mitochondria: in review with 5 Anki reviews');
-ok(m.state.lastReview > Date.now() - 13 * DAY && m.state.lastReview < Date.now() - 9 * DAY, 'last review about 10 days ago (when the test file was made)');
-ok(m.state.due > Date.now() - 11 * DAY && m.state.reps === 5, `due rebuilt from history (due in ${((m.state.due - Date.now()) / DAY).toFixed(1)} days)`);
+// The test file's reviews have fixed dates, so compare with its own last review rather than today's date.
+const lastLog = Math.max(...m.logs.map(l => l.timestamp));
+ok(Math.abs(m.state.lastReview - lastLog) < DAY, 'last review is the last Anki review');
+ok(m.state.due > m.state.lastReview && m.state.reps === 5, `due rebuilt from history (due in ${((m.state.due - Date.now()) / DAY).toFixed(1)} days)`);
 ok(!d['Ribosome'].state && d['Ribosome'].logs.length === 4, 'Ribosome: Forget in Anki → new, history kept');
 ok(!d['Nucleus'].state && !d['Nucleus'].logs.length, 'Nucleus: never reviewed → new');
 const z = d['DNA is copied into […]'];
