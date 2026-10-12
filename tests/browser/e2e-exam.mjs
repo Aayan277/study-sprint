@@ -53,8 +53,11 @@ const easyLabel = await page.$eval('.rate.r4 span', s => s.textContent);
 await page.keyboard.press('4'); await page.waitForTimeout(300);
 states = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')));
 ok(!(await lateNeedy()).length, `Easy on "${first}" (${easyLabel}) leaves no card that needs a review waiting until after the exam`);
-// Easy on this long-unseen card makes it stable enough to be 95%+ on exam day, so it may go past the exam.
-ok(/mo$/.test(easyLabel) || parseInt(easyLabel) <= 10, 'the Easy button shows the real gap when the card will be remembered on exam day: ' + easyLabel);
+// If Easy sends the card past the exam, it must be one we expect to remember on exam day (95%+).
+const rated = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')).sort((a, b) => b.lastReview - a.lastReview)[0]);
+const pastExam = rated.due > examStart;
+const onExamDay = await page.evaluate(async ([s, start]) => (await import('./js/exam.js')).recallAt(s, start), [rated, examStart]);
+ok(!pastExam || onExamDay >= 0.95, `Easy (${easyLabel}) goes past the exam only when recall on exam day is 95%+: ${onExamDay.toFixed(3)}`);
 await page.click('#endBtn');
 // custom study offers exam prep too
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
