@@ -803,8 +803,24 @@ async function route() {
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  if (el.isConnected) scrollTo(0, 0);
+  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); }
   if (resetLink) showResetLink(resetLink);
+}
+
+// Tell screen readers the screen changed: the page title follows the screen (a deck shows its own name) and
+// focus moves to the screen's main heading.
+const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
+let firstScreen = true;
+function announceScreen(el, name) {
+  const h1 = el.querySelector('h1');
+  const title = name === 'welcome' ? SCREEN_NAMES.welcome : h1?.textContent.trim() || SCREEN_NAMES[name] || 'Today';
+  document.title = `${title} · Study Sprint`;
+  const first = firstScreen;
+  firstScreen = false;
+  // Not on the very first load, and not during a Review or Play round (they manage focus themselves).
+  if (first || !h1 || document.body.classList.contains('focus')) return;
+  h1.tabIndex = -1;
+  h1.focus({ preventScroll: true });
 }
 
 let lastHash = '#/today';
