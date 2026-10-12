@@ -372,6 +372,9 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}"></label>
       <label class="field"><span>Course code (optional)</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
+      <label class="field"><span>Exam date (optional)</span>
+        <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
+        <small class="note" style="margin:4px 0 0">Until then, every card in this deck (and its subdecks) comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).` : ''}</small></label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
@@ -384,9 +387,6 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
         <span>In Review: the front when it appears, the back when you flip. (The speaker button or R reads it any time.)</span></span>
         <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>`}
-      ${isNew ? '' : `<label class="field"><span>Exam date (optional)</span>
-        <input id="deckExam" type="date" value="${esc(deck.examDate || '')}">
-        <small class="note" style="margin:4px 0 0">Until then, every card in this deck (and its subdecks) comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).` : ''}</small></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -427,12 +427,12 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       options = read;
     }
     const saved = isNew
-      ? { id: db.newId(), name, course, color, parentId, created: Date.now() }
+      ? { id: db.newId(), name, course, color, parentId, created: Date.now(), ...($('deckExam').value ? { examDate: $('deckExam').value } : {}) }
       : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
         examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto };
     await db.saveDeck(saved);
     // A new exam date (its own, or from the deck it's moved into): bring forward cards scheduled after it.
-    // Covers the subdecks that use this date too.
+    // Covers the subdecks that use this date too. (A new deck has no cards to move yet.)
     let moved = 0;
     const after = decks.map(d => (d.id === saved.id ? saved : d)).concat(isNew ? [saved] : []);
     const exam = effectiveDeck(after, saved.id).examDate;

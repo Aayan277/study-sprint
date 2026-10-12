@@ -57,5 +57,17 @@ await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelect
 await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('#deckForm button[type=submit]');
 await page.waitForFunction(() => !document.querySelector('.exam-line'));
 ok(true, 'clearing the date removes exam mode');
+// the Exam date field is near the top of Edit deck (right after the name and course code), above Study options and Read aloud
+await page.click('#editDeck'); await page.waitForSelector('#deckExam');
+const order = await page.$$eval('#deckForm [id=deckName], #deckForm [id=deckCourse], #deckForm [id=deckExam], #deckForm [id=deckOpts], #deckForm [id=deckTts]', els => els.map(e => e.id));
+ok(order.join() === 'deckName,deckCourse,deckExam,deckOpts,deckTts', 'Edit deck: Exam date comes right after name and course code: ' + order.join());
+await page.click('#deckCancel');
+// New deck has an Exam date too, and keeps it
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('#newDeck');
+await page.click('#newDeck'); await page.waitForSelector('#deckExam');
+await page.fill('#deckName', 'Chem'); await page.fill('#deckExam', inDays(20)); await page.click('#deckForm button[type=submit]');
+await page.waitForFunction(() => /Created/.test(document.querySelector('#toast')?.textContent || ''));
+ok(await page.evaluate(async d => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Chem')?.examDate === d, inDays(20)), 'a new deck saves its exam date');
+ok((await page.textContent('.deck:has-text("Chem")')).includes('Exam in 20 days'), 'and shows the exam countdown');
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
