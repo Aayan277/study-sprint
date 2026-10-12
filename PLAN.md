@@ -205,8 +205,8 @@ Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlu
 
 Done on the `experiment` branch, in three steps. All of it keeps the no-build-step, no-data-format-change rules (the only new setting keys are `onboarded` and the fold states, which live in localStorage).
 
-1. **Dark and sleek look.** New design tokens (type, spacing, radii, elevation, color roles), five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light plus OLED, Geist fonts, and rating colors that stay distinct from the brand color.
-2. **Today is the home screen.** Daily goal ring, streak and one Start button, a row per course, upcoming exams, and an Options sheet (decks, flip or type, Custom study). Decks, the flip card and the finish screen were updated to match.
+1. **Dark and sleek look.** New design tokens (type, spacing, radii, elevation, color roles), five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light plus OLED, Geist fonts, fixed rating colors that stay distinct from the brand color, a focus mode (tab bar and header hidden during a round), and contrast fixes.
+2. **Today is the home screen.** Daily goal ring, streak and one Start button, a row per course, upcoming exams, and an Options sheet (decks, flip or type, Custom study). The card flips, the finish screen was redone, and emoji became one icon set. Decks was updated to match. The Review setup now lives in Today → Options.
 3. **Less to wade through, and a first run.**
    - **First run** (`js/onboarding.js`, route `#/welcome`): on a fresh install with no decks, cards or reviews, a skippable 3-step start (pitch, name your course with optional code and exam date, add cards by paste / file or Anki / sample deck) then a guided review of 3 cards (real reviews, saved). It never shows again once finished or skipped (`onboarded` setting, this device only). Existing installs (the old `seeded` flag, or any data) never see it. The sample deck is only added when "Try the sample deck" is picked. Tests skip it with `localStorage 'study-sprint-skip-onboarding' = '1'` (set by `tests/browser/pw.mjs`) or `?skipOnboarding`, which adds the sample deck like before.
    - **JLPT starter decks** are hidden: a small "Starter decks" fold at the bottom of Decks, and Import links to it ("Ready-made decks", `#/decks/starters`).
@@ -215,6 +215,7 @@ Done on the `experiment` branch, in three steps. All of it keeps the no-build-st
    - **Card filters** are grouped (Status / Flags / Problems) with `<optgroup>`.
    - **Play quick-start:** deck, the three format tiles and Start fit above the fold at 375x812; question type, Hard, Flash, question count and time are under "Customise" with a one-line summary. The deck defaults to the one with the nearest upcoming exam (until you pick one in that visit), otherwise the last one used.
    - **Play starts new cards in exam decks** (see section 5 above).
+   - **Earlier bug fixes** along the way: focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight (study day starts at 4am).
 
 Known leftovers: Reset all data still re-adds the sample deck afterwards (as before), and the first-run start does not appear on a second device that is about to sign in (its "Already use Study Sprint?" link goes to Settings).
 
