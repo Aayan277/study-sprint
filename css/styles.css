@@ -699,7 +699,8 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .hud b{color:var(--text);font:600 1.05rem var(--f-num)}
 .hud .streak-on b{color:var(--accent-text)}
 .hud .clock-low b{color:var(--again)}
-.hud .link{margin-left:auto}
+.hud .link{margin-left:auto;flex:none}
+@media (max-width:360px){.hud{column-gap:8px}.hud .link{padding:8px 4px}}   /* keeps Quit on the same line at 320px */
 .lives{color:var(--again);letter-spacing:3px;font-size:1rem;margin-right:8px}
 .lives .lost{color:var(--line-strong)}
 .penalty{color:var(--again);font-weight:600;margin-left:4px}
