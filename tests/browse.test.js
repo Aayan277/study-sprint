@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, SORTS, replaceInCards, tagCounts, renameTag } from '../js/browse-logic.js';
+import { cardStatus, browseCards, isHidden, isBuried, buryUntil, parseTags, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from '../js/browse-logic.js';
 import * as leechFns from '../js/browse-logic.js';
 import { dayEnd } from '../js/days.js';
 
@@ -128,4 +128,11 @@ test('tags: counts, rename and remove everywhere', () => {
   assert.deepEqual(renameTag(cs, 'exam1', 'Exam 1').map(c => [c.id, c.tags]), [['a', ['exam 1', 'cells']], ['b', ['exam 1']]]);
   assert.deepEqual(renameTag(cs, 'cells', 'exam 1').map(c => [c.id, c.tags]), [['a', ['exam1', 'exam 1']], ['c', ['exam 1']]]);   // merging doesn't double up
   assert.deepEqual(renameTag(cs, 'cells', '').map(c => c.tags), [['exam1'], ['exam 1']]);                                       // removing
+});
+
+test('every filter is in exactly one dropdown group', () => {
+  const grouped = FILTER_GROUPS.flatMap(([, keys]) => keys);
+  assert.deepEqual([...grouped].sort(), FILTERS.map(([k]) => k).sort());
+  assert.equal(new Set(grouped).size, grouped.length);
+  assert.deepEqual(FILTER_GROUPS.map(([g]) => g), [null, 'Status', 'Flags', 'Problems']);
 });

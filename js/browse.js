@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
@@ -18,6 +18,13 @@ const shortDate = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric
 
 // Remembered while the app is open, so going into a card and back keeps your search.
 const memory = { query: '', filter: 'all', sort: 'added-old' };   // oldest first = the order you added them
+
+// The filter dropdown's options, grouped (Status / Flags / Problems).
+function filterOptions(current) {
+  const label = new Map(FILTERS);
+  const opt = k => `<option value="${k}" ${k === current ? 'selected' : ''}>${label.get(k)}</option>`;
+  return FILTER_GROUPS.map(([group, keys]) => group ? `<optgroup label="${group}">${keys.map(opt).join('')}</optgroup>` : keys.map(opt).join('')).join('');
+}
 
 // ---------- the "All cards" screen (#/browse) ----------
 export async function renderBrowseAll(el) {
@@ -56,7 +63,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     </div>
     <div class="br-controls">
       <input type="search" id="brQuery" placeholder="Search cards" aria-label="Search cards" value="${esc(B.query)}" autocomplete="off">
-      <select id="brFilter" aria-label="Show">${FILTERS.map(([k, l]) => `<option value="${k}" ${k === B.filter ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select id="brFilter" aria-label="Show">${filterOptions(B.filter)}</select>
       <select id="brSort" aria-label="Sort by">${SORTS.map(([k, l]) => `<option value="${k}" ${k === B.sort ? 'selected' : ''}>${l}</option>`).join('')}</select>
     </div>
     <p class="note br-count" id="brCount" aria-live="polite"></p>

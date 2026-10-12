@@ -18,7 +18,7 @@ const target = await page.evaluate(async () => { const db = await import('./js/d
   return cs[5].front; });
 
 // settings: leech after 1, tag + suspend
-await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#leech');
+await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#advanced'); await page.click('#advanced summary'); await page.waitForSelector('#leech', { state: 'visible' });   // leech settings are in Advanced scheduling
 ok(await page.inputValue('#leech') === '8', 'leech threshold defaults to 8');
 await page.click('#leechMinus'); ok(await page.inputValue('#leech') === '7', 'minus works');
 await page.fill('#leech', '1'); await page.dispatchEvent('#leech', 'change');

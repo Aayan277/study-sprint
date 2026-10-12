@@ -57,6 +57,19 @@ ok((await page.locator('#perDay + .chart-table tbody tr').count()) === 30, 'tabl
 // hardest cards + drill
 ok((await page.locator('.hard-list li').count()) >= 5, 'hardest cards listed');
 ok((await page.locator('.hard-list li .f').first().textContent()) === 'Negative reinforcement', 'most-forgotten card first (4 lapses)');
+// "More stats": folded on a phone, with what's always shown above it
+ok(await page.isVisible('#moreBtn') && await page.getAttribute('#moreBtn', 'aria-expanded') === 'false' && await page.isHidden('#moreBody'), 'phone: "More stats" starts folded');
+ok(await page.isHidden('#btnTitle') && await page.isHidden('#hours') && await page.isHidden('#difficulty') && await page.isHidden('#mTitle'), 'folded away: answer buttons, time of day, difficulty, mastery');
+ok(await page.isVisible('#calTitle') && await page.isVisible('#perDay') && await page.isVisible('#forecast') && await page.isVisible('#hardTitle') && await page.isVisible('.pgrid'), 'always shown: streak, retention, calendar, reviews per day, due in 7 days, hardest cards');
+await noHScroll('stats folded'); await page.screenshot({ path: SP + '/s-folded.png', fullPage: true });
+await page.click('#moreBtn');
+ok(await page.getAttribute('#moreBtn', 'aria-expanded') === 'true' && await page.isVisible('#btnTitle') && await page.isVisible('#hours') && await page.isVisible('#difficulty') && await page.isVisible('#mTitle'), 'tapping More stats shows the four sections');
+await noHScroll('stats expanded'); await page.screenshot({ path: SP + '/s-expanded.png', fullPage: true });
+await page.reload(); await page.waitForSelector('.chart');
+ok(await page.getAttribute('#moreBtn', 'aria-expanded') === 'true' && await page.isVisible('#mTitle'), 'the open fold is remembered after a reload');
+await page.click('#moreBtn'); await page.reload(); await page.waitForSelector('.chart');
+ok(await page.isHidden('#mTitle'), 'and so is closing it');
+await page.click('#moreBtn');
 // mastery
 ok((await page.locator('.mtile').count()) === 17, 'mastery grid has every card (12 + 5)');
 ok((await page.locator('.mdeck h3').count()) === 2, 'grid grouped by deck');

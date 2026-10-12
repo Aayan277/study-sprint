@@ -11,7 +11,7 @@ import { renderWelcome } from './onboarding.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import { renderPlay } from './play.js';
 import { renderStats } from './stats.js';
 import { renderBrowseAll } from './browse.js';
@@ -67,24 +67,8 @@ async function renderSettings(el) {
           <p>How likely you should be to remember a card when it comes back. Higher means you remember more but review more often. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
       </div>
-      <div class="set-row">
-        <div><b>Leech after</b><p>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</p></div>
-        <div class="stepper">
-          <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
-          <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
-          <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
-        </div>
-      </div>
-      <div class="set-row column">
-        <div><b id="leechActLbl">When a card becomes a leech</b></div>
-        <div class="chips" role="group" aria-labelledby="leechActLbl">
-          <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
-          <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
-        </div>
-        <p class="note" style="margin:0">Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</p>
-      </div>
-      <details class="advanced" id="advanced">
-        <summary>Advanced scheduling</summary>
+      <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
+        <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
         <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
         <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
           <label for="lsteps"><b>Learning steps</b></label>
@@ -125,6 +109,26 @@ async function renderSettings(el) {
                 ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
               </select></label>`).join('')}
           </div></div>
+        <div class="adv-row"><b id="timerLbl">Play timer</b>
+          <span>The default time per question in Play, in seconds. The Play screen has the same slider.</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" id="timerMinus" aria-label="Shorter timer">−</button>
+            <input id="timerSec" type="number" inputmode="numeric" min="3" max="20" value="${settings.timer}" aria-labelledby="timerLbl">
+            <button type="button" class="icon-btn" id="timerPlus" aria-label="Longer timer">+</button>
+          </div></div>
+        <div class="adv-row"><b>Leech after</b>
+          <span>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
+            <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
+            <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
+          </div></div>
+        <div class="adv-row"><b id="leechActLbl">When a card becomes a leech</b>
+          <div class="chips" role="group" aria-labelledby="leechActLbl">
+            <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
+            <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
+          </div>
+          <span>Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</span></div>
         <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
       </details>
     </section>
@@ -150,11 +154,14 @@ async function renderSettings(el) {
         <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
         <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
       </div>
-      <div class="set-row">
-        <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
-        <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
-      </div>
-      <p class="note"><span id="whereNote"></span> The Play timer is set on the Play screen.</p>
+      <p class="note"><span id="whereNote"></span></p>
+      <details class="danger-zone" id="dangerZone">
+        <summary>Danger zone</summary>
+        <div class="set-row">
+          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
+          <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
+        </div>
+      </details>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -204,6 +211,16 @@ async function renderSettings(el) {
     db.setSetting('leechAction', settings.leechAction);
     document.querySelectorAll('[data-leech]').forEach(x => x.setAttribute('aria-pressed', x === btn));
   }));
+  // Play timer: the same setting as the slider on the Play screen (3 to 20 seconds).
+  const setTimer = v => {
+    const n = Math.max(3, Math.min(20, Math.round(Number(v) || settings.timer)));
+    $('timerSec').value = n;
+    settings.timer = n;
+    db.setSetting('timer', n);
+  };
+  $('timerSec').addEventListener('change', e => setTimer(e.target.value));
+  $('timerMinus').addEventListener('click', () => setTimer(settings.timer - 1));
+  $('timerPlus').addEventListener('click', () => setTimer(settings.timer + 1));
   // Reviews per day: blank = no limit.
   $('rpd').addEventListener('change', e => {
     const v = e.target.value.trim();
@@ -222,6 +239,7 @@ async function renderSettings(el) {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
   });
+  rememberFold($('advanced'), 'settings-advanced');
   wireAdvanced(el);
 }
 

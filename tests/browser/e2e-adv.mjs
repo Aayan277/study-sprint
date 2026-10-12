@@ -69,7 +69,7 @@ ok(capped.easyDays <= 45 && capped.goodDays <= 45 && capped.rated <= 45 && cappe
 await page.click('#endBtn');
 
 // Reset to defaults
-await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#advanced'); await page.click('#advanced summary');
+await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#advanced'); await page.evaluate(() => { document.getElementById('advanced').open = true; });   // (the fold remembers it was opened)
 await page.click('#schedReset'); await page.waitForFunction(() => document.getElementById('lsteps')?.value === '1m 10m');
 ok((await setting('maxInterval')) === 36500 && (await setting('fuzz')) === true && (await setting('relearningSteps')) === '10m' && (await setting('learningSteps')) === '1m 10m', 'reset puts every default back');
 ok(await page.evaluate(() => document.getElementById('advanced').open), 'advanced stays open after reset');

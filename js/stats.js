@@ -9,7 +9,7 @@ import { cardLevel } from './decks.js';
 import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText } from './format.js';
-import { $, esc, plural } from './ui.js';
+import { $, esc, plural, icon, foldOpen, saveFold } from './ui.js';
 
 // Where an answer came from, for tooltips.
 const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
@@ -21,6 +21,9 @@ const LEVEL_NOTE = {
   young: 'Remembered for less than 21 days',
   mature: 'Remembered for 21 days or more'
 };
+
+// The fold only exists on phones; from 1024px wide everything is shown (styles.css hides the button).
+const PHONE = matchMedia('(max-width:1023px)');
 
 let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
@@ -97,6 +100,8 @@ export async function renderStats(el) {
   const buttons = buttonCounts(logs, now);
   const hours = hourly(logs, now);
   const bands = difficultyBands(cards.map(c => statesById.get(c.id)));
+  // "More stats" is folded on phones; computers show everything (styles.css), so this only matters under 1024px.
+  const moreOpen = foldOpen('stats-more');
   const hourName = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
 
   el.innerHTML = `
@@ -152,6 +157,20 @@ export async function renderStats(el) {
       })}
     </section>
 
+    <section class="card section stats-hardest" aria-labelledby="hardTitle">
+      <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
+        ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
+      ${hardest.length ? `<ol class="hard-list">${hardest.map(h => `
+        <li><div class="f">${esc(plainText(h.card.front))}</div>
+          <div class="b">${esc(plainText(h.card.back))}</div>
+          <div class="n mono">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
+      : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
+    </section>
+
+    <section class="more-stats">
+      <button class="more-toggle" type="button" id="moreBtn" aria-expanded="${moreOpen}" aria-controls="moreBody">
+        <span>More stats</span><span class="muted small">Answer buttons, time of day, difficulty, mastery</span>${icon('chevron')}</button>
+      <div class="more-body" id="moreBody" ${moreOpen || !PHONE.matches ? '' : 'hidden'}>
     <section class="card section" aria-labelledby="btnTitle">
       <div class="mhead"><h2 id="btnTitle">Answer buttons</h2><span class="muted small">Last 30 days</span></div>
       ${[['learning', 'Learning', buttons.learningRight], ['review', 'Reviews', buttons.reviewRight]].map(([k, name, right]) => {
@@ -193,17 +212,7 @@ export async function renderStats(el) {
       <p class="note">FSRS's difficulty for each card you've studied. Hard cards come back more often.</p>
     </section>
 
-    <section class="card section" aria-labelledby="hardTitle">
-      <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
-        ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
-      ${hardest.length ? `<ol class="hard-list">${hardest.map(h => `
-        <li><div class="f">${esc(plainText(h.card.front))}</div>
-          <div class="b">${esc(plainText(h.card.back))}</div>
-          <div class="n mono">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
-      : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
-    </section>
-
-    <section class="card section" aria-labelledby="mTitle">
+    <section class="card section stats-mastery" aria-labelledby="mTitle">
       <div class="mhead"><h2 id="mTitle">Mastery</h2><span class="muted small">${counts.mature} of ${plural(cards.length, 'card')} mature</span></div>
       <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
       <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
@@ -217,9 +226,20 @@ export async function renderStats(el) {
         }).join('')}</div></div>`;
       }).join('')}</div>
       <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
+    </section>
+      </div>
     </section>`}`;
 
   if (!allCards.length) return;
+  $('moreBtn').addEventListener('click', () => {
+    const open = $('moreBtn').getAttribute('aria-expanded') !== 'true';
+    $('moreBtn').setAttribute('aria-expanded', String(open));
+    $('moreBody').hidden = !open;
+    saveFold('stats-more', open);
+  });
+  // Resizing across 1024px: show everything on a computer, and go back to the saved choice on a phone.
+  const syncMore = () => { $('moreBody').hidden = PHONE.matches && $('moreBtn').getAttribute('aria-expanded') !== 'true'; };
+  PHONE.addEventListener('change', () => { if ($('moreBody')?.isConnected) syncMore(); });
   $('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   el.querySelectorAll('.chart').forEach(wireChart);
   wireCalendar();

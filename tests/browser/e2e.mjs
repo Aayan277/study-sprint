@@ -58,7 +58,7 @@ ok(await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 
 ok((await page.locator('meta[name=theme-color]').getAttribute('content')) === '#0C080A', 'browser bar color follows theme');
 await page.click('[data-tab=decks]'); await page.waitForSelector('.deck'); await page.screenshot({ path: SP + '/6-library-rose-dark.png' });
 // reset
-await page.click('[data-tab=settings]'); await page.click('#resetBtn'); await page.click('#rsYes');
+await page.click('[data-tab=settings]'); await page.click('#dangerZone > summary'); await page.click('#resetBtn'); await page.click('#rsYes');
 await page.waitForSelector('.deck');
 ok((await page.locator('.deck').count()) === 1 && (await page.locator('.deck-name').first().innerText()).includes('sample') && await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'reset: data wiped, sample back, theme kept');
 // all 5 themes x light/dark: screenshot sanity

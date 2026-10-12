@@ -60,3 +60,16 @@ test('exam prep: not seen lately, weakest first, then new cards', () => {
   const { queue } = examPrepQueue(cards, states, NOW);
   assert.deepEqual(queue.map(q => [q.card.id, q.kind]), [['old-weak', 'learn'], ['old-strong', 'review'], ['new1', 'new'], ['new2', 'new']]);
 });
+
+test('nearestExamDeck: nearest upcoming exam with cards, subdecks inherit, null without one', async () => {
+  const { nearestExamDeck } = await import('../js/exam.js');
+  const NOWT = new Date(2026, 9, 7, 15, 0).getTime();
+  const iso = d => { const x = new Date(NOWT + d * 86400000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const decks = [{ id: 'a', created: 1, examDate: iso(20) }, { id: 'b', created: 2, examDate: iso(5) }, { id: 'c', created: 3 }, { id: 'old', created: 4, examDate: iso(-3) }, { id: 'empty', created: 5, examDate: iso(1) }];
+  const cards = ['a', 'b', 'c', 'old'].map(d => ({ id: 'x' + d, deckId: d }));
+  assert.equal(nearestExamDeck(decks, cards, NOWT), 'b');
+  assert.equal(nearestExamDeck([{ id: 'c', created: 1 }], [{ id: 'k', deckId: 'c' }], NOWT), null);
+  // a subdeck uses its parent's exam; the parent wins the tie
+  const tree = [{ id: 'p', created: 1, examDate: iso(9) }, { id: 'k', created: 2, parentId: 'p' }];
+  assert.equal(nearestExamDeck(tree, [{ id: 'z', deckId: 'k' }], NOWT), 'p');
+});

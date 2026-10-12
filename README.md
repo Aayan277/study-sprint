@@ -43,13 +43,13 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Reviews per day** (optional; no limit by default), overall and per deck.
   - **Per-deck settings** (Edit deck → Study options): a deck can have its own retention, steps, maximum interval, and new and review limits, or use the overall ones.
   - **Subdecks**: put a deck inside another (+ Subdeck, or Edit deck → Inside), e.g. Psych 101 › Unit 1. A deck includes its subdecks in its card list, Review, Play, Stats and Export; its limits cap them all; and they use its settings, exam date and read-aloud language unless they set their own. Anki imports can keep their subdecks.
-- **Play:** timed rounds.
+- **Play:** timed rounds. The deck (it opens on the one with the nearest exam), the format and Start come first; the question type, Hard, Flash, question count and time are under **Customise**.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
   - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
   - **Hard** mode (6 lookalike options) and **Flash** (the question vanishes).
   - Streak scoring, an S–D grade and best scores.
   - **Card ⋯** after each answer opens the same card panel (pauses the round).
-- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
+- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back. In a deck with an exam coming up, a new card's first Play answer is its first review too (within the new-cards-per-day limit).
 - **Works on phones and computers:** on a computer (1024px and wider) the tabs become a sidebar, lists and Stats use the full width, a card's panel opens beside the card list (1200px+), and Review shows a bigger card with its keyboard shortcuts. Phones keep the bottom tabs and pop-up sheets.
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
@@ -57,10 +57,10 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
-  - answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, and how FSRS difficulty is spread across your cards
-  - a mastery grid you can tap card by card
+  - under **More stats** on phones (always shown on a computer): answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, how FSRS difficulty is spread across your cards, and a mastery grid you can tap card by card
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
-- **Starter decks:** optional JLPT N5 and N4 kanji decks (Decks tab → Starter decks).
+- **Starter decks:** optional JLPT N5 and N4 kanji decks, tucked away (Decks tab → Starter decks, or Import → Ready-made decks).
+- **First run:** a fresh install opens on a short, skippable start: name your course, add cards (paste, file or the sample deck), then a guided review of 3 cards. It never shows again, and existing users never see it.
 - **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono.
 - **Works offline,** installs on your phone, and keeps your data on your device.
 
@@ -107,6 +107,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/deck-tree.js` | Subdecks: paths, what's inside a deck, and inherited settings |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
+| `js/onboarding.js` | The first-run start and the guided first review |
 | `js/review.js` | The Review session (flip, rate, finish) |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
@@ -155,3 +156,11 @@ On Claude Code's cloud computers this works as is. On your own computer, install
 `npm install --no-save playwright && npx playwright install chromium`. Screenshots and downloads go in
 `tests/browser/out`. `tests/browser/files` has the sample files the tests import (Anki decks, a spreadsheet);
 `make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package).
+
+## Redesign (experiment branch)
+
+What changed across the three steps (details in PLAN.md):
+
+1. **Look:** dark and sleek design tokens, five accent themes in dark and light (plus OLED), Geist fonts.
+2. **Today:** a home screen with a daily goal, streak, one Start button, a row per course and upcoming exams; Decks, the flip card and the finish screen were redone to match.
+3. **Shorter screens and a first run:** a skippable first-run start with a guided review; JLPT starter decks tucked away; Stats folds four sections under "More stats" on phones; Settings moves timer and leech options into Advanced scheduling and Reset into a Danger zone; card filters are grouped; Play opens with deck, format and Start above the fold with the rest under "Customise"; and Play now starts new cards in decks with an exam coming up.

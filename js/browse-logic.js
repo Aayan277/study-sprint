@@ -50,6 +50,14 @@ export const FILTERS = [
   ['dupes', 'Duplicates (same front)']
 ];
 
+// The same filters, grouped for the dropdown (<optgroup>s). 'All cards' stands on its own at the top.
+export const FILTER_GROUPS = [
+  [null, ['all']],
+  ['Status', ['new', 'learning', 'due', 'review', 'suspended', 'buried']],
+  ['Flags', ['flagged', ...FLAGS.map(f => `flag${f.id}`)]],
+  ['Problems', ['leech', 'dupes']]
+];
+
 export const SORTS = [
   ['added-new', 'Newest first'],
   ['added-old', 'Oldest first'],

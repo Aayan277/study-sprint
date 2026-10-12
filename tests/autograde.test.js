@@ -65,3 +65,34 @@ test('new cards are left for Review', () => {
   assert.equal(scheduleDecision({ state: { state: 0, due: NOW }, rating: GOOD, now: NOW }), 'new');
   assert.equal(applies('new'), false);
 });
+
+// ---- Play starts new cards in decks with an exam ----
+test('new card, no exam: log only, it starts in Review', () => {
+  assert.equal(scheduleDecision({ state: null, rating: GOOD, now: NOW }), 'new');
+  assert.equal(scheduleDecision({ state: { state: 0 }, rating: AGAIN, now: NOW, examDeck: false }), 'new');
+  assert.equal(applies('new'), false);
+});
+
+test('new card in an exam deck: the answer is its first review', () => {
+  assert.equal(scheduleDecision({ state: null, rating: GOOD, now: NOW, examDeck: true }), 'first');
+  assert.equal(scheduleDecision({ state: { state: 0 }, rating: AGAIN, now: NOW, examDeck: true }), 'first');
+  assert.equal(applies('first'), true);
+});
+
+test('exam deck: the first review uses the usual rating (typing fast Easy, multiple choice never Easy, wrong Again)', () => {
+  assert.equal(autoRating({ ok: true, ms: 1000, limitMs: 14400, typing: true }), EASY);
+  assert.equal(autoRating({ ok: true, ms: 500, limitMs: 8000, typing: false }), GOOD);
+  assert.equal(autoRating({ ok: false, ms: 500, limitMs: 8000, typing: false }), AGAIN);
+});
+
+test('exam deck: over the new-card limit it is only logged', () => {
+  assert.equal(scheduleDecision({ state: null, rating: GOOD, now: NOW, examDeck: true, newRoom: false }), 'new-limit');
+  assert.equal(applies('new-limit'), false);
+});
+
+test('exam deck: studied cards follow the old rules, and a new card already changed today is left alone', () => {
+  const overdue = { state: 2, due: NOW - DAY };
+  assert.equal(scheduleDecision({ state: overdue, rating: GOOD, now: NOW, examDeck: true }), 'due');
+  assert.equal(scheduleDecision({ state: overdue, rating: GOOD, alreadyToday: true, now: NOW, examDeck: true }), 'already');
+  assert.equal(scheduleDecision({ state: null, rating: GOOD, alreadyToday: true, now: NOW, examDeck: true }), 'already');
+});

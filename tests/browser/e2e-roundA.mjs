@@ -74,7 +74,7 @@ await p.evaluate(async () => {
   await db.putMany('reviewLog', logs);
   await db.putStates(cs.slice(0, 8).map((c, i) => ({ cardId: c.id, due: now + D, stability: 5, difficulty: 1 + i, reps: 3, lapses: 0, state: 2 })));
 });
-await p.goto('http://localhost:8123/#/stats'); await p.waitForSelector('#btnTitle');
+await p.goto('http://localhost:8123/#/stats'); await p.waitForSelector('#btnTitle', { state: 'attached' }); if (await p.isHidden('#btnTitle')) await p.click('#moreBtn');   // phones fold "More stats"
 ok((await p.$$('.btn-bar span')).length >= 4 && /\d+% right/.test(await p.textContent('.btn-row')), 'answer buttons shown');
 ok(await p.$('#hours') !== null && await p.$('#difficulty') !== null, 'time of day and difficulty charts shown');
 ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');

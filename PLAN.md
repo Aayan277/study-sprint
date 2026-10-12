@@ -136,6 +136,7 @@ Material:
 - If a card is **due or overdue**, apply the rating to FSRS normally.
 - If a card is **not due yet**, only an **Again** changes its schedule. Correct answers get logged for stats but don't push the card further out.
 - Apply at most one schedule update per card per day from Play.
+- **New cards** (never reviewed) are left for Review, with one exception: in a deck whose **exam date** is coming up (its own, or the deck it's inside), a Play answer counts as the card's **first review**: correct uses the table above, wrong is Again. These respect the new-cards-per-day limits (overall, the deck's own, and parent decks' limits). Only new cards really started today count against them, so Play answers that were just logged don't use them up. Over the limit, the card is only logged and starts in Review. The results screen says how many new cards were started and why.
 
 ### 6. Stats
 - **Per-deck mastery grid** like kanji-sprint's, with levels from FSRS: New, Learning, Young (stability under 21 days), Mature (21 days or more). Tap a card to see its history.
@@ -199,6 +200,23 @@ Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlu
 - C. ✅ (v2.9) **Subdecks** (deck.parentId; deck-tree.js). A deck includes its subdecks everywhere (card list, Review, Play, Stats, Export); a parent's limits cap the group; subdecks inherit study options, exam date and read aloud unless they set their own; deleting a parent asks to delete or move up the subdecks; Anki imports can keep their subdecks and Anki exports keep them.
 - D. **Cloze cards**.
 - E. **Image occlusion**.
+
+## Redesign (experiment branch)
+
+Done on the `experiment` branch, in three steps. All of it keeps the no-build-step, no-data-format-change rules (the only new setting keys are `onboarded` and the fold states, which live in localStorage).
+
+1. **Dark and sleek look.** New design tokens (type, spacing, radii, elevation, color roles), five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light plus OLED, Geist fonts, and rating colors that stay distinct from the brand color.
+2. **Today is the home screen.** Daily goal ring, streak and one Start button, a row per course, upcoming exams, and an Options sheet (decks, flip or type, Custom study). Decks, the flip card and the finish screen were updated to match.
+3. **Less to wade through, and a first run.**
+   - **First run** (`js/onboarding.js`, route `#/welcome`): on a fresh install with no decks, cards or reviews, a skippable 3-step start (pitch, name your course with optional code and exam date, add cards by paste / file or Anki / sample deck) then a guided review of 3 cards (real reviews, saved). It never shows again once finished or skipped (`onboarded` setting, this device only). Existing installs (the old `seeded` flag, or any data) never see it. The sample deck is only added when "Try the sample deck" is picked. Tests skip it with `localStorage 'study-sprint-skip-onboarding' = '1'` (set by `tests/browser/pw.mjs`) or `?skipOnboarding`, which adds the sample deck like before.
+   - **JLPT starter decks** are hidden: a small "Starter decks" fold at the bottom of Decks, and Import links to it ("Ready-made decks", `#/decks/starters`).
+   - **Stats:** on phones (under 1024px), answer buttons, time of day, difficulty and the mastery grid sit under a "More stats" fold. Computers show everything.
+   - **Settings:** the timer default and leech settings are inside "Advanced scheduling" (a Play timer stepper was added there: there was none in Settings before), and Reset all data is behind a "Danger zone" fold at the bottom of Your data. The Danger zone always starts closed (its state is deliberately not remembered). Other fold states are remembered per device.
+   - **Card filters** are grouped (Status / Flags / Problems) with `<optgroup>`.
+   - **Play quick-start:** deck, the three format tiles and Start fit above the fold at 375x812; question type, Hard, Flash, question count and time are under "Customise" with a one-line summary. The deck defaults to the one with the nearest upcoming exam (until you pick one in that visit), otherwise the last one used.
+   - **Play starts new cards in exam decks** (see section 5 above).
+
+Known leftovers: Reset all data still re-adds the sample deck afterwards (as before), and the first-run start does not appear on a second device that is about to sign in (its "Already use Study Sprint?" link goes to Settings).
 
 ## Parked (not planned for now)
 

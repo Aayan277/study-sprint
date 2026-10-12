@@ -129,6 +129,20 @@ export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.n
   return { total: Math.max(0, perDay + extra - newStudiedToday(logs, now)), byDeck, chains };
 }
 
+// Play in a deck with an exam starts new cards, within the same limits as Review (see autograde.js).
+// newRoomFor: is there room for one more new card in this deck today? (overall limit, and the limit of the deck and
+// each deck it sits inside). takeNewFor uses one up, so the next card in the same round sees the smaller number.
+export function newRoomFor(limit, deckId) {
+  const { total, byDeck, chains } = limit;
+  return total > 0 && (chains?.get(deckId) || [deckId]).every(id => !byDeck.has(id) || byDeck.get(id) > 0);
+}
+export function takeNewFor(limit, deckId) {
+  if (!newRoomFor(limit, deckId)) return false;
+  takeFromChain(limit.byDeck, limit.chains?.get(deckId) || [deckId]);
+  limit.total--;
+  return true;
+}
+
 // Custom study: extra new cards added for today, or 0 if they were added on an earlier day.
 export const extraNewToday = (extraNew, now = Date.now()) => (extraNew && extraNew.day === dayStart(now) ? extraNew.n : 0);
 

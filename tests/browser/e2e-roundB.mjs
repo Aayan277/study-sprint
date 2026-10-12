@@ -68,7 +68,7 @@ ok(spread.normalDays >= 4 && spread.normalMax <= 12 && spread.spanOk, `40 cards 
 ok(spread.weekendOnWeekend <= 2, `with weekends set to Minimum, ${spread.weekendOnWeekend} of 40 land on a weekend`);
 // easy days setting UI
 await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('[data-easy="6"]', { state: 'attached' });
-await p.click('#advanced summary'); await p.selectOption('[data-easy="6"]', 'minimum'); await p.selectOption('[data-easy="0"]', 'reduced');
+await p.evaluate(() => { document.getElementById('advanced').open = true; }); await p.selectOption('[data-easy="6"]', 'minimum'); await p.selectOption('[data-easy="0"]', 'reduced');
 const ed = (await p.evaluate(async () => (await import('./js/db.js')).getSettings())).easyDays;
 ok(ed[6] === 'minimum' && ed[0] === 'reduced' && ed[1] === 'normal', 'easy days saved: ' + ed.join(','));
 await p.locator('.easy-days').scrollIntoViewIfNeeded(); await p.screenshot({ path: SP + '/B-easy.png' });

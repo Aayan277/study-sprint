@@ -180,3 +180,17 @@ test('subdecks: a parent deck\'s limits cap everything inside it', () => {
   const r = reviewLimits({ perDay: null, decks: [{ id: 'P', reviewPerDay: 5 }], logs: [{ cardId: 'x', timestamp: NOW - HOUR, state: REVIEW, source: 'review' }], deckOf: new Map([['x', 'U1']]), now: NOW, chains });
   assert.equal(r.byDeck.get('P'), 4);
 });
+
+test('newRoomFor / takeNewFor: Play in an exam deck respects the new-card limits', async () => {
+  const { newRoomFor, takeNewFor } = await import('../js/queue.js');
+  const chains = new Map([['kid', ['kid', 'par']], ['par', ['par']], ['other', ['other']]]);
+  const limit = { total: 3, byDeck: new Map([['par', 2]]), chains };
+  assert.equal(newRoomFor(limit, 'kid'), true);
+  assert.equal(takeNewFor(limit, 'kid'), true);
+  assert.equal(takeNewFor(limit, 'kid'), true);
+  assert.equal(limit.total, 1);
+  assert.equal(newRoomFor(limit, 'kid'), false);          // the parent deck's own limit is used up
+  assert.equal(takeNewFor(limit, 'kid'), false);
+  assert.equal(takeNewFor(limit, 'other'), true);         // another deck still has the overall limit
+  assert.equal(newRoomFor(limit, 'other'), false);        // overall limit now 0
+});

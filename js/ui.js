@@ -114,6 +114,19 @@ export function initTapGuard() {
   }, { passive: false });
 }
 
+// Folds (a <details>, or a button that shows and hides a section) remember whether they were open, on this device only.
+// Keyed by a short name like 'stats-more'. localStorage can be missing or blocked, so every use is wrapped.
+export function foldOpen(key, fallback = false) {
+  try { const v = localStorage.getItem('study-sprint-fold-' + key); return v === null ? fallback : v === '1'; } catch { return fallback; }
+}
+export function saveFold(key, open) {
+  try { localStorage.setItem('study-sprint-fold-' + key, open ? '1' : '0'); } catch { /* fine without */ }
+}
+// Remember a <details> element's state under `key` (it must already be drawn open or closed with foldOpen()).
+export function rememberFold(details, key) {
+  details?.addEventListener('toggle', () => saveFold(key, details.open));
+}
+
 // "1 card" / "3 cards"
 // True when a key press is aimed at a button, link or form field. Those handle Enter and Space themselves,
 // so a screen-wide shortcut must leave them alone. `except` is the id of one element that should still count

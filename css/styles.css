@@ -646,7 +646,20 @@ main[data-route="import"] > .view > .savebar{order:5}
 fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .lede b{color:var(--text);font-weight:700}
 .modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-@media (max-width:560px){.modes{grid-template-columns:1fr}}
+/* Phones: the three formats stay side by side as compact tiles (the selected one is explained under them),
+   so the deck, the format and Start all fit on the first screen. */
+.fmt-note{margin-top:var(--s-2);min-height:1.4em}
+@media (min-width:561px){.fmt-note{display:none}}
+@media (max-width:560px){
+  .modes{gap:var(--s-2)}
+  .mode{align-items:center;text-align:center;padding:10px 4px;gap:0}
+  .mode-desc{display:none}
+  main[data-route="play"] fieldset{margin-bottom:var(--s-3)}
+  main[data-route="play"] legend{font-size:var(--fs-sm);color:var(--text-2);padding:0 0 var(--s-1)}
+  main[data-route="play"] .screen-head{margin-bottom:var(--s-3)}
+  .start-row .btn{flex:1 1 auto}
+}
+.play-note{margin-top:var(--s-4)}
 .mode,.opt,.skin{border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-1)}
 .mode{position:relative;display:flex;flex-direction:column;gap:2px;padding:14px var(--s-4);cursor:pointer;min-width:0}
 .mode:hover,.skin:hover,.opt:hover:not(:disabled){border-color:var(--accent-line)}
@@ -862,7 +875,8 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .easy-day{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .easy-day select{font-size:var(--fs-base);padding:7px 8px}
 .advanced{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
-.advanced summary{cursor:pointer;font-weight:600;padding:8px 0;min-height:44px;display:flex;align-items:center}
+.advanced summary{cursor:pointer;font-weight:600;padding:8px 0;min-height:44px;display:flex;flex-wrap:wrap;align-items:center;gap:0 var(--s-3)}
+.adv-sub{font-weight:400;font-size:var(--fs-sm);color:var(--text-2)}
 .advanced .note{margin:0 0 6px}
 .adv-row{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
 .adv-row > span{font-size:var(--fs-sm);color:var(--text-2)}
@@ -998,8 +1012,10 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   .tdecks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s-3)}
   /* Stats: two columns of panels */
   main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-3);align-items:start}
-  main[data-route="stats"] > .view > :not(.card),
-  main[data-route="stats"] > .view > .card:last-child:nth-child(odd){grid-column:1 / -1}
+  main[data-route="stats"] > .view > :not(.card):not(.more-stats){grid-column:1 / -1}
+  /* "More stats" is only a fold on phones: here its cards join the grid, in the order they always had */
+  main[data-route="stats"] .stats-hardest{order:2}
+  main[data-route="stats"] .stats-mastery{order:3;grid-column:1 / -1}
   main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
   /* Review: a bigger card, centered while a session runs */
   main[data-route="review"] > .view{max-width:780px}
@@ -1062,3 +1078,23 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
   .guide .flash{min-height:380px}
 }
 .btn.cta{min-height:56px;font-size:var(--fs-md)}
+
+/* ---------- 17. Folds: "More stats", "Customise", "Danger zone" ---------- */
+/* A button that shows and hides a section (aria-expanded), styled like a card row */
+.more-toggle,.fold-toggle{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:52px;padding:var(--s-3) var(--s-4);margin:0 0 var(--s-2);background:var(--surface-1);color:var(--text);border:0;border-radius:var(--r-lg);box-shadow:var(--e-1);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.more-toggle:hover,.fold-toggle:hover{background:var(--surface-2)}
+.more-toggle > .muted,.fold-toggle > .muted{margin-left:auto;font-weight:400;text-align:right;min-width:0}
+.more-toggle .ico,.fold-toggle .ico{flex:none;transition:transform var(--t-fast);color:var(--text-2)}
+.more-toggle[aria-expanded="true"] .ico,.fold-toggle[aria-expanded="true"] .ico{transform:rotate(90deg)}
+.more-toggle:focus-visible,.fold-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.more-toggle > .muted{display:none}
+@media (min-width:480px){.more-toggle > .muted{display:block}}
+/* Settings: the danger zone sits at the bottom of Your data, behind its own tap */
+.danger-zone{margin-top:var(--s-4);border-top:1px solid var(--line);padding-top:var(--s-2)}
+.danger-zone > summary{cursor:pointer;font-weight:600;color:var(--again);min-height:44px;display:flex;align-items:center}
+.danger-zone .set-row{border-top:0;padding-top:4px}
+/* Computers (1024px and wider) show everything: no More stats fold, its cards join the grid */
+@media (min-width:1024px){
+  .more-stats,.more-body{display:contents}
+  .more-toggle{display:none}
+}

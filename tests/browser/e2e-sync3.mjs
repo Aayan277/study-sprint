@@ -145,7 +145,7 @@ await run(A, async () => (await import('./js/db.js')).setSetting('newPerDay', 40
 await syncNow(A); await syncNow(B);
 ok((await snapshot(B)).settings.newPerDay === 40, 'B has newPerDay 40 before the reset');
 await openSettings(A);
-await A.click('#resetBtn'); await A.waitForSelector('#rsAll');
+await A.click('#dangerZone > summary'); await A.click('#resetBtn'); await A.waitForSelector('#rsAll');
 await A.screenshot({ path: SP + '/s3-reset.png' });
 await A.click('#rsAll'); await A.waitForSelector('.empty, .deck');
 await syncNow(B);
@@ -174,7 +174,7 @@ await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
 ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'hist') && fake.userRows('me@example.com').some(r => r.store === 'cards' && r.id === 'hist-0'),
   'signing in again also re-sends a deck and card that came from another device');
 await openSettings(B);
-await B.click('#resetBtn'); await B.click('#rsHere'); await B.waitForSelector('.deck');
+await B.click('#dangerZone > summary'); await B.click('#resetBtn'); await B.click('#rsHere'); await B.waitForSelector('.deck');
 b = await snapshot(B);
 ok(!b.signedIn && b.decks.join() === 'Intro to Psychology (sample)' && fake.userRows('me@example.com').some(r => r.id === 'geo' && !r.deleted), 'reset just this device: B fresh and signed out, account untouched');
 

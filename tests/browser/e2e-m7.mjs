@@ -41,7 +41,7 @@ ok(true, 'settings shows the last backup date');
 await page.screenshot({ path: SP + '/m7-settings.png', fullPage: true });
 
 // Wipe, then restore
-await page.click('#resetBtn'); await page.click('#rsYes'); await page.waitForSelector('.deck');
+await page.click('#dangerZone > summary'); await page.click('#resetBtn'); await page.click('#rsYes'); await page.waitForSelector('.deck');
 ok((await count('cards')) === 12, 'reset leaves just the sample deck');
 await page.click('#gearBtn'); await page.waitForSelector('#importIn');
 fs.writeFileSync(SP + '/not-backup.json', '{"hello":1}');

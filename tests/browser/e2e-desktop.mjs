@@ -31,7 +31,7 @@ await p.click('.tab[data-tab=stats]'); await p.waitForSelector('main[data-route=
 ok(!(await p.evaluate(() => document.querySelector('#sheet').open)), 'changing screens closes the panel');
 ok((await p.$eval('main', m => m.dataset.route)) === 'stats', 'screen name set for the layout');
 // a confirmation is still a centered pop-up
-await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#resetBtn'); await p.click('#resetBtn'); await p.waitForSelector('#rsYes');
+await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#resetBtn', { state: 'attached' }); await p.click('#dangerZone > summary'); await p.click('#resetBtn'); await p.waitForSelector('#rsYes');
 ok(await p.evaluate(() => document.querySelector('#sheet').matches(':modal') && !document.querySelector('#sheet').classList.contains('side')), 'confirmations stay as pop-ups');
 await p.click('#rsNo');
 // review: keyboard hints visible with a mouse
