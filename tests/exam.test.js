@@ -231,3 +231,12 @@ test('a session over one subdeck uses the plan made for the whole exam, so it ma
   assert.equal(splitCards(subA, states, NOW, review2).reviews.length, today);
   assert.equal(review2.gain.size, today);                                   // the session still orders by gain
 });
+
+test('examSchedule: exam-day gain only orders reviews once the final pass has started', () => {
+  const cards = [{ id: 'a', deckId: 'd' }];
+  const states = new Map([['a', review('a', 3, 5, -1)]]);                 // overdue
+  const gain = date => examSchedule([{ id: 'd', examDate: date }], cards, states, NOW, () => 0.1).gain.size;
+  assert.equal(gain('2026-10-12'), 1);                                     // 5 days left: in the final window
+  assert.equal(gain('2026-10-13'), 0);                                     // 6 days left: not yet
+  assert.equal(gain('2026-11-30'), 0);
+});

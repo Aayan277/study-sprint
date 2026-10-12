@@ -6,6 +6,7 @@
 //      reviewed in the last few days before it instead: spread over the last 5 days (fewer if the exam is
 //      closer), the weakest closest to the exam (examSchedule, pullIn). This is worked out whenever the
 //      day's queue is built, so cards that arrive later (an import, a move, a new subdeck) are covered too.
+//      In those same last days the reviews that add most to exam-day recall come first; further out, the order is normal.
 //   2. In the last 14 days, the target retention rises step by step to 95%, so reviews get stricter.
 //   3. "Exam prep" (examPrepQueue) goes over every card you haven't seen in the last few days.
 // After the exam day, nothing changes any more: the deck goes back to normal by itself.
@@ -138,7 +139,8 @@ export function examClamp(card, now, opts, load) {
 //   caps   Map card id → the time its review is brought forward to (6am on the planned day; the start of the day for today).
 //          Cards whose review is no sooner than the exam and don't need one aren't in it.
 //   gain   Map card id → how much a review now adds to the chance of remembering the card on exam day
-//          (only when gainOf is given: it needs the FSRS library). The queue puts the biggest gains first.
+//          (only when gainOf is given: it needs the FSRS library, and only once the final pass has started,
+//          i.e. in the last FINAL_DAYS days). The queue puts the biggest gains first.
 // Only the last days before an exam change anything, so it costs little to call. Cards that sit in a deck
 // (or a deck inside one) with an exam; exam day itself and later change nothing.
 //   gainOf(card, state, examStart) → number
@@ -158,10 +160,11 @@ export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf 
   const end = dayEnd(now);
   for (const { info, cards: inExam } of groups.values()) {
     const states = inExam.map(c => statesById.get(c.id)).filter(Boolean);
-    if (!planned && finalWindow(info.daysLeft).first === 0) {            // the final pass has started
+    const started = finalWindow(info.daysLeft).first === 0;     // the final pass has started
+    if (!planned && started) {
       for (const [id, day] of planFinalPass(states, info, now)) caps.set(id, day === 0 ? dayStart(now) : startOfDay(day, now) + 2 * 3600000);
     }
-    if (gainOf) {
+    if (gainOf && started) {          // further out, exam cards wait their turn like any other
       for (const card of inExam) {
         const st = statesById.get(card.id);
         if (st && st.state === REVIEW && Math.min(st.due, caps.get(card.id) ?? Infinity) <= end) gain.set(card.id, gainOf(card, st, info.start));
