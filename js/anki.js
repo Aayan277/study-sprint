@@ -91,7 +91,9 @@ export function clozeCard(text, n) {
 // Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Study
 // Sprint can't do that yet, so each one comes in as a plain picture card: the heading (or "Diagram") on the front,
 // the picture on the back. Without this they became broken "[…]" cards.
-export const isOcclusionNote = note => String(note.fields?.[0] ?? '').includes('image-occlusion:');
+// The note type must be a cloze type or called "...Occlusion...", so an ordinary note that happens to quote the text isn't taken for one.
+export const isOcclusionNote = (note, model = {}) =>
+  String(note.fields?.[0] ?? '').includes('image-occlusion:') && (!!model.cloze || /occlusion/i.test(model.name || ''));
 const fieldIndex = (model, name, fallback) => {
   const i = (model.fields || []).findIndex(f => String(f).trim().toLowerCase() === name);
   return i >= 0 ? i : fallback;
@@ -109,7 +111,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
     const pics = { front: frontPics[0] || null, back: backPics[0] || null };
     if (frontPics.length > 1 || backPics.length > 1) extraImages++;
     const noteTags = (note.tags || []).map(t => t.toLowerCase());
-    if (isOcclusionNote(note)) {
+    if (isOcclusionNote(note, model)) {
       // Fields of the Image Occlusion note type: Occlusion, Image, Header, Back Extra, Comments.
       const image = imageNames(note.fields[fieldIndex(model, 'image', 1)])[0] || null;
       const header = text[fieldIndex(model, 'header', 2)]?.trim();

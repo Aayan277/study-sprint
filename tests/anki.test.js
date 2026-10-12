@@ -233,8 +233,9 @@ const ioNote = (header, extra = '') => ({ mid: '9', fields: ['{{c1::image-occlus
   '<img src="heart.png">', header, extra, ''], tags: ['Anatomy'], deck: 'Bio', cards: { 0: 'x1', 1: 'x2' } });
 
 test('image-occlusion notes become one plain picture card, not broken cloze cards', () => {
-  assert.ok(isOcclusionNote(ioNote('H')));
-  assert.ok(!isOcclusionNote({ fields: ['A {{c1::b}}'] }));
+  assert.ok(isOcclusionNote(ioNote('H'), ioModels.get('9')));
+  assert.ok(!isOcclusionNote({ fields: ['A {{c1::b}}'] }, ioModels.get('9')));
+  assert.ok(!isOcclusionNote(ioNote('H'), { name: 'Basic', fields: ['Front', 'Back'], cloze: false }));      // text alone is not enough
   const r = notesToImport([ioNote('Heart anatomy', 'Left side pumps'), ioNote('')], ioModels, new Map([['x1', [{ timestamp: 1, ease: 3, type: 0, factor: 0 }]]]));
   assert.equal(r.rows.length, 2);                                    // one per note, not one per mask
   assert.deepEqual(r.rows[0], ['Heart anatomy', 'Left side pumps']);
