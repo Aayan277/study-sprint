@@ -626,8 +626,16 @@ main[data-route="import"] > .view > .savebar{order:5}
 .c-rev{color:var(--good)}
 #speakBtn{display:inline-grid;place-items:center}
 #speakBtn svg{width:19px;height:19px}
-#endBtn{color:var(--text);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);margin-left:2px;padding:8px 11px}
-.rv-head .link{padding:8px 7px}
+/* The toolbar: Undo, Read aloud and ⋯ are square icon buttons, End has a word */
+.rv-head{gap:6px}
+.rv-head .link{width:40px;height:40px;min-height:40px;padding:0;display:grid;place-items:center;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1);color:var(--text-2)}
+.rv-head .link:hover:not(:disabled){background:var(--surface-2)}
+.rv-head .link .ico,.rv-head .link svg{width:19px;height:19px}
+#endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
+/* Progress: done ÷ (done + left), relearning cards included. It lives outside what is redrawn per card. */
+.rv-prog{height:2px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-3)}
+.rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);box-shadow:0 0 8px var(--glow);transition:width 350ms var(--ease)}
+@media (prefers-reduced-motion:reduce){.rv-prog i{transition:none}}
 
 .flash{position:relative;display:flex;flex-direction:column;gap:var(--s-3);min-height:min(58dvh,520px);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);margin-bottom:var(--s-2);cursor:default}
 .flash[role="button"]{cursor:pointer}

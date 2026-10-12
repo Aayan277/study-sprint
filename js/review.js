@@ -130,10 +130,10 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Lrn, Due) is drawn by the CSS from data-label, so the
+  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
   // text inside each span stays just the number.
   return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Lrn">${n('learn')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Learn">${n('learn')}</span>
     <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
@@ -156,14 +156,15 @@ function renderSession(el, enter = false) {
   const backSize = answerSize(plainText(card.back));          // a long answer is smaller and left-aligned
   const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
 
-  el.innerHTML = `
+  const head = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
-      <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
+      <button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer" ${R.undo.length ? '' : 'disabled'}>${icon('undo')}</button>
       ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
-    </div>
+    </div>`;
+  const body = `
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
@@ -189,6 +190,7 @@ function renderSession(el, enter = false) {
     ${R.typing && !typeThis && !R.flipped ? '<p class="note center" id="longNote">Long answer: say it in your head, then flip.</p>' : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
+  drawSessionPage(el, head, body);
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn').addEventListener('click', () => undo(el));
@@ -204,6 +206,25 @@ function renderSession(el, enter = false) {
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else $('flash').focus({ preventScroll: true });
   publishLive();
+}
+
+// Draws the header and the card, around the progress bar. The bar is NOT redrawn with them: it stays in the page
+// from card to card, so its fill slides to the new value instead of starting again from empty.
+function drawSessionPage(el, head, body) {
+  const bar = el.querySelector(':scope > .rv-prog');
+  const left = R.queue.length + R.waiting.length + (R.current ? 1 : 0);   // relearning cards waiting for their turn count too
+  const done = R.stats.reviewed, total = done + left;
+  if (!bar) el.innerHTML = `${head}<div class="rv-prog" id="rvProg" role="progressbar" aria-label="Session progress" aria-valuemin="0"><i></i></div>${body}`;
+  else {
+    [...el.children].forEach(c => { if (c !== bar) c.remove(); });
+    bar.insertAdjacentHTML('beforebegin', head);
+    bar.insertAdjacentHTML('afterend', body);
+  }
+  const prog = el.querySelector(':scope > .rv-prog');
+  prog.setAttribute('aria-valuemax', total);
+  prog.setAttribute('aria-valuenow', done);
+  prog.setAttribute('aria-valuetext', `${done} of ${total} cards done`);
+  prog.firstElementChild.style.width = `${total ? (done / total * 100).toFixed(1) : 0}%`;
 }
 
 const showButtonHTML = typeThis =>
