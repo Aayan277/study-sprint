@@ -205,6 +205,12 @@ export function examPrepQueue(cards, statesById, now = Date.now(), recentDays = 
   };
 }
 
+// "N new a day to finish by the exam": how many new cards a day finish every card you haven't started, leaving
+// the last LEAD_DAYS days free so each card is seen about three times before the exam (the first review comes
+// about a day after learning it). N = ⌈unstarted ÷ max(1, days left − 4)⌉; 0 when nothing is left to start.
+export const LEAD_DAYS = 4;
+export const newPerDayToFinish = (unstarted, daysLeft) => (unstarted > 0 ? Math.ceil(unstarted / Math.max(1, daysLeft - LEAD_DAYS)) : 0);
+
 // The deck with the nearest upcoming exam that has cards (a subdeck counts the exam of the deck it's inside),
 // or null when no deck has one. A parent comes before its subdecks, so it wins a tie. Play opens on this deck.
 export function nearestExamDeck(decks, cards, now = Date.now()) {

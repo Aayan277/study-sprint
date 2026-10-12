@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS } from '../js/exam.js';
+import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS, newPerDayToFinish } from '../js/exam.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();     // Wed 7 Oct 2026, 3pm
@@ -199,4 +199,14 @@ test('nearestExamDeck: nearest upcoming exam with cards, subdecks inherit, null 
   // a subdeck uses its parent's exam; the parent wins the tie
   const tree = [{ id: 'p', created: 1, examDate: iso(9) }, { id: 'k', created: 2, parentId: 'p' }];
   assert.equal(nearestExamDeck(tree, [{ id: 'z', deckId: 'k' }], NOWT), 'p');
+});
+
+test('N new a day to finish by the exam', () => {
+  assert.equal(newPerDayToFinish(120, 14), 12);          // 120 ÷ (14 − 4)
+  assert.equal(newPerDayToFinish(121, 14), 13);          // rounded up
+  assert.equal(newPerDayToFinish(50, 5), 50);            // 1 day to start them in
+  assert.equal(newPerDayToFinish(50, 2), 50);            // never divides by less than 1
+  assert.equal(newPerDayToFinish(50, 0), 50);
+  assert.equal(newPerDayToFinish(1, 30), 1);
+  assert.equal(newPerDayToFinish(0, 30), 0);             // nothing left to start
 });
