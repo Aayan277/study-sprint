@@ -24,6 +24,9 @@ const LEVEL_NOTE = {
 
 // The fold only exists on phones; from 1024px wide everything is shown (styles.css hides the button).
 const PHONE = matchMedia('(max-width:1023px)');
+// The listener is added once; each render points onPhoneChange at its own screen.
+let onPhoneChange = null;
+PHONE.addEventListener('change', () => { try { onPhoneChange?.(); } catch { /* screen is gone */ } });
 
 let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
@@ -238,8 +241,8 @@ export async function renderStats(el) {
     saveFold('stats-more', open);
   });
   // Resizing across 1024px: show everything on a computer, and go back to the saved choice on a phone.
-  const syncMore = () => { $('moreBody').hidden = PHONE.matches && $('moreBtn').getAttribute('aria-expanded') !== 'true'; };
-  PHONE.addEventListener('change', () => { if ($('moreBody')?.isConnected) syncMore(); });
+  const syncMore = () => { if (!$('moreBody')) return; $('moreBody').hidden = PHONE.matches && $('moreBtn').getAttribute('aria-expanded') !== 'true'; };
+  onPhoneChange = syncMore;
   $('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   el.querySelectorAll('.chart').forEach(wireChart);
   wireCalendar();
