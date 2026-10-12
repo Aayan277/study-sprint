@@ -223,6 +223,26 @@ Done on the `experiment` branch, in three steps. All of it keeps the no-build-st
 
 Known leftovers: Reset all data still re-adds the sample deck afterwards (as before), and the first-run start does not appear on a second device that is about to sign in (its "Already use Study Sprint?" link goes to Settings).
 
+## After v3.0 (research by three review agents, approved order)
+
+Research covered the scheduling algorithm, competitors (Anki, Quizlet, Knowt, RemNote, Brainscape…) and learning science. Courses: maths/science, bio/diagrams, text-heavy and languages. Not wanted for now: sharing decks. One-tap AI cards: maybe later. Built one round at a time, in this order:
+
+1. **Smarter exams and fixes (v3.1).**
+   - Exam final pass instead of the exam-eve pile-up. Today, any card whose next gap would cross the exam lands on the evening before (a simulation of 300 cards over 30 days gave about 300 reviews on the eve, most of them already ≥95% recalled). Instead, skip cards predicted ≥95% recalled on exam day and spread the rest over the last min(5, days left) days, weakest closest to the exam. Apply the exam cap when the queue is built, so cards added later (import, move, subdeck) are covered too.
+   - "N new a day to finish by the exam" on Today (N = ⌈unstarted ÷ (days left − 4)⌉), with one tap to set the deck's limit (asks first).
+   - Pull-in and Exam prep order by recall probability, not stability.
+   - Play: a miss on a card that isn't due still brings it back (as in the auto-grading rules), but doesn't count toward the leech limit. Survival timeouts under 3s are logged only.
+   - Anki history replay: read `factor`, skip cram (filtered deck) reviews, follow Anki's resets, and seed cut-off histories from Anki's interval and ease.
+   - Anki image-occlusion notes currently import as broken cloze cards: import them as picture cards until round 3.
+   - Stats retention counts recall answers only (not multiple choice).
+2. **Cloze cards (v3.2)**, the old round D. Blanks are linked cards: each card keeps its `front`/`back` (so older versions, backups and sync keep working) plus `noteId`, `cloze` and `noteText`. A note editor with […] buttons. Siblings: one card per note per day. Anki cloze import and export. An opt-in "Link cloze cards" tool for older imports.
+3. **Image occlusion (v3.3)**, the old round E. "Hide all, guess one". Masks are stored as fractions of the picture on each card, drawn with the finger (rectangles), and Anki image-occlusion notes import properly.
+4. **Quick wins (v3.4).** Stats by tag or lecture with "Drill this topic"; KaTeX maths on cards; a streak freeze (one a week) and exam rest days; typed answers show which letters were wrong; optional confidence before the reveal ("sure but wrong" stats); a Pretest button for a new lecture deck; new cards mixed across subdecks; a study plan as a calendar file (.ics).
+5. **My own algorithm (v3.5).** Tune FSRS to my reviews (fsrs-rs WASM, @open-spaced-repetition/binding, on a separate page, at about 400+ reviews, kept only if it predicts better); an exam-day forecast ("you'll remember ~78%; do 25 a day for 90%"); predicted vs actual recall chart; workload forecast.
+6. **Exam practice (v3.6).** Test mode (mock exam, mixed question types, score by tag, Drill missed); lecture PDFs into the "Make cards with Claude" prompt (pdf.js); reverse cards.
+
+Later: audio cards, one-tap AI cards (Supabase Edge Function, about $3 a semester), sharing decks.
+
 ## Parked (not planned for now)
 
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.
