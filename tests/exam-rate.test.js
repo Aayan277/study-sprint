@@ -50,3 +50,15 @@ test('rating: a card the exam moves is only taken off the day balancing put it o
   assert.equal(loadMap.get(dayKey(NOW + 2 * DAY)), 3);                   // untouched
   assert.equal(loadMap.get(dayKey(NOW + DAY)), 1);                       // the card is counted where it went
 });
+
+test('preview: the button labels show the day the exam will put the card on, given the busy days', { skip }, async () => {
+  const { rate, previewIntervals, examOptions, schedulerOptions, dayKey } = { ...(await load()), ...(await import('../js/stats-calc.js')) };
+  const deck = { id: 'd', examDate: '2026-10-17' };                      // 5 days left: the cards go on days 1..4
+  const state = { cardId: 'c', state: 2, stability: 4, difficulty: 5, reps: 3, lapses: 0, lastReview: NOW - 2 * DAY, due: NOW, scheduledDays: 2, elapsedDays: 2, learningSteps: 0 };
+  const loadMap = new Map([[dayKey(NOW + 4 * DAY), 9]]);                 // the last day is busy: Good goes to day 3 instead of day 4
+  const opts = { ...examOptions(schedulerOptions({}), deck, NOW), balance: { load: loadMap } };
+  const shown = previewIntervals(state, opts, NOW)[3];
+  const real = rate('c', state, 3, { ...opts, balance: { load: new Map(loadMap) } }, NOW).due - NOW;
+  assert.ok(real < 3 * DAY);                                             // day 3 at 6am, not day 4
+  assert.equal(shown, real);
+});

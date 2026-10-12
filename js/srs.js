@@ -96,7 +96,7 @@ function fromLibrary(cardId, c) {
 export function previewIntervals(state, opts, now = Date.now()) {
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   const out = {};
-  for (const { rating } of RATINGS) out[rating] = examClamp(capInterval(preview[rating].card, now, opts.maxInterval), now, opts).due.getTime() - now;
+  for (const { rating } of RATINGS) out[rating] = examClamp(capInterval(preview[rating].card, now, opts.maxInterval), now, opts, opts.balance?.load).due.getTime() - now;
   return out;
 }
 
