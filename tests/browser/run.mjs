@@ -48,7 +48,9 @@ for (const t of tests) {
     child.on('close', code => { clearTimeout(timer); resolve({ text, code }); });
   });
   const passes = (out.text.match(/^PASS/gm) || []).length;
-  const problems = out.text.split('\n').filter(l => /^FAIL|^ERRORS|Error:/.test(l));
+  // Problems: FAIL and ERROR(S) lines, any "Error:", and a file that checked nothing (a silent file proves nothing).
+  const problems = out.text.split('\n').filter(l => /^FAIL|^ERROR|Error:/.test(l));
+  if (!passes) problems.push('no PASS lines: this file checked nothing');
   const bad = problems.length || out.code;
   if (bad) failed++;
   console.log(`${bad ? '✗' : '✓'} ${t}: ${passes} passed${bad ? `, ${problems.length || 'crashed'} problem(s)` : ''}`);

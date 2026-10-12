@@ -20,7 +20,8 @@ for (const width of [320, 375]) for (const mode of ['light', 'dark']) {
     ['review-setup', async () => { await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('#startBtn'); }],
     ['review-card', async () => { await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.click('#showBtn'); await p.waitForSelector('.rate'); }],
     ['play-setup', async () => { await p.goto('http://localhost:8123/#/play'); await p.waitForSelector('#startBtn'); }],
-    ['play-hard', async () => { await p.click('input[name=diff][value=hard]', { force: true }); await p.click('input[name=fmt][value=survival]', { force: true }); await p.click('#startBtn'); await p.waitForSelector('.opt'); }],
+    ['play-hard', async () => { if (await p.getAttribute('#customBtn', 'aria-expanded') !== 'true') await p.click('#customBtn');   // the options live under Customise
+      await p.click('input[name=diff][value=hard]', { force: true }); await p.click('input[name=fmt][value=survival]', { force: true }); await p.click('#startBtn'); await p.waitForSelector('.opt'); }],
     ['play-results', async () => { for (let i = 0; i < 3; i++) { await p.waitForSelector('.opt:not([disabled])'); await p.click('#skipBtn', { force: true }).catch(() => {}); const wrong = await p.evaluate(() => { const o = [...document.querySelectorAll('.opt')]; return o.length; }); await p.keyboard.press('1'); await p.waitForSelector('.fb'); if (await p.$('.fb.ok')) { await p.keyboard.press('Enter'); i--; continue; } await p.keyboard.press('Enter'); } await p.waitForSelector('.stamp'); }],
     ['stats', async () => { await p.goto('http://localhost:8123/#/stats'); await p.waitForSelector('.chart'); }],
     ['settings', async () => { await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#exportBtn'); }]
@@ -36,10 +37,12 @@ for (const width of [320, 375]) for (const mode of ['light', 'dark']) {
     });
     const okk = r.over <= 0 && !r.offenders.length;
     if (!okk) { bad++; console.log(`FAIL ${width}px ${mode} ${name}: overflow ${r.over}px`, r.offenders.join(', ')); }
+    else console.log(`PASS ${width}px ${mode} ${name}: no sideways scroll`);
     if (width === 320 && mode === 'light') await p.screenshot({ path: `${SP}/sw-${name}.png` });
   }
   if (errs.length) { bad++; console.log(`ERRORS ${width} ${mode}:`, errs.join(' | ')); }
+  else console.log(`PASS ${width}px ${mode}: no page errors`);
   await ctx.close();
 }
-console.log(bad ? `${bad} problems` : 'PASS every screen fits at 320px and 375px, light and dark, no errors');
+if (bad) { console.log(`FAIL ${bad} problems`); process.exitCode = 1; }
 await b.close();
