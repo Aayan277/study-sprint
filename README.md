@@ -106,7 +106,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/balance.js` | Evening out reviews across days, and easy days |
 | `js/deck-tree.js` | Subdecks: paths, what's inside a deck, and inherited settings |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
-| `js/review.js` | The Review screen |
+| `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
+| `js/review.js` | The Review session (flip, rate, finish) |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
