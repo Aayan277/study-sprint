@@ -124,8 +124,8 @@ export function launchStudy({ deckIds = [], deckId, kind = null, days = 3 } = {}
   location.hash = deckId ? `#/review/${encodeURIComponent(deckId)}` : '#/review';
 }
 // A short name for what a session covers (its decks and kind), to tell whether starting again means the same session.
-// No decks means all of them.
-export const scopeKey = (deckIds = [], kind = null) => `${kind || 'today'}:${[...deckIds].sort().join(',')}`;
+// No decks means all of them. `days` is how far ahead a "review ahead" or exam-prep session looks.
+export const scopeKey = (deckIds = [], kind = null, days = 3) => `${kind || 'today'}:${[...deckIds].sort().join(',')}:${days}`;
 export function takeLaunch() { const l = launch; launch = null; return l; }
 
 // Review tells Today when a session is in progress (so Today can offer "Resume").

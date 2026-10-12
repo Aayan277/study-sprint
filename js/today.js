@@ -28,7 +28,7 @@ export async function startStudy(spec = {}) {
   const r = live.resume;
   const going = r && r.day === dayStart() && r.version === db.scheduleVersion() ? r : null;
   if (!going) return launchStudy(spec);
-  if (going.scope === scopeKey(spec.deckIds, spec.kind)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
+  if (going.scope === scopeKey(spec.deckIds, spec.kind, spec.days)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
   openSheet(`
     <h2 id="sheetTitle">Start over?</h2>
     <p>You have a session in progress (${plural(going.left, 'card')} left). Starting a new one replaces it: your answers so far are saved, but you'll lose this session's undo.</p>

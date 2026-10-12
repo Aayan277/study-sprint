@@ -52,7 +52,7 @@ export async function renderReview(el, deckId) {
       location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
       return;
     }
-    return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind));
+    return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind, launch.days));
   }
   // No deck and nothing started: the home screen is Today.
   if (!deckId) { location.replace('#/today'); return; }

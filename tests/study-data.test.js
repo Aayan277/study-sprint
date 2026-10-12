@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countFor, answeredToday, typicalCardMs, DEFAULT_CARD_MS } from '../js/study-data.js';
+import { countFor, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 
@@ -58,4 +58,10 @@ test('time per card comes from the gaps between reviews in a session', () => {
   const breaks = Array.from({ length: 8 }, (_, i) => ({ source: 'review', timestamp: at(i * 300000), ms: 1 }));
   assert.equal(typicalCardMs(breaks, now), DEFAULT_CARD_MS);    // every gap is a break: nothing to go on
   assert.equal(typicalCardMs(logs.map(l => ({ ...l, source: 'play' })), now), DEFAULT_CARD_MS);
+});
+
+test('review ahead by 3 days and by 7 days are different sessions', () => {
+  assert.notEqual(scopeKey(['a'], 'ahead', 3), scopeKey(['a'], 'ahead', 7));
+  assert.equal(scopeKey(['b', 'a'], 'ahead', 7), scopeKey(['a', 'b'], 'ahead', 7));
+  assert.equal(scopeKey(['a']), scopeKey(['a'], null, 3));      // days left out means the usual 3
 });
