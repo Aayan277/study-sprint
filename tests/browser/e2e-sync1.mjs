@@ -33,7 +33,7 @@ await page.evaluate(() => new Promise((resolve, reject) => {
   };
   req.onerror = () => reject(req.error);
 }));
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 let r = await page.evaluate(async () => {
   const db = await import('./js/db.js');
   const d = await db.openDB();
@@ -81,7 +81,7 @@ ok(!r.deleted.some(x => x.store === 'cardStates' && x.id === 'c2' && x.deletedAt
 
 // ---- 3. a fresh install: fixed sample ids ----
 page = await newPage();
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 r = await page.evaluate(async () => { const db = await import('./js/db.js'); return { decks: await db.getAll('decks'), cards: await db.getAll('cards') }; });
 ok(r.decks[0].id === 'sample' && r.decks[0].updatedAt > 0 && r.cards.every(c => /^sample-\d+$/.test(c.id)), 'sample deck has fixed ids');
 await page.click('[data-starter]'); await page.waitForFunction(() => document.querySelectorAll('.deck').length === 2);

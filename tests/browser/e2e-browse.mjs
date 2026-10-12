@@ -11,7 +11,7 @@ const card = front => page.evaluate(async f => (await (await import('./js/db.js'
 const rows = () => page.$$eval('.crow .f', fs => fs.map(f => f.textContent));
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // give a few cards schedules
 await page.evaluate(async () => { const db = await import('./js/db.js'); const cs = (await db.getAll('cards')).sort((a, b) => a.created - b.created); const now = Date.now();
   await db.putMany('cardStates', [{ cardId: cs[0].id, due: now - 86400000, stability: 4, difficulty: 7, reps: 3, lapses: 2, state: 2 }, { cardId: cs[1].id, due: now + 5 * 86400000, stability: 9, difficulty: 3, reps: 4, lapses: 0, state: 2 }]);

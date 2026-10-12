@@ -10,7 +10,7 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 const setting = k => page.evaluate(async k => (await (await import('./js/db.js')).getSettings())[k], k);
 const buttons = () => page.$$eval('.rate', bs => bs.map(b => b.querySelector('b').textContent + ' ' + b.querySelector('span').textContent));
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // defaults: new card buttons as before
 await page.goto('http://localhost:8123/#/review'); await page.waitForSelector('#startBtn'); await page.click('#startBtn'); await page.click('#showBtn');
 const before = await buttons();

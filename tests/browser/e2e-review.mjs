@@ -11,7 +11,7 @@ const noHScroll = async w => ok(await page.evaluate(() => document.documentEleme
 const dbq = fn => page.evaluate(async src => { const db = await import('./js/db.js'); return (new Function('db', 'return (' + src + ')(db)'))(db); }, fn.toString());
 const counts = async () => (await page.textContent('.rv-counts')).trim().split(/\s+/).map(Number);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 ok((await page.getAttribute('#screen', 'aria-live')) === null && (await page.getAttribute('#toast', 'role')) === 'status', 'the whole screen is not a live region; the toast still announces');
 // gear toggle: deck page -> settings -> gear -> back to deck page
 await page.click('.deck-open'); await page.waitForSelector('.crow'); const deckUrl = page.url();
@@ -30,6 +30,8 @@ await page.click('.tab[data-tab=review]'); await page.waitForSelector('#startBtn
 ok((await page.textContent('#startBtn')).includes('12 cards'), 'setup: 12 new cards from the sample deck');
 await page.screenshot({ path: SP + '/r-setup.png', fullPage: true }); await noHScroll('review setup');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
+const focusOn = () => page.evaluate(() => document.body.classList.contains('focus'));
+ok(await focusOn(), 'focus mode is on during a Review round');
 ok(JSON.stringify(await counts()) === '[12,0,0]', 'counts start at 12 new');
 const front1 = await page.textContent('.flash-front');
 await page.screenshot({ path: SP + '/r-front.png' });
@@ -78,6 +80,7 @@ await page.click('#endBtn'); await page.waitForSelector('.stats4');
 const stats = await page.$$eval('.stats4 .v', vs => vs.map(v => v.textContent));
 console.log('   finish:', stats.join(' | '));
 ok(stats[0] === '2' && stats[1] === '50%', 'finish screen: 2 reviewed, 50% accuracy');
+ok(!(await focusOn()), 'focus mode is off on the finish screen');
 await page.screenshot({ path: SP + '/r-finish.png' });
 
 // typing mode

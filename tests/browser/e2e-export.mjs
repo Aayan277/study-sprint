@@ -7,7 +7,7 @@ const errors = [];
 const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', acceptDownloads: true, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(e.stack));
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
   await db.addDeckWithCards({ id: 'x', name: 'Bio / Unit 2', color: '#46A758', created: Date.now() }, [

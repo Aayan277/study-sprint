@@ -6,7 +6,7 @@ for (const width of [320, 375]) for (const mode of ['light', 'dark']) {
   const ctx = await b.newContext({ viewport: { width, height: 700 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+  await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
   await p.evaluate(async m => { const t = await import('./js/themes.js'); const db = await import('./js/db.js'); await db.setSetting('theme', t.applyTheme({ skin: 'ink', mode: m }));
     const cs = await db.getAll('cards'); const now = Date.now();
     await db.putMany('cardStates', cs.slice(0, 6).map((c, i) => ({ cardId: c.id, due: now + (i - 2) * 86400000, stability: 3 + i * 5, difficulty: 5, reps: 3, lapses: i % 3, state: 2 })));

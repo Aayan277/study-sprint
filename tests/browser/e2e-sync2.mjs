@@ -11,7 +11,7 @@ async function device(name) {
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(`${name} pageerror ${e.message}`));
   page.on('console', m => { if (m.type() === 'error' && !/status of (400|422)/.test(m.text())) errors.push(`${name} console ${m.text()}`); });   // 400/422: the deliberate wrong-password tries
-  await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+  await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
   return page;
 }
 const run = (page, fn, arg) => page.evaluate(fn, arg);

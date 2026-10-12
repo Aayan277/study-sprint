@@ -9,7 +9,7 @@ const ctx = await browser.newContext({ viewport: { width: 320, height: 700 }, se
 await ctx.route('https://lakxeftzlpvydzulxrbi.supabase.co/**', fake.handle);
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(e.stack));
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#syncPw');
 const ticks = () => page.$$eval('#syncRules li', li => li.map(x => x.classList.contains('ok')));
 ok((await ticks()).join() === 'false,false,false' && (await page.textContent('#syncRules')).includes('At least 8 characters'), 'rules listed, none met yet');

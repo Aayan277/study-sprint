@@ -6,7 +6,7 @@ const errors = [];
 const open = async (viewport, extra = {}) => {
   const p = await (await browser.newContext({ viewport, serviceWorkers: 'block', ...extra })).newPage();
   p.on('pageerror', e => errors.push(e.stack));
-  await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+  await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
   return p;
 };
 const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });

@@ -6,7 +6,7 @@ const errors = [];
 for (const [w, h, name, extra] of [[375, 740, 'phone', { isMobile: true, hasTouch: true }], [1440, 900, 'desktop', {}], [375, 740, 'phone-dark', { isMobile: true, hasTouch: true, colorScheme: 'dark' }]]) {
   const p = await (await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block', ...extra })).newPage();
   p.on('pageerror', e => errors.push(e.stack));
-  await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+  await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
   await p.evaluate(async () => {     // ~4 months of patchy studying
     const db = await import('./js/db.js'); const cs = await db.getAll('cards'); const D = 86400000, now = Date.now();
     const logs = [];

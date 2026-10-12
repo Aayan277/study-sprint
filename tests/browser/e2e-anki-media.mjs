@@ -6,7 +6,7 @@ const errors = [];
 const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', acceptDownloads: true });
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(e.stack));
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 for (const [file, deckName] of [['anki-media-new.apkg', 'Anatomy new'], ['anki-media-legacy.apkg', 'Anatomy old']]) {
   await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
   await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');

@@ -8,7 +8,7 @@ const card = (p, id) => p.evaluate(async i => (await import('./js/db.js')).get('
 // ---------- phone: toolbar + preview ----------
 let p = await (await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', isMobile: true, hasTouch: true })).newPage();
 p.on('pageerror', e => errors.push(e.stack));
-await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('.crow');
 await p.locator('.crow').nth(0).click(); await p.waitForSelector('#ceBack');
 ok(await p.evaluate(() => document.querySelector('#ceBack').tagName) === 'TEXTAREA', 'phone: a plain text box with buttons');
@@ -52,7 +52,7 @@ await p.click('#quitBtn').catch(() => {});
 // ---------- computer: Word-style box ----------
 p = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' })).newPage();
 p.on('pageerror', e => errors.push(e.stack));
-await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('.crow');
 await p.locator('.crow').nth(2).click(); await p.waitForSelector('#ceBack');
 ok(await p.evaluate(() => document.querySelector('#ceBack').isContentEditable), 'computer: a Word-style box');

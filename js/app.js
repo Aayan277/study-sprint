@@ -729,6 +729,7 @@ async function route() {
   } catch (err) {
     if (!el.isConnected) return;          // a screen you already left: ignore
     console.error(err);
+    setFocusMode(false);                  // a round that failed to draw must not leave the header and tabs hidden
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
   if (el.isConnected) scrollTo(0, 0);

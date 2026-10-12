@@ -11,7 +11,7 @@ const card = front => page.evaluate(async f => (await (await import('./js/db.js'
 const front = () => page.textContent('.flash-front');
 const total = () => page.$$eval('.rv-counts span', s => s.reduce((n, x) => n + +x.textContent, 0));
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // one card is a due review card (lapses 0), so Again makes it lapse
 const target = await page.evaluate(async () => { const db = await import('./js/db.js'); const cs = (await db.getAll('cards')).sort((a, b) => a.created - b.created);
   await db.putMany('cardStates', [{ cardId: cs[5].id, due: Date.now() - 86400000, stability: 3, difficulty: 5, reps: 3, lapses: 0, state: 2, scheduled_days: 3, elapsed_days: 3, learning_steps: 0, last_review: new Date(Date.now() - 4 * 86400000) }]);

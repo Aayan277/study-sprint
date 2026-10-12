@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.t
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async where => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no sideways scroll: ${where}`);
 
-await page.goto('http://localhost:8123/');
+await page.goto('http://localhost:8123/#/decks');
 await page.waitForSelector('.deck');
 ok((await page.locator('.deck').count()) === 1, 'sample deck seeded');
 ok((await page.locator('.deck-counts').first().innerText()).includes('12'), 'sample has 12 cards');

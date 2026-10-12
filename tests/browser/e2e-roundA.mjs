@@ -11,7 +11,7 @@ await ctx.addInitScript(() => {
 });
 const p = await ctx.newPage();
 p.on('pageerror', e => errors.push(e.stack));
-await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 const said = () => p.evaluate(() => window.__said);
 
 // ---- read aloud ----

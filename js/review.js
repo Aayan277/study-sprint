@@ -307,9 +307,9 @@ function countsHTML() {
   const cls = k => (R.current?.kind === k ? ' now' : '');
   // The word in front of each number (New, Lrn, Due) is drawn by the CSS from data-label, so the
   // text inside each span stays just the number.
-  return `<span class="c-new${cls('new')}" data-label="New" title="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Lrn" title="Learning">${n('learn')}</span>
-    <span class="c-rev${cls('review')}" data-label="Due" title="Review">${n('review')}</span>`;
+  return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Lrn">${n('learn')}</span>
+    <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
 function renderSession(el) {
@@ -324,7 +324,7 @@ function renderSession(el) {
 
   el.innerHTML = `
     <div class="rv-head">
-      <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, review">${countsHTML()}</div>
+      <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
       ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">⋯</button>
@@ -506,7 +506,7 @@ async function quick(act) {
 // ---------- 3. finish ----------
 async function finish(el) {
   R.active = false;
-  setFocusMode(false);
+  if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   const { reviewed, again, spent } = R.stats;
   // Reviews due by the end of tomorrow in the decks you just studied.
   const decks = new Set(R.deckIds);

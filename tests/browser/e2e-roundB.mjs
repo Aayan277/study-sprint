@@ -5,7 +5,7 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 const errors = [];
 const p = await (await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', isMobile: true, hasTouch: true })).newPage();
 p.on('pageerror', e => errors.push(e.stack));
-await p.goto('http://localhost:8123/'); await p.waitForSelector('.deck');
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 // 6 review cards due today
 await p.evaluate(async () => {
   const db = await import('./js/db.js'); const D = 86400000, now = Date.now();

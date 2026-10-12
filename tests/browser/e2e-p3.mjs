@@ -11,7 +11,7 @@ const noH = async w => ok(await page.evaluate(() => document.documentElement.scr
 const total = () => page.$$eval('.rv-counts span', s => s.reduce((n, x) => n + +x.textContent, 0));
 const chip = name => page.locator('[data-deck]', { hasText: name }).locator('small').textContent();
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 const ids = await page.evaluate(async () => {
   const db = await import('./js/db.js'); const D = 86400000, now = Date.now();
   const cs = (await db.getAll('cards')).sort((a, b) => a.created - b.created);

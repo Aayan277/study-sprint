@@ -59,6 +59,7 @@ export async function renderPlay(el) {
   const [settings, decks, allCards, states, logs] = await Promise.all([
     db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
   ]);
+  if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
   // Suspended cards, and cards buried until tomorrow, sit out of Play too.
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.

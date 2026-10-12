@@ -5,7 +5,7 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 const errors = [];
 const page = await (await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', isMobile: true, hasTouch: true })).newPage();
 page.on('pageerror', e => errors.push(e.stack));
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 const DAY = 86400000;
 const pad = n => String(n).padStart(2, '0');
 // Counted from the study day (which starts at 4am, like the app), so the test also works between midnight and 4am.

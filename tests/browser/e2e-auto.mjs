@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.t
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const DAY = 86400000;
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // Cards 0-3 overdue, 4-7 not due for 10 days, 8-11 new.
 const cards = await page.evaluate(async DAY => {
   const db = await import('./js/db.js');

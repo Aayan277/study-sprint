@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error' && !m.text().includes('failin
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 const cards = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')));
 const byFront = Object.fromEntries(cards.map(c => [c.front, c.back]));
 const byBack = Object.fromEntries(cards.map(c => [c.back, c.front]));
@@ -25,6 +25,8 @@ await noHScroll('play setup'); await page.screenshot({ path: SP + '/p-setup.png'
 // Classic 10, front -> back, answer everything right
 await setup(['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]']);
 await page.click('#startBtn'); await page.waitForSelector('#pCard');
+const focusOn = () => page.evaluate(() => document.body.classList.contains('focus'));
+ok(await focusOn(), 'focus mode is on during a Play round');
 ok((await page.locator('#options .opt').count()) === 4, 'Normal: 4 options');
 await page.screenshot({ path: SP + '/p-q.png' }); await noHScroll('question');
 for (let i = 0; i < 10; i++) {
@@ -38,6 +40,7 @@ for (let i = 0; i < 10; i++) {
   await page.keyboard.press('Enter');
 }
 await page.waitForSelector('.stamp');
+ok(!(await focusOn()), 'focus mode is off on the Play result screen');
 const res = { stamp: await page.textContent('.stamp'), score: await page.textContent('.res-score'), acc: await page.textContent('.stats4 .v') };
 console.log('   classic result:', JSON.stringify(res));
 ok(res.acc === '100%' && /^[SA]$/.test(res.stamp.trim()), 'all right gives 100% and an S/A stamp');

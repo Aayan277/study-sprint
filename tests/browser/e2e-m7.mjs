@@ -10,7 +10,7 @@ page.on('console', m => { if (m.type() === 'error' && !m.text().includes('Invali
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const count = name => page.evaluate(async n => (await (await import('./js/db.js')).getAll(n)).length, name);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // Starter decks
 ok((await page.locator('.starter').count()) === 2, 'two starter decks offered');
 await page.screenshot({ path: SP + '/m7-starters.png', fullPage: true });
@@ -23,7 +23,7 @@ ok((await page.locator('.crow .f').first().textContent()) === '一' && (await pa
 // some review history so the backup has everything
 await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0];
   await db.saveReview({ cardId: c.id, due: Date.now() + 86400000, stability: 3, difficulty: 5, reps: 1, lapses: 0, state: 2 }, { cardId: c.id, timestamp: Date.now(), source: 'review', correct: true, rating: 3, state: 0 }); });
-await page.evaluate(async () => { const t = await import('./js/themes.js'); const db = await import('./js/db.js'); await db.setSetting('theme', t.applyTheme({ skin: 'sage', mode: 'dark' })); });
+await page.evaluate(async () => { const t = await import('./js/themes.js'); const db = await import('./js/db.js'); await db.setSetting('theme', { skin: 'sage', mode: 'dark', oled: false }); });   // an old theme name, written straight in
 const before = { decks: await count('decks'), cards: await count('cards'), states: await count('cardStates'), logs: await count('reviewLog') };
 
 // Export
@@ -33,7 +33,7 @@ const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#expo
 const file = SP + '/backup.json'; await dl.saveAs(file);
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 ok(/^study-sprint-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()), 'backup file name: ' + dl.suggestedFilename());
-ok(data.format === 'study-sprint-backup' && data.cards.length === before.cards && data.reviewLog.length === before.logs && data.cardStates.length === before.states && data.settings.theme.skin === 'forest', 'backup holds everything: ' + JSON.stringify(before));
+ok(data.format === 'study-sprint-backup' && data.cards.length === before.cards && data.reviewLog.length === before.logs && data.cardStates.length === before.states && data.settings.theme.skin === 'sage', 'backup holds everything: ' + JSON.stringify(before));
 await page.waitForFunction(() => document.querySelector('#screen').textContent.includes('Last backup'));
 ok(true, 'settings shows the last backup date');
 await page.screenshot({ path: SP + '/m7-settings.png', fullPage: true });

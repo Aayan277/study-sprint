@@ -12,7 +12,7 @@ async function device(name, viewport = { width: 375, height: 740 }, mobile = tru
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push(`${name} ${e.stack}`));
   p.on('console', m => { if (m.type() === 'error' && !/status of (400|401|422)|Picture sync failed|Sync failed/.test(m.text())) errors.push(`${name} console ${m.text()}`); });
-  await p.goto(APP); await p.waitForSelector('.deck');
+  await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');
   return p;
 }
 const run = (p, fn, arg) => p.evaluate(fn, arg);

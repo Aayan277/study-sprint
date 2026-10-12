@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.t
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // empty-ish state first: stats with no history
 await page.click('.tab[data-tab=stats]'); await page.waitForSelector('.pgrid');
 ok((await page.textContent('.pgrid')).includes('Review or play today'), 'no history: friendly streak message');

@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error' && !m.text().includes('failin
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
-await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // open the sample deck, go to import from there
 await page.click('.deck-open'); await page.waitForSelector('.crow');
 await page.click('a[href^="#/import/"]'); await page.waitForSelector('#pasteBox');

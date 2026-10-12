@@ -53,7 +53,12 @@ export function applyTheme(theme) {
 }
 
 // "Match my device" follows the device when it flips between light and dark (e.g. at sunset).
-DARK_QUERY.addEventListener?.('change', () => { if (current?.mode === 'auto') applyTheme(current); });
+DARK_QUERY.addEventListener?.('change', () => { if (current?.mode !== 'auto') return; applyTheme(current); redrawPreviews(); });
+// If Settings is open, its theme previews follow the new light/dark too.
+function redrawPreviews() {
+  const box = document.getElementById('skins');
+  if (box && current) box.innerHTML = skinButtonsHTML(current.skin);
+}
 
 function resolvedMode(mode) {
   if (mode === 'auto') return DARK_QUERY.matches ? 'dark' : 'light';
@@ -68,12 +73,12 @@ export function syncBrowserBar() {
 
 // HTML for the theme buttons. Each one shows a mini flashcard in that theme's colors: the preview
 // carries the same data-skin / data-theme / data-oled attributes, so styles.css colors it by itself.
-export function skinButtonsHTML(current) {
+export function skinButtonsHTML(selected) {
   const t = document.documentElement;
   const mode = t.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   const oled = t.getAttribute('data-oled') === 'on' ? ' data-oled="on"' : '';
   return Object.entries(SKINS).map(([id, s]) =>
-    `<button type="button" class="skin" data-skin="${id}" aria-pressed="${current === id}">
+    `<button type="button" class="skin" data-skin="${id}" aria-pressed="${selected === id}">
       <span class="pv" aria-hidden="true" data-skin="${id}" data-theme="${mode}"${oled}><b>Aa</b></span>
       <span style="min-width:0"><span class="nm">${s.name}</span><span class="nt">${s.note}</span></span></button>`
   ).join('');
