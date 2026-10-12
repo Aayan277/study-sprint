@@ -88,10 +88,11 @@ ok(await p.$$eval('#hardList li:not([hidden])', l => l.length) === 8, 'Show all 
 ok(await p.$eval('.hard-list .n', e => !/Mono/i.test(getComputedStyle(e).fontFamily) && getComputedStyle(e, '::before').width === '6px'), 'the Forgotten line is plain text with a small dot');
 
 // ----- A6: one content width on desktop -----
+// (a deck's page is left out: from 1200px it is the three-column page, see e2e-polish2.mjs)
 const d = await open(1440, 900);
 await d.goto('http://localhost:8123/#/decks'); await d.waitForSelector('.deck');
 const edges = {};
-for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.deck'], ['deck', '#/deck/sample', '.crow-btn'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
+for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.deck'], ['stats', '#/stats', '.card'], ['play', '#/play', '#startBtn'], ['settings', '#/settings', '#skins'], ['browse', '#/browse', '.crow-btn']]) {
   await go(d, h, s);
   edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
 }

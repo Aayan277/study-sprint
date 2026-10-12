@@ -1231,6 +1231,50 @@ dialog.sheet.side .sheet-head{padding:20px 14px 12px 22px;border-bottom:1px soli
 dialog.sheet.side > .sheet-in{padding:18px 22px 24px}
 dialog.sheet.side .sheet-foot{padding:12px 22px}
 
+/* A deck's page on a wide screen: tree of decks | the deck | the card editor docked on the right. The tree and the empty
+   dock are only shown from 1200px (the panel itself is the card panel, a side sheet). Below that, nothing changes. */
+.deck-tree,.dock-empty{display:none}
+@media (min-width:1200px){
+  :root:has(main[data-route="deck"]){--panel:400px}
+  main[data-route="deck"]{margin-left:calc(var(--side) + 240px);margin-right:var(--panel);padding:28px 32px 56px}
+  main[data-route="deck"] > .view{max-width:none}
+  main[data-route="deck"] .back{display:none}
+  main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3)}
+  main[data-route="deck"] .screen-head .head-actions{display:flex;flex-wrap:wrap}
+  main[data-route="deck"] .screen-head .head-actions .btn{min-height:40px;font-size:var(--fs-sm);padding:6px 14px}
+  main[data-route="deck"] .br-controls{grid-template-columns:1fr 1fr}
+  main[data-route="deck"] .br-controls input{grid-column:1 / -1}
+  .deck-tree{display:block;position:fixed;top:0;bottom:0;left:var(--side);width:240px;z-index:4;padding:22px 12px;background:var(--bg);border-right:1px solid var(--line);overflow:auto}
+  .dt-head{display:flex;align-items:center;justify-content:space-between;padding:0 6px 12px}
+  .dt-head b{font-size:var(--fs-md);letter-spacing:-.02em}
+  .dt-search{margin:0 0 10px}
+  .dt-search input{height:36px;font-size:var(--fs-sm)}
+  .dt-row{display:flex;align-items:center;gap:2px;padding-left:calc(2px + var(--depth) * 14px);border-radius:var(--r-sm)}
+  .dt-row.cur{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line),inset 2px 0 0 var(--deck)}
+  .dt-tw{all:unset;box-sizing:border-box;flex:none;display:grid;place-items:center;width:24px;height:30px;color:var(--text-3);cursor:pointer;border-radius:var(--r-xs)}
+  button.dt-tw:hover{color:var(--text)}
+  button.dt-tw:focus-visible{outline:2px solid var(--accent)}
+  .dt-tw .ico{width:14px;height:14px;transition:transform var(--t-fast)}
+  .dt-tw[aria-expanded="true"] .ico{transform:rotate(90deg)}
+  .dt-node{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:34px;padding:0 8px 0 2px;color:var(--text-2);text-decoration:none;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm)}
+  .dt-node:hover{color:var(--text)}
+  .dt-node:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .dt-row.cur .dt-node{color:var(--text)}
+  .dt-row.ctx .dt-node{color:var(--text-2)}
+  .dt-node .dot{width:7px;height:7px;border-radius:50%;background:var(--deck);flex:none}
+  .dt-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dt-n{font-size:var(--fs-2xs);color:var(--text-2)}
+  .dt-all{display:inline-flex;align-items:center;gap:2px;margin:14px 8px 0;font-size:var(--fs-sm);color:var(--text-2);text-decoration:none}
+  .dt-all:hover{color:var(--text)}
+  .dt-all .ico{width:14px;height:14px}
+  /* the dock waits for a card: the card panel opens over it, in the same place */
+  .dock-empty{position:fixed;top:0;right:0;bottom:0;width:var(--panel);z-index:3;display:grid;place-content:center;padding:32px;text-align:center;background:var(--surface-1);border-left:1px solid var(--line);color:var(--text-2);font-size:var(--fs-sm)}
+  .dock-empty p{margin:0;max-width:24ch}
+  .dock-empty b{display:block;color:var(--text);font-size:var(--fs-md);margin-bottom:4px}
+  body.has-side .dock-empty{display:none}
+  :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
+}
+
 /* ---------- 16. First-run start (js/onboarding.js) ---------- */
 /* The tabs and header get out of the way (the screen has its own Skip and Back) */
 body.welcome .top,body.welcome .tabs{display:none}

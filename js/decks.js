@@ -12,7 +12,7 @@ import { examInfo, countdown, badgeClass } from './exam.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
-import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices } from './deck-tree.js';
+import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -294,7 +294,15 @@ export async function renderDeck(el, deckId) {
     ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth)}
       <p class="note" style="margin:8px 0 0">Everything below includes the subdecks' cards too.</p></section>` : ''}
     <section id="browser"></section>
+    <aside class="deck-tree" aria-label="Decks">
+      <div class="dt-head"><b>Decks</b><button class="btn primary small" type="button" id="dtNew">+ New</button></div>
+      <label class="deck-search dt-search">${icon('search')}<input id="dtQ" type="search" placeholder="Search decks" aria-label="Search decks" autocomplete="off"></label>
+      <nav id="dtNav" aria-label="Deck tree"></nav>
+      <a class="dt-all" href="#/decks">All decks ${icon('chevron')}</a>
+    </aside>
+    <aside class="dock-empty" aria-label="Card editor"><p><b>Pick a card</b>Its editor opens here, beside the list.</p></aside>
   `;
+  drawDeckTree(list, deckId);
   $('back').addEventListener('click', () => { location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; });
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }, { parentId: deckId }));
@@ -307,6 +315,41 @@ export async function renderDeck(el, deckId) {
   }));
   // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
   await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
+}
+
+// On a wide screen (1200px and up) a deck's page has three columns: this tree of decks on the left, the deck in the
+// middle, and the card editor docked on the right (the card panel, see openSheet's `side`). Below 1200px the tree is
+// hidden by the CSS and nothing changes. The deck you are in is highlighted; its courses are open and the rest folded
+// (what you open is remembered on this device); typing in the search box shows only matching decks.
+function drawDeckTree(list, currentId) {
+  const decks = list.map(x => x.deck);
+  const size = new Map(list.map(x => [x.deck.id, x.stats.total]));
+  const here = new Set(ancestors(decks, currentId).map(d => d.id));          // the deck and the decks it is inside
+  const hasKids = new Set(decks.map(d => d.parentId).filter(Boolean));
+  const isOpen = id => foldOpen('tree-' + id, here.has(id));
+  const draw = () => {
+    const q = $('dtQ').value;
+    let skipBelow = Infinity;                      // rows deeper than this belong to a folded deck
+    $('dtNav').innerHTML = deckTreeRows(decks, q).map(r => {
+      if (!q.trim()) { if (r.depth > skipBelow) return ''; skipBelow = Infinity; }
+      const kids = hasKids.has(r.id) && !q.trim();
+      const open = kids && isOpen(r.id);
+      if (kids && !open) skipBelow = r.depth;
+      const deck = decks.find(d => d.id === r.id);
+      return `<div class="dt-row${r.id === currentId ? ' cur' : ''}${r.context ? ' ctx' : ''}" style="--depth:${r.depth};--deck:${esc(deck.color)}">
+        ${kids ? `<button type="button" class="dt-tw" data-tw="${esc(r.id)}" aria-expanded="${open}" aria-label="${open ? 'Fold' : 'Open'} ${esc(r.name)}">${icon('chevron')}</button>` : '<span class="dt-tw"></span>'}
+        <a class="dt-node" href="#/deck/${esc(r.id)}" ${r.id === currentId ? 'aria-current="page"' : ''}><i class="dot" aria-hidden="true"></i><span class="dt-name">${esc(r.name)}</span><span class="dt-n mono">${size.get(r.id) || 0}</span></a></div>`;
+    }).join('') || `<p class="note">No decks match.</p>`;
+  };
+  draw();
+  $('dtQ').addEventListener('input', draw);
+  $('dtNav').addEventListener('click', e => {
+    const tw = e.target.closest('[data-tw]'); if (!tw) return;
+    saveFold('tree-' + tw.dataset.tw, tw.getAttribute('aria-expanded') !== 'true');
+    draw();
+  });
+  $('dtNew').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }));
+  $('dtNav').querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
 }
 
 // Redraw the counts card at the top of a deck page after the card list changes something.
