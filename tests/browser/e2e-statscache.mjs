@@ -30,4 +30,15 @@ await page.evaluate(async () => {
 });
 ok((await streak()) === 2, 'after a local answer the streak is 2');
 
+// A second tab (same browser profile) saves an answer; this tab's Stats must pick it up.
+const other = await ctx.newPage();
+await other.goto('http://localhost:8123/#/decks'); await other.waitForSelector('.deck');
+await other.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const [card] = await db.getAll('cards');
+  await db.addLog({ cardId: card.id, timestamp: Date.now() - 2 * 86400000, source: 'review', mode: 'flip', correct: true, ms: 1000, rating: 3, state: 2 });
+});
+await page.waitForTimeout(300);
+ok((await streak()) === 3, 'an answer saved in another tab shows up here (streak 3)');
+
 await browser.close();

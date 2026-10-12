@@ -490,14 +490,21 @@ export const LOCAL_ONLY = ['syncAuth', 'syncState'];
 const listeners = new Set();
 export const onLocalChange = fn => { listeners.add(fn); };
 function changed() {
-  dataChanges++;
+  bumpVersion();
   listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 }
 
 // Goes up whenever the saved data changes (a local save, or changes applied from the server). Stats compares it
 // with the number it saw when it read the review log, to know if what it kept is out of date.
+// Other open tabs of the app (e.g. the installed app and a browser tab) are told too, so their Stats refresh.
 let dataChanges = 0;
 export const dataVersion = () => dataChanges;
+const tabs = typeof BroadcastChannel === 'function' ? new BroadcastChannel('study-sprint-db') : null;
+if (tabs) tabs.onmessage = () => { dataChanges++; };
+function bumpVersion() {
+  dataChanges++;
+  tabs?.postMessage('changed');
+}
 
 // Everything changed on this device since a moment (ms), that the server doesn't have yet:
 // { records: { decks: [...], ... }, tombstones: [...], settings: [{ key, value, time }] }
@@ -594,7 +601,7 @@ export async function applyRemote(rows) {
     settingsStore.put(times, SETTING_TIMES);
   });
   if (schedules) scheduleChanges++;
-  if (applied > 0) dataChanges++;
+  if (applied > 0) bumpVersion();
   return applied;
 }
 
