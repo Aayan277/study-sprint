@@ -21,7 +21,7 @@ await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelect
 await page.click('#editDeck'); await page.waitForSelector('#deckExam');
 await page.fill('#deckExam', examDate);
 await page.screenshot({ path: SP + '/exam-editor.png', fullPage: true });
-await page.click('#deckForm button[type=submit]');
+await page.click('button[type=submit][form=deckForm]');
 await page.waitForFunction(() => /brought forward/.test(document.querySelector('#toast')?.textContent || ''));
 // v3.1: only cards that would be below 99% on exam day are pulled in. Here 1 of the 3 cards due after the exam (stability 20, ~90%);
 // the other two (stability 600 and 1500, ~99.4% and ~99.7%) stay where they are.
@@ -65,7 +65,7 @@ await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.d
 await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#optBtn'); await page.click('#optBtn'); await page.waitForSelector('#customBtn'); await page.click('#customBtn');
 await page.waitForSelector('#csPrepBtn');
 ok((await page.textContent('.cs-opt:has(#csPrepBtn)')).includes('exam in 10 days'), 'Custom study offers Exam prep');
-await page.click('#csClose');
+await page.click('.sheet-x');
 // ending an Exam prep session without rating anything shows the real streak (same as Today), not "0 day streak"
 await page.evaluate(async () => { const db = await import('./js/db.js'); const D = 86400000, now = Date.now(); await db.putMany('reviewLog', [1, 2, 3].map(d => ({ cardId: 'sample-5', timestamp: now - d * D, source: 'review', rating: 3, correct: true, state: 2 }))); });
 await page.goto('http://localhost:8123/#/today'); await page.reload(); await page.waitForSelector('.streak');   // reload: the log was written straight to the database
@@ -76,7 +76,7 @@ const endStreak = (await page.textContent('.finish-next .streak')).replace(/\s+/
 ok(!todayStreak.startsWith('0 ') && endStreak === todayStreak, `end of Exam prep shows the same streak as Today: "${endStreak}" vs "${todayStreak}"`);
 // clearing the date turns it off
 await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
-await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('#deckForm button[type=submit]');
+await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('button[type=submit][form=deckForm]');
 await page.waitForFunction(() => !document.querySelector('.exam-line'));
 ok(true, 'clearing the date removes exam mode');
 // the Exam date field is near the top of Edit deck (right after the name and course code), above Study options and Read aloud
@@ -87,7 +87,7 @@ await page.click('#deckCancel');
 // New deck has an Exam date too, and keeps it
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('#newDeck');
 await page.click('#newDeck'); await page.waitForSelector('#deckExam');
-await page.fill('#deckName', 'Chem'); await page.fill('#deckExam', inDays(20)); await page.click('#deckForm button[type=submit]');
+await page.fill('#deckName', 'Chem'); await page.fill('#deckExam', inDays(20)); await page.click('button[type=submit][form=deckForm]');
 await page.waitForFunction(() => /Created/.test(document.querySelector('#toast')?.textContent || ''));
 ok(await page.evaluate(async d => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Chem')?.examDate === d, inDays(20)), 'a new deck saves its exam date');
 ok((await page.textContent('.deck:has-text("Chem")')).includes('Exam in 20 days'), 'and shows the exam countdown');

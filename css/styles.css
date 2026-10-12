@@ -487,20 +487,40 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / 
 .bulkbar #brSel{margin-right:auto;font-weight:600}
 
 /* ---------- 9. Dialogs: a bottom sheet on phones, a centered box on wider screens ---------- */
-dialog.sheet{border:0;padding:0;margin:auto auto 0;width:100%;max-width:520px;max-height:88dvh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface-1);color:var(--text);border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:var(--e-3)}
+/* One frame for every sheet (openSheet in js/ui.js): a header with the title and a × at the top right, a body
+   that scrolls, and a footer with the buttons that stays in view (the main button on the right). The same on
+   phones and computers. */
+dialog.sheet{display:flex;flex-direction:column;border:0;padding:0;margin:auto auto 0;width:100%;max-width:520px;max-height:88dvh;overflow:hidden;background:var(--surface-1);color:var(--text);border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:var(--e-3)}
+dialog.sheet:not([open]){display:none}
+dialog.sheet:focus{outline:none}
 dialog.sheet::backdrop{background:var(--scrim);backdrop-filter:blur(4px)}
 dialog.sheet[open]{animation:sheet-in var(--t-med) var(--ease)}
 @keyframes sheet-in{from{transform:translateY(28px);opacity:0}}
-/* the little grab handle at the top of a phone sheet */
-dialog.sheet:not(.side)::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--line-strong);margin:8px auto 0}
-@media (min-width:600px){dialog.sheet{margin:auto;border-radius:var(--r-lg)} dialog.sheet::before{display:none!important}}
+@media (min-width:600px){dialog.sheet{margin:auto;border-radius:var(--r-lg)}}
+.sheet-head{position:relative;flex:none;display:flex;align-items:center;gap:var(--s-2);padding:18px 8px 6px var(--s-4);touch-action:none}
+/* the grab bar of a phone sheet: drag the header down to close it */
+.sheet-head::before{content:"";position:absolute;top:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--line-strong)}
+@media (min-width:600px){.sheet-head::before{display:none}.sheet-head{padding-top:14px}}
+dialog.sheet.side .sheet-head::before{display:none}
+.sheet-head h2{flex:1;min-width:0;margin:6px 0 0;font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:var(--s-2)}
+.sheet-x{flex:none;display:grid;place-items:center;width:40px;height:40px;margin-top:4px;padding:0;border-radius:50%;border:0;background:var(--surface-2);color:var(--text-2);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
+.sheet-x:hover{color:var(--text);background:var(--surface-3)}
+.sheet-x .ico{width:18px;height:18px}
 .sheet-in{padding:var(--s-3) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom,0px));display:grid;gap:var(--s-4)}
-.sheet-in h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:var(--s-2);margin:0}
+dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;padding-top:var(--s-3);padding-bottom:var(--s-4)}
+.sheet-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:12px var(--s-4) calc(12px + env(safe-area-inset-bottom,0px));background:var(--surface-1);border-top:1px solid var(--line)}
+.sheet-foot .btn{flex:1 1 auto;min-height:48px;white-space:nowrap}
+.sheet-foot .btn.primary,.sheet-foot .btn.solid{flex-grow:1.6;min-width:44%}
+.sheet-foot.stack{flex-direction:column;align-items:stretch}
+.sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
+.sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;opacity:.7;margin-left:4px}
+@media (pointer:coarse){.sheet-foot kbd{display:none}}
 .swatches{display:flex;flex-wrap:wrap;gap:10px}
 .swatch{width:40px;height:40px;border-radius:50%;border:3px solid var(--surface-1);box-shadow:0 0 0 1.5px var(--control);cursor:pointer;padding:0;background:var(--c)}
 .swatch[aria-pressed="true"]{box-shadow:0 0 0 3px var(--text)}
 .sheet-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sheet-actions .btn{flex:1 1 auto}
+.confirm .sheet-actions{justify-content:flex-end}
 .sheet-danger,.card-info{border-top:1px solid var(--line)}
 .sheet-danger{padding-top:14px}
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
@@ -1097,8 +1117,10 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   main[data-route="stats"] .cal-card{--c:16px}
 }
 /* A card's panel next to the card list, from 1200px wide */
-dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:auto}
-dialog.sheet.side .sheet-in{padding:24px 22px 32px}
+dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:hidden}
+dialog.sheet.side .sheet-head{padding:20px 14px 12px 22px;border-bottom:1px solid var(--line)}
+dialog.sheet.side > .sheet-in{padding:18px 22px 24px}
+dialog.sheet.side .sheet-foot{padding:12px 22px}
 
 /* ---------- 16. First-run start (js/onboarding.js) ---------- */
 /* The tabs and header get out of the way (the screen has its own Skip and Back) */

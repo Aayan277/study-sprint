@@ -47,7 +47,7 @@ ok(z && z.state && z.logs.length === 1 && !d['[…] is copied into RNA'].state, 
 await page.locator('.crow', { hasText: 'Mitochondria' }).click(); await page.waitForSelector('#ceForm');
 await page.click('.card-info summary');
 ok((await page.locator('.history tbody tr').count()) === 5 && (await page.textContent('.history')).includes('Anki'), 'card info lists Anki reviews');
-await page.click('#ceClose');
+await page.click('.sheet-x');
 // stats screen counts them
 await page.goto('http://localhost:8123/#/stats'); await page.waitForSelector('.stats4, .stat, h1');
 await page.waitForTimeout(500);

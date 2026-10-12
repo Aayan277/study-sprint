@@ -28,9 +28,9 @@ ok(!(await p.isHidden('#deckOwn')), 'turning off "Use my overall settings" shows
 await p.screenshot({ path: SP + '/B-deck.png', fullPage: true });
 await p.fill('#deckLs', '2m 20m'); await p.fill('#deckRet', '95'); await p.dispatchEvent('#deckRet', 'input');
 await p.fill('#deckRs', 'banana');
-await p.click('#deckForm button[type=submit]');
+await p.click('button[type=submit][form=deckForm]');
 ok((await p.textContent('#deckErr')).startsWith('Relearning steps:'), 'bad steps explained');
-await p.fill('#deckRs', '15m'); await p.click('#deckForm button[type=submit]'); await p.waitForTimeout(300);
+await p.fill('#deckRs', '15m'); await p.click('button[type=submit][form=deckForm]'); await p.waitForTimeout(300);
 const deck = await p.evaluate(async () => (await import('./js/db.js')).getDeck('sample'));
 ok(deck.reviewPerDay === 2 && deck.options?.learningSteps === '2m 20m' && deck.options.relearningSteps === '15m' && deck.options.targetRetention === 0.95, 'deck saves its own limit and settings: ' + JSON.stringify(deck.options));
 ok(await dueCount() === 2, 'deck limit: 2 due');

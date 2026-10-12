@@ -127,11 +127,11 @@ ok(!(await page.textContent('.flash-deck')).includes('Exam prep'), 'a plain Revi
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
 
 // ---- Custom study lists exams only for the chosen decks ----
-await page.click('#optBtn'); await page.click('#deckChips [data-deck="L"]'); await page.click('#customBtn'); await page.waitForSelector('#csClose');
+await page.click('#optBtn'); await page.click('#deckChips [data-deck="L"]'); await page.click('#customBtn'); await page.waitForSelector('#csAheadBtn');
 ok(await page.locator('#csPrepBtn').count() === 0, 'Custom study: no Exam prep when the chosen decks have no exam');
-await page.click('#csClose'); await page.click('#optBtn'); await page.click('#deckChips [data-all]'); await page.click('#deckChips [data-deck="T"]'); await page.click('#customBtn'); await page.waitForSelector('#csClose');
+await page.click('.sheet-x'); await page.click('#optBtn'); await page.click('#deckChips [data-all]'); await page.click('#deckChips [data-deck="T"]'); await page.click('#customBtn'); await page.waitForSelector('#csAheadBtn');
 ok(await page.locator('#csPrepBtn').count() === 1 && (await page.textContent('#sheet')).includes('Short answers'), 'Custom study: Exam prep is there for a chosen deck with an exam');
-await page.click('#csClose'); await page.click('#optBtn'); await page.click('#deckChips [data-all]'); await page.click('#optDone');
+await page.click('.sheet-x'); await page.click('#optBtn'); await page.click('#deckChips [data-all]'); await page.click('#optDone');
 
 // ---- Daily goal counts the chosen decks only ----
 await page.click('.tdeck:has-text("Short answers")'); await page.waitForSelector('#flash');

@@ -269,10 +269,8 @@ async function openExport(deck, decks, deckCards) {
       <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
     </div>
-    <p class="err" id="exErr" hidden></p>
-    <button class="btn ghost" type="button" id="exClose">Close</button>`);
+    <p class="err" id="exErr" hidden></p>`);
   const ex = await import('./export.js');
-  $('exClose').addEventListener('click', closeSheet);
   $('exCsv').addEventListener('click', () => {
     ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
     closeSheet();

@@ -39,21 +39,21 @@ await A.setInputFiles('#ceFrontFile', photo);
 await A.waitForSelector('#ceFrontImg img.img-thumb[src^="blob:"]');
 ok(true, 'picked photo shows as a thumbnail');
 await A.screenshot({ path: SP + '/img-panel.png' });
-await A.click('#ceForm button[type=submit]'); await A.waitForTimeout(400);
+await A.click('button[type=submit][form=ceForm]'); await A.waitForTimeout(400);
 let info = await run(A, async () => {
   const db = await import('./js/db.js'); const c = await db.get('cards', 'sample-0'); const m = await db.getMedia(c.frontImage);
   const bmp = await createImageBitmap(new Blob([m.data], { type: m.type }));
   return { frontImage: c.frontImage, type: m.type, size: m.size, w: bmp.width, h: bmp.height };
 });
 ok(info.frontImage && info.type === 'image/jpeg' && info.w === 1280 && info.h === 853 && info.size < 200000, `shrunk to ${info.w}×${info.h} JPEG, ${Math.round(info.size / 1024)} KB (from ${Math.round(png.length / 1024)} KB)`);
-await A.click('#ceClose');
+await A.click('.sheet-x');
 ok(await A.locator('.crow').nth(0).locator('.pic-mark').count() === 1, 'card list marks cards with pictures');
 // a card whose back is only a picture
 await A.click('#brAdd'); await A.waitForSelector('#acFront');
-await A.fill('#acFront', 'Which organ is this?'); await A.click('#acForm button[type=submit]');
+await A.fill('#acFront', 'Which organ is this?'); await A.click('button[type=submit][form=acForm]');
 ok((await A.textContent('#acErr')).includes('text or a picture'), 'empty back caught');
 await A.setInputFiles('#acBackFile', photo); await A.waitForSelector('#acBackImg img[src^="blob:"]');
-await A.click('#acForm button[type=submit]'); await A.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Card added');
+await A.click('button[type=submit][form=acForm]'); await A.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Card added');
 ok(!(await A.$('#acBackImg img')), 'form clears for the next card');
 await A.click('#acDone');
 const picCard = await run(A, async () => (await (await import('./js/db.js')).getAll('cards')).find(c => c.front === 'Which organ is this?'));
@@ -77,12 +77,12 @@ ok(bHas.every(Boolean), 'the other device downloads them during sync (works offl
 await B.goto(APP + '#/deck/sample'); await B.waitForSelector('.crow');
 await B.locator('.crow').nth(0).click(); await B.waitForSelector('#ceFrontImg img[src^="blob:"]');
 ok(true, 'and shows them');
-await B.click('#ceClose');
+await B.click('.sheet-x');
 
 // ---- removing a picture removes it from the account too ----
 await A.goto(APP + '#/deck/sample'); await A.waitForSelector('.crow');
 await A.locator('.crow').nth(0).click(); await A.waitForSelector('[data-img-remove="ceFront"]');
-await A.click('[data-img-remove="ceFront"]'); await A.click('#ceForm button[type=submit]'); await A.waitForTimeout(300); await A.click('#ceClose');
+await A.click('[data-img-remove="ceFront"]'); await A.click('button[type=submit][form=ceForm]'); await A.waitForTimeout(300); await A.click('.sheet-x');
 await run(A, async id => { const db = await import('./js/db.js'); const m = await db.getMedia(id); await db.putRemoteMedia({ ...m, created: 0 }); }, info.frontImage);   // pretend it's old
 await syncNow(A);
 ok(!fake.files.has(`user-1/${info.frontImage}`) && fake.files.has(`user-1/${picCard.backImage}`), 'unused picture removed here and from the account; the used one stays');
@@ -94,7 +94,7 @@ fake.setBucket(false);
 await B.goto(APP + '#/deck/sample'); await B.waitForSelector('.crow');
 await B.locator('.crow').nth(1).click(); await B.waitForSelector('#ceFront');
 await B.setInputFiles('#ceFrontFile', photo); await B.waitForSelector('#ceFrontImg img[src^="blob:"]');
-await B.click('#ceForm button[type=submit]'); await B.waitForTimeout(300); await B.click('#ceClose');
+await B.click('button[type=submit][form=ceForm]'); await B.waitForTimeout(300); await B.click('.sheet-x');
 await B.goto(APP + '#/settings'); await B.waitForSelector('#syncNowBtn');
 await B.click('#syncNowBtn'); await B.waitForFunction(() => /Pictures can.t sync yet/.test(document.querySelector('#syncStatus')?.textContent || ''));
 ok((await B.textContent('#syncStatus')).startsWith('Synced'), 'without picture storage: cards still sync, with a note: ' + await B.textContent('#syncStatus'));
@@ -120,7 +120,7 @@ const D = await device('D', { width: 1440, height: 900 }, false);
 await D.goto(APP + '#/deck/sample'); await D.waitForSelector('.crow');
 await D.locator('.crow').nth(3).click(); await D.waitForSelector('#ceBack');
 await D.setInputFiles('#ceBackFile', photo); await D.waitForSelector('#ceBackImg img[src^="blob:"]');
-await D.click('#ceForm button[type=submit]'); await D.waitForTimeout(300);
+await D.click('button[type=submit][form=ceForm]'); await D.waitForTimeout(300);
 ok(!!(await run(D, async () => (await (await import('./js/db.js')).get('cards', 'sample-3')).backImage)), 'computer: picture added from the Word-style box');
 await D.screenshot({ path: SP + '/img-desktop.png' });
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');

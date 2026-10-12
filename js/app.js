@@ -413,9 +413,11 @@ function confirmResetSynced() {
     <div class="confirm">
       <p><b>Everywhere</b> deletes every deck, card and review on this device <b>and in your account</b>, so your other devices delete them too when they sync. It can't be undone.</p>
       <p><b>Just this device</b> signs this device out and clears it. Your account and other devices keep everything (sign in again to get it back).</p>
-      <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
-      <button class="btn danger" type="button" id="rsHere">Just this device</button>
-      <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+      <div class="sheet-actions stack">
+        <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
+        <button class="btn danger" type="button" id="rsHere">Just this device</button>
+        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+      </div>
     </div>`);
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
@@ -496,7 +498,7 @@ async function drawSync() {
           <h2 id="sheetTitle">Check your email</h2>
           <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
-          <button class="btn primary" type="button" id="fpOk">OK</button>`);
+          <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
       } catch (e) { err.textContent = e.message; err.hidden = false; }
     });
@@ -595,9 +597,11 @@ async function confirmSignOut() {
     <p>This device stops syncing. Your account and your other devices keep everything.</p>
     <p class="note" id="soNote">Checking for changes that haven't synced yet…</p>
     <div class="confirm">
-      <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
-      <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
-      <button class="btn ghost" type="button" id="soNo">Cancel</button>
+      <div class="sheet-actions stack">
+        <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
+        <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
+        <button class="btn ghost" type="button" id="soNo">Cancel</button>
+      </div>
     </div>`);
   $('soNo').addEventListener('click', closeSheet);
   $('soKeep').addEventListener('click', async () => { await sync.signOut(); closeSheet(); toast('Signed out'); drawSync(); });

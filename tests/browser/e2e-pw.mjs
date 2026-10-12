@@ -36,10 +36,10 @@ await page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncSta
 ok(fake.users.get('new@example.com')?.password === 'goodpass1', 'account created with a good password');
 // change password: same rules
 await page.click('#pwBtn'); await page.waitForSelector('#pw1');
-await page.fill('#pw1', 'short1'); await page.fill('#pw2', 'short1'); await page.click('#pwForm [type=submit]');
+await page.fill('#pw1', 'short1'); await page.fill('#pw2', 'short1'); await page.click('button[type=submit][form=pwForm]');
 ok((await page.textContent('#pwErr')) === 'The password needs at least 8 characters.', 'change password checks the rules: ' + await page.textContent('#pwErr'));
 await page.screenshot({ path: SP + '/pw-sheet.png' });
-await page.fill('#pw1', 'better2pass'); await page.fill('#pw2', 'better2pass'); await page.click('#pwForm [type=submit]');
+await page.fill('#pw1', 'better2pass'); await page.fill('#pw2', 'better2pass'); await page.click('button[type=submit][form=pwForm]');
 await page.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Password changed');
 ok(fake.users.get('new@example.com').password === 'better2pass', 'changed');
 // an older, short password can still sign in (rules only apply to new passwords)

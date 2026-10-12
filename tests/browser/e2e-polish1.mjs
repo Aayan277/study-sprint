@@ -64,7 +64,7 @@ ok(await p.$$eval('#brEmpty', e => e.length === 1) && await p.isVisible('#brEmpt
 ok(!(await p.isVisible('#brQuery')) && !(await p.isVisible('#brList')) && !(await p.isVisible('.deck-summary')), 'no search box, list or summary over it');
 ok(await p.$$eval('.view .empty:not([hidden])', e => e.filter(x => x.offsetParent).length) === 1, 'exactly one visible empty box');
 await p.click('#brAddFirst'); await p.waitForSelector('#acFront');
-await p.fill('#acFront', 'First'); await p.fill('#acBack', 'Card'); await p.click('#acForm button[type=submit]'); await p.waitForTimeout(300); await p.click('#acDone'); await p.waitForTimeout(400);
+await p.fill('#acFront', 'First'); await p.fill('#acBack', 'Card'); await p.click('button[type=submit][form=acForm]'); await p.waitForTimeout(300); await p.click('#acDone'); await p.waitForTimeout(400);
 ok(!(await p.isVisible('#brEmpty')) && await p.isVisible('#brQuery') && await p.isVisible('.deck-summary'), 'adding the first card brings the list and summary back');
 ok(await p.$eval('.deck-summary', e => e.style.borderLeft === '' && getComputedStyle(e, '::before').width === '3px'), 'the deck summary uses the 3px stripe, not an inline 6px border');
 

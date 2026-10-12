@@ -21,7 +21,7 @@ await p.click('[data-fmt=list][data-for=ceBack]');
 ok(await p.inputValue('#ceBack') === 'Learning by **pairing**\n- neutral stimulus\n- response', '• makes the selected lines a list');
 ok((await p.innerHTML('#ceBackPrev')) === 'Learning by <b>pairing</b><ul><li>neutral stimulus</li><li>response</li></ul>' && await p.isVisible('#ceBackPrev'), 'preview shows the formatting');
 await p.screenshot({ path: SP + '/fmt-phone.png' });
-await p.click('#ceForm button[type=submit]'); await p.waitForTimeout(400);
+await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(400);
 ok((await card(p, 'sample-0')).back === 'Learning by **pairing**\n- neutral stimulus\n- response', 'saved as marks');
 ok((await p.locator('.crow').nth(0).locator('.b').textContent()).startsWith('Learning by pairing'), 'list row shows plain text');
 // a short bold answer, typed plainly in Review
@@ -72,13 +72,13 @@ await p.evaluate(() => {
 });
 ok(!(await p.innerHTML('#ceBack')).includes('color'), 'pasting brings in plain text only');
 await p.screenshot({ path: SP + '/fmt-desktop.png' });
-await p.click('#ceForm button[type=submit]'); await p.waitForTimeout(400);
+await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(400);
 ok((await card(p, 'sample-2')).back === 'Removing something **unpleasant** to make a behavior *more* likely.', 'saved as marks: ' + (await card(p, 'sample-2')).back);
 // the bullet button in the Word-style box
 await p.click('#ceBack'); await p.keyboard.press('Control+a'); await p.keyboard.type('one');
 await p.click('[data-fmt=list][data-for=ceBack]');
 await p.keyboard.press('End'); await p.keyboard.press('Enter'); await p.keyboard.type('two');
-await p.click('#ceForm button[type=submit]'); await p.waitForTimeout(400);
+await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(400);
 ok((await card(p, 'sample-2')).back === '- one\n- two', 'bullet list saved as marks: ' + JSON.stringify((await card(p, 'sample-2')).back));
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();

@@ -49,15 +49,15 @@ ok(!uc.suspended && !uc.tags.includes('leech') && await front() === target, 'und
 const n0 = await total();
 const f1 = await front();
 await page.click('#moreBtn'); await page.waitForSelector('#ceForm');
-await page.fill('#ceFront', f1 + ' (edited)'); await page.click('#ceForm button[type=submit]'); await page.waitForTimeout(400);
+await page.fill('#ceFront', f1 + ' (edited)'); await page.click('button[type=submit][form=ceForm]'); await page.waitForTimeout(400);
 ok(await page.isVisible('#ceForm'), 'panel stays open after edit');
-await page.click('#ceClose');
+await page.click('.sheet-x');
 ok(await front() === f1 + ' (edited)', 'edit shows on the review card');
 await page.screenshot({ path: SP + '/p2-review.png' });
 // keyboard: I opens info
 await page.keyboard.press('i'); await page.waitForSelector('#ceForm');
 ok(await page.evaluate(() => document.querySelector('.card-info').open), 'I opens card info');
-await page.click('#ceClose');
+await page.click('.sheet-x');
 // - buries
 await page.keyboard.press('-'); await page.waitForTimeout(300);
 ok((await card(f1 + ' (edited)')).buriedUntil > Date.now() && await front() !== f1 + ' (edited)' && await total() === n0 - 1, '- buries and moves on');
@@ -71,7 +71,7 @@ await page.click('#moreBtn'); await page.waitForSelector('#ceForm'); await page.
 ok(!(await page.isVisible('#ceForm')) && (await card(f3)).suspended && await front() !== f3 && await total() === n0 - 3, '⋯ Suspend closes the panel and skips the card');
 // flag stays
 const f4 = await front();
-await page.click('#moreBtn'); await page.waitForSelector('#ceForm'); await page.click('[data-flag="2"]'); await page.waitForTimeout(400); await page.click('#ceClose');
+await page.click('#moreBtn'); await page.waitForSelector('#ceForm'); await page.click('[data-flag="2"]'); await page.waitForTimeout(400); await page.click('.sheet-x');
 ok((await card(f4)).flag === 2 && await front() === f4, 'flag keeps the card on screen');
 
 // play: Card ⋯ after answering

@@ -172,7 +172,7 @@ export async function openCardPanel(card, ctx) {
       ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       <p class="err" id="ceErr" hidden></p>
-      <button class="btn primary" type="submit">Save changes</button>
+      <div class="sheet-actions"><button class="btn primary" type="submit">Save changes</button></div>
     </form>
 
     <div class="act-grid">
@@ -204,8 +204,7 @@ export async function openCardPanel(card, ctx) {
         ${logs.slice(-30).reverse().map(l => `<tr><td>${shortDate(l.timestamp)}</td><td>${{ play: 'Play', anki: 'Anki' }[l.source] || 'Review'}</td>
           <td class="${l.correct ? 'ok' : 'no'}">${RATING[l.rating] || (l.correct ? 'Right' : 'Wrong')}</td><td class="mono">${l.ms ? (l.ms / 1000).toFixed(1) + 's' : ''}</td></tr>`).join('')}
       </tbody></table>${logs.length > 30 ? '<p class="note">Showing the last 30.</p>' : ''}` : '<p class="note">No answers yet.</p>'}
-    </details>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
+    </details>`, { side: true });
 
   const again = async (msg, act) => {      // after a change: refresh the list, tell the caller, reopen with fresh data
     if (msg) toast(msg);
@@ -218,7 +217,6 @@ export async function openCardPanel(card, ctx) {
   };
   const save = (changes, msg, act) => db.saveCards([{ ...card, ...changes }]).then(() => again(msg, act));
 
-  $('ceClose').addEventListener('click', closeSheet);
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
     const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
@@ -270,10 +268,9 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       </form>
     </details>
     <div class="field"><span>Set due date</span>${studied.length ? dueRow() + (studied.length < n ? `<p class="note">Applies to the ${studied.length} you've studied. New cards are skipped.</p>` : '') : '<p class="note" style="margin:0">None of these have been reviewed yet.</p>'}</div>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
+    `, { side: true });
   const done = async msg => { toast(msg); closeSheet(); await refresh(); };
   const update = (changes, msg) => db.saveCards(selected.map(c => ({ ...c, ...changes }))).then(() => done(msg));
-  $('ceClose').addEventListener('click', closeSheet);
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
     if (act === 'suspend') update({ suspended: true }, `Suspended ${plural(n, 'card')}`);
@@ -315,9 +312,7 @@ function openTagTools(cards, { scope, refresh }) {
         <button class="btn ghost small" type="button" data-tag-rename>Rename</button>
         <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
       : '<p class="note">No tags yet. Add them when editing a card.</p>'}
-    <div id="tagEdit"></div>
-    <button class="btn ghost" type="button" id="tagClose">Close</button>`, { side: true });
-  $('tagClose').addEventListener('click', closeSheet);
+    <div id="tagEdit"></div>`, { side: true });
   const apply = async (from, to) => {
     const changed = renameTag(cards, from, to);
     await db.saveCards(changed);

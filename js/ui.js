@@ -45,7 +45,15 @@ const ICON_PATHS = {
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   circle: '<circle cx="12" cy="12" r="6"/>',
   sub: '<path d="M6 4v9a3 3 0 0 0 3 3h9M14 12l4 4-4 4"/>',
-  enter: '<path d="M20 6v6a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/>'
+  enter: '<path d="M20 6v6a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  pause: '<rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 export const icon = (name, cls = '') =>
   `<svg class="ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
@@ -66,13 +74,50 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 //   side: on a wide screen, show it as a panel down the right-hand side instead, next to the page
 //         (e.g. a card's panel beside the card list, so you can click from card to card).
 //         On phones it's the usual pop-up from the bottom.
+//
+// Every sheet has the same frame, whatever is inside it:
+//   a sticky header   the title (the <h2 id="sheetTitle"> in `html`) and a × at the top right
+//   a scrolling body  everything else in `html`
+//   a sticky footer   the LAST `.sheet-actions` row in `html` (Cancel on the left, the main button on the right).
+//                     A submit button in it still submits its form (it gets a form="..." link, because it is
+//                     no longer inside the <form>). A sheet with no such row has no footer.
+// On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
   const asSide = side && WIDE.matches;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
   d.classList.toggle('side', asSide);
-  d.innerHTML = `<div class="sheet-in">${html}</div>`;
+  d.style.transform = d.style.transition = '';                          // undo a half-finished swipe
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const title = t.content.querySelector('#sheetTitle');
+  const rows = t.content.querySelectorAll('.sheet-actions');
+  const actions = rows[rows.length - 1] || null;
+  const foot = document.createElement('div');
+  foot.className = 'sheet-foot' + (actions?.classList.contains('stack') ? ' stack' : '');
+  if (actions) {
+    const form = actions.closest('form');
+    if (form && !form.id) form.id = 'sheetForm';
+    for (const b of [...actions.children]) {
+      if (form && b.matches('button[type=submit]')) b.setAttribute('form', form.id);
+      foot.appendChild(b);
+    }
+    actions.remove();
+  }
+  const head = document.createElement('div');
+  head.className = 'sheet-head';
+  if (title) head.appendChild(title);
+  head.insertAdjacentHTML('beforeend', `<button type="button" class="sheet-x" aria-label="Close">${icon('x')}</button>`);
+  const body = document.createElement('div');
+  body.className = 'sheet-in';
+  body.appendChild(t.content);
+  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []));
+  d.setAttribute('aria-labelledby', 'sheetTitle');
+  d.querySelector('.sheet-x').addEventListener('click', closeSheet);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }
+  // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
+  // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
+  if (document.activeElement?.classList.contains('sheet-x')) d.focus();
   document.body.classList.toggle('has-side', asSide);
   return d;
 }
@@ -88,7 +133,8 @@ function afterClose() {
 }
 
 // Tapping the dim area outside the sheet closes it. Escape closes a side panel too
-// (the browser only does that for pop-ups).
+// (the browser only does that for pop-ups). On a touchscreen a phone sheet can be dragged down by its
+// header (the grab bar) and lets go of the screen once it has moved far or fast enough.
 export function initSheet() {
   const d = $('sheet');
   d.addEventListener('click', e => { if (e.target === d) closeSheet(); });
@@ -96,6 +142,30 @@ export function initSheet() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
   });
+  let drag = null;
+  d.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x')) return;
+    drag = { id: e.pointerId, y: e.clientY, t: e.timeStamp, dy: 0 };
+    d.setPointerCapture(e.pointerId);
+    d.style.transition = 'none';
+  });
+  d.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.dy = Math.max(0, e.clientY - drag.y);
+    d.style.transform = `translateY(${drag.dy}px)`;
+  });
+  const release = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { dy, t } = drag; drag = null;
+    const fast = dy > 30 && dy / Math.max(1, e.timeStamp - t) > 0.5;      // a quick flick
+    d.style.transition = 'transform 160ms ease';
+    if (e.type !== 'pointercancel' && (dy > Math.min(120, d.offsetHeight / 3) || fast)) {
+      d.style.transform = 'translateY(100%)';
+      setTimeout(() => { closeSheet(); d.style.transform = d.style.transition = ''; }, 160);
+    } else d.style.transform = '';
+  };
+  d.addEventListener('pointerup', release);
+  d.addEventListener('pointercancel', release);
 }
 
 // Stop iPhone double-tap zoom during Review and Play.

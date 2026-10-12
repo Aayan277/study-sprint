@@ -289,7 +289,7 @@ export async function renderToday(el) {
         <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
         <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
       </div>
-      <button class="btn ghost" type="button" id="csClose">Close</button>`);
+      `);
 
     const drawAhead = () => {
       const n = customQueue('ahead', data, cards, days).queue.length;
@@ -318,7 +318,6 @@ export async function renderToday(el) {
     $('csAheadBtn').addEventListener('click', () => go('ahead'));
     $('csPrepBtn')?.addEventListener('click', () => go('prep'));
     $('csForgotBtn').addEventListener('click', () => go('forgot'));
-    $('csClose').addEventListener('click', closeSheet);
   }
 
   draw();
