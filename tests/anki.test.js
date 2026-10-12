@@ -206,6 +206,10 @@ test('a cut-off history starts from the interval and ease Anki has, not from a n
   assert.deepEqual(logs.map(l => [l.timestamp, l.state, l.rating]), [[1000, 2, 3], [2000, 2, 3]]);   // both reviews were from a card in review
   // one row only: the card is just the seed
   assert.equal(replayHistory([cut[0]], fakeRate, 'c1').state.stability, 30);
+  // the deck's longest gap still applies to a seed that is the whole history: it comes back by then
+  const capped = replayHistory([cut[0]], fakeRate, 'c1', 20).state;
+  assert.equal(capped.due, 1000 + 20 * DAYMS);
+  assert.equal(capped.scheduledDays, 20);
   // a first row that is a miss (no positive gap), or that is a learning step, replays as a new card
   assert.equal(replayHistory([{ timestamp: 1, ease: 1, ivl: -600, type: 2, factor: 2300 }], fakeRate).state.state, 3);
   assert.equal(replayHistory([{ timestamp: 1, ease: 3, ivl: 5, type: 0, factor: 0 }], fakeRate).state.n, 1);

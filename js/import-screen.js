@@ -428,7 +428,7 @@ async function save() {
         const deck = effectiveDeck(decks, card.deckId);
         const own = deckSchedulerOptions(settings, deck);
         const last = { ...own, retention: examOptions(own, deck).retention };
-        return replayHistory(entries, (state, rating, when, isLast) => rate(card.id, state, rating, isLast ? last : own, when), card.id);
+        return replayHistory(entries, (state, rating, when, isLast) => rate(card.id, state, rating, isLast ? last : own, when), card.id, own.maxInterval);
       };
     } catch (err) {
       console.error(err);

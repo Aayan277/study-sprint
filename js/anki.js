@@ -176,12 +176,14 @@ const DAY = 86400000;
 // learning step, so earlier reviews are missing). Like Anki's own FSRS import, it turns Anki's interval and ease
 // into FSRS memory: stability ~ the interval (a card is due at 90% recall), and the difficulty that makes a Good
 // answer multiply the interval by the card's ease. The state is as of that row's review.
-export function seedFromAnki(cardId, e) {
+// maxInterval is the deck's longest gap (days): the card comes back no later than that, whatever Anki's gap was.
+export function seedFromAnki(cardId, e, maxInterval = 36500) {
   const ivl = Math.max(0.1, e.ivl);
   const ease = e.factor >= 1300 && e.factor <= 9999 ? e.factor / 1000 : 2.5;      // unknown or odd: Anki's default
   const growth = Math.exp(W8) * ivl ** -W9 * (Math.exp(W10 * 0.1) - 1);            // how much a Good answer grows S per point of (11 - D)
   const difficulty = Math.min(10, Math.max(1, 11 - (ease - 1) / growth));
-  return { cardId, due: e.timestamp + ivl * DAY, stability: ivl, difficulty, elapsedDays: 0, scheduledDays: Math.round(ivl), learningSteps: 0,
+  const gap = Math.min(ivl, maxInterval);
+  return { cardId, due: e.timestamp + gap * DAY, stability: ivl, difficulty, elapsedDays: 0, scheduledDays: Math.round(gap), learningSteps: 0,
     reps: 1, lapses: 0, state: 2, lastReview: e.timestamp };
 }
 
@@ -189,7 +191,7 @@ export function seedFromAnki(cardId, e) {
 //   entries  one card's Anki review history [{ timestamp, ease, ivl, ms, type, factor }]
 //   rate     (state, rating, timestamp, isLast) → new state: Study Sprint's scheduler (srs.js rate).
 //            isLast is true for the card's final review, which sets the due date.
-//   cardId   for the seeded state of a cut-off history
+//   cardId   for the seeded state of a cut-off history       maxInterval  the deck's longest gap, for that seed
 // Returns { state, logs }: the card's final schedule (null if it ends up new) and review log rows
 // (source 'anki') for its history and the stats. Anki's buttons 1–4 are the same as ours.
 // Like Anki:
@@ -198,7 +200,7 @@ export function seedFromAnki(cardId, e) {
 //   - old Anki versions didn't log resets, so a new learning step after reviews starts the card again;
 //   - a history that starts after the card's first learning step is cut off: it starts from Anki's interval
 //     and ease at that row (seedFromAnki) instead of from a new card.
-export function replayHistory(entries, rate, cardId = '') {
+export function replayHistory(entries, rate, cardId = '', maxInterval) {
   // Split the reviews into runs, each starting from a new card. The last run is the card's schedule.
   const runs = [{ rows: [], canSeed: true }];
   for (const e of entries) {
@@ -215,7 +217,7 @@ export function replayHistory(entries, rate, cardId = '') {
     const { rows } = run;
     let from = 0;
     if (run.canSeed && rows.length && rows[0].type !== 0 && rows[0].ivl > 0) {      // cut off: start from the first row's interval and ease
-      state = seedFromAnki(cardId, rows[0]);
+      state = seedFromAnki(cardId, rows[0], maxInterval);
       logs.push(logOf(rows[0], 2));
       from = 1;
     }
