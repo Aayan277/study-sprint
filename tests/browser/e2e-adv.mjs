@@ -69,7 +69,8 @@ ok(capped.easyDays <= 45 && capped.goodDays <= 45 && capped.rated <= 45 && cappe
 await page.click('#endBtn');
 
 // Reset to defaults
-await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#advanced'); await page.evaluate(() => { document.getElementById('advanced').open = true; });   // (the fold remembers it was opened)
+await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#advanced'); if (!(await page.evaluate(() => document.getElementById('advanced').open))) await page.click('#advanced summary');   // (the fold remembers it was opened)
+ok(await page.evaluate(() => document.getElementById('advanced').open), 'advanced opens (by its summary, or remembered)');
 await page.click('#schedReset'); await page.waitForFunction(() => document.getElementById('lsteps')?.value === '1m 10m');
 ok((await setting('maxInterval')) === 36500 && (await setting('fuzz')) === true && (await setting('relearningSteps')) === '10m' && (await setting('learningSteps')) === '1m 10m', 'reset puts every default back');
 ok(await page.evaluate(() => document.getElementById('advanced').open), 'advanced stays open after reset');
@@ -80,12 +81,13 @@ await page.evaluate(async () => { const db = await import('./js/db.js');
 await page.goto('http://localhost:8123/#/play'); await page.waitForSelector('#pDeck');
 const sampleId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name.includes('Psychology')).id);
 await page.selectOption('#pDeck', sampleId);
-ok(await page.isChecked('input[name=qtype][value=back]') && (await page.textContent('fieldset:nth-of-type(3) .note')).includes('long answers'), 'psychology deck (long backs) starts on Back → front, with a reason');
+ok(await page.isChecked('input[name=qtype][value=back]') && (await page.textContent('#customBody fieldset:nth-of-type(1) .note')).includes('long answers'), 'psychology deck (long backs) starts on Back → front, with a reason');
 await page.screenshot({ path: SP + '/adv-play.png', fullPage: true });
 await page.selectOption('#pDeck', 'vocab');
 ok(await page.isChecked('input[name=qtype][value=front]'), 'short-answer deck starts on Front → back');
 await page.selectOption('#pDeck', sampleId);
-await page.click('input[name=qtype][value=front]', { force: true });
+if (await page.getAttribute('#customBtn', 'aria-expanded') !== 'true') await page.click('#customBtn');   // the question type lives under Customise
+await page.click('#customBody label.chip:has(input[name=qtype][value=front])');
 await page.selectOption('#pDeck', 'vocab'); await page.selectOption('#pDeck', sampleId);
 ok(await page.isChecked('input[name=qtype][value=front]'), 'your pick for a deck is remembered');
 await page.reload(); await page.waitForSelector('#pDeck');
