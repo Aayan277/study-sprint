@@ -83,7 +83,8 @@ await p.click('#wlGo'); await p.waitForSelector('.today-hero');
 ok(p.url().endsWith('#/today') && await p.locator('.tabs').isVisible(), 'Go to Today shows the tab bar again');
 await p.reload(); await p.waitForSelector('.today-hero');
 ok(p.url().endsWith('#/today'), 'it never shows again after reload');
-await p.goto(URL + '#/welcome'); await p.waitForSelector('#wlNext');
+await p.goto(URL + '#/welcome'); await p.waitForSelector('.today-hero');
+ok(p.url().endsWith('#/today'), 'opening #/welcome after the start goes to Today');
 await p.goto(URL); await p.waitForSelector('.today-hero');
 ok(p.url().endsWith('#/today'), 'and a fresh open lands on Today');
 await p.context().close();
@@ -164,6 +165,29 @@ await p.click('#readyMade a'); await p.waitForSelector('#startersBox[open]');
 ok(await p.locator('.starter').first().isVisible(), 'Import → Ready-made decks opens them');
 await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
 ok(!(await p.content()).includes('JLPT'), 'no JLPT deck is mentioned on Today');
+await p.context().close();
+
+// ---- after the start: no way back, and the sample deck is never overwritten ----
+p = await fresh();
+await p.goto(URL); await p.waitForSelector('#wlNext'); await p.click('#wlNext'); await p.waitForSelector('#wlForm');
+await p.fill('#wlName', 'Bio'); await p.click('#wlForm button[type=submit]'); await p.waitForSelector('#wlLater');
+await p.click('#wlLater'); await p.waitForSelector('.crow, .empty');
+await p.goBack(); await p.waitForTimeout(400);
+ok(!p.url().includes('welcome'), 'Back after the start does not return to it: ' + p.url());
+await p.goto(URL + '#/decks'); await p.waitForSelector('.empty, .deck');
+await p.evaluate(() => { location.hash = '#/welcome'; }); await p.waitForTimeout(500);
+ok(p.url().endsWith('#/today'), '#/welcome goes to Today once the start is done');
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'sample', name: 'My edited sample', color: '#46A758', created: 1 }, [{ id: 'sx', deckId: 'sample', front: 'q', back: 'a', tags: [], created: 1 }]); });
+await p.evaluate(() => { location.hash = '#/welcome/again'; }); await p.waitForTimeout(500);
+ok(p.url().endsWith('#/today'), '#/welcome/again is also sent to Today');
+await p.context().close();
+p = await fresh();
+await p.goto(URL); await p.waitForSelector('#wlNext'); await p.click('#wlNext'); await p.waitForSelector('#wlForm');
+await p.fill('#wlName', 'Bio'); await p.click('#wlForm button[type=submit]'); await p.waitForSelector('#wlSample');
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'sample', name: 'My edited sample', color: '#46A758', created: 1 }, [{ id: 'sx', deckId: 'sample', front: 'q', back: 'a', tags: [], created: 1 }]); });
+await p.click('#wlSample'); await p.waitForSelector('#coach, .today-hero, .empty'); await p.waitForTimeout(300);
+const sampleNow = await p.evaluate(async () => { const db = await import('./js/db.js'); return { name: (await db.getDeck('sample')).name, cards: (await db.getAll('cards')).filter(c => c.deckId === 'sample').length }; });
+ok(sampleNow.name === 'My edited sample' && sampleNow.cards === 1, 'Try the sample deck leaves an existing sample deck alone');
 await p.context().close();
 
 // ---- desktop ----

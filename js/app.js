@@ -692,7 +692,8 @@ addEventListener('sync', async e => {
 // with ?skipOnboarding in the address. Skipping this way adds the sample deck, like the app always used to.
 function skipFlag() {
   try { if (localStorage.getItem('study-sprint-skip-onboarding') === '1') return true; } catch { /* no storage: fine */ }
-  return /[?&]skipOnboarding\b/.test(location.search);
+  // The address flag is for local testing only, so a stray link can't switch the first run off on the live site.
+  return ['localhost', '127.0.0.1'].includes(location.hostname) && /[?&]skipOnboarding\b/.test(location.search);
 }
 
 // Settle what a start-up looks like. Returns true if the first-run start should show.
@@ -732,7 +733,7 @@ const ROUTES = {
   // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
   // and the rest of the app shouldn't have to wait for it.
   today: el => renderToday(el),
-  welcome: (el, arg) => renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
+  welcome: (el, arg) => renderWelcome(el, arg, { seedSample: async () => { if (!(await db.getDeck('sample'))) await seedSampleDeck(true); }, finish: markOnboarded }),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
   play: el => renderPlay(el),
   decks: (el, arg) => renderLibrary(el, arg === 'starters'),
@@ -752,6 +753,8 @@ async function route() {
   const [, name = 'today', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
+  // Once the start is done, #/welcome goes to Today (the guided review that follows it is still allowed).
+  if (name === 'welcome' && settings.onboarded && !/^review\//.test(arg || '')) { location.replace('#/today'); return; }
   // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
   if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
   currentRoute = name;

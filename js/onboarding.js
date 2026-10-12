@@ -46,7 +46,7 @@ export async function renderWelcome(el, arg, api) {
 // Leave the first-run start for good and go to the Today screen.
 async function leave(api, hash = '#/today') {
   await api.finish();
-  location.hash = hash;
+  location.replace(hash);      // replace, so Back doesn't return to the start
 }
 
 // The little "Step 2 of 3" bar at the top of each step.
@@ -175,6 +175,9 @@ async function renderGuide(el, deckId, api) {
   const inside = subtreeIds(decks, deckId);
   const studied = new Set(states.filter(s => s.state !== 0).map(s => s.cardId));
   const cards = allCards.filter(c => inside.has(c.deckId) && !isHidden(c) && !studied.has(c.id)).sort((a, b) => a.created - b.created).slice(0, GUIDE_CARDS);
+  // On a device that already has a sync account, the sample cards come from the account: answering them here
+  // would stamp them with "now" and could overwrite that progress when syncing.
+  if (deckId === 'sample' && (settings.syncAuth || settings.syncState)) { location.replace('#/today'); return; }
   if (!cards.length) { location.hash = '#/today'; return; }
   G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, srs: null, deckId };
   // The scheduler library comes from the internet the first time; if that fails the walk-through still works, it just can't save.
