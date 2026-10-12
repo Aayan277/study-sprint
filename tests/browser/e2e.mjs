@@ -50,19 +50,24 @@ ok((await page.locator('.deck').count()) === 1, 'sample deck does not come back 
 for (const t of ['review', 'play', 'stats']) { await page.click(`.tab[data-tab=${t}]`); await page.waitForSelector('#screen h1'); await noHScroll(t); }
 // settings + theme
 await page.click('[data-tab=settings]'); await page.waitForSelector('.skin'); await noHScroll('settings');
-await page.click('.skin[data-skin=blossom]'); await page.click('input[name=mode][value=dark]', { force: true });
-ok(await page.evaluate(() => document.documentElement.dataset.skin === 'blossom' && document.documentElement.dataset.theme === 'dark'), 'theme applied');
+await page.click('.skin[data-skin=rose]'); await page.click('input[name=mode][value=dark]', { force: true });
+ok(await page.evaluate(() => document.documentElement.dataset.skin === 'rose' && document.documentElement.dataset.theme === 'dark'), 'theme applied');
 await page.screenshot({ path: SP + '/5-settings.png', fullPage: true });
 await page.reload(); await page.waitForSelector('.skin');
-ok(await page.evaluate(() => document.documentElement.dataset.skin === 'blossom'), 'theme persists');
-ok((await page.locator('meta[name=theme-color]').getAttribute('content')) === '#1A1216', 'browser bar color follows theme');
-await page.click('[data-tab=decks]'); await page.waitForSelector('.deck'); await page.screenshot({ path: SP + '/6-library-sakura-dark.png' });
+ok(await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'theme persists');
+ok((await page.locator('meta[name=theme-color]').getAttribute('content')) === '#0C080A', 'browser bar color follows theme');
+await page.click('[data-tab=decks]'); await page.waitForSelector('.deck'); await page.screenshot({ path: SP + '/6-library-rose-dark.png' });
 // reset
 await page.click('[data-tab=settings]'); await page.click('#resetBtn'); await page.click('#rsYes');
 await page.waitForSelector('.deck');
-ok((await page.locator('.deck').count()) === 1 && (await page.locator('.deck-name').first().innerText()).includes('sample') && await page.evaluate(() => document.documentElement.dataset.skin === 'blossom'), 'reset: data wiped, sample back, theme kept');
-// all 6 themes x light/dark: screenshot sanity
-for (const skin of ['ink','sage','cobalt','neon','onyx']) { await page.evaluate(async s => { const t = await import('./js/themes.js'); t.applyTheme({ skin: s, mode: 'light' }); }, skin); }
+ok((await page.locator('.deck').count()) === 1 && (await page.locator('.deck-name').first().innerText()).includes('sample') && await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'reset: data wiped, sample back, theme kept');
+// all 5 themes x light/dark: screenshot sanity
+for (const skin of ['violet','ocean','forest','ember','rose']) { await page.evaluate(async s => { const t = await import('./js/themes.js'); t.applyTheme({ skin: s, mode: 'light' }); }, skin); }
+// old theme names move to the new ones (the light/dark choice is kept), and OLED black works
+const migrated = await page.evaluate(async () => { const t = await import('./js/themes.js'); return ['sage', 'cobalt', 'blossom', 'neon', 'ink', 'onyx'].map(n => t.cleanTheme({ skin: n, mode: 'light' })); });
+ok(JSON.stringify(migrated.map(m => m.skin)) === '["forest","ocean","rose","violet","violet","violet"]' && migrated[0].mode === 'light', 'old theme names are migrated, light/dark kept');
+await page.evaluate(async () => { const t = await import('./js/themes.js'); t.applyTheme({ skin: 'violet', mode: 'dark', oled: true }); });
+ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toUpperCase() === '#000000'), 'OLED black gives a pure black background');
 // service worker + manifest
 const sw = await page.evaluate(async () => { const r = await navigator.serviceWorker.ready; return !!r.active; });
 ok(sw, 'service worker active');

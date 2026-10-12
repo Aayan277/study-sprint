@@ -84,7 +84,7 @@ if (await page.$('#startBtn')) {
   await page.click('#startBtn'); await page.waitForSelector('#flash');
   // make a due card for play to change
   await page.evaluate(async DAY => { const db = await import('./js/db.js'); const s = (await db.getAll('cardStates')); const one = s[0]; await db.saveReview({ ...one, due: Date.now() - DAY, state: 2 }, { cardId: one.cardId, timestamp: Date.now(), source: 'test' }); }, DAY);
-  await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=review]');
+  await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck'); await page.evaluate(() => { location.hash = '#/review'; });
   await page.waitForSelector('#startBtn, .empty, #flash');
   ok(!(await page.$('#flash')), 'review session starts fresh after schedules changed elsewhere');
 }

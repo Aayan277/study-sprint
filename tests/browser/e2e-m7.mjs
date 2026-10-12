@@ -33,7 +33,7 @@ const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#expo
 const file = SP + '/backup.json'; await dl.saveAs(file);
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 ok(/^study-sprint-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()), 'backup file name: ' + dl.suggestedFilename());
-ok(data.format === 'study-sprint-backup' && data.cards.length === before.cards && data.reviewLog.length === before.logs && data.cardStates.length === before.states && data.settings.theme.skin === 'sage', 'backup holds everything: ' + JSON.stringify(before));
+ok(data.format === 'study-sprint-backup' && data.cards.length === before.cards && data.reviewLog.length === before.logs && data.cardStates.length === before.states && data.settings.theme.skin === 'forest', 'backup holds everything: ' + JSON.stringify(before));
 await page.waitForFunction(() => document.querySelector('#screen').textContent.includes('Last backup'));
 ok(true, 'settings shows the last backup date');
 await page.screenshot({ path: SP + '/m7-settings.png', fullPage: true });
@@ -52,7 +52,7 @@ await page.screenshot({ path: SP + '/m7-restore.png' });
 await page.click('#rbYes'); await page.waitForSelector('.deck');
 const after = { decks: await count('decks'), cards: await count('cards'), states: await count('cardStates'), logs: await count('reviewLog') };
 ok(JSON.stringify(after) === JSON.stringify(before), 'restore brings everything back: ' + JSON.stringify(after));
-ok(await page.evaluate(() => document.documentElement.dataset.skin === 'sage' && document.documentElement.dataset.theme === 'dark'), 'restore brings the theme back');
+ok(await page.evaluate(() => document.documentElement.dataset.skin === 'forest' && document.documentElement.dataset.theme === 'dark'), 'restore brings the theme back');
 
 // Restoring something deleted since the backup: its old delete marker goes too (or syncing would delete it again)
 const deckId = await page.evaluate(async () => { const db = await import('./js/db.js'); const d = (await db.getDecks())[0]; await db.deleteDeck(d.id); return d.id; });

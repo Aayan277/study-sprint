@@ -67,7 +67,7 @@ await waitSynced(B);
 let b = await snapshot(B);
 ok(b.decks.join('|') === 'Biology|Chemistry|Intro to Psychology (sample)', 'B merged: both devices\' decks, one sample deck: ' + b.decks.join('|'));
 ok(Object.keys(b.cards).length === 16 && b.states['bio-0']?.stability === 2 && b.logs.length === 1, 'B got the cards, schedule and review history');
-ok(b.settings.newPerDay === 30 && b.settings.theme.skin === 'ink', 'B got newPerDay, kept its own theme');
+ok(b.settings.newPerDay === 30 && b.settings.theme.skin === 'violet', 'B got newPerDay, kept its own theme');
 ok(await B.inputValue('#npd') === '30' && (await B.textContent('#whereNote')).includes('synced to your account'), 'B\'s Settings screen shows the synced value and the synced note');
 let a = await snapshot(A);
 await syncNow(A); a = await snapshot(A);

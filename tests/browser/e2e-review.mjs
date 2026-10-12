@@ -68,7 +68,7 @@ st = await dbq(db => db.getAll('cardStates'));
 const easy = st.find(s => s.state === 2);
 ok(easy && easy.due - Date.now() > 3 * 86400000, 'Easy card scheduled days ahead');
 // leave the tab and come back: session resumes
-await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
+await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // the tab bar is hidden during a round on phones
 const dueText = await page.textContent('.deck-counts .due');
 ok(dueText.includes('1'), 'deck list shows the learning card as due today: ' + dueText);
 await page.click('.tab[data-tab=review]'); await page.waitForSelector('#flash');
@@ -116,7 +116,7 @@ const tl = logs.find(l => l.cardId === 'short1');
 ok(tl && tl.mode === 'typing' && tl.rating === 3, 'typed review logged as typing + Good');
 
 // settings: new cards per day and retention
-await page.click('#gearBtn'); await page.waitForSelector('#npd');
+await page.evaluate(() => { location.hash = '#/settings'; }); await page.waitForSelector('#npd');   // the header is hidden during a round on phones
 await page.click('#npdMinus'); ok((await page.inputValue('#npd')) === '15', 'new per day stepper');
 await page.$eval('#ret', r => { r.value = 85; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
 ok((await page.textContent('#retOut')) === '85%', 'retention slider label');
@@ -124,7 +124,7 @@ const s = await dbq(db => db.getSettings());
 ok(s.newPerDay === 15 && s.targetRetention === 0.85, 'study settings saved');
 await page.screenshot({ path: SP + '/r-settings.png', fullPage: true }); await noHScroll('settings');
 // deck page review button
-await page.click('#gearBtn'); await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
+await page.click('#gearBtn'); await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // gear returns to the round, where the tab bar is hidden
 await page.click('.deck-open'); await page.waitForSelector('a[href^="#/review/"]');
 await page.click('a[href^="#/review/"]'); await page.waitForSelector('#flash, #startBtn');
 ok(true, 'deck Review button opens review');
