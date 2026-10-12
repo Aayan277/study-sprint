@@ -7,6 +7,7 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
 import { renderLibrary, renderDeck } from './decks.js';
 import { renderToday } from './today.js';
+import { renderWelcome } from './onboarding.js';
 import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
@@ -623,6 +624,7 @@ async function wipeThisDevice() {
   await db.resetAll();
   await db.setSetting('theme', theme);
   settings = { ...db.DEFAULT_SETTINGS, theme };
+  await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
 
@@ -666,9 +668,34 @@ addEventListener('sync', async e => {
 });
 
 // ---------- first run ----------
-// Add the sample deck once. A saved flag stops it coming back after you delete it.
-async function seedSampleDeck() {
-  if (settings.seeded) return;
+// A brand-new install (no decks, cards or reviews, and never opened before) starts with the short
+// first-run start in js/onboarding.js instead of a filled-in sample. Anyone with data never sees it.
+// To skip it (the browser tests do): set localStorage 'study-sprint-skip-onboarding' to '1', or open the app
+// with ?skipOnboarding in the address. Skipping this way adds the sample deck, like the app always used to.
+function skipFlag() {
+  try { if (localStorage.getItem('study-sprint-skip-onboarding') === '1') return true; } catch { /* no storage: fine */ }
+  return /[?&]skipOnboarding\b/.test(location.search);
+}
+
+// Settle what a start-up looks like. Returns true if the first-run start should show.
+async function checkFirstRun() {
+  if (settings.onboarded) return false;
+  // Upgrades: anyone who opened the app before has `seeded` set (the old first-run flag) or has data.
+  const hasData = settings.seeded || (await db.getDecks()).length || (await db.getAll('cards')).length || (await db.getAll('reviewLog')).length;
+  if (hasData) { await markOnboarded(); return false; }
+  if (skipFlag()) { await seedSampleDeck(); await markOnboarded(); return false; }
+  return true;
+}
+async function markOnboarded() {
+  if (settings.onboarded) return;
+  settings.onboarded = true;
+  await db.setSetting('onboarded', true);
+}
+
+// Add the sample deck once. A saved flag stops it coming back after you delete it
+// (`again`: the person asked for it, e.g. "Try the sample deck" in the first-run start).
+async function seedSampleDeck(again = false) {
+  if (settings.seeded && !again) return;
   // Fixed ids (not random), so the sample deck added on two devices is the same deck once they sync.
   const deckId = 'sample';
   const now = Date.now();
@@ -687,9 +714,10 @@ const ROUTES = {
   // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
   // and the rest of the app shouldn't have to wait for it.
   today: el => renderToday(el),
+  welcome: (el, arg) => renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
   play: el => renderPlay(el),
-  decks: el => renderLibrary(el),
+  decks: (el, arg) => renderLibrary(el, arg === 'starters'),
   deck: (el, id) => renderDeck(el, id),
   browse: el => renderBrowseAll(el),
   import: (el, deckId) => renderImport(el, deckId),
@@ -706,8 +734,11 @@ async function route() {
   const [, name = 'today', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
+  // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
+  if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
   currentRoute = name;
   lastHash = location.hash;
+  document.body.classList.toggle('welcome', name === 'welcome');       // the first-run start hides the tabs
   // The gear doubles as a close button while Settings is open.
   $('gearBtn').setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings');
   const render = ROUTES[name] || ROUTES.today;
@@ -798,12 +829,14 @@ async function start() {
     return;
   }
   settings.theme = applyTheme(settings.theme);
-  await seedSampleDeck();
+  const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
   sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');
+  // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
+  if (firstRun && /^#\/today\/?$/.test(location.hash)) history.replaceState(null, '', '#/welcome');
   addEventListener('hashchange', route);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();

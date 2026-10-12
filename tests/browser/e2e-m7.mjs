@@ -12,6 +12,8 @@ const count = name => page.evaluate(async n => (await (await import('./js/db.js'
 
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // Starter decks
+ok(!(await page.locator('.starter').first().isVisible()), 'starter decks are tucked away by default');
+await page.click('#startersBox > summary');
 ok((await page.locator('.starter').count()) === 2, 'two starter decks offered');
 await page.screenshot({ path: SP + '/m7-starters.png', fullPage: true });
 await page.click('[data-starter="jlpt-n5"]');

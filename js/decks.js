@@ -98,7 +98,8 @@ function masteryBar(s) {
 }
 
 // ---------- the deck list ----------
-export async function renderLibrary(el) {
+// showStarters: open the Starter decks section (the Import screen's "Ready-made decks" link does this).
+export async function renderLibrary(el, showStarters = false) {
   const [list, today] = await Promise.all([loadDecks(), loadAll()]);
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
@@ -144,15 +145,15 @@ export async function renderLibrary(el) {
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
     ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
     ${starters.length ? `
-    <section class="starters" aria-labelledby="startTitle">
-      <h2 id="startTitle">Starter decks</h2>
+    <details class="starters" id="startersBox" ${showStarters ? 'open' : ''}>
+      <summary>Starter decks</summary>
       <p class="note">Optional ready-made decks. Add one if it's useful to you.</p>
       ${starters.map(s => `
         <div class="starter">
           <div><b>${esc(s.name)}</b><span class="muted small"> · ${s.count} kanji with meanings and readings</span></div>
           <button class="btn ghost small" type="button" data-starter="${esc(s.key)}">Add</button>
         </div>`).join('')}
-    </section>` : ''}
+    </details>` : ''}
   `;
 
   const create = () => openDeckEditor(null, () => renderLibrary(el));
@@ -164,6 +165,7 @@ export async function renderLibrary(el) {
   el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
     openDeckEditor(list.find(x => x.deck.id === b.dataset.edit).deck, () => renderLibrary(el));
   }));
+  if (showStarters) $('startersBox')?.scrollIntoView({ block: 'center' });
   el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
     const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
     b.disabled = true;
@@ -175,7 +177,7 @@ export async function renderLibrary(el) {
       starterCards(s.level).map((c, i) => ({ id: `${deckId}-${i}`, deckId, ...c, created: now + i }))
     );
     toast(`Added ${s.name}`);
-    renderLibrary(el);
+    renderLibrary(el, true);          // the section stays open, in case the other one is wanted too
   }));
 }
 

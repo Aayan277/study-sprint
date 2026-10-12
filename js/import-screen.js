@@ -7,6 +7,7 @@ import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from '
 import { deckChoices, subtreeIds } from './deck-tree.js';
 import { schedulerOptions } from './sched-settings.js';
 import { DECK_COLORS } from './decks.js';
+import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
@@ -17,7 +18,9 @@ const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make
 // Everything the screen is working with.
 let S = null;
 
-export async function renderImport(el, deckId) {
+// arg: a deck id, optionally followed by "/file" to open on the File tab (the first-run start does this).
+export async function renderImport(el, arg) {
+  const [deckId, firstTab] = String(arg || '').split('/');
   const decks = (await db.getDecks()).sort((a, b) => a.created - b.created);
   S = {
     result: null,          // what import.js detected
@@ -77,6 +80,7 @@ export async function renderImport(el, deckId) {
     </section>
 
     <p class="err" id="loadErr" role="alert" hidden></p>
+    <p class="note" id="readyMade"><a href="#/decks/starters">Ready-made decks</a> (JLPT kanji) are in Decks → Starter decks.</p>
 
     <section id="preview" class="section" hidden aria-labelledby="pvTitle">
       <h2 id="pvTitle" style="margin-top:22px">Preview</h2>
@@ -110,6 +114,7 @@ export async function renderImport(el, deckId) {
   wireFile();
   wireSheet();
   wirePreview();
+  if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
 }
 
@@ -517,7 +522,10 @@ async function save() {
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
     toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
     // replace() so the back gesture from the deck doesn't land on this finished import.
-    location.replace(`#/deck/${deckId}`);
+    // Coming from the first-run start, the first review of the new cards is next.
+    let first = null;
+    try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
+    location.replace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);
     toast("Couldn't add the cards. Nothing was saved, so you can try again.");

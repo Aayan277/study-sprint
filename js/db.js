@@ -37,7 +37,8 @@ export const DEFAULT_SETTINGS = {
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
-  seeded: false      // true once the sample deck has been added on first open
+  seeded: false,     // true once the sample deck has been added on first open
+  onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped; this device only
 };
 
 let dbPromise = null;

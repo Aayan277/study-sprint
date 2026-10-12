@@ -390,8 +390,10 @@ body.focus .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
 .empty .btn{margin-top:14px}
 .browse-all{margin:var(--s-3) 0 0}
 .browse-all a{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);text-decoration:none}
-.starters{margin-top:var(--s-8)}
-.starters h2{margin-bottom:var(--s-1)}
+.starters{margin-top:var(--s-6)}
+.starters > summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-2);font-size:var(--fs-sm);font-weight:500;min-height:40px;padding:0 4px;border-radius:var(--r-sm)}
+.starters > summary:hover{color:var(--text)}
+.starters[open] > summary{margin-bottom:var(--s-1)}
 .starters .note{margin:0 0 var(--s-3)}
 .starter{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);background:var(--surface-1);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);box-shadow:var(--e-1);border-radius:var(--r-md);margin-bottom:var(--s-2)}
 .starter > div{min-width:0}
@@ -1018,3 +1020,45 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 /* A card's panel next to the card list, from 1200px wide */
 dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:auto}
 dialog.sheet.side .sheet-in{padding:24px 22px 32px}
+
+/* ---------- 16. First-run start (js/onboarding.js) ---------- */
+/* The tabs and header get out of the way (the screen has its own Skip and Back) */
+body.welcome .top,body.welcome .tabs{display:none}
+body.welcome main{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
+body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.welcome{display:flex;flex-direction:column;gap:var(--s-4);max-width:520px;margin:0 auto}
+.wl-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);min-height:44px}
+.wl-top .brand{margin:0;font-size:var(--fs-md)}
+.wl-top .back{margin:0;min-height:40px}
+.wl-count{font-size:var(--fs-sm);color:var(--text-2)}
+.wl-bar{display:flex;gap:6px}
+.wl-bar i{flex:1;height:4px;border-radius:var(--r-pill);background:var(--surface-3)}
+.wl-bar i.on{background:var(--accent);box-shadow:0 0 10px var(--glow-soft)}
+.welcome h1{font-size:var(--fs-xl);line-height:1.15;letter-spacing:-.03em;margin:var(--s-2) 0 0;outline:none}
+.welcome .lede{max-width:none}
+.welcome form{display:grid;gap:var(--s-4);margin-top:var(--s-2)}
+.wl-points{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-3)}
+.wl-points li{display:flex;gap:var(--s-3);align-items:flex-start;padding:var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);color:var(--text-2);font-size:var(--fs-base);line-height:1.4}
+.wl-points li .ico{width:20px;height:20px;margin-top:1px;color:var(--accent-text)}
+.wl-points b{color:var(--text)}
+.wl-foot{margin:0;text-align:center;font-size:var(--fs-sm);color:var(--text-2)}
+.wl-foot a{color:var(--accent-text)}
+.wl-opts{display:grid;gap:var(--s-3)}
+.wl-opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--s-3);align-items:center;text-align:left;padding:var(--s-4);background:var(--surface-1);color:var(--text);border:1px solid var(--line-strong);border-radius:var(--r-md);cursor:pointer;box-shadow:var(--e-1)}
+.wl-opt:hover:not(:disabled){border-color:var(--accent-line);background:var(--surface-2)}
+.wl-opt:disabled{opacity:.6}
+.wl-opt .ico{grid-column:2;grid-row:1 / span 2;color:var(--text-2)}
+.wl-opt-t{font-weight:600;font-size:var(--fs-md)}
+.wl-opt-d{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4}
+/* The hint above the card in the guided review */
+.coach{margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border:1px solid var(--accent-line);color:var(--text);font-size:var(--fs-base);line-height:1.4}
+.coach b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 var(--fs-xs) var(--f-num)}
+.guide .flash{min-height:min(50dvh,420px)}
+.wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line);box-shadow:0 0 28px -6px var(--glow)}
+.wl-done .ico{width:30px;height:30px}
+@media (min-width:1024px){
+  body.welcome main{margin-left:0;padding-top:56px}
+  .welcome h1{font-size:var(--fs-2xl)}
+  .guide .flash{min-height:380px}
+}
+.btn.cta{min-height:56px;font-size:var(--fs-md)}
