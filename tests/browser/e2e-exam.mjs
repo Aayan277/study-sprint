@@ -8,7 +8,8 @@ page.on('pageerror', e => errors.push(e.stack));
 await page.goto('http://localhost:8123/'); await page.waitForSelector('.deck');
 const DAY = 86400000;
 const pad = n => String(n).padStart(2, '0');
-const inDays = n => { const d = new Date(Date.now() + n * DAY); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+// Counted from the study day (which starts at 4am, like the app), so the test also works between midnight and 4am.
+const inDays = n => { const d = new Date(Date.now() - 4 * 3600000 + n * DAY); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 // half the sample deck studied: some due far after the exam, one well known, the rest seen recently
 await page.evaluate(async () => {
   const db = await import('./js/db.js'); const D = 86400000, now = Date.now();
