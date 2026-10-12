@@ -134,6 +134,12 @@ npx http-server -c-1
 
 Then open the address it prints.
 
+## Releasing a change
+
+Phones keep the old copy of the app files until `CACHE` in `sw.js` changes. So **bump `CACHE` (for example `v37` to `v38`)
+on every release that changes any app file**, then run `node tests/update-sw-hash.mjs` to save the files' new fingerprint
+in `sw.js`. `npm test` fails with a reminder until you do both.
+
 ## Running the tests
 
 ```
