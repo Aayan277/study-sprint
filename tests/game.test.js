@@ -50,6 +50,16 @@ test('distractors: no duplicates, never the right answer, right count', () => {
   assert.ok(hard.slice(0, 2).includes('Meiosis') && hard.slice(0, 2).includes('Osmosis'), 'Hard puts lookalikes first: ' + hard);
 });
 
+test('distractors from a big library: sampled, still the right count with no duplicates', () => {
+  const pool = Array.from({ length: 5000 }, (_, i) => ({ ...card(`Term ${i}`, `Definition number ${i} of the course`), deckId: i % 2 ? 'a' : 'b' }));
+  for (const hard of [false, true]) {
+    const got = pickDistractors(pool[10], pool, 'back', { hard, rnd: seeded(9) });
+    assert.equal(got.length, hard ? 5 : 3);
+    assert.equal(new Set(got).size, got.length);
+    assert.ok(!got.includes(pool[10].front));
+  }
+});
+
 test('distractors prefer similar length and shared words on Normal', () => {
   const item = card('Supply', 'Amount of a good sellers offer at a price');
   const pool = [item,

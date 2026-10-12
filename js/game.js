@@ -74,6 +74,23 @@ export function similarity(a, b) {
   return (2 * shared) / (pa.length + pb.length);
 }
 
+// Scoring every card in a big library for every question is slow, so a big pool is sampled:
+// half from the card's own deck (the likeliest look-alikes), the rest from anywhere.
+const MAX_CANDIDATES = 300;
+function takeRandom(list, n, rnd) {
+  const copy = list.slice();
+  for (let i = 0; i < Math.min(n, copy.length); i++) {      // a partial shuffle: only the first n places
+    const j = i + Math.floor(rnd() * (copy.length - i));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
+function candidatesFor(card, pool, rnd) {
+  if (pool.length <= MAX_CANDIDATES) return shuffle(pool.slice(), rnd);
+  const sameDeck = takeRandom(pool.filter(o => o.deckId === card.deckId), MAX_CANDIDATES / 2, rnd);
+  return [...sameDeck, ...takeRandom(pool, MAX_CANDIDATES - sameDeck.length, rnd)];   // repeats are skipped below
+}
+
 // Pick wrong options for a card from the other cards' answers.
 //   Normal: prefer the same deck, a similar length (within ±50%), and shared tags or words, plus some randomness.
 //   Hard:   rank by how alike the text looks, so the traps are plausible.
@@ -83,7 +100,7 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
   const words = contentWords(answer);
   const tags = new Set(card.tags || []);
   const scored = [];
-  for (const other of shuffle(pool.slice(), rnd)) {
+  for (const other of candidatesFor(card, pool, rnd)) {
     if (other.id === card.id) continue;
     const label = questionFor(other, qtype).answer;
     const key = dupKey(label);
