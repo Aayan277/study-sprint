@@ -795,6 +795,12 @@ async function route() {
     if (!el.isConnected) return;          // a screen you already left: ignore
     console.error(err);
     setFocusMode(false);                  // a round that failed to draw must not leave the header and tabs hidden
+    // A screen's file that couldn't be loaded (offline, or a half-finished update) gets a plain message and a way out.
+    if (/dynamically imported module|importing a module script/i.test(err.message)) {
+      el.innerHTML = `<div class="empty"><b>Couldn't load this screen.</b><br>Check your connection and reload.<br><button class="btn" type="button" data-reload>Reload</button></div>`;
+      el.querySelector('[data-reload]').onclick = () => location.reload();
+      return;
+    }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
   if (el.isConnected) scrollTo(0, 0);
