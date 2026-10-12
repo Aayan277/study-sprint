@@ -15,7 +15,7 @@ import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
-import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
+import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
@@ -298,7 +298,7 @@ async function answer(el, rating) {
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
     // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
     let cardBefore = null;
-    if (isNewLeech(prev?.lapses || 0, next.lapses, R.leech.threshold)) {
+    if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
       await db.saveCards([leech]);

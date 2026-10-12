@@ -18,7 +18,7 @@ import { loadByDay } from './balance.js';
 import { examOptions, examInfo, nearestExamDeck, examSchedule } from './exam.js';
 import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
-import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
+import { isHidden, isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
@@ -439,7 +439,9 @@ async function record(round, entry) {
   const newRoom = newRoomFor(data.newLeft, entry.card.deckId);
   const cap = data.examCaps.get(id);
   const dueState = prev && cap !== undefined ? { ...prev, due: Math.min(prev.due, cap) } : prev;
-  let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom });
+  // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
+  let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
+    timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = {
     cardId: id, timestamp: now, source: 'play',
@@ -447,7 +449,7 @@ async function record(round, entry) {
     correct: entry.ok, ms: entry.ms, rating,
     state: prev ? prev.state : 0,      // the card's state before this answer
     applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit' or 'already'
+    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
   };
   if (applies(decision)) {
     let next = null;
@@ -471,7 +473,7 @@ async function record(round, entry) {
       await db.saveReview(next, log);
       data.statesById.set(id, next);
       data.playedToday.add(id);
-      await checkLeech(round, entry.card, prev, next);
+      await checkLeech(round, entry.card, prev, next, log);
     }
   } else {
     await db.addLog(log);
@@ -481,8 +483,10 @@ async function record(round, entry) {
 }
 
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
-async function checkLeech(round, card, prev, next) {
-  if (!isNewLeech(prev?.lapses || 0, next.lapses, data.settings.leechThreshold)) return;
+async function checkLeech(round, card, prev, next, log) {
+  // A miss on a card that wasn't due still brings it back, but doesn't count toward the leech limit.
+  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return;
+  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
   const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
   await db.saveCards([leech]);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));

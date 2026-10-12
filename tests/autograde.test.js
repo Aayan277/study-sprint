@@ -96,3 +96,21 @@ test('exam deck: studied cards follow the old rules, and a new card already chan
   assert.equal(scheduleDecision({ state: overdue, rating: GOOD, alreadyToday: true, now: NOW, examDeck: true }), 'already');
   assert.equal(scheduleDecision({ state: null, rating: GOOD, alreadyToday: true, now: NOW, examDeck: true }), 'already');
 });
+
+// ---- Survival's short timer ----
+test('Survival: running out of time with under 3 seconds allowed is only logged', () => {
+  const overdue = { state: 2, due: NOW - DAY }, future = { state: 2, due: NOW + 5 * DAY };
+  const miss = { rating: AGAIN, now: NOW, timedOut: true, fmt: 'survival', limitMs: 2000 };
+  assert.equal(scheduleDecision({ ...miss, state: overdue }), 'short-time');
+  assert.equal(scheduleDecision({ ...miss, state: future }), 'short-time');
+  assert.equal(scheduleDecision({ ...miss, state: null, examDeck: true }), 'short-time');
+  assert.equal(applies('short-time'), false);
+});
+
+test('a timeout with 3 seconds or more, a wrong answer, or another format still counts', () => {
+  const future = { state: 2, due: NOW + 5 * DAY }, overdue = { state: 2, due: NOW - DAY };
+  assert.equal(scheduleDecision({ state: future, rating: AGAIN, now: NOW, timedOut: true, fmt: 'survival', limitMs: 3000 }), 'again');
+  assert.equal(scheduleDecision({ state: overdue, rating: AGAIN, now: NOW, timedOut: true, fmt: 'survival', limitMs: 5000 }), 'due');
+  assert.equal(scheduleDecision({ state: future, rating: AGAIN, now: NOW, timedOut: false, fmt: 'survival', limitMs: 2000 }), 'again');   // a wrong tap
+  assert.equal(scheduleDecision({ state: future, rating: AGAIN, now: NOW, timedOut: true, fmt: 'classic', limitMs: 2000 }), 'again');
+});

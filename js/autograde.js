@@ -11,7 +11,11 @@
 //
 // Rules so playing doesn't break the schedule:
 //   - A card that is due (today or overdue) gets the rating applied normally.
-//   - A card that isn't due yet only changes if the answer was wrong (Again).
+//   - A card that isn't due yet only changes if the answer was wrong (Again): that brings it back. But the miss
+//     doesn't count toward the leech limit (see leechLapses in browse-logic.js): a wrong tap in a quick game
+//     says little about whether you've forgotten the card.
+//   - A Survival question that ran out of time with less than 3 seconds on the clock is only logged. Survival's
+//     timer shrinks to 2 seconds, which is too short to say much about your memory.
 //   - At most one schedule change per card per day from Play.
 //   - New cards (never studied) aren't scheduled from Play, so Play can't sneak extra new cards past your
 //     daily limit... except in a deck with an exam coming up (its own, or the deck it's inside). There an
@@ -50,9 +54,13 @@ export function autoRating({ ok, ms, limitMs, typing }) {
 //   'new'      never studied, and not in a deck with an exam: log only
 //   'new-limit' new card in a deck with an exam, but today's new-card limit is used up: log only
 //   'already'  Play already changed this card today: log only
+//   'short-time'  Survival ran out of time with under 3 seconds allowed: log only
 //   examDeck   does the card's deck (or one it's inside) have an exam coming up?
 //   newRoom    is there room left in today's new-card limits?
-export function scheduleDecision({ state, rating, alreadyToday, now = Date.now(), examDeck = false, newRoom = true }) {
+//   timedOut   did the question run out of time? limitMs, fmt: the time allowed (ms) and the format ('survival', …)
+export const SHORT_TIMER_MS = 3000;
+export function scheduleDecision({ state, rating, alreadyToday, now = Date.now(), examDeck = false, newRoom = true, timedOut = false, limitMs = Infinity, fmt = '' }) {
+  if (timedOut && fmt === 'survival' && limitMs < SHORT_TIMER_MS) return 'short-time';
   if (!state || state.state === NEW) {
     if (!examDeck) return 'new';
     if (alreadyToday) return 'already';

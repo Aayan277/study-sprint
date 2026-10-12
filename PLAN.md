@@ -127,14 +127,15 @@ Material:
 
 | Result | Typing | Multiple choice |
 | --- | --- | --- |
-| Wrong or timed out | Again | Again |
+| Wrong or timed out | Again | Again (a Survival timeout with under 3 seconds allowed is only logged) |
 | Correct, slow (more than 70% of the time used) | Hard | Hard |
 | Correct, normal | Good | Good |
 | Correct, fast (less than 30% of the time used) | Easy | Good (never Easy, since recognizing is easier than recalling) |
 
 **Rules so playing doesn't break the schedule:**
-- If a card is **due or overdue**, apply the rating to FSRS normally.
-- If a card is **not due yet**, only an **Again** changes its schedule. Correct answers get logged for stats but don't push the card further out.
+- If a card is **due or overdue** (including a card the exam's final pass has planned for today), apply the rating to FSRS normally.
+- If a card is **not due yet**, only an **Again** changes its schedule: it brings the card back. Correct answers get logged for stats but don't push the card further out. Such a miss is a lapse for FSRS (the schedule and "forgotten N times" stay right) but **does not count toward the leech limit**: only Review answers, Play answers on due cards and imported history do (the review log says which, `reason: 'again'`). Wrong taps in a quick game say little about whether you forgot the card.
+- A **Survival timeout while under 3 seconds were allowed** (the timer shrinks to a 2s floor) is only logged, never graded.
 - Apply at most one schedule update per card per day from Play.
 - **New cards** (never reviewed) are left for Review, with one exception: in a deck whose **exam date** is coming up (its own, or the deck it's inside), a Play answer counts as the card's **first review**: correct uses the table above, wrong is Again. These respect the new-cards-per-day limits (overall, the deck's own, and parent decks' limits). Only new cards really started today count against them, so Play answers that were just logged don't use them up. Over the limit, the card is only logged and starts in Review. The results screen says how many new cards were started and why.
 
