@@ -230,7 +230,8 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
     ...(result.tags ? { tags: result.tags[i] } : {}),
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
     ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),
-    ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {})
+    ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {}),
+    ...(result.occluded?.[i] ? { occluded: true } : {})        // image-occlusion notes (see anki.js)
   }));
 }
 
@@ -245,13 +246,14 @@ export function dupKey(s) {
 }
 
 // For each card: 'deck' if the deck already has that front, 'import' if it appeared earlier in
-// this same import, or null if it's new.
+// this same import, or null if it's new. Image-occlusion cards are left out: without a heading they all
+// have the front "Diagram", and what tells them apart is the picture.
 export function findDuplicates(cards, existingFronts = []) {
   const inDeck = new Set(existingFronts.map(dupKey));
   const seen = new Set();
   return cards.map(c => {
     const k = dupKey(c.front);
-    if (!k) return null;
+    if (!k || c.occluded) return null;
     if (inDeck.has(k)) return 'deck';
     if (seen.has(k)) return 'import';
     seen.add(k);

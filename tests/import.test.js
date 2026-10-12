@@ -221,6 +221,11 @@ test('duplicates: inside the import and already in the deck', () => {
   assert.deepEqual(findDuplicates(list, ['OSMOSIS']), [null, 'import', null, 'deck']);
   assert.equal(dupKey('  Café  Au-Lait '), 'cafe au lait');
 });
+test('duplicates: image-occlusion cards without a heading are not flagged for sharing the front "Diagram"', () => {
+  const result = { rows: [['Diagram', ''], ['Diagram', ''], ['Heart', '']], pictures: [{ front: null, back: 'a.png' }, { front: null, back: 'b.png' }, { front: null, back: 'c.png' }], occluded: [true, true, true] };
+  assert.deepEqual(findDuplicates(buildCards(result), ['Diagram']), [null, null, null]);
+  assert.deepEqual(findDuplicates(buildCards({ ...result, occluded: [false, false, false] })), [null, 'import', null]);   // plain cards still are
+});
 
 // ---------- Google Sheets links ----------
 test('Google Sheets: normal and published links become CSV links', () => {
