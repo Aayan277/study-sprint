@@ -95,8 +95,8 @@ ok(await p.$eval('.rate.r1 span', s => s.textContent) === '3m' || console.log(aw
 await p.click('#endBtn').catch(() => {});
 
 // stats and play include subdecks
-await go('#/stats', '#sDeck');
-await p.selectOption('#sDeck', 'sample'); await p.waitForTimeout(200);
+await go('#/stats', '#sDeckBtn');
+await p.click('#sDeckBtn'); await p.click('.pick-row[data-id="sample"]'); await p.waitForTimeout(200);
 ok((await p.textContent('#mTitle + span, .mhead .small')).includes(`${total}`) || (await p.locator('.mtile').count()) === total, 'stats for the parent cover its subdecks');
 await go('#/play', '#pDeck');
 const pOpts = await p.$$eval('#pDeck option', o => o.map(x => x.textContent));

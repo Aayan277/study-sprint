@@ -250,3 +250,16 @@ export function nearestExamDeck(decks, cards, now = Date.now()) {
   }
   return best?.id ?? null;
 }
+
+// How ready a set of cards is: the share you are predicted to remember (READY_R or better) at a given time (the exam
+// day, or now), if you did no more reviews before then. A card never studied counts as not ready.
+// `when` is a time in ms. Returns { ready, total, share } (share 0 to 1).
+export const READY_R = 0.9;
+export function readiness(cards, statesById, when) {
+  let ready = 0;
+  for (const c of cards) {
+    const st = statesById.get(c.id);
+    if (st && st.state !== 0 && recallAt(st, when) >= READY_R) ready++;
+  }
+  return { ready, total: cards.length, share: cards.length ? ready / cards.length : 0 };
+}

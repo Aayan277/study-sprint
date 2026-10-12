@@ -7,6 +7,8 @@ const errors = [];
 page.on('pageerror', e => errors.push('pageerror ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+// the deck picker (a sheet with a searchable tree): '' is All decks
+const pickDeck = async id => { await page.click('#sDeckBtn'); await page.click(`.pick-row[data-id="${id}"]`); };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
@@ -83,10 +85,10 @@ await page.locator('.mtile').nth(2).click(); await page.waitForSelector('#mDetai
 ok((await page.textContent('#mDetail')).includes('Negative reinforcement') && (await page.locator('#mDetail .hd').count()) > 0, 'tapping a square shows the card and its last answers');
 await page.locator('.mdeck').first().scrollIntoViewIfNeeded(); await page.screenshot({ path: SP + '/s-mastery.png' });
 // deck filter
-await page.selectOption('#sDeck', 'chem'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 5);
+await pickDeck('chem'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 5);
 ok((await page.textContent('.pgrid .card:nth-child(2)')).includes('–'), 'filter: Chemistry has no reviews yet');
 ok((await page.locator('.mdeck h3').count()) === 0, 'filter: single deck has no deck heading');
-await page.selectOption('#sDeck', 'all'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 17);
+await pickDeck(''); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 17);
 // a huge deck: only the first squares are drawn, "Show more" adds the rest, and a pressed square stays one
 await page.evaluate(async () => {
   const db = await import('./js/db.js');

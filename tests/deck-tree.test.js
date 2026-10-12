@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, ankiPath, deckChoices } from '../js/deck-tree.js';
+import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, ankiPath, deckChoices, deckTreeRows } from '../js/deck-tree.js';
 
 const decks = [
   { id: 'psy', name: 'Psych 101', options: { targetRetention: 0.95 }, examDate: '2026-12-01', ttsLang: 'en-GB' },
@@ -52,4 +52,15 @@ test('subdecks inherit settings unless they set their own', () => {
 test('choices for deck lists use full paths in tree order', () => {
   assert.deepEqual(deckChoices(decks).slice(0, 3).map(c => c.label), ['Psych 101', 'Psych 101 › Unit 1', 'Psych 101 › Unit 1 › Lecture 3']);
   assert.deepEqual(deckChoices(decks, new Set(['u2', 'bio'])).map(c => c.id), ['u2', 'bio']);
+});
+
+test('a searchable deck tree keeps matches and the decks they sit inside', () => {
+  const plain = deckTreeRows(decks);
+  assert.deepEqual(plain.map(r => [r.id, r.depth, r.context]), [['psy', 0, false], ['u1', 1, false], ['l3', 2, false], ['u2', 1, false], ['bio', 0, false], ['lost', 0, false]]);
+  // "lecture" matches one deck: its parents stay, marked as context
+  assert.deepEqual(deckTreeRows(decks, ' LECTURE ').map(r => [r.id, r.context]), [['psy', true], ['u1', true], ['l3', false]]);
+  // a course code is searched too, and so is a name that matches several decks
+  assert.deepEqual(deckTreeRows([{ id: 'a', name: 'Cells', course: 'BIOL 201' }, { id: 'b', name: 'Law' }], 'biol').map(r => r.id), ['a']);
+  assert.deepEqual(deckTreeRows(decks, 'unit').map(r => [r.id, r.context]), [['psy', true], ['u1', false], ['u2', false]]);
+  assert.deepEqual(deckTreeRows(decks, 'zzz'), []);
 });

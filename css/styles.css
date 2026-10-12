@@ -883,6 +883,39 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 /* ---------- 13. Stats ---------- */
 .filter-row{display:flex;gap:10px;margin-bottom:var(--s-3)}
 .filter-row .select{width:auto;max-width:100%;border-radius:var(--r-sm);padding:7px 12px;font-size:var(--fs-sm);background-color:var(--surface-1)}
+/* One course in Stats (Settings → Appearance → Exam readiness in Stats): a deck picker button, then a readiness header */
+.stats-scope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:var(--s-3)}
+.pick-btn{display:inline-flex;align-items:center;gap:10px;min-height:44px;max-width:100%;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:600 var(--fs-md) var(--f-ui);cursor:pointer;box-shadow:var(--e-1)}
+.pick-btn:hover{background:var(--surface-2)}
+.pick-btn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-btn .ico{width:17px;height:17px;color:var(--text-2);flex:none}
+.pick-btn .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.pick-hint{font-size:var(--fs-xs);color:var(--text-2)}
+.ready-card{display:flex;gap:var(--s-4);align-items:center;margin-bottom:var(--s-2);background:var(--hero);padding:var(--s-4)}
+.ready-ring .ring-in b{font-size:1.45rem;font-weight:650;letter-spacing:-.03em}
+.ready-ring .ring-in small{font-size:.6em;font-weight:500;color:var(--text-2);margin:0 0 0 1px}
+.ready-ring{display:inline-grid;width:76px;height:76px}
+.ready-ring .ring-in{flex-direction:row;align-items:baseline}
+.ready-txt{flex:1;min-width:0}
+.ready-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ready-row h2{margin:0;font-size:var(--fs-md);font-weight:600}
+.ready-line{margin:4px 0 8px;font-size:var(--fs-sm);color:var(--text-2)}
+.ready-line b{color:var(--text);font-weight:600}
+.ready-note{margin:8px 0 0;font-size:var(--fs-xs);line-height:1.45}
+.ready-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ready-acts .ico{width:16px;height:16px}
+/* The deck picker sheet (js/deck-picker.js) */
+.pick-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+.pick-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px 0 calc(10px + var(--depth,0) * 18px);border:0;border-radius:var(--r-sm);background:none;color:var(--text);font:500 var(--fs-base) var(--f-ui);text-align:left;cursor:pointer}
+.pick-row:hover{background:var(--surface-2)}
+.pick-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pick-row[aria-selected="true"]{background:var(--surface-3);box-shadow:inset 2px 0 0 var(--accent)}
+.pick-row.ctx{color:var(--text-2)}
+.pick-row .dot{width:8px;height:8px;border-radius:50%;background:var(--deck);flex:none}
+.pick-name{flex:1;min-width:0;overflow-wrap:anywhere}
+.pick-name small{margin-left:6px;font:500 var(--fs-2xs) var(--f-num);color:var(--text-2)}
+.pick-n{flex:none;font-size:var(--fs-xs);color:var(--text-2)}
+.pick-all{font-weight:600}
 .mhead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2) var(--s-3);flex-wrap:wrap;margin-bottom:var(--s-3)}
 .mhead h2{margin:0;font-size:var(--fs-base);font-weight:600;letter-spacing:-.015em}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
@@ -1170,6 +1203,9 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   /* "More stats" is only a fold on phones: here its cards join the grid, in the order they always had */
   main[data-route="stats"] .stats-hardest{order:2}
   main[data-route="stats"] .stats-mastery{order:3;grid-column:1 / -1}
+  /* One course picked: the readiness header and Mastery sit side by side at the top */
+  main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
+  main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
   main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
   /* Review: a bigger card, centered while a session runs */
   main[data-route="review"] > .view > *{max-width:780px}

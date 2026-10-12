@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, FINAL_R, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS, newPerDayToFinish } from '../js/exam.js';
+import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, FINAL_R, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS, newPerDayToFinish, readiness, READY_R } from '../js/exam.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();     // Wed 7 Oct 2026, 3pm
@@ -267,4 +267,22 @@ test('easy days: after a rating, an easy day looks busier', () => {
   const card = examClamp(justRated(3, 20), NOW, opts, new Map());          // days 1..4 are Thu Fri Sat Sun; Sunday (the last) is easy
   assert.equal(new Date(card.due).getDate(), 10);                          // Saturday instead
   assert.equal(new Date(examClamp(justRated(3, 20), NOW, { maxDue: opts.maxDue }, new Map()).due).getDate(), 11);   // no easy day: the last day
+});
+
+test('readiness: the share of cards predicted at 90% or better at a time, with no reviews before it', () => {
+  const cards = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+  const st = (cardId, stability, daysAgo, state = 2) => ({ cardId, state, stability, lastReview: NOW - daysAgo * DAY, due: NOW + DAY, scheduledDays: 1 });
+  const states = new Map([
+    ['a', st('a', 100, 5)],            // strong: 99%+ now
+    ['b', st('b', 2, 5)],              // weak and 5 days since: well under 90%
+    ['c', st('c', 0, 0, 0)]            // never studied
+  ]);                                  // d has no state at all
+  const now = readiness(cards, states, NOW);
+  assert.deepEqual([now.ready, now.total, now.share], [1, 4, 0.25]);
+  // the strong card fades with time: look 400 days ahead
+  assert.equal(readiness(cards, states, NOW + 400 * DAY).ready, 0);
+  // exactly 90%: stability s at "days" gives R = 0.9 by definition of the FSRS stability (R after s days is 90%)
+  assert.equal(READY_R, 0.9);
+  assert.equal(readiness(cards, new Map([['a', st('a', 10, 10)]]), NOW).ready, 1);
+  assert.deepEqual(readiness([], new Map(), NOW), { ready: 0, total: 0, share: 0 });
 });

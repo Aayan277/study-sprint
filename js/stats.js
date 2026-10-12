@@ -5,12 +5,16 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
+import { examInfo, countdown, badgeClass, readiness } from './exam.js';
+import { openDeckPicker } from './deck-picker.js';
+import { startStudy } from './today.js';
+import { openExamSheet } from './exam-sheet.js';
 import { cardLevel } from './decks.js';
 import { streakFromDays, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText } from './format.js';
-import { esc, plural, icon, foldOpen, saveFold } from './ui.js';
+import { esc, plural, icon, foldOpen, saveFold, ring } from './ui.js';
 
 // Where an answer came from, for tooltips.
 const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
@@ -134,7 +138,7 @@ function masteryGridHTML(decks, inside, cards, statesById) {
 }
 
 export async function renderStats(el) {
-  const [decks, allCards, states, logs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs(deckFilter !== 'all')]);
+  const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs(deckFilter !== 'all'), db.getSettings()]);
   if (!el.isConnected) return;
   decks.sort((a, b) => a.created - b.created);
   if (deckFilter !== 'all' && !decks.some(d => d.id === deckFilter)) deckFilter = 'all';
@@ -166,22 +170,66 @@ export async function renderStats(el) {
   // "More stats" is folded on phones; computers show everything (styles.css), so this only matters under 1024px.
   const moreOpen = foldOpen('stats-more');
   const hourName = h => HOUR.format(new Date(2000, 0, 1, h));
-
-  el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
-    ${!allCards.length ? `<div class="empty"><b>No cards yet.</b><br>Add a deck and study it to see your stats here.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
+  // Settings → Appearance → "Exam readiness in Stats" (on by default, this device only). On: a searchable deck picker, and
+  // when one course is picked, a readiness header with Mastery right below it. Off: the plain deck list and no header.
+  const scoped = settings.statsReadiness !== false;
+  const course = scoped && deckFilter !== 'all' ? decks.find(d => d.id === deckFilter) : null;
+  const masteryHTML = `
+    <section class="card section stats-mastery${course ? ' up' : ''}" aria-labelledby="mTitle">
+      <div class="mhead"><h2 id="mTitle">Mastery</h2><span class="muted small">${counts.mature} of ${plural(cards.length, 'card')} mature</span></div>
+      <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
+      <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
+      <div class="mdetail" id="mDetail" aria-live="polite"></div>
+      <div id="mGrid">${masteryGridHTML(decks, inside, cards, statesById)}</div>
+      <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
+    </section>`;
+  // The header for one course: how many of its cards you would still remember (90% or better) on exam day, or today
+  // when there is no exam, if you stopped reviewing now.
+  const exam = course ? examInfo(effectiveDeck(decks, course.id)) : null;
+  const readyHTML = () => {
+    const r = readiness(cards, statesById, exam ? exam.start : now);
+    const pct = Math.round(r.share * 100);
+    const seen = cards.length - counts.new;
+    const share = k => `${(counts[k] / Math.max(1, cards.length) * 100).toFixed(2)}%`;
+    return `
+    <section class="card ready-card" aria-labelledby="readyTitle">
+      ${ring(r.share, 76, 7, `<b>${pct}<small>%</small></b>`, 'ready-ring')}
+      <div class="ready-txt">
+        <div class="ready-row"><h2 id="readyTitle">${exam ? 'Exam readiness' : 'Readiness today'}</h2>${exam ? `<span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>` : ''}</div>
+        <p class="ready-line"><b>${seen}</b>/${cards.length} seen · <b>${counts.mature}</b> mature</p>
+        <div class="mbar" aria-hidden="true"><span class="lv-mature" style="width:${share('mature')}"></span><span class="lv-young" style="width:${share('young')}"></span><span class="lv-learning" style="width:${share('learning')}"></span></div>
+        <p class="note ready-note">${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better). Add an exam date to see it for exam day.'}</p>
+        <div class="ready-acts">
+          ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
+          <a class="btn ghost small" href="#/deck/${esc(course.id)}">Open deck</a>
+        </div>
+      </div>
+    </section>`;
+  };
+  const scopeHTML = scoped ? `
+    <div class="stats-scope">
+      <button type="button" class="pick-btn" id="sDeckBtn" aria-haspopup="dialog" aria-label="Show stats for: ${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}. Change deck">
+        ${course ? `<i class="dot" style="background:${esc(course.color)}"></i>` : ''}<span>${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}</span>${icon('down')}</button>
+      <span class="pick-hint">Search ${plural(decks.length, 'deck')}</span>
+    </div>` : `
     <div class="filter-row">
       <select id="sDeck" class="select" aria-label="Show stats for">
         <option value="all">All decks</option>
         ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === deckFilter ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
       </select>
-    </div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
+    ${!allCards.length ? `<div class="empty"><b>No cards yet.</b><br>Add a deck and study it to see your stats here.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
+    ${scopeHTML}
+    ${course ? readyHTML() + masteryHTML : ''}
 
     <div class="pgrid">
       <div class="card">
-        <h2>Day streak</h2>
+        <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
-        <p>${streak.days === 0 ? 'Review or play today to start a streak.' : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} Any deck counts.</p>
+        <p>${streak.days === 0 ? 'Review or play today to start a streak.' : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
         <div class="week" aria-label="Last 7 days">${streak.week.map(d => `
           <div class="wd${d.on ? ' on' : ''}${d.today ? ' today' : ''}" title="${esc(shortDate(d.time))}${d.on ? ', studied' : ''}">
             <i></i><span>${esc(weekday(d.time).slice(0, 2))}</span></div>`).join('')}
@@ -234,7 +282,7 @@ export async function renderStats(el) {
 
     <section class="more-stats">
       <button class="more-toggle" type="button" id="moreBtn" aria-expanded="${moreOpen}" aria-controls="moreBody">
-        <span>More stats</span><span class="muted small">Answer buttons, time of day, difficulty, mastery</span>${icon('chevron')}</button>
+        <span>More stats</span><span class="muted small">Answer buttons, time of day, difficulty${course ? '' : ', mastery'}</span>${icon('chevron')}</button>
       <div class="more-body" id="moreBody" ${moreOpen || !PHONE.matches ? '' : 'hidden'}>
     <section class="card section" aria-labelledby="btnTitle">
       <div class="mhead"><h2 id="btnTitle">Answer buttons</h2><span class="muted small">Last 30 days</span></div>
@@ -277,14 +325,7 @@ export async function renderStats(el) {
       <p class="note">FSRS's difficulty for each card you've studied. Hard cards come back more often.</p>
     </section>
 
-    <section class="card section stats-mastery" aria-labelledby="mTitle">
-      <div class="mhead"><h2 id="mTitle">Mastery</h2><span class="muted small">${counts.mature} of ${plural(cards.length, 'card')} mature</span></div>
-      <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
-      <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
-      <div class="mdetail" id="mDetail" aria-live="polite"></div>
-      <div id="mGrid">${masteryGridHTML(decks, inside, cards, statesById)}</div>
-      <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
-    </section>
+    ${course ? '' : masteryHTML}
       </div>
     </section>`}`;
 
@@ -299,7 +340,13 @@ export async function renderStats(el) {
   // Resizing across 1024px: show everything on a computer, and go back to the saved choice on a phone.
   const syncMore = () => { if (!q('moreBody')) return; q('moreBody').hidden = PHONE.matches && q('moreBtn').getAttribute('aria-expanded') !== 'true'; };
   onPhoneChange = syncMore;
-  q('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
+  q('sDeck')?.addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
+  q('sDeckBtn')?.addEventListener('click', () => openDeckPicker({
+    decks, selected: deckFilter === 'all' ? '' : deckFilter, title: 'Show stats for',
+    onPick: id => { deckFilter = id || 'all'; selected = null; renderStats(el); }
+  }));
+  q('readyPrep')?.addEventListener('click', () => startStudy({ deckIds: [course.id], deckId: course.id, kind: 'prep' }));
+  q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   wireCalendar(el);
   q('hardAll')?.addEventListener('click', e => {
