@@ -48,6 +48,20 @@ export function streakFromDays(days, now = Date.now()) {
   return { days: n, studiedToday: today, week };
 }
 
+// The same streak, without reading the whole log: asks readSince(time) for the answers since a time (an async
+// function) and only looks further back while the streak runs right up to the oldest day read.
+// `first` is what the first 60 days look like if the caller already has them. Today and the end of a Review
+// session use this, so they always agree with Stats.
+export async function lazyStreak(readSince, now = Date.now(), first = null, days = 60) {
+  let logs = first || await readSince(daysAgoStart(days, now));
+  for (;;) {
+    const streak = dayStreak(logs.filter(isAnswerLog), now);
+    if (streak.days < days - 1 || days >= 3650) return streak;      // it ended inside what was read
+    days *= 2;
+    logs = await readSince(daysAgoStart(days, now));
+  }
+}
+
 // ---------- study calendar ----------
 // A year of study days, like GitHub's contribution chart: one column per week (Monday at the top),
 // the newest week on the right. Each day: { time, count (answers), level 0–4 (how dark), future }.

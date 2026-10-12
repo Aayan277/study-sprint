@@ -14,8 +14,7 @@ import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions } from './exam.js';
-import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, live } from './study-data.js';
-import { dayStreak } from './stats-calc.js';
+import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, live } from './study-data.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
@@ -390,7 +389,7 @@ async function finish(el) {
   const ids = new Set(cards.map(c => c.id));
   const tomorrowEnd = dayEnd(Date.now(), 1);
   const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
-  const streak = dayStreak((await db.getAll('reviewLog')).filter(l => l.source === 'review' || l.source === 'play' || l.source === 'anki'));
+  const streak = await loadStreak();
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!location.hash.startsWith('#/review')) return;
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;

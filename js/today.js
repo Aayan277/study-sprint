@@ -8,8 +8,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, nextDueText, typicalCardMs, minutesText, launchStudy, customQueue, live } from './study-data.js';
-import { dayStreak } from './stats-calc.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, customQueue, live } from './study-data.js';
 import { examInfo, countdown } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, deckPath } from './deck-tree.js';
@@ -18,12 +17,10 @@ import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.j
 const launch = launchStudy;
 
 export async function renderToday(el) {
-  const [data, allLogs] = await Promise.all([loadAll(), db.getAll('reviewLog')]);
+  const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
+  const streak = await loadStreak(data.history);
   if (!el.isConnected) return;
-  const answers = allLogs.filter(l => l.source === 'review' || l.source === 'play' || l.source === 'anki');
-  const streak = dayStreak(answers);
-  const cardMs = typicalCardMs(allLogs);
-  const answered = data.logs.filter(l => l.source === 'review' || l.source === 'play').length;
+  const cardMs = typicalCardMs(data.history);
   const allIds = data.decks.map(d => d.id);
   let chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
   let typing = data.settings.reviewTyping;
@@ -34,6 +31,7 @@ export async function renderToday(el) {
     const ids = chosen.length ? chosen : allIds;
     const c = countFor(data, ids);
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+    const answered = answeredToday(data, chosen);          // the same decks as the cards still to go
     const goal = answered + c.total;
     const resume = live.resume && live.resume.day === dayStart() && live.resume.version === db.scheduleVersion() ? live.resume : null;
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft).slice(0, 3);

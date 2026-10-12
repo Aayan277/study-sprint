@@ -27,6 +27,12 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   reviewLimit  optional: how many reviews (of graduated cards) are still allowed today, a number or
 //                { total, byDeck } from reviewLimits(). Learning cards are never held back.
 export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity) {
+  return queueFrom(splitCards(cards, statesById, now), newLimit, reviewLimit);
+}
+
+// Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
+// Kept apart so Today can do this once and then count any set of decks from the short lists.
+export function splitCards(cards, statesById, now = Date.now()) {
   const end = dayEnd(now);
   const reviews = [], waiting = [], fresh = [];
   for (const card of cards) {
@@ -41,6 +47,10 @@ export function buildQueue(cards, statesById, newLimit, now = Date.now(), review
   }
   reviews.sort((a, b) => a.due - b.due);          // most overdue first
   waiting.sort((a, b) => a.due - b.due);
+  return { reviews, waiting, fresh };
+}
+// Step 2: apply today's new-card and review limits.
+export function queueFrom({ reviews, waiting, fresh }, newLimit, reviewLimit = Infinity) {
   const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
   return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable: fresh.length };
 }

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays, lazyStreak } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -157,4 +157,19 @@ test('streak and calendar from counted days match the versions that take logs', 
   const { all } = answerDays(logs);
   assert.deepEqual(streakFromDays(all, NOW), dayStreak(logs, NOW));
   assert.deepEqual(calendarFromDays(all, NOW), studyCalendar(logs, NOW));
+});
+
+test('lazy streak reads further back only while the streak does, and matches the full one', async () => {
+  const all = [];
+  for (let d = 0; d < 200; d++) all.push(log(d));        // a 200-day streak
+  all.push(log(205));
+  const asked = [];
+  const read = async since => { asked.push(since); return all.filter(l => l.timestamp >= since); };
+  const s = await lazyStreak(read, NOW);
+  assert.equal(s.days, 200);
+  assert.deepEqual(s, dayStreak(all, NOW));
+  assert.equal(asked.length, 3);                          // 60 days, 120, then 240 days: enough to see it end
+  asked.length = 0;
+  assert.equal((await lazyStreak(read, NOW, all.filter(l => l.timestamp >= daysAgoStart(60, NOW)).slice(0, 0).concat([log(0)]))).days, 1);
+  assert.equal(asked.length, 0);                          // a short streak in the logs already loaded needs no more reading
 });
