@@ -35,14 +35,12 @@ let selected = null;       // card shown in the mastery detail panel
 // The review log is big, so Stats avoids reading all of it. The streak and calendar only need how many answers
 // each day had (counted by the database, no rows read), and the charts only need the last 30 days.
 // The whole log is read only when a deck is picked (to know which answers belong to its cards).
-// What was read is kept until something changes it: an answer on this device, or changes from another one.
-let cache = null;       // { day, days, recent, full }: each a promise, filled in as needed
-const forgetLogs = () => { cache = null; };
-db.onLocalChange(forgetLogs);
-addEventListener('sync', e => { if (e.detail?.applied) forgetLogs(); });
+// What was read is kept until the data changes (db.dataVersion goes up: an answer here, or changes from sync).
+let cache = null;       // { day, version, days, recent, full }: each a promise, filled in as needed
 async function loadLogs(needAll) {
-  if (cache && cache.day !== dayStart()) cache = null;           // a new day: "the last 30 days" moved
-  const mine = cache = cache || { day: dayStart() };
+  // A new day moves "the last 30 days"; a new data version means the log changed.
+  if (cache && (cache.day !== dayStart() || cache.version !== db.dataVersion())) cache = null;
+  const mine = cache = cache || { day: dayStart(), version: db.dataVersion() };
   const keep = (name, read) => {
     if (!mine[name]) mine[name] = read().catch(err => { mine[name] = null; throw err; });
     return mine[name];

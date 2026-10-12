@@ -489,7 +489,15 @@ export const LOCAL_ONLY = ['syncAuth', 'syncState'];
 // Tell sync.js when something changed on this device, so it can send it.
 const listeners = new Set();
 export const onLocalChange = fn => { listeners.add(fn); };
-function changed() { listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
+function changed() {
+  dataChanges++;
+  listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
+}
+
+// Goes up whenever the saved data changes (a local save, or changes applied from the server). Stats compares it
+// with the number it saw when it read the review log, to know if what it kept is out of date.
+let dataChanges = 0;
+export const dataVersion = () => dataChanges;
 
 // Everything changed on this device since a moment (ms), that the server doesn't have yet:
 // { records: { decks: [...], ... }, tombstones: [...], settings: [{ key, value, time }] }
@@ -586,6 +594,7 @@ export async function applyRemote(rows) {
     settingsStore.put(times, SETTING_TIMES);
   });
   if (schedules) scheduleChanges++;
+  if (applied > 0) dataChanges++;
   return applied;
 }
 
