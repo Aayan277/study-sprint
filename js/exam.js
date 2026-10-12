@@ -14,6 +14,7 @@
 import { dayStart, dayEnd } from './days.js';
 import { effectiveDeck, subtreeIds, treeOrder } from './deck-tree.js';
 import { dayKey } from './stats-calc.js';
+import { EASY_DAY_WEIGHT, NORMAL_WEEK } from './balance.js';
 
 const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
@@ -77,6 +78,8 @@ export const finalWindow = (daysLeft, from = 0) => ({ first: Math.max(from, days
 // Which day (0 = today) a time falls on, and when a day starts.
 const dayIndex = (time, now) => Math.round((dayStart(time) - dayStart(now)) / DAY);
 const startOfDay = (index, now) => (index <= 0 ? dayStart(now) : dayEnd(now, index - 1));
+// How much a day may carry compared to a normal one: less on an easy day (the same weights as balance.js pickDay).
+const dayWeight = (index, now, easyDays) => EASY_DAY_WEIGHT[easyDays[new Date(startOfDay(index, now)).getDay()]] ?? 1;
 
 // Plan the final pass for one exam: which day each card that needs a review before the exam gets.
 //   states   cards' saved schedules (only Review cards count)
@@ -84,8 +87,9 @@ const startOfDay = (index, now) => (index <= 0 ? dayStart(now) : dayEnd(now, ind
 //   from     the first day that may be planned: 0 = today, 1 = tomorrow
 // A card needs a review when it would wait until after the exam and we expect you'd remember it less than
 // EXAM_RETENTION on exam day. The weakest (lowest chance on exam day) go on the last days. The days stay level:
-// cards already due on a day count toward it. Returns Map card id → day.
-export function planFinalPass(states, info, now = Date.now(), from = 0) {
+// cards already due on a day count toward it, and an easy day (easyDays, Sunday first, as in Settings) takes less.
+// Returns Map card id → day.
+export function planFinalPass(states, info, now = Date.now(), from = 0, easyDays = NORMAL_WEEK) {
   const { first, last } = finalWindow(info.daysLeft, from);
   const plan = new Map();
   if (first > last) return plan;
@@ -107,10 +111,14 @@ export function planFinalPass(states, info, now = Date.now(), from = 0) {
   if (!late.length) return plan;
   // Strongest first, so they get the earliest days and the weakest end up closest to the exam.
   late.sort((a, b) => b.r - a.r || b.stability - a.stability || (a.id < b.id ? -1 : 1));
-  const target = Math.ceil((load.slice(first).reduce((a, b) => a + b, 0) + late.length) / (last - first + 1));
+  // Each day's share of all the reviews in the window, by its weight (equal shares when no day is easy).
+  const total = load.slice(first).reduce((a, b) => a + b, 0) + late.length;
+  const weight = load.map((_, d) => dayWeight(d, now, easyDays));
+  const weights = weight.slice(first).reduce((a, b) => a + b, 0);
+  const target = d => Math.ceil(total * weight[d] / weights);
   let day = first;
   for (const c of late) {
-    while (load[day] >= target && day < last) day++;
+    while (load[day] >= target(day) && day < last) day++;
     load[day]++;
     plan.set(c.id, day);
   }
@@ -127,7 +135,8 @@ export function examClamp(card, now, opts, load) {
   const daysLeft = Math.round((opts.maxDue - dayStart(now)) / DAY);
   const { first, last } = finalWindow(daysLeft, 1);                  // tomorrow at the earliest
   if (first > last) return card;                                        // no day left to put it on
-  const busy = d => load?.get(dayKey(dayEnd(now, d - 1))) || 0;
+  // Busy = (reviews already due + 1) ÷ the day's weight, so an easy day looks busier (as in balance.js).
+  const busy = d => ((load?.get(dayKey(dayEnd(now, d - 1))) || 0) + 1) / dayWeight(d, now, opts.balance?.easyDays || NORMAL_WEEK);
   let day = last;
   for (let d = last - 1; d >= first; d--) if (busy(d) < busy(day)) day = d;
   card.due = new Date(dayEnd(now, day - 1) + 2 * 3600000);              // 6am that day
@@ -146,7 +155,8 @@ export function examClamp(card, now, opts, load) {
 //   gainOf(card, state, examStart) → number
 //   planned (optional) the caps already worked out for the whole exam group (loadAll). A session over only some of
 //   the decks passes them, so it plans no different from Today, and only adds the gain.
-export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf = null, planned = null) {
+//   easyDays (Sunday first, as in Settings): easy weekdays get fewer of the planned reviews.
+export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf = null, planned = null, easyDays = NORMAL_WEEK) {
   const caps = planned || new Map(), gain = new Map();
   const infoOf = new Map();                     // deck id → its exam (decks are few, cards many)
   const groups = new Map();                     // exam day → { info, cards }
@@ -162,7 +172,7 @@ export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf 
     const states = inExam.map(c => statesById.get(c.id)).filter(Boolean);
     const started = finalWindow(info.daysLeft).first === 0;     // the final pass has started
     if (!planned && started) {
-      for (const [id, day] of planFinalPass(states, info, now)) caps.set(id, day === 0 ? dayStart(now) : startOfDay(day, now) + 2 * 3600000);
+      for (const [id, day] of planFinalPass(states, info, now, 0, easyDays)) caps.set(id, day === 0 ? dayStart(now) : startOfDay(day, now) + 2 * 3600000);
     }
     if (gainOf && started) {          // further out, exam cards wait their turn like any other
       for (const card of inExam) {
@@ -186,10 +196,10 @@ export function examGainFrom(st, goodStability, againStability, examStart, now) 
 // Cards brought forward when an exam date is set: the final pass (planFinalPass) from tomorrow on, as saved
 // schedules (6am on the planned day). Returns the changed schedules only. Cards you'd remember at 95%
 // or better on exam day are left alone. Nothing changes if the exam is today or past.
-export function pullIn(states, deck, now = Date.now()) {
+export function pullIn(states, deck, now = Date.now(), easyDays = NORMAL_WEEK) {
   const info = examInfo(deck, now);
   if (!info || info.start <= dayEnd(now)) return [];
-  const plan = planFinalPass(states, info, now, 1);
+  const plan = planFinalPass(states, info, now, 1, easyDays);
   return states.filter(s => s && plan.has(s.cardId)).map(s => {
     const due = startOfDay(plan.get(s.cardId), now) + 2 * 3600000;         // 6am that day
     return { ...s, due, scheduledDays: Math.max(1, Math.round((due - (s.lastReview || now)) / DAY)) };

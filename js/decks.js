@@ -439,7 +439,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     if (!isNew && exam && exam !== effectiveDeck(decks, saved.id).examDate) {
       const dIds = [...subtreeIds(after, saved.id)].filter(id => effectiveDeck(after, id).examDate === exam);
       const ids = new Set((await db.getAll('cards')).filter(c => dIds.includes(c.deckId)).map(c => c.id));
-      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam });
+      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam }, Date.now(), (await db.getSettings()).easyDays);
       if (changed.length) await db.putStates(changed);
       moved = changed.length;
     }

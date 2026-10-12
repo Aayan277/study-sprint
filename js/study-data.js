@@ -39,7 +39,7 @@ export async function loadAll({ history = false } = {}) {
   const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
   const statesById = new Map(states.map(s => [s.cardId, s]));
   // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
-  const exam = examSchedule(decks, visible, statesById, now);
+  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
   return { settings, decks, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }

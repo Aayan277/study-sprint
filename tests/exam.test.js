@@ -240,3 +240,27 @@ test('examSchedule: exam-day gain only orders reviews once the final pass has st
   assert.equal(gain('2026-10-13'), 0);                                     // 6 days left: not yet
   assert.equal(gain('2026-11-30'), 0);
 });
+
+test('easy days: the final pass gives an easy weekday fewer cards', () => {
+  const info = examInfo(deck('2026-10-12'), NOW);                          // Wed 7 Oct: days 0..4 are Wed Thu Fri Sat Sun
+  const states = Array.from({ length: 10 }, (_, i) => review('c' + i, 1 + i * 0.5, 1, 90));
+  const perDay = plan => { const n = [0, 0, 0, 0, 0]; for (const d of plan.values()) n[d]++; return n; };
+  const week = day => ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'].map((v, i) => (i === day ? 'minimum' : v));   // Sunday first
+  assert.deepEqual(perDay(planFinalPass(states, info, NOW)), [2, 2, 2, 2, 2]);
+  const plan = perDay(planFinalPass(states, info, NOW, 0, week(5)));        // Friday is day 2
+  assert.ok(plan[2] <= 1 && plan.reduce((a, b) => a + b) === 10);
+  assert.ok(plan[0] > plan[2] && plan[3] > plan[2]);
+  // examSchedule and pullIn take the same weekdays
+  const decks = [{ id: 'd', examDate: '2026-10-12' }], cards = states.map(s => ({ id: s.cardId, deckId: 'd' }));
+  const caps = examSchedule(decks, cards, new Map(states.map(s => [s.cardId, s])), NOW, null, null, week(5)).caps;
+  assert.equal([...caps.values()].filter(t => new Date(t).getDay() === 5).length, plan[2]);
+  const onFriday = easy => pullIn(states, { examDate: '2026-10-12' }, NOW, easy).filter(s => new Date(s.due).getDay() === 5).length;
+  assert.ok(onFriday(week(5)) <= 1 && onFriday(week(5)) < onFriday(undefined));
+});
+
+test('easy days: after a rating, an easy day looks busier', () => {
+  const opts = { maxDue: examStart('2026-10-12'), balance: { easyDays: ['minimum', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'] } };   // Sundays
+  const card = examClamp(justRated(3, 20), NOW, opts, new Map());          // days 1..4 are Thu Fri Sat Sun; Sunday (the last) is easy
+  assert.equal(new Date(card.due).getDate(), 10);                          // Saturday instead
+  assert.equal(new Date(examClamp(justRated(3, 20), NOW, { maxDue: opts.maxDue }, new Map()).due).getDate(), 11);   // no easy day: the last day
+});
