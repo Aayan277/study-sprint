@@ -90,8 +90,12 @@ export function planFinalPass(states, info, now = Date.now(), from = 0) {
   if (first > last) return plan;
   const load = new Array(last + 1).fill(0);
   const late = [];
+  const today = dayStart(now);
   for (const st of states) {
     if (!st || st.state !== REVIEW) continue;
+    // Answered today: already part of today's share, even though its next review moved to a later day.
+    // (Without this, every queue build would find today emptier and pull more cards in.)
+    if (first === 0 && st.lastReview >= today) load[0]++;
     const day = dayIndex(st.due, now);
     if (day >= info.daysLeft) {
       const r = recallAt(st, info.start);
