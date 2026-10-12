@@ -488,8 +488,8 @@ dialog.sheet:not(.side)::before{content:"";display:block;width:36px;height:4px;b
 .act-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .act-grid .btn{width:100%;justify-content:flex-start;padding:0 var(--s-3);min-height:44px;font-weight:500}
 /* The row of flag colors scrolls sideways inside its own box (not the page) if it is too wide */
-.flags{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:2px 16px}
-.flagbtn{flex:none;min-height:34px;cursor:pointer}
+.flags{display:flex;flex-wrap:wrap;gap:6px}
+.flagbtn{min-height:34px;cursor:pointer}
 .flagbtn i{width:12px;height:12px;border-radius:3px}
 .flagbtn[aria-pressed="true"]{font-weight:700}
 .due-row{align-items:center}
