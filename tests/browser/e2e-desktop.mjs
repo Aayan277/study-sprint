@@ -38,7 +38,7 @@ await p.click('#rsNo');
 await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#showBtn');
 ok(await p.isVisible('#showBtn .key-hint'), 'Space hint shown on a computer');
 // the side panel from Review's ⋯ sits beside the card
-await p.click('#moreBtn'); await p.waitForSelector('#ceForm');
+await p.click('#moreBtn'); await p.waitForSelector('.act-list');
 ok((await box(p, '#sheet')).x > 900 && (await box(p, '.flash')).x + (await box(p, '.flash')).w <= (await box(p, '#sheet')).x, 'Review ⋯ panel sits beside the card');
 await p.screenshot({ path: SP + '/desk/review-panel.png' });
 

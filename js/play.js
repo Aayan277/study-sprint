@@ -508,7 +508,8 @@ async function openCardMenu() {
   clearTimeout(G.autoTimer);
   const round = G;
   openCardPanel((await db.get('cards', round.card.id)) || round.card, {
-    decks: data.decks, statesById: data.statesById, closeAfter: ['suspend', 'bury', 'delete'],
+    decks: data.decks, statesById: data.statesById, mode: 'actions',
+    closeAfter: ['suspend', 'bury', 'delete', 'reset', 'due', 'edit', 'flag', 'move', 'unsuspend', 'unbury'],
     onAction: (act, fresh) => {
       if (['suspend', 'bury', 'delete'].includes(act) || !fresh) dropFromRound(round, round.card.id);
       else replaceInRound(round, playCopy(fresh));

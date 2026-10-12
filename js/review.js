@@ -193,7 +193,7 @@ function renderSession(el, enter = false) {
 
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
-  $('moreBtn').addEventListener('click', () => openCardMenu());
+  $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
   $('speakBtn')?.addEventListener('click', () => readAloud());
   autoSpeak(card);
   wireRatebar(el);
@@ -361,12 +361,15 @@ function replaceInSession(card) {
   if (R.current?.card.id === card.id) R.current = { ...R.current, card };
 }
 
-// The ⋯ button (and E / I keys): the same card panel as the card list.
+// The ⋯ button opens a short sheet of card actions (Edit, Flag, Bury, Suspend, More). E opens the editor straight
+// away and I the full panel with the card's info (browse.js openCardPanel; More in the short sheet opens that panel too).
+// Whatever you change, the sheet closes and you are back at the same card.
 const LEAVES = ['suspend', 'bury', 'delete', 'reset', 'due'];
-function openCardMenu(showInfo = false) {
+const BACK_TO_CARD = [...LEAVES, 'edit', 'flag', 'move', 'unsuspend', 'unbury'];
+function openCardMenu(mode = 'actions') {
   if (!R?.current) return;
   openCardPanel(R.current.card, {
-    decks: R.decks, statesById: R.statesById, showInfo, closeAfter: LEAVES,
+    decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
     onAction: (act, fresh) => {
       R.version = db.scheduleVersion();
       if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
@@ -374,6 +377,13 @@ function openCardMenu(showInfo = false) {
     }
   });
 }
+// When the sheet closes, focus goes back onto the card (the button it was opened from was redrawn).
+document.getElementById('sheet')?.addEventListener('close', () => {
+  const sheet = document.getElementById('sheet');
+  if (sheet.open || !R?.active || !location.hash.startsWith('#/review')) return;
+  const card = document.getElementById('flash');
+  (card?.querySelector('.rv-back:not([inert])') || card)?.focus({ preventScroll: true });
+});
 
 // Quick keys: bury (-) or suspend (@) the card on screen without opening the panel.
 async function quick(act) {
@@ -439,7 +449,7 @@ document.addEventListener('keydown', e => {
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {
     const k = e.key.toLowerCase();
-    if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i'); return; }
+    if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
   }
