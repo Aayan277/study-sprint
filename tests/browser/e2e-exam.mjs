@@ -52,6 +52,14 @@ await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#o
 await page.waitForSelector('#csPrepBtn');
 ok((await page.textContent('.cs-opt:has(#csPrepBtn)')).includes('exam in 10 days'), 'Custom study offers Exam prep');
 await page.click('#csClose');
+// ending an Exam prep session without rating anything shows the real streak (same as Today), not "0 day streak"
+await page.evaluate(async () => { const db = await import('./js/db.js'); const D = 86400000, now = Date.now(); await db.putMany('reviewLog', [1, 2, 3].map(d => ({ cardId: 'sample-5', timestamp: now - d * D, source: 'review', rating: 3, correct: true, state: 2 }))); });
+await page.goto('http://localhost:8123/#/today'); await page.reload(); await page.waitForSelector('.streak');   // reload: the log was written straight to the database
+const todayStreak = (await page.textContent('.streak')).replace(/\s+/g, ' ').trim();
+await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#prepBtn'); await page.click('#prepBtn');
+await page.waitForSelector('#endBtn'); await page.click('#endBtn'); await page.waitForSelector('.finish-next .streak');
+const endStreak = (await page.textContent('.finish-next .streak')).replace(/\s+/g, ' ').trim();
+ok(!todayStreak.startsWith('0 ') && endStreak === todayStreak, `end of Exam prep shows the same streak as Today: "${endStreak}" vs "${todayStreak}"`);
 // clearing the date turns it off
 await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
 await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('#deckForm button[type=submit]');
