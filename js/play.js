@@ -12,13 +12,13 @@ import {
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies } from './autograde.js';
-import { dayStart } from './days.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
-import { examOptions, examInfo, nearestExamDeck, examSchedule } from './exam.js';
-import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
-import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
-import { isHidden, isNewLeechCounted, markLeech } from './browse-logic.js';
+import { loadAll } from './study-data.js';
+import { examOptions, examInfo, nearestExamDeck } from './exam.js';
+import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
+import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
@@ -60,26 +60,22 @@ const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back
 
 export async function renderPlay(el) {
   stopRound();
-  const [settings, decks, allCards, states, logs] = await Promise.all([
-    db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
-  ]);
+  // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
+  const { settings, decks, cards: visible, logs, statesById, exam, newLeft } = await loadAll();
   if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
-  // Suspended cards, and cards buried until tomorrow, sit out of Play too.
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
-  const cards = allCards.filter(c => !isHidden(c)).map(playCopy);
-  decks.sort((a, b) => a.created - b.created);
+  // (loadAll leaves out suspended cards, and cards buried until tomorrow.)
+  const cards = visible.map(playCopy);
   data = {
-    settings, decks, cards,
-    statesById: new Map(states.map(s => [s.cardId, s])),
+    settings, decks, cards, statesById,
     // Cards that an exam's final pass brings forward count as due today (see exam.js).
-    examCaps: examSchedule(decks, allCards, new Map(states.map(s => [s.cardId, s]))).caps,
+    examCaps: exam.caps,
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
     playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
     // Only new cards really started today count (newLimits ignores Play answers that were only logged).
-    newLeft: newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(allCards.map(c => [c.id, c.deckId])),
-      extra: extraNewToday(settings.extraNew), chains: chainMap(decks) })
+    newLeft
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';

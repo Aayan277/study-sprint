@@ -210,3 +210,24 @@ test('N new a day to finish by the exam', () => {
   assert.equal(newPerDayToFinish(1, 30), 1);
   assert.equal(newPerDayToFinish(0, 30), 0);             // nothing left to start
 });
+
+test('a session over one subdeck uses the plan made for the whole exam, so it matches Today', async () => {
+  const { splitCards } = await import('../js/queue.js');
+  const decks = [{ id: 'P', examDate: '2026-10-12' }, { id: 'A', parentId: 'P' }, { id: 'B', parentId: 'P' }];
+  const cards = [], states = new Map();
+  for (let i = 0; i < 10; i++) for (const d of ['A', 'B']) {        // A is weak, B is strong
+    const id = d + i;
+    cards.push({ id, deckId: d });
+    states.set(id, review(id, d === 'A' ? 1 + i * 0.1 : 5 + i * 0.1, 1, 90));
+  }
+  const whole = examSchedule(decks, cards, states, NOW);
+  const today = splitCards(cards, states, NOW, whole).reviews.filter(x => x.card.deckId === 'A').length;
+  const subA = cards.filter(c => c.deckId === 'A');
+  // Planning only A's cards gives A a different share (it ignores B's), which is what Review used to do.
+  const alone = examSchedule(decks, subA, states, NOW);
+  assert.notEqual(splitCards(subA, states, NOW, alone).reviews.length, today);
+  const gainOf = () => 0.1;
+  const review2 = examSchedule(decks, subA, states, NOW, gainOf, whole.caps);
+  assert.equal(splitCards(subA, states, NOW, review2).reviews.length, today);
+  assert.equal(review2.gain.size, today);                                   // the session still orders by gain
+});

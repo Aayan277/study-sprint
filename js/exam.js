@@ -142,8 +142,10 @@ export function examClamp(card, now, opts, load) {
 // Only the last days before an exam change anything, so it costs little to call. Cards that sit in a deck
 // (or a deck inside one) with an exam; exam day itself and later change nothing.
 //   gainOf(card, state, examStart) → number
-export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf = null) {
-  const caps = new Map(), gain = new Map();
+//   planned (optional) the caps already worked out for the whole exam group (loadAll). A session over only some of
+//   the decks passes them, so it plans no different from Today, and only adds the gain.
+export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf = null, planned = null) {
+  const caps = planned || new Map(), gain = new Map();
   const infoOf = new Map();                     // deck id → its exam (decks are few, cards many)
   const groups = new Map();                     // exam day → { info, cards }
   for (const card of cards) {
@@ -156,7 +158,7 @@ export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf 
   const end = dayEnd(now);
   for (const { info, cards: inExam } of groups.values()) {
     const states = inExam.map(c => statesById.get(c.id)).filter(Boolean);
-    if (finalWindow(info.daysLeft).first === 0) {            // the final pass has started
+    if (!planned && finalWindow(info.daysLeft).first === 0) {            // the final pass has started
       for (const [id, day] of planFinalPass(states, info, now)) caps.set(id, day === 0 ? dayStart(now) : startOfDay(day, now) + 2 * 3600000);
     }
     if (gainOf) {

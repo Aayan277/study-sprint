@@ -75,8 +75,9 @@ export async function renderReview(el, deckId) {
 function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // Decks with an exam: the final pass brings cards forward, and the reviews that add most on exam day come first.
   const now = Date.now();
+  // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
-    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))));
+    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
