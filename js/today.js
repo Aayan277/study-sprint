@@ -77,7 +77,7 @@ export async function renderToday(el) {
           <div class="th-text">
             <span class="th-label mono">DAILY GOAL</span>
             <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
-            <span class="th-sub mono"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
+            <span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
             <span class="th-sub">${plural(answered, 'answer')} today</span>
           </div>
         </div>
@@ -95,8 +95,7 @@ export async function renderToday(el) {
         <h2 id="exTitle">Upcoming exams</h2>
         <div class="exams">${exams.map(({ deck, info }) => `
           <div class="exam-row" style="--deck:${esc(deck.color)}">
-            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span></a>
-            <span class="exam-badge">${esc(countdown(info))}</span>
+            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="exam-badge">${esc(countdown(info))}</span></a>
             <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
             ${newPlanHTML(deck, info)}
           </div>`).join('')}</div>
@@ -138,7 +137,7 @@ export async function renderToday(el) {
     // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
     return `<p class="exam-new" data-newplan="${esc(deck.id)}">
       <span><b>${n} new a day</b> to start all ${plural(unstarted, 'unstarted card')} by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}.</span>
-      ${now >= n ? '<span class="mono small">On track</span>'
+      ${now >= n ? `<span class="on-track small">${icon('check')} On track</span>`
         : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
         : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
   };
@@ -175,7 +174,7 @@ export async function renderToday(el) {
         <span class="td-counts"><span class="due"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
           ${info ? `<span class="exam-badge">${esc(countdown(info))}</span>` : ''}</span>
       </span>
-      <span class="td-go">${c.total ? `<span class="td-min mono">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
+      <span class="td-go">${c.total ? `<span class="td-min">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
     return c.total
       ? `<button class="tdeck" type="button" data-start="${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="Study ${esc(deck.name)}: ${plural(c.total, 'card')}">${inner}</button>`
       : `<a class="tdeck done" href="#/deck/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: all done. Open deck">${inner}</a>`;

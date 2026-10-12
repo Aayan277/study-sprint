@@ -145,7 +145,7 @@ export async function renderPlay(el) {
 
       <div class="start-row">
         <button class="btn primary" type="button" id="startBtn">Start round</button>
-        <span class="mode-best mono">${best ? `Best for this setup <b>${best.toLocaleString()}</b>` : 'No score for this setup yet'}</span>
+        <span class="mode-best">${best ? `Best for this setup <b class="mono">${best.toLocaleString()}</b>` : 'No score for this setup yet'}</span>
       </div>
 
       <button class="fold-toggle" type="button" id="customBtn" aria-expanded="${customOpen}" aria-controls="customBody">

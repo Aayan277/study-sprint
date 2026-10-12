@@ -227,7 +227,7 @@ export async function renderStats(el) {
       ${hardest.length ? `<ol class="hard-list">${hardest.map(h => `
         <li><div class="f">${esc(plainText(h.card.front))}</div>
           <div class="b">${esc(plainText(h.card.back))}</div>
-          <div class="n mono">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
+          <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
     </section>
 
