@@ -18,6 +18,11 @@ export const FLAGS = [
 ];
 const NEW = 0, LEARNING = 1, RELEARNING = 3;
 
+// Comparing text with localeCompare() builds a new collator on every call, which is very slow in a sort of
+// thousands of cards. These two are made once: plain A-Z order, and A-Z ignoring case/accents with numbers in order.
+const COLLATE = new Intl.Collator();
+const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
 export const isSuspended = card => !!card.suspended;
 export const isBuried = (card, now = Date.now()) => !!card.buriedUntil && card.buriedUntil > now;
 // Cards Review and Play should skip right now.
@@ -86,7 +91,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
     const key = x => dupKey(x.card.front);
     const counts = new Map();
     for (const x of list) counts.set(key(x), (counts.get(key(x)) || 0) + 1);
-    return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => key(a).localeCompare(key(b)) || a.card.created - b.card.created);
+    return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE.compare(key(a), key(b)) || a.card.created - b.card.created);
   }
   else if (filter !== 'all') list = list.filter(x => x.status === filter);
 
@@ -97,7 +102,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
     due: (a, b) => due(a) - due(b),
     lapses: (a, b) => (b.state?.lapses || 0) - (a.state?.lapses || 0),
     difficulty: (a, b) => (b.state?.difficulty || 0) - (a.state?.difficulty || 0),
-    az: (a, b) => a.card.front.localeCompare(b.card.front, undefined, { sensitivity: 'base', numeric: true })
+    az: (a, b) => NATURAL.compare(a.card.front, b.card.front)
   }[sort] || ((a, b) => b.card.created - a.card.created);
   return list.sort(by);
 }
@@ -144,7 +149,7 @@ export function replaceInCards(cards, { find, replace = '', field = 'both', matc
 export function tagCounts(cards) {
   const counts = new Map();
   for (const c of cards) for (const t of c.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
-  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || COLLATE.compare(a.tag, b.tag));
 }
 // Rename a tag on every card that has it (to = '' removes it). Returns only the cards that changed.
 export function renameTag(cards, from, to) {
