@@ -97,6 +97,27 @@ ok(await page.evaluate(async () => (await (await import('./js/db.js')).getDeck('
 await page.waitForSelector('[data-newplan=Nx]');
 ok(/On track/.test(await page.locator('[data-newplan=Nx]').textContent()) && await page.locator('[data-setnew=Nx]').count() === 0, 'afterwards the line says On track');
 await page.screenshot({ path: SP + '/t-exam-new.png', fullPage: true }); await noHScroll('today with the new-a-day line');
+// When a limit the button can't change is what holds it back, the line says which one instead of offering a button
+// that wouldn't get there: the overall limit, a parent deck's, or a subdeck's.
+await run(async () => { await (await import('./js/db.js')).setSetting('newPerDay', 10); });
+await page.reload(); await page.waitForSelector('[data-newplan=Nx]');
+let nx = await page.locator('[data-newplan=Nx]').textContent();
+ok(/Raise New cards per day in Settings to 15/.test(nx) && await page.locator('[data-setnew=Nx]').count() === 0 && !/On track/.test(nx), 'the overall limit holds it back: a note, no button: ' + nx.replace(/\s+/g, ' '));
+await run(async () => {
+  const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
+  await db.setSetting('newPerDay', 20);
+  const x = new Date(now - 4 * 3600000 + 6 * D);
+  const examDate = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const cards = (deckId, p) => Array.from({ length: 30 }, (_, i) => ({ id: p + i, deckId, front: p + i, back: p + i, tags: [], created: i }));
+  await db.addDeckWithCards({ id: 'Pp', name: 'Parent', color: '#46A758', created: now + 6, newPerDay: 6 }, []);
+  await db.addDeckWithCards({ id: 'Cc', name: 'Child', parentId: 'Pp', color: '#46A758', created: now + 7, examDate, newPerDay: 5 }, cards('Cc', 'cc'));
+  await db.addDeckWithCards({ id: 'Pq', name: 'Top', color: '#46A758', created: now + 8, examDate, newPerDay: 5 }, []);
+  await db.addDeckWithCards({ id: 'Cq', name: 'Under', parentId: 'Pq', color: '#46A758', created: now + 9, newPerDay: 4 }, cards('Cq', 'cq'));
+});
+await page.reload(); await page.waitForSelector('[data-newplan=Cc]');
+ok(/Parent limits it to 6/.test(await page.locator('[data-newplan=Cc]').textContent()) && await page.locator('[data-setnew=Cc]').count() === 0, 'a parent deck\'s limit holds it back: a note, no button');
+ok(/subdeck's own limit/.test(await page.locator('[data-newplan=Pq]').textContent()) && await page.locator('[data-setnew=Pq]').count() === 0, 'a subdeck\'s limit holds it back: a note, no button');
+await run(async () => { const db = await import('./js/db.js'); for (const id of ['Cc', 'Pp', 'Cq', 'Pq']) await db.deleteDeck(id); });
 await run(async () => { await (await import('./js/db.js')).deleteDeck('Nx'); });
 await page.reload(); await page.waitForSelector('.tdeck');
 
