@@ -81,6 +81,23 @@ await page.selectOption('#sDeck', 'chem'); await page.waitForFunction(() => docu
 ok((await page.textContent('.pgrid .card:nth-child(2)')).includes('–'), 'filter: Chemistry has no reviews yet');
 ok((await page.locator('.mdeck h3').count()) === 0, 'filter: single deck has no deck heading');
 await page.selectOption('#sDeck', 'all'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 17);
+// a huge deck: only the first squares are drawn, "Show more" adds the rest, and a pressed square stays one
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  await db.putMany('cards', Array.from({ length: 1200 }, (_, i) => ({ id: 'big' + i, deckId: 'chem', front: 'Q' + i, back: 'A' + i, tags: [], created: 1e9 + i })));
+});
+await page.reload(); await page.waitForSelector('.mtile');
+ok((await page.locator('.mtile').count()) === 500, 'big library: only the first 500 squares are drawn');
+await page.locator('.mmore').first().click();
+ok((await page.locator('.mtile').count()) > 500, 'Show more draws more squares');
+await page.locator('.mtile').nth(3).click(); await page.locator('.mtile').nth(4).click();
+ok((await page.locator('.mtile[aria-pressed="true"]').count()) === 1, 'only one square is pressed');
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.deleteCards(Array.from({ length: 1200 }, (_, i) => 'big' + i)); });
+// leaving Stats while it is still drawing must not throw
+await page.evaluate(() => { location.hash = '#/stats'; setTimeout(() => { location.hash = '#/decks'; }, 0); });
+await page.waitForSelector('.deck'); await page.waitForTimeout(600);
+ok(errors.length === 0, 'leaving Stats mid-draw throws nothing ' + errors.join(' | '));
+await page.goto('http://localhost:8123/#/stats'); await page.reload(); await page.waitForSelector('.pgrid');
 // full page in dark mode
 await page.evaluate(async () => { const t = await import('./js/themes.js'); t.applyTheme({ skin: 'ink', mode: 'dark' }); });
 await page.screenshot({ path: SP + '/s-dark.png', fullPage: true });

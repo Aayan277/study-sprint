@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -139,4 +139,22 @@ test('time of day', () => {
 test('difficulty bands', () => {
   const b = difficultyBands([{ state: 2, difficulty: 1 }, { state: 2, difficulty: 5.5 }, { state: 3, difficulty: 10 }, { state: 0, difficulty: 5 }, null]);
   assert.deepEqual(b.filter(x => x.count).map(x => [x.band, x.count]), [[1, 1], [6, 1], [10, 1]]);
+});
+
+test('answerDays counts answers per day, once for every deck and once for the picked cards', () => {
+  const logs = [log(0), log(0, { cardId: 'b' }), log(1, { cardId: 'b' }), log(2, { source: 'import' })];
+  const { all, picked } = answerDays(logs, new Set(['b']));
+  assert.equal(all.get(dayKey(NOW)), 2);
+  assert.equal(all.size, 2);                       // the 'import' row is not an answer
+  assert.equal(picked.get(dayKey(NOW)), 1);
+  assert.equal(picked.get(dayKey(at(1))), 1);
+  const same = answerDays(logs);
+  assert.equal(same.picked, same.all);             // no filter: one Map
+});
+
+test('streak and calendar from counted days match the versions that take logs', () => {
+  const logs = [log(0), log(1), log(2), log(2), log(5), log(40)];
+  const { all } = answerDays(logs);
+  assert.deepEqual(streakFromDays(all, NOW), dayStreak(logs, NOW));
+  assert.deepEqual(calendarFromDays(all, NOW), studyCalendar(logs, NOW));
 });

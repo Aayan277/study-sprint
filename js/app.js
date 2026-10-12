@@ -661,6 +661,18 @@ function showSyncStatus(lastSync) {
   if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
 }
 
+// Stats is slow to draw, so changes from other devices redraw it once after things settle (not once per sync),
+// and only while it's showing: if the page is hidden, it redraws when you come back.
+let statsTimer = null, statsStale = false;
+function redrawStatsSoon() {
+  clearTimeout(statsTimer);
+  if (document.hidden) { statsStale = true; return; }
+  statsTimer = setTimeout(() => { if (currentRoute === 'stats') route(); }, 1500);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && statsStale) { statsStale = false; if (currentRoute === 'stats') redrawStatsSoon(); }
+});
+
 let warnedStale = false;
 // After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
 addEventListener('sync', async e => {
@@ -677,7 +689,8 @@ addEventListener('sync', async e => {
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
   if (busy) return;
-  if (['today', 'decks', 'deck', 'browse', 'stats'].includes(currentRoute)) route();
+  if (currentRoute === 'stats') redrawStatsSoon();
+  else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
   else if (currentRoute === 'settings') {
     // Redraw Settings in place (keeping your scroll position) so synced study settings show.
     const view = $('screen').querySelector('.view'), y = scrollY;

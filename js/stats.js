@@ -6,10 +6,10 @@
 import * as db from './db.js';
 import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
 import { cardLevel } from './decks.js';
-import { dayStreak, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, studyCalendar, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
+import { streakFromDays, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText } from './format.js';
-import { $, esc, plural, icon, foldOpen, saveFold } from './ui.js';
+import { esc, plural, icon, foldOpen, saveFold } from './ui.js';
 
 // Where an answer came from, for tooltips.
 const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
@@ -31,12 +31,32 @@ PHONE.addEventListener('change', () => { try { onPhoneChange?.(); } catch { /* s
 let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
 
-const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-const weekday = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short' });
+// The whole review log is big, so it is read once and kept until something changes it
+// (a review or Play answer on this device, or changes coming in from another one).
+let logsCache = null;
+const forgetLogs = () => { logsCache = null; };
+db.onLocalChange(forgetLogs);
+addEventListener('sync', e => { if (e.detail?.applied) forgetLogs(); });
+function loadLogs() {
+  if (!logsCache) logsCache = db.getAll('reviewLog').catch(err => { logsCache = null; throw err; });
+  return logsCache;
+}
+
+// The mastery grid draws at most this many squares up front; "Show more" adds the rest of a deck.
+const TILE_BUDGET = 500, TILE_STEP = 500;
+
+// One formatter each, made once: building a new one per date is slow (the calendar formats hundreds of days).
+const SHORT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+const LONG = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const MONTH = new Intl.DateTimeFormat(undefined, { month: 'short' });
+const HOUR = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
+const shortDate = t => SHORT.format(t);
+const weekday = t => WEEKDAY.format(t);
 
 // ---------- study calendar ----------
 // A year of study days as a grid of squares (darker = more answers). Tap or hover a day to see it.
-const longDate = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const longDate = t => LONG.format(t);
 const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}`;
 function calendarHTML(cal, now) {
   const todayKey = dayKey(now);
@@ -44,7 +64,7 @@ function calendarHTML(cal, now) {
   const cols = cal.weeks.map(week => {
     // A month's name over the first week that starts in it.
     const m = new Date(week[0].time).getMonth();
-    const label = m !== lastMonth ? new Date(week[0].time).toLocaleDateString(undefined, { month: 'short' }) : '';
+    const label = m !== lastMonth ? MONTH.format(week[0].time) : '';
     lastMonth = m;
     return `<span class="cal-m">${esc(label)}</span>` + week.map(d => d.future ? '<i class="fut"></i>'
       : `<i class="lv${d.level}${dayKey(d.time) === todayKey ? ' today' : ''}" data-t="${d.time}" data-n="${d.count}" title="${esc(dayText(d))}"></i>`).join('');
@@ -65,21 +85,41 @@ function calendarHTML(cal, now) {
       </div>
     </section>`;
 }
-function wireCalendar() {
-  const box = $('calScroll');
+function wireCalendar(el) {
+  const box = el.querySelector('#calScroll');
   if (!box) return;
   box.scrollLeft = box.scrollWidth;            // newest weeks are on the right
-  $('calGrid').addEventListener('click', e => {
+  const grid = el.querySelector('#calGrid');
+  grid.addEventListener('click', e => {
     const cell = e.target.closest('i[data-t]');
     if (!cell) return;
-    $('calGrid').querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
+    grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
     cell.classList.add('sel');
-    $('calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n });
+    el.querySelector('#calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n });
   });
 }
 
+// ---------- mastery grid ----------
+// One square per card, but only the first TILE_BUDGET are drawn at once: ten thousand buttons would freeze a phone.
+const tileHTML = (c, lvl) => `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(plainText(c.front))}: ${lvl}"></button>`;
+const moreText = left => `Show ${left > TILE_STEP ? `${TILE_STEP.toLocaleString()} more (${left.toLocaleString()} left)` : plural(left, 'more card')}`;
+const deckCards = (cards, deckId) => cards.filter(c => c.deckId === deckId).sort((a, b) => a.created - b.created);
+function masteryGridHTML(decks, inside, cards, statesById) {
+  let budget = TILE_BUDGET;
+  return deckChoices(decks, inside).map(({ id }) => decks.find(d => d.id === id)).map(d => {
+    const dc = deckCards(cards, d.id);
+    if (!dc.length) return '';
+    const shown = Math.min(dc.length, budget);
+    budget -= shown;
+    return `<div class="mdeck" data-deck="${esc(d.id)}" data-shown="${shown}">${inside?.size === 1 ? '' : `<h3>${esc(deckPath(decks, d.id))}</h3>`}
+      <div class="mtiles">${dc.slice(0, shown).map(c => tileHTML(c, cardLevel(statesById.get(c.id)))).join('')}</div>
+      ${shown < dc.length ? `<button type="button" class="btn ghost small mmore">${moreText(dc.length - shown)}</button>` : ''}</div>`;
+  }).join('');
+}
+
 export async function renderStats(el) {
-  const [decks, allCards, states, allLogs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getAll('reviewLog')]);
+  const [decks, allCards, states, allLogs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs()]);
+  if (!el.isConnected) return;
   decks.sort((a, b) => a.created - b.created);
   if (deckFilter !== 'all' && !decks.some(d => d.id === deckFilter)) deckFilter = 'all';
   const statesById = new Map(states.map(s => [s.cardId, s]));
@@ -89,23 +129,27 @@ export async function renderStats(el) {
   // A deck includes its subdecks.
   const inside = deckFilter === 'all' ? null : subtreeIds(decks, deckFilter);
   const cards = inside ? allCards.filter(c => inside.has(c.deckId)) : allCards;
-  const ids = new Set(cards.map(c => c.id));
-  const logs = allLogs.filter(l => ids.has(l.cardId));
-  const streak = dayStreak(allLogs.filter(isAnswerLog), now);
-  const ret = retention(logs, now);
-  const perDay = reviewsPerDay(logs, now);
-  const forecast = dueForecast(cards.map(c => statesById.get(c.id)), now);
-  const hardest = hardestCards(cards, statesById, logs, now);
+  const ids = inside ? new Set(cards.map(c => c.id)) : null;
+  // The streak and calendar need every day; the other numbers only look at the last 30 days, so they get just those.
+  const { all: allDays, picked: pickedDays } = answerDays(allLogs, ids);
+  const since = daysAgoStart(29, now);
+  const recent = allLogs.filter(l => l.timestamp >= since && (!ids || ids.has(l.cardId)));
+  const streak = streakFromDays(allDays, now);
+  const ret = retention(recent, now);
+  const perDay = reviewsPerDay(recent, now);
+  const cardStates = cards.map(c => statesById.get(c.id));
+  const forecast = dueForecast(cardStates, now);
+  const hardest = hardestCards(cards, statesById, recent, now);
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
-  const cal = studyCalendar(logs.filter(isAnswerLog), now);
-  const buttons = buttonCounts(logs, now);
-  const hours = hourly(logs, now);
-  const bands = difficultyBands(cards.map(c => statesById.get(c.id)));
+  const cal = calendarFromDays(pickedDays, now);
+  const buttons = buttonCounts(recent, now);
+  const hours = hourly(recent, now);
+  const bands = difficultyBands(cardStates);
   // "More stats" is folded on phones; computers show everything (styles.css), so this only matters under 1024px.
   const moreOpen = foldOpen('stats-more');
-  const hourName = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+  const hourName = h => HOUR.format(new Date(2000, 0, 1, h));
 
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
@@ -220,56 +264,60 @@ export async function renderStats(el) {
       <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
       <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
       <div class="mdetail" id="mDetail" aria-live="polite"></div>
-      <div id="mGrid">${deckChoices(decks, inside).map(({ id }) => decks.find(d => d.id === id)).map(d => {
-        const dc = cards.filter(c => c.deckId === d.id).sort((a, b) => a.created - b.created);
-        if (!dc.length) return '';
-        return `<div class="mdeck">${inside?.size === 1 ? '' : `<h3>${esc(deckPath(decks, d.id))}</h3>`}<div class="mtiles">${dc.map(c => {
-          const lvl = cardLevel(statesById.get(c.id));
-          return `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(plainText(c.front))}: ${lvl}"></button>`;
-        }).join('')}</div></div>`;
-      }).join('')}</div>
+      <div id="mGrid">${masteryGridHTML(decks, inside, cards, statesById)}</div>
       <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
     </section>
       </div>
     </section>`}`;
 
   if (!allCards.length) return;
-  $('moreBtn').addEventListener('click', () => {
-    const open = $('moreBtn').getAttribute('aria-expanded') !== 'true';
-    $('moreBtn').setAttribute('aria-expanded', String(open));
-    $('moreBody').hidden = !open;
+  const q = id => el.querySelector('#' + id);
+  q('moreBtn').addEventListener('click', () => {
+    const open = q('moreBtn').getAttribute('aria-expanded') !== 'true';
+    q('moreBtn').setAttribute('aria-expanded', String(open));
+    q('moreBody').hidden = !open;
     saveFold('stats-more', open);
   });
   // Resizing across 1024px: show everything on a computer, and go back to the saved choice on a phone.
-  const syncMore = () => { if (!$('moreBody')) return; $('moreBody').hidden = PHONE.matches && $('moreBtn').getAttribute('aria-expanded') !== 'true'; };
+  const syncMore = () => { if (!q('moreBody')) return; q('moreBody').hidden = PHONE.matches && q('moreBtn').getAttribute('aria-expanded') !== 'true'; };
   onPhoneChange = syncMore;
-  $('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
+  q('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   el.querySelectorAll('.chart').forEach(wireChart);
-  wireCalendar();
-  $('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
+  wireCalendar(el);
+  q('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
 
   // Mastery grid: tap a card to see its details and recent answers.
-  const logsByCard = new Map();
-  for (const l of logs) { if (!logsByCard.has(l.cardId)) logsByCard.set(l.cardId, []); logsByCard.get(l.cardId).push(l); }
   const showDetail = () => {
-    const c = cards.find(x => x.id === selected);
-    if (!c) { $('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
+    const c = selected && cards.find(x => x.id === selected);
+    if (!c) { q('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
-    const recent = (logsByCard.get(c.id) || []).filter(isAnswerLog).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
+    const last10 = allLogs.filter(l => l.cardId === c.id && isAnswerLog(l)).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
     const due = !st || st.state === 0 ? '' : st.due <= now ? 'Due now' : `Due in ${formatInterval(st.due - now)}`;
-    $('mDetail').innerHTML = `
+    q('mDetail').innerHTML = `
       <div class="f">${esc(plainText(c.front))}</div>
       <div class="b">${esc(plainText(c.back))}</div>
       <div class="meta"><span><i class="sw lv-${lvl}"></i>${LEVEL_NOTE[lvl]}</span>${due ? `<span>${due}</span>` : ''}
         ${st && st.state !== 0 ? `<span>${plural(st.reps, 'review')}, forgotten ${st.lapses}×</span>` : ''}</div>
-      <div class="meta">${recent.length ? `<span aria-label="Last ${recent.length} answers, oldest first: ${recent.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${recent.map(l =>
+      <div class="meta">${last10.length ? `<span aria-label="Last ${last10.length} answers, oldest first: ${last10.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${last10.map(l =>
         `<i class="hd ${l.correct ? 'y' : 'n'}" title="${SOURCE_NAMES[l.source] || 'Review'}, ${l.correct ? 'right' : 'wrong'}"></i>`).join('')}</span>` : '<span>No answers yet</span>'}</div>`;
   };
-  $('mGrid').addEventListener('click', e => {
+  q('mGrid').addEventListener('click', e => {
+    const more = e.target.closest('.mmore');
+    if (more) {                                       // draw the next part of a deck
+      const box = more.closest('.mdeck');
+      const dc = deckCards(cards, box.dataset.deck);
+      const from = +box.dataset.shown, to = Math.min(dc.length, from + TILE_STEP);
+      box.querySelector('.mtiles').insertAdjacentHTML('beforeend', dc.slice(from, to).map(c => tileHTML(c, cardLevel(statesById.get(c.id)))).join(''));
+      box.dataset.shown = to;
+      if (to < dc.length) more.textContent = moreText(dc.length - to); else more.remove();
+      return;
+    }
     const b = e.target.closest('.mtile'); if (!b) return;
+    // Only the square that was selected and the new one change.
+    el.querySelector('.mtile[aria-pressed="true"]')?.setAttribute('aria-pressed', 'false');
     selected = selected === b.dataset.card ? null : b.dataset.card;
-    el.querySelectorAll('.mtile').forEach(t => t.setAttribute('aria-pressed', String(t.dataset.card === selected)));
+    if (selected) b.setAttribute('aria-pressed', 'true');
     showDetail();
   });
   showDetail();
