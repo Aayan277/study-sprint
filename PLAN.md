@@ -28,7 +28,7 @@ A mobile-first flashcard app for studying university course material. It combine
 | Scheduling | FSRS via the `ts-fsrs` library |
 | CSV parsing | Papa Parse |
 | Excel import | SheetJS (load it only when someone imports an .xlsx) |
-| Fonts and themes | Bricolage Grotesque (headings), DM Sans (text), IBM Plex Mono (numbers). 6 themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx) with light and dark versions. No kanji or Japanese branding |
+| Fonts and themes | Geist (text) and Geist Mono (numbers). 5 accent themes (Violet, Ocean, Forest, Ember, Rose) with dark and light versions, plus OLED black. No kanji or Japanese branding |
 
 ### Suggested file structure
 

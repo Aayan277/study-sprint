@@ -60,7 +60,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - a mastery grid you can tap card by card
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
 - **Starter decks:** optional JLPT N5 and N4 kanji decks (Decks tab → Starter decks).
-- **Themes:** 6 color themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx), most with light and dark versions.
+- **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono.
 - **Works offline,** installs on your phone, and keeps your data on your device.
 
 ## Install it on your phone

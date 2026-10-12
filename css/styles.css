@@ -906,7 +906,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   main[data-route="decks"] .deck{min-height:132px;grid-template-rows:auto 1fr;padding:var(--s-4) var(--s-2) var(--s-4) var(--s-5)}
   main[data-route="decks"] .deck .mbar{align-self:end}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
-  main[data-route="deck"] .screen-head .head-actions{display:flex}
+  main[data-route="deck"] .screen-head .head-actions{display:flex;gap:var(--s-2)}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{order:0;min-height:34px;font-size:var(--fs-sm);padding:6px 14px}
   /* Stats: two columns of panels */
   main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-3);align-items:start}

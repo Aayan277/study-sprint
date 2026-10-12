@@ -313,6 +313,7 @@ function countsHTML() {
 }
 
 function renderSession(el) {
+  if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
   if (!R.current) return finish(el);
   setFocusMode(true);
