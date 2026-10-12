@@ -90,7 +90,13 @@ test('hardest cards: most lapses, then most misses', () => {
 });
 
 test('clean axis tops', () => {
-  assert.deepEqual([0, 3, 7, 12, 48, 51, 180, 1000].map(niceMax), [5, 5, 10, 20, 50, 100, 200, 1000]);
+  assert.deepEqual([0, 3, 7, 12, 48, 51, 180, 1000].map(niceMax), [5, 3, 8, 15, 50, 60, 200, 1000]);
+  // finer steps: 38 gets 40 (not 50), 111 gets 150 (not 200), and a peak of 90 gets 100
+  assert.deepEqual([1, 2, 2.2, 4, 7, 9, 10, 11, 38, 90, 111, 240, 260, 900].map(niceMax), [1, 2, 2.5, 4, 8, 10, 10, 15, 40, 100, 150, 250, 300, 1000]);
+  // never below the biggest value, never more than 1.5x it (above 1), so a chart's tallest bar fills at least two thirds
+  for (let v = 2; v <= 5000; v++) { const m = niceMax(v); assert.ok(m >= v && m <= v * 1.5, `${v} -> ${m}`); }
+  // small fractions stay clean numbers
+  assert.deepEqual([0.3, 0.07].map(niceMax), [0.3, 0.08]);
 });
 
 test('study calendar: weeks start on Monday, newest on the right, darker on busier days', () => {

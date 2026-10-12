@@ -224,10 +224,11 @@ export async function renderStats(el) {
     <section class="card section stats-hardest" aria-labelledby="hardTitle">
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
         ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
-      ${hardest.length ? `<ol class="hard-list">${hardest.map(h => `
-        <li><div class="f">${esc(plainText(h.card.front))}</div>
+      ${hardest.length ? `<ol class="hard-list" id="hardList">${hardest.map((h, i) => `
+        <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}><div class="f">${esc(plainText(h.card.front))}</div>
           <div class="b">${esc(plainText(h.card.back))}</div>
-          <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>`
+          <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
+        ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
     </section>
 
@@ -301,6 +302,12 @@ export async function renderStats(el) {
   q('sDeck').addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   el.querySelectorAll('.chart').forEach(wireChart);
   wireCalendar(el);
+  q('hardAll')?.addEventListener('click', e => {
+    const open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
+    el.querySelectorAll('#hardList [data-more]').forEach(li => { li.hidden = !open; });
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    e.currentTarget.textContent = open ? 'Show fewer' : `Show all ${hardest.length}`;
+  });
   q('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
 
   // Mastery grid: tap a card to see its details and recent answers.
@@ -340,6 +347,9 @@ export async function renderStats(el) {
   });
   showDetail();
 }
+
+// The Hardest cards list shows this many until "Show all".
+const HARD_SHOWN = 5;
 
 // ---------- column chart ----------
 // rows: data; value(row): bar height; x(row, i, rows): axis label ('' for none);

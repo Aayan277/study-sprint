@@ -816,13 +816,13 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 
 /* column charts: thin bars with rounded tops, hairline grid, labels in text colors */
 .chart{position:relative}
-.chart-plot{position:relative;height:140px;margin:var(--s-2) 0 0 26px}
+.chart-plot{position:relative;height:150px;margin:var(--s-2) 0 0 26px}
 .chart-line{position:absolute;left:0;right:0;border-top:1px solid var(--line)}
 .chart-line span{position:absolute;right:calc(100% + 6px);top:-.6em;font:.625rem var(--f-num);color:var(--text-2)}
 .chart-cols{position:absolute;inset:0;display:flex;align-items:flex-end;gap:0}
 .col{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;background:none;border:0;padding:0;cursor:pointer;border-radius:4px}
 .col:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 35%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
+.bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 70%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
 .col:last-child .bar,.col:hover .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}
 .cap{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font:500 .625rem var(--f-num);color:var(--text-2);white-space:nowrap}
 .chart-x{display:flex;gap:0;margin:6px 0 0 26px;font:.625rem var(--f-num);color:var(--text-2)}
@@ -860,6 +860,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .hard-list .f{font-weight:550;overflow-wrap:anywhere}
 .hard-list .b{font-size:var(--fs-sm);color:var(--text-2);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hard-list .n{font-size:var(--fs-xs);color:var(--text-2);margin-top:2px;display:flex;align-items:center;gap:6px}
+.hard-all{margin-top:var(--s-2)}
 .hard-list .n::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--again);flex:none}
 
 .mdetail{margin:14px 0;padding:12px 14px;border-radius:var(--r-md);background:var(--surface-sunken);box-shadow:inset 0 0 0 1px var(--line);min-height:0}
