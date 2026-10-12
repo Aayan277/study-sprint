@@ -5,28 +5,25 @@
 
 import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
-import { renderLibrary, renderDeck } from './decks.js';
-import { renderImport } from './import-screen.js';
+import { renderToday } from './today.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard } from './ui.js';
-import { renderPlay } from './play.js';
-import { renderStats } from './stats.js';
-import { renderBrowseAll } from './browse.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
+import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '2.6';
+const APP_VERSION = '3.0';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
 // ---------- settings ----------
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  const { skin, mode } = settings.theme;
+  const { skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">SETTINGS</span><h1>Settings</h1></div></div>
 
@@ -38,45 +35,35 @@ async function renderSettings(el) {
     <section class="section" aria-labelledby="apTitle">
       <h2 id="apTitle">Light or dark</h2>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
-        ${[['auto', 'Match my device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) =>
+        ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
-      <p class="note">Neon and Onyx are always dark.</p>
+      <label class="adv-row switch-row"><span><b>OLED black</b>
+        <span>Pure black page in dark mode, to save battery on OLED screens.</span></span>
+        <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
       <h2 id="studyTitle">Study</h2>
       <div class="set-row">
-        <div><b>New cards per day</b><p>Across all decks. Due reviews are never limited.</p></div>
+        <div><b>New cards per day</b><p>Across all decks. A deck can have its own limit too (Edit deck).</p></div>
         <div class="stepper">
           <button type="button" class="icon-btn" id="npdMinus" aria-label="Fewer new cards">−</button>
           <input id="npd" type="number" inputmode="numeric" min="0" max="999" value="${settings.newPerDay}" aria-label="New cards per day">
           <button type="button" class="icon-btn" id="npdPlus" aria-label="More new cards">+</button>
         </div>
       </div>
+      <div class="set-row">
+        <div><b>Reviews per day</b><p>Most reviews to show in a day, across all decks. Leave it blank for no limit, which works best with FSRS: held-back cards come back later than planned.</p></div>
+        <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
+      </div>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you should be to remember a card when it comes back. Higher means you remember more but review more often. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
       </div>
-      <div class="set-row">
-        <div><b>Leech after</b><p>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</p></div>
-        <div class="stepper">
-          <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
-          <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
-          <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
-        </div>
-      </div>
-      <div class="set-row column">
-        <div><b id="leechActLbl">When a card becomes a leech</b></div>
-        <div class="chips" role="group" aria-labelledby="leechActLbl">
-          <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
-          <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
-        </div>
-        <p class="note" style="margin:0">Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</p>
-      </div>
-      <details class="advanced" id="advanced">
-        <summary>Advanced scheduling</summary>
+      <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
+        <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
         <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
         <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
           <label for="lsteps"><b>Learning steps</b></label>
@@ -107,8 +94,36 @@ async function renderSettings(el) {
           <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
           <span class="err" id="maxErr" hidden></span></div>
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
-          <span>Adds a little randomness to longer gaps so cards added together don't all come due on the same day.</span></span>
+          <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <div class="adv-row"><b id="easyLbl">Easy days</b>
+          <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
+          <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
+            <label class="easy-day"><span>${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'short' }))}</span>
+              <select data-easy="${d}" aria-label="${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'long' }))}">
+                ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
+              </select></label>`).join('')}
+          </div></div>
+        <div class="adv-row"><b id="timerLbl">Play timer</b>
+          <span>The default time per question in Play, in seconds. The Play screen has the same slider.</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" id="timerMinus" aria-label="Shorter timer">−</button>
+            <input id="timerSec" type="number" inputmode="numeric" min="3" max="20" value="${settings.timer}" aria-labelledby="timerLbl">
+            <button type="button" class="icon-btn" id="timerPlus" aria-label="Longer timer">+</button>
+          </div></div>
+        <div class="adv-row"><b>Leech after</b>
+          <span>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
+            <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
+            <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
+          </div></div>
+        <div class="adv-row"><b id="leechActLbl">When a card becomes a leech</b>
+          <div class="chips" role="group" aria-labelledby="leechActLbl">
+            <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
+            <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
+          </div>
+          <span>Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</span></div>
         <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
       </details>
     </section>
@@ -134,11 +149,14 @@ async function renderSettings(el) {
         <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
         <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
       </div>
-      <div class="set-row">
-        <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
-        <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
-      </div>
-      <p class="note"><span id="whereNote"></span> The Play timer is set on the Play screen.</p>
+      <p class="note"><span id="whereNote"></span></p>
+      <details class="danger-zone" id="dangerZone">
+        <summary>Danger zone</summary>
+        <div class="set-row">
+          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
+          <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
+        </div>
+      </details>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -148,10 +166,16 @@ async function renderSettings(el) {
     saveTheme({ ...settings.theme, skin: b.dataset.skin });
     el.querySelectorAll('.skin').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   });
+  // The previews are redrawn after a light/dark or OLED change, so they show the new look
+  const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
   el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, mode: r.value });
-    $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); // previews switch between light and dark versions
+    redrawSkins();
   }));
+  $('oled').addEventListener('change', e => {
+    saveTheme({ ...settings.theme, oled: e.target.checked });
+    redrawSkins();
+  });
   drawSync();
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
@@ -182,11 +206,35 @@ async function renderSettings(el) {
     db.setSetting('leechAction', settings.leechAction);
     document.querySelectorAll('[data-leech]').forEach(x => x.setAttribute('aria-pressed', x === btn));
   }));
+  // Play timer: the same setting as the slider on the Play screen (3 to 20 seconds).
+  const setTimer = v => {
+    const n = Math.max(3, Math.min(20, Math.round(Number(v) || settings.timer)));
+    $('timerSec').value = n;
+    settings.timer = n;
+    db.setSetting('timer', n);
+  };
+  $('timerSec').addEventListener('change', e => setTimer(e.target.value));
+  $('timerMinus').addEventListener('click', () => setTimer(settings.timer - 1));
+  $('timerPlus').addEventListener('click', () => setTimer(settings.timer + 1));
+  // Reviews per day: blank = no limit.
+  $('rpd').addEventListener('change', e => {
+    const v = e.target.value.trim();
+    settings.reviewLimit = v ? Math.max(1, Math.min(9999, Math.round(Number(v) || 1))) : null;
+    e.target.value = settings.reviewLimit ?? '';
+    db.setSetting('reviewLimit', settings.reviewLimit);
+  });
+  el.querySelectorAll('[data-easy]').forEach(sel => sel.addEventListener('change', () => {
+    const week = [...(settings.easyDays || db.DEFAULT_SETTINGS.easyDays)];
+    week[+sel.dataset.easy] = sel.value;
+    settings.easyDays = week;
+    db.setSetting('easyDays', week);
+  }));
   $('ret').addEventListener('input', e => { $('retOut').textContent = `${e.target.value}%`; });
   $('ret').addEventListener('change', e => {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
   });
+  rememberFold($('advanced'), 'settings-advanced');
   wireAdvanced(el);
 }
 
@@ -304,8 +352,15 @@ async function confirmRestore(file) {
   $('rbNo').focus();
   $('rbNo').addEventListener('click', closeSheet);
   $('rbYes').addEventListener('click', async () => {
-    if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
-    await db.importAll(data, { everywhere: synced });
+    try {
+      if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
+      await db.importAll(data, { everywhere: synced });
+    } catch (e) {
+      console.error(e);
+      closeSheet();
+      toast("Couldn't restore that backup. Nothing was changed.");
+      return;
+    }
     if (synced) sync.syncNow();
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
@@ -478,7 +533,7 @@ const rulesList = id => `<ul class="pw-rules" id="${id}" aria-live="polite"></ul
 function wireRules(inputId, listId) {
   const draw = () => {
     $(listId).innerHTML = checkPassword($(inputId).value).map(r =>
-      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${r.ok ? '✓' : '○'}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
+      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${icon(r.ok ? 'check' : 'circle')}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
   };
   $(inputId).addEventListener('input', draw);
   draw();
@@ -512,7 +567,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
     try {
       await save(pw);
       closeSheet();
-      toast(done);
+      toast(typeof done === 'function' ? done() : done);
       if (currentRoute === 'settings') drawSync();
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
   });
@@ -582,6 +637,7 @@ async function wipeThisDevice() {
   await db.resetAll();
   await db.setSetting('theme', theme);
   settings = { ...db.DEFAULT_SETTINGS, theme };
+  await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
 
@@ -600,6 +656,18 @@ function showSyncStatus(lastSync) {
   if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
 }
 
+// Stats is slow to draw, so changes from other devices redraw it once after things settle (not once per sync),
+// and only while it's showing: if the page is hidden, it redraws when you come back.
+let statsTimer = null, statsStale = false;
+function redrawStatsSoon() {
+  clearTimeout(statsTimer);
+  if (document.hidden) { statsStale = true; return; }
+  statsTimer = setTimeout(() => { if (currentRoute === 'stats') route(); }, 1500);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && statsStale) { statsStale = false; if (currentRoute === 'stats') redrawStatsSoon(); }
+});
+
 let warnedStale = false;
 // After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
 addEventListener('sync', async e => {
@@ -616,7 +684,8 @@ addEventListener('sync', async e => {
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
   if (busy) return;
-  if (['decks', 'deck', 'browse', 'stats'].includes(currentRoute)) route();
+  if (currentRoute === 'stats') redrawStatsSoon();
+  else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
   else if (currentRoute === 'settings') {
     // Redraw Settings in place (keeping your scroll position) so synced study settings show.
     const view = $('screen').querySelector('.view'), y = scrollY;
@@ -625,9 +694,35 @@ addEventListener('sync', async e => {
 });
 
 // ---------- first run ----------
-// Add the sample deck once. A saved flag stops it coming back after you delete it.
-async function seedSampleDeck() {
-  if (settings.seeded) return;
+// A brand-new install (no decks, cards or reviews, and never opened before) starts with the short
+// first-run start in js/onboarding.js instead of a filled-in sample. Anyone with data never sees it.
+// To skip it (the browser tests do): set localStorage 'study-sprint-skip-onboarding' to '1', or open the app
+// with ?skipOnboarding in the address. Skipping this way adds the sample deck, like the app always used to.
+function skipFlag() {
+  try { if (localStorage.getItem('study-sprint-skip-onboarding') === '1') return true; } catch { /* no storage: fine */ }
+  // The address flag is for local testing only, so a stray link can't switch the first run off on the live site.
+  return ['localhost', '127.0.0.1'].includes(location.hostname) && /[?&]skipOnboarding\b/.test(location.search);
+}
+
+// Settle what a start-up looks like. Returns true if the first-run start should show.
+async function checkFirstRun() {
+  if (settings.onboarded) return false;
+  // Upgrades: anyone who opened the app before has `seeded` set (the old first-run flag) or has data.
+  const hasData = settings.seeded || (await db.getDecks()).length || (await db.getAll('cards')).length || (await db.getAll('reviewLog')).length;
+  if (hasData) { await markOnboarded(); return false; }
+  if (skipFlag()) { await seedSampleDeck(); await markOnboarded(); return false; }
+  return true;
+}
+async function markOnboarded() {
+  if (settings.onboarded) return;
+  settings.onboarded = true;
+  await db.setSetting('onboarded', true);
+}
+
+// Add the sample deck once. A saved flag stops it coming back after you delete it
+// (`again`: the person asked for it, e.g. "Try the sample deck" in the first-run start).
+async function seedSampleDeck(again = false) {
+  if (settings.seeded && !again) return;
   // Fixed ids (not random), so the sample deck added on two devices is the same deck once they sync.
   const deckId = 'sample';
   const now = Date.now();
@@ -643,15 +738,18 @@ async function seedSampleDeck() {
 
 // ---------- navigation ----------
 const ROUTES = {
-  // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
-  // and the rest of the app shouldn't have to wait for it.
+  // Today is the home screen, so it loads with the app. Every other screen is loaded the first time it is
+  // opened (the service worker has them saved, so that is quick), which keeps the first load small.
+  // Review also needs the FSRS library from the internet (saved for offline after the first time).
+  today: el => renderToday(el),
+  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: async () => { if (!(await db.getDeck('sample'))) await seedSampleDeck(true); }, finish: markOnboarded }),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
-  play: el => renderPlay(el),
-  decks: el => renderLibrary(el),
-  deck: (el, id) => renderDeck(el, id),
-  browse: el => renderBrowseAll(el),
-  import: (el, deckId) => renderImport(el, deckId),
-  stats: el => renderStats(el),
+  play: async el => (await import('./play.js')).renderPlay(el),
+  decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
+  deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
+  browse: async el => (await import('./browse.js')).renderBrowseAll(el),
+  import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
+  stats: async el => (await import('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)
 };
 
@@ -661,40 +759,71 @@ let beforeSettings = null;   // address of the screen you were on before opening
 
 async function route() {
   const resetLink = takeResetLink();      // opened from a password reset email? (see below)
-  const [, name = 'decks', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
+  const [, name = 'today', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
+  // Once the start is done, #/welcome goes to Today (the guided review that follows it is still allowed).
+  if (name === 'welcome' && settings.onboarded && !/^review\//.test(arg || '')) { location.replace('#/today'); return; }
+  // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
+  if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
+  if (name !== 'review') takeLaunch();     // a session handed over to Review that never got there (e.g. it failed to load) must not start later
   currentRoute = name;
   lastHash = location.hash;
+  document.body.classList.toggle('welcome', name === 'welcome');       // the first-run start hides the tabs
   // The gear doubles as a close button while Settings is open.
   $('gearBtn').setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings');
-  const render = ROUTES[name] || ROUTES.decks;
+  const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
-  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name;
+  // (A running Review session counts as Today.)
+  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name === 'review' ? 'today' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
   closeSheet();
+  setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');
   el.className = 'view';
   $('screen').replaceChildren(el);
   // Which screen this is, for the desktop layout (some screens use the full width: see styles.css).
-  $('screen').dataset.route = ROUTES[name] ? name : 'decks';
+  $('screen').dataset.route = ROUTES[name] ? name : 'today';
   scrollTo(0, 0);
   try {
     await render(el, arg && decodeURIComponent(arg));
   } catch (err) {
     if (!el.isConnected) return;          // a screen you already left: ignore
     console.error(err);
+    setFocusMode(false);                  // a round that failed to draw must not leave the header and tabs hidden
+    // A screen's file that couldn't be loaded (offline, or a half-finished update) gets a plain message and a way out.
+    if (/dynamically imported module|importing a module script/i.test(err.message)) {
+      el.innerHTML = `<div class="empty"><b>Couldn't load this screen.</b><br>Check your connection and reload.<br><button class="btn" type="button" data-reload>Reload</button></div>`;
+      el.querySelector('[data-reload]').onclick = () => location.reload();
+      return;
+    }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  if (el.isConnected) scrollTo(0, 0);
+  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); }
   if (resetLink) showResetLink(resetLink);
 }
 
-let lastHash = '#/decks';
+// Tell screen readers the screen changed: the page title follows the screen (a deck shows its own name) and
+// focus moves to the screen's main heading.
+const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
+let firstScreen = true;
+function announceScreen(el, name) {
+  const h1 = el.querySelector('h1');
+  const title = name === 'welcome' ? SCREEN_NAMES.welcome : h1?.textContent.trim() || SCREEN_NAMES[name] || 'Today';
+  document.title = `${title} · Study Sprint`;
+  const first = firstScreen;
+  firstScreen = false;
+  // Not on the very first load, and not during a Review or Play round (they manage focus themselves).
+  if (first || !h1 || document.body.classList.contains('focus')) return;
+  h1.tabIndex = -1;
+  h1.focus({ preventScroll: true });
+}
+
+let lastHash = '#/today';
 
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
 function wireGear() {
@@ -702,7 +831,7 @@ function wireGear() {
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
     e.preventDefault();
     if (beforeSettings) history.back();                 // came from another screen: step back to it
-    else location.hash = '#/decks';                     // opened straight onto Settings: go to Decks
+    else location.hash = '#/today';                     // opened straight onto Settings: go home
   });
 }
 
@@ -720,15 +849,24 @@ function keptResetLink() {
   try { return JSON.parse(sessionStorage.getItem('resetLink') || 'null'); } catch { return null; }
 }
 let resetShown = false;
-function showResetLink(link) {
+async function showResetLink(link) {
   resetShown = true;
   const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
   if (link.error) { forget(); toast(link.error); return; }
+  // Show whose account the link is for, and refuse a link for a different account than this device's.
+  let user;
+  try { user = await sync.lookUpResetLink(link.session); } catch (err) {
+    if (err.code !== 'offline') forget();   // offline: keep the link for this tab, so reopening the app tries again
+    toast(err.message);
+    return;
+  }
+  let result;
   openPasswordSheet({
     title: 'Set a new password',
-    intro: '<p class="note" style="margin-top:0">You opened a password reset link. Choose a new password, then use it to sign in on your other devices.</p>',
-    save: async pw => { await sync.finishPasswordReset(link.session, pw); forget(); },
-    done: 'Password saved. You\'re signed in.'
+    intro: `<p class="note" style="margin-top:0">Set a new password for <b>${esc(user.email)}</b>. Then use it to sign in on your other devices.</p>`,
+    save: async pw => { result = await sync.finishPasswordReset(link.session, pw); forget(); },
+    done: () => result.signedIn ? 'Password saved. You\'re signed in.'
+      : `Password saved for ${result.email}. To sync this device with that account, sign in from Settings → Sync.`
   });
   // Cancelling just closes it; the link can't be used again after that.
   $('pwCancel')?.addEventListener('click', forget);
@@ -746,12 +884,14 @@ async function start() {
     return;
   }
   settings.theme = applyTheme(settings.theme);
-  await seedSampleDeck();
+  const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
   sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
-  // Opening the app with no "#/..." in the address shows the deck library.
-  if (!location.hash) history.replaceState(null, '', '#/decks');
+  // Opening the app with no "#/..." in the address shows Today.
+  if (!location.hash) history.replaceState(null, '', '#/today');
+  // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
+  if (firstRun && /^#\/today\/?$/.test(location.hash)) history.replaceState(null, '', '#/welcome');
   addEventListener('hashchange', route);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();

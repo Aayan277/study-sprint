@@ -53,3 +53,16 @@ test('Anki export: a side\'s picture goes after its text', async () => {
   const { notes } = await ankiContents({ id: 'd', name: 'P' }, [{ id: 'c', front: 'Heart', back: '', tags: [], frontImageFile: 'a1.jpg', backImageFile: 'b2.png' }], 1_800_000_000_000);
   assert.equal(notes[0].flds, 'Heart<br><img src="a1.jpg">\x1f<img src="b2.png">');
 });
+
+test('subdecks: a Deck column, and Anki subdecks with their parents', async () => {
+  const sub = [{ ...cards[0], deckName: 'Psych' }, { ...cards[1], deckName: 'Psych::Unit 1::Lecture 3' }];
+  assert.ok(toCSV(sub).startsWith('﻿Front,Back,Tags,Deck\r\n'));
+  assert.ok(toCSV(sub).includes(',Psych::Unit 1::Lecture 3\r\n'));
+  assert.ok(toCSV(cards).startsWith('﻿Front,Back,Tags\r\n'));                // one deck: no Deck column
+  const NOW = 1_800_000_000_000;
+  const { col, cards: ac } = await ankiContents({ id: 'd', name: 'Psych' }, sub, NOW);
+  const decks = Object.values(JSON.parse(col.decks));
+  assert.deepEqual(decks.map(d => d.name).sort(), ['Default', 'Psych', 'Psych::Unit 1', 'Psych::Unit 1::Lecture 3']);
+  const nameOf = id => decks.find(d => d.id === id).name;
+  assert.deepEqual(ac.map(c => nameOf(c.did)), ['Psych', 'Psych::Unit 1::Lecture 3']);
+});

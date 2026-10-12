@@ -18,6 +18,11 @@ export const FLAGS = [
 ];
 const NEW = 0, LEARNING = 1, RELEARNING = 3;
 
+// Comparing text with localeCompare() builds a new collator on every call, which is very slow in a sort of
+// thousands of cards. These two are made once: plain A-Z order, and A-Z ignoring case/accents with numbers in order.
+const COLLATE = new Intl.Collator();
+const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
 export const isSuspended = card => !!card.suspended;
 export const isBuried = (card, now = Date.now()) => !!card.buriedUntil && card.buriedUntil > now;
 // Cards Review and Play should skip right now.
@@ -46,7 +51,16 @@ export const FILTERS = [
   ['buried', 'Buried'],
   ['flagged', 'Any flag'],
   ...FLAGS.map(f => [`flag${f.id}`, `${f.name} flag`]),
-  ['leech', 'Leeches']
+  ['leech', 'Leeches'],
+  ['dupes', 'Duplicates (same front)']
+];
+
+// The same filters, grouped for the dropdown (<optgroup>s). 'All cards' stands on its own at the top.
+export const FILTER_GROUPS = [
+  [null, ['all']],
+  ['Status', ['new', 'learning', 'due', 'review', 'suspended', 'buried']],
+  ['Flags', ['flagged', ...FLAGS.map(f => `flag${f.id}`)]],
+  ['Problems', ['leech', 'dupes']]
 ];
 
 export const SORTS = [
@@ -71,6 +85,14 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   if (filter === 'flagged') list = list.filter(x => x.card.flag);
   else if (/^flag\d$/.test(filter)) list = list.filter(x => x.card.flag === +filter.slice(4));
   else if (filter === 'leech') list = list.filter(x => (x.card.tags || []).includes('leech'));
+  else if (filter === 'dupes') {
+    // Cards whose front matches another card's (ignoring capitals, accents, punctuation and formatting),
+    // listed next to each other.
+    const key = x => dupKey(x.card.front);
+    const counts = new Map();
+    for (const x of list) counts.set(key(x), (counts.get(key(x)) || 0) + 1);
+    return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE.compare(key(a), key(b)) || a.card.created - b.card.created);
+  }
   else if (filter !== 'all') list = list.filter(x => x.status === filter);
 
   const due = x => (x.state && x.state.state !== NEW ? x.state.due : Infinity);
@@ -80,7 +102,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
     due: (a, b) => due(a) - due(b),
     lapses: (a, b) => (b.state?.lapses || 0) - (a.state?.lapses || 0),
     difficulty: (a, b) => (b.state?.difficulty || 0) - (a.state?.difficulty || 0),
-    az: (a, b) => a.card.front.localeCompare(b.card.front, undefined, { sensitivity: 'base', numeric: true })
+    az: (a, b) => NATURAL.compare(a.card.front, b.card.front)
   }[sort] || ((a, b) => b.card.created - a.card.created);
   return list.sort(by);
 }
@@ -103,4 +125,35 @@ export function isNewLeech(prevLapses, nextLapses, threshold = LEECH_DEFAULTS.le
 export function markLeech(card, action = LEECH_DEFAULTS.leechAction) {
   const tags = [...new Set([...(card.tags || []), 'leech'])];
   return { ...card, tags, ...(action === 'suspend' ? { suspended: true } : {}) };
+}
+
+// ---------- card list tools ----------
+// Find and replace in cards' text. field: 'front', 'back' or 'both'. Returns only the cards that changed.
+export function replaceInCards(cards, { find, replace = '', field = 'both', matchCase = false }) {
+  if (!find) return [];
+  const re = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), matchCase ? 'g' : 'gi');
+  const fields = field === 'both' ? ['front', 'back'] : [field];
+  const out = [];
+  for (const c of cards) {
+    const changes = {};
+    for (const f of fields) {
+      const now = String(c[f] ?? '').replace(re, () => replace);
+      if (now !== c[f]) changes[f] = now;
+    }
+    if (Object.keys(changes).length) out.push({ ...c, ...changes });
+  }
+  return out;
+}
+
+// Every tag used by these cards, with how many cards have it, most used first.
+export function tagCounts(cards) {
+  const counts = new Map();
+  for (const c of cards) for (const t of c.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || COLLATE.compare(a.tag, b.tag));
+}
+// Rename a tag on every card that has it (to = '' removes it). Returns only the cards that changed.
+export function renameTag(cards, from, to) {
+  const [clean] = parseTags(to);
+  return cards.filter(c => (c.tags || []).includes(from))
+    .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (t === from ? clean : t)).filter(Boolean))] }));
 }

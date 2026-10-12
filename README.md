@@ -13,7 +13,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
 
 ## Features
 
-- **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, and a mastery bar. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
+- **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, a mastery ring and a Study button. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
 - **Formatting:** **bold**, *italics* and bullet lists on cards. On a phone, the B / I / • buttons add simple marks (`**bold**`, `*italic*`, `- item`) with a live preview; on a computer, the box shows formatting as you type (Ctrl/⌘+B, Ctrl/⌘+I). Typed answers and Play use the plain text. Anki imports keep bold, italics and lists, and Anki exports turn them back into formatting.
 - **Pictures:** one picture on each side of a card (the picture button next to B / I / •). Photos are shrunk automatically (longest side 1280px), shown in Review and Play, synced between devices (Supabase Storage: run `supabase/media.sql`), kept in backups, and brought along by Anki imports and exports.
 - **Exam date mode** (Edit deck → Exam date): until the exam, no card in the deck is scheduled past it (cards already scheduled later are brought forward), retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, weakest first. A countdown shows on the deck; after the exam it goes back to normal.
@@ -22,6 +22,7 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - Search, filter (new, learning, due, suspended, buried, flags, leeches) and sort (date added, due, most forgotten, hardest, A–Z).
   - Tap a card to edit it, suspend it, bury it until tomorrow, flag it, move it, reset it to new, set its due date, delete it, or see its full history (Card info).
   - Select several cards to do any of these to all of them at once, and add single cards with + Add card.
+  - **Tools:** a Duplicates filter (same front, written differently), **Find and replace** across selected cards, and **Tags** to rename or remove a tag everywhere.
   - Suspended and buried cards are left out of Review and Play.
 - **Import** (the fastest way in):
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
@@ -30,20 +31,25 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS. Off, or with no history, cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
-- **Review:** daily spaced repetition with FSRS-6.
+- **Today** (the home screen): your day streak, a daily goal ring, one **Start** button for everything due (with a time estimate from your own answer speed), a row per course to study just that deck, and your upcoming exams. **Options** on Today holds which decks to study, answering by flipping or typing, and Custom study.
+- **Review:** daily spaced repetition with FSRS-6. The card turns over when you flip it (a quick fade if your device asks for reduced motion).
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
-  - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend), and a summary at the end.
+  - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend, R read aloud), and a summary at the end.
+  - **Read aloud:** 🔊 (or R) reads the card with your device's voices; each deck picks a language (or works it out from the text) and can read cards out automatically.
   - The ⋯ button opens the card's panel mid-review: edit, flag, suspend, bury, move, reset, set due date, delete or see its info.
-  - **Custom study** (on the Review screen): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
+  - **Custom study** (Today → Options): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
   - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki.
-  - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams) and fuzz on/off.
-- **Play:** timed rounds.
+  - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams), spreading due dates onto the least busy days, and **easy days** (Normal / Reduced / Minimum per weekday).
+  - **Reviews per day** (optional; no limit by default), overall and per deck.
+  - **Per-deck settings** (Edit deck → Study options): a deck can have its own retention, steps, maximum interval, and new and review limits, or use the overall ones.
+  - **Subdecks**: put a deck inside another (+ Subdeck, or Edit deck → Inside), e.g. Psych 101 › Unit 1. A deck includes its subdecks in its card list, Review, Play, Stats and Export; its limits cap them all; and they use its settings, exam date and read-aloud language unless they set their own. Anki imports can keep their subdecks.
+- **Play:** timed rounds. The deck (it opens on the one with the nearest exam), the format and Start come first; the question type, Hard, Flash, question count and time are under **Customise**.
   - **Classic** (10/20/40 questions), **Survival** (3 lives, shrinking timer) and **Lightning** (60 seconds).
   - Front → back, back → front, or typing. Definition-style decks start on back → front (read the definition, pick the term), and your own pick is remembered per deck.
   - **Hard** mode (6 lookalike options) and **Flash** (the question vanishes).
   - Streak scoring, an S–D grade and best scores.
   - **Card ⋯** after each answer opens the same card panel (pauses the round).
-- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back.
+- **Auto-grading:** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). A miss on any studied card brings it back. In a deck with an exam coming up, a new card's first Play answer is its first review too (within the new-cards-per-day limit).
 - **Works on phones and computers:** on a computer (1024px and wider) the tabs become a sidebar, lists and Stats use the full width, a card's panel opens beside the card list (1200px+), and Review shows a bigger card with its keyboard shortcuts. Phones keep the bottom tabs and pop-up sheets.
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
@@ -51,10 +57,11 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - a study calendar: a year of study days as squares (darker = more answers), with your best streak
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
-  - a mastery grid you can tap card by card
+  - under **More stats** on phones (always shown on a computer): answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, how FSRS difficulty is spread across your cards, and a mastery grid you can tap card by card
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
-- **Starter decks:** optional JLPT N5 and N4 kanji decks (Decks tab → Starter decks).
-- **Themes:** 6 color themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx), most with light and dark versions.
+- **Starter decks:** optional JLPT N5 and N4 kanji decks, tucked away (Decks tab → Starter decks, or Import → Ready-made decks).
+- **First run:** a fresh install opens on a short, skippable start: name your course, add cards (paste, file or the sample deck), then a guided review of 3 cards. It never shows again, and existing users never see it.
+- **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono.
 - **Works offline,** installs on your phone, and keeps your data on your device.
 
 ## Install it on your phone
@@ -67,7 +74,7 @@ On a computer, open the link in Chrome or Edge and use the install button in the
 
 ## Your data
 
-Everything is saved in your browser (IndexedDB), on your device only. There are no accounts and no servers.
+Everything is saved in your browser (IndexedDB) on your device, and it all works offline with no account. An account is optional: if you want your decks on more than one device, sign in under Settings → Sync (accounts and storage come from your own Supabase project, see [docs/sync-setup.md](docs/sync-setup.md)). Without one, nothing leaves your device.
 
 - The home-screen app and a browser tab can have **separate** storage (especially on iPhone), so pick one and stick with it.
 - **Export a backup now and then** (Settings → Back up). To move to a new phone or computer, export there and choose **Import backup** on the new device.
@@ -95,8 +102,13 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/exam.js` | Exam date mode: limits, pulling cards in, Exam prep |
 | `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
 | `js/media.js` | Pictures: shrinking, saving and showing them |
+| `js/speech.js` | Reading cards aloud |
+| `js/balance.js` | Evening out reviews across days, and easy days |
+| `js/deck-tree.js` | Subdecks: paths, what's inside a deck, and inherited settings |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
-| `js/review.js` | The Review screen |
+| `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
+| `js/onboarding.js` | The first-run start and the guided first review |
+| `js/review.js` | The Review session (flip, rate, finish) |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
@@ -122,6 +134,12 @@ npx http-server -c-1
 
 Then open the address it prints.
 
+## Releasing a change
+
+Phones keep the old copy of the app files until `CACHE` in `sw.js` changes. So **bump `CACHE` (for example `v37` to `v38`)
+on every release that changes any app file**, then run `node tests/update-sw-hash.mjs` to save the files' new fingerprint
+in `sw.js`. `npm test` fails with a reminder until you do both.
+
 ## Running the tests
 
 ```
@@ -129,3 +147,27 @@ node --test
 ```
 
 To run one file, use for example `node tests/import.test.js`. No install is needed: it uses Node's built-in test runner. `package.json` only tells Node the files are modules.
+
+### Browser tests
+
+`tests/browser` has tests that open the app in a real (hidden) browser and click through it: Review, Play,
+import and export, sync (against a fake Supabase), subdecks and more. Each check prints PASS or FAIL.
+
+```
+npm run test:browser            # all of them (a few minutes)
+npm run test:browser review     # only the ones with "review" in the name
+```
+
+On Claude Code's cloud computers this works as is. On your own computer, install the browser tools once:
+`npm install --no-save playwright && npx playwright install chromium`. Screenshots and downloads go in
+`tests/browser/out`. `tests/browser/files` has the sample files the tests import (Anki decks, a spreadsheet);
+`make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package).
+
+## Redesign (v3.0, experiment branch)
+
+What changed across the three steps (details in PLAN.md):
+
+1. **Look:** a dark and sleek look with new design tokens; five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light, plus OLED black; rating colors fixed so Again / Hard / Good / Easy never change with the theme; a focus mode that hides the tab bar and header during a round; and contrast fixes. Geist fonts.
+2. **Today:** a home screen (the first tab) with a daily goal ring, streak, one Start button, a row per course with a mastery ring and upcoming exams. The card now flips, the finish screen was redone, and emoji were replaced by one set of icons. The old Review setup lives in Today → Options.
+3. **Shorter screens and a first run:** a skippable first-run start (pitch, name your course, add cards, guided review) that existing users never see; JLPT starter decks tucked away under "Starter decks"; Stats folds four sections under "More stats" on phones only; Settings moves timer and leech options into Advanced scheduling and Reset into a Danger zone; card filters are grouped; Play opens with deck, format and Start above the fold with the rest under "Customise"; and Play starts new cards in decks with an exam coming up. Along the way: fixes for focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight.
+4. **Speed and Today follow-ups:** Stats, Today and Browse are much quicker on big libraries (10,000 cards); other screens load when first opened and the app opens from its saved files at once, updating in the background. Starting a session while another is going resumes it (same decks) or asks first; the flipped card moves focus to the answer for screen readers and the keyboard; the Today time estimate uses the real time between answers.

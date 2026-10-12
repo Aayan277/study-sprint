@@ -3,10 +3,12 @@
 
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
-import { notesToImport, onlyDeck, deckList, replayHistory } from './anki.js';
+import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
+import { deckChoices, subtreeIds } from './deck-tree.js';
 import { schedulerOptions } from './sched-settings.js';
 import { DECK_COLORS } from './decks.js';
-import { $, esc, plural, toast } from './ui.js';
+import { FIRST_REVIEW_KEY } from './onboarding.js';
+import { $, esc, plural, toast, icon } from './ui.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -16,7 +18,9 @@ const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make
 // Everything the screen is working with.
 let S = null;
 
-export async function renderImport(el, deckId) {
+// arg: a deck id, optionally followed by "/file" to open on the File tab (the first-run start does this).
+export async function renderImport(el, arg) {
+  const [deckId, firstTab] = String(arg || '').split('/');
   const decks = (await db.getDecks()).sort((a, b) => a.created - b.created);
   S = {
     result: null,          // what import.js detected
@@ -35,7 +39,7 @@ export async function renderImport(el, deckId) {
     <section class="section">
       <label class="field"><span>Add to deck</span>
         <select id="deckSel">
-          ${decks.map(d => `<option value="${esc(d.id)}" ${d.id === S.deckId ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+          ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === S.deckId ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
           <option value="${NEW_DECK}" ${S.deckId === NEW_DECK ? 'selected' : ''}>+ New deck…</option>
         </select></label>
       <label class="field" id="newNameRow" style="margin-top:12px" ${S.deckId === NEW_DECK ? '' : 'hidden'}><span>New deck name</span>
@@ -76,6 +80,7 @@ export async function renderImport(el, deckId) {
     </section>
 
     <p class="err" id="loadErr" role="alert" hidden></p>
+    <p class="note" id="readyMade"><a href="#/decks/starters">Ready-made decks</a> (JLPT kanji) are in Decks → Starter decks.</p>
 
     <section id="preview" class="section" hidden aria-labelledby="pvTitle">
       <h2 id="pvTitle" style="margin-top:22px">Preview</h2>
@@ -87,8 +92,11 @@ export async function renderImport(el, deckId) {
       <label class="adv-row switch-row prog-row" id="progRow" hidden><span><b>Bring over my Anki progress</b>
         <span id="progInfo"></span></span>
         <input id="ankiProg" type="checkbox" class="switch" checked></label>
+      <label class="adv-row switch-row prog-row" id="subRow" hidden><span><b>Keep Anki's subdecks</b>
+        <span id="subInfo"></span></span>
+        <input id="ankiSubs" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
-        <button class="btn ghost small" type="button" id="swapBtn">⇄ Swap front and back</button>
+        <button class="btn ghost small" type="button" id="swapBtn">${icon('swap')} Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
       </div>
       <ol class="plist" id="plist"></ol>
@@ -106,6 +114,7 @@ export async function renderImport(el, deckId) {
   wireFile();
   wireSheet();
   wirePreview();
+  if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
 }
 
@@ -120,7 +129,10 @@ function wireDeckPicker() {
   });
 }
 async function loadDeckFronts() {
-  S.deckFronts = S.deckId === NEW_DECK ? [] : (await db.getCardsInDeck(S.deckId)).map(c => c.front);
+  // Duplicates are checked against the deck and its subdecks.
+  if (S.deckId === NEW_DECK) { S.deckFronts = []; return; }
+  const inside = subtreeIds(await db.getDecks(), S.deckId);
+  S.deckFronts = (await db.getAll('cards')).filter(c => inside.has(c.deckId)).map(c => c.front);
 }
 
 // ---------- Paste / File / Google Sheets tabs ----------
@@ -382,6 +394,10 @@ function refreshFlags() {
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
+  // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
+  const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
+  $('subRow').hidden = !subs.size;
+  if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to, like in Anki. Off = everything goes in that one deck.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
   $('found').innerHTML = parts.join(' ');
@@ -394,7 +410,7 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, pictures: c.pictures }));
+  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiDeck: c.ankiDeck, pictures: c.pictures }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -423,58 +439,97 @@ async function save() {
     deckName = $('deckSel').selectedOptions[0].textContent;
   }
 
-  $('saveBtn').disabled = true;
-  const now = Date.now();
-  // created + i keeps the cards in the order they were pasted.
-  const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
-  // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
-  const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
-  if (withPics.length) {
-    const { processImage, saveImage } = await import('./media.js');
-    const done = new Map();          // a picture used on several cards is saved once
-    const picture = async name => {
-      if (!name) return null;
-      if (!done.has(name)) {
-        done.set(name, (async () => {
-          const got = await S.ankiMedia.get(name);
-          if (!got) return null;
-          const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
-          return saveImage(type, data);
-        })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+  // Read what we need from the page now: the picture step below takes a while, and you may leave the screen meanwhile.
+  const saveBtn = $('saveBtn');
+  const makeSubdecks = !$('subRow').hidden && $('ankiSubs').checked;
+  saveBtn.disabled = true;
+  try {
+    const now = Date.now();
+    // created + i keeps the cards in the order they were pasted.
+    const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
+    // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
+    const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
+    if (withPics.length) {
+      const { processImage, saveImage } = await import('./media.js');
+      const done = new Map();          // a picture used on several cards is saved once
+      const picture = async name => {
+        if (!name) return null;
+        if (!done.has(name)) {
+          done.set(name, (async () => {
+            const got = await S.ankiMedia.get(name);
+            if (!got) return null;
+            const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
+            return saveImage(type, data);
+          })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+        }
+        return done.get(name);
+      };
+      for (const [n, [pics, card]] of withPics.entries()) {
+        saveBtn.textContent = `Adding pictures: ${n + 1} of ${withPics.length}…`;
+        const [f, b] = [await picture(pics.front), await picture(pics.back)];
+        if (f) card.frontImage = f;
+        if (b) card.backImage = b;
       }
-      return done.get(name);
-    };
-    for (const [n, [pics, card]] of withPics.entries()) {
-      $('saveBtn').textContent = `Adding pictures: ${n + 1} of ${withPics.length}…`;
-      const [f, b] = [await picture(pics.front), await picture(pics.back)];
-      if (f) card.frontImage = f;
-      if (b) card.backImage = b;
     }
-  }
-  if (deckId === NEW_DECK) {
-    deckId = db.newId();
+    // Nothing is saved until everything is ready; then it all goes in together (see db.addImport).
+    const newDecks = [];
+    let color;
+    if (deckId === NEW_DECK) {
+      deckId = db.newId();
+      color = DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
+      newDecks.push({ id: deckId, name: deckName, course: '', color, parentId: '', created: now });
+    }
     cards.forEach(c => { c.deckId = deckId; });
-    const color = DECK_COLORS[Math.floor(Math.random() * DECK_COLORS.length)];
-    await db.addDeckWithCards({ id: deckId, name: deckName, course: '', color, created: now }, cards);
-  } else {
-    cards.forEach(c => { c.deckId = deckId; });
-    await db.putMany('cards', cards);
-  }
-  let withHistory = 0;
-  if (replay) {
+    // Anki subdecks: make (or reuse) the same subdecks inside the chosen deck, and put each card in its own.
+    let made = 0;
+    if (makeSubdecks) {
+      const all = await db.getDecks();
+      color ||= all.find(d => d.id === deckId)?.color;
+      const paths = subdeckPaths(toAdd.map(c => c.ankiDeck));
+      const found = new Map();                     // 'parentId/name' → deck id
+      const subdeck = (parentId, name) => {
+        const key = `${parentId}/${name}`;
+        if (!found.has(key)) {
+          const existing = all.find(d => d.parentId === parentId && d.name === name);
+          if (existing) found.set(key, existing.id);
+          else {
+            const deck = { id: db.newId(), name, course: '', color, parentId, created: now + 1 + made++ };
+            newDecks.push(deck);
+            all.push(deck);
+            found.set(key, deck.id);
+          }
+        }
+        return found.get(key);
+      };
+      for (const [i, path] of paths.entries()) {
+        let id = deckId;
+        for (const name of path) id = subdeck(id, name);
+        cards[i].deckId = id;
+      }
+    }
+    let withHistory = 0;
     const states = [], logs = [];
-    cards.forEach((card, i) => {
-      const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
-      if (!entries) return;
-      const { state, logs: cardLogs } = replay(card.id, entries);
-      if (state) states.push(state);
-      if (cardLogs.length) withHistory++;
-      cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
-    });
-    if (logs.length) await db.putMany('reviewLog', logs);
-    if (states.length) await db.putStates(states);
+    if (replay) {
+      cards.forEach((card, i) => {
+        const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
+        if (!entries) return;
+        const { state, logs: cardLogs } = replay(card.id, entries);
+        if (state) states.push(state);
+        if (cardLogs.length) withHistory++;
+        cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
+      });
+    }
+    await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
+    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
+    // replace() so the back gesture from the deck doesn't land on this finished import.
+    // Coming from the first-run start, the first review of the new cards is next.
+    let first = null;
+    try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
+    location.replace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't add the cards. Nothing was saved, so you can try again.");
+    saveBtn.disabled = false;
+    if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
-  toast(`Added ${plural(cards.length, 'card')} to ${deckName}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
-  // replace() so the back gesture from the deck doesn't land on this finished import.
-  location.replace(`#/deck/${deckId}`);
 }

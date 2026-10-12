@@ -223,11 +223,13 @@ export function parseRows(rows) {
 
 // Pick which columns are the front and back.
 export function buildCards(result, frontCol = 0, backCol = 1) {
-  // tags, ankiId and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki review history).
+  // tags, ankiId, ankiDeck and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
+  // review history; ankiDeck is the Anki deck it came from, for keeping subdecks).
   return result.rows.map((r, i) => ({
     front: r[frontCol] ?? '', back: r[backCol] ?? '',
     ...(result.tags ? { tags: result.tags[i] } : {}),
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
+    ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),
     ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {})
   }));
 }

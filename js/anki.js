@@ -182,3 +182,18 @@ export function deckList(result) {
   return [...counts].filter(([name]) => name).map(([name, count]) => ({ name, count }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
+
+// Keeping Anki's subdecks: each row's deck relative to what all the rows share, as a list of names.
+// ['Psych', 'Psych::Unit 1', 'Psych::Unit 1::Lecture 3'] → [[], ['Unit 1'], ['Unit 1', 'Lecture 3']]
+// (the shared part, "Psych", is the deck you import into). Decks from different top-level Anki decks
+// keep their whole names: ['Bio', 'Chem::Acids'] → [['Bio'], ['Chem', 'Acids']].
+export function subdeckPaths(names) {
+  const split = names.map(n => String(n || '').split('::').map(s => s.trim()).filter(Boolean));
+  let shared = split[0]?.length || 0;
+  for (const p of split) {
+    let i = 0;
+    while (i < shared && i < p.length && p[i] === split[0][i]) i++;
+    shared = i;
+  }
+  return split.map(p => p.slice(shared));
+}

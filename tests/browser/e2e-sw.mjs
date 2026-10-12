@@ -1,0 +1,78 @@
+// The service worker: app files come from the saved copy at once and update in the background,
+// a new version of sw.js installs a fresh copy and reloads once, and the app opens offline.
+// It serves a temporary copy of the app (on any free port) so the test can change files between visits.
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { chromium } from './pw.mjs';
+
+const ROOT = path.resolve(import.meta.dirname, '../..');
+const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-sw-'));
+for (const f of ['index.html', 'sw.js', 'manifest.webmanifest']) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
+for (const d of ['css', 'js', 'icons']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
+const probe = v => fs.appendFileSync(path.join(SITE, 'js/sample.js'), `\nexport const PROBE = '${v}';\n`);
+const setProbe = v => { const f = path.join(SITE, 'js/sample.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/export const PROBE = '.*';/, `export const PROBE = '${v}';`)); };
+probe('A');
+
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+const server = http.createServer((req, res) => {
+  const p = new URL(req.url, 'http://x').pathname;
+  const file = path.join(SITE, p.endsWith('/') ? p + 'index.html' : p);
+  if (!file.startsWith(SITE) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end(); return; }
+  res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
+  fs.createReadStream(file).pipe(res);
+});
+await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+const URL0 = `http://localhost:${server.address().port}/`;
+
+const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 375, height: 740 } });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', e => errors.push(e.message));
+const probeNow = () => page.evaluate(async () => (await import('./js/sample.js')).PROBE);
+const cacheNames = () => page.evaluate(() => caches.keys());
+const settle = ms => page.waitForTimeout(ms);
+
+// 1. First visit: the worker installs and saves every app file.
+await page.goto(URL0 + '#/today'); await page.waitForSelector('.tdeck, .empty');
+await page.evaluate(() => navigator.serviceWorker.ready);
+await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 15000 });
+ok((await cacheNames()).length === 1, 'first visit: one cache of app files ' + (await cacheNames()));
+const first = (await cacheNames())[0];
+ok(await page.evaluate(async c => !!(await (await caches.open(c)).match('js/today.js')), first), 'js/today.js is saved');
+ok(await probeNow() === 'A', 'first visit runs the files as served');
+
+// 2. Same version of the worker, a changed file: this visit still uses the saved copy, the next one has the update.
+setProbe('B');
+await page.reload(); await page.waitForSelector('.tdeck, .empty');
+ok(await probeNow() === 'A', 'a visit is answered from the saved copy straight away');
+await settle(800);   // the background copy is fetched and saved
+await page.reload(); await page.waitForSelector('.tdeck, .empty');
+ok(await probeNow() === 'B', 'and the next visit has the update');
+
+// 3. A new version of sw.js: a fresh copy of everything is installed, the old one removed, the app reloads once.
+setProbe('C');
+fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').replace(/study-sprint-v\d+/, 'study-sprint-v999'));
+let loads = 0;
+page.on('load', () => { loads++; });
+await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.update()));
+await page.waitForFunction(() => caches.keys().then(k => k.length === 1 && k[0] === 'study-sprint-v999'), null, { timeout: 15000 }).catch(() => {});
+await settle(1500);
+ok(JSON.stringify(await cacheNames()) === '["study-sprint-v999"]', 'new worker: only the new cache is left ' + (await cacheNames()));
+ok(loads === 1, 'the app reloaded once to pick up the update (' + loads + ')');
+await page.waitForSelector('.tdeck, .empty');
+ok(await probeNow() === 'C', 'after the reload the new files run straight away, not the old ones');
+
+// 4. Offline: the app still opens.
+await ctx.setOffline(true);
+await page.reload(); await page.waitForSelector('.tdeck, .empty');
+ok(await probeNow() === 'C', 'offline: the app opens from the saved files');
+ok((await page.locator('h1').first().textContent()) === 'Today', 'offline: Today shows');
+await page.evaluate(() => { location.hash = '#/stats'; }); await page.waitForSelector('.pgrid, .empty');
+ok((await page.locator('h1').first().textContent()) === 'Stats', 'offline: another screen (loaded on demand) opens too');
+await ctx.setOffline(false);
+ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
+await browser.close(); server.close(); fs.rmSync(SITE, { recursive: true, force: true });

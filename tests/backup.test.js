@@ -20,6 +20,16 @@ test('other files are refused with a clear message', () => {
   assert.match(checkBackup({ ...good, cards: undefined }), /damaged \(missing cards\)/);
 });
 
+test('a backup with a broken record, bad color or SVG picture is refused', () => {
+  assert.match(checkBackup({ ...good, cards: [{ front: 'no id' }] }), /record in cards has no id/);
+  assert.match(checkBackup({ ...good, cardStates: [{ id: 'x' }] }), /cardStates has no cardId/);
+  assert.match(checkBackup({ ...good, decks: [null] }), /record in decks/);
+  assert.match(checkBackup({ ...good, decks: [{ id: 'd', color: 'red;position:fixed' }] }), /invalid color/);
+  assert.equal(checkBackup({ ...good, decks: [{ id: 'd', color: '#3E63DD' }], cards: [{ id: 'c' }], cardStates: [{ cardId: 'c' }] }), null);
+  assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'image/svg+xml', data: '' }] }), /not a supported image/);
+  assert.equal(checkBackup({ ...good, media: [{ id: 'm', type: 'image/jpeg', data: '' }] }), null);
+});
+
 test('starter decks: 102 N5 and 180 N4 kanji', () => {
   assert.deepEqual(STARTER_DECKS.map(d => starterCards(d.level).length), [102, 180]);
   const all = STARTER_DECKS.flatMap(d => starterCards(d.level));

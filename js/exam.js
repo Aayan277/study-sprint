@@ -9,6 +9,7 @@
 // After the exam day, nothing changes any more: the deck goes back to normal by itself.
 
 import { dayStart, dayEnd } from './days.js';
+import { effectiveDeck, subtreeIds, treeOrder } from './deck-tree.js';
 
 const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
@@ -80,4 +81,17 @@ export function examPrepQueue(cards, statesById, now = Date.now(), recentDays = 
     queue: [...studied.map(({ card, st }) => ({ card, kind: st.state === REVIEW ? 'review' : 'learn' })), ...fresh.map(card => ({ card, kind: 'new' }))],
     waiting: []
   };
+}
+
+// The deck with the nearest upcoming exam that has cards (a subdeck counts the exam of the deck it's inside),
+// or null when no deck has one. A parent comes before its subdecks, so it wins a tie. Play opens on this deck.
+export function nearestExamDeck(decks, cards, now = Date.now()) {
+  let best = null;
+  for (const { deck } of treeOrder(decks)) {
+    const info = examInfo(effectiveDeck(decks, deck.id), now);
+    if (!info || (best && info.daysLeft >= best.daysLeft)) continue;
+    const inside = subtreeIds(decks, deck.id);
+    if (cards.some(c => inside.has(c.deckId))) best = { id: deck.id, daysLeft: info.daysLeft };
+  }
+  return best?.id ?? null;
 }

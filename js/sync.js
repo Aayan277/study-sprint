@@ -46,6 +46,7 @@ async function signedIn(session) {
   // A different account than last time on this device (or the first): start from the beginning, so
   // everything here is sent and everything on the server is merged in.
   if (!syncState || syncState.userId !== session.user.id) {
+    await db.forgetSyncedMarks();   // records that came from other devices count as unsent too
     await db.setSetting('syncState', { userId: session.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 });
   }
   return syncNow();
@@ -62,11 +63,42 @@ export const sendPasswordReset = email => supa.sendPasswordReset(email.trim(), a
 export function recoveryFromLink(hash = location.hash) {
   return parseAuthLink(hash);
 }
-// Set the new password from a reset link, and sign in with it.
+// Whose account a reset link is for: { id, email }. Anyone can make a link for their own account, so this
+// refuses (with a message to show) if the link is for someone else than the account signed in on this device.
+export async function lookUpResetLink(linkSession) {
+  let user;
+  try { user = await supa.getUser(linkSession.access_token); } catch (err) {
+    // Only a refused token means the link is spent. Offline or a server hiccup: keep the link and try again later.
+    if (err.status === 401 || err.status === 403) throw new supa.SupaError('That reset link has expired or was already used. Ask for a new one.', { code: 'expired' });
+    throw new supa.SupaError('Couldn’t check that reset link. Check your connection and open it again.', { code: 'offline' });
+  }
+  const current = await account();
+  if (current && current.id !== user.id) {
+    throw new supa.SupaError(`That link is for ${user.email}, but this device is signed in as ${current.email}. Sign out here first, then ask for a new reset email.`);
+  }
+  // Signed out, but this device last synced with a different account: setting the password would sign in and
+  // copy everything here into the link's account, so refuse.
+  const { syncState } = await db.getSettings();
+  if (!current && syncState?.userId && syncState.userId !== user.id) {
+    throw new supa.SupaError(`That link is for ${user.email}, but this device's cards belong to a different account. Sign in to that account first, or clear this device (Settings → Your data → Reset all data).`);
+  }
+  return user;
+}
+// Set the new password from a reset link. Normally that signs in too. Not on a device that has cards
+// but never signed in: a link for someone else's account would copy everything here into it.
+// Returns { signedIn, email } so the screen can say which happened.
 export async function finishPasswordReset(linkSession, password) {
+  const user = await lookUpResetLink(linkSession);   // checked again here, right before anything changes
   await supa.setPassword(linkSession.access_token, password);
-  const user = await supa.getUser(linkSession.access_token);
-  return signedIn({ ...linkSession, user });
+  const { syncAuth, syncState } = await db.getSettings();
+  const known = syncAuth?.user?.id === user.id || syncState?.userId === user.id;
+  if (!known && !syncState && await hasLocalData()) return { signedIn: false, email: user.email };
+  await signedIn({ ...linkSession, user });
+  return { signedIn: true, email: user.email };
+}
+async function hasLocalData() {
+  for (const name of ['decks', 'cards', 'reviewLog']) if ((await db.getAll(name)).length) return true;
+  return false;
 }
 // Change the password while signed in.
 export async function changePassword(password) {

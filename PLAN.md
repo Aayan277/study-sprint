@@ -23,12 +23,12 @@ A mobile-first flashcard app for studying university course material. It combine
 | Piece | Choice |
 | --- | --- |
 | Hosting | GitHub Pages, from the `main` branch root |
-| App shell | PWA: `manifest.webmanifest` plus a service worker (network-first for app files, cache-first for fonts and CDN libraries). Copy the approach from kanji-sprint's `sw.js` |
+| App shell | PWA: `manifest.webmanifest` plus a service worker (app files are served from the saved copy and updated in the background, cache-first for fonts and CDN libraries). Copy the approach from kanji-sprint's `sw.js` |
 | Storage | IndexedDB, through a small wrapper in `js/db.js` (or `idb-keyval` from a CDN). Not localStorage, since decks can outgrow it |
 | Scheduling | FSRS via the `ts-fsrs` library |
 | CSV parsing | Papa Parse |
 | Excel import | SheetJS (load it only when someone imports an .xlsx) |
-| Fonts and themes | Bricolage Grotesque (headings), DM Sans (text), IBM Plex Mono (numbers). 6 themes (Ink, Blossom, Sage, Cobalt, Neon, Onyx) with light and dark versions. No kanji or Japanese branding |
+| Fonts and themes | Geist (text) and Geist Mono (numbers). 5 accent themes (Violet, Ocean, Forest, Ember, Rose) with dark and light versions, plus OLED black. No kanji or Japanese branding |
 
 ### Suggested file structure
 
@@ -136,6 +136,7 @@ Material:
 - If a card is **due or overdue**, apply the rating to FSRS normally.
 - If a card is **not due yet**, only an **Again** changes its schedule. Correct answers get logged for stats but don't push the card further out.
 - Apply at most one schedule update per card per day from Play.
+- **New cards** (never reviewed) are left for Review, with one exception: in a deck whose **exam date** is coming up (its own, or the deck it's inside), a Play answer counts as the card's **first review**: correct uses the table above, wrong is Again. These respect the new-cards-per-day limits (overall, the deck's own, and parent decks' limits). Only new cards really started today count against them, so Play answers that were just logged don't use them up. Over the limit, the card is only logged and starts in Review. The results screen says how many new cards were started and why.
 
 ### 6. Stats
 - **Per-deck mastery grid** like kanji-sprint's, with levels from FSRS: New, Learning, Young (stability under 21 days), Mature (21 days or more). Tap a card to see its history.
@@ -189,6 +190,38 @@ Built in 3 parts:
 2. ✅ **Study calendar** in Stats (v2.2): a year of study days, one column per week, darker = more answers; tap a day to see it; best streak.
 3. ✅ **Export a deck** (v2.3) as CSV (Excel-friendly, imports back in) or an Anki deck (.apkg, Anki's widely supported older layout; checked by importing into the real Anki library). Cards only: progress stays in Study Sprint.
 4. ✅ **Exam date mode** (v2.4) (full: nothing scheduled past the exam, retention rises near it, Exam prep session, countdown), ✅ **card formatting** (v2.5) (saved as simple marks; B / I / • toolbar on phones, Word-style editing on computers) and ✅ **images on cards** (v2.6) (1 per side, shrunk to 1280px JPEG, synced through Supabase Storage with `supabase/media.sql`, in backups, Anki import (both file formats) and export). All done.
+
+## More from Anki (requested after v2.6)
+
+Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlusion is "hide all, guess one"; cards from the same note don't show on the same day; subdecks (a parent includes its subdecks; its limits cap the group); per-deck settings (default "use my overall settings"); no daily review limit by default; easy days (Normal / Reduced / Minimum per weekday) and load balancing within fuzz; read aloud per deck.
+
+- A. ✅ (v2.7) **Read aloud** (🔊 / R, deck language or auto-detect, auto-read), **card list tools** (Duplicates filter, Find and replace, Tags: rename or remove everywhere), **more stats** (answer buttons, time of day, difficulty).
+- B. ✅ (v2.8) **Per-deck settings** (deck.options, deck.reviewPerDay), **daily review limit** (settings.reviewLimit), **easy days** and evening out (settings.easyDays; balance.js picks the least busy day within the fuzz range).
+- C. ✅ (v2.9) **Subdecks** (deck.parentId; deck-tree.js). A deck includes its subdecks everywhere (card list, Review, Play, Stats, Export); a parent's limits cap the group; subdecks inherit study options, exam date and read aloud unless they set their own; deleting a parent asks to delete or move up the subdecks; Anki imports can keep their subdecks and Anki exports keep them.
+- D. **Cloze cards**.
+- E. **Image occlusion**.
+
+## Redesign (v3.0, experiment branch)
+
+Done on the `experiment` branch, in three steps. All of it keeps the no-build-step, no-data-format-change rules (the only new setting keys are `onboarded` and the fold states, which live in localStorage).
+
+1. **Dark and sleek look.** New design tokens (type, spacing, radii, elevation, color roles), five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light plus OLED, Geist fonts, fixed rating colors that stay distinct from the brand color, a focus mode (tab bar and header hidden during a round), and contrast fixes.
+2. **Today is the home screen.** Daily goal ring, streak and one Start button, a row per course, upcoming exams, and an Options sheet (decks, flip or type, Custom study). The card flips, the finish screen was redone, and emoji became one icon set. Decks was updated to match. The Review setup now lives in Today → Options.
+3. **Less to wade through, and a first run.**
+   - **First run** (`js/onboarding.js`, route `#/welcome`): on a fresh install with no decks, cards or reviews, a skippable 3-step start (pitch, name your course with optional code and exam date, add cards by paste / file or Anki / sample deck) then a guided review of 3 cards (real reviews, saved). It never shows again once finished or skipped (`onboarded` setting, kept in backups). Existing installs (the old `seeded` flag, or any data) never see it. The sample deck is only added when "Try the sample deck" is picked. Tests skip it with `localStorage 'study-sprint-skip-onboarding' = '1'` (set by `tests/browser/pw.mjs`) or `?skipOnboarding`, which adds the sample deck like before.
+   - **JLPT starter decks** are hidden: a small "Starter decks" fold at the bottom of Decks, and Import links to it ("Ready-made decks", `#/decks/starters`).
+   - **Stats:** on phones (under 1024px), answer buttons, time of day, difficulty and the mastery grid sit under a "More stats" fold. Computers show everything.
+   - **Settings:** the timer default and leech settings are inside "Advanced scheduling" (a Play timer stepper was added there: there was none in Settings before), and Reset all data is behind a "Danger zone" fold at the bottom of Your data. The Danger zone always starts closed (its state is deliberately not remembered). Other fold states are remembered per device.
+   - **Card filters** are grouped (Status / Flags / Problems) with `<optgroup>`.
+   - **Play quick-start:** deck, the three format tiles and Start fit above the fold at 375x812; question type, Hard, Flash, question count and time are under "Customise" with a one-line summary. The deck defaults to the one with the nearest upcoming exam (until you pick one in that visit), otherwise the last one used.
+   - **Play starts new cards in exam decks** (see section 5 above).
+     - A subdeck's own past exam date hides its parent's exam for that subdeck (same as Review), and on exam day itself Play still starts new cards.
+     - The new-cards-per-day limit is respected (overall, the deck's, and parents'); Play answers that were only logged do not use up slots, in Review and Play alike (`newLimits`).
+   - First-run details: going Back never returns to the start (`location.replace`); `#/welcome` goes to Today once finished; "Try the sample deck" does nothing if a `sample` deck already exists; the guided review of the sample is skipped on a device with a sync account; `?skipOnboarding` only works on localhost.
+   - **Earlier bug fixes** along the way: focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight (study day starts at 4am).
+   - **Speed pass and Today follow-ups:** Stats counts answers per day in the database (the whole log is read only when a deck is picked), draws 500 mastery squares at a time, and redraws once after a sync; Today reads 60 days of the log and finds the streak by walking back only as far as it goes (`lazyStreak`, shared with Stats and the finish screen); deck counts come from one sorted pass (`splitCards`); Browse sorts with one `Intl.Collator`; Play samples ~300 candidates for wrong options; `applyRemote` reads a whole page at once; the service worker is stale-while-revalidate (bump `CACHE` for a release: it installs fresh files and reloads once), `index.html` preloads the boot modules (a test keeps the list in step with `app.js`), and screens other than Today load on demand. Review: the turned-away face is `inert` and focus moves to the answer; Today's Start resumes a same-deck session or asks "Start over?"; exam prep is a normal launch (`kind: 'prep'`); a deck's session lives at `#/review/<deck>`; the time estimate is the median gap between reviews in a session.
+
+Known leftovers: Reset all data still re-adds the sample deck afterwards (as before), and the first-run start does not appear on a second device that is about to sign in (its "Already use Study Sprint?" link goes to Settings).
 
 ## Parked (not planned for now)
 

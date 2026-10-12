@@ -13,14 +13,17 @@ import {
 } from './game.js';
 import { autoRating, scheduleDecision, applies } from './autograde.js';
 import { dayStart } from './days.js';
-import { schedulerOptions } from './sched-settings.js';
-import { examOptions } from './exam.js';
+import { deckSchedulerOptions } from './sched-settings.js';
+import { loadByDay } from './balance.js';
+import { examOptions, examInfo, nearestExamDeck } from './exam.js';
+import { newLimits, extraNewToday, newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck, chainMap } from './deck-tree.js';
 import { isHidden, isNewLeech, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
-import { $, esc, plural, toast } from './ui.js';
+import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
@@ -30,6 +33,9 @@ const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: fal
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
 let pendingDrill = null;   // card ids sent from another screen (Stats → "Drill these")
+// Has the deck been picked in this visit? Until it has, Play opens on the deck with the nearest exam (see defaultDeck).
+let deckChosen = false;
+let customOpen = null;     // is the "Customise" fold open? (read from this device's saved choice the first time)
 
 // Open Play and start a drill round on these cards straight away.
 export function drillCards(cardIds) {
@@ -43,6 +49,7 @@ const sizeClass = text => (text.length > 120 ? ' xlong' : text.length > 50 ? ' l
 
 // Stop timers when a round is abandoned (leaving the tab, or quitting).
 function stopRound() {
+  setFocusMode(false);
   if (!G) return;
   cancelAnimationFrame(G.raf); clearTimeout(G.autoTimer); clearTimeout(G.flashTimer);
   G = null;
@@ -56,6 +63,7 @@ export async function renderPlay(el) {
   const [settings, decks, allCards, states, logs] = await Promise.all([
     db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(dayStart())
   ]);
+  if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
   // Suspended cards, and cards buried until tomorrow, sit out of Play too.
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
@@ -65,10 +73,17 @@ export async function renderPlay(el) {
     settings, decks, cards,
     statesById: new Map(states.map(s => [s.cardId, s])),
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
-    playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId))
+    playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
+    // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
+    // Only new cards really started today count (newLimits ignores Play answers that were only logged).
+    newLeft: newLimits({ perDay: settings.newPerDay, decks, logs, deckOf: new Map(allCards.map(c => [c.id, c.deckId])),
+      extra: extraNewToday(settings.extraNew), chains: chainMap(decks) })
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
+  // Opening Play: the deck with the nearest exam, otherwise the one you used last.
+  if (!deckChosen) prefs.deckId = nearestExamDeck(decks, cards) || prefs.deckId;
+  if (customOpen === null) customOpen = foldOpen('play-custom');
   let pace = settings.timer;
 
   // Drill sent from Stats: use your usual question type when it works for these cards, otherwise
@@ -85,7 +100,9 @@ export async function renderPlay(el) {
   }
 
   const draw = () => {
-    const pool = prefs.deckId === 'all' ? cards : cards.filter(c => c.deckId === prefs.deckId);
+    // A deck includes its subdecks.
+    const inside = prefs.deckId === 'all' ? null : subtreeIds(decks, prefs.deckId);
+    const pool = inside ? cards.filter(c => inside.has(c.deckId)) : cards;
     // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || defaultQuestionType(pool);
@@ -102,29 +119,40 @@ export async function renderPlay(el) {
     const radio = (name, value, label, checked, extra = '') =>
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
 
+    // One line saying what's in "Customise", so the folded part is still visible at a glance.
+    const timeText = prefs.fmt === 'lightning' ? '60 s clock' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
+    const summary = [typing ? 'Typing' : QTYPES[prefs.qtype], prefs.hard ? 'Hard' : 'Normal', prefs.flash ? `Flash ${prefs.flash / 1000}s` : null,
+      prefs.fmt === 'classic' ? `${prefs.len} questions` : null, timeText].filter(Boolean).join(' · ');
+    const fmtDesc = { classic: 'A set number of questions, with a timer on each.', survival: '3 lives. The timer gets shorter every question.', lightning: '60 seconds on the clock. Wrong answers cost 3s.' };
+
     el.innerHTML = `
-      <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1>
-        <p class="lede">A right answer scores <b>100</b>, plus up to <b>100</b> more for speed, multiplied by your streak (up to <b>×1.5</b>).
-          Answers on cards that are due also count as their review.</p></div></div>
+      <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1></div></div>
 
       ${!cards.length ? `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
           <option value="all" ${prefs.deckId === 'all' ? 'selected' : ''}>All decks (${plural(cards.length, 'card')})</option>
-          ${decks.map(d => `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.name)} (${cards.filter(c => c.deckId === d.id).length})</option>`).join('')}
+          ${deckChoices(decks).map(d => { const ids = subtreeIds(decks, d.id); return `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.label)} (${cards.filter(c => ids.has(c.deckId)).length})</option>`; }).join('')}
         </select>
       </fieldset>
 
       <fieldset><legend>Format</legend>
         <div class="modes three">
-          ${[['classic', `${prefs.len} Q`, 'A set number of questions, with a timer on each.'],
-             ['survival', '<span class="hearts" aria-hidden="true">●●●</span>', '3 lives. The timer gets shorter every question.'],
-             ['lightning', '<span class="clock">1:00</span>', '60 seconds on the clock. Wrong answers cost 3s.']].map(([v, ex, desc]) => `
-            <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''}>
-              <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span><span class="mode-desc">${desc}</span></label>`).join('')}
+          ${[['classic', `${prefs.len} Q`], ['survival', '<span class="hearts" aria-hidden="true">●●●</span>'], ['lightning', '<span class="clock">1:00</span>']].map(([v, ex]) => `
+            <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''} aria-describedby="fmtNote">
+              <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span><span class="mode-desc">${fmtDesc[v]}</span></label>`).join('')}
         </div>
+        <p class="note fmt-note" id="fmtNote">${fmtDesc[prefs.fmt]}</p>
       </fieldset>
 
+      <div class="start-row">
+        <button class="btn primary" type="button" id="startBtn">Start round</button>
+        <span class="mode-best mono">${best ? `Best for this setup <b>${best.toLocaleString()}</b>` : 'No score for this setup yet'}</span>
+      </div>
+
+      <button class="fold-toggle" type="button" id="customBtn" aria-expanded="${customOpen}" aria-controls="customBody">
+        <span>Customise</span><span class="muted small">${esc(summary)}</span>${icon('chevron')}</button>
+      <div id="customBody" ${customOpen ? '' : 'hidden'}>
       <fieldset><legend>Question</legend>
         <div class="chips">
           ${radio('qtype', 'front', 'Front → pick the back', prefs.qtype === 'front', mcOk ? '' : 'disabled')}
@@ -161,16 +189,21 @@ export async function renderPlay(el) {
           ${notes.length ? `<p class="note">${notes.join(' ')}</p>` : ''}
         </fieldset>`}
       </div>
-
-      <div class="start-row">
-        <button class="btn primary" type="button" id="startBtn">Start round</button>
-        <span class="mode-best mono">${best ? `Best for this setup <b>${best.toLocaleString()}</b>` : 'No score for this setup yet'}</span>
       </div>
+
+      <p class="note play-note">A right answer scores <b>100</b>, plus up to <b>100</b> more for speed, multiplied by your streak (up to <b>×1.5</b>).
+        Answers on cards that are due count as their review, and so do new cards in a deck with an exam.</p>
       <p class="hint mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
     if (!cards.length) return;
     const save = () => db.setSetting('playPrefs', { ...prefs });
-    $('pDeck').addEventListener('change', e => { prefs.deckId = e.target.value; save(); draw(); });
+    $('customBtn').addEventListener('click', () => {
+      customOpen = $('customBtn').getAttribute('aria-expanded') !== 'true';
+      $('customBtn').setAttribute('aria-expanded', String(customOpen));
+      $('customBody').hidden = !customOpen;
+      saveFold('play-custom', customOpen);
+    });
+    $('pDeck').addEventListener('change', e => { prefs.deckId = e.target.value; deckChosen = true; save(); draw(); });
     el.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => {
       if (r.name === 'fmt') prefs.fmt = r.value;
       if (r.name === 'qtype') { prefs.qtype = r.value; prefs.qtypeByDeck = { ...prefs.qtypeByDeck, [prefs.deckId]: r.value }; }
@@ -185,7 +218,7 @@ export async function renderPlay(el) {
       $('paceOut').innerHTML = `<b>${pace}s</b> ${name}`;
     });
     $('pace')?.addEventListener('change', () => { db.setSetting('timer', pace); settings.timer = pace; draw(); });
-    $('startBtn').addEventListener('click', () => start(el, { ...prefs, pace, pool }));
+    $('startBtn').addEventListener('click', () => { deckChosen = true; save(); start(el, { ...prefs, pace, pool }); });
   };
   draw();
 }
@@ -207,6 +240,7 @@ function start(el, opts) {
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
+  setFocusMode(true);
   el.innerHTML = `
     <div class="hud mono">
       <span id="hudA"></span>
@@ -371,13 +405,13 @@ function answer(choice) {
   $('pCard').classList.add(ok ? 'ok' : 'no');
 
   const head = ok
-    ? `<div class="fb ok"><span class="fb-mark">✓ Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
+    ? `<div class="fb ok"><span class="fb-mark">${icon('check')} Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
   const yours = !ok && given ? `<span class="given">You answered: ${esc(given)}</span>` : '';
   const info = ok ? '' : `<p class="fb-info"><b>${esc(G.q.answer)}</b>${yours}</p>`;
   $('feedback').innerHTML = `${head}${info}<div class="fb-btns">
-    <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">↵</span></button>
-    <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ⋯</button></div>`;
+    <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
+    <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
   $('nextBtn').addEventListener('click', next);
   $('cardBtn').addEventListener('click', openCardMenu);
   if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
@@ -396,32 +430,44 @@ async function record(round, entry) {
   const now = Date.now();
   const rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing' });
   const prev = data.statesById.get(id);
-  let decision = scheduleDecision({ state: prev, rating, alreadyToday: data.playedToday.has(id), now });
+  // A new card in a deck with an exam coming up (its own or a parent's) is started by Play: this answer is its
+  // first review. That uses up one of today's new cards. Over the deck's new-card limit (overall, the deck's own
+  // and its parents'), it's only logged and starts in Review as before.
+  const examDeck = !!examInfo(effectiveDeck(data.decks, entry.card.deckId), now);
+  const newRoom = newRoomFor(data.newLeft, entry.card.deckId);
+  let decision = scheduleDecision({ state: prev, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom });
+  if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = {
     cardId: id, timestamp: now, source: 'play',
     mode: round.qtype, format: round.fmt,
     correct: entry.ok, ms: entry.ms, rating,
     state: prev ? prev.state : 0,      // the card's state before this answer
     applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'not-due', 'new' or 'already'
+    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit' or 'already'
   };
   if (applies(decision)) {
+    let next = null;
     try {
       const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
-      const deck = data.decks.find(d => d.id === entry.card.deckId);     // exam date mode limits (exam.js)
-      const next = rate(id, prev, rating, examOptions(schedulerOptions(data.settings), deck, now), now);
+      const deck = effectiveDeck(data.decks, entry.card.deckId);     // with what it inherits from its parent decks
+      // The deck's own settings (or the overall ones), its exam limits, and evening out the reviews.
+      data.balance ||= { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };
+      next = rate(id, prev, rating, { ...examOptions(deckSchedulerOptions(data.settings, deck), deck, now), balance: data.balance }, now);
+    } catch (err) {
+      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
+      console.error(err);
+      if (decision === 'first') { giveBackNewFor(data.newLeft, entry.card.deckId); decision = 'new'; }    // not started: slot back
+      else decision = 'not-due';
+      log.reason = decision;
+      await db.addLog(log);
+    }
+    // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
+    if (next) {
       log.applied = true;
       await db.saveReview(next, log);
       data.statesById.set(id, next);
       data.playedToday.add(id);
       await checkLeech(round, entry.card, prev, next);
-    } catch (err) {
-      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
-      console.error(err);
-      decision = 'not-due';
-      log.applied = false;
-      log.reason = 'not-due';
-      await db.addLog(log);
     }
   } else {
     await db.addLog(log);
@@ -480,15 +526,18 @@ function next() {
 async function scheduleSummary(round) {
   await round.saving;                          // wait for the last answers to finish saving
   const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
-  const graded = count('due'), sentBack = count('again'), fresh = count('new');
+  const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
   const parts = [];
   if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded from your answers`);
   if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back for review`);
+  // New cards in a deck with an exam are started by Play (autograde.js).
+  if (started) parts.push(`<b>${plural(started, 'new card')}</b> started, because ${started === 1 ? 'its' : 'their'} deck has an exam coming up`);
   const text = parts.length
     ? `Review schedule updated: ${parts.join(', ')}.`
     : 'No cards were due, so your review schedule didn’t change.';
-  const extra = fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review, not here.` : '';
+  const extra = (fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review, not here.` : '')
+    + (over ? ` ${plural(over, 'new card')} ${over === 1 ? 'was' : 'were'} over today’s new-card limit, so ${over === 1 ? 'it starts' : 'they start'} in Review.` : '');
   return `<p class="sched-note">${text}${extra} Every answer counts toward your stats.</p>`;
 }
 
@@ -497,6 +546,7 @@ async function finish() {
   clearTimeout(G.autoTimer); cancelAnimationFrame(G.raf); clearTimeout(G.flashTimer);
   const el = G.el, round = G;
   G = null;
+  setFocusMode(false);
   const total = round.log.length, correct = round.log.filter(l => l.ok).length;
   const acc = total ? correct / total : 0;
   const oks = round.log.filter(l => l.ok);
@@ -513,7 +563,7 @@ async function finish() {
   }
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
-  const deckName = round.deckId === 'all' ? 'All decks' : data.decks.find(d => d.id === round.deckId)?.name || '';
+  const deckName = round.deckId === 'all' ? 'All decks' : deckPath(data.decks, round.deckId);
   const schedule = await scheduleSummary(round);
   // You may have switched to another screen while that saved: don't draw over it.
   if (!location.hash.startsWith('#/play')) return;
@@ -564,7 +614,7 @@ document.addEventListener('keydown', e => {
   if (!G || !$('pCard') || e.ctrlKey || e.metaKey || e.altKey || document.getElementById('sheet')?.open) return;
   if (e.key === 'Escape') { e.preventDefault(); const el = G.el; stopRound(); renderPlay(el); return; }
   if (G.answered) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); }
+    if ((e.key === 'Enter' || e.key === ' ') && !onControl(e)) { e.preventDefault(); next(); }
     return;
   }
   if (G.qtype !== 'typing' && /^[1-6]$/.test(e.key) && +e.key <= G.opts.length) { e.preventDefault(); answer(+e.key - 1); }

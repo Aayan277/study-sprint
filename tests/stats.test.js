@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays, lazyStreak } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -115,4 +115,61 @@ test('study calendar with no answers', () => {
   const cal = studyCalendar([], NOW);
   assert.equal(cal.weeks.length, 53);
   assert.deepEqual([cal.max, cal.daysStudied, cal.longest], [0, 0, 0]);
+});
+
+
+test('answer buttons: learning vs review, last 30 days', () => {
+  const logs = [log(0, { rating: 3, state: 2 }), log(1, { rating: 1, state: 2, correct: false }), log(2, { rating: 4, state: 2 }), log(3, { rating: 2, state: 0 }),
+    log(40, { rating: 1, state: 2 }), log(1, { source: 'play', rating: 3, state: 2 }), log(1, { source: 'review', rating: 3, state: 1 })];
+  const b = buttonCounts(logs, NOW);
+  assert.deepEqual(b.review, [1, 0, 2, 1]);
+  assert.deepEqual(b.learning, [0, 1, 1, 0]);
+  assert.equal(b.reviewRight, 75);
+  assert.equal(buttonCounts([], NOW).reviewRight, null);
+});
+
+test('time of day', () => {
+  const at9 = d => { const t = new Date(daysAgoStart(d, NOW)); t.setHours(9, 30); return t.getTime(); };
+  const h = hourly([{ ...log(0), timestamp: at9(0) }, { ...log(1), timestamp: at9(1), correct: false }, log(0)], NOW);
+  assert.equal(h.length, 24);
+  assert.deepEqual([h[9].total, h[9].right], [2, 1]);
+  assert.equal(h[12].total, 1);
+});
+
+test('difficulty bands', () => {
+  const b = difficultyBands([{ state: 2, difficulty: 1 }, { state: 2, difficulty: 5.5 }, { state: 3, difficulty: 10 }, { state: 0, difficulty: 5 }, null]);
+  assert.deepEqual(b.filter(x => x.count).map(x => [x.band, x.count]), [[1, 1], [6, 1], [10, 1]]);
+});
+
+test('answerDays counts answers per day, once for every deck and once for the picked cards', () => {
+  const logs = [log(0), log(0, { cardId: 'b' }), log(1, { cardId: 'b' }), log(2, { source: 'import' })];
+  const { all, picked } = answerDays(logs, new Set(['b']));
+  assert.equal(all.get(dayKey(NOW)), 2);
+  assert.equal(all.size, 2);                       // the 'import' row is not an answer
+  assert.equal(picked.get(dayKey(NOW)), 1);
+  assert.equal(picked.get(dayKey(at(1))), 1);
+  const same = answerDays(logs);
+  assert.equal(same.picked, same.all);             // no filter: one Map
+});
+
+test('streak and calendar from counted days match the versions that take logs', () => {
+  const logs = [log(0), log(1), log(2), log(2), log(5), log(40)];
+  const { all } = answerDays(logs);
+  assert.deepEqual(streakFromDays(all, NOW), dayStreak(logs, NOW));
+  assert.deepEqual(calendarFromDays(all, NOW), studyCalendar(logs, NOW));
+});
+
+test('lazy streak reads further back only while the streak does, and matches the full one', async () => {
+  const all = [];
+  for (let d = 0; d < 200; d++) all.push(log(d));        // a 200-day streak
+  all.push(log(205));
+  const asked = [];
+  const read = async since => { asked.push(since); return all.filter(l => l.timestamp >= since); };
+  const s = await lazyStreak(read, NOW);
+  assert.equal(s.days, 200);
+  assert.deepEqual(s, dayStreak(all, NOW));
+  assert.equal(asked.length, 3);                          // 60 days, 120, then 240 days: enough to see it end
+  asked.length = 0;
+  assert.equal((await lazyStreak(read, NOW, all.filter(l => l.timestamp >= daysAgoStart(60, NOW)).slice(0, 0).concat([log(0)]))).days, 1);
+  assert.equal(asked.length, 0);                          // a short streak in the logs already loaded needs no more reading
 });

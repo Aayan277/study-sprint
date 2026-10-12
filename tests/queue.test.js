@@ -75,7 +75,7 @@ test('interval labels', () => {
     ['<1m', '1m', '10m', '5h', '4d', '1.5mo', '1.1y']);
 });
 
-import { pickNew, newLimits, extraNewToday, aheadQueue, forgottenQueue } from '../js/queue.js';
+import { pickNew, newLimits, extraNewToday, aheadQueue, forgottenQueue, reviewLimits } from '../js/queue.js';
 const inDeck = (id, deckId) => ({ id, deckId, front: id, back: id });
 
 test('each deck can have its own new card limit, inside the overall one', () => {
@@ -104,6 +104,16 @@ test('new limits count what was already studied today, plus extras', () => {
   // buildQueue takes the same limits
   const { queue } = buildQueue([inDeck('x', 'A'), inDeck('y', 'A'), inDeck('z', 'A'), inDeck('w', 'B')], new Map(), l, NOW);
   assert.deepEqual(queue.map(q => q.card.id), ['x', 'y', 'w']);
+});
+
+test('Play answers that were only logged do not use up new cards, applied ones do', () => {
+  const decks = [{ id: 'A' }], deckOf = new Map([['p1', 'A'], ['p2', 'A'], ['p3', 'A']]);
+  const logs = [
+    { cardId: 'p1', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: false, reason: 'new' },
+    { cardId: 'p2', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: false, reason: 'new-limit' },
+    { cardId: 'p3', timestamp: NOW - HOUR, state: NEW, source: 'play', applied: true, reason: 'first' }
+  ];
+  assert.equal(newLimits({ perDay: 20, decks, logs, deckOf, now: NOW }).total, 19);
 });
 
 test('extra new cards only count on the day they were added', () => {
@@ -137,4 +147,60 @@ test('forgotten today: cards rated Again today, once each', () => {
     { cardId: 'deleted', timestamp: NOW - HOUR, rating: 1 }
   ];
   assert.deepEqual(forgottenQueue(cards, states, logs, NOW).queue.map(q => [q.card.id, q.kind]), [['b', 'review'], ['a', 'learn']]);
+});
+
+
+test('daily review limit: overall and per deck, learning cards never held back', () => {
+  const cs = [inDeck('r1', 'A'), inDeck('r2', 'A'), inDeck('r3', 'B'), inDeck('r4', 'B'), inDeck('l1', 'A')];
+  const states = new Map([
+    ['r1', { state: REVIEW, due: NOW - 4 * DAY }], ['r2', { state: REVIEW, due: NOW - 3 * DAY }],
+    ['r3', { state: REVIEW, due: NOW - 2 * DAY }], ['r4', { state: REVIEW, due: NOW - DAY }],
+    ['l1', { state: LEARNING, due: NOW - 60000 }]
+  ]);
+  const ids = lim => buildQueue(cs, states, 0, NOW, lim).queue.map(q => q.card.id);
+  assert.deepEqual(ids(Infinity), ['r1', 'r2', 'r3', 'r4', 'l1']);
+  assert.deepEqual(ids(2), ['r1', 'r2', 'l1']);                                         // most overdue first
+  assert.deepEqual(ids({ total: 10, byDeck: new Map([['A', 1]]) }), ['r1', 'r3', 'r4', 'l1']);
+  const decks = [{ id: 'A', reviewPerDay: 2 }, { id: 'B' }];
+  const deckOf = new Map([['r1', 'A'], ['r3', 'B']]);
+  const logs = [
+    { cardId: 'r1', timestamp: NOW - HOUR, state: REVIEW, source: 'review' },
+    { cardId: 'r3', timestamp: NOW - HOUR, state: REVIEW, source: 'play', applied: true },
+    { cardId: 'r3', timestamp: NOW - HOUR, state: REVIEW, source: 'play', applied: false },     // didn't count
+    { cardId: 'r1', timestamp: NOW - HOUR, state: LEARNING, source: 'review' },                // not a review
+    { cardId: 'r1', timestamp: NOW - DAY, state: REVIEW, source: 'review' }                    // yesterday
+  ];
+  const l = reviewLimits({ perDay: 10, decks, logs, deckOf, now: NOW });
+  assert.equal(l.total, 8);
+  assert.deepEqual([...l.byDeck], [['A', 1]]);
+  assert.equal(reviewLimits({ perDay: null, decks: [], logs, deckOf, now: NOW }).total, Infinity);
+});
+
+test('subdecks: a parent deck\'s limits cap everything inside it', () => {
+  // Psych (limit 3 new) › Unit 1 (limit 2) and Unit 2 (no limit of its own); Bio has no limit.
+  const decks = [{ id: 'P', newPerDay: 3 }, { id: 'U1', parentId: 'P', newPerDay: 2 }, { id: 'U2', parentId: 'P' }, { id: 'B' }];
+  const chains = new Map([['P', ['P']], ['U1', ['U1', 'P']], ['U2', ['U2', 'P']], ['B', ['B']]]);
+  const fresh = ['u1a', 'u1b', 'u1c', 'u2a', 'u2b', 'b1'].map(id => inDeck(id, id.startsWith('u1') ? 'U1' : id.startsWith('u2') ? 'U2' : 'B'));
+  const studiedToday = [{ cardId: 'old', timestamp: NOW - HOUR, state: NEW }];          // one new card done in Unit 2
+  const deckOf = new Map([['old', 'U2']]);
+  const l = newLimits({ perDay: 20, decks, logs: studiedToday, deckOf, now: NOW, chains });
+  assert.deepEqual([...l.byDeck], [['P', 2], ['U1', 2]]);                               // Psych has 2 left (3 − 1 in Unit 2)
+  assert.deepEqual(pickNew(fresh, l).map(c => c.id), ['u1a', 'u1b', 'b1']);            // Psych's 2 used by Unit 1, so none from Unit 2
+  // reviews done in a subdeck count toward the parent
+  const r = reviewLimits({ perDay: null, decks: [{ id: 'P', reviewPerDay: 5 }], logs: [{ cardId: 'x', timestamp: NOW - HOUR, state: REVIEW, source: 'review' }], deckOf: new Map([['x', 'U1']]), now: NOW, chains });
+  assert.equal(r.byDeck.get('P'), 4);
+});
+
+test('newRoomFor / takeNewFor: Play in an exam deck respects the new-card limits', async () => {
+  const { newRoomFor, takeNewFor } = await import('../js/queue.js');
+  const chains = new Map([['kid', ['kid', 'par']], ['par', ['par']], ['other', ['other']]]);
+  const limit = { total: 3, byDeck: new Map([['par', 2]]), chains };
+  assert.equal(newRoomFor(limit, 'kid'), true);
+  assert.equal(takeNewFor(limit, 'kid'), true);
+  assert.equal(takeNewFor(limit, 'kid'), true);
+  assert.equal(limit.total, 1);
+  assert.equal(newRoomFor(limit, 'kid'), false);          // the parent deck's own limit is used up
+  assert.equal(takeNewFor(limit, 'kid'), false);
+  assert.equal(takeNewFor(limit, 'other'), true);         // another deck still has the overall limit
+  assert.equal(newRoomFor(limit, 'other'), false);        // overall limit now 0
 });

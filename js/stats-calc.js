@@ -1,14 +1,23 @@
 // The numbers behind the Stats tab. Pure functions (no page, no database),
 // tested by tests/stats.test.js. Days follow the app's study day, which starts at 4am.
 
-import { dayStart, dayEnd } from './days.js';
+import { dayStart, dayEnd, ROLLOVER_HOUR } from './days.js';
 
 const NEW = 0, REVIEW = 2;
 
 // A short name for a study day, e.g. "2026-10-07". Uses the study day's start, so 2am belongs to the day before.
+// Names are worked out once per day: the day's number (counting days of wall-clock time, shifted by the 4am
+// rollover) finds it again quickly, which matters when a log has tens of thousands of rows.
+const names = new Map();
 export function dayKey(time) {
-  const d = new Date(dayStart(time));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const n = Math.floor((time - new Date(time).getTimezoneOffset() * 60000 - ROLLOVER_HOUR * 3600000) / 86400000);
+  let name = names.get(n);
+  if (name === undefined) {
+    const d = new Date(dayStart(time));
+    name = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    names.set(n, name);
+  }
+  return name;
 }
 
 // The start of the study day `n` days before the one containing `now` (n = 0 is today).
@@ -23,7 +32,10 @@ export function daysAgoStart(n, now = Date.now()) {
 // Any review or Play answer counts as studying that day.
 // The streak counts back from today, or from yesterday if you haven't studied yet today.
 export function dayStreak(logs, now = Date.now()) {
-  const days = new Set(logs.map(l => dayKey(l.timestamp)));
+  return streakFromDays(new Set(logs.map(l => dayKey(l.timestamp))), now);
+}
+// The same, from days already worked out: anything with .has(dayKey), e.g. a Set or the Map from answerDays().
+export function streakFromDays(days, now = Date.now()) {
   const today = days.has(dayKey(now));
   let n = 0;
   for (let i = today ? 0 : 1; days.has(dayKey(daysAgoStart(i, now))); i++) n++;
@@ -36,6 +48,20 @@ export function dayStreak(logs, now = Date.now()) {
   return { days: n, studiedToday: today, week };
 }
 
+// The same streak, without reading the whole log: asks readSince(time) for the answers since a time (an async
+// function) and only looks further back while the streak runs right up to the oldest day read.
+// `first` is what the first 60 days look like if the caller already has them. Today and the end of a Review
+// session use this, so they always agree with Stats.
+export async function lazyStreak(readSince, now = Date.now(), first = null, days = 60) {
+  let logs = first || await readSince(daysAgoStart(days, now));
+  for (;;) {
+    const streak = dayStreak(logs.filter(isAnswerLog), now);
+    if (streak.days < days - 1 || days >= 3650) return streak;      // it ended inside what was read
+    days *= 2;
+    logs = await readSince(daysAgoStart(days, now));
+  }
+}
+
 // ---------- study calendar ----------
 // A year of study days, like GitHub's contribution chart: one column per week (Monday at the top),
 // the newest week on the right. Each day: { time, count (answers), level 0–4 (how dark), future }.
@@ -43,6 +69,10 @@ export function dayStreak(logs, now = Date.now()) {
 export function studyCalendar(logs, now = Date.now(), weeks = 53) {
   const perDay = new Map();
   for (const l of logs) { const k = dayKey(l.timestamp); perDay.set(k, (perDay.get(k) || 0) + 1); }
+  return calendarFromDays(perDay, now, weeks);
+}
+// The same, from answers per day already counted (a Map of dayKey -> count, see answerDays()).
+export function calendarFromDays(perDay, now = Date.now(), weeks = 53) {
   // Start on the Monday `weeks - 1` weeks before this week's Monday.
   const todayStart = daysAgoStart(0, now);
   const fromMonday = (new Date(todayStart).getDay() + 6) % 7;      // Mon = 0 … Sun = 6
@@ -72,6 +102,20 @@ export function studyCalendar(logs, now = Date.now(), weeks = 53) {
 
 // An answer from Review, Play, or a review history imported from Anki.
 export const isAnswerLog = l => l.source === 'review' || l.source === 'play' || l.source === 'anki';
+
+// Answers per study day (a Map of dayKey -> count), counted in one pass over the log.
+// `all` counts every deck (for the streak); `picked` only the cards in `cardIds` (the Stats deck filter).
+// With no filter they are the same Map.
+export function answerDays(logs, cardIds = null) {
+  const all = new Map(), picked = cardIds ? new Map() : all;
+  for (const l of logs) {
+    if (!isAnswerLog(l)) continue;
+    const k = dayKey(l.timestamp);
+    all.set(k, (all.get(k) || 0) + 1);
+    if (cardIds && cardIds.has(l.cardId)) picked.set(k, (picked.get(k) || 0) + 1);
+  }
+  return { all, picked };
+}
 
 // ---------- retention ----------
 // Of the due reviews in the last 30 days, how many did you remember?
@@ -114,12 +158,12 @@ export function reviewsPerDay(logs, now = Date.now(), days = 30) {
 // ---------- due forecast ----------
 // How many cards come due on each of the next `days` days. Today includes anything overdue.
 export function dueForecast(states, now = Date.now(), days = 7) {
-  const out = [];
-  for (let i = 0; i < days; i++) out.push({ time: daysAgoStart(-i, now), count: 0 });
+  const out = [], ends = [];
+  for (let i = 0; i < days; i++) { out.push({ time: daysAgoStart(-i, now), count: 0 }); ends.push(dayEnd(now, i)); }
   for (const s of states) {
     if (!s || s.state === NEW) continue;
     for (let i = 0; i < days; i++) {
-      if (s.due <= dayEnd(now, i)) { out[i].count++; break; }
+      if (s.due <= ends[i]) { out[i].count++; break; }
     }
   }
   return out;
@@ -151,3 +195,42 @@ export function niceMax(max) {
   return 10 * pow;
 }
 
+// ---------- answer buttons ----------
+// How often you pressed Again / Hard / Good / Easy in the last `days` days, for cards you were still
+// learning and for normal reviews. { learning: [again, hard, good, easy], review: [...] } plus the share of
+// reviews you got right (anything but Again).
+export function buttonCounts(logs, now = Date.now(), days = 30) {
+  const since = daysAgoStart(days - 1, now);
+  const out = { learning: [0, 0, 0, 0], review: [0, 0, 0, 0] };
+  for (const l of logs) {
+    if (l.timestamp < since || !(l.rating >= 1 && l.rating <= 4) || !isAnswerLog(l)) continue;
+    out[l.state === REVIEW ? 'review' : 'learning'][l.rating - 1]++;
+  }
+  const pct = list => { const n = list.reduce((a, b) => a + b, 0); return n ? Math.round(((n - list[0]) / n) * 100) : null; };
+  return { ...out, learningRight: pct(out.learning), reviewRight: pct(out.review) };
+}
+
+// ---------- time of day ----------
+// Answers in each hour of the day (0–23) over the last `days` days, and how many were right.
+export function hourly(logs, now = Date.now(), days = 30) {
+  const since = daysAgoStart(days - 1, now);
+  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: 0, right: 0 }));
+  for (const l of logs) {
+    if (l.timestamp < since || !isAnswerLog(l)) continue;
+    const h = hours[new Date(l.timestamp).getHours()];
+    h.total++;
+    if (l.correct) h.right++;
+  }
+  return hours;
+}
+
+// ---------- difficulty ----------
+// How many studied cards sit at each FSRS difficulty, in 10 bands from 1 (easiest) to 10 (hardest).
+export function difficultyBands(states) {
+  const bands = Array.from({ length: 10 }, (_, i) => ({ band: i + 1, count: 0 }));
+  for (const s of states) {
+    if (!s || s.state === NEW || !(s.difficulty > 0)) continue;
+    bands[Math.min(9, Math.max(0, Math.ceil(s.difficulty) - 1))].count++;
+  }
+  return bands;
+}
