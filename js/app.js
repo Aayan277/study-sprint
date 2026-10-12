@@ -5,16 +5,10 @@
 
 import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
-import { renderLibrary, renderDeck } from './decks.js';
 import { renderToday } from './today.js';
-import { renderWelcome } from './onboarding.js';
-import { renderImport } from './import-screen.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
-import { renderPlay } from './play.js';
-import { renderStats } from './stats.js';
-import { renderBrowseAll } from './browse.js';
 import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
@@ -743,17 +737,18 @@ async function seedSampleDeck(again = false) {
 
 // ---------- navigation ----------
 const ROUTES = {
-  // Loaded on demand: Review needs the FSRS library from the internet (saved for offline after the first time),
-  // and the rest of the app shouldn't have to wait for it.
+  // Today is the home screen, so it loads with the app. Every other screen is loaded the first time it is
+  // opened (the service worker has them saved, so that is quick), which keeps the first load small.
+  // Review also needs the FSRS library from the internet (saved for offline after the first time).
   today: el => renderToday(el),
-  welcome: (el, arg) => renderWelcome(el, arg, { seedSample: async () => { if (!(await db.getDeck('sample'))) await seedSampleDeck(true); }, finish: markOnboarded }),
+  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: async () => { if (!(await db.getDeck('sample'))) await seedSampleDeck(true); }, finish: markOnboarded }),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
-  play: el => renderPlay(el),
-  decks: (el, arg) => renderLibrary(el, arg === 'starters'),
-  deck: (el, id) => renderDeck(el, id),
-  browse: el => renderBrowseAll(el),
-  import: (el, deckId) => renderImport(el, deckId),
-  stats: el => renderStats(el),
+  play: async el => (await import('./play.js')).renderPlay(el),
+  decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
+  deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
+  browse: async el => (await import('./browse.js')).renderBrowseAll(el),
+  import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
+  stats: async el => (await import('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)
 };
 
