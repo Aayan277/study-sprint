@@ -84,9 +84,9 @@ function calendarHTML(cal, now) {
     <section class="card section cal-card" aria-labelledby="calTitle">
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
         <span class="muted small">Studied ${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
-      <div class="cal-scroll" id="calScroll">
-        <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.`)}">
-          <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
+      <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.`)}">
+        <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
+        <div class="cal-scroll" id="calScroll">
           <div class="cal-grid" id="calGrid" aria-hidden="true">${cols}</div>
         </div>
       </div>
@@ -99,8 +99,13 @@ function calendarHTML(cal, now) {
 function wireCalendar(el) {
   const box = el.querySelector('#calScroll');
   if (!box) return;
-  box.scrollLeft = box.scrollWidth;            // newest weeks are on the right
   const grid = el.querySelector('#calGrid');
+  // Start scrolled to the newest weeks (on the right). A month name that starts before the left edge would show
+  // as a cut-off "un", so those are hidden until you scroll back to them.
+  const hideCutLabels = () => grid.querySelectorAll('.cal-m').forEach(m => { m.style.visibility = m.offsetLeft - grid.offsetLeft < box.scrollLeft - 1 ? 'hidden' : ''; });
+  box.scrollLeft = box.scrollWidth;
+  hideCutLabels();
+  box.addEventListener('scroll', hideCutLabels, { passive: true });
   grid.addEventListener('click', e => {
     const cell = e.target.closest('i[data-t]');
     if (!cell) return;

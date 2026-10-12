@@ -21,6 +21,7 @@ for (const [w, h, name, extra] of [[375, 740, 'phone', { isMobile: true, hasTouc
   }));
   ok(r.cells === 53 * 7 && r.studied > 50 && r.months >= 12, `${name}: a year of days, ${r.studied} studied, ${r.months} month labels`);
   ok(r.atEnd && !r.pageScroll, `${name}: scrolled to the newest week, no sideways page scroll`);
+  ok(await p.evaluate(() => { const left = document.querySelector('#calScroll').getBoundingClientRect().left; return [...document.querySelectorAll('.cal-m')].filter(m => m.textContent && getComputedStyle(m).visibility !== 'hidden').every(m => m.getBoundingClientRect().left >= left - 0.5); }), `${name}: no month name is cut off at the left edge`);
   await p.locator('#calGrid i.today').click();
   ok(/: \d+ answers?|: no studying/.test(await p.textContent('#calInfo')), `${name}: tapping a day explains it: ` + await p.textContent('#calInfo'));
   await p.locator('.cal-card').screenshot({ path: `${SP}/cal-${name}.png` });

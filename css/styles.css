@@ -847,9 +847,10 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 
 /* Study calendar: a year of days, one column per week, Monday at the top */
 .cal-card{--c:12px}
-.cal-scroll{overflow-x:auto;margin:6px -4px 0;padding:0 4px 6px}
-.cal{display:flex;gap:6px;width:max-content}
-.cal-wd{position:sticky;left:-4px;z-index:1;display:grid;grid-template-rows:14px repeat(7,var(--c));gap:3px;padding:0 4px;background:var(--surface-1);font:500 .62rem var(--f-num);color:var(--text-2)}
+.cal{display:flex;gap:6px;margin-top:6px}   /* the weekday names stay put; only the weeks scroll, so a month name is never covered */
+.cal-scroll{flex:1;min-width:0;overflow-x:auto;padding:0 0 6px}
+.cal-grid{width:max-content}
+.cal-wd{display:grid;grid-template-rows:14px repeat(7,var(--c));gap:3px;padding-bottom:6px;font:500 .62rem var(--f-num);color:var(--text-2)}
 .cal-wd b{font-weight:500;line-height:var(--c)}
 .cal-grid{display:grid;grid-template-rows:14px repeat(7,var(--c));grid-auto-flow:column;grid-auto-columns:var(--c);gap:3px}
 .cal-m{font:500 .62rem var(--f-num);color:var(--text-2);white-space:nowrap;overflow:visible;line-height:14px}
