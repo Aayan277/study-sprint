@@ -74,7 +74,7 @@ On a computer, open the link in Chrome or Edge and use the install button in the
 
 ## Your data
 
-Everything is saved in your browser (IndexedDB), on your device only. There are no accounts and no servers.
+Everything is saved in your browser (IndexedDB) on your device, and it all works offline with no account. An account is optional: if you want your decks on more than one device, sign in under Settings → Sync (accounts and storage come from your own Supabase project, see [docs/sync-setup.md](docs/sync-setup.md)). Without one, nothing leaves your device.
 
 - The home-screen app and a browser tab can have **separate** storage (especially on iPhone), so pick one and stick with it.
 - **Export a backup now and then** (Settings → Back up). To move to a new phone or computer, export there and choose **Import backup** on the new device.
