@@ -163,7 +163,7 @@ On Claude Code's cloud computers this works as is. On your own computer, install
 `tests/browser/out`. `tests/browser/files` has the sample files the tests import (Anki decks, a spreadsheet);
 `make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package).
 
-## Redesign (experiment branch)
+## Redesign (v3.0, experiment branch)
 
 What changed across the three steps (details in PLAN.md):
 

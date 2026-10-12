@@ -201,7 +201,7 @@ Five rounds, choices approved ("go"): cloze blanks are linked cards; image occlu
 - D. **Cloze cards**.
 - E. **Image occlusion**.
 
-## Redesign (experiment branch)
+## Redesign (v3.0, experiment branch)
 
 Done on the `experiment` branch, in three steps. All of it keeps the no-build-step, no-data-format-change rules (the only new setting keys are `onboarded` and the fold states, which live in localStorage).
 
