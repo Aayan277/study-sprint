@@ -8,7 +8,8 @@ import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
-import { examInfo, countdown, badgeClass, pullIn } from './exam.js';
+import { examInfo, countdown, badgeClass } from './exam.js';
+import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices } from './deck-tree.js';
@@ -279,7 +280,8 @@ export async function renderDeck(el, deckId) {
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
+        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>`
+          : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
         <button class="btn ghost small" type="button" id="addSub">+ Subdeck</button>
@@ -299,6 +301,7 @@ export async function renderDeck(el, deckId) {
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
+  $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; else renderDeck(el, deckId);
   }));
@@ -485,6 +488,10 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     e.preventDefault();
     const name = $('deckName').value.trim();
     if (!name) { $('deckErr').textContent = 'Give the deck a name.'; $('deckErr').hidden = false; $('deckName').focus(); return; }
+    // A date that was already saved is left alone; a new one is checked (blank clears it).
+    const newExam = $('deckExam').value;
+    const examProblem = newExam !== (deck?.examDate || '') ? examDateError(newExam) : '';
+    if (examProblem) { $('deckErr').textContent = examProblem; $('deckErr').hidden = false; $('deckExam').focus(); return; }
     const course = $('deckCourse').value.trim();
     const parentId = $('deckParent').value;
     // Read aloud automatically: a subdeck only stores it when it differs from the deck it's inside.
@@ -503,19 +510,9 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       ? { id: db.newId(), name, course, color, parentId, created: Date.now(), ...($('deckExam').value ? { examDate: $('deckExam').value } : {}) }
       : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
         examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto };
-    await db.saveDeck(saved);
-    // A new exam date (its own, or from the deck it's moved into): bring forward cards scheduled after it.
-    // Covers the subdecks that use this date too. (A new deck has no cards to move yet.)
-    let moved = 0;
-    const after = decks.map(d => (d.id === saved.id ? saved : d)).concat(isNew ? [saved] : []);
-    const exam = effectiveDeck(after, saved.id).examDate;
-    if (!isNew && exam && exam !== effectiveDeck(decks, saved.id).examDate) {
-      const dIds = [...subtreeIds(after, saved.id)].filter(id => effectiveDeck(after, id).examDate === exam);
-      const ids = new Set((await db.getAll('cards')).filter(c => dIds.includes(c.deckId)).map(c => c.id));
-      const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam }, Date.now(), (await db.getSettings()).easyDays);
-      if (changed.length) await db.putStates(changed);
-      moved = changed.length;
-    }
+    // A new exam date (its own, or from the deck it's moved into) brings forward the cards scheduled after it: see
+    // commitDeck in exam-sheet.js, which the short "Add exam date" sheet uses too. (A new deck has no cards to move yet.)
+    const { moved } = await commitDeck(saved, decks, { isNew });
     closeSheet();
     toast(isNew ? `Created “${name}”` : moved ? `Deck saved. ${plural(moved, 'card')} brought forward to before the exam` : 'Deck saved');
     onDone(saved);

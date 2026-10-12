@@ -77,8 +77,8 @@ ok(!todayStreak.startsWith('0 ') && endStreak === todayStreak, `end of Exam prep
 // clearing the date turns it off
 await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
 await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('button[type=submit][form=deckForm]');
-await page.waitForFunction(() => !document.querySelector('.exam-line'));
-ok(true, 'clearing the date removes exam mode');
+await page.waitForFunction(() => !document.querySelector('.exam-line .exam-badge'));
+ok(await page.isVisible('#addExam'), 'clearing the date removes exam mode, and the deck page offers Add exam date again');
 // the Exam date field is near the top of Edit deck (right after the name and course code), above Study options and Read aloud
 await page.click('#editDeck'); await page.waitForSelector('#deckExam');
 const order = await page.$$eval('#deckForm [id=deckName], #deckForm [id=deckCourse], #deckForm [id=deckExam], #deckForm [id=deckOpts], #deckForm [id=deckTts]', els => els.map(e => e.id));

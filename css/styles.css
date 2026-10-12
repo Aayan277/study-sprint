@@ -355,6 +355,15 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-new .small:not(.on-track){display:block;margin-top:4px}
 .exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
+.exam-add{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
+.exam-add .link{padding:4px 6px;min-height:32px}
+.exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
+.exam-chip:hover{background:var(--surface-2)}
+.exam-chip .ico{width:15px;height:15px;color:var(--accent-text)}
+.exam-chip i{width:8px;height:8px;border-radius:50%;flex:none}
+.exam-line .exam-chip{margin:0}
+.exam-date{width:100%;font-size:1.15rem;padding:14px}
+.exam-quick{display:flex;gap:8px;flex-wrap:wrap}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
