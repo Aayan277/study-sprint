@@ -12,7 +12,7 @@
 // Rules so playing doesn't break the schedule:
 //   - A card that is due (today or overdue) gets the rating applied normally.
 //   - A card that isn't due yet only changes if the answer was wrong (Again): that brings it back. But the miss
-//     doesn't count toward the leech limit (see leechLapses in browse-logic.js): a wrong tap in a quick game
+//     doesn't count toward the leech limit (see isNewLeechCounted in browse-logic.js): a wrong tap in a quick game
 //     says little about whether you've forgotten the card.
 //   - A Survival question that ran out of time with less than 3 seconds on the clock is only logged. Survival's
 //     timer shrinks to 2 seconds, which is too short to say much about your memory.

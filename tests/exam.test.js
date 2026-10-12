@@ -25,7 +25,7 @@ test('scheduling options near the exam', () => {
   assert.deepEqual(examOptions(opts, { id: 'd' }, NOW), opts);              // no exam: unchanged
   const far = examOptions(opts, deck('2026-12-20'), NOW);
   assert.equal(far.retention, 0.9);                                         // more than 2 weeks out
-  assert.equal(far.maxDue, examStart('2026-12-20'));                        // but nothing scheduled past it
+  assert.equal(far.maxDue, examStart('2026-12-20'));                        // but the limit is set: examClamp decides what may go past it
   const near = examOptions(opts, deck('2026-10-12'), NOW);                  // 5 days to go
   assert.ok(near.retention > 0.9 && near.retention < EXAM_RETENTION);
   assert.equal(examOptions(opts, deck('2026-10-08'), NOW).retention, EXAM_RETENTION);   // the day before
