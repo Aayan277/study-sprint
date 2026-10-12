@@ -10,7 +10,7 @@ import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
 import { plainText } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
 const RATING = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
@@ -52,7 +52,14 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
   };
   await load();
 
+  // With no cards at all there is one friendly empty state, not a search box over an empty list.
+  const emptyArt = `<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M55 38v26M42 51h26" stroke="var(--accent-text)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
   box.innerHTML = `
+    <div class="empty empty-first" id="brEmpty" hidden>${emptyArt}<b>No cards yet</b>
+      <p>Paste a list like <code>term - definition</code> and it becomes cards. Or add them one at a time.</p>
+      <div class="empty-btns"><a class="btn primary" href="#/import${deckId ? '/' + encodeURIComponent(deckId) : ''}">${icon('paste')} Paste cards</a>
+        <button class="btn ghost" type="button" id="brAddFirst">${icon('plus')} Add one card</button></div></div>
+    <div id="brMain">
     <div class="mhead br-head">
       <h2>Cards <span class="count mono" id="brTotal"></span></h2>
       <div class="head-actions">
@@ -73,7 +80,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       <span id="brSel" class="mono"></span>
       <button class="btn ghost small" type="button" id="brAll">Select all</button>
       <button class="btn primary small" type="button" id="brActions">Actions…</button>
-    </div>`;
+    </div></div>`;
 
   // Which deck a row is in: the full path in All cards; on a deck's page, the subdeck below it (if any).
   const where = card => {
@@ -82,6 +89,8 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     return chain.slice(0, chain.findIndex(d => d.id === deckId)).reverse().map(d => d.name).join(' › ');
   };
   const draw = () => {
+    $('brEmpty').hidden = cards.length > 0;
+    $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
     B.visible = list;
     $('brTotal').textContent = `(${cards.length})`;
@@ -131,6 +140,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
+  $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brTags').addEventListener('click', () => openTagTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
   $('brActions').addEventListener('click', () => {
     if (!B.selected.size) { toast('Select some cards first'); return; }

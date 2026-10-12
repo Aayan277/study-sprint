@@ -9,7 +9,7 @@
 import * as db from './db.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
-import { examInfo, countdown, newPerDayToFinish } from './exam.js';
+import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
@@ -95,7 +95,7 @@ export async function renderToday(el) {
         <h2 id="exTitle">Upcoming exams</h2>
         <div class="exams">${exams.map(({ deck, info }) => `
           <div class="exam-row" style="--deck:${esc(deck.color)}">
-            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="exam-badge">${esc(countdown(info))}</span></a>
+            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}">${esc(countdown(info))}</span></a>
             <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
             ${newPlanHTML(deck, info)}
           </div>`).join('')}</div>
@@ -171,8 +171,8 @@ export async function renderToday(el) {
       <span class="td-main">
         ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
         <span class="td-name">${esc(deck.name)}</span>
-        <span class="td-counts"><span class="due"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
-          ${info ? `<span class="exam-badge">${esc(countdown(info))}</span>` : ''}</span>
+        <span class="td-counts"><span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
+          ${info ? `<span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
       </span>
       <span class="td-go">${c.total ? `<span class="td-min">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
     return c.total

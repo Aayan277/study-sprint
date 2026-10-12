@@ -8,7 +8,7 @@ import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
-import { examInfo, countdown, pullIn } from './exam.js';
+import { examInfo, countdown, badgeClass, pullIn } from './exam.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices } from './deck-tree.js';
@@ -132,10 +132,10 @@ export async function renderLibrary(el, showStarters = false) {
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
-          ${examInfo(deck) ? `<span class="exam-badge">${esc(countdown(examInfo(deck)))}</span>` : ''}
+          ${examInfo(deck) ? `<span class="${badgeClass(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
             <span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
-            <span class="due"><b>${c.due}</b> due</span>
+            <span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span>
             <span><b>${c.fresh}</b> new</span>
           </span>
         </button>
@@ -203,7 +203,7 @@ export async function renderDeck(el, deckId) {
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="exam-badge">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
+        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>` : ''}</div>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="editDeck">Edit</button>
         <button class="btn ghost small" type="button" id="addSub">+ Subdeck</button>
@@ -212,11 +212,10 @@ export async function renderDeck(el, deckId) {
         ${s.total ? `<a class="btn primary small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
-    <div class="card section deck-summary" style="border-left:6px solid ${esc(deck.color)}">${summaryHTML(s)}</div>
+    <div class="card section deck-summary" style="--deck:${esc(deck.color)}" ${cards.length ? '' : 'hidden'}>${summaryHTML(s)}</div>
     ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth)}
       <p class="note" style="margin:8px 0 0">Everything below includes the subdecks' cards too.</p></section>` : ''}
     <section id="browser"></section>
-    ${cards.length ? '' : `<div class="empty"><b>This deck is empty.</b><br>Add cards one at a time with + Add card, or paste notes, upload a CSV or Excel file, or load a Google Sheet.<br><a class="btn primary" href="#/import/${esc(deck.id)}">Import cards</a></div>`}
   `;
   $('back').addEventListener('click', () => { location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; });
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
@@ -236,7 +235,7 @@ async function refreshCounts(el, deckId) {
   const box = el.querySelector('.deck-summary');
   if (!box) return;
   const item = (await loadDecks()).find(x => x.deck.id === deckId);
-  if (item) box.innerHTML = summaryHTML(item.stats);
+  if (item) { box.innerHTML = summaryHTML(item.stats); box.hidden = !item.stats.total; }
 }
 
 function summaryHTML(s) {

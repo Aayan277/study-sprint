@@ -15,7 +15,7 @@
      lines      --line (hairline), --line-strong (button edges), --control (edges of text boxes, switches:
                 3:1 or better, so people can see where a control is)
      brand      --accent (fills, rings), --accent-text (links, small text), --on-accent (text on an accent fill)
-     ratings    --again (red), --hard (amber), --good (green), --easy (blue). The same in every theme, so
+     ratings    --again (crimson), --hard (amber), --good (green), --easy (blue). The same in every theme, so
                 "wrong" never looks like the brand color. Each has a -tint (soft fill) and -line (edge).
    Themes are chosen with attributes on <html>: data-skin (the accent), data-theme="light" (otherwise dark),
    data-oled="on" (dark only). See js/themes.js. */
@@ -54,8 +54,8 @@
 
   /* ----- dark mode (the default), same for every accent ----- */
   --line:rgb(255 255 255 / .07); --line-strong:rgb(255 255 255 / .13); --hi:rgb(255 255 255 / .06);
-  /* Rating colors. Fixed: they do not change with the accent. */
-  --again:#FF6B5E; --again-tint:rgb(255 107 94 / .13); --again-line:rgb(255 107 94 / .38);
+  /* Rating colors. Fixed: they do not change with the accent. Again is crimson, so it differs from Ember's orange. */
+  --again:#FF5C7A; --again-tint:rgb(255 92 122 / .13); --again-line:rgb(255 92 122 / .4);
   --hard:#FFC53D;  --hard-tint:rgb(255 197 61 / .12);  --hard-line:rgb(255 197 61 / .34);
   --good:#34D9A5;  --good-tint:rgb(52 217 165 / .12);  --good-line:rgb(52 217 165 / .34);
   --easy:#5C9DFF;  --easy-tint:rgb(92 157 255 / .13);  --easy-line:rgb(92 157 255 / .36);
@@ -65,13 +65,15 @@
   --e-2:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong),0 12px 28px -12px rgb(0 0 0 / .8);
   --e-3:inset 0 1px 0 rgb(255 255 255 / .08),0 0 0 1px var(--line-strong),0 30px 60px -20px rgb(0 0 0 / .9);
   --scrim:rgb(3 4 8 / .7);
+  /* Exams are amber (a plan, not an alarm); red is kept for the last 3 days (.exam-badge.soon) */
+  --exam:var(--hard); --exam-tint:var(--hard-tint); --exam-line:var(--hard-line);
   color-scheme:dark;
 }
 /* ----- light mode ----- */
 :root[data-theme="light"]{
   --a-tint:.09; --a-line:.35; --a-glow:.35; --a-soft:.14; --a-hero:.14;
   --line:rgb(11 13 18 / .09); --line-strong:rgb(11 13 18 / .15); --hi:rgb(255 255 255 / .7);
-  --again:#C42B2B; --again-tint:#FDECEB; --again-line:#F3BDBA;
+  --again:#BE123C; --again-tint:#FDE8EC; --again-line:#F4B6C3;
   --hard:#8F5300;  --hard-tint:#FFF3DF;  --hard-line:#EBCF9E;
   --good:#087054;  --good-tint:#E3F5EF;  --good-line:#B3E0D0;
   --easy:#1F5FC2;  --easy-tint:#E8F0FD;  --easy-line:#BCD3F6;
@@ -364,6 +366,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .td-counts b{font-family:var(--f-num);font-weight:500;color:var(--text)}
 .td-counts .due{padding:0 8px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .td-counts .due b{color:var(--accent-text)}
+.td-counts .due.zero,.deck-counts .due.zero{background:none;box-shadow:none;padding:0;color:var(--text-2)}
+.td-counts .due.zero b,.deck-counts .due.zero b{color:var(--text)}
 .td-go{display:flex;align-items:center;gap:var(--s-2);flex:none}
 .td-min{font-size:var(--fs-xs);color:var(--text-2)}
 .td-go .ico{width:36px;height:36px;padding:9px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
@@ -403,6 +407,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .empty{text-align:center;padding:34px var(--s-4);border:1px dashed var(--control);border-radius:var(--r-lg);color:var(--text-2)}
 .empty b{color:var(--text)}
 .empty .btn{margin-top:14px}
+/* The first-card empty state (an empty deck or All cards): a solid card, not a dashed box */
+.empty-first{background:var(--surface-1);border:0;box-shadow:var(--e-1);padding:28px var(--s-5) 26px;margin-top:var(--s-2)}
+.empty-first b{display:block;font-size:var(--fs-lg);letter-spacing:-.02em;margin-top:2px}
+.empty-first p{margin:6px auto 0;max-width:34ch;font-size:var(--fs-base);line-height:1.5}
+.empty-first code{font:500 .92em var(--f-num);background:var(--surface-3);padding:1px 6px;border-radius:5px;color:var(--text)}
+.empty-art{display:block;width:120px;height:96px;margin:0 auto 6px}
+.empty-btns{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:18px}
+.empty-btns .btn{width:min(100%,240px);margin:0}
 .browse-all{margin:var(--s-3) 0 0}
 .browse-all a{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);text-decoration:none}
 .starters{margin-top:var(--s-6)}
@@ -429,13 +441,15 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .mbar .lv-new{background:transparent}
 
 /* ---------- 8. Deck page and card list ---------- */
-.deck-summary{padding:var(--s-3) var(--s-4)}
+.deck-summary{position:relative;overflow:hidden;padding:var(--s-3) var(--s-4) var(--s-3) 20px}
+.deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
 .deck-summary .deck-counts .due{order:0}
 main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3);margin-bottom:var(--s-4)}
 main[data-route="deck"] .screen-head .head-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 main[data-route="deck"] .screen-head .head-actions .btn{padding:6px 2px;white-space:nowrap;font-size:var(--fs-sm)}
 main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / -1;order:-1;min-height:46px;font-size:var(--fs-base)}
-.exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--again-tint);color:var(--again);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+.exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--exam-tint);color:var(--exam);box-shadow:inset 0 0 0 1px var(--exam-line);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+.exam-badge.soon{background:var(--again-tint);color:var(--again);box-shadow:inset 0 0 0 1px var(--again-line)}
 .deck .exam-badge{margin-top:4px;justify-self:start}
 .exam-line{margin:var(--s-2) 0 0;font-size:var(--fs-base);color:var(--text-2)}
 .br-head h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em}
@@ -1138,3 +1152,6 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
   .more-stats,.more-body{display:contents}
   .more-toggle{display:none}
 }
+
+/* Light mode: the colored edge stripes need no glow (it only smudges on white) */
+:root[data-theme="light"] :is(.deck,.tdeck,.exam-row,.deck-summary)::before{box-shadow:none}

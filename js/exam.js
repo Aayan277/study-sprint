@@ -55,6 +55,9 @@ export function examInfo(deck, now = Date.now()) {
   return daysLeft >= 0 ? { start, daysLeft } : null;
 }
 
+// The class for an exam countdown badge: amber, and red only in the last 3 days.
+export const badgeClass = info => (info && info.daysLeft <= 3 ? 'exam-badge soon' : 'exam-badge');
+
 export function countdown(info) {
   if (!info) return '';
   return info.daysLeft === 0 ? 'Exam today' : info.daysLeft === 1 ? 'Exam tomorrow' : `Exam in ${info.daysLeft} days`;
