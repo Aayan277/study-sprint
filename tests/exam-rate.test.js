@@ -21,21 +21,22 @@ const NOW = new Date(2026, 9, 12, 10).getTime();
 
 test('final pass: answering today\'s share does not make the next queue build pull more cards in', { skip }, async () => {
   const { rate, examOptions, examSchedule, splitCards, schedulerOptions } = await load();
-  const deck = { id: 'd', examDate: '2026-10-17' };                      // 5 days left: the pass covers today and 4 more days
+  const deck = { id: 'd', examDate: '2026-10-15' };                      // 3 days left: the pass covers today and 2 more days
   const cards = [], states = new Map();
   for (let i = 0; i < 100; i++) {
     const id = 'c' + i;
     cards.push({ id, deckId: 'd' });
-    states.set(id, { cardId: id, state: 2, stability: 4 + i * 0.05, difficulty: 5, reps: 3, lapses: 0, lastReview: NOW - 3 * DAY, due: NOW + 20 * DAY, scheduledDays: 23, elapsedDays: 0, learningSteps: 0 });
+    states.set(id, { cardId: id, state: 2, stability: 30 + i * 0.05, difficulty: 5, reps: 3, lapses: 0, lastReview: NOW - 3 * DAY, due: NOW + 20 * DAY, scheduledDays: 23, elapsedDays: 0, learningSteps: 0 });
   }
+  // ~98% on exam day, so all are in the pass; a Good answer makes a card sure enough (99%) to leave it, so it isn't planned again.
   let t = NOW, reviewed = 0;
   for (let build = 0; build < 6; build++) {
     const due = splitCards(cards, states, t, examSchedule([deck], cards, states, t)).reviews;
-    if (build === 0) assert.equal(due.length, 20);                       // 100 cards over 5 days
+    if (build === 0) assert.equal(due.length, 34);                       // 100 cards over 3 days (34, 33, 33)
     else assert.equal(due.length, 0, `build ${build} found ${due.length} more`);
     for (const x of due) { states.set(x.card.id, rate(x.card.id, states.get(x.card.id), 3, examOptions(schedulerOptions({}), deck, t), t)); reviewed++; t += 1000; }
   }
-  assert.equal(reviewed, 20);
+  assert.equal(reviewed, 34);
 });
 
 test('rating: a card the exam moves is only taken off the day balancing put it on if balancing counted it there', { skip }, async () => {
@@ -53,12 +54,12 @@ test('rating: a card the exam moves is only taken off the day balancing put it o
 
 test('preview: the button labels show the day the exam will put the card on, given the busy days', { skip }, async () => {
   const { rate, previewIntervals, examOptions, schedulerOptions, dayKey } = { ...(await load()), ...(await import('../js/stats-calc.js')) };
-  const deck = { id: 'd', examDate: '2026-10-17' };                      // 5 days left: the cards go on days 1..4
+  const deck = { id: 'd', examDate: '2026-10-15' };                      // 3 days left: the cards go on days 1..2
   const state = { cardId: 'c', state: 2, stability: 4, difficulty: 5, reps: 3, lapses: 0, lastReview: NOW - 2 * DAY, due: NOW, scheduledDays: 2, elapsedDays: 2, learningSteps: 0 };
-  const loadMap = new Map([[dayKey(NOW + 4 * DAY), 9]]);                 // the last day is busy: Good goes to day 3 instead of day 4
+  const loadMap = new Map([[dayKey(NOW + 2 * DAY), 9]]);                 // the last day is busy: Good goes to day 1 instead of day 2
   const opts = { ...examOptions(schedulerOptions({}), deck, NOW), balance: { load: loadMap } };
   const shown = previewIntervals(state, opts, NOW)[3];
   const real = rate('c', state, 3, { ...opts, balance: { load: new Map(loadMap) } }, NOW).due - NOW;
-  assert.ok(real < 3 * DAY);                                             // day 3 at 6am, not day 4
+  assert.ok(real < 2 * DAY);                                             // day 1 at 6am, not day 2
   assert.equal(shown, real);
 });

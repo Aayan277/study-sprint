@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS, newPerDayToFinish } from '../js/exam.js';
+import { examStart, examInfo, countdown, examOptions, pullIn, examPrepQueue, EXAM_RETENTION, FINAL_R, recall, recallAt, finalWindow, planFinalPass, examSchedule, examGainFrom, examClamp, FINAL_DAYS, newPerDayToFinish } from '../js/exam.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();     // Wed 7 Oct 2026, 3pm
@@ -41,11 +41,13 @@ test('recall: 90% when a gap equals the stability, falling slowly', () => {
   assert.equal(recallAt({ stability: 10, lastReview: NOW - 10 * DAY }, NOW), recall(10, 10));
 });
 
-test('the final pass window: the last 5 days, fewer when the exam is closer', () => {
-  assert.equal(FINAL_DAYS, 5);
-  assert.deepEqual(finalWindow(30), { first: 25, last: 29 });
-  assert.deepEqual(finalWindow(5), { first: 0, last: 4 });
+test('the final pass window: the last 3 days, fewer when the exam is closer', () => {
+  assert.equal(FINAL_DAYS, 3);
+  assert.equal(FINAL_R, 0.99);
+  assert.deepEqual(finalWindow(30), { first: 27, last: 29 });
+  assert.deepEqual(finalWindow(5), { first: 2, last: 4 });
   assert.deepEqual(finalWindow(3), { first: 0, last: 2 });
+  assert.deepEqual(finalWindow(2), { first: 0, last: 1 });
   assert.deepEqual(finalWindow(1), { first: 0, last: 0 });
   assert.deepEqual(finalWindow(3, 1), { first: 1, last: 2 });
   assert.ok(finalWindow(1, 1).first > finalWindow(1, 1).last);          // nothing fits
@@ -56,7 +58,7 @@ const review = (cardId, stability, ago, dueIn) => ({ cardId, state: 2, stability
 
 test('cards scheduled after the exam are pulled in, weakest closest to the exam', () => {
   const states = [
-    { ...review('strong', 50, 10, 60) },             // ~96% on exam day: needs nothing
+    { ...review('strong', 400, 10, 60) },            // ~99.6% on exam day: needs nothing
     { ...review('weak', 5, 2, 30) },
     { ...review('weaker', 2, 1, 40) },
     { ...review('soon', 8, 0, 2) },                  // due before the exam anyway
@@ -72,25 +74,27 @@ test('cards scheduled after the exam are pulled in, weakest closest to the exam'
   assert.deepEqual(pullIn(states, { id: 'd' }, NOW), []);
 });
 
-test('final pass: cards that will still be 95% on exam day are left alone', () => {
+test('final pass: cards that will still be 99% on exam day are left alone', () => {
   const info = examInfo(deck('2026-10-12'), NOW);                          // 5 days left
-  const sure = review('sure', 200, 3, 100);
-  assert.ok(recallAt(sure, info.start) >= EXAM_RETENTION);
-  const plan = planFinalPass([sure, review('unsure', 3, 1, 100)], info, NOW);
-  assert.deepEqual([...plan.keys()], ['unsure']);
+  const sure = review('sure', 1000, 3, 100);
+  assert.ok(recallAt(sure, info.start) >= FINAL_R);
+  const nearly = review('nearly', 50, 3, 100);                             // ~97%: above the retention target, but not sure enough
+  assert.ok(recallAt(nearly, info.start) >= EXAM_RETENTION && recallAt(nearly, info.start) < FINAL_R);
+  const plan = planFinalPass([sure, nearly, review('unsure', 3, 1, 100)], info, NOW);
+  assert.deepEqual([...plan.keys()].sort(), ['nearly', 'unsure']);
 });
 
 test('final pass: spread evenly over the window, strongest first, weakest on the last days', () => {
-  const info = examInfo(deck('2026-10-12'), NOW);                          // days 0..4 are the window
-  const states = Array.from({ length: 10 }, (_, i) => review('c' + i, 1 + i * 0.5, 1, 90));    // c0 is the weakest
+  const info = examInfo(deck('2026-10-10'), NOW);                          // days 0..2 are the window
+  const states = Array.from({ length: 9 }, (_, i) => review('c' + i, 1 + i * 0.5, 1, 90));    // c0 is the weakest
   const plan = planFinalPass(states, info, NOW);
-  assert.equal(plan.size, 10);
-  const perDay = [0, 0, 0, 0, 0];
+  assert.equal(plan.size, 9);
+  const perDay = [0, 0, 0];
   for (const d of plan.values()) perDay[d]++;
-  assert.deepEqual(perDay, [2, 2, 2, 2, 2]);
-  assert.ok(plan.get('c0') >= plan.get('c9'));                              // weakest no earlier than the strongest
-  assert.equal(plan.get('c0'), 4);
-  assert.equal(plan.get('c9'), 0);
+  assert.deepEqual(perDay, [3, 3, 3]);
+  assert.ok(plan.get('c0') >= plan.get('c8'));                              // weakest no earlier than the strongest
+  assert.equal(plan.get('c0'), 2);
+  assert.equal(plan.get('c8'), 0);
 });
 
 test('final pass: reviews already due on a day count toward its share', () => {
@@ -125,10 +129,10 @@ test('examSchedule: a subdeck uses its parent\'s exam, and cards in no exam deck
 });
 
 test('examSchedule: the gain of each due review comes from gainOf', () => {
-  const decks = [{ id: 'd', examDate: '2026-10-12' }];
+  const decks = [{ id: 'd', examDate: '2026-10-10' }];
   const cards = [{ id: 'a', deckId: 'd' }, { id: 'b', deckId: 'd' }];
   const states = new Map([['a', review('a', 3, 5, -1)], ['b', review('b', 3, 1, 30)]]);
-  const { gain } = examSchedule(decks, cards, states, NOW, (card, st, start) => (start === examStart('2026-10-12') ? 0.1 : -1));
+  const { gain } = examSchedule(decks, cards, states, NOW, (card, st, start) => (start === examStart('2026-10-10') ? 0.1 : -1));
   assert.deepEqual([...gain], [['a', 0.1]]);                    // b isn't due today (and isn't planned for it either)
 });
 
@@ -149,8 +153,8 @@ test('after a rating: a gap past the exam moves to the final days only when the 
   const weak = examClamp(justRated(3, 20), NOW, opts);
   assert.ok(weak.due.getTime() > dayEnd(NOW) && weak.due.getTime() < opts.maxDue);       // on one of the days before the exam
   assert.equal(weak.scheduled_days, 4);                                      // no load given: the last day, the weakest's place
-  const strong = examClamp(justRated(120, 200), NOW, opts);
-  assert.equal(strong.due.getTime(), NOW + 200 * DAY);                       // still 95% on exam day: left alone
+  const strong = examClamp(justRated(400, 200), NOW, opts);
+  assert.equal(strong.due.getTime(), NOW + 200 * DAY);                       // still 99% on exam day: left alone
   const before = examClamp(justRated(3, 2), NOW, opts);
   assert.equal(before.due.getTime(), NOW + 2 * DAY);                         // comes back before the exam anyway
   assert.equal(examClamp(justRated(3, 20), NOW, {}).due.getTime(), NOW + 20 * DAY);       // no exam
@@ -213,7 +217,7 @@ test('N new a day to finish by the exam', () => {
 
 test('a session over one subdeck uses the plan made for the whole exam, so it matches Today', async () => {
   const { splitCards } = await import('../js/queue.js');
-  const decks = [{ id: 'P', examDate: '2026-10-12' }, { id: 'A', parentId: 'P' }, { id: 'B', parentId: 'P' }];
+  const decks = [{ id: 'P', examDate: '2026-10-10' }, { id: 'A', parentId: 'P' }, { id: 'B', parentId: 'P' }];
   const cards = [], states = new Map();
   for (let i = 0; i < 10; i++) for (const d of ['A', 'B']) {        // A is weak, B is strong
     const id = d + i;
@@ -236,25 +240,25 @@ test('examSchedule: exam-day gain only orders reviews once the final pass has st
   const cards = [{ id: 'a', deckId: 'd' }];
   const states = new Map([['a', review('a', 3, 5, -1)]]);                 // overdue
   const gain = date => examSchedule([{ id: 'd', examDate: date }], cards, states, NOW, () => 0.1).gain.size;
-  assert.equal(gain('2026-10-12'), 1);                                     // 5 days left: in the final window
-  assert.equal(gain('2026-10-13'), 0);                                     // 6 days left: not yet
+  assert.equal(gain('2026-10-10'), 1);                                     // 3 days left: in the final window
+  assert.equal(gain('2026-10-11'), 0);                                     // 4 days left: not yet
   assert.equal(gain('2026-11-30'), 0);
 });
 
 test('easy days: the final pass gives an easy weekday fewer cards', () => {
-  const info = examInfo(deck('2026-10-12'), NOW);                          // Wed 7 Oct: days 0..4 are Wed Thu Fri Sat Sun
-  const states = Array.from({ length: 10 }, (_, i) => review('c' + i, 1 + i * 0.5, 1, 90));
-  const perDay = plan => { const n = [0, 0, 0, 0, 0]; for (const d of plan.values()) n[d]++; return n; };
+  const info = examInfo(deck('2026-10-10'), NOW);                          // Wed 7 Oct: days 0..2 are Wed Thu Fri
+  const states = Array.from({ length: 9 }, (_, i) => review('c' + i, 1 + i * 0.5, 1, 90));
+  const perDay = plan => { const n = [0, 0, 0]; for (const d of plan.values()) n[d]++; return n; };
   const week = day => ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'].map((v, i) => (i === day ? 'minimum' : v));   // Sunday first
-  assert.deepEqual(perDay(planFinalPass(states, info, NOW)), [2, 2, 2, 2, 2]);
+  assert.deepEqual(perDay(planFinalPass(states, info, NOW)), [3, 3, 3]);
   const plan = perDay(planFinalPass(states, info, NOW, 0, week(5)));        // Friday is day 2
-  assert.ok(plan[2] <= 1 && plan.reduce((a, b) => a + b) === 10);
-  assert.ok(plan[0] > plan[2] && plan[3] > plan[2]);
+  assert.ok(plan[2] <= 1 && plan.reduce((a, b) => a + b) === 9);
+  assert.ok(plan[0] > plan[2] && plan[1] > plan[2]);
   // examSchedule and pullIn take the same weekdays
-  const decks = [{ id: 'd', examDate: '2026-10-12' }], cards = states.map(s => ({ id: s.cardId, deckId: 'd' }));
+  const decks = [{ id: 'd', examDate: '2026-10-10' }], cards = states.map(s => ({ id: s.cardId, deckId: 'd' }));
   const caps = examSchedule(decks, cards, new Map(states.map(s => [s.cardId, s])), NOW, null, null, week(5)).caps;
   assert.equal([...caps.values()].filter(t => new Date(t).getDay() === 5).length, plan[2]);
-  const onFriday = easy => pullIn(states, { examDate: '2026-10-12' }, NOW, easy).filter(s => new Date(s.due).getDay() === 5).length;
+  const onFriday = easy => pullIn(states, { examDate: '2026-10-10' }, NOW, easy).filter(s => new Date(s.due).getDay() === 5).length;
   assert.ok(onFriday(week(5)) <= 1 && onFriday(week(5)) < onFriday(undefined));
 });
 

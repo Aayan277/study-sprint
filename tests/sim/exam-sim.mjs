@@ -6,8 +6,8 @@
 // with the chance FSRS predicts. Runs the app's real scheduling code (srs.js, queue.js, exam.js) twice:
 //   before  every card whose next review would be after the exam is put on the evening before it (the v3.0 rule)
 //   none    (for comparison) no exam rule at all: cards are scheduled as if there were no exam
-//   after   cards likely to be remembered at 95% on exam day are left alone; the rest are spread over the
-//           last 5 days, the weakest closest to the exam
+//   after   cards likely to be remembered at 99% on exam day are left alone; the rest are spread over the
+//           last 3 days, the weakest closest to the exam
 // Prints the reviews per day, and how well the cards should be remembered at the start of exam day.
 import { register } from 'node:module';
 register('./loader.mjs', import.meta.url);

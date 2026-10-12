@@ -1,9 +1,9 @@
 // Exam date mode: get a whole deck ready for an exam. Pure functions, tested by tests/exam.test.js.
 //
 // A deck can have an exam date (deck.examDate, e.g. '2026-11-20'). Until that day:
-//   1. The final pass. A card that we expect you to remember at 95% or better on exam day is left alone,
+//   1. The final pass. A card that we expect you to remember at 99% or better on exam day is left alone,
 //      even if its next review falls after the exam. Every other card that would wait until after the exam is
-//      reviewed in the last few days before it instead: spread over the last 5 days (fewer if the exam is
+//      reviewed in the last few days before it instead: spread over the last 3 days (fewer if the exam is
 //      closer), the weakest closest to the exam (examSchedule, pullIn). This is worked out whenever the
 //      day's queue is built, so cards that arrive later (an import, a move, a new subdeck) are covered too.
 //      In those same last days the reviews that add most to exam-day recall come first; further out, the order is normal.
@@ -20,7 +20,12 @@ const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
 export const EXAM_RETENTION = 0.95;   // retention on the day before the exam
 const REVIEW = 2;
-export const FINAL_DAYS = 5;          // the final pass is spread over at most this many days before the exam
+export const FINAL_DAYS = 3;          // the final pass is spread over at most this many days before the exam
+// A card skips its last review before the exam only if it's predicted at least this likely to be remembered on
+// exam day. Higher than EXAM_RETENTION on purpose: the predictions are a little optimistic for many students, and
+// simulations with real forgetting showed 95% lost 1-2 points on exam day against reviewing everything the evening
+// before, while 99% kept within 0.2 points (and still spreads the load).
+export const FINAL_R = 0.99;
 
 // ---------- how likely you are to remember a card ----------
 // FSRS's forgetting curve: R = (1 + FACTOR · days / stability) ^ DECAY. R is the chance of remembering.
@@ -104,7 +109,7 @@ export function planFinalPass(states, info, now = Date.now(), from = 0, easyDays
     const day = dayIndex(st.due, now);
     if (day >= info.daysLeft) {
       const r = recallAt(st, info.start);
-      if (r < EXAM_RETENTION) late.push({ id: st.cardId, r, stability: st.stability });
+      if (r < FINAL_R) late.push({ id: st.cardId, r, stability: st.stability });
     } else if (day >= first) load[day]++;
     else if (day < 0 && first === 0) load[0]++;               // overdue: you'll do it today
   }
@@ -126,12 +131,12 @@ export function planFinalPass(states, info, now = Date.now(), from = 0, easyDays
 }
 
 // Used by srs.js after every rating. opts.maxDue is the start of exam day. A card that would come back on or after
-// it only needs a review before then if we expect you'd remember it less than 95% on exam day. Then it goes
+// it only needs a review before then if we expect you'd remember it less than 99% on exam day. Then it goes
 // on one of the last days before the exam, the least busy one (later days win a tie, as the weakest cards
 // belong closest to the exam). load (optional) is the Map of reviews per day from balance.js (rate() updates it).
 export function examClamp(card, now, opts, load) {
   if (!(opts.maxDue > now) || card.due.getTime() < opts.maxDue) return card;
-  if (recall(card.stability, (opts.maxDue - now) / DAY) >= EXAM_RETENTION) return card;     // fine as it is
+  if (recall(card.stability, (opts.maxDue - now) / DAY) >= FINAL_R) return card;     // fine as it is
   const daysLeft = Math.round((opts.maxDue - dayStart(now)) / DAY);
   const { first, last } = finalWindow(daysLeft, 1);                  // tomorrow at the earliest
   if (first > last) return card;                                        // no day left to put it on
@@ -194,7 +199,7 @@ export function examGainFrom(st, goodStability, againStability, examStart, now) 
 }
 
 // Cards brought forward when an exam date is set: the final pass (planFinalPass) from tomorrow on, as saved
-// schedules (6am on the planned day). Returns the changed schedules only. Cards you'd remember at 95%
+// schedules (6am on the planned day). Returns the changed schedules only. Cards you'd remember at 99%
 // or better on exam day are left alone. Nothing changes if the exam is today or past.
 export function pullIn(states, deck, now = Date.now(), easyDays = NORMAL_WEEK) {
   const info = examInfo(deck, now);

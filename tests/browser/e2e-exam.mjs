@@ -14,7 +14,7 @@ const inDays = n => { const d = new Date(Date.now() - 4 * 3600000 + n * DAY); re
 await page.evaluate(async () => {
   const db = await import('./js/db.js'); const D = 86400000, now = Date.now();
   const st = (i, due, stability, last) => ({ cardId: `sample-${i}`, due, stability, difficulty: 4, reps: 4, lapses: 0, state: 2, lastReview: last, elapsedDays: 5, scheduledDays: 30, learningSteps: 0 });
-  await db.putStates([st(0, now + 60 * D, 80, now - 20 * D), st(1, now + 45 * D, 20, now - 10 * D), st(2, now + 90 * D, 200, now - 30 * D), st(3, now + 2 * D, 6, now - D), st(4, now + 5 * D, 9, now - 6 * D)]);
+  await db.putStates([st(0, now + 60 * D, 600, now - 20 * D), st(1, now + 45 * D, 20, now - 10 * D), st(2, now + 90 * D, 1500, now - 30 * D), st(3, now + 2 * D, 6, now - D), st(4, now + 5 * D, 9, now - 6 * D)]);
 });
 const examDate = inDays(10);
 await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
@@ -23,19 +23,19 @@ await page.fill('#deckExam', examDate);
 await page.screenshot({ path: SP + '/exam-editor.png', fullPage: true });
 await page.click('#deckForm button[type=submit]');
 await page.waitForFunction(() => /brought forward/.test(document.querySelector('#toast')?.textContent || ''));
-// v3.1: only cards that would be below 95% on exam day are pulled in. Here 1 of the 3 cards due after the exam (stability 20, ~90%);
-// the other two (stability 80 and 200) stay where they are.
+// v3.1: only cards that would be below 99% on exam day are pulled in. Here 1 of the 3 cards due after the exam (stability 20, ~90%);
+// the other two (stability 600 and 1500, ~99.4% and ~99.7%) stay where they are.
 ok((await page.textContent('#toast')).includes('1 card brought forward'), 'setting the date pulls in the card that needs it: ' + await page.textContent('#toast'));
 const examStart = await page.evaluate(async d => (await import('./js/exam.js')).examStart(d), examDate);
-// Cards due after the exam must be ones expected to be at 95% or better on exam day.
+// Cards due after the exam must be ones expected to be at 99% or better on exam day.
 const lateNeedy = () => page.evaluate(async d => {
-  const { examStart, recallAt, EXAM_RETENTION } = await import('./js/exam.js');
+  const { examStart, recallAt, FINAL_R } = await import('./js/exam.js');
   const start = examStart(d);
-  return (await (await import('./js/db.js')).getAll('cardStates')).filter(s => s.due > start && recallAt(s, start) < EXAM_RETENTION).map(s => s.cardId);
+  return (await (await import('./js/db.js')).getAll('cardStates')).filter(s => s.due > start && recallAt(s, start) < FINAL_R).map(s => s.cardId);
 }, examDate);
 let states = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')));
 ok(!(await lateNeedy()).length, 'no card that needs a review is due after the exam');
-ok(states.filter(s => s.due > examStart).length === 2, 'the two cards at 95%+ on exam day keep their dates after it');
+ok(states.filter(s => s.due > examStart).length === 2, 'the two cards at 99%+ on exam day keep their dates after it');
 ok((await page.textContent('.exam-line')).includes('Exam in 10 days'), 'deck page shows the countdown');
 await page.screenshot({ path: SP + '/exam-deck.png' });
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
@@ -53,11 +53,12 @@ const easyLabel = await page.$eval('.rate.r4 span', s => s.textContent);
 await page.keyboard.press('4'); await page.waitForTimeout(300);
 states = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')));
 ok(!(await lateNeedy()).length, `Easy on "${first}" (${easyLabel}) leaves no card that needs a review waiting until after the exam`);
-// If Easy sends the card past the exam, it must be one we expect to remember on exam day (95%+).
+// If Easy sends the card past the exam, it must be one we expect to remember on exam day (99%+).
 const rated = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')).sort((a, b) => b.lastReview - a.lastReview)[0]);
 const pastExam = rated.due > examStart;
 const onExamDay = await page.evaluate(async ([s, start]) => (await import('./js/exam.js')).recallAt(s, start), [rated, examStart]);
-ok(!pastExam || onExamDay >= 0.95, `Easy (${easyLabel}) goes past the exam only when recall on exam day is 95%+: ${onExamDay.toFixed(3)}`);
+const finalR = await page.evaluate(async () => (await import('./js/exam.js')).FINAL_R);
+ok(!pastExam || onExamDay >= finalR, `Easy (${easyLabel}) goes past the exam only when recall on exam day is 99%+: ${onExamDay.toFixed(3)}`);
 await page.click('#endBtn');
 // custom study offers exam prep too
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
