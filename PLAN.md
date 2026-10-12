@@ -236,7 +236,18 @@ Research covered the scheduling algorithm, competitors (Anki, Quizlet, Knowt, Re
 5. **My own algorithm (v3.5).** Tune FSRS to my reviews (fsrs-rs WASM, @open-spaced-repetition/binding, on a separate page, at about 400+ reviews, kept only if it predicts better); an exam-day forecast ("you'll remember ~78%; do 25 a day for 90%"); predicted vs actual recall chart; workload forecast.
 6. **Exam practice (v3.6).** Test mode (mock exam, mixed question types, score by tag, Drill missed); lecture PDFs into the "Make cards with Claude" prompt (pdf.js); reverse cards.
 
-Later: audio cards, one-tap AI cards (Supabase Edge Function, about $3 a semester), sharing decks.
+Later: audio cards, the "these look like notes" paste banner, one-tap AI cards (Supabase Edge Function, about $3 a semester), sharing decks.
+
+## Polish pass (after v3.1, approved from the Polish Preview)
+
+Four design reviews (visual, layout, motion, first impression) and before/after renders; the owner picked by number. New switches go in a new **Settings → Appearance** section (this device only), on by default.
+
+1. **Visual fixes (A1–A6):** one font for Start and no mono in prose, solid tab bar and header; calm deck label on cards, readable long answers (setting: card text **Auto** / Center / Left, Auto = long answers left), framed pictures; exams in amber (red only inside 3 days), Again in crimson so Ember's accent stands alone; one deck-page stripe and one empty state; Stats charts use their height, solid bars, calmer hardest list; one content width on desktop. Also check Today's time estimate (a render showed ~1 min per card).
+2. **Layout (B1–B7):** short card action sheet, Save returns to the card; one sheet frame (× top-right, sticky footer); Review progress bar; Decks that scale (search, sort, collapsed subdecks, small play buttons; setting "Compact deck list"); exam date in 3 taps from Today; per-course readiness header in Stats (setting); desktop 3-column Decks with a side panel.
+3. **Motion (C1–C5):** rating feedback afterimage (setting); goal ring fill and completion; finish count-up, streak flame, confetti at most once a day; Play combo flames and grade stamp; tab transitions and sheet springs (setting "Smooth transitions"). Reduced motion always wins.
+4. **First impression (D1–D6):** welcome screen as a landing page (2 columns on desktop); sample deck matches the promise and Skip doesn't dead-end; violet app icon, maskable icon and SVG favicon; og:image and link-preview tags; install-app card after the first finished session; README hero and fresh screenshots.
+
+Later: "These look like notes" paste banner (B8), with the one-tap AI cards.
 
 ## Parked (not planned for now)
 
