@@ -8,13 +8,38 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, customQueue, live } from './study-data.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
 import { examInfo, countdown } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
-import { subtreeIds, deckPath } from './deck-tree.js';
+import { subtreeIds, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
 
-const launch = launchStudy;
+// Start a study session (see launchStudy in study-data.js), with two things first:
+//   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
+//     because a new session replaces it (its answers are saved, but they could no longer be undone)
+//   - Review's code is loaded before leaving this screen, so a failed load (offline on a first visit) shows a message here
+//     instead of a broken screen
+// Also used by the Decks screen and deck pages.
+export async function startStudy(spec = {}) {
+  try { await import('./review.js'); } catch {
+    toast("Couldn't open Review. Check your connection and try again.");
+    return;
+  }
+  const r = live.resume;
+  const going = r && r.day === dayStart() && r.version === db.scheduleVersion() ? r : null;
+  if (!going) return launchStudy(spec);
+  if (going.scope === scopeKey(spec.deckIds, spec.kind)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
+  openSheet(`
+    <h2 id="sheetTitle">Start over?</h2>
+    <p>You have a session in progress (${plural(going.left, 'card')} left). Starting a new one replaces it: your answers so far are saved, but you'll lose this session's undo.</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" id="soKeep">Keep going</button>
+      <button class="btn primary" type="button" id="soNew">Start over</button>
+    </div>`);
+  $('soKeep').addEventListener('click', () => { closeSheet(); location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; });
+  $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
+}
+const launch = startStudy;
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
@@ -104,11 +129,12 @@ export async function renderToday(el) {
     $('optBtn')?.addEventListener('click', () => openOptions());
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
-    el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', async () => (await import('./review.js')).examPrep(b.dataset.prep)));
+    el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.prep], deckId: b.dataset.prep, kind: 'prep' })));
   };
 
   // ----- Options (a sheet): decks, answer by, custom study -----
   const openOptions = (focusSel) => {
+    const first = !$('sheet').open;
     openSheet(`
       <h2 id="sheetTitle">Study options</h2>
       <section class="section">
@@ -137,6 +163,9 @@ export async function renderToday(el) {
         <button class="btn primary" type="button" id="optDone">Done</button>
       </div>`);
     const sheet = $('sheet');
+    // The screen behind is redrawn when a deck is picked, so the Options button it opened from is a new one: when
+    // the sheet closes, put focus back on it (otherwise it would fall to the top of the page).
+    if (first) sheet.addEventListener('close', () => $('optBtn')?.focus(), { once: true });
     sheet.querySelector('[data-all]').addEventListener('click', () => { chosen = []; pick(); openOptions('[data-all]'); });
     sheet.querySelectorAll('[data-deck]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.deck;
@@ -163,9 +192,11 @@ export async function renderToday(el) {
     const isNew = c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; };
     const newAvail = cards.filter(isNew).length;
     let days = 3, extra = 10;
-    // Decks here with an exam coming up (subdecks use their parent's date unless they set one)
+    // Decks here with an exam coming up (subdecks use their parent's date unless they set one): only those with cards
+    // that Exam prep would cover.
+    const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) }))
-      .filter(e => e.info && cards.some(c => subtreeIds(data.decks, e.deck.id).has(c.deckId)));
+      .filter(e => e.info && cards.some(c => subtreeIds(data.decks, e.deck.id).has(c.deckId) && examOf.get(c.deckId)));
 
     openSheet(`
       <h2 id="sheetTitle">Custom study</h2>

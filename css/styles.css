@@ -278,6 +278,9 @@ body.focus .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
 .link.more{min-width:38px;color:var(--text-2);font-size:1.2rem;line-height:1}
 .hint{display:block;text-align:center;font:var(--fs-2xs) var(--f-num);color:var(--text-3);margin-top:10px}
 .key-hint{display:none}
+.key-line{display:none;margin:var(--s-2) 0 0;text-align:center;font:var(--fs-2xs) var(--f-num);color:var(--text-3)}
+/* A computer with a keyboard: remind what the keys do */
+@media (min-width:1024px) and (hover:hover) and (pointer:fine){.key-line{display:block}}
 
 /* ---------- 6. Screen head ---------- */
 .screen-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;margin:4px 0 var(--s-5)}
@@ -575,10 +578,14 @@ main[data-route="import"] > .view > .savebar{order:5}
    is just the stage; each face is drawn like a card. A new card rises in. */
 .flash.rv-card{display:flex;flex-direction:column;gap:0;padding:0;background:none;box-shadow:none;perspective:1400px}
 .flash.rv-card.enter{animation:card-in 300ms var(--ease)}
-.rv-turn{flex:1 1 auto;display:grid;transform-style:preserve-3d;transition:transform 350ms var(--ease)}
+.rv-turn{position:relative;flex:1 1 auto;display:grid;transform-style:preserve-3d;transition:transform 350ms var(--ease)}
 .rv-card.flipped .rv-turn{transform:rotateY(180deg)}
 .rv-face{grid-area:1 / 1;min-width:0;display:flex;flex-direction:column;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .rv-back{transform:rotateY(180deg)}
+.rv-back:focus{outline:none}
+/* Until the card is turned, the back is laid over the front instead of beside it, so a long answer doesn't
+   stretch the front face. It takes its own height once the card is turned. */
+.rv-card:not(.flipped) .rv-back{position:absolute;inset:0;overflow:hidden}
 .rv-card:not(.flipped) .rv-back,.rv-card.flipped .rv-front{pointer-events:none}
 /* The question again, smaller, above the answer */
 .flash-recap{margin:0;font-weight:600;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em;line-height:1.15;text-align:center;overflow-wrap:anywhere;white-space:pre-line}

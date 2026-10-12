@@ -2,7 +2,8 @@
 
 import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
-import { loadAll, countFor, launchStudy } from './study-data.js';
+import { loadAll, countFor } from './study-data.js';
+import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
@@ -66,12 +67,15 @@ function setFolded(id, isFolded) {
   isFolded ? f.add(id) : f.delete(id);
   try { localStorage.setItem(FOLD_KEY, JSON.stringify([...f])); } catch { /* private mode: just not remembered */ }
 }
-function subdeckRows(items, baseDepth) {
-  return items.map(({ deck, depth, stats }) => `
+// `today` (from loadAll) makes the numbers today's: the same ones Today and "Study N" use, with the daily limits applied.
+function subdeckRows(items, baseDepth, today = null) {
+  return items.map(({ deck, depth, stats }) => {
+    const c = today ? countFor(today, [deck.id]) : { due: stats.due, fresh: stats.new };
+    return `
     <button class="subdeck" type="button" data-open="${esc(deck.id)}" style="--depth:${depth - baseDepth - 1};--deck:${esc(deck.color)}">
       <span class="sd-name">${esc(deck.name)}</span>
-      <span class="sd-counts"><span class="due"><b>${stats.due}</b> due</span> <span><b>${stats.new}</b> new</span></span>
-    </button>`).join('');
+      <span class="sd-counts"><span class="due"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span></span>
+    </button>`; }).join('');
 }
 // The items inside `id` (everything after it in tree order that's deeper).
 function inside(list, id) {
@@ -80,12 +84,12 @@ function inside(list, id) {
   for (let j = i + 1; j < list.length && list[j].depth > list[i].depth; j++) out.push(list[j]);
   return out;
 }
-function subdeckBox(list, item, open) {
+function subdeckBox(list, item, open, today) {
   const kids = inside(list, item.deck.id);
   if (!kids.length) return '';
   return `<details class="subdecks" data-fold="${esc(item.deck.id)}" ${open ? 'open' : ''}>
       <summary>${plural(kids.filter(k => k.depth === item.depth + 1).length, 'subdeck')}</summary>
-      ${subdeckRows(kids, item.depth)}
+      ${subdeckRows(kids, item.depth, today)}
     </details>`;
 }
 
@@ -103,6 +107,7 @@ export async function renderLibrary(el, showStarters = false) {
   const [list, today] = await Promise.all([loadDecks(), loadAll()]);
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
+  const todayAll = countFor(today, top.map(x => x.deck.id));      // today's numbers: daily limits applied
   const fold = folded();
   // Starter decks you haven't added yet.
   const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
@@ -117,12 +122,12 @@ export async function renderLibrary(el, showStarters = false) {
       </div>
     </div>
     <div class="dsum" aria-label="All decks">
-      <span><b class="mono">${sum('due')}</b> due today</span>
-      <span><b class="mono">${sum('new')}</b> new</span>
+      <span><b class="mono">${todayAll.due}</b> due today</span>
+      <span><b class="mono">${todayAll.fresh}</b> new today</span>
       <span><b class="mono">${sum('total')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>
-    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; const go = countFor(today, [deck.id]).total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0; return `
+    ${list.length ? `<div class="decks">${top.map(item => { const { deck, stats } = item; const c = countFor(today, [deck.id]), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0; return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
@@ -130,8 +135,8 @@ export async function renderLibrary(el, showStarters = false) {
           ${examInfo(deck) ? `<span class="exam-badge">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
             <span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
-            <span class="due"><b>${stats.due}</b> due</span>
-            <span><b>${stats.new}</b> new</span>
+            <span class="due"><b>${c.due}</b> due</span>
+            <span><b>${c.fresh}</b> new</span>
           </span>
         </button>
         <span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 40, 4, `<small class="mono">${Math.round(mastered * 100)}</small>`)}<span class="sr-only">${Math.round(mastered * 100)}% mastered</span></span>
@@ -140,7 +145,7 @@ export async function renderLibrary(el, showStarters = false) {
           ${go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
                 : `<span class="deck-done">${icon('check')} Done for today</span>`}
         </div>
-        ${subdeckBox(list, item, !fold.has(deck.id))}
+        ${subdeckBox(list, item, !fold.has(deck.id), today)}
       </article>`; }).join('')}</div>`
     : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
     ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
@@ -160,7 +165,7 @@ export async function renderLibrary(el, showStarters = false) {
   $('newDeck').addEventListener('click', create);
   $('newDeck2')?.addEventListener('click', create);
   el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
-  el.querySelectorAll('[data-study]').forEach(b => b.addEventListener('click', () => launchStudy({ deckIds: [b.dataset.study], deckId: b.dataset.study })));
+  el.querySelectorAll('[data-study]').forEach(b => b.addEventListener('click', () => startStudy({ deckIds: [b.dataset.study], deckId: b.dataset.study })));
   el.querySelectorAll('[data-fold]').forEach(d => d.addEventListener('toggle', () => setFolded(d.dataset.fold, !d.open)));
   el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
     openDeckEditor(list.find(x => x.deck.id === b.dataset.edit).deck, () => renderLibrary(el));
@@ -204,7 +209,7 @@ export async function renderDeck(el, deckId) {
         <button class="btn ghost small" type="button" id="addSub">+ Subdeck</button>
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
         ${cards.length ? '<button class="btn ghost small" type="button" id="exportDeck">Export</button>' : ''}
-        ${s.total ? `<a class="btn primary small" href="#/review/${esc(deck.id)}">Review</a>` : ''}
+        ${s.total ? `<a class="btn primary small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
       </div>
     </div>
     <div class="card section deck-summary" style="border-left:6px solid ${esc(deck.color)}">${summaryHTML(s)}</div>
@@ -217,7 +222,8 @@ export async function renderDeck(el, deckId) {
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }, { parentId: deckId }));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
-  $('prepBtn')?.addEventListener('click', async () => (await import('./review.js')).examPrep(deck.id));
+  $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
+  $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; else renderDeck(el, deckId);
   }));

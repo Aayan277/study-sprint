@@ -72,7 +72,7 @@ await p.click('#deckCancel');
 await DB(async ([u]) => { const db = await import('./js/db.js'); await db.saveDeck({ ...(await db.getDeck('sample')), newPerDay: 3 }); await db.saveDeck({ ...(await db.getDeck(u)), newPerDay: 1 }); }, [u1.id]);
 await go('#/today', '#optBtn'); await p.click('#optBtn'); await p.waitForSelector('#deckChips');
 const chips = await p.$$eval('#deckChips [data-deck]', b => b.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
-ok(chips.length === 3 && chips[1].length > 0 && (await p.$$('#deckChips .sub-mark')).length === 2, 'chips in tree order: ' + chips.join(' | '));
+ok(chips.length === 3 && chips[1].startsWith('Unit 1') && chips[2].startsWith('Lecture 3') && (await p.$$('#deckChips .sub-mark')).length === 2, 'chips in tree order, subdecks marked: ' + chips.join(' | '));
 ok(+(await p.$eval('[data-count=new]', v => v.textContent)) === 3, "parent's limit of 3 caps the group");
 await p.click(`[data-deck="${u1.id}"]`);
 const u1new = +(await p.$eval('[data-count=new]', v => v.textContent));

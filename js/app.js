@@ -11,6 +11,7 @@ import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMax
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
+import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
@@ -765,6 +766,7 @@ async function route() {
   if (name === 'welcome' && settings.onboarded && !/^review\//.test(arg || '')) { location.replace('#/today'); return; }
   // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
   if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
+  if (name !== 'review') takeLaunch();     // a session handed over to Review that never got there (e.g. it failed to load) must not start later
   currentRoute = name;
   lastHash = location.hash;
   document.body.classList.toggle('welcome', name === 'welcome');       // the first-run start hides the tabs

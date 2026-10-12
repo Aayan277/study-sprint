@@ -131,8 +131,10 @@ await page.screenshot({ path: SP + '/r-settings.png', fullPage: true }); await n
 // deck page review button
 await page.click('#gearBtn'); await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');   // gear returns to the round, where the tab bar is hidden
 await page.click('.deck-open'); await page.waitForSelector('a[href^="#/review/"]');
-await page.click('a[href^="#/review/"]'); await page.waitForSelector('#flash, #startBtn');
-ok(true, 'deck Review button opens review');
+await page.click('a[href^="#/review/"]');
+// a session from Today is still going, so a different one asks first (see the e2e-today checks for the details)
+await page.waitForSelector('#soNew'); await page.click('#soNew'); await page.waitForSelector('#flash');
+ok(page.url().includes('#/review/'), 'deck Review button opens that deck in review: ' + page.url());
 // offline: the app shell + FSRS library work offline
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.evaluate(() => navigator.serviceWorker.ready);

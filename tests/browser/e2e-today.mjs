@@ -46,13 +46,13 @@ ok(await page.locator('.rv-face').count() === 2, 'front and back are both in the
 const front = await page.textContent('.flash-front');
 await page.keyboard.press('Space'); await page.keyboard.press('3');
 await page.waitForFunction(f => document.querySelector('.flash-front')?.textContent !== f, front, { timeout: 2000 });
-ok(true, 'Space then 3 rates at once, without waiting for the flip');
+ok((await page.textContent('.flash-front')) !== front && (await page.locator('.rv-card.flipped').count()) === 0, 'Space then 3 rates at once, without waiting for the flip: a new, unflipped card is showing');
 await page.evaluate(() => { location.hash = '#/decks'; }); await page.waitForSelector('.deck');
 ok(!(await focusOn()), 'focus mode is off after leaving a round');
 
 // Resume banner, then old #/review link
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn');
-ok(true, 'Today offers Resume');
+ok(/\d+ cards? left/.test(await page.textContent('.resume')) && (await page.getAttribute('#resumeBtn', 'href')).startsWith('#/review/'), 'Today offers Resume with the cards left: ' + (await page.textContent('.resume')).replace(/\s+/g, ' ').trim());
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.goto('http://localhost:8123/#/review'); await page.reload(); await page.waitForSelector('.today-hero');   // (a reload: no session in memory)
 ok(page.url().endsWith('#/today'), '#/review with nothing started goes to Today');
@@ -88,7 +88,9 @@ const order = [];
 for (let i = 0; i < 8; i++) { order.push(await page.evaluate(() => document.activeElement.id || document.activeElement.className || document.activeElement.tagName)); await page.keyboard.press('Tab'); }
 ok(order.includes('optBtn'), 'Tab reaches Options: ' + order.join(', '));
 await page.focus('#optBtn'); await page.keyboard.press('Enter'); await page.waitForSelector('#deckChips');
-ok(true, 'Enter opens Options'); await page.keyboard.press('Escape');
+ok(await page.locator('#sheet[open] #deckChips').count() === 1, 'Enter opens Options'); await page.keyboard.press('Escape');
+await page.waitForFunction(() => !document.getElementById('sheet').open);
+ok(await page.evaluate(() => document.activeElement?.id) === 'optBtn', 'closing Options puts focus back on the Options button');
 
 ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
 await browser.close();

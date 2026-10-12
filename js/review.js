@@ -14,7 +14,7 @@ import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions } from './exam.js';
-import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, live } from './study-data.js';
+import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
 import { isHidden, isNewLeech, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
@@ -29,12 +29,7 @@ const MAX_CARD_MS = 2 * 60 * 1000;
 
 // ---------- 1. starting ----------
 // Today (js/today.js) decides what to study and hands it over with setLaunch(); this screen starts it.
-// Exam prep for one deck (from its page): open Review straight into the session.
-let prepFor = null;
-export function examPrep(deckId) {
-  prepFor = deckId;
-  location.hash = `#/review/${encodeURIComponent(deckId)}`;
-}
+// Exam prep and the other Custom study sessions come the same way (a launch with a `kind`).
 
 export async function renderReview(el, deckId) {
   // Coming back to a session that's still going: carry on where you were.
@@ -46,29 +41,25 @@ export async function renderReview(el, deckId) {
   if (!el.isConnected) return;                 // you already moved to another screen
   const typing = data.settings.reviewTyping;
 
-  // From Today: its decks, or one of Custom study's sessions.
+  // From Today (or a deck's page): its decks, or one of Custom study's sessions.
   if (launch) {
     const allIds = data.decks.map(d => d.id);
     const chosen = launch.deckIds.filter(id => allIds.includes(id));
     const c = countFor(data, chosen.length ? chosen : allIds);
-    return start(el, data, c.cards, typing, launch.deckId, launch.kind ? customQueue(launch.kind, data, c.cards, launch.days) : null);
+    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days) : null;
+    if (custom && !custom.queue.length) {      // e.g. exam prep when every card was seen in the last 3 days
+      toast(launch.kind === 'prep' ? 'You have seen every card in this deck in the last 3 days' : 'Nothing to review there');
+      location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
+      return;
+    }
+    return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind));
   }
   // No deck and nothing started: the home screen is Today.
   if (!deckId) { location.replace('#/today'); return; }
 
-  // From a deck's page: straight into its cards (no setup screen).
-  const inside = withSubdecks(data, [deckId]);
-  const deckCards = data.cards.filter(c => inside.has(c.deckId));
-  if (prepFor && prepFor === deckId) {
-    prepFor = null;
-    const prep = customQueue('prep', data, deckCards);
-    if (prep.queue.length) return start(el, data, deckCards, typing, deckId, prep);
-    toast('You have seen every card in this deck in the last 3 days');
-    location.replace(`#/deck/${encodeURIComponent(deckId)}`);
-    return;
-  }
+  // From a deck's page (or a reload): straight into its cards (no setup screen).
   const c = countFor(data, [deckId]);
-  if (c.total) return start(el, data, c.cards, typing, deckId);
+  if (c.total) return start(el, data, c.cards, typing, deckId, null, scopeKey([deckId]));
   const name = data.decks.find(d => d.id === deckId)?.name || 'This deck';
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">REVIEW</span><h1>${esc(name)}</h1></div></div>
@@ -81,10 +72,10 @@ export async function renderReview(el, deckId) {
 
 // ---------- 2. session ----------
 // custom: optional { queue, waiting, label } for a Custom study session instead of today's cards.
-function start(el, data, cards, typing, deckId, custom = null) {
+function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, Date.now(), data.reviewLeft);
   R = {
-    active: true, day: dayStart(), deckId, typing, custom: custom?.label || null,
+    active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
     // Reviews already due on each day, to even them out (and keep easy days light): balance.js.
     balance: { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays },
@@ -141,6 +132,9 @@ function countsHTML() {
     <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
+// The face that is turned away is hidden from screen readers and can't be focused or tabbed to (inert).
+const HIDDEN = 'aria-hidden="true" inert';
+
 // Draw the card on screen. Both faces are in the page from the start: the front, and the back (the
 // question again, small, with the answer), so flip() only has to turn the card over.
 //   enter: a new card is coming in, so it rises into place
@@ -165,12 +159,12 @@ function renderSession(el, enter = false) {
     </div>
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'role="button" tabindex="0" aria-label="Show answer"'}>
       <div class="rv-turn">
-        <div class="rv-face rv-front" ${R.flipped ? 'aria-hidden="true"' : ''}>
+        <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
           <div class="flash-front${size}">${front}</div>
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
-        <div class="rv-face rv-back" ${R.flipped ? '' : 'aria-hidden="true"'}>
+        <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
           <div class="flash-recap">${front}</div>
           <div class="flash-ans">
@@ -186,7 +180,8 @@ function renderSession(el, enter = false) {
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
     ${R.typing && !typeThis && !R.flipped ? '<p class="note center" id="longNote">Long answer: say it in your head, then flip.</p>' : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>`;
+    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
+    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn').addEventListener('click', () => undo(el));
@@ -197,7 +192,10 @@ function renderSession(el, enter = false) {
   wireRatebar(el);
   $('flash').addEventListener('click', () => { if (!R.flipped && !typeThis) flip(el); });
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
+  // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
   if (typeThis && !R.flipped) $('typeIn').focus();
+  else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
+  else $('flash').focus({ preventScroll: true });
   publishLive();
 }
 
@@ -219,7 +217,7 @@ function autoSpeak(card) {
 // Tell Today whether a session is in progress, so it can offer to resume it.
 function publishLive() {
   live.resume = R?.active
-    ? { left: R.queue.length + R.waiting.length + (R.current ? 1 : 0), deckId: R.deckId, day: R.day, version: R.version }
+    ? { left: R.queue.length + R.waiting.length + (R.current ? 1 : 0), deckId: R.deckId, scope: R.scope, day: R.day, version: R.version }
     : null;
 }
 
@@ -248,12 +246,16 @@ function flip(el) {
   flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
   flash.classList.add('flipped');
   ['role', 'tabindex', 'aria-label'].forEach(a => flash.removeAttribute(a));
-  flash.querySelector('.rv-front').setAttribute('aria-hidden', 'true');
-  flash.querySelector('.rv-back').removeAttribute('aria-hidden');
+  const front = flash.querySelector('.rv-front'), back = flash.querySelector('.rv-back');
+  front.setAttribute('aria-hidden', 'true'); front.inert = true;
+  back.removeAttribute('aria-hidden'); back.inert = false;
   $('typeForm')?.remove();
   $('longNote')?.remove();
   $('ratebar').innerHTML = rateButtonsHTML();
   wireRatebar(el);
+  // The button that was pressed is gone, so move focus to the answer: screen readers read it out, and the
+  // keyboard stays where it was (1–4 and Space still rate).
+  back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
   $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
 }
