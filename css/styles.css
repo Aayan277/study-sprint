@@ -217,8 +217,10 @@ main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-i
 .tab[aria-current="page"] svg{color:var(--accent);stroke-width:2;filter:drop-shadow(0 0 8px var(--glow))}
 .tab[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;border-radius:0 0 2px 2px;background:var(--accent);box-shadow:0 0 12px 1px var(--glow)}
 
-/* While a round runs, the toast sits above the docked rating bar */
-body.focus .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+/* Toasts sit at the top, below the header, so they never cover a button. During a round the header is hidden and
+   Quit is up there, so the toast goes above the docked answer/rating bar instead. The first-run start has no header. */
+body.focus .toast{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 
 /* Focus mode (phones): while a Review or Play round is running the header and tab bar get out of the way.
    js/ui.js setFocusMode() turns the body class on and off. */
@@ -481,7 +483,7 @@ dialog.sheet:not(.side)::before{content:"";display:block;width:36px;height:4px;b
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
 .confirm p{margin:0}
 .err{color:var(--again);font-size:var(--fs-base);margin:12px 0 0}
-.toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
+.toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
 .field textarea,.rich{font-size:var(--fs-md)}
 .act-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .act-grid .btn{width:100%;justify-content:flex-start;padding:0 var(--s-3);min-height:44px;font-weight:500}
@@ -1001,7 +1003,8 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   main > .view{max-width:1120px;margin:0 auto}
   main[data-route="play"] > .view,main[data-route="settings"] > .view,main[data-route="import"] > .view{max-width:760px}
   body.has-side main{margin-right:var(--panel)}
-  .toast{left:calc(50% + var(--side) / 2);bottom:28px}
+  .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
+  body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
   .ratebar,.savebar{bottom:0}
   .ratebar{padding-bottom:var(--s-5)}
   .bulkbar{bottom:var(--s-4)}
