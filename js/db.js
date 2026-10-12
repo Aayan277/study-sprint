@@ -500,7 +500,7 @@ function changed() {
 let dataChanges = 0;
 export const dataVersion = () => dataChanges;
 const tabs = typeof BroadcastChannel === 'function' ? new BroadcastChannel('study-sprint-db') : null;
-if (tabs) tabs.onmessage = () => { dataChanges++; };
+if (tabs) { tabs.onmessage = () => { dataChanges++; }; tabs.unref?.(); }   // unref: lets Node tests exit
 function bumpVersion() {
   dataChanges++;
   tabs?.postMessage('changed');
