@@ -24,6 +24,7 @@ import { dayStart, dayEnd } from './days.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
+  cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
   targetRetention: 0.9,
   newPerDay: 20,
   timer: 8,          // seconds per question in Play

@@ -4,7 +4,7 @@
 // That way the phone's back gesture and the browser's back button work as expected.
 
 import * as db from './db.js';
-import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
+import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
 import { renderToday } from './today.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
@@ -41,6 +41,16 @@ async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>OLED black</b>
         <span>Pure black page in dark mode, to save battery on OLED screens.</span></span>
         <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
+    </section>
+
+    <section class="section" aria-labelledby="appearTitle">
+      <h2 id="appearTitle">Appearance</h2>
+      <div class="set-row column">
+        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers, which are easier to read. This device only.</p></div>
+        <div class="chips" role="radiogroup" aria-labelledby="alignLbl" id="alignChips">
+          ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        </div>
+      </div>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -153,7 +163,7 @@ async function renderSettings(el) {
       <details class="danger-zone" id="dangerZone">
         <summary>Danger zone</summary>
         <div class="set-row">
-          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
+          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme and card text setting are kept.</p></div>
           <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
         </div>
       </details>
@@ -171,6 +181,10 @@ async function renderSettings(el) {
   el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, mode: r.value });
     redrawSkins();
+  }));
+  el.querySelectorAll('input[name="cardAlign"]').forEach(r => r.addEventListener('change', () => {
+    settings.cardAlign = applyCardAlign(r.value);
+    db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
   }));
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
@@ -364,6 +378,7 @@ async function confirmRestore(file) {
     if (synced) sync.syncNow();
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
+    applyCardAlign(settings.cardAlign);
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     location.hash = '#/decks';
@@ -633,10 +648,11 @@ function confirmDeleteServer() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const theme = settings.theme;
+  const { theme, cardAlign } = settings;
   await db.resetAll();
   await db.setSetting('theme', theme);
-  settings = { ...db.DEFAULT_SETTINGS, theme };
+  await db.setSetting('cardAlign', cardAlign);
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
@@ -884,6 +900,7 @@ async function start() {
     return;
   }
   settings.theme = applyTheme(settings.theme);
+  applyCardAlign(settings.cardAlign);
   const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)

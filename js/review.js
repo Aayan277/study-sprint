@@ -8,7 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
-import { formatHTML, plainText } from './format.js';
+import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -151,7 +151,9 @@ function renderSession(el, enter = false) {
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = R.typing && canType(plainText(card.back));
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
-  const deckLabel = `<span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
+  const fullPath = R.deckNames.get(card.deckId) || '';
+  const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
+  const backSize = answerSize(plainText(card.back));          // a long answer is smaller and left-aligned
   const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
 
   el.innerHTML = `
@@ -171,10 +173,10 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          <div class="flash-recap">${front}</div>
+          <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+            <div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
           </div>
         </div>
       </div>

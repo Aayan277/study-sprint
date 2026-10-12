@@ -116,3 +116,9 @@ export function toggleBullets(value, start, end) {
   const out = value.slice(0, from) + changed + value.slice(to);
   return { value: out, start: from, end: from + changed.length };
 }
+
+// ---------- what a card face shows ----------
+// The deck label on a card: only the last two levels of the path ("Unit 2 › Synapses"), the full path as a tooltip.
+export const shortDeckPath = path => String(path || '').split(' › ').slice(-2).join(' › ');
+// How long an answer is: 'long' from 160 characters, 'xlong' from 320 (smaller, left-aligned; see .flash-back in styles.css).
+export const answerSize = text => (text.length > 320 ? ' long xlong' : text.length > 160 ? ' long' : '');
