@@ -108,18 +108,20 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const { card } = scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
+  let counted = false;                          // did balancing add this card to the load?
   if (balanced && card.state === 2 && card.scheduled_days >= 3) {
     const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now });
     card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
     card.scheduled_days = d;
     load?.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
+    counted = true;
   }
   // The exam can move the card to another day: take it off the day balancing chose, and put it on the new one.
   const chosen = card.due.getTime();
   examClamp(card, now, opts, load);
   if (load && card.due.getTime() !== chosen) {
     const was = dayKey(chosen);
-    if (balanced && load.get(was) > 0) load.set(was, load.get(was) - 1);
+    if (counted && load.get(was) > 0) load.set(was, load.get(was) - 1);
     load.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
   }
   return fromLibrary(cardId, card);

@@ -37,3 +37,16 @@ test('final pass: answering today\'s share does not make the next queue build pu
   }
   assert.equal(reviewed, 20);
 });
+
+test('rating: a card the exam moves is only taken off the day balancing put it on if balancing counted it there', { skip }, async () => {
+  const { rate, examOptions, schedulerOptions, dayKey } = { ...(await load()), ...(await import('../js/stats-calc.js')) };
+  const deck = { id: 'd', examDate: '2026-10-14' };                      // 2 days left
+  // A Hard answer on a shaky card gives a gap of 2 days: too short for balancing (it needs 3), so it isn't counted
+  // on that day. The exam then moves it to tomorrow.
+  const state = { cardId: 'c', state: 2, stability: 1.5, difficulty: 5, reps: 3, lapses: 0, lastReview: NOW - DAY, due: NOW, scheduledDays: 1, elapsedDays: 1, learningSteps: 0 };
+  const loadMap = new Map([[dayKey(NOW + 2 * DAY), 3]]);                 // 3 other cards due in 2 days
+  const next = rate('c', state, 2, { ...examOptions(schedulerOptions({}), deck, NOW), balance: { load: loadMap } }, NOW);
+  assert.equal(next.scheduledDays, 1);
+  assert.equal(loadMap.get(dayKey(NOW + 2 * DAY)), 3);                   // untouched
+  assert.equal(loadMap.get(dayKey(NOW + DAY)), 1);                       // the card is counted where it went
+});
