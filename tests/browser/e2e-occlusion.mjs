@@ -204,6 +204,193 @@ ok(play.zoom === 0 && play.ask >= 1, 'Play shows the picture with the asked box,
 await page.screenshot({ path: SP + '/occ-play-375.png' });
 await noSideways(page, 'in Play');
 await page.click('#quitBtn');
+// a missed picture question is listed with a small picture of the answer
+await page.waitForSelector('#pDeck');
+await page.locator('label.mode', { hasText: 'Survival' }).click();
+await page.click('#startBtn'); await page.waitForSelector('#pPrompt .occ');
+const names = ['Aortic arch', 'Left ventricle', 'Atrium', 'Pulmonary vein'];
+for (let i = 0; i < 3; i++) {
+  await page.waitForSelector('#pPrompt .occ-ask');
+  const k = +(await page.locator('#pPrompt .occ-ask').first().getAttribute('aria-label')).match(/part (\d)/)[1];
+  const wrong = page.locator('#options .opt', { hasNotText: names[k - 1] }).first();
+  await wrong.click();
+  if (i < 2) { await page.waitForSelector('#nextBtn'); await page.click('#nextBtn'); }
+}
+await page.waitForSelector('#nextBtn'); await page.click('#nextBtn');
+await page.waitForSelector('.missed');
+ok(await page.locator('.missed .miss .occ-mini .occ-reveal').count() >= 3, 'Play results list each missed picture with a small picture of the answer');
+await noSideways(page, 'in the Play results');
+await page.screenshot({ path: SP + '/occ-play-missed-375.png', fullPage: true });
+
+// ---- 6. Anki's occlusion notes import as one card per box (both file formats) ----
+for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
+  await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
+  await page.goto(URL + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+  await page.setInputFiles('#fileIn', SP + '/files/' + file);
+  await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  const badges = await page.locator('.prow .badge:not([hidden])').allTextContents();
+  ok(badges.filter(b => b.startsWith('Image occlusion: box')).join() === 'Image occlusion: box 1,Image occlusion: box 2', `${file}: the preview badges the occlusion rows "box 1" and "box 2"`);
+  const roRows = await page.locator('.prow', { hasText: 'Image occlusion' }).locator('textarea').evaluateAll(t => t.every(x => x.readOnly));
+  ok(roRows, `${file}: occlusion rows are read-only`);
+  await page.fill('#newName', 'IO ' + file.slice(12, 15)); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+  const io = await page.evaluate(async name => {
+    const db = await import('./js/db.js');
+    const d = (await db.getDecks()).find(x => x.name === name);
+    return (await db.getAll('cards')).filter(c => c.deckId === d.id && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n).map(c => ({ n: c.occlusion.n, w: c.occlusion.w, h: c.occlusion.h, masks: c.occlusion.masks.map(m => [m.x, m.y, m.w, m.h]), noteId: c.noteId, media: c.backImage }));
+  }, 'IO ' + file.slice(12, 15));
+  ok(io.length === 2 && io[0].noteId === io[1].noteId && io[0].w === 8 && io[0].h === 8 && io[0].masks[0].every((v, i) => near(v, [0.1, 0.1, 0.2, 0.2][i], 0.001)) && io[0].masks[1].every((v, i) => near(v, [0.5, 0.5, 0.2, 0.2][i], 0.001)), `${file}: 2 occlusion cards, boxes ≈ (.1,.1,.2,.2) and (.5,.5,.2,.2), picture 8×8`);
+}
+
+// ---- 7. export as an Anki Image Occlusion note, and read it back ----
+await page.goto(URL + '#/deck/' + seed.deckId); await page.waitForSelector('#exportDeck');
+await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+ok((await page.textContent('#sheet')).includes('Image-occlusion cards need Anki 23.10+'), 'the export sheet warns that occlusion needs Anki 23.10+');
+const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#exApkg')]);
+await dl.saveAs(SP + '/exports/occlusion.apkg');
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
+await page.goto(URL + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+await page.setInputFiles('#fileIn', SP + '/exports/occlusion.apkg');
+await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+ok((await page.textContent('#found')).includes('Found 4 cards') && (await page.textContent('#found')).includes('1 image-occlusion note makes these cards'), 'the exported file reads back as 1 occlusion note with 4 cards');
+await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+const rt = await page.evaluate(async seedDeck => {
+  const db = await import('./js/db.js');
+  const decks = await db.getDecks();
+  const orig = (await db.getAll('cards')).filter(c => c.deckId === seedDeck && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n);
+  const back = (await db.getAll('cards')).filter(c => c.deckId === decks.find(d => d.name === 'Round trip').id && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n);
+  const diff = back.map((c, i) => Math.max(...c.occlusion.masks.flatMap((m, k) => ['x', 'y', 'w', 'h'].map(f => Math.abs(m[f] - orig[0].occlusion.masks[k][f])))));
+  return { n: back.length, ns: back.map(c => c.occlusion.n), w: back[0].occlusion.w, h: back[0].occlusion.h, header: back[0].occlusion.header, extra: back[0].noteExtra, shapes: back[0].occlusion.masks.map(m => m.shape).join(), maxDiff: Math.max(...diff), origN: orig.length, extraOk: back.every(c => c.noteExtra === 'Blood leaves here'), picture: !!(await db.getMedia(back[0].backImage)) };
+}, seed.deckId);
+ok(rt.n === 4 && rt.ns.join() === '1,2,3,4' && rt.w === 2048 && rt.h === 1365 && rt.header === 'Heart' && rt.extraOk && rt.picture, 'round trip: 4 cards, the picture at 2048×1365, header and Back Extra kept');
+ok(rt.maxDiff <= 1e-4 && rt.shapes === 'rect,rect,ellipse,polygon,rect', `round trip: every box within 1e-4 (${rt.maxDiff.toExponential(1)}), shapes ${rt.shapes}`);
+
+// ---- 8. backups ----
+const bk = await page.evaluate(async seedDeck => {
+  const db = await import('./js/db.js');
+  const before = (await db.getAll('cards')).filter(c => c.occlusion).map(c => JSON.stringify([c.id, c.occlusion, c.backImage])).sort();
+  const data = JSON.parse(JSON.stringify(await db.exportAll()));
+  const good = db.checkBackup(data);
+  const evil = JSON.parse(JSON.stringify(data));
+  evil.cards.find(c => c.occlusion).occlusion.masks[0].x = '0.1;background:url(//evil.example/x)';
+  const evil2 = JSON.parse(JSON.stringify(data));
+  evil2.cards.find(c => c.occlusion).occlusion.n = 0;
+  await db.importAll(data);
+  const after = (await db.getAll('cards')).filter(c => c.occlusion).map(c => JSON.stringify([c.id, c.occlusion, c.backImage])).sort();
+  return { good, bad1: db.checkBackup(evil), bad2: db.checkBackup(evil2), same: before.length > 0 && before.join() === after.join(), count: before.length };
+}, seed.deckId);
+ok(bk.good === null && bk.same, `a backup with occlusion cards passes the check and restores them unchanged (${bk.count} cards)`);
+ok(/invalid image-occlusion fields/.test(bk.bad1) && /invalid image-occlusion fields/.test(bk.bad2), 'a backup with a style-injecting or invalid box is refused');
+
+// ---- 9. the first-run walk-through draws an occlusion card too ----
+await page.evaluate(async deckId => {
+  const db = await import('./js/db.js');
+  for (const c of (await db.getAll('cards')).filter(c => c.deckId === deckId && c.occlusion)) await db.clearStates([c.id]);
+}, seed.deckId);
+await page.goto(URL + '#/welcome/review/' + seed.deckId); await page.waitForSelector('#flash .occ');
+ok(await page.locator('#flash .rv-front .occ-ask').count() >= 1 && (await page.locator('#flash .rv-front .occ-img').count()) === 1, 'the walk-through shows the picture with the asked box');
+await page.click('#flash .flash-hint'); await page.waitForSelector('#flash.flipped');
+ok(await page.locator('#flash .rv-back .occ-reveal').count() >= 1 && (await page.textContent('#flash .rv-back .occ-label')).length > 0, 'the walk-through back uncovers the box and shows its label');
+await noSideways(page, 'in the walk-through');
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
+
+// ---- 10. syncing between two devices, including healing ----
+const fake = fakeSupabase();
+async function device(name) {
+  const c = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block' });
+  await c.route('https://lakxeftzlpvydzulxrbi.supabase.co/**', fake.handle);
+  const p = await c.newPage();
+  p.on('pageerror', e => errors.push(`${name} pageerror ${e.message}`));
+  p.on('console', m => { if (m.type() === 'error' && !/status of (400|422)/.test(m.text())) errors.push(`${name} console ${m.text()}`); });
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
+  return p;
+}
+const signIn = async (p, create) => {
+  await p.goto(URL + '#/settings'); await p.waitForSelector('#syncEmail');
+  await p.fill('#syncEmail', 'occ@example.com'); await p.fill('#syncPw', 'secret123');
+  await p.click(create ? '#syncCreate' : '#syncForm button[type=submit]');
+  await p.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
+};
+const syncNow = p => p.evaluate(async () => { const s = await import('./js/sync.js'); await s.syncNow(); return s.lastStatus(); });
+const A = await device('A');
+const syncSeed = await A.evaluate(async () => {
+  const db = await import('./js/db.js'), occ = await import('./js/occlusion.js'), media = await import('./js/media.js');
+  const c = document.createElement('canvas'); c.width = 600; c.height = 400;
+  c.getContext('2d').fillRect(0, 0, 600, 400);
+  const file = new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'a.png', { type: 'image/png' });
+  const info = await media.addImageInfo(file, { maxSide: media.OCCLUSION_SIDE });
+  const deck = { id: 'occdeck', name: 'Synced picture', color: '#46A758', created: Date.now() };
+  await db.saveDeck(deck);
+  const masks = [1, 2, 3].map(n => ({ id: 'm' + n, n, shape: 'rect', x: 0.1 * n, y: 0.1, w: 0.1, h: 0.1, label: 'Part ' + n }));
+  await db.saveNote(occ.planOcclusionSave([], { masks, header: 'Sync', w: info.width, h: info.height, image: info.id }), { deckId: deck.id, noteId: 'occnote', tags: [] });
+  return info.id;
+});
+await signIn(A, true);
+const B = await device('B');
+await signIn(B, false);
+await syncNow(B);
+const onB = () => B.evaluate(async () => { const db = await import('./js/db.js'); return (await db.getAll('cards')).filter(c => c.noteId === 'occnote').sort((a, b) => a.occlusion.n - b.occlusion.n).map(c => ({ id: c.id, n: c.occlusion.n, labels: c.occlusion.masks.map(m => m.label).join(), back: c.back, edited: c.noteEditedAt, media: c.backImage })); });
+let b1 = await onB();
+ok(b1.length === 3 && b1.every(c => c.labels === 'Part 1,Part 2,Part 3'), 'device B gets the 3 occlusion cards with their boxes');
+ok(await B.evaluate(async id => !!(await (await import('./js/db.js')).getMedia(id)), syncSeed), 'and downloads the picture');
+// A edits only the first sibling (a label), as if the other siblings hadn't synced yet; B must end up with all three agreeing
+await A.evaluate(async () => {
+  const db = await import('./js/db.js'), occ = await import('./js/occlusion.js');
+  const sibs = (await db.getAll('cards')).filter(c => c.noteId === 'occnote').sort((a, b) => a.occlusion.n - b.occlusion.n);
+  const masks = sibs[0].occlusion.masks.map(m => (m.n === 1 ? { ...m, label: 'Renamed' } : m));
+  const { front, back } = occ.occFrontBack({ header: 'Sync', masks }, 1);
+  await db.saveCards([{ ...sibs[0], front, back, occlusion: { ...sibs[0].occlusion, masks }, noteEditedAt: Date.now() + 5000 }]);
+});
+await syncNow(A); await syncNow(B);
+await B.waitForTimeout(300);
+const b2 = await onB();
+ok(b2.every(c => c.labels === 'Renamed,Part 2,Part 3') && b2[0].back === 'Renamed' && new Set(b2.map(c => c.edited)).size === 1, 'healing: all three siblings on B carry the newest boxes after one sibling changed on A: ' + b2.map(c => c.labels).join(' | '));
+await syncNow(B); await syncNow(A);
+const a2 = await A.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.noteId === 'occnote').map(c => c.occlusion.masks.map(m => m.label).join()));
+ok(a2.every(l => l === 'Renamed,Part 2,Part 3'), 'and the healed cards reach A, so both devices agree');
+
+// ---- 11. a desktop window: the viewer with mouse wheel and keys ----
+const dctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+const desk = await dctx.newPage();
+desk.on('pageerror', e => errors.push('desk pageerror ' + e.message));
+desk.on('console', m => { if (m.type() === 'error') errors.push('desk console ' + m.text()); });
+await desk.goto(URL + '#/decks'); await desk.waitForSelector('.deck');
+const dseed = await desk.evaluate(async () => {
+  const db = await import('./js/db.js'), occ = await import('./js/occlusion.js'), media = await import('./js/media.js');
+  const c = document.createElement('canvas'); c.width = 1600; c.height = 900;
+  const g = c.getContext('2d'); g.fillStyle = '#9ad'; g.fillRect(0, 0, 1600, 900); g.fillStyle = '#c33'; g.fillRect(400, 300, 300, 200);
+  const info = await media.addImageInfo(new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'd.png', { type: 'image/png' }), { maxSide: media.OCCLUSION_SIDE });
+  const deck = { id: db.newId(), name: 'Desktop picture', color: '#8F80FF', created: Date.now() };
+  await db.saveDeck(deck);
+  const masks = [{ id: 'a', n: 1, shape: 'rect', x: 0.25, y: 0.33, w: 0.19, h: 0.22, label: 'Red box' }, { id: 'b', n: 2, shape: 'ellipse', x: 0.6, y: 0.5, w: 0.2, h: 0.3 }];
+  await db.saveNote(occ.planOcclusionSave([], { masks, header: 'Desk', w: info.width, h: info.height, image: info.id }), { deckId: deck.id, noteId: db.newId(), tags: [] });
+  return deck.id;
+});
+await desk.goto(URL + '#/today'); await desk.waitForSelector('.tdeck');
+await desk.locator(`[data-start="${dseed}"]`).click(); await desk.waitForSelector('#flash .occ-img[src]');
+await desk.screenshot({ path: SP + '/occ-review-desk.png' });
+await noSideways(desk, 'on the desktop Review');
+const fw = await desk.locator('.rv-front .occ').boundingBox();
+ok(fw.height <= 900 * 0.65 && fw.width / fw.height > 1.7, `on a big screen the picture is capped (${Math.round(fw.width)}×${Math.round(fw.height)})`);
+await desk.keyboard.press('z'); await desk.waitForSelector('dialog.occ-view[open]');
+const cv = desk.locator('.occ-view-canvas');
+const rect0 = await cv.boundingBox();
+const cx = rect0.x + rect0.width * 0.7, cy = rect0.y + rect0.height * 0.4;
+const fracX = (cx - rect0.x) / rect0.width, fracY = (cy - rect0.y) / rect0.height;
+await desk.mouse.move(cx, cy); await desk.mouse.wheel(0, -500);
+await desk.waitForTimeout(150);
+const rect1 = await cv.boundingBox();
+const s1 = +(await cv.evaluate(e => getComputedStyle(e).getPropertyValue('--s')));
+ok(s1 > 1.5 && near(rect1.x + fracX * rect1.width, cx, 2) && near(rect1.y + fracY * rect1.height, cy, 2), `the wheel zooms at the cursor (${s1.toFixed(2)}×, the point under the cursor moved ${Math.abs(rect1.x + fracX * rect1.width - cx).toFixed(2)}px)`);
+await desk.keyboard.press('-'); await desk.keyboard.press('-'); await desk.keyboard.press('-');
+ok(+(await cv.evaluate(e => getComputedStyle(e).getPropertyValue('--s'))) === 1, 'the - key zooms back out to fit');
+await desk.keyboard.press('+'); await desk.keyboard.press('ArrowLeft');
+await desk.mouse.dblclick(cx, cy);
+ok(+(await cv.evaluate(e => getComputedStyle(e).getPropertyValue('--s'))) === 1, 'a double-click toggles between fit and zoomed');
+await desk.screenshot({ path: SP + '/occ-zoom-desk.png' });
+await desk.keyboard.press('Escape'); await desk.waitForFunction(() => !document.querySelector('dialog.occ-view'));
+await desk.keyboard.press('Space'); await desk.waitForFunction(() => document.querySelector('#flash').classList.contains('flipped'));
+ok((await desk.textContent('.rv-back .occ-label')).length > 0, 'Space flips the card with the keyboard (Escape closed the viewer first)');
+await dctx.close();
 
 if (errors.length) { console.log('FAIL page errors:\n' + errors.join('\n')); process.exitCode = 1; } else console.log('PASS no page errors');
 await browser.close();

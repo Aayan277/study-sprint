@@ -195,9 +195,10 @@ export function openZoom(figureHTML, title = 'Picture', returnTo = null) {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // The Zoom button of a card's picture was pressed.
-export function zoomFrom(button) {
+// returnTo: what gets the focus back when the viewer closes (the button, unless the caller says otherwise).
+export function zoomFrom(button, returnTo = button) {
   const figure = button.closest('.occ');
-  if (figure) openZoom(figure.outerHTML, figure.querySelector('img')?.alt || 'Picture', button);
+  if (figure) openZoom(figure.outerHTML, figure.querySelector('img')?.alt || 'Picture', returnTo);
 }
 
 // One handler for every Zoom button on the page (Review, onboarding). It runs before the card's own click handler and

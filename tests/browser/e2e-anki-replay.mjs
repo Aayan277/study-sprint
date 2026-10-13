@@ -1,5 +1,5 @@
 // Anki progress, the way Anki's own FSRS code reads it: cram reviews skipped, resets, cut-off histories, the deck's
-// own scheduling settings and exam; and image-occlusion notes imported as plain picture cards.
+// own scheduling settings and exam; and image-occlusion notes imported as one card per box.
 import { chromium } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -10,6 +10,7 @@ page.on('pageerror', e => errors.push('pageerror ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const DAY = 86400000;
+const near = (a, b) => Math.abs(a - b) < 1e-3;
 const pad = n => String(n).padStart(2, '0');
 const inDays = n => { const d = new Date(Date.now() - 4 * 3600000 + n * DAY); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const deckData = name => page.evaluate(async n => {
@@ -41,8 +42,8 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   const name = file.includes('new') ? 'Replay new' : 'Replay old';
   await load(file);
   const found = await page.textContent('#found');
-  ok(found.includes('Found 4 cards'), `${file}: 3 ordinary notes + 1 image-occlusion note = 4 cards (not one per mask): ${found.slice(0, 60)}`);
-  ok(/1 image-occlusion note comes in as a plain picture card/.test(found) && /later update/.test(found), `${file}: the preview says occlusion comes later`);
+  ok(found.includes('Found 5 cards'), `${file}: 3 ordinary notes + 1 image-occlusion note with 2 boxes = 5 cards: ${found.slice(0, 60)}`);
+  ok(/1 image-occlusion note makes these cards: one card per box/.test(found) && !/later update/.test(found) && !/plain picture card/.test(found), `${file}: the preview says one card per box`);
   ok(!(await page.innerText('#screen')).includes('image-occlusion:') && !(await page.innerText('#screen')).includes('[…]'), `${file}: no broken [...] or mask code in the preview`);
   ok((await page.textContent('#progInfo')).startsWith('10 reviews on 3 cards'), `${file}: progress counts 10 reviews (the cram miss is not one): ` + await page.textContent('#progInfo'));
   await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
@@ -59,9 +60,13 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   const again = d['Restarted card'];
   ok(again.state?.state === 2 && again.state.reps === 2 && again.logs.length === 5, `${file}: learned again after an unlogged reset: only the last group sets the schedule (reps ${again.state?.reps}), all 5 reviews kept in the log`);
 
-  const io = d['Heart anatomy'];
-  ok(io && io.card.back === 'The left side pumps to the body' && io.card.backImage && !io.card.frontImage && !io.state, `${file}: image-occlusion note is a picture card: heading on the front, the picture on the back, new`);
-  ok(Object.keys(d).length === 4 && !Object.keys(d).some(k => k.includes('[')), `${file}: no cloze-style cards from the masks`);
+  const ios = [d['Heart anatomy: hidden part 1 of 2'], d['Heart anatomy: hidden part 2 of 2']];
+  const o = ios.map(x => x?.card.occlusion);
+  ok(ios.every(x => x && x.card.back === '' && x.card.backImage && !x.card.frontImage && !x.state && x.card.noteExtra === 'The left side pumps to the body'), `${file}: image-occlusion note is 2 cards (one per box) with the picture and its Back Extra, new`);
+  ok(o.every(m => m && m.w === 8 && m.h === 8 && m.header === 'Heart anatomy' && m.masks.length === 2) && o[0].n === 1 && o[1].n === 2 && ios[0].card.noteId === ios[1].card.noteId, `${file}: both cards share a note, the picture size (8×8) and both boxes`);
+  const [m1, m2] = o[0].masks;
+  ok(near(m1.x, 0.1) && near(m1.y, 0.1) && near(m1.w, 0.2) && near(m1.h, 0.2) && near(m2.x, 0.5) && near(m2.y, 0.5) && near(m2.w, 0.2) && near(m2.h, 0.2) && m1.n === 1 && m2.n === 2, `${file}: the boxes are where Anki put them (.1,.1,.2,.2) and (.5,.5,.2,.2)`);
+  ok(Object.keys(d).length === 5 && !Object.keys(d).some(k => k.includes('[')), `${file}: no cloze-style cards from the masks`);
 }
 
 // The deck's own settings and exam shape the rebuilt due date (compare the same card's last gap).

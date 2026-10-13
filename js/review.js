@@ -553,7 +553,13 @@ document.addEventListener('keydown', e => {
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
-    if (k === 'z' && face?.querySelector('.occ-zoom')) { e.preventDefault(); face.querySelector('.occ-zoom').click(); return; }
+    if (k === 'z' && face?.querySelector('.occ-zoom')) {
+      e.preventDefault();
+      // Opened with the key: focus goes back to the card (not the Zoom button), so Space still flips it afterwards.
+      const back = R.flipped ? $('flash').querySelector('.rv-back') : $('flash');
+      import('./occlusion-view.js').then(v => v.zoomFrom(face.querySelector('.occ-zoom'), back));
+      return;
+    }
     if (k === 'm' && face?.querySelector('.occ-peek')) { e.preventDefault(); togglePeek(face.querySelector('.occ-peek')); return; }
   }
   if (!R.flipped) {
