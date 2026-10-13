@@ -390,6 +390,7 @@ async function openExport(deck, decks, deckCards) {
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
     <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${cards.some(c => c.frontImage || c.backImage) ? ' Pictures go in the Anki deck (a spreadsheet can only hold text).' : ''}</p>
+    ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
       <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>

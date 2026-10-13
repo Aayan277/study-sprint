@@ -21,6 +21,7 @@ const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
 import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
+import { validOcclusion } from './occlusion.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -432,6 +433,10 @@ export function checkBackup(data) {
   // Cloze fields end up in the page, so they must have the right type: a positive whole number, and text.
   if (!data.cards.every(c => (c.cloze === undefined || (Number.isInteger(c.cloze) && c.cloze > 0)) && [c.noteId, c.noteText].every(v => v === undefined || typeof v === 'string'))) {
     return 'This backup file is damaged (a card has invalid cloze fields).';
+  }
+  // Image-occlusion fields end up in style attributes, so the boxes must be plain numbers in range.
+  if (!data.cards.every(c => c.occlusion === undefined || (validOcclusion(c.occlusion) && typeof c.noteId === 'string'))) {
+    return 'This backup file is damaged (a card has invalid image-occlusion fields).';
   }
   // A review's id can be missing (one is given when it's saved), but otherwise must be a number.
   if (!data.reviewLog.every(r => r && typeof r === 'object' && (r.id === undefined || Number.isFinite(r.id)))) return 'This backup file is damaged (a record in reviewLog is broken).';

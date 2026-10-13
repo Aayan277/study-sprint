@@ -18,6 +18,25 @@ test('cloze fields must have the right type', () => {
   assert.match(checkBackup({ ...good, cards: [card({ noteText: { a: 1 } })] }), bad);
 });
 
+test('image-occlusion fields: a valid card passes; bad numbers, style tricks and a missing noteId are refused', () => {
+  const m = extra => ({ id: 'm1', n: 1, shape: 'rect', x: 0.1, y: 0.1, w: 0.2, h: 0.2, ...extra });
+  const card = (occ = {}, extra = {}) => ({ id: 'c', noteId: 'N', front: 'f', back: 'b', occlusion: { n: 1, w: 2048, h: 1365, header: 'Heart', masks: [m()], ...occ }, ...extra });
+  const bad = /invalid image-occlusion fields/;
+  assert.equal(checkBackup({ ...good, cards: [card(), card({ n: 2, masks: [m({ shape: 'ellipse', label: 'Aorta' }), m({ id: 'm2', n: 2, shape: 'polygon', points: [[0.1, 0.1], [0.3, 0.1], [0.2, 0.3]] })] }), { id: 'plain', front: 'a', back: 'b' }] }), null);
+  assert.match(checkBackup({ ...good, cards: [card({ n: 0 })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ n: 1.5 })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ w: 0 })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ masks: [] })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ masks: [m({ x: 1.5 })] })] }), bad);                 // out of range
+  assert.match(checkBackup({ ...good, cards: [card({ masks: [m({ x: '0.1;background:url(//evil)' })] })] }), bad);   // style injection
+  assert.match(checkBackup({ ...good, cards: [card({ masks: [m({ shape: 'star' })] })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ masks: [m({ label: 5 })] })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({}, { noteId: undefined })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({}, { noteId: 5 })] }), /cloze|image-occlusion/);
+  assert.match(checkBackup({ ...good, cards: [card({ header: 5 })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [{ id: 'c', front: 'f', back: 'b', occlusion: 'x' }] }), bad);
+});
+
 test('a real backup passes the check', () => {
   assert.equal(checkBackup(good), null);
 });

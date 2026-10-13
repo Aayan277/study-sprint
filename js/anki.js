@@ -10,6 +10,7 @@
 
 import { htmlToMarks } from './format.js';
 import { clozeNumbers, clozeCard } from './cloze.js';
+import { parseAnkiOcclusion, occFrontBack, groupsOf } from './occlusion.js';
 
 // HTML → plain text, keeping line breaks (formatting dropped). Fields themselves keep their bold,
 // italics and lists as marks: see htmlToMarks in format.js.
@@ -70,6 +71,7 @@ export { clozeNumbers, clozeCard };
 //   ankiIds   the Anki card each row came from, so its review history can come along
 //   reviews   Map Anki card id → its review history, for the rows' cards that have one
 //   occluded  for each row, true if it came from an image-occlusion note (see below)
+//   occlusions  for each row, null, or { noteKey, n, header, shapes, pixels, image } for an image-occlusion card (see below)
 //   clozes    for each row, null, or { noteKey, n, text } for a cloze note's card: the note's text, the blank this
 //             row hides, and a key shared by the rows of one note (so the import makes them siblings: see cloze.js)
 //   noteExtras  for each row, the note's Back Extra text ('' when none); for a cloze note it is shown under the answer
@@ -78,9 +80,14 @@ export { clozeNumbers, clozeCard };
 // Rows are [front, back, any other fields]. Cloze notes give one row per cloze number: just [front, back], with
 // their other fields (like Back Extra) kept as the note's extra (noteExtras).
 //
-// Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Study
-// Sprint can't do that yet, so each one comes in as a plain picture card: the heading (or "Diagram") on the front,
-// the picture on the back. Without this they became broken "[…]" cards.
+// Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Each one
+// comes in as a note of image-occlusion cards (see occlusion.js): one card for each numbered group of boxes, with the
+// picture and all the boxes. The result's `occlusions` array has, for each such row,
+// { noteKey, n, header, shapes, pixels, image }: the Anki boxes, still in Anki's numbers (the import screen turns them
+// into fractions of the picture once it has decoded the picture: see import-screen.js).
+// A note with no readable boxes or no picture comes in as one plain picture card instead (`occluded`): the heading
+// (or "Diagram") on the front, the picture on the back. So are the notes of the old "Image Occlusion Enhanced"
+// add-on, which draws its masks in SVG files: one picture card for each group of its notes.
 // The note type must be a cloze type or called "...Occlusion...", so an ordinary note that happens to quote the text isn't taken for one.
 export const isOcclusionNote = (note, model = {}) =>
   String(note.fields?.[0] ?? '').includes('image-occlusion:') && (!!model.cloze || /occlusion/i.test(model.name || ''));
@@ -88,13 +95,35 @@ const fieldIndex = (model, name, fallback) => {
   const i = (model.fields || []).findIndex(f => String(f).trim().toLowerCase() === name);
   return i >= 0 ? i : fallback;
 };
+// The "Image Occlusion Enhanced" add-on (it makes one note for each mask, with an ID like "20170224194620-3").
+export const isEnhancedNote = (model = {}) => {
+  const names = (model.fields || []).map(f => String(f).trim().toLowerCase());
+  return /image occlusion enhanced/i.test(model.name || '') || (names.includes('question mask') && names.includes('original mask'));
+};
 export function notesToImport(notes, models, reviews = new Map()) {
-  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [], clozes = [], noteExtras = [], guids = [];
+  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [], clozes = [], noteExtras = [], guids = [], occlusions = [];
   let images = 0, extraImages = 0;
   const usedTypes = new Set();
+  const enhancedSeen = new Set();
   for (const [index, note] of notes.entries()) {
     const model = models.get(String(note.mid)) || { name: '', fields: [], cloze: false };
     const text = note.fields.map(f => htmlToMarks(f));       // bold, italics and lists kept as marks
+    if (isEnhancedNote(model)) {
+      // One picture card for each group of the add-on's notes (the ID without its last "-number").
+      const idText = htmlToText(note.fields[fieldIndex(model, 'id', 0)] || '').trim();
+      const group = `${note.deck || ''}|${idText ? idText.replace(/-\d+$/, '') : 'note' + index}`;
+      if (enhancedSeen.has(group)) continue;
+      enhancedSeen.add(group);
+      if (note.fields.some(hasImage)) images++;
+      const image = imageNames(note.fields[fieldIndex(model, 'image', 2)])[0] || note.fields.flatMap(imageNames)[0] || null;
+      const header = htmlToText(note.fields[fieldIndex(model, 'header', 1)] || '').trim();
+      const extra = text[fieldIndex(model, 'remarks', 5)]?.trim();
+      rows.push([header || 'Diagram', extra || '']); tags.push((note.tags || []).map(t => t.toLowerCase())); decks.push(note.deck || '');
+      pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true); occlusions.push(null);
+      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      usedTypes.add('occlusion');
+      continue;
+    }
     if (note.fields.some(hasImage)) images++;
     // One picture per side: the first in the front field, and the first in the other fields for the back.
     const frontPics = imageNames(note.fields[0]), backPics = note.fields.slice(1).flatMap(imageNames);
@@ -104,12 +133,27 @@ export function notesToImport(notes, models, reviews = new Map()) {
     if (isOcclusionNote(note, model)) {
       // Fields of the Image Occlusion note type: Occlusion, Image, Header, Back Extra, Comments.
       const image = imageNames(note.fields[fieldIndex(model, 'image', 1)])[0] || null;
-      const header = text[fieldIndex(model, 'header', 2)]?.trim();
-      const extra = text[fieldIndex(model, 'back extra', 3)]?.trim();
-      rows.push([header || 'Diagram', extra || '']); tags.push(noteTags); decks.push(note.deck || '');
-      pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true);       // its masks' history doesn't fit a plain picture card
-      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      const header = htmlToText(note.fields[fieldIndex(model, 'header', 2)] || '').trim();
+      const extra = text[fieldIndex(model, 'back extra', 3)]?.trim() || '';
+      const { shapes, pixels } = parseAnkiOcclusion(note.fields[0]);
+      const groups = groupsOf(shapes);
       usedTypes.add('occlusion');
+      if (shapes.length && image) {
+        const noteKey = String(note.id ?? index);
+        for (const n of groups) {
+          const { front, back } = occFrontBack({ header, masks: shapes }, n);
+          rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || '');
+          pictures.push({ front: null, back: image }); occluded.push(false); clozes.push(null);
+          occlusions.push({ noteKey, n, header, shapes, pixels, image });
+          noteExtras.push(extra); guids.push(note.guid || null);
+          ankiIds.push(note.cards?.[n - 1] ?? null);      // box number n is Anki card number n - 1
+        }
+      } else {
+        // Nothing to hide (or no picture): a plain picture card, as before.
+        rows.push([header || 'Diagram', extra]); tags.push(noteTags); decks.push(note.deck || '');
+        pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true); occlusions.push(null);
+        clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      }
       continue;
     }
     const nums = clozeNumbers(note.fields[0] ?? '');
@@ -120,13 +164,13 @@ export function notesToImport(notes, models, reviews = new Map()) {
       for (const n of nums) {
         const { front, back } = clozeCard(text[0], n);
         rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
-        clozes.push({ noteKey, n, text: text[0] }); noteExtras.push(extra); guids.push(note.guid || null);
+        clozes.push({ noteKey, n, text: text[0] }); occlusions.push(null); noteExtras.push(extra); guids.push(note.guid || null);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
       }
       usedTypes.add('cloze');
     } else {
       rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
-      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      clozes.push(null); occlusions.push(null); noteExtras.push(''); guids.push(note.guid || null);
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card (a reverse card's history isn't used)
       usedTypes.add(String(note.mid));
     }
@@ -138,7 +182,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const columns = Array.from({ length: width }, (_, i) =>
     (only && only.fields[i]) || (i === 0 ? 'Front (field 1)' : i === 1 ? 'Back (field 2)' : `Field ${i + 1}`));
   const used = new Map(ankiIds.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
-  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, noteExtras, guids, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
+  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, occlusions, noteExtras, guids, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
 }
 
@@ -233,7 +277,7 @@ export function onlyDeck(result, deck) {
   const keep = result.decks.map(d => d === deck || d.startsWith(deck + '::'));
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
-  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), ankiIds,
+  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), occlusions: pick(result.occlusions || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), ankiIds,
     progress: progressOf(ankiIds, result.reviews || new Map()) };
 }
 

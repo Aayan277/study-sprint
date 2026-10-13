@@ -2,18 +2,22 @@
 // of a picture in the database's media store (db.js). Pictures sync through Supabase Storage (sync.js).
 //
 //   addImage(file)   shrink a picked photo (longest side 1280px, JPEG) and save it; returns its id
+//   addImageInfo(file, opts)  the same, but returns { id, width, height } (image occlusion needs the size)
 //   imgHTML(id)      an <img> for a picture; it fills itself in (see the watcher at the bottom), downloading
 //                    the picture from your account first if this device doesn't have it yet
 
 import * as db from './db.js';
 
 const MAX_SIDE = 1280;     // pixels: plenty for a phone or laptop screen, and keeps files ~100–250 KB
+export const OCCLUSION_SIDE = 2048;     // image-occlusion pictures are kept larger, so small diagram text stays readable
 const QUALITY = 0.82;
 
 // Shrink and re-save a picture as JPEG. (Transparent areas, e.g. in a PNG diagram, become white.)
-export async function processImage(file) {
+// Returns the saved size (width, height) and the size the picture had before (srcWidth, srcHeight).
+export async function processImage(file, { maxSide = MAX_SIDE } = {}) {
   const img = await decode(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+  const srcWidth = img.width, srcHeight = img.height;
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
   const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h });
   const ctx = canvas.getContext('2d');
@@ -23,7 +27,7 @@ export async function processImage(file) {
   img.close?.();
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', QUALITY));
   if (!blob) throw new Error('Could not save the picture');
-  return { type: 'image/jpeg', data: await blob.arrayBuffer(), width: w, height: h };
+  return { type: 'image/jpeg', data: await blob.arrayBuffer(), width: w, height: h, srcWidth, srcHeight };
 }
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { /* older browsers */ }
@@ -40,9 +44,13 @@ async function decode(file) {
   }
 }
 
-export async function addImage(file) {
-  const { type, data } = await processImage(file);
+export async function addImage(file, opts) {
+  const { type, data } = await processImage(file, opts);
   return saveImage(type, data);
+}
+export async function addImageInfo(file, opts) {
+  const { type, data, width, height } = await processImage(file, opts);
+  return { id: await saveImage(type, data), width, height };
 }
 // Save picture bytes as they are (e.g. from an Anki deck). Returns the new id.
 export async function saveImage(type, data) {

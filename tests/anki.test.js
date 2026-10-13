@@ -237,28 +237,74 @@ const ioModels = new Map([['9', { name: 'Image Occlusion', fields: ['Occlusion',
 const ioNote = (header, extra = '') => ({ mid: '9', fields: ['{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2}}{{c2::image-occlusion:rect:left=.5:top=.5:width=.2:height=.2}}',
   '<img src="heart.png">', header, extra, ''], tags: ['Anatomy'], deck: 'Bio', cards: { 0: 'x1', 1: 'x2' } });
 
-test('image-occlusion notes become one plain picture card, not broken cloze cards', () => {
+test('image-occlusion notes become one card for each group of boxes, with all the boxes', () => {
   assert.ok(isOcclusionNote(ioNote('H'), ioModels.get('9')));
   assert.ok(!isOcclusionNote({ fields: ['A {{c1::b}}'] }, ioModels.get('9')));
   assert.ok(!isOcclusionNote(ioNote('H'), { name: 'Basic', fields: ['Front', 'Back'], cloze: false }));      // text alone is not enough
-  const r = notesToImport([ioNote('Heart anatomy', 'Left side pumps'), ioNote('')], ioModels, new Map([['x1', [{ timestamp: 1, ease: 3, type: 0, factor: 0 }]]]));
-  assert.equal(r.rows.length, 2);                                    // one per note, not one per mask
-  assert.deepEqual(r.rows[0], ['Heart anatomy', 'Left side pumps']);
-  assert.deepEqual(r.rows[1], ['Diagram', '']);                      // no heading: "Diagram"
-  assert.deepEqual(r.pictures, [{ front: null, back: 'heart.png' }, { front: null, back: 'heart.png' }]);
-  assert.ok(r.rows.every(row => !row.join(' ').includes('[…]') && !row.join(' ').includes('image-occlusion')));
-  assert.deepEqual(r.occluded, [true, true]);
-  assert.deepEqual(r.ankiIds, [null, null]);                         // masks' history does not fit a plain picture card
-  assert.deepEqual(r.tags, [['anatomy'], ['anatomy']]);
-  assert.equal(r.progress.cards, 0);
+  const n1 = { ...ioNote('Heart anatomy', '<b>Left</b> side pumps'), id: '501', guid: 'g-io' };
+  const r = notesToImport([n1, ioNote('')], ioModels, new Map([['x1', [{ timestamp: 1, ease: 3, type: 0, factor: 0 }]]]));
+  assert.equal(r.rows.length, 4);                                    // two boxes in each of two notes
+  assert.deepEqual(r.rows[0], ['Heart anatomy: hidden part 1 of 2', '']);
+  assert.deepEqual(r.rows[1], ['Heart anatomy: hidden part 2 of 2', '']);
+  assert.deepEqual(r.rows[2], ['Diagram: hidden part 1 of 2', '']);  // no heading: "Diagram"
+  assert.deepEqual(r.pictures[0], { front: null, back: 'heart.png' });
+  assert.deepEqual(r.occluded, [false, false, false, false]);
+  assert.deepEqual(r.clozes, [null, null, null, null]);
+  assert.deepEqual(r.noteExtras, ['**Left** side pumps', '**Left** side pumps', '', '']);
+  assert.deepEqual(r.ankiIds, ['x1', 'x2', 'x1', 'x2']);              // history comes along: box n is Anki card n - 1
+  assert.equal(r.guids[0], 'g-io');
+  const [o1, o2] = r.occlusions;
+  assert.deepEqual([o1.noteKey, o1.n, o1.header, o1.image, o1.pixels], ['501', 1, 'Heart anatomy', 'heart.png', false]);
+  assert.equal(o2.n, 2);
+  assert.equal(o1.shapes, o2.shapes);                                // every card has all the boxes
+  assert.deepEqual(o1.shapes.map(s => [s.n, s.x, s.w]), [[1, 0.1, 0.2], [2, 0.5, 0.2]]);
+  assert.notEqual(r.occlusions[2].noteKey, o1.noteKey);
+  assert.deepEqual(r.tags[0], ['anatomy']);
+  assert.deepEqual(r.progress, { cards: 2, reviews: 2 });           // (both test notes use the Anki card x1)
   assert.equal(r.images, 2);
+  assert.ok(r.rows.every(row => !row.join(' ').includes('[…]') && !row.join(' ').includes('image-occlusion')));
 });
 
-test('occlusion and other notes together; picking a deck keeps the flags in step', () => {
+test('image-occlusion: boxes in one group make one card; text boxes are skipped; pixels are flagged', () => {
+  const field = '{{c1::image-occlusion:rect:left=10:top=10:width=50:height=50}}{{c1::image-occlusion:ellipse:left=100:top=10:rx=20:ry=20}}{{c4::image-occlusion:text:left=1:top=1:text=hi}}';
+  const r = notesToImport([{ mid: '9', fields: [field, '<img src="a.png">', 'H', '', ''], cards: { 0: 'k' } }], ioModels);
+  assert.equal(r.rows.length, 1);
+  assert.equal(r.occlusions[0].shapes.length, 2);
+  assert.equal(r.occlusions[0].pixels, true);
+  assert.deepEqual(r.ankiIds, ['k']);
+});
+
+test('image-occlusion: a note with no readable boxes or no picture is still one plain picture card', () => {
+  const noBoxes = { mid: '9', fields: ['{{c1::image-occlusion:text:left=1:top=1:text=hi}}', '<img src="a.png">', 'Heart', 'Extra', ''] };
+  const noPic = { mid: '9', fields: ['{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2}}', '', '', '', ''] };
+  const r = notesToImport([noBoxes, noPic], ioModels);
+  assert.deepEqual(r.rows, [['Heart', 'Extra'], ['Diagram', '']]);
+  assert.deepEqual(r.occluded, [true, true]);
+  assert.deepEqual(r.occlusions, [null, null]);
+  assert.deepEqual(r.pictures, [{ front: null, back: 'a.png' }, { front: null, back: null }]);
+});
+
+test('Image Occlusion Enhanced add-on notes: one plain picture card for each group of notes', () => {
+  const ioe = new Map([['7', { name: 'Image Occlusion Enhanced', fields: ['ID (hidden)', 'Header', 'Image', 'Question Mask', 'Footer', 'Remarks', 'Sources', 'Extra 1', 'Extra 2', 'Answer Mask', 'Original Mask'], cloze: false }]]);
+  const note = (id, deck = 'Bio') => ({ mid: '7', fields: [id, 'Skull', '<img src="skull.png">', '<img src="q.svg">', '', 'Bones', '', '', '', '<img src="a.svg">', '<img src="o.svg">'], tags: [], deck });
+  const r = notesToImport([note('2017-1'), note('2017-2'), note('2017-3'), note('2018-1'), note('2017-1', 'Other')], ioe);
+  assert.equal(r.rows.length, 3);                                  // 2017 (Bio), 2018 (Bio), 2017 (Other)
+  assert.deepEqual(r.rows[0], ['Skull', 'Bones']);
+  assert.deepEqual(r.occluded, [true, true, true]);
+  assert.deepEqual(r.pictures[0], { front: null, back: 'skull.png' });
+  assert.deepEqual(r.occlusions, [null, null, null]);
+  assert.equal(r.images, 3);
+});
+
+test('occlusion and other notes together; picking a deck keeps every list in step', () => {
   const r = notesToImport([{ mid: '1', fields: ['Q', 'A'], deck: 'Other' }, ioNote('Heart')], new Map([...models, ...ioModels]));
-  assert.deepEqual(r.occluded, [false, true]);
-  assert.deepEqual(onlyDeck(r, 'Bio').occluded, [true]);
-  assert.deepEqual(onlyDeck(r, 'Bio').rows, [['Heart', '']]);
+  assert.deepEqual(r.occluded, [false, false, false]);
+  assert.deepEqual(r.occlusions.map(o => o && o.n), [null, 1, 2]);
+  const bio = onlyDeck(r, 'Bio');
+  assert.deepEqual(bio.occlusions.map(o => o.n), [1, 2]);
+  assert.deepEqual(bio.rows, [['Heart: hidden part 1 of 2', ''], ['Heart: hidden part 2 of 2', '']]);
+  assert.equal(bio.noteExtras.length, 2);
+  assert.equal(bio.ankiIds.length, 2);
 });
 
 test('a cloze note: its cards share one note key, with the note text and Back Extra', () => {

@@ -154,10 +154,12 @@ async function session() {
 
 // Siblings of a cloze note edited on two devices can end up with different texts (the newest of each card wins
 // while syncing). The newest sibling's text wins for all of them; this saves the others again, so every
-// device agrees. cloze.js is only loaded when a pulled card belongs to a note.
+// device agrees. cloze.js is only loaded when a pulled card belongs to a note. Image-occlusion notes (their boxes
+// and picture) are healed the same way, by occlusion.js.
 export async function healNotes() {
-  const { healNotes: heal } = await import('./cloze.js');
-  const fixed = heal(await db.getAll('cards'));
+  const [{ healNotes: heal }, { healOcclusion }] = await Promise.all([import('./cloze.js'), import('./occlusion.js')]);
+  const all = await db.getAll('cards');
+  const fixed = [...heal(all), ...healOcclusion(all)];
   if (fixed.length) await db.saveCards(fixed);
   return fixed.length;
 }
