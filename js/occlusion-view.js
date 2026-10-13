@@ -16,10 +16,11 @@ const DOUBLE_ZOOM = 2.5;   // where a double-tap zooms to
 //   aspect     the picture's width / height (else read from the canvas's --ar)
 //   onChange(view)  after every move: { s, x, y }
 //   onPinch()  when a second finger arrives, so an editor can drop the box it was drawing
+//   arrowsBusy()  true while something else uses the arrow keys (the editor nudges the selected box with them)
 // The canvas is sized to fit the frame (zoom 1) and moved with a CSS transform; its --s variable is the zoom, so the
 // handles of the editor can stay one size.
 // Returns { view, set, fit, zoomBy, setAspect, size, destroy }.
-export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange = () => {}, onPinch = () => {} } = {}) {
+export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange = () => {}, onPinch = () => {}, arrowsBusy = () => false } = {}) {
   let ratio = aspect || parseFloat(getComputedStyle(canvas).getPropertyValue('--ar')) || 1.5;
   let vw = 0, vh = 0, cw = 0, ch = 0;
   let view = { s: 1, x: 0, y: 0 };
@@ -124,7 +125,7 @@ export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange
     if (e.key === '+' || e.key === '=') zoomTo(view.s * 1.5, mid.x, mid.y);
     else if (e.key === '-' || e.key === '_') zoomTo(view.s / 1.5, mid.x, mid.y);
     else if (e.key === '0') layout(true);
-    else if (view.s > 1 && e.key.startsWith('Arrow') && !e.target.closest?.('button')) {
+    else if (view.s > 1 && e.key.startsWith('Arrow') && !arrowsBusy() && !e.target.closest?.('button')) {
       put({ ...view, x: view.x + ({ ArrowLeft: 60, ArrowRight: -60 }[e.key] || 0), y: view.y + ({ ArrowUp: 60, ArrowDown: -60 }[e.key] || 0) });
     } else return;
     e.preventDefault();

@@ -1668,3 +1668,89 @@ dialog.occ-view::backdrop{background:var(--scrim)}
   .occ-tag,.occ-num{background:Highlight;color:HighlightText}
   .occ-zoom{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
 }
+
+/* ---------- 20. Image occlusion editor (js/occlusion-editor.js) ----------
+   A full-screen dialog on phones, a big window on computers. The picture sits on a canvas that is moved and scaled with a
+   CSS transform (js/occlusion-view.js sets --s, the zoom), so everything that must keep one size on screen (outlines,
+   corner handles, number badges) is written as calc(N px / var(--s)). Boxes and handles take no pointer events: the
+   editor finds what is under a finger itself, with a 22px grab radius around each corner (a 44px target). */
+dialog.occ-ed{position:fixed;inset:0;top:var(--vvt,0);display:flex;flex-direction:column;width:100vw;width:100dvw;height:var(--vvh,100dvh);max-width:none;max-height:none;margin:0;padding:0;border:0;background:var(--bg);color:var(--text);overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+dialog.occ-ed:not([open]){display:none}
+dialog.occ-ed::backdrop{background:var(--scrim)}
+@media (min-width:1024px){
+  dialog.occ-ed{inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);width:min(1200px,96vw);height:92vh;height:92dvh;border:1px solid var(--line-strong);border-radius:var(--r-lg);box-shadow:0 24px 70px -10px rgb(0 0 0 / .55)}
+}
+.occ-ed-bar{display:flex;align-items:center;gap:var(--s-2);flex:none;padding:max(var(--s-2),env(safe-area-inset-top)) max(var(--s-3),env(safe-area-inset-right)) var(--s-2) max(var(--s-3),env(safe-area-inset-left));background:var(--surface-1);border-bottom:1px solid var(--line)}
+.occ-ed-x{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface-2);color:var(--text);cursor:pointer}
+.occ-ed-x:hover{background:var(--surface-3)}
+.occ-ed .ico{width:22px;height:22px}
+.occ-ed-head{flex:1;min-width:0;text-align:center}
+.occ-ed-head h2{margin:0;font-size:var(--fs-md);font-weight:650;letter-spacing:-.01em;line-height:1.25}
+.occ-ed-count{display:block;font-size:var(--fs-xs);color:var(--text-2);line-height:1.3}
+.occ-ed-bar .btn{flex:none;min-height:44px;padding:8px 20px}
+
+.occ-ed-stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;overscroll-behavior:contain;background:var(--surface-sunken);cursor:crosshair;outline:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.occ-ed-stage.panning{cursor:grabbing}
+.occ-ed-canvas{background:#fff;box-shadow:0 0 0 calc(1px / var(--s,1)) var(--line-strong),0 calc(6px / var(--s,1)) calc(24px / var(--s,1)) rgb(0 0 0 / .25)}
+.occ-ed-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;-webkit-user-drag:none;user-select:none;font-size:var(--fs-sm);color:var(--text-2)}
+.occ-ed-masks{position:absolute;inset:0;pointer-events:none}
+.occ-ed-mask{position:absolute;box-sizing:border-box;container-type:size;pointer-events:none;outline:none}
+.occ-ed-fill{position:absolute;inset:0;background:rgb(var(--acc) / .38);box-shadow:inset 0 0 0 calc(2px / var(--s,1)) var(--accent),0 0 0 calc(1px / var(--s,1)) #fff}
+.occ-ed-mask.round .occ-ed-fill{border-radius:50%}
+.occ-ed-mask.mate .occ-ed-fill{background:rgb(var(--acc) / .52)}
+.occ-ed-mask.sel .occ-ed-fill{background:rgb(var(--acc) / .26);box-shadow:inset 0 0 0 calc(3px / var(--s,1)) #fff,0 0 0 calc(2px / var(--s,1)) var(--accent),0 0 calc(10px / var(--s,1)) rgb(var(--acc) / .8)}
+.occ-ed-mask:focus-visible{outline:calc(2px / var(--s,1)) solid var(--text);outline-offset:calc(4px / var(--s,1))}
+/* the number of the card, never bigger than its box */
+.occ-ed-num{position:absolute;left:0;top:0;display:grid;place-items:center;box-sizing:border-box;width:min(calc(20px / var(--s,1)),100cqw);height:min(calc(20px / var(--s,1)),100cqh);border-radius:0 0 calc(6px / var(--s,1)) 0;background:var(--accent);color:var(--on-accent);font:700 min(calc(12px / var(--s,1)),80cqh)/1 var(--f-ui)}
+/* corner handles: drawn 14px, grabbed from 22px around */
+.occ-ed-h{position:absolute;box-sizing:border-box;width:calc(14px / var(--s,1));height:calc(14px / var(--s,1));margin:calc(-7px / var(--s,1)) 0 0 calc(-7px / var(--s,1));border:calc(2px / var(--s,1)) solid var(--accent);border-radius:50%;background:#fff;box-shadow:0 calc(1px / var(--s,1)) calc(3px / var(--s,1)) rgb(0 0 0 / .45)}
+.occ-ed-h-nw{left:0;top:0}.occ-ed-h-ne{left:100%;top:0}.occ-ed-h-sw{left:0;top:100%}.occ-ed-h-se{left:100%;top:100%}
+.occ-ed-draft{position:absolute;box-sizing:border-box;border:calc(2px / var(--s,1)) dashed var(--accent);background:rgb(var(--acc) / .22);box-shadow:0 0 0 calc(1px / var(--s,1)) #fff;pointer-events:none}
+.occ-ed-pill{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);margin:0;padding:8px 14px;border-radius:var(--r-pill);background:rgb(0 0 0 / .78);color:#fff;font-size:var(--fs-sm);line-height:1.35;text-align:center;pointer-events:none;z-index:2}
+.occ-ed-hint{bottom:14px}
+.occ-ed-note{top:10px}
+.occ-ed-note:empty{opacity:0;padding:0}
+.occ-ed-label{flex:none;display:grid;grid-template-columns:1fr auto;gap:4px var(--s-2);align-items:center;padding:var(--s-2) max(var(--s-3),env(safe-area-inset-right)) var(--s-2) max(var(--s-3),env(safe-area-inset-left));background:var(--surface-1);border-top:1px solid var(--line)}
+.occ-ed-label label{grid-column:1 / -1;font-size:var(--fs-xs);font-weight:600;color:var(--text-2)}
+.occ-ed-label input{min-width:0;min-height:44px;padding:8px 12px;border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-sunken);color:var(--text);font-size:16px}
+.occ-ed-label .btn{min-height:44px}
+.occ-ed-tools{flex:none;display:flex;gap:0;padding:6px max(4px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left));background:var(--surface-1);border-top:1px solid var(--line)}
+.occ-ed-tool{flex:1 1 0;min-width:44px;min-height:52px;display:grid;justify-items:center;align-content:center;gap:3px;padding:4px 0;border:0;border-radius:var(--r-md);background:none;color:var(--text);font:600 11px/1.1 var(--f-ui);cursor:pointer;-webkit-user-select:none;user-select:none}
+.occ-ed-tool i{display:grid;font-style:normal}
+.occ-ed-tool:hover:not(:disabled){background:var(--surface-3)}
+.occ-ed-tool:active:not(:disabled){background:var(--accent-tint)}
+.occ-ed-tool.on{background:var(--accent-tint);color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.occ-ed-tool:disabled{opacity:.36;cursor:default}
+.occ-ed-confirm{position:absolute;inset:0;z-index:5;display:grid;align-items:end;background:var(--scrim)}
+.occ-ed-cf{display:grid;gap:var(--s-2);padding:var(--s-4) max(var(--s-4),env(safe-area-inset-right)) calc(var(--s-4) + env(safe-area-inset-bottom,0px)) max(var(--s-4),env(safe-area-inset-left));background:var(--surface-1);border-top:1px solid var(--line-strong);border-radius:var(--r-lg) var(--r-lg) 0 0}
+.occ-ed-cf h3{margin:0;font-size:var(--fs-md)}
+.occ-ed-cf p{margin:0;color:var(--text-2)}
+.occ-ed-cf-btns{display:flex;gap:var(--s-2);margin-top:var(--s-2)}
+.occ-ed-cf-btns .btn{flex:1 1 0;min-height:48px}
+@media (min-width:1024px){
+  .occ-ed-confirm{place-items:center}
+  .occ-ed-cf{width:min(420px,90%);border:1px solid var(--line-strong);border-radius:var(--r-lg)}
+  .occ-ed-tools{justify-content:center}
+  .occ-ed-tool{flex:0 0 76px}
+}
+
+/* the form around it: choosing a picture, then the preview with Edit boxes */
+.occ-body{display:grid;gap:var(--s-3)}
+.occ-pick{display:grid}
+.occ-pick-btn{display:grid;justify-items:center;align-content:center;gap:var(--s-1);min-height:140px;padding:var(--s-5) var(--s-4);border:2px dashed var(--line-strong);border-radius:var(--r-lg);background:var(--surface-2);color:var(--text);font:inherit;text-align:center;cursor:pointer}
+.occ-pick-btn b{font-size:var(--fs-md);font-weight:650}
+.occ-pick-btn span{font-size:var(--fs-sm);color:var(--text-2)}
+.occ-pick-btn svg{color:var(--accent-text)}
+.occ-pick-btn:hover:not(:disabled),.occ-pick.drag .occ-pick-btn{border-color:var(--accent);background:var(--accent-tint)}
+.occ-pick-btn:disabled{opacity:.7;cursor:progress}
+.occ-form-row{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
+.occ-form-row .cloze-makes{margin:0;min-width:0}
+.occ-form-row .btn{flex:none}
+.kind-switch .chip span{min-height:44px}
+
+@media (forced-colors:active){
+  .occ-ed-fill{background:transparent;border:2px solid Highlight;box-shadow:none}
+  .occ-ed-mask.sel .occ-ed-fill{border-width:4px}
+  .occ-ed-num{background:Highlight;color:HighlightText}
+  .occ-ed-h{background:Canvas;border-color:Highlight}
+}

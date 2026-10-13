@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion } from './card-editor.js';
+import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText } from './format.js';
@@ -388,7 +388,7 @@ async function saveOcclusionNote(card, ops, msg) {
     if (plan.error) { showErr('ceErr', plan.error); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim() });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', occRemovalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -550,11 +550,12 @@ export function openAddCard({ decks, deckId, refresh }) {
     <form id="acForm" class="sheet-in" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
-      <div id="acBasic" ${kind === 'cloze' ? 'hidden' : ''}>
+      <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
         ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
         ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
       </div>
       <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
+      ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
@@ -562,11 +563,27 @@ export function openAddCard({ decks, deckId, refresh }) {
         <button class="btn primary" type="submit">Add card</button>
       </div>
     </form>`, { side: true });
-  $(kind === 'cloze' ? 'acText' : 'acFront').focus();
+  (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   $('acDone').addEventListener('click', closeSheet);
+  let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
     e.preventDefault();
     const deck = $('acDeck')?.value || target, tags = parseTags($('acTags').value);
+    if (readKind('ac') === 'occlusion') {
+      if (adding) return;
+      const note = readOcclusion('ac');
+      const plan = note.image ? planOcclusionSave([], note) : { error: 'Choose a picture first.' };
+      if (plan.error) { showErr('acErr', plan.error); return; }
+      adding = true;
+      try {
+        await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
+      } finally { adding = false; }
+      resetOcclusion('ac'); $('acErr').hidden = true;
+      $('acOccChoose').focus();
+      toast(`Added ${plural(plan.add.length, 'card')}`);
+      refresh();
+      return;
+    }
     if (readKind('ac') === 'cloze') {
       const text = readCardText('acText').trim();
       const plan = planNoteSave([], text);
