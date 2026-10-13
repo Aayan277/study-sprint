@@ -326,21 +326,35 @@ function wireCardForm(card, ctx, msg) {
 
 // Saving a cloze note: every card of the note at once. A blank that was taken out deletes its card and history,
 // so that asks first (in the page, like the other confirmations).
+// The text is read and planned again when the save actually happens (it may have changed, or a sync may have
+// changed the note, since the question was shown); if that removes a card nobody confirmed, it asks again.
+// The buttons are off while saving, so a double-click can't save twice (which would add a blank's card twice).
+let savingNote = false;
 async function saveClozeNote(card, ops, msg) {
-  const text = readCardText('ceText').trim();
-  const sibs = (await db.getAll('cards')).filter(c => c.noteId === card.noteId);
-  // Of two cards with the same blank number, the one with a schedule or the most reviews stays.
-  const states = new Set((await db.getAll('cardStates')).map(s => s.cardId));
-  const reviews = new Map(await Promise.all(sibs.map(async c => [c.id, (await db.getCardLogs(c.id)).length])));
-  const plan = planNoteSave(sibs, text, c => (states.has(c.id) ? 1e9 : 0) + reviews.get(c.id));
-  if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
-  $('ceErr').hidden = true;
-  const go = async () => {
+  const planNow = async () => {
+    const sibs = (await db.getAll('cards')).filter(c => c.noteId === card.noteId);
+    // Of two cards with the same blank number, the one with a schedule or the most reviews stays.
+    const states = new Set((await db.getAll('cardStates')).map(s => s.cardId));
+    const reviews = new Map(await Promise.all(sibs.map(async c => [c.id, (await db.getCardLogs(c.id)).length])));
+    return planNoteSave(sibs, readCardText('ceText').trim(), c => (states.has(c.id) ? 1e9 : 0) + reviews.get(c.id));
+  };
+  const busy = on => document.querySelectorAll('#ceForm button, button[form=ceForm]').forEach(b => { b.disabled = on; });
+  const guarded = async fn => {
+    if (savingNote) return;
+    savingNote = true; busy(true);
+    try { await fn(); } finally { savingNote = false; busy(false); }
+  };
+  // confirmed: ids of the cards the person agreed to remove
+  const go = async confirmed => {
+    const plan = await planNow();
+    if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
+    $('ceErr').hidden = true;
+    if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim() });
     return ops.again(msg, 'edit');
   };
-  if (!plan.remove.length) return go();
-  confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', go);
+  const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
+  return guarded(() => go(new Set()));
 }
 const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
 const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');

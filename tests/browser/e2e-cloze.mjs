@@ -85,6 +85,20 @@ const after = await noteCards();
 ok(after.map(c => c.cloze).join() === '1,3,4' && after.every(c => c.noteText === 'The {{c1::mitochondria}} makes ATP for {{c4::the}} {{c3::cell}}'), 'c2 is gone, c4 is added, every sibling has the new text');
 ok(after.find(c => c.cloze === 4).front === 'The mitochondria makes ATP for […] cell' && after.find(c => c.cloze === 1).id === notes[0].id, 'c4 is a new card; c1 kept its own card');
 
+// ---- 3b. the confirmation re-plans when it saves; a double-click saves once ----
+if (!(await page.isVisible('#ceText'))) { await page.locator('.crow', { hasText: 'for […] cell' }).click(); await page.waitForSelector('#ceText'); }
+await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for {{c4::the}} cell');
+await page.click('button[type=submit][form=ceForm]'); await page.waitForSelector('#cfYes');
+ok((await page.textContent('#ceFormConfirm')).includes('c3 was removed'), 'the question names c3');
+await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for the cell');            // changed after the question
+await page.click('#cfYes'); await page.waitForTimeout(300);
+ok((await page.textContent('#ceFormConfirm')).includes('c3 and c4 were removed') && (await noteCards()).length === 3, 'text changed since the question: it asks again and saves nothing');
+await page.click('#cfNo');
+await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for {{c4::the}} {{c3::cell}} {{c5::x}}');
+await page.evaluate(() => { const f = document.getElementById('ceForm'); f.requestSubmit(); f.requestSubmit(); });
+await page.waitForTimeout(500);
+ok((await noteCards()).filter(c => c.cloze === 5).length === 1, 'submitting twice adds the new blank once');
+
 // ---- 4. a computer: the Word-style box, the shortcuts, and the short editor ----
 {
   const desk = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })).newPage();
