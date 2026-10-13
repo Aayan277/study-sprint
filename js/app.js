@@ -14,12 +14,14 @@ import { formatInterval } from './queue.js';
 import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
+import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '3.5';
 
 let settings = { ...db.DEFAULT_SETTINGS };
+initInstall();       // listens for the browser saying the app can be installed (see install.js)
 
 // ---------- settings ----------
 async function renderSettings(el) {
@@ -158,6 +160,7 @@ async function renderSettings(el) {
 
     <section class="section" aria-labelledby="dataTitle">
       <h2 id="dataTitle">Your data</h2>
+      <div class="set-row" id="installRow">${settingsRowHTML()}</div>
       <div class="set-row">
         <div><b>Storage</b><p>${persisted
           ? 'Saved permanently on this device.'
@@ -184,6 +187,7 @@ async function renderSettings(el) {
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
 
+  wireSettingsRow($('installRow'));
   $('skins').addEventListener('click', e => {
     const b = e.target.closest('.skin'); if (!b) return;
     saveTheme({ ...settings.theme, skin: b.dataset.skin });

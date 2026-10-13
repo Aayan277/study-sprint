@@ -31,6 +31,8 @@ export const SPEAKER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="curren
 // icon('check') returns an <svg> that takes its color and size from the text around it (see .ico in styles.css).
 const ICON_PATHS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  share: '<path d="M12 3v12M8 7l4-4 4 4"/><path d="M7 11H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/>',
+  download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   swap: '<path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',

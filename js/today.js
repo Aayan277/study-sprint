@@ -14,6 +14,7 @@ import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
 import { addSampleDeck } from './sample.js';
+import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
 
@@ -105,6 +106,7 @@ export async function renderToday(el) {
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <a class="btn primary wide big" href="#/play">${icon('bolt')} Play a round</a></div>`}
       </section>
+      <div id="installSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
       ${exams.length ? `
       <section class="section" aria-labelledby="exTitle">
@@ -128,6 +130,7 @@ export async function renderToday(el) {
       </section>`}`;
     wire(c);
     fx.goalRing(el, answered, goal);
+    drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
   };
 
   // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.
@@ -367,6 +370,9 @@ export async function renderToday(el) {
   }
 
   draw();
+  // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
+  const onInstall = () => { if (el.isConnected) drawInstallCard($('installSlot')); else window.removeEventListener('install-change', onInstall); };
+  window.addEventListener('install-change', onInstall);
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant.
   import('./review.js').catch(() => {});
 }

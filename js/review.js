@@ -10,6 +10,7 @@ import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
+import { noteSession } from './install.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
@@ -452,6 +453,7 @@ async function finish(el) {
   const streak = await loadStreak();
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!location.hash.startsWith('#/review')) return;
+  if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
   const mins = Math.floor(spent / 60000), secs = Math.round((spent % 60000) / 1000);
 
