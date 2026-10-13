@@ -37,8 +37,14 @@ export const LIGHTNING_REF_MS = 6000;
 //   ms      how long the answer took
 //   limitMs the time allowed (Infinity in Lightning)
 //   typing  typed answer (true) or multiple choice (false)
-export function autoRating({ ok, ms, limitMs, typing }) {
+//   speed   optional: your usual time for this mode (from speedProfiles), per unit of text; chars: the text read
+export function autoRating({ ok, ms, limitMs, typing, speed = null, chars = 0 }) {
   if (!ok) return AGAIN;
+  if (speed) {            // compared with your own usual time for this much text, not with the timer
+    const expected = speed * (SPEED.c0 + chars);
+    if (ms > SPEED.hardX * expected) return HARD;
+    return typing && ms < SPEED.easyX * expected ? EASY : GOOD;
+  }
   const allowed = Number.isFinite(limitMs) ? limitMs : LIGHTNING_REF_MS * (typing ? TYPING_TIME : 1);
   const used = ms / allowed;
   if (used > 0.7) return HARD;
@@ -72,3 +78,25 @@ export function scheduleDecision({ state, rating, alreadyToday, now = Date.now()
 }
 
 export const applies = decision => decision === 'due' || decision === 'again' || decision === 'first';
+
+// The rating actually applied. Picking the right option (multiple choice) is recognition, which is easier than
+// recalling the answer, so on a due card it counts at most as Hard. Simulations showed counting it as Good made the
+// schedule think cards were better known than they were; capping it at Hard fixed that for 2-3% more reviews.
+export const appliedRating = ({ decision, rating, mc = false }) => (decision === 'due' && mc && rating > HARD ? HARD : rating);
+
+// Speed relative to the person (B6). Your usual time per question type is the median of your last `window`
+// correct Play answers, per (SPEED.c0 + characters read). Until there are `minN` of them, the timer rule is used.
+export const SPEED = { window: 200, minN: 50, hardX: 2.2, easyX: 0.5, c0: 25 };
+export const speedKey = (mode, hard) => `${mode}${hard ? ':hard' : ''}`;
+export function speedProfiles(logs) {
+  const by = new Map();
+  for (let i = logs.length - 1; i >= 0; i--) {          // newest first
+    const l = logs[i];
+    if (l.source !== 'play' || !l.correct || !(l.ms > 0) || !(l.chars >= 0)) continue;
+    const k = speedKey(l.mode, l.hard), a = by.get(k) || [];
+    if (a.length < SPEED.window) { a.push(l.ms / (SPEED.c0 + l.chars)); by.set(k, a); }
+  }
+  const out = new Map();
+  for (const [k, a] of by) if (a.length >= SPEED.minN) { a.sort((x, y) => x - y); out.set(k, a[a.length >> 1]); }
+  return out;
+}

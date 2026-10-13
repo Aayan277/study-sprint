@@ -52,7 +52,8 @@ let checks = 0;
 for (const l of logs) {
   const c = cards.find(x => x.id === l.cardId);
   const wrong = wrongOn.has(c.id);
-  const want = c.cat === 'due' ? { applied: true, rating: wrong ? 1 : 3 }
+  // A right multiple-choice answer on a due card counts at most as Hard (recognition, not recall).
+  const want = c.cat === 'due' ? { applied: true, rating: wrong ? 1 : 2 }
     : c.cat === 'notdue' ? { applied: wrong, rating: wrong ? 1 : 3 }
     : { applied: false, rating: wrong ? 1 : 3 };
   const good = l.applied === want.applied && l.rating === want.rating && l.mode === 'front' && l.format === 'classic' && typeof l.ms === 'number';
@@ -60,7 +61,7 @@ for (const l of logs) {
   checks += good;
   // schedule actually moved (or not)
   const s = states[c.id];
-  if (c.cat === 'due' && !wrong) ok(s.due > Date.now() + DAY && s.reps === 4, `due card answered right was graded Good and pushed out (${c.front})`);
+  if (c.cat === 'due' && !wrong) ok(s.due > Date.now() + DAY && s.reps === 4, `due card answered right was graded (Hard, multiple choice) and pushed out (${c.front})`);
   if (c.cat === 'due' && wrong) ok(s.state === 3 && s.lapses === 1, `due card answered wrong went to relearning (${c.front})`);
   if (c.cat === 'notdue' && !wrong) ok(s.reps === 3 && s.due > Date.now() + 9 * DAY, `not-due card answered right is unchanged (${c.front})`);
   if (c.cat === 'notdue' && wrong) ok(s.state === 3 && s.lapses === 1, `not-due card answered wrong went to relearning (${c.front})`);

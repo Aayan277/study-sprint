@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { autoRating, scheduleDecision, applies, AGAIN, HARD, GOOD, EASY, LIGHTNING_REF_MS } from '../js/autograde.js';
+import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, SPEED, AGAIN, HARD, GOOD, EASY, LIGHTNING_REF_MS } from '../js/autograde.js';
 import { dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();
@@ -113,4 +113,22 @@ test('a timeout with 3 seconds or more, a wrong answer, or another format still 
   assert.equal(scheduleDecision({ state: overdue, rating: AGAIN, now: NOW, timedOut: true, fmt: 'survival', limitMs: 5000 }), 'due');
   assert.equal(scheduleDecision({ state: future, rating: AGAIN, now: NOW, timedOut: false, fmt: 'survival', limitMs: 2000 }), 'again');   // a wrong tap
   assert.equal(scheduleDecision({ state: future, rating: AGAIN, now: NOW, timedOut: true, fmt: 'classic', limitMs: 2000 }), 'again');
+});
+
+test('with a speed profile, answers are judged against your own usual time, not the timer', () => {
+  const speed = 100;                                   // 100 ms per unit of text
+  const chars = 15, expected = speed * (SPEED.c0 + chars);
+  assert.equal(autoRating({ ok: true, ms: expected, limitMs: 1000, typing: true, speed, chars }), GOOD, 'usual pace = Good, even past the timer share');
+  assert.equal(autoRating({ ok: true, ms: SPEED.hardX * expected + 1, limitMs: 1e9, typing: true, speed, chars }), HARD);
+  assert.equal(autoRating({ ok: true, ms: SPEED.easyX * expected - 1, limitMs: 1e9, typing: true, speed, chars }), EASY);
+  assert.equal(autoRating({ ok: true, ms: SPEED.easyX * expected - 1, limitMs: 1e9, typing: false, speed, chars }), GOOD, 'multiple choice is never Easy');
+  assert.equal(autoRating({ ok: false, ms: 10, limitMs: 1e9, typing: true, speed, chars }), AGAIN);
+});
+
+test('a right multiple-choice answer on a due card counts at most as Hard; typing and other decisions are unchanged', () => {
+  assert.equal(appliedRating({ decision: 'due', rating: GOOD, mc: true }), HARD);
+  assert.equal(appliedRating({ decision: 'due', rating: HARD, mc: true }), HARD);
+  assert.equal(appliedRating({ decision: 'due', rating: AGAIN, mc: true }), AGAIN);
+  assert.equal(appliedRating({ decision: 'due', rating: EASY, mc: false }), EASY);
+  assert.equal(appliedRating({ decision: 'first', rating: GOOD, mc: true }), GOOD);
 });
