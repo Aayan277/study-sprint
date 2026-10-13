@@ -17,7 +17,7 @@ import * as fx from './fx.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.4.1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
