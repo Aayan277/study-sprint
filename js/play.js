@@ -24,6 +24,7 @@ import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
+import * as fx from './fx.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
@@ -273,9 +274,12 @@ function updateHud(penalty) {
   else if (G.fmt === 'survival') a = `<span class="lives" aria-label="${G.lives} of ${LIVES} lives left">${'●'.repeat(G.lives)}<span class="lost">${'●'.repeat(LIVES - G.lives)}</span></span>Q <b>${G.i + 1}</b>`;
   else a = `<span id="clockWrap">Time <b id="hudClock">${fmtClock(G.clock)}</b></span>${penalty ? '<span class="penalty">−3s</span>' : ''}`;
   $('hudA').innerHTML = a + (G.hard ? ' <span class="hardtag">Hard</span>' : '') + (G.flash ? ` <span class="hardtag">Flash ${G.flash / 1000}s</span>` : '');
+  const shown = +$('score').textContent.replace(/\D/g, '') || 0;
   $('score').textContent = G.score.toLocaleString();
   $('streak').textContent = G.streak;
   $('streakWrap').classList.toggle('streak-on', G.streak >= 3);
+  fx.combo($('streakWrap'), G.streak);                  // flame tiers at x3, x5 and x10
+  fx.score($('score'), shown, G.score);                 // the score counts up (the text is already the new total)
 }
 
 function showQuestion() {
@@ -325,7 +329,7 @@ function tick(now) {
     const rem = G.clock - (now - G.qStart);
     const f = Math.max(0, rem) / LIGHTNING_MS;
     fill.style.transform = `scaleX(${f})`;
-    fill.classList.toggle('low', f < 0.25);
+    fill.classList.toggle('low', f < 0.3);          // the last 30%: the bar thickens and throbs (styles.css)
     const c = $('hudClock'); if (c) c.textContent = fmtClock(rem);
     $('clockWrap')?.classList.toggle('clock-low', rem < 10000);
     if (rem <= 0) { timeUp(); return; }
@@ -580,7 +584,7 @@ async function finish() {
       <div class="stamp press" aria-label="Grade ${letter}"><span>${letter}</span></div>
       <div style="min-width:0">
         <p class="res-grade">${label} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${QTYPES[round.qtype]} · ${esc(deckName)}</p>
-        <p class="res-score mono">${round.score.toLocaleString()} <small>pts</small></p>
+        <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
         ${line ? `<p class="res-line">${line}</p>` : ''}
         ${isBest ? '<p class="newbest">New best for this setup</p>' : ''}
       </div>
@@ -612,6 +616,7 @@ async function finish() {
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   $('againBtn').focus({ preventScroll: true });
+  fx.result(el);
 }
 
 // ---------- keyboard ----------

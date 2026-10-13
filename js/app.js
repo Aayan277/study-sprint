@@ -13,10 +13,11 @@ import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
 import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
+import * as fx from './fx.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -54,6 +55,12 @@ async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>Compact deck list</b>
         <span>Decks gets a search box and a sort (due, exam or A–Z), folds subdecks under their course and uses small play buttons. Turn it off for the old list. This device only.</span></span>
         <input id="compactDecks" type="checkbox" class="switch" ${settings.compactDecks !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Rating feedback</b>
+        <span>When you rate a card in Review, a coloured ring pulses on the button, the new interval floats up, and an outline of the old card drifts away in a direction that suits the rating. The next card appears at once either way. This device only.</span></span>
+        <input id="ratingFeedback" type="checkbox" class="switch" ${settings.ratingFeedback !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Smooth transitions</b>
+        <span>Screens slide when you change tab, and pop-up sheets spring open and slide away. Turn it off for instant changes. This device only.</span></span>
+        <input id="smoothMotion" type="checkbox" class="switch" ${settings.smoothMotion !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
         <span>Pick one course in Stats and see how much of it you are ready to remember on exam day (or today, with no exam), with an Exam prep button. Mastery moves to the top. This device only.</span></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
@@ -193,8 +200,8 @@ async function renderSettings(el) {
     db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
   }));
   // These two are per device too (not in SYNCED_SETTINGS): Decks and Stats read them when they are drawn.
-  for (const key of ['compactDecks', 'statsReadiness']) {
-    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); });
+  for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion']) {
+    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); });
   }
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
@@ -389,6 +396,7 @@ async function confirmRestore(file) {
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
     applyCardAlign(settings.cardAlign);
+    fx.configure(settings);
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     location.hash = '#/decks';
@@ -662,13 +670,15 @@ function confirmDeleteServer() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const { theme, cardAlign, compactDecks, statsReadiness } = settings;
+  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion } = settings;
   await db.resetAll();
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);
   await db.setSetting('compactDecks', compactDecks);
   await db.setSetting('statsReadiness', statsReadiness);
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness };
+  await db.setSetting('ratingFeedback', ratingFeedback);
+  await db.setSetting('smoothMotion', smoothMotion);
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
@@ -816,7 +826,7 @@ async function route() {
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');
-  el.className = 'view';
+  el.className = 'view' + fx.enterClass();      // a short fade-up where View Transitions are missing
   $('screen').replaceChildren(el);
   // Which screen this is, for the desktop layout (some screens use the full width: see styles.css).
   $('screen').dataset.route = ROUTES[name] ? name : 'today';
@@ -917,6 +927,7 @@ async function start() {
   }
   settings.theme = applyTheme(settings.theme);
   applyCardAlign(settings.cardAlign);
+  fx.configure(settings);
   const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
@@ -925,7 +936,8 @@ async function start() {
   if (!location.hash) history.replaceState(null, '', '#/today');
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
   if (firstRun && /^#\/today\/?$/.test(location.hash)) history.replaceState(null, '', '#/welcome');
-  addEventListener('hashchange', route);
+  // Changing tab slides (View Transitions) unless Smooth transitions is off, motion is reduced or a round is running.
+  addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.

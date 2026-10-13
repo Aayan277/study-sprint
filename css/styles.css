@@ -832,8 +832,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .play-card .flash-front.gone{opacity:0}
 .play-card{transition:box-shadow .2s}
 .play-card.ok{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--good)}
-.play-card.no{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--again);animation:shake .32s}
-@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.play-card.no{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--again);animation:fx-shake 380ms var(--out-expo)}
 .flash-q{position:absolute;bottom:10px;right:14px;font-size:var(--fs-xs);color:var(--text-2)}
 .timer{height:3px;margin:12px 0 var(--s-4);background:var(--surface-3);border-radius:3px;overflow:hidden}
 .timer-fill{height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow);transform-origin:left center}
@@ -866,8 +865,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .res-head{display:flex;align-items:center;gap:18px;margin-bottom:22px}
 @media (max-width:480px){.res-head .stamp{width:78px;height:78px;font-size:2.5rem;border-width:3px}}
 .stamp{width:104px;height:104px;flex:none;border:4px solid var(--accent);border-radius:50%;color:var(--accent-text);display:grid;place-items:center;font-weight:700;font-size:3.4rem;line-height:1;transform:rotate(-8deg);text-shadow:0 0 24px var(--glow)}
-.stamp.press{animation:press .35s ease-out}
-@keyframes press{from{transform:rotate(-8deg) scale(1.35);opacity:.3}to{transform:rotate(-8deg) scale(1);opacity:1}}
+.stamp.press{position:relative;animation:fx-stamp 520ms cubic-bezier(.2,.9,.25,1.25) backwards}
 .res-grade{margin:0;font-weight:600;color:var(--text-2);font-size:var(--fs-base);overflow-wrap:anywhere}
 .res-score{margin:0;font:600 clamp(2.3rem,9vw,3.2rem)/1.1 var(--f-num);letter-spacing:-.04em}
 .res-score small{font:500 var(--fs-md) var(--f-ui);letter-spacing:0;color:var(--text-2)}
@@ -1339,3 +1337,140 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 
 /* Light mode: the colored edge stripes need no glow (it only smudges on white) */
 :root[data-theme="light"] :is(.deck,.tdeck,.exam-row,.deck-summary)::before{box-shadow:none}
+
+/* ---------- 16. Motion (v3.4) ----------
+   The look of the small animations that js/fx.js starts. Rules: only transform and opacity move (a few tiny glows aside),
+   nothing here may delay a rating, and prefers-reduced-motion switches every animation and transition off (section 14),
+   so what is left for reduced motion is the still version: final numbers, colours, outlines. */
+:root{
+  --spring:cubic-bezier(.34,1.56,.64,1);           /* a small overshoot, for pops */
+  --out-expo:cubic-bezier(.16,1,.3,1);             /* fast start and a long settle, for things arriving and leaving */
+  --sheet-spring:var(--out-expo);                  /* sheets: a real spring where linear() exists */
+}
+@supports (transition-timing-function:linear(0,1)){
+  :root{--sheet-spring:linear(0,.009,.035 2.1%,.141 4.4%,.281 6.7%,.723 12.9%,.938 16.7%,1.017 19.6%,1.077 23.1%,1.088 25.6%,1.081 28.6%,1.013 37.3%,.99 42.9%,.993 51.1%,1.001 64%,1)}
+}
+
+/* Numbers that count up: the real text is final from the first moment. While it counts, the real text is hidden and the
+   ticking number is drawn from data-n by a pseudo-element, which screen readers skip (the "/ ''" is its empty alt text). */
+.fx-count{position:relative;-webkit-text-fill-color:transparent}
+.fx-count::after{content:attr(data-n);content:attr(data-n) / "";position:absolute;left:0;top:0;white-space:nowrap;-webkit-text-fill-color:currentColor}
+.ring-in .fx-count::after{left:50%;transform:translateX(-50%)}
+.res-n{display:inline-block}
+
+/* C1. Rating feedback: the rating's colour, for one moment, on each piece (JS sets data-r) */
+[data-r="1"]{--rc:var(--again)} [data-r="2"]{--rc:var(--hard)} [data-r="3"]{--rc:var(--good)} [data-r="4"]{--rc:var(--easy)}
+.fx-ring{position:fixed;z-index:30;pointer-events:none;border-radius:var(--r-md);
+  box-shadow:0 0 0 1.5px var(--rc),0 0 18px -2px var(--rc);animation:fx-ring 420ms var(--out-expo) forwards}
+@keyframes fx-ring{from{opacity:.95;transform:scale(1)}to{opacity:0;transform:scale(1.14,1.3)}}
+.fx-ivl{position:fixed;z-index:31;pointer-events:none;transform:translate(-50%,0);font:600 var(--fs-sm)/1 var(--f-num);
+  color:var(--rc);text-shadow:0 0 12px var(--rc);animation:fx-ivl 640ms var(--out-expo) forwards}
+@keyframes fx-ivl{0%{opacity:0;transform:translate(-50%,6px)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-34px)}}
+/* The old card leaves as an outline (a plain box in the card's shape, so no text can overlap the next card): Again goes back into the pile (left and down), Hard drops a little, Good lifts,
+   Easy lifts further and faster. */
+.fx-ghost{position:fixed;z-index:3;pointer-events:none;margin:0!important;animation:var(--ga) var(--gd,240ms) var(--out-expo) forwards}
+.fx-ghost[data-r="1"]{--ga:fx-out-again}
+.fx-ghost[data-r="2"]{--ga:fx-out-hard}
+.fx-ghost[data-r="3"]{--ga:fx-out-good}
+.fx-ghost[data-r="4"]{--ga:fx-out-easy;--gd:200ms}
+@keyframes fx-out-again{to{opacity:0;transform:translate(-28px,10px) rotate(-2.5deg) scale(.96)}}
+@keyframes fx-out-hard{to{opacity:0;transform:translateY(14px) scale(.97)}}
+@keyframes fx-out-good{to{opacity:0;transform:translateY(-30px) scale(.96)}}
+@keyframes fx-out-easy{to{opacity:0;transform:translateY(-48px) scale(.95)}}
+.fx-ghost{border-radius:var(--r-xl);background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--rc) 22%,transparent),transparent 70%),var(--surface-1);
+  box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent),0 0 40px -12px var(--rc)}
+
+/* C2. Today: the goal ring fills from where it was; a finished goal is green, with a halo and a check that pops */
+.ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
+.ring.is-full .ring-fg{stroke:var(--good);filter:drop-shadow(0 0 6px var(--good-line))}
+.ring.fx-win{isolation:isolate}
+.ring.fx-win::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  box-shadow:0 0 0 2px var(--good),0 0 24px 4px var(--good-line);animation:fx-halo-ring 900ms 650ms var(--out-expo) both}
+@keyframes fx-halo-ring{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.45)}}
+.ring.fx-win .ring-check{animation:fx-check 520ms 750ms var(--spring) backwards}
+@keyframes fx-check{from{opacity:0;transform:scale(.3) rotate(-25deg)}}
+
+/* C3. The finish screen: tiles rise one after another, the flame catches, a milestone pill pops, a halo behind the title */
+.stats4.fx-in > div{animation:fx-rise 420ms var(--out-expo) backwards}
+.stats4.fx-in > div:nth-child(2){animation-delay:50ms}
+.stats4.fx-in > div:nth-child(3){animation-delay:100ms}
+.stats4.fx-in > div:nth-child(4){animation-delay:150ms}
+@keyframes fx-rise{from{opacity:0;transform:translateY(8px)}}
+.streak.kept.fx-ignite .ico{animation:fx-ignite 700ms var(--spring) backwards}
+@keyframes fx-ignite{0%{opacity:.3;transform:scale(.6) translateY(3px)}55%{opacity:1;transform:scale(1.25)}100%{transform:scale(1)}}
+.fx-mile-tag{display:inline-block;flex:none;padding:2px 8px;border-radius:var(--r-pill);font:600 var(--fs-2xs)/1.5 var(--f-num);letter-spacing:.04em;
+  color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line);animation:fx-pop 420ms 400ms var(--spring) backwards}
+@keyframes fx-pop{from{opacity:0;transform:scale(.6)}}
+.fx-glow-h1{position:relative}
+.fx-glow-h1::before{content:"";position:absolute;inset:-60px -80px;z-index:-1;pointer-events:none;
+  background:radial-gradient(closest-side,var(--glow),transparent);opacity:0;animation:fx-halo 1100ms var(--out-expo)}
+@keyframes fx-halo{0%{opacity:0;transform:scale(.5)}30%{opacity:.9}100%{opacity:0;transform:scale(1.25)}}
+.fx-confetti{position:fixed;inset:0;width:100%;height:100%;z-index:35;pointer-events:none}
+
+/* C4. Play: the combo pill (a flame that gets hotter at x3, x5 and x10; the tiers are still colours with reduced motion) */
+#streakWrap{display:inline-flex;align-items:center;gap:4px;padding:2px 8px 2px 6px;border-radius:var(--r-pill)}
+#streakWrap::before{content:"";width:14px;height:14px;flex:none;background:currentColor;opacity:0;transform:scale(.4);
+  -webkit-mask:var(--flame) center/contain no-repeat;mask:var(--flame) center/contain no-repeat;transition:opacity 200ms,transform 260ms var(--spring)}
+:root{--flame:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.2 1 2 2 2.2C10.5 8.5 11 5.5 12 3z'/%3E%3C/svg%3E")}
+#streakWrap.streak-on::before{opacity:1;transform:none}
+#streakWrap[data-tier="1"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line)}
+#streakWrap[data-tier="2"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard),0 0 16px -4px var(--hard)}
+#streakWrap[data-tier="3"]{color:var(--again);background:var(--again-tint);box-shadow:inset 0 0 0 1px var(--again),0 0 20px -2px var(--again)}
+#streakWrap[data-tier] b{color:inherit!important}
+#streakWrap[data-tier="3"]::before{animation:fx-flicker 900ms ease-in-out infinite}
+@keyframes fx-flicker{0%,100%{transform:scale(1) rotate(0)}30%{transform:scale(1.1,1.18) rotate(-4deg)}60%{transform:scale(.96,1.05) rotate(3deg)}}
+.fx-bump{animation:fx-bump 280ms var(--spring)}
+@keyframes fx-bump{40%{transform:scale(1.18)}}
+/* a right answer blooms: a ring grows off the card and fades (a pseudo-element, so only transform and opacity move) */
+.play-card.ok::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:0 0 0 2px var(--good-line);
+  animation:fx-bloom 520ms var(--out-expo) forwards}
+@keyframes fx-bloom{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.06,1.12)}}
+.opt.correct{position:relative;overflow:hidden}
+.opt.correct::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgb(255 255 255 / .16) 50%,transparent 70%);
+  transform:translateX(-100%);animation:fx-shine 600ms 60ms var(--out-expo) forwards;pointer-events:none}
+@keyframes fx-shine{to{transform:translateX(100%)}}
+/* a wrong answer: a shake that dies away (calmer than an even one) */
+@keyframes fx-shake{15%{transform:translateX(-7px)}35%{transform:translateX(5px)}55%{transform:translateX(-3px)}75%{transform:translateX(1.5px)}}
+/* the last 30% of the timer: the bar thickens and pulses (and Lightning's clock ticks under 10 seconds) */
+.timer{transition:transform 200ms var(--ease)}
+.timer:has(.low){transform:scaleY(1.7)}
+.timer-fill.low{animation:fx-urgent 520ms ease-in-out infinite alternate}
+@keyframes fx-urgent{from{opacity:.6}to{opacity:1}}
+.hud .clock-low b{display:inline-block;animation:fx-tick 1s steps(1) infinite}
+@keyframes fx-tick{0%{transform:scale(1.12)}20%{transform:scale(1)}}
+/* the grade stamp slams down, an ink ring spreads from where it lands and the header nudges */
+@keyframes fx-stamp{0%{transform:rotate(-16deg) scale(1.9);opacity:0}55%{transform:rotate(-7deg) scale(.93);opacity:1}100%{transform:rotate(-8deg) scale(1)}}
+.stamp.press::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent);pointer-events:none;animation:fx-ink 700ms 290ms var(--out-expo) both}
+@keyframes fx-ink{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.6)}}
+.fx-thud{animation:fx-thud 260ms 280ms ease-out}
+@keyframes fx-thud{30%{transform:translateY(2px)}}
+
+/* C5. Smooth transitions (the Settings switch sets data-smooth="off" on <html> to turn all of this off) */
+/* Tabs slide with View Transitions. The header and tab bar get their own layer for the moment it runs, so they stay still. */
+html.vt-on .top{view-transition-name:top}
+html.vt-on .tabs{view-transition-name:tabs}
+::view-transition-old(root){animation:fx-vt-out 160ms ease-in both}
+::view-transition-new(root){animation:fx-vt-in 260ms var(--out-expo) both}
+html[data-vt-dir="back"]::view-transition-old(root){animation-name:fx-vt-out-back}
+html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back}
+@keyframes fx-vt-out{to{opacity:0;transform:translateX(-16px)}}
+@keyframes fx-vt-in{from{opacity:0;transform:translateX(24px)}}
+@keyframes fx-vt-out-back{to{opacity:0;transform:translateX(16px)}}
+@keyframes fx-vt-in-back{from{opacity:0;transform:translateX(-24px)}}
+.view.fx-enter{animation:fx-rise 240ms var(--out-expo)}      /* no View Transitions in this browser: the new screen fades up */
+/* Sheets spring in and slide out (Chrome 117+ and Safari 17.5+; elsewhere they open and close as before) */
+:root:not([data-smooth="off"]) dialog.sheet:not(.side){
+  &[open]{animation:none}
+  transition:transform 420ms var(--sheet-spring),opacity 160ms,overlay 280ms allow-discrete,display 280ms allow-discrete;
+  &:not([open]){transform:translateY(100%);opacity:.6;transition-duration:240ms;transition-timing-function:cubic-bezier(.4,0,1,1)}
+  @starting-style{&[open]{transform:translateY(100%)}}
+}
+:root:not([data-smooth="off"]) dialog.sheet::backdrop{transition:opacity 280ms,overlay 280ms allow-discrete,display 280ms allow-discrete;opacity:1}
+:root:not([data-smooth="off"]) dialog.sheet:not([open])::backdrop{opacity:0}
+@starting-style{:root:not([data-smooth="off"]) dialog.sheet[open]::backdrop{opacity:0}}
+
+/* Reduced motion: section 14 already stops every animation and transition. These pieces have no still version. */
+@media (prefers-reduced-motion:reduce){
+  .fx-ghost,.fx-ring,.fx-ivl,.fx-confetti{display:none!important}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}
+}

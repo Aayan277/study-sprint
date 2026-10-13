@@ -14,6 +14,7 @@ import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
 import { openExamSheet } from './exam-sheet.js';
+import * as fx from './fx.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
 //   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
@@ -114,6 +115,7 @@ export async function renderToday(el) {
         <div class="tdecks">${top.map(deckRow).join('')}</div>
       </section>`}`;
     wire(c);
+    fx.goalRing(el, answered, goal);
   };
 
   // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.

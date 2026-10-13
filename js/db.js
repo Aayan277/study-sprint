@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
   compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
+  ratingFeedback: true,  // Review: a ring on the pressed button, the interval floating up and an outline of the old card leaving. This device only
+  smoothMotion: true,    // Smooth transitions: tabs slide and sheets spring (View Transitions). This device only
   statsReadiness: true,  // Stats for one course: a readiness header with an Exam prep button, Mastery on top (off = no header). This device only
   targetRetention: 0.9,
   newPerDay: 20,

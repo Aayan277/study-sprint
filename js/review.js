@@ -19,6 +19,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
+import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -314,7 +315,10 @@ async function answer(el, rating) {
     state: prev ? prev.state : NEW          // the card's state before this review (useful for stats and FSRS tuning later)
   };
   try {
-    const logId = await db.saveReview(next, log);
+    const saving = db.saveReview(next, log);
+    // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
+    fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
+    const logId = await saving;
     R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
@@ -474,6 +478,7 @@ async function finish(el) {
     </div>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
   $('undoLast')?.addEventListener('click', () => undo(el));
+  fx.finished(el, { complete: !R.current, reviewed });
 }
 
 // ---------- keyboard ----------
