@@ -43,5 +43,75 @@ ok(r.nums.join() === '1,2,4' && r.same === 1 && r.extra.every(e => e === 'Powerh
 ok(r.c2Kept, 'edit: c2 keeps its card, schedule and history');
 ok(r.c3Gone && r.tombstone, 'edit: the removed blank deletes its card, schedule and history, leaving a deleted marker');
 
+// ---- 2. the add form: Basic | Cloze ----
+await page.click('.deck-open'); await page.waitForSelector('.crow');
+const deckUrl = page.url();
+const selectIn = (id, word) => page.evaluate(([id, word]) => { const t = document.getElementById(id); const i = t.value.indexOf(word); t.focus(); t.setSelectionRange(i, i + word.length); }, [id, word]);
+await page.click('#brAdd'); await page.waitForSelector('#acForm');
+ok(await page.isChecked('input[name=acKind][value=basic]') && await page.isVisible('#acFront') && !(await page.isVisible('#acText')), 'add form opens on Basic');
+await page.locator('.kind-switch .chip', { hasText: 'Cloze' }).click();
+ok(await page.isVisible('#acText') && !(await page.isVisible('#acFront')), 'Cloze shows the text box and hides front/back');
+ok((await page.textContent('#acTextPrev')).includes('Select a word'), 'preview asks for a blank at first');
+await page.fill('#acText', 'The mitochondria makes ATP for the cell');
+await selectIn('acText', 'mitochondria'); await page.click('[data-cloze=new]');
+ok((await page.inputValue('#acText')) === 'The {{c1::mitochondria}} makes ATP for the cell', 'New blank wraps the selection as c1');
+await selectIn('acText', 'ATP'); await page.click('[data-cloze=new]');
+await selectIn('acText', 'cell'); await page.click('[data-cloze=new]');
+ok((await page.inputValue('#acText')) === 'The {{c1::mitochondria}} makes {{c2::ATP}} for the {{c3::cell}}', 'blanks are numbered c1, c2, c3');
+ok((await page.textContent('#acTextPrev .cloze-makes')) === 'Makes 3 cards: c1 c2 c3', 'preview says: Makes 3 cards: c1 c2 c3');
+ok((await page.locator('#acTextPrev mark.cloze-ans').count()) === 3, 'preview highlights the 3 blanks');
+await page.fill('#acTags', 'bio');
+await page.screenshot({ path: SP + '/cloze-editor-375.png' });
+await page.click('button[type=submit][form=acForm]'); await page.waitForFunction(() => document.querySelectorAll('.crow .ckind').length >= 6);
+let notes = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.noteText && c.noteText.startsWith('The {{c1::mito') && !c.noteExtra).sort((a, b) => a.cloze - b.cloze));
+ok(notes.length === 3 && new Set(notes.map(c => c.noteId)).size === 1 && notes[2].front === 'The mitochondria makes ATP for the […]' && notes[0].tags[0] === 'bio', 'adding saves 3 sibling cards with one noteId');
+ok(await page.isVisible('#acText') && (await page.inputValue('#acText')) === '', 'the form stays open on Cloze, cleared, for the next note');
+await page.click('#acDone');
+
+// ---- 3. editing a note: add c4, remove c2 with a confirmation ----
+const noteCards = () => page.evaluate(async id => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.noteId === id).sort((a, b) => a.cloze - b.cloze), notes[0].noteId);
+await page.locator('.crow', { hasText: 'The mitochondria makes ATP for the […]' }).click(); await page.waitForSelector('#ceText');
+ok((await page.inputValue('#ceText')) === notes[0].noteText && !(await page.isVisible('input[name=ceKind]').catch(() => false)), 'editing a cloze card opens the whole note (no Basic | Cloze switch)');
+await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for {{c4::the}} {{c3::cell}}');
+await page.click('button[type=submit][form=ceForm]'); await page.waitForSelector('#ceFormConfirm .confirm');
+ok((await page.textContent('#ceFormConfirm')).includes('c2 was removed: its card and review history go too'), 'removing a blank asks first, in the page');
+ok((await noteCards()).length === 3, 'nothing is deleted before the confirmation');
+await page.click('#cfNo'); ok((await noteCards()).length === 3 && await page.isVisible('#ceText'), 'Cancel keeps the note and the editor open');
+await page.click('button[type=submit][form=ceForm]'); await page.waitForSelector('#cfYes'); await page.click('#cfYes');
+await page.waitForFunction(() => !document.getElementById('ceForm') || !document.querySelector('#ceFormConfirm .confirm'));
+await page.waitForTimeout(300);
+const after = await noteCards();
+ok(after.map(c => c.cloze).join() === '1,3,4' && after.every(c => c.noteText === 'The {{c1::mitochondria}} makes ATP for {{c4::the}} {{c3::cell}}'), 'c2 is gone, c4 is added, every sibling has the new text');
+ok(after.find(c => c.cloze === 4).front === 'The mitochondria makes ATP for […] cell' && after.find(c => c.cloze === 1).id === notes[0].id, 'c4 is a new card; c1 kept its own card');
+
+// ---- 4. a computer: the Word-style box, the shortcuts, and the short editor ----
+{
+  const desk = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })).newPage();
+  desk.on('pageerror', e => errors.push('desk pageerror ' + e.message));
+  await desk.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } });
+  await desk.goto(deckUrl); await desk.waitForSelector('.crow');
+  await desk.click('#brAdd'); await desk.waitForSelector('#acForm');
+  await desk.locator('.kind-switch .chip', { hasText: 'Cloze' }).click();
+  ok(await desk.evaluate(() => !!document.getElementById('acText').dataset.rich), 'on a computer the cloze text is the Word-style box');
+  await desk.click('#acText'); await desk.keyboard.type('The cell wall holds the cell');
+  await desk.locator('#acText').evaluate(el => { const r = document.createRange(), t = el.firstChild, i = t.textContent.indexOf('wall'); r.setStart(t, i); r.setEnd(t, i + 4); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await desk.keyboard.press('Control+Shift+C');
+  await desk.locator('#acText').evaluate(el => { const w = [...el.childNodes].filter(n => n.nodeType === 3).pop(), r = document.createRange(), i = w.textContent.lastIndexOf('cell'); r.setStart(w, i); r.setEnd(w, i + 4); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await desk.keyboard.press('Control+Alt+Shift+C');
+  const txt = await desk.evaluate(async () => (await import('./js/card-editor.js')).readCardText('acText'));
+  ok(txt === 'The cell {{c1::wall}} holds the {{c1::cell}}', 'Ctrl+Shift+C makes a new blank, Ctrl+Alt+Shift+C reuses the last number: ' + txt);
+  ok((await desk.textContent('#acTextPrev .cloze-makes')) === 'Makes 1 card: c1', 'two blanks with one number make one card');
+  await desk.click('button[type=submit][form=acForm]'); await desk.waitForFunction(() => document.querySelector('.ckind'));
+  await desk.click('#acDone'); await desk.waitForFunction(() => !document.getElementById('sheet').open);
+  // the short editor (the one Review and Play open with E)
+  await desk.evaluate(async () => { const db = await import('./js/db.js'), b = await import('./js/browse.js');
+    const c = (await db.getAll('cards')).find(x => x.noteId && x.cloze === 1);
+    b.openCardPanel(c, { decks: await db.getDecks(), statesById: new Map(), mode: 'edit', refresh: async () => {} }); });
+  await desk.waitForSelector('#ceText');
+  ok(!(await desk.isVisible('#ceFront').catch(() => false)) && (await desk.textContent('#ceTextPrev .cloze-makes')).startsWith('Makes'), 'the short editor opens a cloze card as a cloze note, with the preview');
+  await desk.screenshot({ path: SP + '/cloze-editor-1440.png' });
+  await desk.close();
+}
+
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();

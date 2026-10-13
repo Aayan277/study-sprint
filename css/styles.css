@@ -1107,6 +1107,22 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .rich{min-height:calc(var(--rows,2) * 1.55em + 24px);padding:11px 13px;line-height:1.55;overflow-wrap:anywhere;cursor:text}
 .rich:empty::before{content:attr(data-placeholder);color:var(--text-3)}
 
+/* Cloze cards: the Basic | Cloze switch, the blank buttons, the live preview, and the blanks on a card.
+   A hidden blank is a quiet accent pill; the answer on the back is the accent colour, like the line above it. */
+.kind-switch{margin-bottom:var(--s-3)}
+.cloze-tools{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-bottom:var(--s-2)}
+.cloze-tools .btn{min-height:44px}
+.cloze-prev{margin:calc(var(--s-1) * -1) 0 var(--s-3);padding:8px 12px;border-left:3px solid var(--accent-line);overflow-wrap:anywhere}
+.cloze-makes{margin:0;font-size:var(--fs-sm);color:var(--text-2);font-weight:500}
+.cloze-render{margin-top:var(--s-1);font-size:var(--fs-base);line-height:1.5;white-space:pre-line}
+.cloze-help{margin:0 0 var(--s-3)}
+.ckind{display:inline-block;padding:0 6px;border-radius:var(--r-pill);background:var(--accent-tint);color:var(--accent-text);font-size:var(--fs-xs);font-weight:600;vertical-align:1px}
+.cloze-blank{display:inline-block;padding:0 .35em;border-radius:.3em;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);font-weight:650;white-space:normal}
+mark.cloze-ans{padding:0 .15em;border-radius:.25em;background:var(--accent-tint);color:var(--accent-text);font-weight:650;box-shadow:inset 0 -2px 0 var(--accent-line)}
+.cloze-render mark.cloze-ans{box-shadow:inset 0 0 0 1px var(--accent-line)}
+.flash-extra{margin:var(--s-3) 0 0;font-size:var(--fs-sm);color:var(--text-2);line-height:1.5;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
+.flash-back.cloze-full{font-size:clamp(1.25rem,5.4vw,1.6rem);font-weight:550;line-height:1.35}
+
 /* Settings → Appearance → Card text alignment (js/themes.js sets data-align on <html>).
    Auto leaves the rules above alone: short text centred, long answers left. */
 html[data-align="center"] :is(.flash-front,.flash-recap,.flash-back){text-align:center}

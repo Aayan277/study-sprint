@@ -59,6 +59,13 @@ export function wrapBlank(value, start, end, n) {
   const open = `{{c${n}::`;
   return { value: value.slice(0, start) + open + sel + '}}' + value.slice(end), start: start + open.length, end: start + open.length + sel.length };
 }
+// With nothing selected, the word the cursor is in or touching (so "New blank" hides that word).
+export function wordAt(value, pos) {
+  let start = pos, end = pos;
+  while (start > 0 && /[\p{L}\p{N}'’-]/u.test(value[start - 1])) start--;
+  while (end < value.length && /[\p{L}\p{N}'’-]/u.test(value[end])) end++;
+  return [start, end];
+}
 // The next free blank number, and the one used last (for "same blank").
 export const nextNumber = text => Math.max(0, ...clozeNumbers(text)) + 1;
 export const lastNumber = text => Math.max(1, ...clozeNumbers(text));
