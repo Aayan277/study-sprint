@@ -39,7 +39,7 @@ const alpha = c => +(c.match(/[\d.]+/g)[3] ?? 1);
 ok(alpha(bars[0]) >= .9 && alpha(bars[1]) >= .85, 'tab bar and header are nearly solid: ' + bars.join(' | '));
 // Stats keeps its mono numbers
 await go(p, '#/stats', '.pgrid');
-ok(/Mono/i.test(await css(p, '.pgrid .big', 'fontFamily')) && await css(p, '.pgrid .big', 'fontSize') === '40px', 'Stats big numbers stay mono at 40px');
+ok(!/Mono/i.test(await css(p, '.pgrid .big', 'fontFamily')) && await css(p, '.pgrid .big', 'fontSize') === '40px', 'Stats big numbers use Geist (no monospace) at 40px');
 
 // ----- A3: exam colors -----
 await go(p, '#/today', '.exam-row');
