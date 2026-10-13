@@ -105,3 +105,19 @@ test('password rules for new passwords: 8+ characters, a letter and a number', (
   assert.equal(passwordMissing('12345678'), 'a letter');
   assert.equal(passwordMissing('secret123'), '');
 });
+
+test('cloze fields sync as they are, and siblings that diverged are healed', async () => {
+  const { clozeCard, healNotes } = await import('../js/cloze.js');
+  const text = 'A {{c1::b}} c {{c2::d}}';
+  const card = { id: 'k1', deckId: 'd', ...clozeCard(text, 1), noteId: 'N', cloze: 1, noteText: text, noteExtra: 'x', updatedAt: NOW };
+  const back = recordFromRow(rowFromRecord('cards', card));
+  assert.equal(back.noteId, 'N'); assert.equal(back.cloze, 1); assert.equal(back.noteText, text); assert.equal(back.noteExtra, 'x');
+  // Device A edited c1's card, device B edited c2's card: after syncing each keeps its own newest text.
+  const textA = 'A {{c1::bee}} c {{c2::d}}', textB = 'A {{c1::b}} c {{c2::dee}}';
+  const a = { ...card, ...clozeCard(textA, 1), noteText: textA, updatedAt: NOW + 5 };
+  const b = { id: 'k2', deckId: 'd', ...clozeCard(textB, 2), noteId: 'N', cloze: 2, noteText: textB, updatedAt: NOW + 9 };
+  const fixed = healNotes([a, b]);
+  assert.deepEqual(fixed.map(c => c.id), ['k1']);
+  assert.equal(fixed[0].noteText, textB);
+  assert.equal(fixed[0].front, 'A […] c dee');
+});

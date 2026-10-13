@@ -317,6 +317,34 @@ export async function deleteCards(cardIds) {
   changed();
 }
 
+// Save a cloze note: every card of the note in one transaction, with the same change time.
+//   plan    { update, add, remove } from planNoteSave() in cloze.js: cards to rewrite, blanks that need a new card,
+//           and cards whose blank is gone (they are deleted with their schedule and history: the editor asks first)
+//   common  fields every card of the note shares (deckId, noteId, tags, noteExtra). A value of undefined or ''
+//           takes the field off the cards.
+// Returns the saved cards.
+export async function saveNote({ update = [], add = [], remove = [] }, common = {}) {
+  const db = await openDB();
+  const tx = db.transaction(['cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  const saved = [];
+  const shared = card => {
+    const out = { ...card, ...common };
+    for (const [k, v] of Object.entries(common)) if (v === undefined || v === '') delete out[k];
+    return out;
+  };
+  await inTx(tx, () => {
+    const cards = tx.objectStore('cards');
+    for (const c of update) saved.push(shared(c));
+    add.forEach((c, i) => saved.push(shared({ id: newId(), created: now + i, ...c })));
+    saved.forEach(c => cards.put(stamp('cards', c, now)));
+    for (const c of remove) deleteCardIn(tx, c.id, now);
+  });
+  scheduleChanges++;
+  changed();
+  return saved;
+}
+
 // Change schedules directly (set a due date), or remove them (reset a card to new).
 // The review history is kept either way.
 export async function putStates(states) { await putMany('cardStates', states); scheduleChanges++; }
