@@ -1,18 +1,102 @@
 {
   "name": "Study Sprint",
   "short_name": "Study Sprint",
-  "description": "Flashcards for university courses: spaced repetition plus timed game rounds.",
+  "description": "Free flashcards with real spaced repetition, exam dates and timed game rounds. Works offline, no account.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#08090C",
   "theme_color": "#08090C",
   "lang": "en",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-monochrome-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "monochrome"
+    }
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "categories": [
+    "education",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "Today's review",
+      "short_name": "Review",
+      "description": "Start what is due today",
+      "url": "./#/today"
+    },
+    {
+      "name": "Play a round",
+      "short_name": "Play",
+      "description": "Timed game rounds",
+      "url": "./#/play"
+    },
+    {
+      "name": "Add cards",
+      "short_name": "Add cards",
+      "description": "Paste notes or import a file",
+      "url": "./#/import"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "docs/screenshots/today.png",
+      "sizes": "750x1624",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Today: one Start button for everything due"
+    },
+    {
+      "src": "docs/screenshots/review.png",
+      "sizes": "750x1624",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Review with spaced repetition"
+    },
+    {
+      "src": "docs/screenshots/play.png",
+      "sizes": "750x1624",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Timed game rounds"
+    },
+    {
+      "src": "docs/screenshots/desktop.png",
+      "sizes": "1440x900",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Study Sprint on a computer"
+    }
   ]
 }

@@ -128,5 +128,39 @@ for (const [how, init] of [['navigator.standalone', () => Object.defineProperty(
   await p.context().close();
 }
 
+// ---------- D3, D4: link previews, icons and the manifest ----------
+p = await open(browser);
+await p.goto(URL); await p.waitForSelector('.today-hero');
+const meta = async (sel, attr = 'content') => p.locator(sel).first().getAttribute(attr);
+const BASE = 'https://aayan277.github.io/study-sprint/';
+const img = await meta('meta[property="og:image"]');
+ok(img.startsWith(BASE) && img.endsWith('.png'), 'og:image is an absolute address on the live site: ' + img);
+ok(await meta('meta[property="og:url"]') === BASE && await meta('link[rel=canonical]', 'href') === BASE, 'og:url and the canonical link point at the live site');
+ok(await meta('meta[property="og:type"]') === 'website' && (await meta('meta[property="og:title"]')).includes('Study Sprint') && (await meta('meta[property="og:description"]')).length > 40, 'og:type, og:title and og:description are there');
+ok(await meta('meta[name="twitter:card"]') === 'summary_large_image' && (await meta('meta[name="twitter:image"]')).startsWith(BASE), 'Twitter card is summary_large_image with an absolute image');
+ok(/spaced repetition/.test(await meta('meta[name=description]')) && /Works offline/.test(await meta('meta[name=description]')), 'the page description is the sharp one');
+// the image itself (served from this folder: the same file the live address will serve)
+const og = await (await p.request.get(URL + img.slice(BASE.length))).body();
+ok(og.readUInt32BE(16) === 1200 && og.readUInt32BE(20) === 630 && og.length < 300 * 1024, 'the og image is 1200x630 and under 300 KB: ' + Math.round(og.length / 1024) + ' KB');
+ok(await meta('link[rel=icon][type="image/svg+xml"]', 'href') === 'icons/favicon.svg' && await p.locator('link[rel=icon][type="image/png"]').count() === 1, 'the SVG favicon and the PNG fallback');
+ok((await p.locator('meta[name=theme-color]').evaluateAll(m => m.map(x => x.media).sort().join('|'))) .includes('dark') && await p.locator('meta[name=theme-color]').count() === 2, 'separate dark and light theme-color metas');
+ok(await meta('meta[name=apple-mobile-web-app-status-bar-style]') === 'black-translucent', 'iOS status bar is black-translucent');
+const png = async path => { const r = await p.request.get(URL + path); const b = await r.body(); return { ok: r.ok(), w: b.readUInt32BE(16), h: b.readUInt32BE(20), sig: b.slice(1, 4).toString() }; };
+const man = await (await p.request.get(URL + 'manifest.webmanifest')).json();
+ok(!('orientation' in man) && man.background_color === '#08090C' && man.theme_color === '#08090C', 'manifest: no orientation lock, splash colors #08090C');
+ok(man.categories.includes('education') && man.display_override.includes('standalone') && /spaced repetition/.test(man.description), 'manifest: categories, display_override and description');
+ok(['Review', 'Play', 'Add cards'].every(n => man.shortcuts.some(s => s.short_name === n)), 'manifest: shortcuts Review, Play, Add cards');
+ok(man.screenshots.some(s => s.form_factor === 'narrow') && man.screenshots.some(s => s.form_factor === 'wide'), 'manifest: narrow and wide screenshots');
+for (const s of man.screenshots) { const r = await png(s.src); ok(r.ok && s.sizes === r.w + 'x' + r.h, 'screenshot ' + s.src + ' exists and is ' + s.sizes); }
+for (const purpose of ['any', 'maskable', 'monochrome']) ok(man.icons.some(i => i.purpose === purpose), 'manifest has a "' + purpose + '" icon');
+for (const i of man.icons) {
+  if (i.type === 'image/png') { const r = await png(i.src); ok(r.ok && r.sig === 'PNG' && i.sizes === r.w + 'x' + r.h, 'icon ' + i.src + ' is reachable and ' + i.sizes); }
+  else ok((await p.request.get(URL + i.src)).ok(), 'icon ' + i.src + ' is reachable');
+}
+ok((await png('icons/apple-touch-icon.png')).w === 180, 'the Apple touch icon is 180x180');
+const sw = await (await p.request.get(URL + 'sw.js')).text();
+ok(['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-monochrome-512.png', 'favicon.svg', 'apple-touch-icon.png'].every(f => sw.includes("'icons/" + f + "'")) && sw.includes("'js/install.js'"), 'sw.js saves the icons and install.js for offline');
+await p.context().close();
+
 await real.close(); await browser.close();
 if (errors.length) { console.log('ERRORS\n' + errors.join('\n')); process.exitCode = 1; }
