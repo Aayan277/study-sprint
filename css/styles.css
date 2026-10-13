@@ -777,20 +777,19 @@ main[data-route="import"] > .view > .savebar{order:5}
 fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .lede b{color:var(--text);font-weight:700}
 .modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-/* Phones: the three formats stay side by side as compact tiles (the selected one is explained under them),
-   so the deck, the format and Start all fit on the first screen. */
-.fmt-note{margin-top:var(--s-2);min-height:1.4em}
-@media (min-width:561px){.fmt-note{display:none}}
+/* Phones: the three formats stay side by side as compact tiles, so the deck, the format and Start all fit on the first screen. */
 @media (max-width:560px){
   .modes{gap:var(--s-2)}
   .mode{align-items:center;text-align:center;padding:10px 4px;gap:0}
-  .mode-desc{display:none}
   main[data-route="play"] fieldset{margin-bottom:var(--s-3)}
   main[data-route="play"] legend{font-size:var(--fs-sm);color:var(--text-2);padding:0 0 var(--s-1)}
   main[data-route="play"] .screen-head{margin-bottom:var(--s-3)}
   .start-row .btn{flex:1 1 auto}
 }
-.play-note{margin-top:var(--s-4)}
+.how-score{margin-top:var(--s-4);font-size:var(--fs-sm);color:var(--text-2)}
+.how-score summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+.how-score p{margin:0 0 var(--s-2)}
+.how-score b{color:var(--text)}
 .mode,.opt,.skin{border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-1)}
 .mode{position:relative;display:flex;flex-direction:column;gap:2px;padding:14px var(--s-4);cursor:pointer;min-width:0}
 .mode:hover,.skin:hover,.opt:hover:not(:disabled){border-color:var(--accent-line)}
@@ -801,7 +800,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mode-ex .clock{font-family:var(--f-num);font-weight:600}
 .mode-ex .hearts{color:var(--again);letter-spacing:3px;font-family:var(--f-num);font-size:1.05rem}
 .mode-name{font-weight:600}
-.mode-desc{font-size:var(--fs-base);color:var(--text-2)}
+.mode-desc{font-size:var(--fs-sm);color:var(--text-2)}
 .mode-best{font-size:var(--fs-sm);color:var(--text-2)}
 .mode-best b{color:var(--text);font-weight:600}
 .settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
@@ -919,7 +918,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2);margin-bottom:var(--s-2)}
 @media (max-width:560px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.pgrid .card{padding:var(--s-3) var(--s-3) var(--s-4);display:flex;flex-direction:column}
+.pgrid .card{height:100%;padding:var(--s-3) var(--s-3) var(--s-4);display:flex;flex-direction:column}
 .pgrid .card:first-child{background:var(--hero)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
 .pgrid .card p{margin:var(--s-2) 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-2)}
@@ -934,6 +933,11 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .wd.on i::after{content:"";width:4px;height:8px;border:solid var(--on-accent);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-.5px,-1px)}
 .wd.today span{color:var(--text);font-weight:600}
 .card.section{margin-bottom:var(--s-2)}
+main[data-route="stats"] .card.section{display:flex;flex-direction:column}
+/* In a Stats card: the chart takes the spare height and the note under it sits at the bottom, so paired cards line up */
+main[data-route="stats"] .card.section > .chart{flex:1 1 auto;display:flex;flex-direction:column}
+main[data-route="stats"] .card.section > .chart .chart-plot{flex:1 1 150px;min-height:150px;max-height:240px}
+main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;padding-top:var(--s-2)}
 
 /* column charts: thin bars with rounded tops, hairline grid, labels in text colors */
 .chart{position:relative}
@@ -1196,7 +1200,10 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   .today-hero .btn.big,.today-hero .th-done{grid-column:2;grid-row:1 / span 2}
   .tdecks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s-3)}
   /* Stats: two columns of panels */
-  main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--s-3);align-items:start}
+  main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2) var(--s-3);align-items:stretch}
+  /* Cards in a row are one height: the gap replaces the cards' bottom margin, and each card's footer note sits at its bottom */
+  main[data-route="stats"] .card.section,main[data-route="stats"] .ready-card{margin-bottom:0;height:100%}
+  main[data-route="stats"] .pgrid{margin-bottom:0}
   main[data-route="stats"] > .view > :not(.card):not(.more-stats){grid-column:1 / -1}
   /* "More stats" is only a fold on phones: here its cards join the grid, in the order they always had */
   main[data-route="stats"] .stats-hardest{order:2}

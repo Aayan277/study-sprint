@@ -92,7 +92,7 @@ const right = info.logs.filter(l => l.reason === 'first' && l.cardId !== wrongId
 ok(right.length >= 1 && right.every(l => l.rating === 3 || l.rating === 2), 'right multiple-choice answers are Good or Hard, never Easy');
 ok(info.states.some(s => s.cardId === wrongId && s.state === 1), 'the missed card is now learning');
 const note = await page.textContent('.sched-note');
-ok(/new cards? started, because (its|their) deck has an exam/.test(note), 'the results note explains why new cards started');
+ok(/new cards? started \(exam deck\)/.test(note), 'the results note explains why new cards started');
 ok(/over today.s new-card limit/.test(note), 'and mentions the cards over the limit');
 await page.screenshot({ path: SP + '/play-results-exam.png', fullPage: true });
 
@@ -113,7 +113,7 @@ if (states0 === 0) {
   await playRound();
   const n = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cardStates')).length);
   ok(n === 0, 'no exam: Play still leaves new cards for Review');
-  ok(/start in Review, not here/.test(await page.textContent('.sched-note')), 'and the note says so');
+  ok(/start in Review/.test(await page.textContent('.sched-note')), 'and the note says so');
 } else console.log('   (skipped the no-exam round: could not clear schedules)');
 
 await browser.close();

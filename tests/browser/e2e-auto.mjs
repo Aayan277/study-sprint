@@ -67,7 +67,7 @@ for (const l of logs) {
   if (c.cat === 'new') ok(!s, `new card was not scheduled (${c.front})`);
 }
 ok(checks === logs.length, `log rows match the rules (${checks}/${logs.length})`);
-ok(/Review schedule updated/.test(note1), 'results screen explains the schedule change');
+ok(/Schedule updated/.test(note1), 'results screen explains the schedule change');
 
 // Second round the same day: nothing already changed by Play changes again.
 const appliedFirst = new Set(logs.filter(l => l.applied).map(l => l.cardId));

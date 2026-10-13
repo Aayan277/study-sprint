@@ -112,8 +112,8 @@ export async function renderPlay(el) {
     const best = settings.playBest?.[bestKey(prefs)];
     const typing = prefs.qtype === 'typing';
     const notes = [];
-    if (prefs.fmt === 'survival') notes.push('Each question gets 3% less time, down to a 2s floor.');
-    if (typing) notes.push(`Typing gets ${TYPING_TIME}× the time (${Math.round(pace * TYPING_TIME)}s${prefs.fmt === 'survival' ? ' to start' : ''}).`);
+    if (prefs.fmt === 'survival') notes.push('Timer shrinks 3% a question, 2s floor.');
+    if (typing) notes.push(`Typing gets ${TYPING_TIME}× time: ${Math.round(pace * TYPING_TIME)}s${prefs.fmt === 'survival' ? ' to start' : ''}.`);
     const paceName = pace <= 4 ? 'Sprint' : pace <= 7 ? 'Quick' : pace <= 10 ? 'Standard' : pace <= 14 ? 'Relaxed' : 'Easy';
     const radio = (name, value, label, checked, extra = '') =>
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
@@ -122,7 +122,7 @@ export async function renderPlay(el) {
     const timeText = prefs.fmt === 'lightning' ? '60 s clock' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
     const summary = [typing ? 'Typing' : QTYPES[prefs.qtype], prefs.hard ? 'Hard' : 'Normal', prefs.flash ? `Flash ${prefs.flash / 1000}s` : null,
       prefs.fmt === 'classic' ? `${prefs.len} questions` : null, timeText].filter(Boolean).join(' · ');
-    const fmtDesc = { classic: 'A set number of questions, with a timer on each.', survival: '3 lives. The timer gets shorter every question.', lightning: '60 seconds on the clock. Wrong answers cost 3s.' };
+    const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
 
     el.innerHTML = `
       <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1></div></div>
@@ -138,10 +138,9 @@ export async function renderPlay(el) {
       <fieldset><legend>Format</legend>
         <div class="modes three">
           ${[['classic', `${prefs.len} Q`], ['survival', '<span class="hearts" aria-hidden="true">●●●</span>'], ['lightning', '<span class="clock">1:00</span>']].map(([v, ex]) => `
-            <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''} aria-describedby="fmtNote">
+            <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''}>
               <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span><span class="mode-desc">${fmtDesc[v]}</span></label>`).join('')}
         </div>
-        <p class="note fmt-note" id="fmtNote">${fmtDesc[prefs.fmt]}</p>
       </fieldset>
 
       <div class="start-row">
@@ -158,20 +157,20 @@ export async function renderPlay(el) {
           ${radio('qtype', 'back', 'Back → pick the front', prefs.qtype === 'back', mcOk ? '' : 'disabled')}
           ${radio('qtype', 'typing', 'Typing', typing, typeCount ? '' : 'disabled')}
         </div>
-        <p class="note">${!mcOk ? 'Multiple choice needs at least 4 cards with different answers. Use Typing, or Review.'
-          : typing ? `You type the shorter side (40 characters or less). ${typeCount} of ${pool.length} cards can be typed.`
-          : suggested ? 'Starting on Back → front because this deck has long answers: you read the definition and pick the term, which is closer to an exam.'
-          : 'Wrong options come from other cards in the deck.'}</p>
+        ${(!mcOk || typing || suggested) ? `<p class="note">${!mcOk ? 'Multiple choice needs 4+ cards with different answers.'
+          : typing ? `${typeCount} of ${pool.length} cards fit typing (40 characters max).`
+          : suggested ? 'Back → front suits this deck’s long answers.'
+          : ''}</p>` : ''}
       </fieldset>
 
       <div class="settings">
         <fieldset><legend>Difficulty</legend>
           <div class="chips">${radio('diff', 'normal', 'Normal', !prefs.hard)}${radio('diff', 'hard', 'Hard', prefs.hard)}</div>
-          <p class="note">${prefs.hard ? 'Hard: 6 options with lookalike traps, −50 for each wrong answer, ×1.25 points. Typing gets no typo forgiveness.' : 'Normal: 4 options.'}</p>
+          ${prefs.hard ? '<p class="note">6 options, −50 per miss, ×1.25 points, no typo forgiveness.</p>' : ''}
         </fieldset>
         <fieldset><legend>Flash</legend>
           <div class="chips">${[0, 1200, 800, 500].map(f => radio('flash', f, f ? `${f / 1000}s` : 'Off', prefs.flash === f)).join('')}</div>
-          <p class="note">${prefs.flash ? `The question disappears after ${prefs.flash / 1000}s, so read fast. Answers score ×1.2.` : 'Make the question vanish a moment after it appears.'}</p>
+          ${prefs.flash ? `<p class="note">Question hides after ${prefs.flash / 1000}s. Points ×1.2.</p>` : ''}
         </fieldset>
       </div>
 
@@ -179,7 +178,7 @@ export async function renderPlay(el) {
         ${prefs.fmt === 'classic' ? `<fieldset><legend>Questions</legend>
           <div class="chips">${[10, 20, 40].map(n => radio('len', n, n, prefs.len === n)).join('')}</div></fieldset>` : ''}
         ${prefs.fmt === 'lightning' ? `<fieldset><legend>Clock</legend>
-          <p class="lightning-note">You get <b>60 seconds</b> total, with no timer per question. Each wrong answer takes <b>3 seconds</b> off. The clock pauses while you read the answer.</p></fieldset>` : `
+          <p class="lightning-note"><b>60 seconds</b> in all. A wrong answer costs <b>3s</b>.</p></fieldset>` : `
         <fieldset><legend id="paceLegend">${prefs.fmt === 'survival' ? 'Starting time per question' : 'Time per question'}</legend>
           <div class="slider-row">
             <input type="range" id="pace" min="3" max="20" step="1" value="${pace}" aria-labelledby="paceLegend">
@@ -190,8 +189,9 @@ export async function renderPlay(el) {
       </div>
       </div>
 
-      <p class="note play-note">A right answer scores <b>100</b>, plus up to <b>100</b> more for speed, multiplied by your streak (up to <b>×1.5</b>).
-        Answers on cards that are due count as their review, and so do new cards in a deck with an exam.</p>
+      <details class="how-score"><summary>ⓘ How scoring works</summary>
+        <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
+        <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
       <p class="hint mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
     if (!cards.length) return;
@@ -538,16 +538,16 @@ async function scheduleSummary(round) {
   const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
   const parts = [];
-  if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded from your answers`);
-  if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back for review`);
+  if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
+  if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back`);
   // New cards in a deck with an exam are started by Play (autograde.js).
-  if (started) parts.push(`<b>${plural(started, 'new card')}</b> started, because ${started === 1 ? 'its' : 'their'} deck has an exam coming up`);
+  if (started) parts.push(`<b>${plural(started, 'new card')}</b> started (exam deck)`);
   const text = parts.length
-    ? `Review schedule updated: ${parts.join(', ')}.`
-    : 'No cards were due, so your review schedule didn’t change.';
-  const extra = (fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review, not here.` : '')
-    + (over ? ` ${plural(over, 'new card')} ${over === 1 ? 'was' : 'were'} over today’s new-card limit, so ${over === 1 ? 'it starts' : 'they start'} in Review.` : '');
-  return `<p class="sched-note">${text}${extra} Every answer counts toward your stats.</p>`;
+    ? `Schedule updated: ${parts.join(', ')}.`
+    : 'No cards were due: schedule unchanged.';
+  const extra = (fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review.` : '')
+    + (over ? ` ${plural(over, 'new card')} over today’s new-card limit ${over === 1 ? 'starts' : 'start'} in Review.` : '');
+  return `<p class="sched-note">${text}${extra}</p>`;
 }
 
 async function finish() {
@@ -583,7 +583,7 @@ async function finish() {
     <div class="res-head">
       <div class="stamp press" aria-label="Grade ${letter}"><span>${letter}</span></div>
       <div style="min-width:0">
-        <p class="res-grade">${label} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${QTYPES[round.qtype]} · ${esc(deckName)}</p>
+        <p class="res-grade">${label} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
         <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
         ${line ? `<p class="res-line">${line}</p>` : ''}
         ${isBest ? '<p class="newbest">New best for this setup</p>' : ''}
