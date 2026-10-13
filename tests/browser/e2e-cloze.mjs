@@ -274,11 +274,14 @@ ok(prev.includes('1 note') && prev.includes('3 cards') && prev.includes('1 group
 ok((await page.locator('#linkOut mark.cloze-ans').count()) === 3, 'the preview shows the note with its 3 blanks');
 await page.screenshot({ path: SP + '/cloze-link-375.png' });
 ok((await deckCards('Old cloze import')).every(c => !c.noteId), 'nothing changes before you press Link');
-await page.click('#linkNo'); await page.click('#linkFind'); await page.waitForSelector('#linkGo'); await page.click('#linkGo');
+await page.click('#linkNo'); await page.click('#linkFind'); await page.waitForSelector('#linkGo');
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.saveCards([{ ...(await db.get('cards', 'old2')), tags: ['changed-after-preview'] }]); });
+await page.click('#linkGo');
 await page.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Linked'));
 const linked = await deckCards('Old cloze import');
 const mem = linked.filter(c => c.noteId);
 ok(mem.length === 3 && new Set(mem.map(c => c.noteId)).size === 1 && mem[0].noteText === 'The {{c1::cell}} has a {{c2::nucleus::organelle}} and {{c3::DNA}}', 'applying links the 3 cards into one note: ' + (mem[0] || {}).noteText);
+ok(mem.find(c => c.id === 'old2').tags?.[0] === 'changed-after-preview', 'a change made after the preview is kept (the cards are read again)');
 ok(mem.map(c => c.id).join() === 'old1,old2,old3' && mem[1].front === 'The cell has a [organelle] and DNA' && mem[1].cloze === 2, 'the same cards, same fronts, with their blank numbers');
 const kept = await page.evaluate(async () => { const db = await import('./js/db.js'); return { st: await db.get('cardStates', 'old2'), logs: (await db.getCardLogs('old2')).length }; });
 ok(kept.st && kept.st.stability === 7 && kept.logs === 1, 'schedule and history are kept');

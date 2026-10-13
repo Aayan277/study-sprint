@@ -481,9 +481,16 @@ function wireLinkTool(cards, { scope, refresh }) {
     $('linkNo').addEventListener('click', () => { $('linkOut').innerHTML = ''; });
     $('linkGo').addEventListener('click', async () => {
       $('linkGo').disabled = true;
+      // The cards are read again, so a change made since the preview (a tag, a suspend, a deleted card) is kept.
+      // A card that was deleted, edited or linked in the meantime is left out.
+      const nowCards = new Map((await db.getAll('cards')).map(c => [c.id, c]));
       const changed = notes.flatMap(n => {
         const noteId = db.newId();
-        return n.members.map(({ card, cloze }) => ({ ...card, noteId, cloze, noteText: n.noteText, ...clozeCard(n.noteText, cloze) }));
+        return n.members.flatMap(({ card, cloze }) => {
+          const fresh = nowCards.get(card.id);
+          if (!fresh || fresh.noteId || fresh.front !== card.front || fresh.back !== card.back) return [];
+          return [{ ...fresh, noteId, cloze, noteText: n.noteText, ...clozeCard(n.noteText, cloze) }];
+        });
       });
       await db.saveCards(changed);
       toast(`Linked ${plural(linked, 'card')} into ${plural(notes.length, 'note')}`);
