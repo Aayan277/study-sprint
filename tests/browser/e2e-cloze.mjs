@@ -32,7 +32,7 @@ let r = await page.evaluate(async T => {
   await db.saveNote(cz.planNoteSave(sibs, T2), { deckId: deck.id, noteId, tags: ['bio'], noteExtra: 'Powerhouse' });
   sibs = await siblings();
   const logs = await db.getAll('reviewLog');
-  return { first, nums: sibs.map(c => c.cloze), same: new Set(sibs.map(c => c.updatedAt)).size, extra: sibs.map(c => c.noteExtra),
+  return { first, nums: sibs.map(c => c.cloze), same: new Set(sibs.map(c => c.updatedAt)).size, edited: new Set(sibs.map(c => c.noteEditedAt)).size === 1 && typeof sibs[0].noteEditedAt === 'number' && sibs[0].noteEditedAt >= first[0].at, extra: sibs.map(c => c.noteExtra),
     c2Kept: sibs[1].id === c2 && !!(await db.get('cardStates', c2)) && logs.some(l => l.cardId === c2),
     c3Gone: !(await db.get('cards', c3)) && !(await db.get('cardStates', c3)) && !logs.some(l => l.cardId === c3),
     tombstone: (await db.getAll('deleted')).some(d => d.store === 'cards' && d.id === c3) };
@@ -40,6 +40,7 @@ let r = await page.evaluate(async T => {
 ok(r.first.length === 3 && r.first[0].front === 'The […] makes ATP for the cell' && r.first[0].back === 'mitochondria' && r.first.every(c => c.tags[0] === 'bio'), 'saveNote makes one card per blank, with front and back');
 ok(new Set(r.first.map(c => c.at)).size === 1, 'all siblings share one save time');
 ok(r.nums.join() === '1,2,4' && r.same === 1 && r.extra.every(e => e === 'Powerhouse'), 'edit: c3 gone, c4 added, extra on every card');
+ok(r.edited, 'edit: every sibling carries the same noteEditedAt');
 ok(r.c2Kept, 'edit: c2 keeps its card, schedule and history');
 ok(r.c3Gone && r.tombstone, 'edit: the removed blank deletes its card, schedule and history, leaving a deleted marker');
 

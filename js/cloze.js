@@ -109,16 +109,22 @@ export function planNoteSave(oldSiblings, newText) {
 }
 
 // Two devices can edit different siblings of one note while offline, and syncing keeps the newest of each card,
-// so the siblings can end up with different texts. Make them agree again: the text of the most recently edited
-// sibling wins, and the others get their front and back worked out from it. Returns the cards to save.
-// (A sibling whose blank is no longer in the winning text is left as it is.)
+// so the siblings can end up with different texts. Make them agree again: the text with the latest noteEditedAt
+// (the time the note's text was last edited, which saveNote writes on every sibling) wins, and the others get
+// their front and back worked out from it. Saving a single card (suspend, bury, flag) re-stamps its updatedAt
+// but keeps its old noteEditedAt, so it can't win. Equal times are settled by card id, so every device picks the
+// same winner. Cards without noteEditedAt (saved before it existed) only compete with each other, by updatedAt.
+// The fixed cards get the winner's noteEditedAt (never "now"), so healing can't beat a real edit made elsewhere.
+// Returns the cards to save. (A sibling whose blank is no longer in the winning text is left as it is.)
 export function healNotes(cards) {
   const notes = new Map();
   for (const c of cards) if (c.noteId && c.noteText !== undefined) (notes.get(c.noteId) || notes.set(c.noteId, []).get(c.noteId)).push(c);
   const fixed = [];
   for (const sibs of notes.values()) {
     if (sibs.every(s => s.noteText === sibs[0].noteText && s.noteExtra === sibs[0].noteExtra)) continue;
-    const newest = sibs.reduce((a, b) => ((b.updatedAt || 0) > (a.updatedAt || 0) || ((b.updatedAt || 0) === (a.updatedAt || 0) && b.id > a.id) ? b : a));
+    const stamped = sibs.filter(s => s.noteEditedAt !== undefined);
+    const time = stamped.length ? s => s.noteEditedAt : s => s.updatedAt || 0;
+    const newest = (stamped.length ? stamped : sibs).reduce((a, b) => (time(b) > time(a) || (time(b) === time(a) && b.id > a.id) ? b : a));
     const nums = clozeNumbers(newest.noteText);
     for (const s of sibs) {
       if (!nums.includes(s.cloze)) continue;
@@ -126,6 +132,7 @@ export function healNotes(cards) {
       if (s.noteText === newest.noteText && s.noteExtra === newest.noteExtra && s.front === front && s.back === back) continue;
       const card = { ...s, front, back, noteText: newest.noteText };
       if (newest.noteExtra) card.noteExtra = newest.noteExtra; else delete card.noteExtra;
+      if (newest.noteEditedAt !== undefined) card.noteEditedAt = newest.noteEditedAt;
       fixed.push(card);
     }
   }

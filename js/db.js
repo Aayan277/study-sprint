@@ -329,7 +329,7 @@ export async function saveNote({ update = [], add = [], remove = [] }, common = 
   const now = Date.now();
   const saved = [];
   const shared = card => {
-    const out = { ...card, ...common };
+    const out = { ...card, ...common, noteEditedAt: now };     // when the note's text was last edited (healNotes picks the newest)
     for (const [k, v] of Object.entries(common)) if (v === undefined || v === '') delete out[k];
     return out;
   };

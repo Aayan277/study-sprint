@@ -98,6 +98,30 @@ test('healing: a sibling whose blank is gone is left alone', () => {
   assert.deepEqual(fixed.map(c => c.id).sort(), ['k1']);
 });
 
+test('healing: a later suspend with the old text does not undo a real note edit', () => {
+  const newText = 'The {{c1::mitochondria}} makes {{c2::ATP}} for the {{c3::cell}} and {{c4::more}}';
+  const edited = n => ({ id: 'k' + n, deckId: 'd', noteId: 'N', cloze: n, ...clozeCard(newText, n), noteText: newText, noteEditedAt: 100, updatedAt: 100 });
+  // Device A edited the note (and added c4). Device B suspended c2 later, still with the old text.
+  const c2 = sib(2, { suspended: true, updatedAt: 200 });
+  const fixed = healNotes([edited(1), c2, edited(3), edited(4)]);
+  assert.deepEqual(fixed.map(c => c.id), ['k2']);
+  assert.equal(fixed[0].noteText, newText);
+  assert.equal(fixed[0].suspended, true);                 // the suspend stays
+  assert.equal(fixed[0].noteEditedAt, 100);               // the edit's own time, not "now"
+  // Healed cards agree, so healing again (on either device) changes nothing: no ping-pong.
+  assert.equal(healNotes([edited(1), fixed[0], edited(3), edited(4)]).length, 0);
+});
+
+test('healing: equal edit times are settled by card id; cards without an edit time only compete with each other', () => {
+  const tA = 'x {{c1::a}}', tB = 'x {{c1::b}} {{c2::c}}';
+  const a = sib(1, { ...clozeCard(tA, 1), noteEditedAt: 5, noteText: tA }), b = sib(2, { ...clozeCard(tB, 2), noteEditedAt: 5, noteText: tB });
+  const one = healNotes([a, b]), two = healNotes([b, a]);
+  assert.deepEqual(one, two);                             // the order of the cards doesn't matter
+  assert.equal(one[0].noteText, tB);                      // k2 beats k1
+  const legacy = sib(3, { updatedAt: 999, noteText: 'old {{c3::z}}' });
+  assert.equal(healNotes([a, legacy]).length, 0);         // legacy's blank isn't in the winner: left alone, and it can't win
+});
+
 const old = (id, front, back, deckId = 'd') => ({ id, deckId, front, back });
 
 test('link tool: cards of one older import become a note', () => {
