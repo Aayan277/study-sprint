@@ -9,6 +9,7 @@
 // are left out.
 
 import { htmlToMarks } from './format.js';
+import { clozeNumbers, clozeCard } from './cloze.js';
 
 // HTML → plain text, keeping line breaks (formatting dropped). Fields themselves keep their bold,
 // italics and lists as marks: see htmlToMarks in format.js.
@@ -54,23 +55,8 @@ export function mediaList(bytes) {
   return out;
 }
 
-// Cloze: which numbers does a text use? "{{c1::a}} {{c2::b}} {{c1::c}}" → [1, 2]
-const CLOZE = /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g;
-export function clozeNumbers(text) {
-  return [...new Set([...String(text).matchAll(CLOZE)].map(m => +m[1]))].sort((a, b) => a - b);
-}
-
-// One card for cloze number n: that cloze is hidden as […] (or [hint]) on the front, the others are shown,
-// and the back is the hidden answer(s).
-export function clozeCard(text, n) {
-  const answers = [];
-  const front = String(text).replace(CLOZE, (m, num, answer, hint) => {
-    if (+num !== n) return answer;
-    answers.push(answer);
-    return hint ? `[${hint}]` : '[…]';
-  });
-  return { front, back: answers.join(', ') };
-}
+// Cloze helpers live in cloze.js; they're re-exported here for the importer and its tests.
+export { clozeNumbers, clozeCard };
 
 // Turn Anki notes into rows for the import preview.
 //   notes   [{ mid, fields: [html, ...], tags: [...], deck: 'Parent::Child' }]
