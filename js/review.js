@@ -80,7 +80,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor

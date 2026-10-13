@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { splitCards, queueFrom, buildQueue, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
+import { splitCards, queueFrom, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -40,7 +40,9 @@ export async function loadAll({ history = false } = {}) {
   const statesById = new Map(states.map(s => [s.cardId, s]));
   // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
   const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
-  return { settings, decks, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
+  // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
+  const answered = answeredNotes(logs, visible, now);
+  return { settings, decks, answered, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
 
@@ -58,7 +60,7 @@ export function countFor(data, deckIds) {
     reviews: split.reviews.filter(x => ids.has(x.card.deckId)),
     waiting: split.waiting.filter(x => ids.has(x.card.deckId)),
     fresh: split.fresh.filter(c => ids.has(c.deckId))
-  }, data.newLeft, data.reviewLeft);
+  }, data.newLeft, data.reviewLeft, data.answered);
   const fresh = queue.filter(q => q.kind === 'new').length;
   const due = queue.length - fresh + waiting.length;
   // `cards` (every card in these decks) is only worked out if someone asks for it.
@@ -82,8 +84,12 @@ export function nextDueText(data, cards) {
 // kind: 'ahead' (cards due in the next `days` days), 'prep' (exam prep) or 'forgot' (cards forgotten today).
 // Returns { queue, waiting, label } like a normal session, from the cards of the chosen decks.
 export function customQueue(kind, data, cards, days = 3) {
-  if (kind === 'ahead') return { ...aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps), label: 'Review ahead' };
+  if (kind === 'ahead') {
+    const ahead = aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps);
+    return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, data.answered), label: 'Review ahead' };       // follows the one-sibling-a-day rule
+  }
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
+  // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
   return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById), label: 'Exam prep' };

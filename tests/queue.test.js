@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQueue, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, NEW, LEARNING, REVIEW } from '../js/queue.js';
+import { buildQueue, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, REVIEW } from '../js/queue.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();      // 7 Oct 2026, 3pm local time
@@ -232,4 +232,47 @@ test('review ahead leaves out cards the exam brought to today', () => {
   const states = new Map([['a', { state: REVIEW, due: NOW + 40 * DAY }], ['b', { state: REVIEW, due: NOW + 2 * DAY }]]);
   assert.deepEqual(aheadQueue(['a', 'b'].map(card), states, 3, NOW).queue.map(q => q.card.id), ['b']);
   assert.deepEqual(aheadQueue(['a', 'b'].map(card), states, 3, NOW, new Map([['a', dayEnd(NOW) + HOUR]])).queue.map(q => q.card.id), ['a', 'b']);
+});
+
+// ---------- cloze siblings ----------
+const sibCard = (id, note) => ({ id, deckId: 'd', front: id, back: id, ...(note ? { noteId: note, cloze: 1 } : {}) });
+
+test('siblings: two due cards of one note show only one, the most overdue', () => {
+  const cards = [sibCard('a1', 'A'), sibCard('a2', 'A'), sibCard('plain')];
+  const states = new Map([['a1', { state: REVIEW, due: NOW - DAY }], ['a2', { state: REVIEW, due: NOW - 3 * DAY }], ['plain', { state: REVIEW, due: NOW - DAY }]]);
+  const { queue } = buildQueue(cards, states, 5, NOW);
+  assert.deepEqual(queue.map(q => q.card.id).sort(), ['a2', 'plain']);
+});
+
+test('siblings: a learning card comes before a review, a review before a new card', () => {
+  let cards = [sibCard('r', 'A'), sibCard('l', 'A'), sibCard('n', 'A')];
+  let states = new Map([['r', { state: REVIEW, due: NOW - DAY }], ['l', { state: LEARNING, due: NOW + 5 * MIN }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW).queue.map(q => q.card.id), ['l']);
+  states = new Map([['r', { state: REVIEW, due: NOW - DAY }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW).queue.map(q => q.card.id), ['r']);
+  cards = [sibCard('n1', 'A'), sibCard('n2', 'A')];
+  assert.deepEqual(buildQueue(cards, new Map(), 5, NOW).queue.map(q => q.card.id), ['n1']);         // new: the first one
+  // a learning card due later today still holds its place
+  states = new Map([['r', { state: REVIEW, due: NOW - DAY }], ['l', { state: LEARNING, due: NOW + 2 * HOUR }]]);
+  const q = buildQueue([sibCard('r', 'A'), sibCard('l', 'A')], states, 5, NOW);
+  assert.deepEqual([q.queue.length, q.waiting.map(w => w.card.id)], [0, ['l']]);
+});
+
+test('siblings: a card from the note answered today hides the others, but not itself coming back', () => {
+  const cards = [sibCard('a1', 'A'), sibCard('a2', 'A'), sibCard('a3', 'A')];
+  const logs = [{ cardId: 'a1', timestamp: NOW - HOUR, source: 'review' }, { cardId: 'a3', timestamp: NOW - DAY * 2, source: 'review' }, { cardId: 'a3', timestamp: NOW - HOUR, source: 'play', applied: false }];
+  const answered = answeredNotes(logs, cards, NOW);
+  assert.deepEqual([...answered.get('A')], ['a1']);
+  const states = new Map([['a1', { state: LEARNING, due: NOW + 5 * MIN }], ['a2', { state: REVIEW, due: NOW - DAY }], ['a3', { state: REVIEW, due: NOW - DAY }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.map(q => q.card.id), ['a1']);
+  // the learning card has been done with: only a2 and a3 left, and the note was answered today, so nothing shows
+  states.set('a1', { state: REVIEW, due: NOW + 5 * DAY });
+  assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.length, 0);
+});
+
+test('siblings: a hidden sibling does not use up a new-card slot, and ordinary cards are untouched', () => {
+  const cards = [sibCard('n1', 'A'), sibCard('n2', 'A'), sibCard('p1'), sibCard('p2')];
+  const q = buildQueue(cards, new Map(), 2, NOW).queue.map(x => x.card.id);
+  assert.deepEqual(q, ['n1', 'p1']);
+  assert.deepEqual(limitSiblings([{ card: sibCard('x'), kind: 'review' }, { card: sibCard('y'), kind: 'review' }]).length, 2);
 });
