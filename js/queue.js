@@ -82,16 +82,18 @@ export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = ne
 export function limitSiblings(items, noteOf = c => c.noteId, answered = new Map()) {
   const rank = x => (x.kind === 'learn' ? 0 : x.kind === 'review' ? 1 : 2);
   const best = new Map();
+  const learning = new Set();                                         // learning cards are never held back
   const kept = items.filter(x => {
     const note = noteOf(x.card);
     if (!note) return true;
     const today = answered.get(note);
+    if (today && x.kind === 'learn') { learning.add(x); return true; }
     if (today && !today.has(x.card.id)) return false;                // a sibling was answered today
     const cur = best.get(note);
     if (!cur || rank(x) < rank(cur) || (rank(x) === rank(cur) && rank(x) < 2 && (x.due ?? 0) < (cur.due ?? 0))) best.set(note, x);
     return true;
   });
-  return kept.filter(x => { const note = noteOf(x.card); return !note || best.get(note) === x; });
+  return kept.filter(x => { const note = noteOf(x.card); return !note || learning.has(x) || best.get(note) === x; });
 }
 // The cards of each cloze note answered today, from today's review log: Map noteId → Set of card ids.
 // (Play answers that were only logged, not applied to the schedule, don't count.)

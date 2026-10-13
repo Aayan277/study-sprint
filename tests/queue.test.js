@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQueue, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, REVIEW } from '../js/queue.js';
+import { buildQueue, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, RELEARNING, REVIEW } from '../js/queue.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();      // 7 Oct 2026, 3pm local time
@@ -268,6 +268,14 @@ test('siblings: a card from the note answered today hides the others, but not it
   // the learning card has been done with: only a2 and a3 left, and the note was answered today, so nothing shows
   states.set('a1', { state: REVIEW, due: NOW + 5 * DAY });
   assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.length, 0);
+});
+
+test('siblings: learning cards are never held back, even when the whole note was answered today', () => {
+  const cards = [sibCard('a1', 'A'), sibCard('a2', 'A'), sibCard('a3', 'A')];
+  const logs = [{ cardId: 'a1', timestamp: NOW - HOUR, source: 'review' }, { cardId: 'a2', timestamp: NOW - HOUR, source: 'review' }];
+  const answered = answeredNotes(logs, cards, NOW);
+  const states = new Map([['a1', { state: LEARNING, due: NOW + 5 * MIN }], ['a2', { state: RELEARNING, due: NOW + 6 * MIN }], ['a3', { state: REVIEW, due: NOW - DAY }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.map(q => q.card.id).sort(), ['a1', 'a2']);   // a3 waits for tomorrow
 });
 
 test('siblings: a hidden sibling does not use up a new-card slot, and ordinary cards are untouched', () => {
