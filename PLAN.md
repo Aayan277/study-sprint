@@ -238,6 +238,13 @@ Research covered the scheduling algorithm, competitors (Anki, Quizlet, Knowt, Re
 
 Later: audio cards, the "these look like notes" paste banner, one-tap AI cards (Supabase Edge Function, about $3 a semester), sharing decks.
 
+## Algorithm follow-ups (v3.5, tested in simulation first)
+
+Simulated with the app's real code, three learner types, 48+ scenarios, 60 seeds each:
+- ✅ **Play speed judged against your own pace:** after 50 right answers per mode, Hard if over 2.2× your usual time for that much text, Easy (typing only) if under 0.5×; before that, the old 30% / 70% of the timer. Rating accuracy 67% → 80%, worst retention cell −0.11 points, workload neutral.
+- ✅ **Multiple choice on a due card counts at most as Hard** (recognition is easier than recall): no scenario worse, +2–3% reviews, and later recall after a Play-counted review rose from 73% to 78%.
+- ❌ **Backlog after a break ordered by lowest recall:** no benefit with a normal limit, and worse with a tight daily limit (−0.9 to −1.5 points), so the order stays most-overdue first.
+
 ## Polish pass (after v3.1, approved from the Polish Preview)
 
 Four design reviews (visual, layout, motion, first impression) and before/after renders; the owner picked by number. New switches go in a new **Settings → Appearance** section (this device only), on by default.

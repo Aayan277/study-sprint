@@ -11,7 +11,8 @@ import {
   questionFor, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
-import { autoRating, scheduleDecision, applies } from './autograde.js';
+import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
+import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { loadAll } from './study-data.js';
@@ -76,7 +77,9 @@ export async function renderPlay(el) {
     playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
     // Only new cards really started today count (newLimits ignores Play answers that were only logged).
-    newLeft
+    newLeft,
+    // Your usual answer times per question type (speed relative to you, not the timer): the last 60 days of Play.
+    speed: speedProfiles(await db.getLogsSince(daysAgoStart(60)))
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
@@ -398,7 +401,8 @@ function answer(choice) {
     if (G.lives <= 0) G.over = true;
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
-  const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given };
+  const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+    chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length };     // text read, for speed relative to you
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
   const round = G;
@@ -430,7 +434,9 @@ function answer(choice) {
 async function record(round, entry) {
   const id = entry.card.id;
   const now = Date.now();
-  const rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing' });
+  const chars = entry.chars ?? 0;
+  let rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing',
+    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars });
   const prev = data.statesById.get(id);
   // A new card in a deck with an exam coming up (its own or a parent's) is started by Play: this answer is its
   // first review. That uses up one of today's new cards. Over the deck's new-card limit (overall, the deck's own
@@ -442,11 +448,12 @@ async function record(round, entry) {
   // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
   let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
+  rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing' });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = {
     cardId: id, timestamp: now, source: 'play',
     mode: round.qtype, format: round.fmt,
-    correct: entry.ok, ms: entry.ms, rating,
+    correct: entry.ok, ms: entry.ms, rating, chars, hard: !!round.hard,
     state: prev ? prev.state : 0,      // the card's state before this answer
     applied: false,                    // did it change the schedule?
     reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
