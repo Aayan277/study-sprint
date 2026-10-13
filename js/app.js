@@ -6,7 +6,7 @@
 import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
 import { renderToday } from './today.js';
-import { SAMPLE_DECK } from './sample.js';
+import { addSampleDeck } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
@@ -765,15 +765,7 @@ async function markOnboarded() {
 // (`again`: the person asked for it, e.g. "Try the sample deck" in the first-run start).
 async function seedSampleDeck(again = false) {
   if (settings.seeded && !again) return;
-  // Fixed ids (not random), so the sample deck added on two devices is the same deck once they sync.
-  const deckId = 'sample';
-  const now = Date.now();
-  await db.addDeckWithCards(
-    { id: deckId, name: SAMPLE_DECK.name, course: SAMPLE_DECK.course, color: SAMPLE_DECK.color, created: now },
-    // created + i keeps the cards in their original order.
-    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: `sample-${i}`, deckId, front, back, tags: [], created: now + i })),
-    { at: 1 }
-  );
+  await addSampleDeck();
   settings.seeded = true;
   await db.setSetting('seeded', true);
 }
@@ -784,7 +776,7 @@ const ROUTES = {
   // opened (the service worker has them saved, so that is quick), which keeps the first load small.
   // Review also needs the FSRS library from the internet (saved for offline after the first time).
   today: el => renderToday(el),
-  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: async () => { if (!(await db.getDeck('sample'))) await seedSampleDeck(true); }, finish: markOnboarded }),
+  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
   review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
   play: async el => (await import('./play.js')).renderPlay(el),
   decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
@@ -804,8 +796,9 @@ async function route() {
   const [, name = 'today', arg] = location.hash.match(/^#\/([a-z]+)(?:\/(.+))?/) || [];
   if (name === 'settings' && currentRoute && currentRoute !== 'settings') beforeSettings = beforeSettings || lastHash;
   if (name !== 'settings') beforeSettings = null;
-  // Once the start is done, #/welcome goes to Today (the guided review that follows it is still allowed).
-  if (name === 'welcome' && settings.onboarded && !/^review\//.test(arg || '')) { location.replace('#/today'); return; }
+  // Once the start is done, #/welcome goes to Today. Still allowed: the guided review that follows it, and
+  // #/welcome/again (the "How it works" link on an empty Today screen), which shows the pitch again.
+  if (name === 'welcome' && settings.onboarded && !/^(review\/|again$)/.test(arg || '')) { location.replace('#/today'); return; }
   // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
   if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
   if (name !== 'review') takeLaunch();     // a session handed over to Review that never got there (e.g. it failed to load) must not start later

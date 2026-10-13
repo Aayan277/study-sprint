@@ -1,6 +1,8 @@
 // A small starter deck, added the first time the app opens so it isn't empty.
 // Delete it whenever you like; it won't come back (unless you reset all data).
 
+import * as db from './db.js';
+
 export const SAMPLE_DECK = {
   name: 'Intro to Psychology (sample)',
   course: 'PSYC 101',
@@ -20,3 +22,20 @@ export const SAMPLE_DECK = {
     ['Maslow’s hierarchy', 'Needs in order: physiological, safety, love and belonging, esteem, self-actualization.']
   ]
 };
+
+// Add the sample deck, unless a deck with the sample's id is already there (an edited copy is never overwritten).
+// Fixed ids (not random), so the sample deck added on two devices is the same deck once they sync.
+// Used by the first-run start and by the empty Today screen ("Try sample cards"), and by app.js for the first open.
+export async function addSampleDeck() {
+  const deckId = 'sample';
+  if (await db.getDeck(deckId)) return false;
+  const now = Date.now();
+  await db.addDeckWithCards(
+    { id: deckId, name: SAMPLE_DECK.name, course: SAMPLE_DECK.course, color: SAMPLE_DECK.color, created: now },
+    // created + i keeps the cards in their original order.
+    SAMPLE_DECK.cards.map(([front, back], i) => ({ id: `sample-${i}`, deckId, front, back, tags: [], created: now + i })),
+    { at: 1 }
+  );
+  await db.setSetting('seeded', true);
+  return true;
+}
