@@ -190,8 +190,8 @@ await page.waitForFunction(() => document.querySelector('#found')?.textContent.i
 ok((await page.textContent('#found')).includes('1 cloze note make'), 'Anki import: says the cloze note makes the cards');
 await page.fill('#newName', 'From Anki cloze'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const ac = (await page.evaluate(async () => { const db = await import('./js/db.js'); const ds = await db.getDecks(); return (await db.getAll('cards')).filter(c => ds.find(d => d.id === c.deckId)?.name === 'From Anki cloze' || ds.find(d => d.id === c.deckId)?.parentId === ds.find(x => x.name === 'From Anki cloze')?.id); }));
-const ak = ac.filter(c => c.noteId);
-ok(ak.length === 2 && ak[0].noteId === ak[1].noteId && ak.map(c => c.cloze).sort().join() === '1,2' && ak[0].front.includes('[…]') && ak[0].noteText.includes('{{c1::'), 'Anki import: the 2-blank cloze note became 2 sibling cards with the note text');
+const ak = ac.filter(c => c.noteId).sort((a, b) => a.cloze - b.cloze);
+ok(ak.length === 2 && ak[0].noteId === ak[1].noteId && ak.map(c => c.cloze).sort().join() === '1,2' && ak[0].front.includes('[…]') && ak[1].front.includes('[speech area]') && ak[0].noteText.includes('{{c1::'), 'Anki import: the 2-blank cloze note became 2 sibling cards with the note text');
 ok(ac.length === 7 && ac.every(c => typeof c.ankiGuid === 'string' && c.ankiGuid), 'Anki import: every card keeps its Anki guid');
 
 // export our own notes as an Anki file and bring them back
@@ -208,6 +208,37 @@ await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await p
 const rt = await deckCards('Round trip'), orig = await deckCards('Cell biology');
 ok(rt.length === 3 && new Set(rt.map(c => c.noteId)).size === 1 && rt[0].noteText === orig[0].noteText && rt.every(c => c.noteExtra === orig[0].noteExtra), 'round trip: same text and Extra, one note with 3 sibling cards');
 ok(rt.every(c => c.ankiGuid === rt[0].ankiGuid) && rt[0].ankiGuid.length === 10, 'round trip: the Anki guid is the note\'s (shared by its cards)');
+
+// ---- 8. the "Link cloze cards" tool (Browse → Tools) ----
+const old = await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const deck = { id: db.newId(), name: 'Old cloze import', color: '#8F80FF', created: Date.now() + 99 };
+  const mkc = (i, front, back) => ({ id: 'old' + i, deckId: deck.id, front, back, tags: [], created: Date.now() + i });
+  await db.addDeckWithCards(deck, [
+    mkc(1, 'The […] has a nucleus and DNA', 'cell'), mkc(2, 'The cell has a [organelle] and DNA', 'nucleus'), mkc(3, 'The cell has a nucleus and […]', 'DNA'),
+    mkc(4, 'Capital of France?', 'Paris'), mkc(5, 'A […] b', 'x'), mkc(6, 'A [hint] b', 'x')]);
+  await db.putStates([{ cardId: 'old2', due: Date.now() + 5 * 864e5, stability: 7, difficulty: 4, reps: 3, lapses: 0, state: 2, lastReview: Date.now() - 864e5 }]);
+  await db.addLog({ cardId: 'old2', timestamp: Date.now() - 864e5, source: 'review', correct: true, rating: 3, ms: 100, state: 2 });
+  return deck.id;
+});
+await page.goto('http://localhost:8123/#/deck/' + old); await page.waitForSelector('.crow');
+await page.click('#brTags'); await page.waitForSelector('#linkFind');
+ok((await page.textContent('#sheetTitle')) === 'Tools', 'Browse has a Tools sheet');
+await page.click('#linkFind'); await page.waitForSelector('#linkGo');
+const prev = await page.textContent('#linkOut');
+ok(prev.includes('1 note') && prev.includes('3 cards') && prev.includes('1 group of cards looked unclear'), 'link tool preview: 1 note from 3 cards, 1 unclear group left alone');
+ok((await page.locator('#linkOut mark.cloze-ans').count()) === 3, 'the preview shows the note with its 3 blanks');
+await page.screenshot({ path: SP + '/cloze-link-375.png' });
+ok((await deckCards('Old cloze import')).every(c => !c.noteId), 'nothing changes before you press Link');
+await page.click('#linkNo'); await page.click('#linkFind'); await page.waitForSelector('#linkGo'); await page.click('#linkGo');
+await page.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Linked'));
+const linked = await deckCards('Old cloze import');
+const mem = linked.filter(c => c.noteId);
+ok(mem.length === 3 && new Set(mem.map(c => c.noteId)).size === 1 && mem[0].noteText === 'The {{c1::cell}} has a {{c2::nucleus::organelle}} and {{c3::DNA}}', 'applying links the 3 cards into one note: ' + (mem[0] || {}).noteText);
+ok(mem.map(c => c.id).join() === 'old1,old2,old3' && mem[1].front === 'The cell has a [organelle] and DNA' && mem[1].cloze === 2, 'the same cards, same fronts, with their blank numbers');
+const kept = await page.evaluate(async () => { const db = await import('./js/db.js'); return { st: await db.get('cardStates', 'old2'), logs: (await db.getCardLogs('old2')).length }; });
+ok(kept.st && kept.st.stability === 7 && kept.logs === 1, 'schedule and history are kept');
+ok(linked.filter(c => !c.noteId).length === 3, 'the other cards (a plain card and the unclear pair) are untouched');
 
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();

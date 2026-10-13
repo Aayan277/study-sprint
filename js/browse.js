@@ -8,7 +8,7 @@ import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, F
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind } from './card-editor.js';
-import { planNoteSave } from './cloze.js';
+import { planNoteSave, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { plainText } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
@@ -64,7 +64,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     <div class="mhead br-head">
       <h2>Cards <span class="count mono" id="brTotal"></span></h2>
       <div class="head-actions">
-        <button class="btn ghost small" type="button" id="brTags">Tags</button>
+        <button class="btn ghost small" type="button" id="brTags">Tools</button>
         <button class="btn ghost small" type="button" id="brSelect">Select</button>
         <button class="btn primary small" type="button" id="brAdd">+ Add card</button>
       </div>
@@ -142,7 +142,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
-  $('brTags').addEventListener('click', () => openTagTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
+  $('brTags').addEventListener('click', () => openTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
   $('brActions').addEventListener('click', () => {
     if (!B.selected.size) { toast('Select some cards first'); return; }
     openBulkActions(cards.filter(c => B.selected.has(c.id)), { decks, statesById, refresh, clear: () => { B.selected.clear(); } });
@@ -408,18 +408,25 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
 }
 
-// ---------- tags ----------
-// Every tag in the list's cards: rename one everywhere (merging with an existing tag is fine), or remove it.
-function openTagTools(cards, { scope, refresh }) {
+// ---------- tools ----------
+// The Tools sheet: tags (rename or remove one everywhere in the list's cards, merging with an existing tag is
+// fine) and "Link cloze cards" (older imports: turn separate fill-in-the-blank cards into notes).
+function openTools(cards, { scope, refresh }) {
   const tags = tagCounts(cards);
   openSheet(`
-    <h2 id="sheetTitle">Tags in ${esc(scope)}</h2>
+    <h2 id="sheetTitle">Tools</h2>
+    <h3 class="tool-h">Tags in ${esc(scope)}</h3>
     ${tags.length ? `<ul class="tag-list">${tags.map(({ tag, count }) => `
       <li data-tag="${esc(tag)}"><span class="tag-name">${esc(tag)}</span><span class="muted small">${plural(count, 'card')}</span>
         <button class="btn ghost small" type="button" data-tag-rename>Rename</button>
         <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
       : '<p class="note">No tags yet. Add them when editing a card.</p>'}
-    <div id="tagEdit"></div>`, { side: true });
+    <div id="tagEdit"></div>
+    <h3 class="tool-h">Link cloze cards</h3>
+    <p class="note">Cards imported before notes existed have one separate card for each blank (“The […] makes ATP” and “The mitochondria makes […]”). This finds cards of one deck that come from the same sentence and links them as one cloze note, so Review shows one of them a day. Schedules and history stay as they are. You see what it found first.</p>
+    <button class="btn ghost small" type="button" id="linkFind">Find cards to link</button>
+    <div id="linkOut" aria-live="polite"></div>`, { side: true });
+  wireLinkTool(cards, { scope, refresh });
   const apply = async (from, to) => {
     const changed = renameTag(cards, from, to);
     await db.saveCards(changed);
@@ -439,6 +446,35 @@ function openTagTools(cards, { scope, refresh }) {
     });
     li.querySelector('[data-tag-remove]').addEventListener('click', () =>
       confirmIn('tagEdit', `Remove the tag “${tag}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(tag, '')));
+  });
+}
+
+// "Link cloze cards": look for older cards that belong together (cloze.js planLinks), show what it found, and only
+// link them when asked. Linking changes nothing but the cards' note fields: schedules and history are not touched.
+function wireLinkTool(cards, { scope, refresh }) {
+  $('linkFind').addEventListener('click', () => {
+    const { notes, skipped } = planLinks(cards);
+    const linked = notes.reduce((n, x) => n + x.members.length, 0);
+    const unclear = skipped ? `<p class="note">${plural(skipped, 'group')} of cards looked unclear (the blanks overlap), so ${skipped === 1 ? 'it was' : 'they were'} left alone.</p>` : '';
+    if (!notes.length) { $('linkOut').innerHTML = `<div class="link-preview"><p>Nothing to link in ${esc(scope)}.</p>${unclear}</div>`; return; }
+    $('linkOut').innerHTML = `<div class="link-preview">
+      <p><b>${plural(notes.length, 'note')}</b> from <b>${plural(linked, 'card')}</b>.</p>
+      <ul class="link-eg">${notes.slice(0, 3).map(n => `<li>${renderCloze(n.noteText, 0, 'all')} <span class="muted">(${plural(n.members.length, 'card')})</span></li>`).join('')}</ul>
+      ${notes.length > 3 ? `<p class="note">…and ${plural(notes.length - 3, 'more note')}.</p>` : ''}${unclear}
+      <div class="sheet-actions"><button class="btn ghost" type="button" id="linkNo">Cancel</button><button class="btn primary" type="button" id="linkGo">Link ${plural(linked, 'card')}</button></div></div>`;
+    $('linkNo').addEventListener('click', () => { $('linkOut').innerHTML = ''; });
+    $('linkGo').addEventListener('click', async () => {
+      $('linkGo').disabled = true;
+      const changed = notes.flatMap(n => {
+        const noteId = db.newId();
+        return n.members.map(({ card, cloze }) => ({ ...card, noteId, cloze, noteText: n.noteText, ...clozeCard(n.noteText, cloze) }));
+      });
+      await db.saveCards(changed);
+      toast(`Linked ${plural(linked, 'card')} into ${plural(notes.length, 'note')}`);
+      await refresh();
+      closeSheet();
+    });
+    $('linkGo').scrollIntoView({ block: 'nearest' });
   });
 }
 
