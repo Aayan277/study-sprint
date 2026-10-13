@@ -1,1 +1,7 @@
 tests/browser/out/
+
+# scheduling simulator
+tests/sim/compare/deps/
+tests/sim/compare/base/
+tests/sim/compare/new/
+tests/sim/compare/*.jsonl
