@@ -429,6 +429,10 @@ export function checkBackup(data) {
   for (const [k, field] of Object.entries(keyField)) {
     if (!data[k].every(r => r && typeof r === 'object' && validKey(r[field]))) return 'This backup file is damaged (a record in ' + k + ' has no ' + field + ').';
   }
+  // Cloze fields end up in the page, so they must have the right type: a positive whole number, and text.
+  if (!data.cards.every(c => (c.cloze === undefined || (Number.isInteger(c.cloze) && c.cloze > 0)) && [c.noteId, c.noteText].every(v => v === undefined || typeof v === 'string'))) {
+    return 'This backup file is damaged (a card has invalid cloze fields).';
+  }
   // A review's id can be missing (one is given when it's saved), but otherwise must be a number.
   if (!data.reviewLog.every(r => r && typeof r === 'object' && (r.id === undefined || Number.isFinite(r.id)))) return 'This backup file is damaged (a record in reviewLog is broken).';
   // Deck colors go into style attributes, so only plain hex colors are allowed.

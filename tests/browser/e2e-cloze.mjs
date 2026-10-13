@@ -91,7 +91,8 @@ await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for {{c4::the}} c
 await page.click('button[type=submit][form=ceForm]'); await page.waitForSelector('#cfYes');
 ok((await page.textContent('#ceFormConfirm')).includes('c3 was removed'), 'the question names c3');
 await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for the cell');            // changed after the question
-await page.click('#cfYes'); await page.waitForTimeout(300);
+await page.click('#cfYes');
+await page.waitForFunction(() => document.getElementById('ceFormConfirm').textContent.includes('were removed'), null, { timeout: 5000 }).catch(() => {});
 ok((await page.textContent('#ceFormConfirm')).includes('c3 and c4 were removed') && (await noteCards()).length === 3, 'text changed since the question: it asks again and saves nothing');
 await page.click('#cfNo');
 await page.fill('#ceText', 'The {{c1::mitochondria}} makes ATP for {{c4::the}} {{c3::cell}} {{c5::x}}');
@@ -254,6 +255,14 @@ ok(mem.map(c => c.id).join() === 'old1,old2,old3' && mem[1].front === 'The cell 
 const kept = await page.evaluate(async () => { const db = await import('./js/db.js'); return { st: await db.get('cardStates', 'old2'), logs: (await db.getCardLogs('old2')).length }; });
 ok(kept.st && kept.st.stability === 7 && kept.logs === 1, 'schedule and history are kept');
 ok(linked.filter(c => !c.noteId).length === 3, 'the other cards (a plain card and the unclear pair) are untouched');
+
+// ---- a cloze field that is text instead of a number (a hand-edited backup or sync row) can't inject markup ----
+await page.evaluate(async deckId => {
+  const db = await import('./js/db.js');
+  await db.saveCards([{ id: 'xss1', deckId, front: 'xss front', back: 'xss back', noteId: 'X', noteText: 'x', cloze: '1" onmouseover="window.__xss=1" x="' }]);
+}, old);
+await page.reload(); await page.waitForSelector('.crow');
+ok(await page.locator('.crow', { hasText: 'xss front' }).count() === 1 && await page.locator('[onmouseover]').count() === 0, 'a text cloze field does not reach the page as markup');
 
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();
