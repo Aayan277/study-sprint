@@ -68,3 +68,17 @@ export const ankiPath = (decks, id) => deckPath(decks, id, '::');
 //   only  optional Set of deck ids to keep
 export const deckChoices = (decks, only) =>
   treeOrder(decks).filter(x => !only || only.has(x.deck.id)).map(x => ({ id: x.deck.id, label: deckPath(decks, x.deck.id), depth: x.depth }));
+
+// The rows of a searchable deck tree (the picker in deck-picker.js): [{ id, name, course, depth, context }] in tree order.
+// With no search, every deck. With one, only the decks whose name or course code contains it (any case), plus the decks
+// they sit inside, marked context: true, so you can see where each match lives.
+export function deckTreeRows(decks, query = '') {
+  const all = treeOrder(decks);
+  const q = String(query).trim().toLowerCase();
+  const row = ({ deck, depth }, context = false) => ({ id: deck.id, name: deck.name, course: deck.course || '', depth, context });
+  if (!q) return all.map(x => row(x));
+  const hit = new Set(all.filter(({ deck }) => `${deck.name} ${deck.course || ''}`.toLowerCase().includes(q)).map(x => x.deck.id));
+  const keep = new Set(hit);
+  for (const id of hit) for (const a of ancestors(decks, id)) keep.add(a.id);
+  return all.filter(x => keep.has(x.deck.id)).map(x => row(x, !hit.has(x.deck.id)));
+}

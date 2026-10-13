@@ -13,14 +13,14 @@ const total = await DB(async () => (await (await import('./js/db.js')).getCardsI
 // + Subdeck from the deck page
 await go('#/deck/sample', '#addSub'); await p.click('#addSub'); await p.waitForSelector('#deckParent');
 ok(await p.$eval('#deckParent', s => s.value) === 'sample', 'new subdeck starts inside the deck');
-await p.fill('#deckName', 'Unit 1'); await p.click('#deckForm button[type=submit]');
+await p.fill('#deckName', 'Unit 1'); await p.click('button[type=submit][form=deckForm]');
 await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Unit 1');
 const u1 = await DB(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Unit 1'));
 ok(u1.parentId === 'sample', 'saved with parentId');
 ok((await p.textContent('.crumbs')).includes('Psych') || (await p.textContent('.crumbs')).length > 0, 'breadcrumb: ' + await p.textContent('.crumbs'));
 ok((await p.textContent('#back')).trim() !== '‹ Decks', 'back goes to the parent: ' + (await p.textContent('#back')).trim());
 // a sub-subdeck
-await p.click('#addSub'); await p.waitForSelector('#deckName'); await p.fill('#deckName', 'Lecture 3'); await p.click('#deckForm button[type=submit]');
+await p.click('#addSub'); await p.waitForSelector('#deckName'); await p.fill('#deckName', 'Lecture 3'); await p.click('button[type=submit][form=deckForm]');
 await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Lecture 3');
 const l3 = await DB(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Lecture 3'));
 // move cards: 0-3 → Unit 1, 4-5 → Lecture 3
@@ -36,13 +36,14 @@ ok((await p.locator('article.deck').count()) === 1, 'subdecks are not separate t
 ok((await p.textContent('article.deck .deck-counts')).includes(`${total} cards`), 'parent tile counts everything inside');
 const rows = await p.$$eval('.subdecks .subdeck .sd-name', r => r.map(x => x.textContent));
 ok(rows.join('|') === 'Unit 1|Lecture 3', 'subdeck rows: ' + rows.join('|'));
-ok((await p.textContent('.subdecks summary')).trim() === '1 subdeck', 'summary counts direct subdecks');
+ok((await p.textContent('.subdecks summary')).trim() === '1 subdeck · 2 in all', 'summary counts direct subdecks, and all of them');
+ok(!(await p.$eval('.subdecks', d => d.open)), 'compact list: subdecks start folded under their course');
+await p.click('.subdecks summary');           // (the rows below are read from the page, folded or not)
 await p.screenshot({ path: SP + '/C-library.png', fullPage: true });
-// fold is remembered
-await p.click('.subdecks summary'); await p.waitForTimeout(100);
+// the open fold is remembered on this device (folded is the default)
+await p.waitForTimeout(100);
 await go('#/decks', '.deck');
-ok(!(await p.$eval('.subdecks', d => d.open)), 'folding is remembered');
-await p.click('.subdecks summary');
+ok(await p.$eval('.subdecks', d => d.open), 'an opened fold is remembered');
 await p.click('.subdeck >> text=Lecture 3'); await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Lecture 3');
 ok((await p.locator('.crow').count()) === 2, 'subdeck page lists its own cards');
 
@@ -94,8 +95,8 @@ ok(await p.$eval('.rate.r1 span', s => s.textContent) === '3m' || console.log(aw
 await p.click('#endBtn').catch(() => {});
 
 // stats and play include subdecks
-await go('#/stats', '#sDeck');
-await p.selectOption('#sDeck', 'sample'); await p.waitForTimeout(200);
+await go('#/stats', '#sDeckBtn');
+await p.click('#sDeckBtn'); await p.click('.pick-row[data-id="sample"]'); await p.waitForTimeout(200);
 ok((await p.textContent('#mTitle + span, .mhead .small')).includes(`${total}`) || (await p.locator('.mtile').count()) === total, 'stats for the parent cover its subdecks');
 await go('#/play', '#pDeck');
 const pOpts = await p.$$eval('#pDeck option', o => o.map(x => x.textContent));

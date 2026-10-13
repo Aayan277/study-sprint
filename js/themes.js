@@ -83,3 +83,14 @@ export function skinButtonsHTML(selected) {
       <span style="min-width:0"><span class="nm">${s.name}</span><span class="nt">${s.note}</span></span></button>`
   ).join('');
 }
+
+// ---------- card text alignment (Settings → Appearance) ----------
+// 'auto' (short text centred, long answers left), 'center' or 'left'. Kept per device, like the theme.
+// styles.css reads it from <html data-align="...">.
+export const CARD_ALIGNS = [['auto', 'Auto'], ['center', 'Center'], ['left', 'Left']];
+export const cleanAlign = v => (CARD_ALIGNS.some(a => a[0] === v) ? v : 'auto');
+export function applyCardAlign(v) {
+  const align = cleanAlign(v);
+  document.documentElement.setAttribute('data-align', align);
+  return align;
+}

@@ -27,7 +27,7 @@ await page.goto('http://localhost:8123/#/deck/B'); await page.waitForSelector('#
 await page.click('#editDeck'); await page.waitForSelector('#deckOpts'); await page.click('#deckOpts summary'); await page.waitForSelector('#deckNew');
 ok(await page.inputValue('#deckNew') === '', 'deck limit blank by default');
 await page.screenshot({ path: SP + '/p3-deck.png', fullPage: true });
-await page.fill('#deckNew', '1'); await page.click('#deckForm button[type=submit]'); await page.waitForTimeout(300);
+await page.fill('#deckNew', '1'); await page.click('button[type=submit][form=deckForm]'); await page.waitForTimeout(300);
 ok((await page.evaluate(async () => (await import('./js/db.js')).getDeck('B'))).newPerDay === 1, 'deck limit saved');
 
 const openOpts = async () => { await page.click('#optBtn'); await page.waitForSelector('#customBtn'); };

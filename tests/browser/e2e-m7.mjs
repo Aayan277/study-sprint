@@ -19,8 +19,9 @@ await page.screenshot({ path: SP + '/m7-starters.png', fullPage: true });
 await page.click('[data-starter="jlpt-n5"]');
 await page.waitForFunction(() => document.querySelectorAll('.deck').length === 2);
 ok((await page.locator('.starter').count()) === 1, 'added N5 deck is no longer offered');
-ok((await page.locator('.deck-name').nth(1).textContent()) === 'JLPT N5 Kanji' && (await page.locator('.deck-counts').nth(1).textContent()).includes('102'), 'N5 deck has 102 cards');
-await page.locator('.deck-open').nth(1).click(); await page.waitForSelector('.crow');
+const n5 = page.locator('article.deck', { hasText: 'JLPT N5 Kanji' });      // the list is sorted by what is due, so find the tile by name
+ok((await n5.locator('.deck-counts').textContent()).includes('102'), 'N5 deck has 102 cards');
+await n5.locator('.deck-open').click(); await page.waitForSelector('.crow');
 ok((await page.locator('.crow .f').first().textContent()) === '一' && (await page.locator('.crow .b').first().textContent()) === 'one; いち / ひと(つ)', 'first card is 一 → one; いち / ひと(つ)');
 // some review history so the backup has everything
 await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0];

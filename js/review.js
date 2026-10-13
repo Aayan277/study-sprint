@@ -8,7 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
-import { formatHTML, plainText } from './format.js';
+import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -19,6 +19,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
+import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -130,10 +131,10 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Lrn, Due) is drawn by the CSS from data-label, so the
+  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
   // text inside each span stays just the number.
   return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Lrn">${n('learn')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
     <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
@@ -151,17 +152,20 @@ function renderSession(el, enter = false) {
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = R.typing && canType(plainText(card.back));
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
-  const deckLabel = `<span class="flash-deck">${esc(R.deckNames.get(card.deckId) || '')}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
+  const fullPath = R.deckNames.get(card.deckId) || '';
+  const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
+  const backSize = answerSize(plainText(card.back));          // a long answer is smaller and left-aligned
   const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
 
-  el.innerHTML = `
+  const head = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
-      <button class="link" type="button" id="undoBtn" ${R.undo.length ? '' : 'disabled'}>Undo</button>
+      <button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer" ${R.undo.length ? '' : 'disabled'}>${icon('undo')}</button>
       ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
-    </div>
+    </div>`;
+  const body = `
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
@@ -171,10 +175,10 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          <div class="flash-recap">${front}</div>
+          <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+            <div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
           </div>
         </div>
       </div>
@@ -187,11 +191,12 @@ function renderSession(el, enter = false) {
     ${R.typing && !typeThis && !R.flipped ? '<p class="note center" id="longNote">Long answer: say it in your head, then flip.</p>' : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
+  drawSessionPage(el, head, body);
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn').addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
-  $('moreBtn').addEventListener('click', () => openCardMenu());
+  $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
   $('speakBtn')?.addEventListener('click', () => readAloud());
   autoSpeak(card);
   wireRatebar(el);
@@ -202,6 +207,25 @@ function renderSession(el, enter = false) {
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else $('flash').focus({ preventScroll: true });
   publishLive();
+}
+
+// Draws the header and the card, around the progress bar. The bar is NOT redrawn with them: it stays in the page
+// from card to card, so its fill slides to the new value instead of starting again from empty.
+function drawSessionPage(el, head, body) {
+  const bar = el.querySelector(':scope > .rv-prog');
+  const left = R.queue.length + R.waiting.length + (R.current ? 1 : 0);   // relearning cards waiting for their turn count too
+  const done = R.stats.reviewed, total = done + left;
+  if (!bar) el.innerHTML = `${head}<div class="rv-prog" id="rvProg" role="progressbar" aria-label="Session progress" aria-valuemin="0"><i></i></div>${body}`;
+  else {
+    [...el.children].forEach(c => { if (c !== bar) c.remove(); });
+    bar.insertAdjacentHTML('beforebegin', head);
+    bar.insertAdjacentHTML('afterend', body);
+  }
+  const prog = el.querySelector(':scope > .rv-prog');
+  prog.setAttribute('aria-valuemax', total);
+  prog.setAttribute('aria-valuenow', done);
+  prog.setAttribute('aria-valuetext', `${done} of ${total} cards done`);
+  prog.firstElementChild.style.width = `${total ? (done / total * 100).toFixed(1) : 0}%`;
 }
 
 const showButtonHTML = typeThis =>
@@ -291,7 +315,10 @@ async function answer(el, rating) {
     state: prev ? prev.state : NEW          // the card's state before this review (useful for stats and FSRS tuning later)
   };
   try {
-    const logId = await db.saveReview(next, log);
+    const saving = db.saveReview(next, log);
+    // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
+    fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
+    const logId = await saving;
     R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
@@ -357,21 +384,47 @@ function replaceInSession(card) {
   R.queue = R.queue.map(swap);
   R.waiting = R.waiting.map(swap);
   if (R.current?.card.id === card.id) R.current = { ...R.current, card };
+  // Undo brings these cards back, so they must carry the edit too (or Undo would show the old text, and editing from it would save it again).
+  // cardBefore is the card as it was before it became a leech: it keeps that, but gets the new content.
+  R.undo = R.undo.map(u => {
+    if (u.item.card.id !== card.id) return u;
+    const before = u.cardBefore && { ...card, tags: (card.tags || []).filter(t => (u.cardBefore.tags || []).includes(t) || t !== 'leech'), suspended: u.cardBefore.suspended, buriedUntil: u.cardBefore.buriedUntil };
+    return { ...u, item: { ...u.item, card }, cardBefore: before || u.cardBefore };
+  });
 }
 
-// The ⋯ button (and E / I keys): the same card panel as the card list.
+// The ⋯ button opens a short sheet of card actions (Edit, Flag, Bury, Suspend, More). E opens the editor straight
+// away and I the full panel with the card's info (browse.js openCardPanel; More in the short sheet opens that panel too).
+// Whatever you change, the sheet closes and you are back at the same card.
 const LEAVES = ['suspend', 'bury', 'delete', 'reset', 'due'];
-function openCardMenu(showInfo = false) {
+const BACK_TO_CARD = [...LEAVES, 'edit', 'flag', 'move', 'unsuspend', 'unbury'];
+async function openCardMenu(mode = 'actions') {
   if (!R?.current) return;
-  openCardPanel(R.current.card, {
-    decks: R.decks, statesById: R.statesById, showInfo, closeAfter: LEAVES,
+  // The saved copy of the card, in case it was changed since it was drawn (the same way Play does it).
+  const id = R.current.card.id;
+  const card = (await db.get('cards', id)) || R.current.card;
+  if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
+  openCardPanel(card, {
+    decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
     onAction: (act, fresh) => {
       R.version = db.scheduleVersion();
       if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
-      else { replaceInSession(fresh); renderSession(R.el); }
+      else {
+        // Redrawing the card must not wipe an answer half typed in the box.
+        const typed = $('typeIn')?.value;
+        replaceInSession(fresh); renderSession(R.el);
+        if (typed && $('typeIn')) $('typeIn').value = typed;
+      }
     }
   });
 }
+// When the sheet closes, focus goes back onto the card (the button it was opened from was redrawn).
+document.getElementById('sheet')?.addEventListener('close', () => {
+  const sheet = document.getElementById('sheet');
+  if (sheet.open || !R?.active || !location.hash.startsWith('#/review')) return;
+  const card = document.getElementById('flash');
+  (card?.querySelector('.rv-back:not([inert])') || card)?.focus({ preventScroll: true });
+});
 
 // Quick keys: bury (-) or suspend (@) the card on screen without opening the panel.
 async function quick(act) {
@@ -425,6 +478,7 @@ async function finish(el) {
     </div>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
   $('undoLast')?.addEventListener('click', () => undo(el));
+  fx.finished(el, { complete: !R.current, reviewed });
 }
 
 // ---------- keyboard ----------
@@ -437,7 +491,7 @@ document.addEventListener('keydown', e => {
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {
     const k = e.key.toLowerCase();
-    if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i'); return; }
+    if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
   }

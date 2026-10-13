@@ -18,7 +18,7 @@ const said = () => p.evaluate(() => window.__said);
 await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('#editDeck');
 await p.click('#editDeck'); await p.waitForSelector('#deckTts');
 await p.selectOption('#deckTts', 'en-GB'); await p.check('#deckTtsAuto');
-await p.click('#deckForm button[type=submit]'); await p.waitForTimeout(300);
+await p.click('button[type=submit][form=deckForm]'); await p.waitForTimeout(300);
 const deck = await p.evaluate(async () => (await import('./js/db.js')).getDeck('sample'));
 ok(deck.ttsLang === 'en-GB' && deck.ttsAuto === true, 'deck saves its read-aloud language and auto-read');
 await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#speakBtn');

@@ -10,7 +10,7 @@ import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage } from './card-editor.js';
 import { plainText } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
 const RATING = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
@@ -52,7 +52,14 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
   };
   await load();
 
+  // With no cards at all there is one friendly empty state, not a search box over an empty list.
+  const emptyArt = `<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M55 38v26M42 51h26" stroke="var(--accent-text)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
   box.innerHTML = `
+    <div class="empty empty-first" id="brEmpty" hidden>${emptyArt}<b>No cards yet</b>
+      <p>Paste a list like <code>term - definition</code> and it becomes cards. Or add them one at a time.</p>
+      <div class="empty-btns"><a class="btn primary" href="#/import${deckId ? '/' + encodeURIComponent(deckId) : ''}">${icon('paste')} Paste cards</a>
+        <button class="btn ghost" type="button" id="brAddFirst">${icon('plus')} Add one card</button></div></div>
+    <div id="brMain">
     <div class="mhead br-head">
       <h2>Cards <span class="count mono" id="brTotal"></span></h2>
       <div class="head-actions">
@@ -73,7 +80,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       <span id="brSel" class="mono"></span>
       <button class="btn ghost small" type="button" id="brAll">Select all</button>
       <button class="btn primary small" type="button" id="brActions">Actions…</button>
-    </div>`;
+    </div></div>`;
 
   // Which deck a row is in: the full path in All cards; on a deck's page, the subdeck below it (if any).
   const where = card => {
@@ -82,6 +89,8 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     return chain.slice(0, chain.findIndex(d => d.id === deckId)).reverse().map(d => d.name).join(' › ');
   };
   const draw = () => {
+    $('brEmpty').hidden = cards.length > 0;
+    $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
     B.visible = list;
     $('brTotal').textContent = `(${cards.length})`;
@@ -131,6 +140,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
     openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
+  $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brTags').addEventListener('click', () => openTagTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
   $('brActions').addEventListener('click', () => {
     if (!B.selected.size) { toast('Select some cards first'); return; }
@@ -140,13 +150,19 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
 }
 
 // ---------- one card's panel ----------
-// ctx: { decks, statesById, refresh, onAction, closeAfter, showInfo }
+// ctx: { decks, statesById, refresh, onAction, closeAfter, showInfo, mode }
 //   onAction(act, freshCard, freshState)  optional: told about each change (used by Review and Play)
-//   closeAfter  actions that close the panel instead of reopening it (e.g. Review skips a suspended card)
+//   closeAfter  actions that close the sheet instead of reopening the card's panel (Review and Play close it after
+//               every change, so you are straight back at the card)
 //   showInfo    open the "Card info" section straight away
+//   mode        'full' (default, the card list): everything about the card in one panel
+//               'actions' (Review, Play): a short sheet of Edit, Flag, Bury, Suspend and More (More opens the full panel)
+//               'edit': just the editor (Front, Back, Tags), for the E key
 export async function openCardPanel(card, ctx) {
   if (!card) return;
-  const { decks, statesById, refresh = async () => {}, onAction, closeAfter = [], showInfo = false } = ctx;
+  if (ctx.mode === 'actions') return openCardActions(card, ctx);
+  if (ctx.mode === 'edit') return openCardEdit(card, ctx);
+  const { decks, statesById, showInfo = false } = ctx;
   const state = statesById.get(card.id);
   const studied = state && state.state !== 0;
   const logs = await db.getCardLogs(card.id);
@@ -158,11 +174,8 @@ export async function openCardPanel(card, ctx) {
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
-      ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}
-      <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
-      <p class="err" id="ceErr" hidden></p>
-      <button class="btn primary" type="submit">Save changes</button>
+      ${cardFieldsHTML(card)}
+      <div class="sheet-actions"><button class="btn primary" type="submit">Save changes</button></div>
     </form>
 
     <div class="act-grid">
@@ -194,33 +207,14 @@ export async function openCardPanel(card, ctx) {
         ${logs.slice(-30).reverse().map(l => `<tr><td>${shortDate(l.timestamp)}</td><td>${{ play: 'Play', anki: 'Anki' }[l.source] || 'Review'}</td>
           <td class="${l.correct ? 'ok' : 'no'}">${RATING[l.rating] || (l.correct ? 'Right' : 'Wrong')}</td><td class="mono">${l.ms ? (l.ms / 1000).toFixed(1) + 's' : ''}</td></tr>`).join('')}
       </tbody></table>${logs.length > 30 ? '<p class="note">Showing the last 30.</p>' : ''}` : '<p class="note">No answers yet.</p>'}
-    </details>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
+    </details>`, { side: true });
 
-  const again = async (msg, act) => {      // after a change: refresh the list, tell the caller, reopen with fresh data
-    if (msg) toast(msg);
-    await refresh();
-    const fresh = (await db.get('cards', card.id));
-    const st = await db.get('cardStates', card.id);
-    if (st) statesById.set(card.id, st); else statesById.delete(card.id);
-    if (onAction) await onAction(act, fresh, st);
-    if (fresh && !closeAfter.includes(act)) openCardPanel(fresh, { ...ctx, showInfo: false }); else closeSheet();
-  };
-  const save = (changes, msg, act) => db.saveCards([{ ...card, ...changes }]).then(() => again(msg, act));
-
-  $('ceClose').addEventListener('click', closeSheet);
-  $('ceForm').addEventListener('submit', e => {
-    e.preventDefault();
-    const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
-    const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
-    // Each side needs something on it: text, a picture, or both.
-    if (!(front || frontImage) || !(back || backImage)) { $('ceErr').textContent = 'A card needs a front and a back (text or a picture).'; $('ceErr').hidden = false; return; }
-    save({ front, back, frontImage, backImage, tags: parseTags($('ceTags').value) }, 'Saved', 'edit');
-  });
+  const { save, again } = cardOps(card, ctx);
+  wireCardForm(save, 'Saved');
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
-    if (act === 'suspend') save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
-    if (act === 'bury') save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');
+    if (act === 'suspend') toggleSuspend(card, save);
+    if (act === 'bury') toggleBury(card, save);
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
     if (act === 'delete') confirmIn('ceConfirm', 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
   }));
@@ -228,6 +222,93 @@ export async function openCardPanel(card, ctx) {
   wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
   if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
 }
+
+// The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.
+async function openCardActions(card, ctx) {
+  const state = ctx.statesById.get(card.id);
+  const now = Date.now();
+  const status = cardStatus(card, state, now);
+  openSheet(`
+    <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
+    <p class="act-front">${esc(plainText(card.front))}</p>
+    <div class="act-list">
+      <button type="button" class="act-row" data-go="edit" aria-keyshortcuts="E">${icon('edit')}<span>Edit card</span><kbd aria-hidden="true">E</kbd></button>
+      <div class="act-row act-flags" role="group" aria-labelledby="flagLbl"><span class="act-fl" id="flagLbl">Flag</span>
+        ${FLAGS.map(f => `<button type="button" class="act-flag" data-flag="${f.id}" style="--c:${f.color}" aria-pressed="${card.flag === f.id}" aria-label="${f.name} flag"></button>`).join('')}</div>
+      <button type="button" class="act-row" data-act="bury" aria-keyshortcuts="-">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span><kbd aria-hidden="true">-</kbd></button>
+      <button type="button" class="act-row" data-act="suspend" aria-keyshortcuts="@">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span><kbd aria-hidden="true">@</kbd></button>
+      <button type="button" class="act-row" data-go="more">${icon('more')}<span>More<small>Move, due date, reset, delete, card info</small></span>${icon('chevron')}</button>
+    </div>`, { side: true });
+  const { save } = cardOps(card, ctx);
+  const sheet = $('sheet');
+  sheet.querySelector('[data-go="edit"]').addEventListener('click', () => openCardEdit(card, ctx));
+  sheet.querySelector('[data-go="more"]').addEventListener('click', () => openCardPanel(card, { ...ctx, mode: 'full' }));
+  sheet.querySelector('[data-act="bury"]').addEventListener('click', () => toggleBury(card, save));
+  sheet.querySelector('[data-act="suspend"]').addEventListener('click', () => toggleSuspend(card, save));
+  wireFlags(f => { const next = f === card.flag ? 0 : f; save({ flag: next }, next ? `${FLAGS.find(x => x.id === next).name} flag` : 'Flag removed', 'flag'); });
+}
+
+// The shortcuts shown in the short sheet (E, - and @) work while it is open. Review's and Play's own keys stand aside
+// when a sheet is open, so they are handled here, on whatever short sheet is showing.
+document.addEventListener('keydown', e => {
+  const sheet = document.getElementById('sheet');
+  if (!sheet?.open || !sheet.querySelector('.act-list') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select')) return;
+  const pick = { e: '[data-go="edit"]', E: '[data-go="edit"]', '-': '[data-act="bury"]', '@': '[data-act="suspend"]' }[e.key];
+  if (pick) { e.preventDefault(); sheet.querySelector(pick)?.click(); }
+});
+
+// The short editor: Front, Back and Tags (with the formatting buttons and pictures), Cancel and Save always in view.
+async function openCardEdit(card, ctx) {
+  openSheet(`
+    <h2 id="sheetTitle">Edit card</h2>
+    <form id="ceForm" class="sheet-in" style="padding:0">
+      ${cardFieldsHTML(card)}
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="ceCancel">Cancel</button>
+        <button class="btn primary" type="submit">Save <kbd aria-hidden="true">${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl+↵'}</kbd></button>
+      </div>
+    </form>`, { side: true });
+  $('ceCancel').addEventListener('click', closeSheet);
+  wireCardForm(cardOps(card, ctx).save, 'Card saved');
+}
+
+// ---------- shared by the card sheets ----------
+// What happens after a change to one card: refresh the list, tell the caller, then close the sheet or show the card's
+// full panel again with fresh data.
+function cardOps(card, ctx) {
+  const { statesById, refresh = async () => {}, onAction, closeAfter = [] } = ctx;
+  const again = async (msg, act) => {
+    if (msg) toast(msg);
+    await refresh();
+    const fresh = (await db.get('cards', card.id));
+    const st = await db.get('cardStates', card.id);
+    if (st) statesById.set(card.id, st); else statesById.delete(card.id);
+    if (onAction) await onAction(act, fresh, st);
+    if (fresh && !closeAfter.includes(act)) openCardPanel(fresh, { ...ctx, mode: 'full', showInfo: false }); else closeSheet();
+  };
+  const save = (changes, msg, act) => db.saveCards([{ ...card, ...changes }]).then(() => again(msg, act));
+  return { again, save };
+}
+const cardFieldsHTML = card => `
+      ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
+      ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}
+      <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      <p class="err" id="ceErr" hidden></p>`;
+function wireCardForm(save, msg) {
+  $('ceForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
+    const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
+    // Each side needs something on it: text, a picture, or both.
+    if (!(front || frontImage) || !(back || backImage)) { $('ceErr').textContent = 'A card needs a front and a back (text or a picture).'; $('ceErr').hidden = false; return; }
+    save({ front, back, frontImage, backImage, tags: parseTags($('ceTags').value) }, msg, 'edit');
+  });
+  // Ctrl/⌘+Enter saves from inside a box.
+  $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
+}
+const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
+const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');
 
 // ---------- acting on several cards ----------
 function openBulkActions(selected, { decks, statesById, refresh, clear }) {
@@ -260,10 +341,9 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       </form>
     </details>
     <div class="field"><span>Set due date</span>${studied.length ? dueRow() + (studied.length < n ? `<p class="note">Applies to the ${studied.length} you've studied. New cards are skipped.</p>` : '') : '<p class="note" style="margin:0">None of these have been reviewed yet.</p>'}</div>
-    <button class="btn ghost" type="button" id="ceClose">Close</button>`, { side: true });
+    `, { side: true });
   const done = async msg => { toast(msg); closeSheet(); await refresh(); };
   const update = (changes, msg) => db.saveCards(selected.map(c => ({ ...c, ...changes }))).then(() => done(msg));
-  $('ceClose').addEventListener('click', closeSheet);
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
     if (act === 'suspend') update({ suspended: true }, `Suspended ${plural(n, 'card')}`);
@@ -305,9 +385,7 @@ function openTagTools(cards, { scope, refresh }) {
         <button class="btn ghost small" type="button" data-tag-rename>Rename</button>
         <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
       : '<p class="note">No tags yet. Add them when editing a card.</p>'}
-    <div id="tagEdit"></div>
-    <button class="btn ghost" type="button" id="tagClose">Close</button>`, { side: true });
-  $('tagClose').addEventListener('click', closeSheet);
+    <div id="tagEdit"></div>`, { side: true });
   const apply = async (from, to) => {
     const changed = renameTag(cards, from, to);
     await db.saveCards(changed);

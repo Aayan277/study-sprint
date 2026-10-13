@@ -9,10 +9,12 @@
 import * as db from './db.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
-import { examInfo, countdown, newPerDayToFinish } from './exam.js';
+import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
+import { openExamSheet } from './exam-sheet.js';
+import * as fx from './fx.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
 //   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
@@ -40,6 +42,7 @@ export async function startStudy(spec = {}) {
   $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
 }
 const launch = startStudy;
+const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row offers; the rest are one tap away in Decks
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
@@ -60,6 +63,7 @@ export async function renderToday(el) {
     const goal = answered + c.total;
     const resume = live.resume && live.resume.day === dayStart() && live.resume.version === db.scheduleVersion() ? live.resume : null;
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft).slice(0, 3);
+    const noExam = coursesWithoutExam();
     el.innerHTML = `
       <div class="screen-head">
         <div><span class="eyebrow mono">${esc(day.toUpperCase())}</span><h1>Today</h1></div>
@@ -77,7 +81,7 @@ export async function renderToday(el) {
           <div class="th-text">
             <span class="th-label mono">DAILY GOAL</span>
             <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
-            <span class="th-sub mono"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
+            <span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
             <span class="th-sub">${plural(answered, 'answer')} today</span>
           </div>
         </div>
@@ -95,19 +99,32 @@ export async function renderToday(el) {
         <h2 id="exTitle">Upcoming exams</h2>
         <div class="exams">${exams.map(({ deck, info }) => `
           <div class="exam-row" style="--deck:${esc(deck.color)}">
-            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span></a>
-            <span class="exam-badge">${esc(countdown(info))}</span>
+            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}">${esc(countdown(info))}</span></a>
             <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
             ${newPlanHTML(deck, info)}
           </div>`).join('')}</div>
       </section>` : ''}
+      ${noExam.length ? `
+      <div class="exam-add" role="group" aria-label="Add an exam date">
+        <span>Add exam date</span>
+        ${noExam.slice(0, EXAM_CHIPS).map(d => `<button type="button" class="exam-chip" data-addexam="${esc(d.id)}" aria-label="Add exam date for ${esc(d.name)}"><i style="background:${esc(d.color)}"></i>${esc(d.name)} ${icon('plus')}</button>`).join('')}
+        ${noExam.length > EXAM_CHIPS ? `<a class="link" href="#/decks">${noExam.length - EXAM_CHIPS} more in Decks</a>` : ''}
+      </div>` : ''}
       <section class="section" aria-labelledby="tdTitle">
         <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks</a></div>
         <div class="tdecks">${top.map(deckRow).join('')}</div>
       </section>`}`;
     wire(c);
+    fx.goalRing(el, answered, goal);
   };
 
+  // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.
+  const coursesWithoutExam = () => {
+    const size = new Map();
+    for (const c of data.cards) size.set(c.deckId, (size.get(c.deckId) || 0) + 1);
+    const cardsIn = d => [...subtreeIds(data.decks, d.id)].reduce((n, id) => n + (size.get(id) || 0), 0);
+    return top.filter(d => d.id !== 'sample' && !examInfo(d)).map(d => [d, cardsIn(d)]).filter(x => x[1]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  };
   // "24 new a day to finish by 6 Nov", with a button to set the deck's limit to that (it asks first).
   // Cards not started yet are counted in the deck and its subdecks. Nothing shows when there are none left.
   const newPlan = (deck, info) => {
@@ -138,7 +155,7 @@ export async function renderToday(el) {
     // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
     return `<p class="exam-new" data-newplan="${esc(deck.id)}">
       <span><b>${n} new a day</b> to start all ${plural(unstarted, 'unstarted card')} by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}.</span>
-      ${now >= n ? '<span class="mono small">On track</span>'
+      ${now >= n ? `<span class="on-track small">${icon('check')} On track</span>`
         : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
         : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
   };
@@ -172,10 +189,10 @@ export async function renderToday(el) {
       <span class="td-main">
         ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
         <span class="td-name">${esc(deck.name)}</span>
-        <span class="td-counts"><span class="due"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
-          ${info ? `<span class="exam-badge">${esc(countdown(info))}</span>` : ''}</span>
+        <span class="td-counts"><span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
+          ${info ? `<span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
       </span>
-      <span class="td-go">${c.total ? `<span class="td-min mono">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
+      <span class="td-go">${c.total ? `<span class="td-min">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
     return c.total
       ? `<button class="tdeck" type="button" data-start="${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="Study ${esc(deck.name)}: ${plural(c.total, 'card')}">${inner}</button>`
       : `<a class="tdeck done" href="#/deck/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: all done. Open deck">${inner}</a>`;
@@ -187,6 +204,7 @@ export async function renderToday(el) {
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
     el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));
+    el.querySelectorAll('[data-addexam]').forEach(b => b.addEventListener('click', () => openExamSheet(b.dataset.addexam, () => renderToday(el))));
     el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.prep], deckId: b.dataset.prep, kind: 'prep' })));
   };
 
@@ -290,7 +308,7 @@ export async function renderToday(el) {
         <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
         <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
       </div>
-      <button class="btn ghost" type="button" id="csClose">Close</button>`);
+      `);
 
     const drawAhead = () => {
       const n = customQueue('ahead', data, cards, days).queue.length;
@@ -319,7 +337,6 @@ export async function renderToday(el) {
     $('csAheadBtn').addEventListener('click', () => go('ahead'));
     $('csPrepBtn')?.addEventListener('click', () => go('prep'));
     $('csForgotBtn').addEventListener('click', () => go('forgot'));
-    $('csClose').addEventListener('click', closeSheet);
   }
 
   draw();

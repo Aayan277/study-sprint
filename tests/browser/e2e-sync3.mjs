@@ -56,11 +56,11 @@ await C.goto(fake.recoveryLink('me@example.com', APP));
 await C.waitForSelector('#pwForm');
 ok(new URL(C.url()).hash === '#/settings', 'the sign-in is taken out of the address');
 ok((await C.textContent('#sheet')).includes('Set a new password for me@example.com'), 'the reset sheet names the account');
-await C.fill('#pw1', 'newpass456'); await C.fill('#pw2', 'newpass45'); await C.click('#pwForm [type=submit]');
+await C.fill('#pw1', 'newpass456'); await C.fill('#pw2', 'newpass45'); await C.click('button[type=submit][form=pwForm]');
 ok((await C.textContent('#pwErr')).includes("don't match"), 'mismatched passwords caught');
 await C.screenshot({ path: SP + '/s3-newpw.png' });
 const rowsBefore = fake.userRows('me@example.com').length;
-await C.fill('#pw2', 'newpass456'); await C.click('#pwForm [type=submit]');
+await C.fill('#pw2', 'newpass456'); await C.click('button[type=submit][form=pwForm]');
 // C has the sample deck and never signed in: the password is set, but it must not sign in and send that deck
 await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('Password saved for me@example.com'));
 ok((await toastText(C)).includes('sign in from Settings') && fake.users.get('me@example.com').password === 'newpass456', 'never-synced device with data: password saved, told to sign in from Settings');
@@ -74,7 +74,7 @@ const resetVia = async (page, password) => {
   await page.waitForSelector('#toast[hidden]', { state: 'attached' });   // the last toast is gone, so the next one is new
   await page.goto(fake.recoveryLink('me@example.com', APP));
   await page.waitForSelector('#sheet[open] #pwForm');   // the old, closed sheet is still in the page
-  await page.fill('#pw1', password); await page.fill('#pw2', password); await page.click('#pwForm [type=submit]');
+  await page.fill('#pw1', password); await page.fill('#pw2', password); await page.click('button[type=submit][form=pwForm]');
   await page.waitForSelector('#toast:not([hidden])');
   return toastText(page);
 };
@@ -108,7 +108,7 @@ ok((await toastText(C)).includes('signed in as me@example.com') && !(await C.isV
 ok(fake.users.get('other@example.com').password === 'secret123' && (await run(C, async () => (await (await import('./js/sync.js')).account()).email)) === 'me@example.com', 'nothing changed: still signed in as me@example.com');
 // change password while signed in
 await openSettings(C);
-await C.click('#pwBtn'); await C.fill('#pw1', 'changed789'); await C.fill('#pw2', 'changed789'); await C.click('#pwForm [type=submit]');
+await C.click('#pwBtn'); await C.fill('#pw1', 'changed789'); await C.fill('#pw2', 'changed789'); await C.click('button[type=submit][form=pwForm]');
 await C.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Password changed');
 ok(fake.users.get('me@example.com').password === 'changed789', 'change password while signed in');
 

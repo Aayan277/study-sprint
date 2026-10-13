@@ -36,17 +36,17 @@ ok((await rows())[0] === 'Classical conditioning', 'Most forgotten sort');
 await page.locator('.crow', { hasText: 'Placebo effect' }).click(); await page.waitForSelector('#ceForm');
 await page.screenshot({ path: SP + '/b-panel.png', fullPage: true });
 await page.fill('#ceBack', 'Getting better because you believe you were treated'); await page.fill('#ceTags', 'Research, Exam 1');
-await page.click('#ceForm button[type=submit]'); await page.waitForTimeout(400);
+await page.click('button[type=submit][form=ceForm]'); await page.waitForTimeout(400);
 let c = await card('Placebo effect');
 ok(c.back === 'Getting better because you believe you were treated' && c.tags.join() === 'research,exam 1', 'edit back and tags');
 await page.click('[data-flag="1"]'); await page.waitForTimeout(400);
 ok((await card('Placebo effect')).flag === 1, 'red flag set');
 await page.click('[data-act="suspend"]'); await page.waitForTimeout(400);
 ok((await card('Placebo effect')).suspended === true && (await page.textContent('#sheetTitle')).includes('Suspended'), 'suspended (panel shows it)');
-await page.click('#ceClose');
+await page.click('.sheet-x');
 ok((await page.locator('.crow', { hasText: 'Placebo effect' }).locator('.st').textContent()) === 'Suspended', 'list shows Suspended');
 await page.locator('.crow', { hasText: 'Neuroplasticity' }).click(); await page.click('[data-act="bury"]'); await page.waitForTimeout(400);
-ok((await card('Neuroplasticity')).buriedUntil > Date.now(), 'buried until tomorrow'); await page.click('#ceClose');
+ok((await card('Neuroplasticity')).buriedUntil > Date.now(), 'buried until tomorrow'); await page.click('.sheet-x');
 await page.locator('.crow', { hasText: 'Classical conditioning' }).click();
 await page.click('.card-info summary');
 ok((await page.textContent('.card-info')).includes('Forgotten2 times') || (await page.textContent('.card-info')).includes('2 times'), 'card info shows lapses');
@@ -59,7 +59,7 @@ ok(st.due > Date.now() + 2 * 86400000 && st.due < Date.now() + 4 * 86400000 && s
 await page.click('[data-act="reset"]'); await page.click('#cfYes'); await page.waitForTimeout(400);
 st = await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards')).find(c => c.front === 'Classical conditioning'); return db.get('cardStates', c.id); });
 ok(!st, 'reset to new removes the schedule');
-await page.click('#ceClose');
+await page.click('.sheet-x');
 
 // Review and Play skip suspended / buried
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
@@ -84,9 +84,9 @@ await page.click('#brActions'); await page.click('[data-act="delete"]'); await p
 await page.waitForFunction(() => document.querySelectorAll('.crow').length === 0 && document.querySelector('.crows .empty'));
 ok((await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).length)) === 9, 'bulk delete removed 3 cards');
 await page.click('#brSelect'); await page.selectOption('#brFilter', 'all');
-await page.click('#brAdd'); await page.fill('#acFront', 'Heuristic'); await page.fill('#acBack', 'A mental shortcut'); await page.click('#acForm button[type=submit]');
+await page.click('#brAdd'); await page.fill('#acFront', 'Heuristic'); await page.fill('#acBack', 'A mental shortcut'); await page.click('button[type=submit][form=acForm]');
 await page.waitForFunction(() => document.getElementById('acFront').value === '');
-await page.fill('#acFront', 'Schema'); await page.fill('#acBack', 'A mental framework'); await page.click('#acForm button[type=submit]');
+await page.fill('#acFront', 'Schema'); await page.fill('#acBack', 'A mental framework'); await page.click('button[type=submit][form=acForm]');
 await page.waitForTimeout(400); await page.click('#acDone');
 ok((await page.locator('.crow').count()) === 11 && (await page.textContent('.deck-summary')).includes('11'), 'added 2 cards one after another; counts updated');
 // move a card to a new deck via the All cards browser
@@ -95,6 +95,6 @@ await page.goto('http://localhost:8123/#/browse'); await page.waitForSelector('.
 ok((await page.locator('.crow .d').count()) === 11, 'All cards browser shows each card\'s deck');
 await page.locator('.crow', { hasText: 'Schema' }).click(); await page.selectOption('#ceMove', 'other'); await page.click('#ceMoveBtn'); await page.waitForTimeout(400);
 ok((await card('Schema')).deckId === 'other', 'moved card to another deck');
-await page.click('#ceClose'); await noHScroll('all cards');
+await page.click('.sheet-x'); await noHScroll('all cards');
 ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
 await browser.close();

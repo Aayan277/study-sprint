@@ -91,20 +91,27 @@ export function customQueue(kind, data, cards, days = 3) {
 
 // ---------- how long a session takes ----------
 export const DEFAULT_CARD_MS = 8000;       // used until there are enough answers to go by
-// A pause longer than this between two reviews is a break, not time spent on a card.
-const BREAK_MS = 2 * 60 * 1000, MAX_CARD_MS = 60 * 1000;
-// Your usual time per card: the median time between one review and the next in the same session
-// (last 60 days), or 8 seconds until there are enough. The log's own `ms` is only the time to turn the card over,
-// so it leaves out thinking about the rating and the next card; the gap between answers covers all of it.
+// Two reviews further apart than this are not "one card after another": the person looked away, took a break,
+// or the log rows are not a real session (an import, or a different day). 45 s covers a slow, careful card.
+const SAME_SESSION_MS = 45 * 1000;
+// Recent habits count most: use the last 2 weeks when they hold enough gaps, else the whole history.
+const RECENT_DAYS = 14, MIN_GAPS = 5, MIN_RECENT_GAPS = 20;
+// Your usual time per card: the median time between one review and the next in the same session, or 8 seconds
+// until there are enough. The log's own `ms` is only the time to turn the card over, so it leaves out thinking
+// about the rating and the next card; the gap between answers covers all of it.
+// Only Review's own log rows are used: Play rounds are quicker, and imported Anki history has made-up times.
+// (A gap of a minute or more used to count as "a minute a card", which turned 76 cards into a 76-minute estimate.)
 export function typicalCardMs(logs, now = Date.now()) {
   const since = now - HISTORY_DAYS * 86400000;
-  const reviews = logs.filter(l => l.source === 'review' && l.timestamp >= since).sort((a, b) => a.timestamp - b.timestamp);
-  const times = [];
+  const reviews = logs.filter(l => l.source === 'review' && l.timestamp >= since && l.timestamp <= now).sort((a, b) => a.timestamp - b.timestamp);
+  const gaps = [];                                  // [when, how long] for each pair of reviews in one session
   for (let i = 1; i < reviews.length; i++) {
     const gap = reviews[i].timestamp - reviews[i - 1].timestamp;
-    if (gap > 0 && gap <= BREAK_MS) times.push(Math.min(gap, MAX_CARD_MS));
+    if (gap > 0 && gap <= SAME_SESSION_MS) gaps.push([reviews[i].timestamp, gap]);
   }
-  if (times.length < 5) return DEFAULT_CARD_MS;
+  const recent = gaps.filter(g => g[0] >= now - RECENT_DAYS * 86400000);
+  const times = (recent.length >= MIN_RECENT_GAPS ? recent : gaps).map(g => g[1]);
+  if (times.length < MIN_GAPS) return DEFAULT_CARD_MS;
   times.sort((a, b) => a - b);
   const mid = times.length >> 1;
   return times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2;

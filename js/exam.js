@@ -55,6 +55,9 @@ export function examInfo(deck, now = Date.now()) {
   return daysLeft >= 0 ? { start, daysLeft } : null;
 }
 
+// The class for an exam countdown badge: amber, and red only in the last 3 days.
+export const badgeClass = info => (info && info.daysLeft <= 3 ? 'exam-badge soon' : 'exam-badge');
+
 export function countdown(info) {
   if (!info) return '';
   return info.daysLeft === 0 ? 'Exam today' : info.daysLeft === 1 ? 'Exam tomorrow' : `Exam in ${info.daysLeft} days`;
@@ -246,4 +249,18 @@ export function nearestExamDeck(decks, cards, now = Date.now()) {
     if (cards.some(c => inside.has(c.deckId))) best = { id: deck.id, daysLeft: info.daysLeft };
   }
   return best?.id ?? null;
+}
+
+// How ready a set of cards is: the share you are predicted to remember (READY_R or better) at a given time (the exam
+// day, or now), if you did no more reviews before then. A card never studied counts as not ready.
+// `when` is a time in ms. Returns { ready, total, share } (share 0 to 1).
+export const READY_R = 0.9;
+export function readiness(cards, statesById, when) {
+  let ready = 0;
+  cards = cards.filter(c => !c.suspended);        // suspended cards are not being studied: they count neither as ready nor in the total
+  for (const c of cards) {
+    const st = statesById.get(c.id);
+    if (st && st.state !== 0 && recallAt(st, when) >= READY_R) ready++;
+  }
+  return { ready, total: cards.length, share: cards.length ? ready / cards.length : 0 };
 }

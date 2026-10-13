@@ -191,11 +191,13 @@ export function hardestCards(cards, statesById, logs, now = Date.now(), limit = 
 }
 
 // ---------- chart scale ----------
-// A clean top for a chart's axis: 0, 5, 10, 20, 50, 100, 200, 500 ... at or above the biggest value.
+// A clean top for a chart's axis, at or above the biggest value: 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 or 10 times a
+// power of ten (so 38 gets 40 and 111 gets 150, not 50 and 200, and the bars use the chart's height).
+const NICE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
 export function niceMax(max) {
   if (max <= 0) return 5;
   const pow = 10 ** Math.floor(Math.log10(max));
-  for (const step of [1, 2, 5, 10]) if (step * pow >= max) return step * pow;
+  for (const step of NICE_STEPS) if (step * pow >= max) return Math.round(step * pow * 1e9) / 1e9;   // (rounding hides 0.1 * 3 = 0.30000000000000004)
   return 10 * pow;
 }
 

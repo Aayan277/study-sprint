@@ -4,7 +4,7 @@
 // That way the phone's back gesture and the browser's back button work as expected.
 
 import * as db from './db.js';
-import { applyTheme, syncBrowserBar, skinButtonsHTML } from './themes.js';
+import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
 import { renderToday } from './today.js';
 import { SAMPLE_DECK } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
@@ -13,10 +13,11 @@ import * as sync from './sync.js';
 import { formatInterval } from './queue.js';
 import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
+import * as fx from './fx.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.4';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 
@@ -41,6 +42,28 @@ async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>OLED black</b>
         <span>Pure black page in dark mode, to save battery on OLED screens.</span></span>
         <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
+    </section>
+
+    <section class="section" aria-labelledby="appearTitle">
+      <h2 id="appearTitle">Appearance</h2>
+      <div class="set-row column">
+        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers, which are easier to read. This device only.</p></div>
+        <div class="chips" role="radiogroup" aria-labelledby="alignLbl" id="alignChips">
+          ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        </div>
+      </div>
+      <label class="adv-row switch-row"><span><b>Compact deck list</b>
+        <span>Decks gets a search box and a sort (due, exam or A–Z), folds subdecks under their course and uses small play buttons. Turn it off for the old list. This device only.</span></span>
+        <input id="compactDecks" type="checkbox" class="switch" ${settings.compactDecks !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Rating feedback</b>
+        <span>When you rate a card in Review, a coloured ring pulses on the button, the new interval floats up, and an outline of the old card drifts away in a direction that suits the rating. The next card appears at once either way. This device only.</span></span>
+        <input id="ratingFeedback" type="checkbox" class="switch" ${settings.ratingFeedback !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Smooth transitions</b>
+        <span>Screens slide when you change tab, and pop-up sheets spring open and slide away. Turn it off for instant changes. This device only.</span></span>
+        <input id="smoothMotion" type="checkbox" class="switch" ${settings.smoothMotion !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
+        <span>Pick one course in Stats and see how much of it you are ready to remember on exam day (or today, with no exam), with an Exam prep button. Mastery moves to the top. This device only.</span></span>
+        <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -153,7 +176,7 @@ async function renderSettings(el) {
       <details class="danger-zone" id="dangerZone">
         <summary>Danger zone</summary>
         <div class="set-row">
-          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme is kept.</p></div>
+          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme and card text setting are kept.</p></div>
           <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
         </div>
       </details>
@@ -172,6 +195,14 @@ async function renderSettings(el) {
     saveTheme({ ...settings.theme, mode: r.value });
     redrawSkins();
   }));
+  el.querySelectorAll('input[name="cardAlign"]').forEach(r => r.addEventListener('change', () => {
+    settings.cardAlign = applyCardAlign(r.value);
+    db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
+  }));
+  // These two are per device too (not in SYNCED_SETTINGS): Decks and Stats read them when they are drawn.
+  for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion']) {
+    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); });
+  }
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
     redrawSkins();
@@ -364,6 +395,8 @@ async function confirmRestore(file) {
     if (synced) sync.syncNow();
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
+    applyCardAlign(settings.cardAlign);
+    fx.configure(settings);
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     location.hash = '#/decks';
@@ -398,9 +431,11 @@ function confirmResetSynced() {
     <div class="confirm">
       <p><b>Everywhere</b> deletes every deck, card and review on this device <b>and in your account</b>, so your other devices delete them too when they sync. It can't be undone.</p>
       <p><b>Just this device</b> signs this device out and clears it. Your account and other devices keep everything (sign in again to get it back).</p>
-      <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
-      <button class="btn danger" type="button" id="rsHere">Just this device</button>
-      <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+      <div class="sheet-actions stack">
+        <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
+        <button class="btn danger" type="button" id="rsHere">Just this device</button>
+        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+      </div>
     </div>`);
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
@@ -481,7 +516,7 @@ async function drawSync() {
           <h2 id="sheetTitle">Check your email</h2>
           <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
-          <button class="btn primary" type="button" id="fpOk">OK</button>`);
+          <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
       } catch (e) { err.textContent = e.message; err.hidden = false; }
     });
@@ -562,7 +597,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
     err.hidden = true;
     if (!passwordOk(pw)) { err.textContent = `The password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
     if (pw !== $('pw2').value) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
-    const btn = e.submitter || $('pwForm').querySelector('[type=submit]');
+    const btn = e.submitter || [...$('pwForm').elements].find(b => b.type === 'submit');   // the footer's button lives outside the form but is linked to it
     btn.disabled = true;
     try {
       await save(pw);
@@ -580,9 +615,11 @@ async function confirmSignOut() {
     <p>This device stops syncing. Your account and your other devices keep everything.</p>
     <p class="note" id="soNote">Checking for changes that haven't synced yet…</p>
     <div class="confirm">
-      <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
-      <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
-      <button class="btn ghost" type="button" id="soNo">Cancel</button>
+      <div class="sheet-actions stack">
+        <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
+        <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
+        <button class="btn ghost" type="button" id="soNo">Cancel</button>
+      </div>
     </div>`);
   $('soNo').addEventListener('click', closeSheet);
   $('soKeep').addEventListener('click', async () => { await sync.signOut(); closeSheet(); toast('Signed out'); drawSync(); });
@@ -633,10 +670,15 @@ function confirmDeleteServer() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const theme = settings.theme;
+  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion } = settings;
   await db.resetAll();
   await db.setSetting('theme', theme);
-  settings = { ...db.DEFAULT_SETTINGS, theme };
+  await db.setSetting('cardAlign', cardAlign);
+  await db.setSetting('compactDecks', compactDecks);
+  await db.setSetting('statsReadiness', statsReadiness);
+  await db.setSetting('ratingFeedback', ratingFeedback);
+  await db.setSetting('smoothMotion', smoothMotion);
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
 }
@@ -784,7 +826,7 @@ async function route() {
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');
-  el.className = 'view';
+  el.className = 'view' + fx.enterClass();      // a short fade-up where View Transitions are missing
   $('screen').replaceChildren(el);
   // Which screen this is, for the desktop layout (some screens use the full width: see styles.css).
   $('screen').dataset.route = ROUTES[name] ? name : 'today';
@@ -884,6 +926,8 @@ async function start() {
     return;
   }
   settings.theme = applyTheme(settings.theme);
+  applyCardAlign(settings.cardAlign);
+  fx.configure(settings);
   const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
@@ -892,7 +936,8 @@ async function start() {
   if (!location.hash) history.replaceState(null, '', '#/today');
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
   if (firstRun && /^#\/today\/?$/.test(location.hash)) history.replaceState(null, '', '#/welcome');
-  addEventListener('hashchange', route);
+  // Changing tab slides (View Transitions) unless Smooth transitions is off, motion is reduced or a round is running.
+  addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.

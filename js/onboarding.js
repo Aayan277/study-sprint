@@ -19,7 +19,7 @@ import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
 import { isHidden } from './browse-logic.js';
 import { formatInterval } from './queue.js';
-import { formatHTML, plainText } from './format.js';
+import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
 
@@ -201,7 +201,9 @@ function drawGuide() {
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
   const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
   const ivl = G.srs ? G.srs.previewIntervals(null, optsFor(card)) : null;
-  const deckLabel = `<span class="flash-deck">${esc(deckPath(G.decks, card.deckId))}</span>`;
+  const fullPath = deckPath(G.decks, card.deckId);
+  const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}</span>`;
+  const backSize = answerSize(plainText(card.back));
   el.innerHTML = `
     <div class="welcome guide">
       <div class="wl-top"><span class="wl-count mono">Card ${i + 1} of ${cards.length}</span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
@@ -214,8 +216,8 @@ function drawGuide() {
             <div class="flash-front${size}">${front}</div>
             <p class="flash-hint">Tap to flip</p></div>
           <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
-            <div class="flash-recap">${front}</div>
-            <div class="flash-ans"><div class="flash-back">${imgHTML(card.backImage)}${formatHTML(card.back)}</div></div></div>
+            <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
+            <div class="flash-ans"><div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div></div></div>
         </div>
       </article>
       <div class="ratebar" id="ratebar">${flipped ? `

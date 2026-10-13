@@ -15,7 +15,7 @@
      lines      --line (hairline), --line-strong (button edges), --control (edges of text boxes, switches:
                 3:1 or better, so people can see where a control is)
      brand      --accent (fills, rings), --accent-text (links, small text), --on-accent (text on an accent fill)
-     ratings    --again (red), --hard (amber), --good (green), --easy (blue). The same in every theme, so
+     ratings    --again (crimson), --hard (amber), --good (green), --easy (blue). The same in every theme, so
                 "wrong" never looks like the brand color. Each has a -tint (soft fill) and -line (edge).
    Themes are chosen with attributes on <html>: data-skin (the accent), data-theme="light" (otherwise dark),
    data-oled="on" (dark only). See js/themes.js. */
@@ -54,8 +54,8 @@
 
   /* ----- dark mode (the default), same for every accent ----- */
   --line:rgb(255 255 255 / .07); --line-strong:rgb(255 255 255 / .13); --hi:rgb(255 255 255 / .06);
-  /* Rating colors. Fixed: they do not change with the accent. */
-  --again:#FF6B5E; --again-tint:rgb(255 107 94 / .13); --again-line:rgb(255 107 94 / .38);
+  /* Rating colors. Fixed: they do not change with the accent. Again is crimson, so it differs from Ember's orange. */
+  --again:#FF5C7A; --again-tint:rgb(255 92 122 / .13); --again-line:rgb(255 92 122 / .4);
   --hard:#FFC53D;  --hard-tint:rgb(255 197 61 / .12);  --hard-line:rgb(255 197 61 / .34);
   --good:#34D9A5;  --good-tint:rgb(52 217 165 / .12);  --good-line:rgb(52 217 165 / .34);
   --easy:#5C9DFF;  --easy-tint:rgb(92 157 255 / .13);  --easy-line:rgb(92 157 255 / .36);
@@ -65,13 +65,15 @@
   --e-2:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong),0 12px 28px -12px rgb(0 0 0 / .8);
   --e-3:inset 0 1px 0 rgb(255 255 255 / .08),0 0 0 1px var(--line-strong),0 30px 60px -20px rgb(0 0 0 / .9);
   --scrim:rgb(3 4 8 / .7);
+  /* Exams are amber (a plan, not an alarm); red is kept for the last 3 days (.exam-badge.soon) */
+  --exam:var(--hard); --exam-tint:var(--hard-tint); --exam-line:var(--hard-line);
   color-scheme:dark;
 }
 /* ----- light mode ----- */
 :root[data-theme="light"]{
   --a-tint:.09; --a-line:.35; --a-glow:.35; --a-soft:.14; --a-hero:.14;
   --line:rgb(11 13 18 / .09); --line-strong:rgb(11 13 18 / .15); --hi:rgb(255 255 255 / .7);
-  --again:#C42B2B; --again-tint:#FDECEB; --again-line:#F3BDBA;
+  --again:#BE123C; --again-tint:#FDE8EC; --again-line:#F4B6C3;
   --hard:#8F5300;  --hard-tint:#FFF3DF;  --hard-line:#EBCF9E;
   --good:#087054;  --good-tint:#E3F5EF;  --good-line:#B3E0D0;
   --easy:#1F5FC2;  --easy-tint:#E8F0FD;  --easy-line:#BCD3F6;
@@ -198,7 +200,7 @@ main[data-route="decks"] .eyebrow,main[data-route="stats"] .eyebrow,main[data-ro
 
 /* ---------- 4. App frame: header on top, screen in the middle, tab bar at the bottom ---------- */
 .top{position:sticky;top:0;z-index:5;padding-top:env(safe-area-inset-top,0px);
-  background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--line)}
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--line)}
 .top-in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:var(--s-3);padding:6px 12px 6px 16px}
 .brand{font-weight:650;font-size:var(--fs-md);letter-spacing:-.02em;margin-right:auto;color:var(--text);text-decoration:none;padding:4px 0;cursor:pointer;display:flex;align-items:center;gap:9px}
 .brand-mark{width:24px;height:24px;flex:none;filter:drop-shadow(0 0 10px var(--glow-soft))}
@@ -209,7 +211,7 @@ main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-i
 
 /* Docked glass tab bar with a glowing indicator over the current tab */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;padding-bottom:env(safe-area-inset-bottom,0px);
-  background:color-mix(in srgb,var(--surface-1) 80%,transparent);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-top:1px solid var(--line)}
+  background:color-mix(in srgb,var(--surface-1) 92%,transparent);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border-top:1px solid var(--line)}
 .tabs-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;min-height:56px;background:none;border:0;color:var(--text-3);font-size:var(--fs-2xs);font-weight:500;cursor:pointer;text-decoration:none;transition:color var(--t-fast)}
 .tab svg{width:22px;height:22px;stroke-width:1.6}
@@ -322,13 +324,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .th-label{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;color:var(--accent-text)}
 .th-big{font-size:var(--fs-xl);font-weight:650;letter-spacing:-.035em;line-height:1.1;text-shadow:0 0 28px var(--glow)}
 .th-sub{font-size:var(--fs-sm);color:var(--text-2)}
-.th-sub b{color:var(--text);font-weight:600}
-.streak{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:var(--s-4) 0;font-size:var(--fs-sm);color:var(--text-2)}
+.th-sub b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.streak{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:var(--s-4) 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
 .streak .ico{width:18px;height:18px;color:var(--text-3)}
 .streak b{color:var(--text);font-size:var(--fs-md)}
 .streak span{flex-basis:100%;padding-left:24px;color:var(--text-2)}
 .streak.kept .ico{color:var(--hard);filter:drop-shadow(0 0 6px var(--hard-line))}
-.btn.big{min-height:56px;font-size:var(--fs-md)}
+.btn.big{min-height:56px;font-size:var(--fs-md);font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.btn.big .ico{width:18px;height:18px}
 .th-done b{display:block;font-size:var(--fs-md);margin-bottom:2px}
 .th-done p{margin:0 0 var(--s-3);color:var(--text-2);font-size:var(--fs-sm)}
 .resume{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);margin-bottom:var(--s-3);background:var(--accent-tint);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:var(--fs-sm)}
@@ -339,13 +342,28 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .sec-head h2{margin:0}
 .sec-head .link{padding:4px 6px;min-height:32px}
 .exams{display:grid;gap:var(--s-2)}
-.exam-row{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-3);padding:var(--s-2) var(--s-3) var(--s-2) var(--s-4);background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);overflow:hidden}
+.exam-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 12px;padding:12px 12px 12px 18px;background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);overflow:hidden}
 .exam-row::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
-.exam-link{display:flex;align-items:center;gap:var(--s-2);flex:1 1 140px;min-width:0;color:var(--text);text-decoration:none;font-weight:600}
+.exam-link{display:flex;flex-wrap:wrap;align-items:center;gap:6px var(--s-2);grid-column:1;grid-row:1;min-width:0;color:var(--text);text-decoration:none;font-weight:600}
 .exam-link .ico{color:var(--text-2)}
 .exam-name{overflow-wrap:anywhere}
-.exam-new{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2);margin:0;font-size:var(--fs-sm);color:var(--text-2)}
+.exam-row > [data-prep]{grid-column:2;grid-row:1}
+.exam-new{grid-column:1 / -1;grid-row:2;margin:0;font-size:var(--fs-sm);line-height:1.45;color:var(--text-2)}
+.exam-new > span:first-child{display:inline}
+.on-track{display:inline-flex;align-items:center;gap:3px;margin-left:6px;vertical-align:-1px;color:var(--good);font-weight:600;white-space:nowrap}
+.on-track .ico{width:15px;height:15px}
+.exam-new .small:not(.on-track){display:block;margin-top:4px}
+.exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
+.exam-add{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
+.exam-add .link{padding:4px 6px;min-height:32px}
+.exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
+.exam-chip:hover{background:var(--surface-2)}
+.exam-chip .ico{width:15px;height:15px;color:var(--accent-text)}
+.exam-chip i{width:8px;height:8px;border-radius:50%;flex:none}
+.exam-line .exam-chip{margin:0}
+.exam-date{width:100%;font-size:1.15rem;padding:14px}
+.exam-quick{display:flex;gap:8px;flex-wrap:wrap}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
@@ -357,12 +375,39 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .td-counts b{font-family:var(--f-num);font-weight:500;color:var(--text)}
 .td-counts .due{padding:0 8px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .td-counts .due b{color:var(--accent-text)}
+.td-counts .due.zero,.deck-counts .due.zero{background:none;box-shadow:none;padding:0;color:var(--text-2)}
+.td-counts .due.zero b,.deck-counts .due.zero b{color:var(--text)}
 .td-go{display:flex;align-items:center;gap:var(--s-2);flex:none}
 .td-min{font-size:var(--fs-xs);color:var(--text-2)}
 .td-go .ico{width:36px;height:36px;padding:9px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .tdeck.done .td-go .ico{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good)}
 .tdeck.done .td-name{color:var(--text-2)}
 
+/* Compact deck list (Settings → Appearance): search and sort on top, a small round play button, subdecks folded */
+.deck-tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:var(--s-3)}
+.deck-search{position:relative;flex:1 1 220px;display:flex;align-items:center}
+.deck-search .ico{position:absolute;left:12px;width:17px;height:17px;color:var(--text-3);pointer-events:none}
+.deck-search input{width:100%;min-width:0;height:42px;padding:0 12px 0 38px;border-radius:var(--r-md);border:1px solid var(--control);background:var(--surface-sunken);color:var(--text);font-size:var(--fs-md)}
+.deck-sort{display:flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1)}
+.deck-sort button{border:0;background:none;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);padding:0 12px;min-height:36px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.deck-sort button:hover{color:var(--text)}
+.deck-sort button[aria-pressed="true"]{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-strong)}
+@media (max-width:520px){.deck-sort{flex:1 1 100%}.deck-sort button{flex:1}}
+.decks.compact .deck{padding-bottom:var(--s-3)}
+.decks.compact .deck-act{grid-column:2 / 4;grid-row:2;align-self:end;justify-self:end;margin:0 4px 0 0}
+.decks.compact .deck-open{grid-row:1 / 3}
+.deck-go{all:unset;box-sizing:border-box;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);cursor:pointer}
+.deck-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deck-go .ico{width:17px;height:17px;margin-left:2px}
+.deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:0 6px 18px -6px var(--glow)}
+.deck-go.done{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good);cursor:default}
+.deck-go.done .ico{margin:0}
+.decks.compact .subdecks{margin-top:var(--s-2)}
+.decks.compact .subdecks summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:36px;color:var(--text-2);font-weight:500}
+.decks.compact .subdecks summary::-webkit-details-marker{display:none}
+.decks.compact .subdecks summary .ico{width:16px;height:16px;color:var(--text-3)}
+.decks.compact .subdecks summary .sub-chev{margin-left:auto;transition:transform var(--t-fast)}
+.decks.compact .subdecks[open] summary .sub-chev{transform:rotate(90deg)}
 .decks{display:grid;gap:var(--s-2)}
 .deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
@@ -396,6 +441,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .empty{text-align:center;padding:34px var(--s-4);border:1px dashed var(--control);border-radius:var(--r-lg);color:var(--text-2)}
 .empty b{color:var(--text)}
 .empty .btn{margin-top:14px}
+/* The first-card empty state (an empty deck or All cards): a solid card, not a dashed box */
+.empty-first{background:var(--surface-1);border:0;box-shadow:var(--e-1);padding:28px var(--s-5) 26px;margin-top:var(--s-2)}
+.empty-first b{display:block;font-size:var(--fs-lg);letter-spacing:-.02em;margin-top:2px}
+.empty-first p{margin:6px auto 0;max-width:34ch;font-size:var(--fs-base);line-height:1.5}
+.empty-first code{font:500 .92em var(--f-num);background:var(--surface-3);padding:1px 6px;border-radius:5px;color:var(--text)}
+.empty-art{display:block;width:120px;height:96px;margin:0 auto 6px}
+.empty-btns{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:18px}
+.empty-btns .btn{width:min(100%,240px);margin:0}
 .browse-all{margin:var(--s-3) 0 0}
 .browse-all a{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);text-decoration:none}
 .starters{margin-top:var(--s-6)}
@@ -422,13 +475,15 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .mbar .lv-new{background:transparent}
 
 /* ---------- 8. Deck page and card list ---------- */
-.deck-summary{padding:var(--s-3) var(--s-4)}
+.deck-summary{position:relative;overflow:hidden;padding:var(--s-3) var(--s-4) var(--s-3) 20px}
+.deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
 .deck-summary .deck-counts .due{order:0}
 main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3);margin-bottom:var(--s-4)}
 main[data-route="deck"] .screen-head .head-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 main[data-route="deck"] .screen-head .head-actions .btn{padding:6px 2px;white-space:nowrap;font-size:var(--fs-sm)}
 main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / -1;order:-1;min-height:46px;font-size:var(--fs-base)}
-.exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--again-tint);color:var(--again);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+.exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--exam-tint);color:var(--exam);box-shadow:inset 0 0 0 1px var(--exam-line);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+.exam-badge.soon{background:var(--again-tint);color:var(--again);box-shadow:inset 0 0 0 1px var(--again-line)}
 .deck .exam-badge{margin-top:4px;justify-self:start}
 .exam-line{margin:var(--s-2) 0 0;font-size:var(--fs-base);color:var(--text-2)}
 .br-head h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em}
@@ -436,7 +491,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / 
 .br-controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--s-2);margin-bottom:6px}
 @media (max-width:520px){.br-controls{grid-template-columns:1fr 1fr}.br-controls input{grid-column:1 / -1}}
 .br-controls input,.br-controls select{min-width:0;font-size:var(--fs-base);padding:8px 11px}
-.br-count{margin:0 0 10px;font:500 var(--fs-2xs) var(--f-num);color:var(--text-2);letter-spacing:.04em}
+.br-count{margin:0 0 10px;font-size:var(--fs-xs);color:var(--text-2)}
 /* A dense grouped list: one rounded box, hairlines between the rows */
 .crows{list-style:none;margin:0;padding:0;display:grid;gap:0;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden}
 .crows .empty{padding:20px}
@@ -450,7 +505,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / 
 .crow-main{flex:1;min-width:0;display:grid;gap:1px}
 .crow-main .f{font-weight:550;font-size:var(--fs-base);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .crow-main .b{font-size:var(--fs-sm);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.crow-main .d{font:var(--fs-xs) var(--f-num);color:var(--text-2)}
+.crow-main .d{font-size:var(--fs-xs);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .crow-meta{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 /* Card status pills: text says it, the tint backs it up */
 .st{display:inline-block;font:500 var(--fs-2xs)/1.6 var(--f-num);padding:0 7px;border-radius:var(--r-xs);background:var(--surface-3);color:var(--text-2);white-space:nowrap}
@@ -466,20 +521,40 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / 
 .bulkbar #brSel{margin-right:auto;font-weight:600}
 
 /* ---------- 9. Dialogs: a bottom sheet on phones, a centered box on wider screens ---------- */
-dialog.sheet{border:0;padding:0;margin:auto auto 0;width:100%;max-width:520px;max-height:88dvh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface-1);color:var(--text);border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:var(--e-3)}
+/* One frame for every sheet (openSheet in js/ui.js): a header with the title and a × at the top right, a body
+   that scrolls, and a footer with the buttons that stays in view (the main button on the right). The same on
+   phones and computers. */
+dialog.sheet{display:flex;flex-direction:column;border:0;padding:0;margin:auto auto 0;width:100%;max-width:520px;max-height:88dvh;overflow:hidden;background:var(--surface-1);color:var(--text);border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:var(--e-3)}
+dialog.sheet:not([open]){display:none}
+dialog.sheet:focus{outline:none}
 dialog.sheet::backdrop{background:var(--scrim);backdrop-filter:blur(4px)}
 dialog.sheet[open]{animation:sheet-in var(--t-med) var(--ease)}
 @keyframes sheet-in{from{transform:translateY(28px);opacity:0}}
-/* the little grab handle at the top of a phone sheet */
-dialog.sheet:not(.side)::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--line-strong);margin:8px auto 0}
-@media (min-width:600px){dialog.sheet{margin:auto;border-radius:var(--r-lg)} dialog.sheet::before{display:none!important}}
+@media (min-width:600px){dialog.sheet{margin:auto;border-radius:var(--r-lg)}}
+.sheet-head{position:relative;flex:none;display:flex;align-items:center;gap:var(--s-2);padding:18px 8px 6px var(--s-4);touch-action:none}
+/* the grab bar of a phone sheet: drag the header down to close it */
+.sheet-head::before{content:"";position:absolute;top:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--line-strong)}
+@media (min-width:600px){.sheet-head::before{display:none}.sheet-head{padding-top:14px}}
+dialog.sheet.side .sheet-head::before{display:none}
+.sheet-head h2{flex:1;min-width:0;margin:6px 0 0;font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:var(--s-2)}
+.sheet-x{flex:none;display:grid;place-items:center;width:40px;height:40px;margin-top:4px;padding:0;border-radius:50%;border:0;background:var(--surface-2);color:var(--text-2);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
+.sheet-x:hover{color:var(--text);background:var(--surface-3)}
+.sheet-x .ico{width:18px;height:18px}
 .sheet-in{padding:var(--s-3) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom,0px));display:grid;gap:var(--s-4)}
-.sheet-in h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:var(--s-2);margin:0}
+dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;padding-top:var(--s-3);padding-bottom:var(--s-4)}
+.sheet-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:12px var(--s-4) calc(12px + env(safe-area-inset-bottom,0px));background:var(--surface-1);border-top:1px solid var(--line)}
+.sheet-foot .btn{flex:1 1 auto;min-height:48px;white-space:nowrap}
+.sheet-foot .btn.primary,.sheet-foot .btn.solid{flex-grow:1.6;min-width:44%}
+.sheet-foot.stack{flex-direction:column;align-items:stretch}
+.sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
+.sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;opacity:.7;margin-left:4px}
+@media (pointer:coarse){.sheet-foot kbd{display:none}}
 .swatches{display:flex;flex-wrap:wrap;gap:10px}
 .swatch{width:40px;height:40px;border-radius:50%;border:3px solid var(--surface-1);box-shadow:0 0 0 1.5px var(--control);cursor:pointer;padding:0;background:var(--c)}
 .swatch[aria-pressed="true"]{box-shadow:0 0 0 3px var(--text)}
 .sheet-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sheet-actions .btn{flex:1 1 auto}
+.confirm .sheet-actions{justify-content:flex-end}
 .sheet-danger,.card-info{border-top:1px solid var(--line)}
 .sheet-danger{padding-top:14px}
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
@@ -487,6 +562,23 @@ dialog.sheet:not(.side)::before{content:"";display:block;width:36px;height:4px;b
 .err{color:var(--again);font-size:var(--fs-base);margin:12px 0 0}
 .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
 .field textarea,.rich{font-size:var(--fs-md)}
+/* The short card sheet in Review and Play: Edit, Flag, Bury, Suspend, More */
+.act-front{margin:0 0 -4px;font-weight:600;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-list{display:grid;background:var(--surface-2);border-radius:var(--r-lg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.act-row{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 16px;background:none;border:0;color:var(--text);font:500 var(--fs-md) var(--f-ui);text-align:left;cursor:pointer;width:100%}
+.act-row + .act-row{box-shadow:inset 0 1px 0 var(--line)}
+button.act-row:hover{background:var(--surface-3)}
+.act-row > .ico{width:20px;height:20px;color:var(--text-2);flex:none}
+.act-row > span{flex:1;min-width:0;display:grid}
+.act-row small{font-size:var(--fs-xs);color:var(--text-2);font-weight:400}
+.act-row kbd{font:600 var(--fs-2xs)/1.6 var(--f-num);color:var(--text-2);border:1px solid var(--line-strong);border-radius:5px;padding:0 6px}
+@media (pointer:coarse){.act-row kbd{display:none}}
+.act-flags{cursor:default;gap:10px}
+.act-fl{flex:1}
+.act-flag{flex:none;width:34px;height:34px;border-radius:50%;border:0;background:var(--c);box-shadow:inset 0 0 0 2px rgb(0 0 0 / .15);cursor:pointer}
+.act-flag[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface-2),0 0 0 4px var(--text)}
+.act-flag:focus-visible,.act-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.act-flag:focus-visible{outline-offset:3px}
 .act-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .act-grid .btn{width:100%;justify-content:flex-start;padding:0 var(--s-3);min-height:44px;font-weight:500}
 /* The row of flag colors scrolls sideways inside its own box (not the page) if it is too wide */
@@ -568,17 +660,38 @@ main[data-route="import"] > .view > .savebar{order:5}
 .c-rev{color:var(--good)}
 #speakBtn{display:inline-grid;place-items:center}
 #speakBtn svg{width:19px;height:19px}
-#endBtn{color:var(--text);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);margin-left:2px;padding:8px 11px}
-.rv-head .link{padding:8px 7px}
+/* The toolbar: Undo, Read aloud and ⋯ are square icon buttons, End has a word */
+.rv-head{gap:6px}
+.rv-head .link{width:40px;height:40px;min-height:40px;padding:0;display:grid;place-items:center;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1);color:var(--text-2)}
+.rv-head .link{flex:none}
+.rv-head .link.more{min-width:0}
+.rv-head .link:hover:not(:disabled){background:var(--surface-2)}
+.rv-head .link .ico,.rv-head .link svg{width:19px;height:19px}
+#endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
+/* Progress: done ÷ (done + left), relearning cards included. It lives outside what is redrawn per card. */
+.rv-prog{height:2px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-3)}
+.rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);box-shadow:0 0 8px var(--glow);transition:width 350ms var(--ease)}
+@media (prefers-reduced-motion:reduce){.rv-prog i{transition:none}}
+/* Very narrow phones: shorter label, tighter buttons, so the whole toolbar fits */
+@media (max-width:359px){
+  .rv-head{gap:3px}
+  .rv-head .link{width:36px;min-height:36px;height:36px}
+  #endBtn{width:auto;padding:0 10px}
+  .rv-counts{padding:2px}
+  .rv-counts span{padding:7px 3px;gap:3px}
+  .rv-counts span[data-short]::before{content:attr(data-short)}
+}
 
 .flash{position:relative;display:flex;flex-direction:column;gap:var(--s-3);min-height:min(58dvh,520px);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);margin-bottom:var(--s-2);cursor:default}
 .flash[role="button"]{cursor:pointer}
 /* Quick taps on the card or rating buttons shouldn't select text or show the iPhone tap menu. */
 .flash,.rate,.ratebar .btn,.opt{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.flash-deck{align-self:flex-start;margin-bottom:auto;font:500 var(--fs-2xs)/1 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);padding:6px 9px;border-radius:var(--r-xs);background:var(--surface-3);overflow-wrap:anywhere}
+.flash-deck{display:block;align-self:stretch;margin-bottom:auto;font:500 var(--fs-xs)/1.3 var(--f-ui);color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .flash-front{font-weight:600;font-size:clamp(1.75rem,8vw,2.5rem);letter-spacing:-.035em;line-height:1.15;text-align:center;margin:auto 0;overflow-wrap:anywhere;white-space:pre-line}
 .flash-front.long{font-size:clamp(1.3rem,5.6vw,1.7rem);letter-spacing:-.02em}
 .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0;text-align:left}
+.flash-front,.flash-recap{text-wrap:balance}
+.flash-front.xlong{text-wrap:pretty}
 /* Review's card turns over: a front face and a back face, both always in the page. The flash itself
    is just the stage; each face is drawn like a card. A new card rises in. */
 .flash.rv-card{display:flex;flex-direction:column;gap:0;padding:0;background:none;box-shadow:none;perspective:1400px}
@@ -598,7 +711,13 @@ main[data-route="import"] > .view > .savebar{order:5}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
-.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
+.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
+/* A long answer (about 160+ characters, set in review.js) is read, not glanced at: smaller, left-aligned, with its
+   question shrunk to a one-or-two-line reminder. 320+ characters go one step smaller. */
+.flash-back.long{font-size:1.06rem;line-height:1.6;letter-spacing:-.005em;text-align:left}
+.flash-back.xlong{font-size:1rem}
+.flash-recap.small{font-size:1.06rem;line-height:1.4;font-weight:600;text-align:left}
+.rv-back:has(.flash-recap.small) .flash-ans{margin-top:0}
 .rv-typed:empty{display:none}
 .flash-hint{margin:auto 0 0;text-align:center;font:500 var(--fs-xs) var(--f-ui);color:var(--text-2)}
 .typed{margin:0 0 10px;text-align:center;font-weight:700}
@@ -713,8 +832,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .play-card .flash-front.gone{opacity:0}
 .play-card{transition:box-shadow .2s}
 .play-card.ok{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--good)}
-.play-card.no{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--again);animation:shake .32s}
-@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.play-card.no{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--again);animation:fx-shake 380ms var(--out-expo)}
 .flash-q{position:absolute;bottom:10px;right:14px;font-size:var(--fs-xs);color:var(--text-2)}
 .timer{height:3px;margin:12px 0 var(--s-4);background:var(--surface-3);border-radius:3px;overflow:hidden}
 .timer-fill{height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow);transform-origin:left center}
@@ -747,8 +865,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .res-head{display:flex;align-items:center;gap:18px;margin-bottom:22px}
 @media (max-width:480px){.res-head .stamp{width:78px;height:78px;font-size:2.5rem;border-width:3px}}
 .stamp{width:104px;height:104px;flex:none;border:4px solid var(--accent);border-radius:50%;color:var(--accent-text);display:grid;place-items:center;font-weight:700;font-size:3.4rem;line-height:1;transform:rotate(-8deg);text-shadow:0 0 24px var(--glow)}
-.stamp.press{animation:press .35s ease-out}
-@keyframes press{from{transform:rotate(-8deg) scale(1.35);opacity:.3}to{transform:rotate(-8deg) scale(1);opacity:1}}
+.stamp.press{position:relative;animation:fx-stamp 520ms cubic-bezier(.2,.9,.25,1.25) backwards}
 .res-grade{margin:0;font-weight:600;color:var(--text-2);font-size:var(--fs-base);overflow-wrap:anywhere}
 .res-score{margin:0;font:600 clamp(2.3rem,9vw,3.2rem)/1.1 var(--f-num);letter-spacing:-.04em}
 .res-score small{font:500 var(--fs-md) var(--f-ui);letter-spacing:0;color:var(--text-2)}
@@ -764,6 +881,39 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 /* ---------- 13. Stats ---------- */
 .filter-row{display:flex;gap:10px;margin-bottom:var(--s-3)}
 .filter-row .select{width:auto;max-width:100%;border-radius:var(--r-sm);padding:7px 12px;font-size:var(--fs-sm);background-color:var(--surface-1)}
+/* One course in Stats (Settings → Appearance → Exam readiness in Stats): a deck picker button, then a readiness header */
+.stats-scope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:var(--s-3)}
+.pick-btn{display:inline-flex;align-items:center;gap:10px;min-height:44px;max-width:100%;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:600 var(--fs-md) var(--f-ui);cursor:pointer;box-shadow:var(--e-1)}
+.pick-btn:hover{background:var(--surface-2)}
+.pick-btn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-btn .ico{width:17px;height:17px;color:var(--text-2);flex:none}
+.pick-btn .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.pick-hint{font-size:var(--fs-xs);color:var(--text-2)}
+.ready-card{display:flex;gap:var(--s-4);align-items:center;margin-bottom:var(--s-2);background:var(--hero);padding:var(--s-4)}
+.ready-ring .ring-in b{font-size:1.45rem;font-weight:650;letter-spacing:-.03em}
+.ready-ring .ring-in small{font-size:.6em;font-weight:500;color:var(--text-2);margin:0 0 0 1px}
+.ready-ring{display:inline-grid;width:76px;height:76px}
+.ready-ring .ring-in{flex-direction:row;align-items:baseline}
+.ready-txt{flex:1;min-width:0}
+.ready-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ready-row h2{margin:0;font-size:var(--fs-md);font-weight:600}
+.ready-line{margin:4px 0 8px;font-size:var(--fs-sm);color:var(--text-2)}
+.ready-line b{color:var(--text);font-weight:600}
+.ready-note{margin:8px 0 0;font-size:var(--fs-xs);line-height:1.45}
+.ready-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ready-acts .ico{width:16px;height:16px}
+/* The deck picker sheet (js/deck-picker.js) */
+.pick-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+.pick-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px 0 calc(10px + var(--depth,0) * 18px);border:0;border-radius:var(--r-sm);background:none;color:var(--text);font:500 var(--fs-base) var(--f-ui);text-align:left;cursor:pointer}
+.pick-row:hover{background:var(--surface-2)}
+.pick-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pick-row[aria-selected="true"]{background:var(--surface-3);box-shadow:inset 2px 0 0 var(--accent)}
+.pick-row.ctx{color:var(--text-2)}
+.pick-row .dot{width:8px;height:8px;border-radius:50%;background:var(--deck);flex:none}
+.pick-name{flex:1;min-width:0;overflow-wrap:anywhere}
+.pick-name small{margin-left:6px;font:500 var(--fs-2xs) var(--f-num);color:var(--text-2)}
+.pick-n{flex:none;font-size:var(--fs-xs);color:var(--text-2)}
+.pick-all{font-weight:600}
 .mhead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2) var(--s-3);flex-wrap:wrap;margin-bottom:var(--s-3)}
 .mhead h2{margin:0;font-size:var(--fs-base);font-weight:600;letter-spacing:-.015em}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
@@ -773,9 +923,9 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .pgrid .card:first-child{background:var(--hero)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
 .pgrid .card p{margin:var(--s-2) 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-2)}
-.big{font:600 2.5rem/1 var(--f-num);letter-spacing:-.06em;margin-top:var(--s-3);color:var(--text)}
+.pgrid .big{font:600 2.5rem/1 var(--f-num);letter-spacing:-.06em;margin-top:var(--s-3);color:var(--text)}
 .pgrid .card:first-child .big{text-shadow:0 0 24px var(--glow)}
-.big small{font:500 var(--fs-sm) var(--f-ui);letter-spacing:0;color:var(--text-2);margin-left:5px}
+.pgrid .big small{font:500 var(--fs-sm) var(--f-ui);letter-spacing:0;color:var(--text-2);margin-left:5px}
 /* The last 7 days: a check mark in a filled square means studied (not only a color) */
 .week{display:flex;gap:4px;justify-content:space-between;margin-top:auto;padding-top:var(--s-3)}
 .wd{display:flex;flex-direction:column;align-items:center;gap:4px;font:500 .625rem var(--f-num);color:var(--text-2)}
@@ -787,13 +937,13 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 
 /* column charts: thin bars with rounded tops, hairline grid, labels in text colors */
 .chart{position:relative}
-.chart-plot{position:relative;height:140px;margin:var(--s-2) 0 0 26px}
+.chart-plot{position:relative;height:150px;margin:var(--s-2) 0 0 26px}
 .chart-line{position:absolute;left:0;right:0;border-top:1px solid var(--line)}
 .chart-line span{position:absolute;right:calc(100% + 6px);top:-.6em;font:.625rem var(--f-num);color:var(--text-2)}
 .chart-cols{position:absolute;inset:0;display:flex;align-items:flex-end;gap:0}
 .col{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;background:none;border:0;padding:0;cursor:pointer;border-radius:4px}
 .col:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 35%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
+.bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 70%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
 .col:last-child .bar,.col:hover .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}
 .cap{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font:500 .625rem var(--f-num);color:var(--text-2);white-space:nowrap}
 .chart-x{display:flex;gap:0;margin:6px 0 0 26px;font:.625rem var(--f-num);color:var(--text-2)}
@@ -830,7 +980,9 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .hard-list li:first-child{border-top:0;padding-top:0}
 .hard-list .f{font-weight:550;overflow-wrap:anywhere}
 .hard-list .b{font-size:var(--fs-sm);color:var(--text-2);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.hard-list .n{font:500 var(--fs-2xs) var(--f-num);color:var(--again);margin-top:2px}
+.hard-list .n{font-size:var(--fs-xs);color:var(--text-2);margin-top:2px;display:flex;align-items:center;gap:6px}
+.hard-all{margin-top:var(--s-2)}
+.hard-list .n::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--again);flex:none}
 
 .mdetail{margin:14px 0;padding:12px 14px;border-radius:var(--r-md);background:var(--surface-sunken);box-shadow:inset 0 0 0 1px var(--line);min-height:0}
 .mdetail p{margin:0}
@@ -885,6 +1037,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .stepper .icon-btn{border-color:var(--line-strong);background:var(--surface-2);font-size:1.3rem;color:var(--text)}
 .stepper input{width:64px;text-align:center;font:600 var(--fs-md) var(--f-num);padding:9px 4px}
 .num-box{width:110px;font:600 var(--fs-md) var(--f-num);padding:9px 10px}
+.num-box::placeholder{font-family:var(--f-ui);font-weight:400}
 .easy-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:var(--s-2)}
 .easy-day{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .easy-day select{font-size:var(--fs-base);padding:7px 8px}
@@ -934,7 +1087,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .export-opt span{font-weight:400;font-size:var(--fs-base);color:var(--text-2)}
 
 /* Card formatting (format.js, card-editor.js) */
-.flash-front b,.flash-recap b,.flash-back b{font-weight:800}
+.flash-front b,.flash-recap b,.flash-back b{font-weight:650}
 .flash-front ul,.flash-recap ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
 .flash-front ul,.flash-recap ul{font-size:.8em}
 .fmt-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
@@ -949,8 +1102,15 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .rich{min-height:calc(var(--rows,2) * 1.55em + 24px);padding:11px 13px;line-height:1.55;overflow-wrap:anywhere;cursor:text}
 .rich:empty::before{content:attr(data-placeholder);color:var(--text-3)}
 
+/* Settings → Appearance → Card text alignment (js/themes.js sets data-align on <html>).
+   Auto leaves the rules above alone: short text centred, long answers left. */
+html[data-align="center"] :is(.flash-front,.flash-recap,.flash-back){text-align:center}
+html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:left}
+
 /* Pictures on cards (media.js) */
-.card-img{display:block;max-width:100%;max-height:38vh;margin:0 auto 10px;border-radius:var(--r-md);object-fit:contain;background:var(--surface-sunken)}
+.card-img{display:block;max-width:100%;max-height:38vh;margin:0 auto 10px;border-radius:var(--r-md);object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line-strong)}
+/* a white picture is easier on the eyes on a dark card */
+:root:not([data-theme="light"]) .card-img{filter:brightness(.92)}
 .card-img.missing,.img-thumb.missing{min-height:48px;min-width:120px;border:1px dashed var(--control);font-size:var(--fs-sm);color:var(--text-2)}
 .flash-front .card-img,.flash-recap .card-img{max-height:32vh}
 .play-card .card-img{max-height:26vh}
@@ -1004,8 +1164,10 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   .tab[aria-current="page"]::before{top:9px;bottom:9px;left:0;right:auto;width:2px;height:auto;border-radius:0 2px 2px 0}
   /* Pages: next to the sidebar, roomier. Lists and Stats use the full width; the rest stay readable. */
   main{max-width:none;margin:0 0 0 var(--side);padding:32px 44px 56px}
+  /* One content width for every screen (1120px), so the left edges line up when you switch tabs.
+     Screens that read better narrow keep their content in a 760px column at the same left edge. */
   main > .view{max-width:1120px;margin:0 auto}
-  main[data-route="play"] > .view,main[data-route="settings"] > .view,main[data-route="import"] > .view{max-width:760px}
+  main[data-route="play"] > .view > *,main[data-route="settings"] > .view > *,main[data-route="import"] > .view > *{max-width:760px}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
   body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
@@ -1015,12 +1177,20 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   /* Decks: a grid of decks */
   main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--s-3)}
   main[data-route="decks"] .deck{min-height:150px;grid-template-rows:auto 1fr;padding:var(--s-4) var(--s-2) var(--s-4) var(--s-5)}
+  /* Compact: tiles keep their own height instead of stretching to the tallest one in the row */
+  main[data-route="decks"] .decks.compact{align-items:start}
+  main[data-route="decks"] .decks.compact .deck{min-height:0}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
   main[data-route="deck"] .screen-head .head-actions{display:flex;gap:var(--s-2)}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{order:0;min-height:34px;font-size:var(--fs-sm);padding:6px 14px}
   /* Today: the goal and streak on the left, the big Start button beside them */
-  main[data-route="today"] > .view{max-width:960px}
-  .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:var(--s-8);align-items:center;padding:var(--s-6)}
+  .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-8);align-items:center;padding:var(--s-8)}
+  .th-big{font-size:2.25rem}
+  .th-sub{font-size:var(--fs-base)}
+  .today-hero .ring{width:112px!important;height:112px!important}      /* the ring is drawn at 84px (inline); it is larger here */
+  .today-hero .th-main .ring-in b{font-size:2rem}
+  .exams{grid-template-columns:repeat(auto-fill,minmax(440px,1fr))}
+  .exam-row{align-content:start}
   .today-hero .th-main{grid-column:1;grid-row:1}
   .today-hero .streak{grid-column:1;grid-row:2;margin-bottom:0}
   .today-hero .btn.big,.today-hero .th-done{grid-column:2;grid-row:1 / span 2}
@@ -1031,15 +1201,20 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   /* "More stats" is only a fold on phones: here its cards join the grid, in the order they always had */
   main[data-route="stats"] .stats-hardest{order:2}
   main[data-route="stats"] .stats-mastery{order:3;grid-column:1 / -1}
+  /* One course picked: the readiness header and Mastery sit side by side at the top */
+  main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
+  main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
   main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
   /* Review: a bigger card, centered while a session runs */
-  main[data-route="review"] > .view{max-width:780px}
-  body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 88px);display:flex;flex-direction:column;justify-content:center}
+  main[data-route="review"] > .view > *{max-width:780px}
+  body.focus main[data-route="review"] > .view{max-width:780px;min-height:calc(100dvh - 88px);display:flex;flex-direction:column;justify-content:center}
   main[data-route="review"] .flash{min-height:440px}
   main[data-route="review"] .rv-face{padding:var(--s-6) var(--s-10)}
   main[data-route="review"] .flash-front{font-size:3rem}
   main[data-route="review"] .flash-recap{font-size:1.75rem}
   main[data-route="review"] .flash-back{font-size:1.5rem}
+  main[data-route="review"] .flash-back.long,main[data-route="review"] .flash-recap.small{font-size:1.15rem}
+  main[data-route="review"] .flash-back.xlong{font-size:1.05rem}
   main[data-route="review"] .rate{min-height:68px}
   main[data-route="review"] .rate b{font-size:var(--fs-md)}
   main[data-route="review"] .flash-front .card-img,main[data-route="review"] .flash-recap .card-img{max-height:36vh}
@@ -1049,8 +1224,54 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
   main[data-route="stats"] .cal-card{--c:16px}
 }
 /* A card's panel next to the card list, from 1200px wide */
-dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:auto}
-dialog.sheet.side .sheet-in{padding:24px 22px 32px}
+dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:hidden}
+dialog.sheet.side .sheet-head{padding:20px 14px 12px 22px;border-bottom:1px solid var(--line)}
+dialog.sheet.side > .sheet-in{padding:18px 22px 24px}
+dialog.sheet.side .sheet-foot{padding:12px 22px}
+
+/* A deck's page on a wide screen: tree of decks | the deck | the card editor docked on the right. The tree and the empty
+   dock are only shown from 1200px (the panel itself is the card panel, a side sheet). Below that, nothing changes. */
+.deck-tree,.dock-empty{display:none}
+@media (min-width:1200px){
+  :root:has(main[data-route="deck"]){--panel:400px}
+  main[data-route="deck"]{margin-left:calc(var(--side) + 240px);margin-right:var(--panel);padding:28px 32px 56px}
+  main[data-route="deck"] > .view{max-width:none}
+  main[data-route="deck"] .back{display:none}
+  main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3)}
+  main[data-route="deck"] .screen-head .head-actions{display:flex;flex-wrap:wrap}
+  main[data-route="deck"] .screen-head .head-actions .btn{min-height:40px;font-size:var(--fs-sm);padding:6px 14px}
+  main[data-route="deck"] .br-controls{grid-template-columns:1fr 1fr}
+  main[data-route="deck"] .br-controls input{grid-column:1 / -1}
+  .deck-tree{display:block;position:fixed;top:0;bottom:0;left:var(--side);width:240px;z-index:4;padding:22px 12px;background:var(--bg);border-right:1px solid var(--line);overflow:auto}
+  .dt-head{display:flex;align-items:center;justify-content:space-between;padding:0 6px 12px}
+  .dt-head b{font-size:var(--fs-md);letter-spacing:-.02em}
+  .dt-search{margin:0 0 10px}
+  .dt-search input{height:36px;font-size:var(--fs-sm)}
+  .dt-row{display:flex;align-items:center;gap:2px;padding-left:calc(2px + var(--depth) * 14px);border-radius:var(--r-sm)}
+  .dt-row.cur{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line),inset 2px 0 0 var(--deck)}
+  .dt-tw{all:unset;box-sizing:border-box;flex:none;display:grid;place-items:center;width:24px;height:30px;color:var(--text-3);cursor:pointer;border-radius:var(--r-xs)}
+  button.dt-tw:hover{color:var(--text)}
+  button.dt-tw:focus-visible{outline:2px solid var(--accent)}
+  .dt-tw .ico{width:14px;height:14px;transition:transform var(--t-fast)}
+  .dt-tw[aria-expanded="true"] .ico{transform:rotate(90deg)}
+  .dt-node{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:34px;padding:0 8px 0 2px;color:var(--text-2);text-decoration:none;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm)}
+  .dt-node:hover{color:var(--text)}
+  .dt-node:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .dt-row.cur .dt-node{color:var(--text)}
+  .dt-row.ctx .dt-node{color:var(--text-2)}
+  .dt-node .dot{width:7px;height:7px;border-radius:50%;background:var(--deck);flex:none}
+  .dt-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dt-n{font-size:var(--fs-2xs);color:var(--text-2)}
+  .dt-all{display:inline-flex;align-items:center;gap:2px;margin:14px 8px 0;font-size:var(--fs-sm);color:var(--text-2);text-decoration:none}
+  .dt-all:hover{color:var(--text)}
+  .dt-all .ico{width:14px;height:14px}
+  /* the dock waits for a card: the card panel opens over it, in the same place */
+  .dock-empty{position:fixed;top:0;right:0;bottom:0;width:var(--panel);z-index:3;display:grid;place-content:center;padding:32px;text-align:center;background:var(--surface-1);border-left:1px solid var(--line);color:var(--text-2);font-size:var(--fs-sm)}
+  .dock-empty p{margin:0;max-width:24ch}
+  .dock-empty b{display:block;color:var(--text);font-size:var(--fs-md);margin-bottom:4px}
+  body.has-side .dock-empty{display:none}
+  :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
+}
 
 /* ---------- 16. First-run start (js/onboarding.js) ---------- */
 /* The tabs and header get out of the way (the screen has its own Skip and Back) */
@@ -1112,4 +1333,144 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 @media (min-width:1024px){
   .more-stats,.more-body{display:contents}
   .more-toggle{display:none}
+}
+
+/* Light mode: the colored edge stripes need no glow (it only smudges on white) */
+:root[data-theme="light"] :is(.deck,.tdeck,.exam-row,.deck-summary)::before{box-shadow:none}
+
+/* ---------- 16. Motion (v3.4) ----------
+   The look of the small animations that js/fx.js starts. Rules: only transform and opacity move (a few tiny glows aside),
+   nothing here may delay a rating, and prefers-reduced-motion switches every animation and transition off (section 14),
+   so what is left for reduced motion is the still version: final numbers, colours, outlines. */
+:root{
+  --spring:cubic-bezier(.34,1.56,.64,1);           /* a small overshoot, for pops */
+  --out-expo:cubic-bezier(.16,1,.3,1);             /* fast start and a long settle, for things arriving and leaving */
+  --sheet-spring:var(--out-expo);                  /* sheets: a real spring where linear() exists */
+}
+@supports (transition-timing-function:linear(0,1)){
+  :root{--sheet-spring:linear(0,.009,.035 2.1%,.141 4.4%,.281 6.7%,.723 12.9%,.938 16.7%,1.017 19.6%,1.077 23.1%,1.088 25.6%,1.081 28.6%,1.013 37.3%,.99 42.9%,.993 51.1%,1.001 64%,1)}
+}
+
+/* Numbers that count up: the real text is final from the first moment. While it counts, the real text is hidden and the
+   ticking number is drawn from data-n by a pseudo-element, which screen readers skip (the "/ ''" is its empty alt text). */
+.fx-count{position:relative;-webkit-text-fill-color:transparent}
+.fx-count::after{content:attr(data-n);content:attr(data-n) / "";position:absolute;left:0;top:0;white-space:nowrap;-webkit-text-fill-color:currentColor}
+.ring-in .fx-count::after{left:50%;transform:translateX(-50%)}
+.res-n{display:inline-block}
+
+/* C1. Rating feedback: the rating's colour, for one moment, on each piece (JS sets data-r) */
+[data-r="1"]{--rc:var(--again)} [data-r="2"]{--rc:var(--hard)} [data-r="3"]{--rc:var(--good)} [data-r="4"]{--rc:var(--easy)}
+.fx-ring{position:fixed;z-index:30;pointer-events:none;border-radius:var(--r-md);
+  box-shadow:0 0 0 1.5px var(--rc),0 0 18px -2px var(--rc);animation:fx-ring 420ms var(--out-expo) forwards}
+@keyframes fx-ring{from{opacity:.95;transform:scale(1)}to{opacity:0;transform:scale(1.14,1.3)}}
+.fx-ivl{position:fixed;z-index:31;pointer-events:none;transform:translate(-50%,0);font:600 var(--fs-sm)/1 var(--f-num);
+  color:var(--rc);text-shadow:0 0 12px var(--rc);animation:fx-ivl 640ms var(--out-expo) forwards}
+@keyframes fx-ivl{0%{opacity:0;transform:translate(-50%,6px)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-34px)}}
+/* The old card leaves as an outline (a plain box in the card's shape, so no text can overlap the next card): Again goes back into the pile (left and down), Hard drops a little, Good lifts,
+   Easy lifts further and faster. */
+.fx-ghost{position:fixed;z-index:3;pointer-events:none;margin:0!important;animation:var(--ga) var(--gd,240ms) var(--out-expo) forwards}
+.fx-ghost[data-r="1"]{--ga:fx-out-again}
+.fx-ghost[data-r="2"]{--ga:fx-out-hard}
+.fx-ghost[data-r="3"]{--ga:fx-out-good}
+.fx-ghost[data-r="4"]{--ga:fx-out-easy;--gd:200ms}
+@keyframes fx-out-again{to{opacity:0;transform:translate(-28px,10px) rotate(-2.5deg) scale(.96)}}
+@keyframes fx-out-hard{to{opacity:0;transform:translateY(14px) scale(.97)}}
+@keyframes fx-out-good{to{opacity:0;transform:translateY(-30px) scale(.96)}}
+@keyframes fx-out-easy{to{opacity:0;transform:translateY(-48px) scale(.95)}}
+.fx-ghost{border-radius:var(--r-xl);background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--rc) 22%,transparent),transparent 70%),var(--surface-1);
+  box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent),0 0 40px -12px var(--rc)}
+
+/* C2. Today: the goal ring fills from where it was; a finished goal is green, with a halo and a check that pops */
+.ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
+.ring.is-full .ring-fg{stroke:var(--good);filter:drop-shadow(0 0 6px var(--good-line))}
+.ring.fx-win{isolation:isolate}
+.ring.fx-win::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  box-shadow:0 0 0 2px var(--good),0 0 24px 4px var(--good-line);animation:fx-halo-ring 900ms 650ms var(--out-expo) both}
+@keyframes fx-halo-ring{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.45)}}
+.ring.fx-win .ring-check{animation:fx-check 520ms 750ms var(--spring) backwards}
+@keyframes fx-check{from{opacity:0;transform:scale(.3) rotate(-25deg)}}
+
+/* C3. The finish screen: tiles rise one after another, the flame catches, a milestone pill pops, a halo behind the title */
+.stats4.fx-in > div{animation:fx-rise 420ms var(--out-expo) backwards}
+.stats4.fx-in > div:nth-child(2){animation-delay:50ms}
+.stats4.fx-in > div:nth-child(3){animation-delay:100ms}
+.stats4.fx-in > div:nth-child(4){animation-delay:150ms}
+@keyframes fx-rise{from{opacity:0;transform:translateY(8px)}}
+.streak.kept.fx-ignite .ico{animation:fx-ignite 700ms var(--spring) backwards}
+@keyframes fx-ignite{0%{opacity:.3;transform:scale(.6) translateY(3px)}55%{opacity:1;transform:scale(1.25)}100%{transform:scale(1)}}
+.fx-mile-tag{display:inline-block;flex:none;padding:2px 8px;border-radius:var(--r-pill);font:600 var(--fs-2xs)/1.5 var(--f-num);letter-spacing:.04em;
+  color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line);animation:fx-pop 420ms 400ms var(--spring) backwards}
+@keyframes fx-pop{from{opacity:0;transform:scale(.6)}}
+.fx-glow-h1{position:relative}
+.fx-glow-h1::before{content:"";position:absolute;inset:-60px -80px;z-index:-1;pointer-events:none;
+  background:radial-gradient(closest-side,var(--glow),transparent);opacity:0;animation:fx-halo 1100ms var(--out-expo)}
+@keyframes fx-halo{0%{opacity:0;transform:scale(.5)}30%{opacity:.9}100%{opacity:0;transform:scale(1.25)}}
+.fx-confetti{position:fixed;inset:0;width:100%;height:100%;z-index:35;pointer-events:none}
+
+/* C4. Play: the combo pill (a flame that gets hotter at x3, x5 and x10; the tiers are still colours with reduced motion) */
+#streakWrap{display:inline-flex;align-items:center;gap:4px;padding:2px 8px 2px 6px;border-radius:var(--r-pill)}
+#streakWrap::before{content:"";width:14px;height:14px;flex:none;background:currentColor;opacity:0;transform:scale(.4);
+  -webkit-mask:var(--flame) center/contain no-repeat;mask:var(--flame) center/contain no-repeat;transition:opacity 200ms,transform 260ms var(--spring)}
+:root{--flame:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.2 1 2 2 2.2C10.5 8.5 11 5.5 12 3z'/%3E%3C/svg%3E")}
+#streakWrap.streak-on::before{opacity:1;transform:none}
+#streakWrap[data-tier="1"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line)}
+#streakWrap[data-tier="2"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard),0 0 16px -4px var(--hard)}
+#streakWrap[data-tier="3"]{color:var(--again);background:var(--again-tint);box-shadow:inset 0 0 0 1px var(--again),0 0 20px -2px var(--again)}
+#streakWrap[data-tier] b{color:inherit!important}
+#streakWrap[data-tier="3"]::before{animation:fx-flicker 900ms ease-in-out infinite}
+@keyframes fx-flicker{0%,100%{transform:scale(1) rotate(0)}30%{transform:scale(1.1,1.18) rotate(-4deg)}60%{transform:scale(.96,1.05) rotate(3deg)}}
+.fx-bump{animation:fx-bump 280ms var(--spring)}
+@keyframes fx-bump{40%{transform:scale(1.18)}}
+/* a right answer blooms: a ring grows off the card and fades (a pseudo-element, so only transform and opacity move) */
+.play-card.ok::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:0 0 0 2px var(--good-line);
+  animation:fx-bloom 520ms var(--out-expo) forwards}
+@keyframes fx-bloom{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.06,1.12)}}
+.opt.correct{position:relative;overflow:hidden}
+.opt.correct::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgb(255 255 255 / .16) 50%,transparent 70%);
+  transform:translateX(-100%);animation:fx-shine 600ms 60ms var(--out-expo) forwards;pointer-events:none}
+@keyframes fx-shine{to{transform:translateX(100%)}}
+/* a wrong answer: a shake that dies away (calmer than an even one) */
+@keyframes fx-shake{15%{transform:translateX(-7px)}35%{transform:translateX(5px)}55%{transform:translateX(-3px)}75%{transform:translateX(1.5px)}}
+/* the last 30% of the timer: the bar thickens and pulses (and Lightning's clock ticks under 10 seconds) */
+.timer{transition:transform 200ms var(--ease)}
+.timer:has(.low){transform:scaleY(1.7)}
+.timer-fill.low{animation:fx-urgent 520ms ease-in-out infinite alternate}
+@keyframes fx-urgent{from{opacity:.6}to{opacity:1}}
+.hud .clock-low b{display:inline-block;animation:fx-tick 1s steps(1) infinite}
+@keyframes fx-tick{0%{transform:scale(1.12)}20%{transform:scale(1)}}
+/* the grade stamp slams down, an ink ring spreads from where it lands and the header nudges */
+@keyframes fx-stamp{0%{transform:rotate(-16deg) scale(1.9);opacity:0}55%{transform:rotate(-7deg) scale(.93);opacity:1}100%{transform:rotate(-8deg) scale(1)}}
+.stamp.press::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent);pointer-events:none;animation:fx-ink 700ms 290ms var(--out-expo) both}
+@keyframes fx-ink{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.6)}}
+.fx-thud{animation:fx-thud 260ms 280ms ease-out}
+@keyframes fx-thud{30%{transform:translateY(2px)}}
+
+/* C5. Smooth transitions (the Settings switch sets data-smooth="off" on <html> to turn all of this off) */
+/* Tabs slide with View Transitions. The header and tab bar get their own layer for the moment it runs, so they stay still. */
+html.vt-on .top{view-transition-name:top}
+html.vt-on .tabs{view-transition-name:tabs}
+::view-transition-old(root){animation:fx-vt-out 160ms ease-in both}
+::view-transition-new(root){animation:fx-vt-in 260ms var(--out-expo) both}
+html[data-vt-dir="back"]::view-transition-old(root){animation-name:fx-vt-out-back}
+html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back}
+@keyframes fx-vt-out{to{opacity:0;transform:translateX(-16px)}}
+@keyframes fx-vt-in{from{opacity:0;transform:translateX(24px)}}
+@keyframes fx-vt-out-back{to{opacity:0;transform:translateX(16px)}}
+@keyframes fx-vt-in-back{from{opacity:0;transform:translateX(-24px)}}
+.view.fx-enter{animation:fx-rise 240ms var(--out-expo)}      /* no View Transitions in this browser: the new screen fades up */
+/* Sheets spring in and slide out (Chrome 117+ and Safari 17.5+; elsewhere they open and close as before) */
+:root:not([data-smooth="off"]) dialog.sheet:not(.side){
+  &[open]{animation:none}
+  transition:transform 420ms var(--sheet-spring),opacity 160ms,overlay 280ms allow-discrete,display 280ms allow-discrete;
+  &:not([open]){transform:translateY(100%);opacity:.6;transition-duration:240ms;transition-timing-function:cubic-bezier(.4,0,1,1)}
+  @starting-style{&[open]{transform:translateY(100%)}}
+}
+:root:not([data-smooth="off"]) dialog.sheet::backdrop{transition:opacity 280ms,overlay 280ms allow-discrete,display 280ms allow-discrete;opacity:1}
+:root:not([data-smooth="off"]) dialog.sheet:not([open])::backdrop{opacity:0}
+@starting-style{:root:not([data-smooth="off"]) dialog.sheet[open]::backdrop{opacity:0}}
+
+/* Reduced motion: section 14 already stops every animation and transition. These pieces have no still version. */
+@media (prefers-reduced-motion:reduce){
+  .fx-ghost,.fx-ring,.fx-ivl,.fx-confetti{display:none!important}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}
 }
