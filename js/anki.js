@@ -79,7 +79,20 @@ export { clozeNumbers, clozeCard };
 //   progress  { cards, reviews }: how many rows have history, and how many reviews in all
 // Rows are [front, back, any other fields]. Cloze notes give one row per cloze number: just [front, back], with
 // their other fields (like Back Extra) kept as the note's extra (noteExtras).
-//
+
+// The labels in an Image Occlusion note's Comments field: lines "1. Aorta" (split by <br> or a line break), all of them
+// numbered. Returns labels by position (index k - 1), or null when the field is anything else.
+export function ioLabels(html) {
+  const lines = String(html ?? '').split(/<br\s*\/?>|<\/?div\b[^>]*>|\r?\n/i).map(l => htmlToText(l).trim()).filter(Boolean);
+  const out = [];
+  for (const line of lines) {
+    const m = /^(\d+)\.\s(.*)$/s.exec(line);
+    if (!m || +m[1] < 1 || +m[1] > 1000) return null;
+    out[+m[1] - 1] = m[2].trim();
+  }
+  return out.length ? out : null;
+}
+
 // Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Each one
 // comes in as a note of image-occlusion cards (see occlusion.js): one card for each numbered group of boxes, with the
 // picture and all the boxes. The result's `occlusions` array has, for each such row,
@@ -135,8 +148,11 @@ export function notesToImport(notes, models, reviews = new Map()) {
       const image = imageNames(note.fields[fieldIndex(model, 'image', 1)])[0] || null;
       const header = htmlToText(note.fields[fieldIndex(model, 'header', 2)] || '').trim();
       const extra = text[fieldIndex(model, 'back extra', 3)]?.trim() || '';
-      const { shapes, pixels } = parseAnkiOcclusion(note.fields[0]);
-      const groups = groupsOf(shapes);
+      const parsed = parseAnkiOcclusion(note.fields[0]), pixels = parsed.pixels;
+      const groups = groupsOf(parsed.shapes);
+      const labels = ioLabels(note.fields[fieldIndex(model, 'comments', 4)]);
+      // Comments "1. Aorta" name the k-th group (Study Sprint's own export writes them).
+      const shapes = labels ? parsed.shapes.map(s => (labels[groups.indexOf(s.n)] ? { ...s, label: labels[groups.indexOf(s.n)] } : s)) : parsed.shapes;
       usedTypes.add('occlusion');
       if (shapes.length && image) {
         const noteKey = String(note.id ?? index);

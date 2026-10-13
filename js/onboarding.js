@@ -224,7 +224,7 @@ function drawGuide() {
   // A picture with hidden boxes (image occlusion) is drawn by occlusion.js; its back uncovers the box and shows the label.
   const occ = hasMasks(card);
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
-  const front = occ ? occlusionHTML(card, 'front') : `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
+  const front = occ ? occlusionHTML(card, 'front', { shortcut: false }) : `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));
   const ivl = G.srs ? G.srs.previewIntervals(null, optsFor(card)) : null;
   const fullPath = deckPath(G.decks, card.deckId);
@@ -244,7 +244,7 @@ function drawGuide() {
           <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
             ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
             <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ
-              ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>`
+              ? `${occlusionHTML(card, 'back', { shortcut: false })}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>`
               : `${imgHTML(card.backImage)}${formatHTML(card.back)}`}</div></div></div>
         </div>
       </article>
@@ -276,6 +276,7 @@ function flipGuide() {
 // Keys, like Review: Space or Enter flips, 1–4 rate.
 document.addEventListener('keydown', e => {
   if (!G?.el.isConnected || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
+  if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the picture viewer has its own keys
   if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches('input, textarea, select')) return;
   if (!G.flipped) {
     if (!onControl(e, 'flash') && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flipGuide(); }

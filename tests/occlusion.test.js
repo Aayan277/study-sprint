@@ -77,6 +77,25 @@ test('parse: rect, ellipse, polygon (bounding box), text skipped', () => {
   assert.deepEqual(shapes[2].points, [[0.1, 0.1], [0.5, 0.1], [0.3, 0.5]]);
 });
 
+test('parse: a polygon moved in Anki (left/top changed, points not) is shifted to left/top', () => {
+  const { shapes } = parseAnkiOcclusion('{{c1::image-occlusion:polygon:left=.3:top=.3:points=.1,.1 .2,.1 .15,.2:oi=1}}');
+  assert.equal(round(shapes[0].x), 0.3);
+  assert.equal(round(shapes[0].y), 0.3);
+  assert.deepEqual([round(shapes[0].w), round(shapes[0].h)], [0.1, 0.1]);
+  assert.deepEqual(shapes[0].points.map(p => p.map(round)), [[0.3, 0.3], [0.4, 0.3], [0.35, 0.4]]);
+  // no left/top: the points stay where they are
+  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:polygon:points=.1,.1 .2,.1 .15,.2}}').shapes[0].x, 0.1);
+});
+
+test('parse: a long run of backslashes is not a slow regex, and \\: and \\} still work', () => {
+  const t0 = performance.now();
+  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:' + '\\'.repeat(5000)).shapes.length, 0);
+  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:' + '\\'.repeat(5000) + 'x').shapes.length, 0);
+  assert.ok(performance.now() - t0 < 50, 'took ' + (performance.now() - t0));
+  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:foo=a\\:b}}').shapes.length, 1);
+  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:foo=a\\}b}}').shapes.length, 1);
+});
+
 test('parse: tags, entities, quotes, escaped colons, several shapes in one cN, missing oi, unknown keys', () => {
   const field = '<div>{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:angle=15:foo=a\\:b}}</div><br>'
     + '{{c1::image-occlusion:rect:left=.5:top=.5:width=.2:height=.2:oi=1}}'
@@ -125,9 +144,14 @@ test('ankiOcclusionText: Anki format, and it round trips within 1e-4', () => {
   const text = ankiOcclusionText(masks);
   assert.ok(text.startsWith('{{c1::image-occlusion:rect:left=.1235:top=.5000:width=.2500:height=.1000:oi=1}}'));
   assert.ok(text.includes('{{c2::image-occlusion:ellipse:left=.1000:top=.2000:rx=.2000:ry=.3000:oi=1}}'));
-  assert.ok(text.includes('{{c3::image-occlusion:polygon:points=.1000,.1000 .5000,.1000 .3000,.5000:oi=1}}'));
+  // Anki always writes left/top, and draws a polygon offset by (left - minX, top - minY)
+  assert.ok(text.includes('{{c3::image-occlusion:polygon:left=.1000:top=.1000:points=.1000,.1000 .5000,.1000 .3000,.5000:oi=1}}'));
   const back = toFractions(parseAnkiOcclusion(text).shapes, false, 1, 1);
   assert.equal(back.length, 3);
+  // left/top are read too: moving only left/top moves the polygon, like Anki's editor does
+  const moved = parseAnkiOcclusion(text.replace('polygon:left=.1000:top=.1000', 'polygon:left=.3000:top=.2000')).shapes[2];
+  assert.deepEqual([moved.x, moved.y].map(round), [0.3, 0.2]);
+  assert.deepEqual(moved.points.map(p => p.map(round)), [[0.3, 0.2], [0.7, 0.2], [0.5, 0.6]]);
   masks.forEach((m, i) => { for (const k of ['x', 'y', 'w', 'h']) assert.ok(Math.abs(back[i][k] - m[k]) <= 1e-4, `${i} ${k}`); assert.equal(back[i].n, m.n); assert.equal(back[i].shape, m.shape); });
 });
 
@@ -223,6 +247,46 @@ test('heal: picture, extra, ties and cards without stamps', () => {
   assert.deepEqual(healOcclusion([{ id: 'q', noteId: 'N', front: 'a', back: 'b' }]), []);
 });
 
+test('heal: siblings that differ only in key order are already in agreement', () => {
+  const reorder = m => Object.fromEntries(Object.entries(m).reverse());
+  const a = card(1), b = card(3, { occlusion: { ...card(3).occlusion, masks: MASKS.map(reorder), h: 1365 } });
+  b.occlusion = Object.fromEntries(Object.entries(b.occlusion).reverse());
+  assert.deepEqual(healOcclusion([a, b]), []);
+});
+
+test('heal: a missing picture never wins and never strips the siblings', () => {
+  // the newest edit has lost its backImage: the card that still has one wins, and nobody is left without a picture
+  const edited = MASKS.map(m => (m.id === 'm1' ? { ...m, label: 'Arch' } : m));
+  const a = card(1, { noteEditedAt: 100 }), b = card(3, { noteEditedAt: 200, backImage: undefined, occlusion: { ...card(3).occlusion, masks: edited } });
+  const fixed = healOcclusion([a, b]);
+  assert.deepEqual(fixed.map(f => [f.id, f.backImage]), [['c3', 'img1']]);
+  // the winner has a picture: it is given to a sibling that has none
+  assert.equal(healOcclusion([card(1, { updatedAt: 1, backImage: undefined }), card(3, { updatedAt: 9 })])[0].backImage, 'img1');
+  // nobody has one: nothing is invented
+  assert.ok(healOcclusion([card(1, { backImage: undefined }), card(3, { backImage: undefined, noteExtra: 'x' })]).every(f => f.backImage === undefined));
+  // same noteEditedAt: the later updatedAt wins, then the larger id
+  const e = card(1, { noteEditedAt: 5, updatedAt: 9, noteExtra: 'late' }), f = card(3, { noteEditedAt: 5, updatedAt: 1, noteExtra: 'early' });
+  assert.equal(healOcclusion([e, f])[0].noteExtra, 'late');
+});
+
+test('helpers survive junk entries in the masks (from pulled sync data)', () => {
+  const junk = [null, 5, 'x', ...MASKS];
+  assert.equal(occLabel(junk, 1), 'Aorta');
+  assert.deepEqual(groupsOf(junk), [1, 3]);
+  assert.equal(hitTest(junk, 0.15, 0.15)?.id, 'm1');
+  assert.equal(nextN(junk), 4);
+  assert.equal(deleteMasks(junk, ['m1']).length, 5);
+  assert.equal(splitMask(junk, 'm3').find(m => m?.id === 'm3').n, 4);
+  assert.equal(groupMasks(junk, ['m1', 'm2']).find(m => m?.id === 'm2').n, 1);
+  assert.ok(occlusionHTML(card(1, { occlusion: { ...card(1).occlusion, masks: junk } }), 'back').includes('occ-reveal'));
+});
+
+test('a note with more than 300 boxes fails validOcclusion (the importer then makes a plain picture)', () => {
+  const many = Array.from({ length: 301 }, (_, i) => mask('m' + i, 1, 0.1, 0.1, 0.1, 0.1));
+  assert.equal(validOcclusion({ n: 1, w: 100, h: 100, masks: many }), false);
+  assert.equal(validOcclusion({ n: 1, w: 100, h: 100, masks: many.slice(0, 300) }), true);
+});
+
 // ---------- showing ----------
 test('HTML front: the active group asks, the others are hidden from screen readers', () => {
   const html = occlusionHTML(card(3), 'front');
@@ -241,11 +305,16 @@ test('HTML back: the group is uncovered with its label, the others stay covered'
   const html = occlusionHTML(card(1), 'back');
   assert.match(html, /occ-mask occ-reveal/);
   assert.match(html, /aria-label="Answer: Aorta"/);
-  assert.match(html, /<span class="occ-tag" style="left:20\.000%;top:30\.000%">Aorta<\/span>/);
+  assert.match(html, /<span class="occ-tag" aria-hidden="true" style="left:20\.000%;transform:translateX\(-20\.000%\);top:30\.000%">Aorta<\/span>/);
   assert.equal((html.match(/class="occ-mask"/g) || []).length, 2);
   assert.match(occlusionHTML(card(3, { occlusion: { ...card(3).occlusion, masks: [mask('m', 3, 0.1, 0.1, 0.2, 0.2), mask('o', 4, 0.5, 0.5, 0.2, 0.2)] } }), 'back'), /aria-label="Uncovered part 1 of 2"/);
   const low = occlusionHTML(card(1, { occlusion: { ...card(1).occlusion, masks: [mask('m', 1, 0.3, 0.8, 0.2, 0.2, { label: 'Low' })] } }), 'back');
   assert.match(low, /occ-tag occ-tag-up/);
+  assert.match(low, /transform:translate\(-40\.000%,-100%\)/);
+  // near the edges the centre is clamped to 15%..85% and the tag is pulled back by its own width
+  const edge = x => occlusionHTML(card(1, { occlusion: { ...card(1).occlusion, masks: [mask('m', 1, x, 0.1, 0.04, 0.1, { label: 'E' })] } }), 'back');
+  assert.match(edge(0.02), /left:15\.000%;transform:translateX\(-15\.000%\)/);
+  assert.match(edge(0.94), /left:85\.000%;transform:translateX\(-85\.000%\)/);
 });
 
 test('HTML all: every box numbered by display position, this card highlighted', () => {

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote } from '../js/anki.js';
+import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -263,6 +263,22 @@ test('image-occlusion notes become one card for each group of boxes, with all th
   assert.deepEqual(r.progress, { cards: 2, reviews: 2 });           // (both test notes use the Anki card x1)
   assert.equal(r.images, 2);
   assert.ok(r.rows.every(row => !row.join(' ').includes('[…]') && !row.join(' ').includes('image-occlusion')));
+});
+
+test('image-occlusion: the Comments field ("1. Aorta<br>2. Vein") names the groups by position', () => {
+  const withComments = html => ({ ...ioNote('Heart'), fields: [...ioNote('Heart').fields.slice(0, 4), html] });
+  const r = notesToImport([withComments('1. Aorta &amp; arch<br>2. <b>Left</b> ventricle')], ioModels);
+  assert.deepEqual(r.rows.map(x => x[1]), ['Aorta & arch', 'Left ventricle']);
+  assert.deepEqual(r.occlusions[0].shapes.map(x => x.label), ['Aorta & arch', 'Left ventricle']);
+  // a gap in the numbers is fine (an unlabelled group), and line breaks work like <br>
+  assert.deepEqual(notesToImport([withComments('2. Vein')], ioModels).rows.map(x => x[1]), ['', 'Vein']);
+  assert.deepEqual(notesToImport([withComments('1. Aorta\n2. Vein')], ioModels).rows.map(x => x[1]), ['Aorta', 'Vein']);
+  // a labelled position that has no group is ignored
+  assert.deepEqual(notesToImport([withComments('1. A<br>2. B<br>3. C')], ioModels).rows.map(x => x[1]), ['A', 'B']);
+  // free text in Comments (not every line numbered) is left alone
+  for (const text of ['Some notes', '1. Aorta<br>and more', '', 'See 1. above']) assert.deepEqual(notesToImport([withComments(text)], ioModels).rows.map(x => x[1]), ['', ''], text);
+  assert.equal(ioLabels('Some notes'), null);
+  assert.deepEqual(ioLabels('<div>1. A</div><div>2. B</div>'), ['A', 'B']);
 });
 
 test('image-occlusion: boxes in one group make one card; text boxes are skipped; pixels are flagged', () => {

@@ -119,6 +119,29 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     css: ANKI_CSS, latexPre: '\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n',
     latexPost: '\\end{document}', tags: [], vers: [], req: [[0, 'any', [0]]]
   };
+  // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
+  // rest are Basic notes, one each.
+  // Cards of one image-occlusion picture likewise go out as one Anki Image Occlusion note.
+  let groups = [];                       // [{ cloze: true, cards } | { occ: true, cards } | { cloze: false, card }]
+  const byNote = new Map();
+  for (const c of cards) {
+    const kind = hasBlank(c) ? 'cloze' : isOcclusion(c) && hasMasks(c) ? 'occ' : null;
+    if (kind) {
+      const key = kind + ':' + c.noteId;
+      if (!byNote.has(key)) { byNote.set(key, { cloze: kind === 'cloze', occ: kind === 'occ', cards: [] }); groups.push(byNote.get(key)); }
+      byNote.get(key).cards.push(c);
+    } else groups.push({ cloze: false, card: c });
+  }
+  // An occlusion note needs its picture file in the package (else it goes out as Basic cards, as does a card whose
+  // group isn't among the boxes of the note's first card).
+  for (const g of groups.filter(x => x.occ)) {
+    const ok = g.cards.some(c => c.backImageFile) ? groupsOf(g.cards[0].occlusion.masks) : [];
+    const lost = g.cards.filter(c => !ok.includes(c.occlusion.n));
+    if (!lost.length) continue;
+    g.cards = g.cards.filter(c => ok.includes(c.occlusion.n));
+    groups.push(...lost.map(card => ({ cloze: false, card })));
+  }
+  groups = groups.filter(g => !g.occ || g.cards.length);
   const usesCloze = cards.some(hasBlank);
   // Anki's own Cloze note type (type 1): the Text field has the blanks, "{{cloze:Text}}" shows one at a time.
   const clozeModel = {
@@ -127,7 +150,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     flds: ['Text', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     css: `${ANKI_CSS}\n.cloze {\n  font-weight: bold;\n  color: blue;\n}\n.nightMode .cloze {\n  color: lightblue;\n}\n`, req: [[0, 'any', [0]]]
   };
-  const usesOcc = cards.some(c => isOcclusion(c) && hasMasks(c));
+  const usesOcc = groups.some(g => g.occ);
   // Anki's Image Occlusion type (a cloze type, "original stock kind" 6). Sorted by Header, which is also what sfld holds.
   const occModel = {
     ...model, id: IO_ID, name: 'Study Sprint Image Occlusion', type: 1, originalStockKind: 6, sortf: 2,
@@ -147,19 +170,6 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
-  // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
-  // rest are Basic notes, one each.
-  // Cards of one image-occlusion picture likewise go out as one Anki Image Occlusion note.
-  const groups = [];                       // [{ cloze: true, cards } | { occ: true, cards } | { cloze: false, card }]
-  const byNote = new Map();
-  for (const c of cards) {
-    const kind = hasBlank(c) ? 'cloze' : isOcclusion(c) && hasMasks(c) ? 'occ' : null;
-    if (kind) {
-      const key = kind + ':' + c.noteId;
-      if (!byNote.has(key)) { byNote.set(key, { cloze: kind === 'cloze', occ: kind === 'occ', cards: [] }); groups.push(byNote.get(key)); }
-      byNote.get(key).cards.push(c);
-    } else groups.push({ cloze: false, card: c });
-  }
   // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
   const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
   const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');

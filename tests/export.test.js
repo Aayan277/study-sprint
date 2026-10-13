@@ -158,21 +158,55 @@ test('image-occlusion cards export as one Anki Image Occlusion note, a card for 
 test('image-occlusion round trip: export, then read the note back as the importer sees it', async () => {
   const { notesToImport } = await import('../js/anki.js');
   const { toFractions, occFrontBack } = await import('../js/occlusion.js');
-  const masks = [{ id: 'a', n: 1, shape: 'rect', x: 0.1234, y: 0.2, w: 0.3, h: 0.4 }, { id: 'b', n: 2, shape: 'ellipse', x: 0.5, y: 0.5, w: 0.2, h: 0.2 }];
-  const cards = [1, 2].map(n => ({ id: 'o' + n, noteId: 'N9', ...occFrontBack({ header: 'Heart', masks }, n), tags: [], deckName: 'Bio', backImageFile: 'm1.jpg', occlusion: { n, w: 100, h: 100, header: 'Heart', masks } }));
+  const masks = [{ id: 'a', n: 1, shape: 'rect', x: 0.1234, y: 0.2, w: 0.3, h: 0.4, label: 'Aorta' }, { id: 'b', n: 2, shape: 'ellipse', x: 0.5, y: 0.5, w: 0.2, h: 0.2 },
+    { id: 'c', n: 3, shape: 'polygon', x: 0.2, y: 0.6, w: 0.2, h: 0.3, points: [[0.2, 0.9], [0.4, 0.9], [0.3, 0.6]], label: 'Vein &amp; <i>duct</i>' }];
+  const cards = [1, 2, 3].map(n => ({ id: 'o' + n, noteId: 'N9', ...occFrontBack({ header: 'Heart', masks }, n), tags: [], deckName: 'Bio', backImageFile: 'm1.jpg', occlusion: { n, w: 100, h: 100, header: 'Heart', masks } }));
   const { col, notes, cards: ac } = await ankiContents({ id: 'd', name: 'Bio' }, cards);
   const models = new Map(Object.entries(JSON.parse(col.models)).map(([id, m]) => [id, { name: m.name, fields: m.flds.map(f => f.name), cloze: m.type === 1 }]));
   const back = notes.map(n => ({ id: String(n.id), guid: n.guid, mid: String(n.mid), fields: n.flds.split('\x1f'), tags: [], deck: 'Bio',
     cards: Object.fromEntries(ac.filter(c => c.nid === n.id).map(c => [c.ord, String(c.id)])) }));
   const r = notesToImport(back, models);
-  assert.deepEqual(r.rows, [['Heart: hidden part 1 of 2', ''], ['Heart: hidden part 2 of 2', '']]);
-  assert.deepEqual(r.pictures, [{ front: null, back: 'm1.jpg' }, { front: null, back: 'm1.jpg' }]);
+  // Anki's file: every shape has left/top, a polygon too (Anki draws it offset by left - minX, top - minY)
+  assert.ok(notes[0].flds.split('\x1f')[0].endsWith('{{c3::image-occlusion:polygon:left=.2000:top=.6000:points=.2000,.9000 .4000,.9000 .3000,.6000:oi=1}}'));
+  assert.deepEqual(r.rows, [['Heart: hidden part 1 of 3', 'Aorta'], ['Heart: hidden part 2 of 3', ''], ['Heart: hidden part 3 of 3', 'Vein &amp; <i>duct</i>']]);
+  assert.deepEqual(r.pictures, [{ front: null, back: 'm1.jpg' }, { front: null, back: 'm1.jpg' }, { front: null, back: 'm1.jpg' }]);
   const again = toFractions(r.occlusions[0].shapes, r.occlusions[0].pixels, 100, 100);
-  assert.deepEqual(again.map(m => [m.n, m.shape]), [[1, 'rect'], [2, 'ellipse']]);
+  assert.deepEqual(again.map(m => [m.n, m.shape]), [[1, 'rect'], [2, 'ellipse'], [3, 'polygon']]);
+  assert.deepEqual(again.map(m => m.label), ['Aorta', undefined, 'Vein &amp; <i>duct</i>']);            // the labels come back from Comments
   masks.forEach((m, i) => ['x', 'y', 'w', 'h'].forEach(k => assert.ok(Math.abs(again[i][k] - m[k]) <= 1e-4)));
 });
 
 test('CSV: image-occlusion cards are their text only (the fallback front and the label)', async () => {
   const csv = toCSV([{ front: 'Heart: hidden part 1 of 2', back: 'Aorta', tags: [], occlusion: {} }]);
   assert.ok(csv.includes('Heart: hidden part 1 of 2,Aorta'));
+});
+
+test('image-occlusion export: no picture file on this device means Basic cards, not a note with an empty Image field', async () => {
+  const { occFrontBack } = await import('../js/occlusion.js');
+  const masks = [{ id: 'a', n: 1, shape: 'rect', x: 0.1, y: 0.2, w: 0.3, h: 0.4, label: 'Aorta' }, { id: 'b', n: 2, shape: 'rect', x: 0.5, y: 0.5, w: 0.2, h: 0.2 }];
+  const sib = (n, over = {}) => ({ id: 'o' + n, noteId: 'N9', ...occFrontBack({ header: 'Heart', masks }, n), tags: [], deckName: 'Bio', occlusion: { n, w: 100, h: 100, header: 'Heart', masks }, ...over });
+  const { col, notes, cards: ac } = await ankiContents({ id: 'd', name: 'Bio' }, [sib(1), sib(2)], 1_800_000_000_000);
+  assert.equal(notes.length, 2);
+  assert.ok(notes.every(n => n.mid === 1_600_000_000_001 && n.flds.split('\x1f').length === 2));
+  assert.deepEqual(notes.map(n => n.flds.split('\x1f')), [['Heart: hidden part 1 of 2', 'Aorta'], ['Heart: hidden part 2 of 2', '']]);
+  assert.equal(ac.length, 2);
+  assert.ok(!Object.values(JSON.parse(col.models)).some(m => m.originalStockKind === 6));
+  // the picture exists on one sibling only: still one occlusion note
+  const some = await ankiContents({ id: 'd', name: 'Bio' }, [sib(1), sib(2, { backImageFile: 'm1.jpg' })], 1_800_000_000_000);
+  assert.equal(some.notes.length, 1);
+  assert.equal(some.notes[0].flds.split('\x1f')[1], '<img src="m1.jpg">');
+});
+
+test('image-occlusion export: a sibling whose group is not among the note\'s boxes goes out as a Basic card', async () => {
+  const { occFrontBack } = await import('../js/occlusion.js');
+  const masks = [{ id: 'a', n: 1, shape: 'rect', x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, { id: 'b', n: 2, shape: 'rect', x: 0.5, y: 0.5, w: 0.2, h: 0.2 }];
+  const sib = (n, over = {}) => ({ id: 'o' + n, noteId: 'N9', ...occFrontBack({ header: 'Heart', masks }, n), tags: [], deckName: 'Bio', backImageFile: 'm1.jpg', occlusion: { n, w: 100, h: 100, header: 'Heart', masks }, ...over });
+  // c7 has boxes of its own (so it passes hasMasks) but n 7 is not in the first card's boxes
+  const other = [{ id: 'z', n: 7, shape: 'rect', x: 0.1, y: 0.1, w: 0.1, h: 0.1 }];
+  const stray = sib(7, { occlusion: { n: 7, w: 100, h: 100, masks: other }, front: 'Stray', back: 'Card' });
+  const { notes, cards: ac } = await ankiContents({ id: 'd', name: 'Bio' }, [sib(1), sib(2), stray], 1_800_000_000_000);
+  assert.equal(notes.length, 2);
+  assert.deepEqual(ac.filter(c => c.nid === notes[0].id).map(c => c.ord).sort(), [0, 1]);
+  assert.equal(notes[1].mid, 1_600_000_000_001);
+  assert.deepEqual(notes[1].flds.split('\x1f'), ['Stray', 'Card<br><img src="m1.jpg">']);
 });

@@ -5,7 +5,7 @@ import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
 import { clozeCard, parseCloze, hasClozeLines } from './cloze.js';
-import { toFractions, occFrontBack, groupsOf, groupIndex, MAX_HEADER } from './occlusion.js';
+import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
 import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
@@ -624,7 +624,9 @@ async function addOcclusion(toAdd, cards, saveBtn) {
     }
     const { pic, masks } = notes.get(o.noteKey);
     const header = String(o.header || '').trim().slice(0, MAX_HEADER);
-    if (pic && masks.length) {
+    // Too many (or bad) boxes would make cards that fail validation, and with them every backup: use a plain picture.
+    const good = pic && masks.length && validOcclusion({ n: 1, w: pic.width, h: pic.height, masks });
+    if (good) {
       if (!groupsOf(masks).includes(o.n)) { drop.add(i); continue; }      // every box of this group fell outside the picture
       cards[i].backImage = pic.id;
       cards[i].occlusion = { n: o.n, w: pic.width, h: pic.height, ...(header ? { header } : {}), masks };
@@ -635,6 +637,7 @@ async function addOcclusion(toAdd, cards, saveBtn) {
       delete cards[i].noteId;
       Object.assign(cards[i], { front: header || 'Diagram', back: c.noteExtra || '' });
       delete cards[i].noteExtra;
+      toAdd[i].ankiId = null;          // the first card's Anki history isn't replayed onto the plain picture
       if (pic) cards[i].backImage = pic.id;
     }
   }

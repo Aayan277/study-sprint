@@ -44,7 +44,7 @@ export function groupIndex(masks, n) {
 
 // A group's label: the different labels of its masks, joined. '' when it has none.
 export function occLabel(masks, n) {
-  const labels = (masks || []).filter(m => m.n === n).map(m => String(m.label ?? '').trim()).filter(Boolean);
+  const labels = (masks || []).filter(m => m?.n === n).map(m => String(m.label ?? '').trim()).filter(Boolean);
   return [...new Set(labels)].join(', ');
 }
 
@@ -110,7 +110,7 @@ const plainField = html => String(html ?? '')
     if (e[0] === '#') { const code = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1); return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m; }
     return ENTITIES[e.toLowerCase()] ?? m;
   });
-const SHAPE_CODE = /\{\{c(\d+)::image-occlusion:(rect|ellipse|polygon|text)((?:\\.|[^}])*)\}\}/g;
+const SHAPE_CODE = /\{\{c(\d+)::image-occlusion:(rect|ellipse|polygon|text)((?:\\.|[^}\\])*)\}\}/g;
 
 // "left=.1:top=.2" → { left: '.1', top: '.2' }, splitting on ":" that is not escaped.
 function properties(text) {
@@ -146,6 +146,11 @@ export function parseAnkiOcclusion(fieldHtml) {
     } else {
       const points = String(p.points ?? '').replace(/["']/g, '').trim().split(/\s+/).map(pair => pair.split(',').map(num)).filter(pt => pt.length === 2 && pt.every(Number.isFinite));
       if (points.length < 3) continue;
+      // Anki's editor moves a polygon by changing left/top and leaves the points alone, so shift the points to left/top.
+      const left = num(p.left), top = num(p.top);
+      const dx = Number.isFinite(left) ? left - Math.min(...points.map(pt => pt[0])) : 0;
+      const dy = Number.isFinite(top) ? top - Math.min(...points.map(pt => pt[1])) : 0;
+      if (dx || dy) points.forEach(pt => { pt[0] += dx; pt[1] += dy; });
       const xs = points.map(pt => pt[0]), ys = points.map(pt => pt[1]);
       s = { n, shape: 'polygon', x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), points };
     }
@@ -164,7 +169,7 @@ export function toFractions(shapes, pixels, srcW, srcH) {
   const masks = [];
   for (const s of shapes) {
     const m = cleanMask({
-      id: 'm' + (masks.length + 1), n: s.n, shape: s.shape, x: s.x * fx, y: s.y * fy, w: s.w * fx, h: s.h * fy,
+      id: 'm' + (masks.length + 1), n: s.n, shape: s.shape, label: s.label, x: s.x * fx, y: s.y * fy, w: s.w * fx, h: s.h * fy,
       points: s.points?.map(([px, py]) => [px * fx, py * fy])
     });
     if (m) masks.push(m);
@@ -177,7 +182,7 @@ const ank = v => (+v).toFixed(4).replace(/^0\./, '.');
 export function ankiOcclusionText(masks) {
   return masks.map(m => {
     const props = m.shape === 'polygon' && m.points
-      ? [`points=${m.points.map(([x, y]) => `${ank(x)},${ank(y)}`).join(' ')}`]
+      ? [`left=${ank(m.x)}`, `top=${ank(m.y)}`, `points=${m.points.map(([x, y]) => `${ank(x)},${ank(y)}`).join(' ')}`]
       : m.shape === 'ellipse'
         ? [`left=${ank(m.x)}`, `top=${ank(m.y)}`, `rx=${ank(m.w / 2)}`, `ry=${ank(m.h / 2)}`]
         : [`left=${ank(m.x)}`, `top=${ank(m.y)}`, `width=${ank(m.w)}`, `height=${ank(m.h)}`];
@@ -249,13 +254,21 @@ export function occRemovalText({ remove, duplicates = [] }) {
 export function healOcclusion(cards) {
   const notes = new Map();
   for (const c of cards) if (isOcclusion(c)) (notes.get(c.noteId) || notes.set(c.noteId, []).get(c.noteId)).push(c);
-  const sigOf = c => JSON.stringify({ header: c.occlusion.header, masks: c.occlusion.masks, w: c.occlusion.w, h: c.occlusion.h }) + '|' + (c.backImage || '') + '|' + (c.noteExtra || '');
+  // A signature that doesn't depend on key order (a database may reorder the keys of the boxes).
+  const maskSig = m => [m?.id, m?.n, m?.shape, m?.x, m?.y, m?.w, m?.h, m?.label ?? null, m?.points ?? null];
+  const sigOf = c => JSON.stringify([c.occlusion.header ?? null, c.occlusion.w, c.occlusion.h, c.occlusion.masks.map(maskSig), c.backImage || '', c.noteExtra || '']);
   const fixed = [];
   for (const sibs of notes.values()) {
     if (sibs.every(s => sigOf(s) === sigOf(sibs[0]))) continue;
     const stamped = sibs.filter(s => s.noteEditedAt !== undefined);
     const time = stamped.length ? s => s.noteEditedAt : s => s.updatedAt || 0;
-    const newest = (stamped.length ? stamped : sibs).reduce((a, b) => (time(b) > time(a) || (time(b) === time(a) && b.id > a.id) ? b : a));
+    // Prefer a winner that still has its picture; ties go to the later updatedAt, then the larger id.
+    const pool = stamped.length ? stamped : sibs;
+    const withPic = pool.filter(s => s.backImage);
+    const newest = (withPic.length ? withPic : pool).reduce((a, b) => {
+      const later = time(b) - time(a) || (b.updatedAt || 0) - (a.updatedAt || 0) || (b.id > a.id ? 1 : -1);
+      return later > 0 ? b : a;
+    });
     const { header, masks, w, h } = newest.occlusion;
     const groups = groupsOf(masks);
     for (const s of sibs) {
@@ -263,7 +276,7 @@ export function healOcclusion(cards) {
       const { front, back } = occFrontBack({ header, masks }, s.occlusion.n);
       const occlusion = { n: s.occlusion.n, w, h, ...(header ? { header } : {}), masks };
       if (sigOf(s) === sigOf(newest) && s.front === front && s.back === back) continue;
-      const card = { ...s, front, back, backImage: newest.backImage, occlusion };
+      const card = { ...s, front, back, backImage: newest.backImage || s.backImage, occlusion };
       if (newest.noteExtra) card.noteExtra = newest.noteExtra; else delete card.noteExtra;
       if (newest.noteEditedAt !== undefined) card.noteEditedAt = newest.noteEditedAt;
       fixed.push(card);
@@ -285,7 +298,8 @@ const drawable = masks => (Array.isArray(masks) ? masks : []).filter(m => isPlai
 //   side 'back'   only this card's group uncovered (with its label), the others stay covered
 //   side 'all'    every box as an outline with a number (the editor's preview); this card's group is highlighted
 //   zoom          add the Zoom button (not wanted in Play or in small lists)
-export function occlusionHTML(card, side = 'front', { zoom = true } = {}) {
+//   shortcut      say the button has the Z key (Review does; the walk-through doesn't)
+export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = true } = {}) {
   const o = card?.occlusion || {};
   const masks = drawable(o.masks);
   const groups = groupsOf(masks), total = groups.length;
@@ -328,12 +342,14 @@ export function occlusionHTML(card, side = 'front', { zoom = true } = {}) {
     const top = Math.min(...mine.map(m => m.y)), bottom = Math.max(...mine.map(m => m.y + m.h));
     const where = bottom <= 0.82 ? `top:${pct(bottom)}` : top >= 0.18 ? `top:${pct(top)}` : 'bottom:6px';
     const cls = bottom <= 0.82 ? '' : top >= 0.18 ? ' occ-tag-up' : ' occ-tag-in';
-    tag = `<span class="occ-tag${cls}" style="left:${pct(Math.min(0.85, Math.max(0.15, (left + right) / 2)))};${where}">${esc(label)}</span>`;
+    // Centred on the boxes (15% to 85%), but pulled back by its own width so it stays inside the figure.
+    const c = (Math.min(0.85, Math.max(0.15, (left + right) / 2)) * 100).toFixed(3);
+    tag = `<span class="occ-tag${cls}" aria-hidden="true" style="left:${c}%;transform:${cls === ' occ-tag-up' ? `translate(-${c}%,-100%)` : `translateX(-${c}%)`};${where}">${esc(label)}</span>`;
   }
   const style = sized ? ` style="aspect-ratio:${Math.round(W)} / ${Math.round(H)};--ar:${(W / H).toFixed(4)}"` : '';
   return `<figure class="occ occ-${side}${sized ? '' : ' occ-flow'}"${style} role="group" aria-label="${esc(name)}: ${total} hidden ${total === 1 ? 'part' : 'parts'}">`
     + `<img class="occ-img" data-media="${esc(card?.backImage ?? '')}" alt="${esc(name)}">${divs}${tag}`
-    + `${zoom ? `<button type="button" class="occ-zoom" aria-label="Zoom picture" aria-keyshortcuts="Z">${ZOOM_ICON}</button>` : ''}</figure>`;
+    + `${zoom ? `<button type="button" class="occ-zoom" aria-label="Zoom picture"${shortcut ? ' aria-keyshortcuts="Z"' : ''}>${ZOOM_ICON}</button>` : ''}</figure>`;
 }
 
 // What read-aloud says. Front: "Heart anatomy. What is hidden part 2 of 5?" Back: the label, or "Part 2 of 5".
@@ -394,7 +410,7 @@ function inside(m, x, y) {
 }
 // The mask under a point: the topmost one (the last in the list) wins. null when none.
 export function hitTest(masks, x, y) {
-  for (let i = masks.length - 1; i >= 0; i--) if (inside(masks[i], x, y)) return masks[i];
+  for (let i = masks.length - 1; i >= 0; i--) if (isPlain(masks[i]) && inside(masks[i], x, y)) return masks[i];
   return null;
 }
 // Which corner of the mask's box is the point on? 'nw' | 'ne' | 'sw' | 'se' | null. tolX/tolY: how close, in picture fractions.
@@ -429,18 +445,18 @@ export function resizeMask(m, corner, x, y, minW = 0, minH = 0) {
 
 // ---------- editing the list of boxes ----------
 // The next free group number (never one used before: floor is the highest n the picture has ever had).
-export const nextN = (masks, floor = 0) => Math.max(floor, 0, ...masks.map(m => m.n)) + 1;
+export const nextN = (masks, floor = 0) => Math.max(floor, 0, ...masks.map(m => m?.n).filter(Number.isInteger)) + 1;
 // Put the masks with these ids into one group (the lowest n among them).
 export function groupMasks(masks, ids) {
-  const set = new Set(ids), n = Math.min(...masks.filter(m => set.has(m.id)).map(m => m.n));
-  return Number.isFinite(n) ? masks.map(m => (set.has(m.id) ? { ...m, n } : m)) : masks;
+  const set = new Set(ids), n = Math.min(...masks.filter(m => set.has(m?.id)).map(m => m.n));
+  return Number.isFinite(n) ? masks.map(m => (set.has(m?.id) ? { ...m, n } : m)) : masks;
 }
 // Take one mask out of its group, into a group of its own.
 export function splitMask(masks, id, floor = 0) {
   const n = nextN(masks, floor);
-  return masks.map(m => (m.id === id ? { ...m, n } : m));
+  return masks.map(m => (m?.id === id ? { ...m, n } : m));
 }
-export const deleteMasks = (masks, ids) => masks.filter(m => !ids.includes(m.id));
+export const deleteMasks = (masks, ids) => masks.filter(m => !ids.includes(m?.id));
 
 // Undo and redo: { past, present, future }, at most 100 steps back.
 export const newH = present => ({ past: [], present, future: [] });

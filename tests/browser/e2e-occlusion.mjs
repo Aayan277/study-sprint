@@ -259,9 +259,11 @@ const rt = await page.evaluate(async seedDeck => {
   const orig = (await db.getAll('cards')).filter(c => c.deckId === seedDeck && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n);
   const back = (await db.getAll('cards')).filter(c => c.deckId === decks.find(d => d.name === 'Round trip').id && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n);
   const diff = back.map((c, i) => Math.max(...c.occlusion.masks.flatMap((m, k) => ['x', 'y', 'w', 'h'].map(f => Math.abs(m[f] - orig[0].occlusion.masks[k][f])))));
-  return { n: back.length, ns: back.map(c => c.occlusion.n), w: back[0].occlusion.w, h: back[0].occlusion.h, header: back[0].occlusion.header, extra: back[0].noteExtra, shapes: back[0].occlusion.masks.map(m => m.shape).join(), maxDiff: Math.max(...diff), origN: orig.length, extraOk: back.every(c => c.noteExtra === 'Blood leaves here'), picture: !!(await db.getMedia(back[0].backImage)) };
+  const labelsOf = cs => [...new Set(cs[0].occlusion.masks.filter(m => m.label).map(m => m.n + ':' + m.label))].join('|');      // a label belongs to its group
+  return { labels: labelsOf(back), origLabels: labelsOf(orig), n: back.length, ns: back.map(c => c.occlusion.n), w: back[0].occlusion.w, h: back[0].occlusion.h, header: back[0].occlusion.header, extra: back[0].noteExtra, shapes: back[0].occlusion.masks.map(m => m.shape).join(), maxDiff: Math.max(...diff), origN: orig.length, extraOk: back.every(c => c.noteExtra === 'Blood leaves here'), picture: !!(await db.getMedia(back[0].backImage)) };
 }, seed.deckId);
 ok(rt.n === 4 && rt.ns.join() === '1,2,3,4' && rt.w === 2048 && rt.h === 1365 && rt.header === 'Heart' && rt.extraOk && rt.picture, 'round trip: 4 cards, the picture at 2048×1365, header and Back Extra kept');
+ok(rt.origLabels.includes('Aortic arch') && rt.labels === rt.origLabels, `round trip: the labels come back from Comments (${rt.labels})`);
 ok(rt.maxDiff <= 1e-4 && rt.shapes === 'rect,rect,ellipse,polygon,rect', `round trip: every box within 1e-4 (${rt.maxDiff.toExponential(1)}), shapes ${rt.shapes}`);
 
 // ---- 8. backups ----
@@ -291,6 +293,33 @@ ok(await page.locator('#flash .rv-front .occ-ask').count() >= 1 && (await page.l
 await page.click('#flash .flash-hint'); await page.waitForSelector('#flash.flipped');
 ok(await page.locator('#flash .rv-back .occ-reveal').count() >= 1 && (await page.textContent('#flash .rv-back .occ-label')).length > 0, 'the walk-through back uncovers the box and shows its label');
 await noSideways(page, 'in the walk-through');
+ok(await page.locator('#flash .occ-zoom').count() >= 1 && await page.locator('#flash .occ-zoom[aria-keyshortcuts]').count() === 0, 'the walk-through zoom button does not claim a Z shortcut');
+{
+  // the picture viewer has its own keys: 3 must not rate the card behind it
+  const logs = () => page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length);
+  const logs0 = await logs();
+  await page.click('#flash .rv-back .occ-zoom'); await page.waitForSelector('dialog.occ-view[open]');
+  await page.keyboard.press('3'); await page.waitForTimeout(300);
+  ok(await page.locator('dialog.occ-view[open]').count() === 1 && await page.locator('#flash.flipped').count() === 1 && (await logs()) === logs0, 'walk-through: with the viewer open, pressing 3 rates nothing');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('dialog.occ-view'));
+}
+// a label near the edges stays inside the picture
+{
+  const edge = await page.evaluate(async () => {
+    const occ = await import('./js/occlusion.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;top:0;left:16px;width:343px;background:#fff;z-index:99';
+    const mk = (x, label) => {
+      const masks = [{ id: 'm', n: 1, shape: 'rect', x, y: 0.1, w: 0.06, h: 0.1, label }];
+      return occ.occlusionHTML({ noteId: 'N', backImage: 'x', occlusion: { n: 1, w: 400, h: 300, masks } }, 'back', { zoom: false });
+    };
+    host.innerHTML = mk(0.02, 'Superior vena cava') + mk(0.9, 'Inferior vena cava');
+    document.body.append(host);
+    const out = [...host.querySelectorAll('figure')].map(f => { const a = f.getBoundingClientRect(), t = f.querySelector('.occ-tag').getBoundingClientRect(); return { l: t.left - a.left, r: a.right - t.right, w: t.width, hidden: f.querySelector('.occ-tag').getAttribute('aria-hidden') }; });
+    host.remove();
+    return out;
+  });
+  ok(edge.length === 2 && edge.every(e => e.l >= -0.5 && e.r >= -0.5 && e.w > 20 && e.hidden === 'true'), `labels near both edges lie inside the picture at 375px (${edge.map(e => `${e.l.toFixed(1)}/${e.r.toFixed(1)}`).join(', ')})`);
+}
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
 
 // ---- 10. syncing between two devices, including healing ----
