@@ -86,7 +86,10 @@ export function nextDueText(data, cards) {
 export function customQueue(kind, data, cards, days = 3) {
   if (kind === 'ahead') {
     const ahead = aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps);
-    return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, data.answered), label: 'Review ahead' };       // follows the one-sibling-a-day rule
+    // A sibling that is still due today (it will be in today's Review) holds the others back, like one answered today.
+    const held = new Map(data.answered);
+    for (const x of [...data.split.reviews, ...data.split.waiting]) if (x.card.noteId && !held.has(x.card.noteId)) held.set(x.card.noteId, new Set());
+    return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, held), label: 'Review ahead' };       // follows the one-sibling-a-day rule
   }
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
   // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).

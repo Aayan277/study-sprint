@@ -135,3 +135,15 @@ test('Today counts a cloze note once, the same as the Review queue, and exam pre
   const prep = customQueue('prep', deckExam, all, 3);
   assert.deepEqual(prep.queue.map(x => x.card.id).filter(id => id.startsWith('k')).sort(), ['k2', 'k3']);
 });
+
+test('review ahead leaves out siblings of a card that is still due today', async () => {
+  const { customQueue } = await import('../js/study-data.js');
+  const cl = [1, 2, 3].map(n => ({ id: 'k' + n, deckId: 'b', front: 'f', back: 'b', noteId: 'N', cloze: n, created: n }));
+  const st = new Map(cl.map(c => [c.id, { cardId: c.id, state: 2, due: now + 2 * DAY, lastReview: now - DAY }]));
+  const d = { ...data, cards: cl, statesById: st, logs: [], answered: new Map(), exam: { caps: new Map(), gain: new Map() } };
+  d.split = splitCards(cl, st, now);
+  assert.equal(customQueue('ahead', d, cl, 3).queue.length, 1);          // nothing due today: one of the three
+  st.set('k1', { cardId: 'k1', state: 2, due: now - DAY, lastReview: now - 5 * DAY });
+  d.split = splitCards(cl, st, now);                                      // k1 is due today and will be in Review
+  assert.equal(customQueue('ahead', d, cl, 3).queue.length, 0);
+});
