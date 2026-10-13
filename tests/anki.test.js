@@ -47,7 +47,8 @@ test('cloze notes and mixed note types', () => {
     { mid: '2', fields: ['A {{c1::b}} {{c2::c}}', 'extra'], tags: ['x'], deck: 'D' },
     { mid: '3', fields: ['perro', 'dog', 'El perro corre'], tags: [], deck: 'D' }
   ], models);
-  assert.deepEqual(r.rows, [['A […] c', 'b', 'extra'], ['A b […]', 'c', 'extra'], ['perro', 'dog', 'El perro corre']]);
+  assert.deepEqual(r.rows, [['A […] c', 'b', ''], ['A b […]', 'c', ''], ['perro', 'dog', 'El perro corre']]);     // Back Extra is the note's extra, not a column
+  assert.deepEqual(r.noteExtras, ['extra', 'extra', '']);
   assert.deepEqual(r.tags, [['x'], ['x'], []]);
   assert.deepEqual(r.columns, ['Front (field 1)', 'Back (field 2)', 'Field 3']);
 });
@@ -258,4 +259,22 @@ test('occlusion and other notes together; picking a deck keeps the flags in step
   assert.deepEqual(r.occluded, [false, true]);
   assert.deepEqual(onlyDeck(r, 'Bio').occluded, [true]);
   assert.deepEqual(onlyDeck(r, 'Bio').rows, [['Heart', '']]);
+});
+
+test('a cloze note: its cards share one note key, with the note text and Back Extra', () => {
+  const r = notesToImport([
+    { id: '101', guid: 'g-one', mid: '2', fields: ['The {{c1::mito}} makes {{c2::ATP}}', '<b>Extra</b> info'], tags: [], deck: 'D', cards: { 0: 'k1', 1: 'k2' } },
+    { id: '102', guid: 'g-two', mid: '2', fields: ['{{c1::Solo}} note', ''], tags: [], deck: 'D' },
+    { id: '103', guid: 'g-three', mid: '1', fields: ['Front', 'Back'], tags: [], deck: 'D' }
+  ], models);
+  assert.deepEqual(r.clozes, [
+    { noteKey: '101', n: 1, text: 'The {{c1::mito}} makes {{c2::ATP}}' }, { noteKey: '101', n: 2, text: 'The {{c1::mito}} makes {{c2::ATP}}' },
+    { noteKey: '102', n: 1, text: '{{c1::Solo}} note' }, null]);
+  assert.deepEqual(r.noteExtras, ['**Extra** info', '**Extra** info', '', '']);
+  assert.deepEqual(r.guids, ['g-one', 'g-one', 'g-two', 'g-three']);
+  assert.deepEqual(r.ankiIds, ['k1', 'k2', null, null]);
+  // choosing one Anki deck keeps the lists in step
+  const picked = onlyDeck({ ...r, decks: ['A', 'A', 'B', 'B'] }, 'B');
+  assert.deepEqual(picked.clozes.map(c => c && c.noteKey), ['102', null]);
+  assert.deepEqual(picked.guids, ['g-two', 'g-three']);
 });

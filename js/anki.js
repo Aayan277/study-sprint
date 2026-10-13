@@ -70,9 +70,13 @@ export { clozeNumbers, clozeCard };
 //   ankiIds   the Anki card each row came from, so its review history can come along
 //   reviews   Map Anki card id → its review history, for the rows' cards that have one
 //   occluded  for each row, true if it came from an image-occlusion note (see below)
+//   clozes    for each row, null, or { noteKey, n, text } for a cloze note's card: the note's text, the blank this
+//             row hides, and a key shared by the rows of one note (so the import makes them siblings: see cloze.js)
+//   noteExtras  for each row, the note's Back Extra text ('' when none); for a cloze note it is shown under the answer
+//   guids     each row's Anki note guid, saved on the card (ankiGuid)
 //   progress  { cards, reviews }: how many rows have history, and how many reviews in all
-// Rows are [front, back, any other fields]. Cloze notes give one row per cloze number, with their
-// other fields (like Back Extra) after the back.
+// Rows are [front, back, any other fields]. Cloze notes give one row per cloze number: just [front, back], with
+// their other fields (like Back Extra) kept as the note's extra (noteExtras).
 //
 // Image-occlusion notes (a cloze note whose first field holds "image-occlusion:") hide parts of a picture. Study
 // Sprint can't do that yet, so each one comes in as a plain picture card: the heading (or "Diagram") on the front,
@@ -85,10 +89,10 @@ const fieldIndex = (model, name, fallback) => {
   return i >= 0 ? i : fallback;
 };
 export function notesToImport(notes, models, reviews = new Map()) {
-  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [];
+  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [], clozes = [], noteExtras = [], guids = [];
   let images = 0, extraImages = 0;
   const usedTypes = new Set();
-  for (const note of notes) {
+  for (const [index, note] of notes.entries()) {
     const model = models.get(String(note.mid)) || { name: '', fields: [], cloze: false };
     const text = note.fields.map(f => htmlToMarks(f));       // bold, italics and lists kept as marks
     if (note.fields.some(hasImage)) images++;
@@ -104,20 +108,25 @@ export function notesToImport(notes, models, reviews = new Map()) {
       const extra = text[fieldIndex(model, 'back extra', 3)]?.trim();
       rows.push([header || 'Diagram', extra || '']); tags.push(noteTags); decks.push(note.deck || '');
       pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true);       // its masks' history doesn't fit a plain picture card
+      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
       usedTypes.add('occlusion');
       continue;
     }
     const nums = clozeNumbers(note.fields[0] ?? '');
     if (model.cloze || nums.length) {
       // Cloze text is in the first field. Turn it to text first so hidden answers lose their formatting too.
+      const extra = text.slice(1).map(t => t.trim()).filter(Boolean).join('\n');
+      const noteKey = String(note.id ?? index);
       for (const n of nums) {
         const { front, back } = clozeCard(text[0], n);
-        rows.push([front, back, ...text.slice(1)]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
+        rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
+        clozes.push({ noteKey, n, text: text[0] }); noteExtras.push(extra); guids.push(note.guid || null);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
       }
       usedTypes.add('cloze');
     } else {
       rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
+      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card (a reverse card's history isn't used)
       usedTypes.add(String(note.mid));
     }
@@ -129,7 +138,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const columns = Array.from({ length: width }, (_, i) =>
     (only && only.fields[i]) || (i === 0 ? 'Front (field 1)' : i === 1 ? 'Back (field 2)' : `Field ${i + 1}`));
   const used = new Map(ankiIds.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
-  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
+  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, noteExtras, guids, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
 }
 
@@ -224,7 +233,7 @@ export function onlyDeck(result, deck) {
   const keep = result.decks.map(d => d === deck || d.startsWith(deck + '::'));
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
-  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), ankiIds,
+  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), ankiIds,
     progress: progressOf(ankiIds, result.reviews || new Map()) };
 }
 

@@ -132,3 +132,14 @@ test('link tool: overlapping blanks are skipped as unclear', () => {
   assert.equal(notes.length, 0);
   assert.equal(skipped, 1);
 });
+
+test('pasted lines: one note per line, lines without blanks left out', async () => {
+  const { parseCloze, hasClozeLines } = await import('../js/cloze.js');
+  const text = 'The {{c1::cell}} has a {{c2::nucleus}}\nplain line\n\n{{c1::Solo}}';
+  assert.ok(hasClozeLines(text) && !hasClozeLines('nothing here'));
+  const { result, notes, skipped } = parseCloze(text);
+  assert.equal(notes, 2); assert.equal(skipped, 1);
+  assert.deepEqual(result.rows, [['The […] has a nucleus', 'cell'], ['The cell has a […]', 'nucleus'], ['[…]', 'Solo']]);
+  assert.deepEqual(result.clozes.map(c => c.noteKey), ['paste0', 'paste0', 'paste2']);
+  assert.equal(result.format.id, 'cloze');
+});

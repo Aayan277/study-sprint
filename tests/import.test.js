@@ -250,3 +250,10 @@ test('a side can be just a picture (Anki imports)', () => {
   assert.equal(isComplete({ front: '', back: 'Heart', pictures: { front: null, back: null } }), false);
   assert.equal(isComplete({ front: '', back: 'Heart' }), false);
 });
+
+test('cloze fields and the Anki guid come through buildCards', () => {
+  const result = { columns: ['a', 'b'], rows: [['A […]', 'x'], ['plain', 'y']], clozes: [{ noteKey: 'n', n: 1, text: 'A {{c1::x}}' }, null], noteExtras: ['more', ''], guids: ['g1', 'g2'] };
+  assert.deepEqual(buildCards(result), [
+    { front: 'A […]', back: 'x', cloze: { noteKey: 'n', n: 1, text: 'A {{c1::x}}' }, noteExtra: 'more', ankiGuid: 'g1' },
+    { front: 'plain', back: 'y', ankiGuid: 'g2' }]);
+});

@@ -127,7 +127,8 @@ function readCollection(db) {
     }
   }
 
-  const notes = q('SELECT id, mid, flds, tags FROM notes ORDER BY id').map(([id, mid, flds, tags]) => ({
+  const notes = q('SELECT id, guid, mid, flds, tags FROM notes ORDER BY id').map(([id, guid, mid, flds, tags]) => ({
+    id: String(id), guid: String(guid || ''),
     mid: String(mid),
     fields: String(flds).split('\x1f'),
     tags: String(tags || '').trim().split(/\s+/).filter(Boolean),

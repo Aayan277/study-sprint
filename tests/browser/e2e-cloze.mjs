@@ -166,5 +166,48 @@ const html = await page.innerHTML('#flash');
 ok(!html.includes('<script') && !html.includes('<img') && await page.evaluate(() => window.__pwned === undefined), 'HTML in answers, text and Extra is shown as text, never run');
 ok((await page.textContent('.rv-back mark.cloze-ans')).includes('<script>'), 'the answer shows the characters as written');
 
+// ---- 7. importing: pasted lines, an Anki file, and an export of our own notes ----
+const deckCards = name => page.evaluate(async name => { const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.name === name);
+  return (await db.getAll('cards')).filter(c => c.deckId === d.id).sort((a, b) => a.created - b.created); }, name);
+await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox');
+await page.fill('#pasteBox', 'Mitosis - cell division\nMeiosis - division into 4 gametes');
+await page.waitForSelector('#plist .prow');
+ok(!(await page.isVisible('#clozeBtn')), 'no "Make cloze notes" button for ordinary pasted cards');
+await page.fill('#pasteBox', 'The {{c1::cell}} has a {{c2::nucleus}} and {{c3::DNA}}\nPlain line without a blank\nWater is {{c1::H2O}}');
+await page.waitForSelector('#clozeBtn:not([hidden])');
+await page.click('#clozeBtn'); await page.waitForFunction(() => document.querySelector('#found').textContent.includes('2 cloze notes'));
+ok((await page.textContent('#found')).includes('Found 4 cards') && (await page.textContent('#found')).includes('1 line without a blank was left out'), 'paste: Make cloze notes gives 4 cards from 2 notes: ' + (await page.textContent('#found')).slice(0, 120));
+ok(await page.locator('.prow textarea[data-side=front]').first().evaluate(t => t.readOnly) && !(await page.isVisible('#swapBtn')), 'cloze rows are read-only and there is nothing to swap');
+await page.screenshot({ path: SP + '/cloze-paste-375.png', fullPage: true });
+await page.fill('#newName', 'Pasted cloze'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+let pc = await deckCards('Pasted cloze');
+ok(pc.length === 4 && new Set(pc.map(c => c.noteId)).size === 2 && pc[0].noteText === 'The {{c1::cell}} has a {{c2::nucleus}} and {{c3::DNA}}' && pc[1].front === 'The cell has a […] and DNA', 'pasted notes saved: 4 cards, 2 notes, text kept');
+
+// an Anki file (a cloze note with two blanks, and ordinary cards)
+await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+await page.setInputFiles('#fileIn', SP + '/files/anki-new.apkg');
+await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+ok((await page.textContent('#found')).includes('1 cloze note make'), 'Anki import: says the cloze note makes the cards');
+await page.fill('#newName', 'From Anki cloze'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+const ac = (await page.evaluate(async () => { const db = await import('./js/db.js'); const ds = await db.getDecks(); return (await db.getAll('cards')).filter(c => ds.find(d => d.id === c.deckId)?.name === 'From Anki cloze' || ds.find(d => d.id === c.deckId)?.parentId === ds.find(x => x.name === 'From Anki cloze')?.id); }));
+const ak = ac.filter(c => c.noteId);
+ok(ak.length === 2 && ak[0].noteId === ak[1].noteId && ak.map(c => c.cloze).sort().join() === '1,2' && ak[0].front.includes('[…]') && ak[0].noteText.includes('{{c1::'), 'Anki import: the 2-blank cloze note became 2 sibling cards with the note text');
+ok(ac.length === 7 && ac.every(c => typeof c.ankiGuid === 'string' && c.ankiGuid), 'Anki import: every card keeps its Anki guid');
+
+// export our own notes as an Anki file and bring them back
+await page.goto('http://localhost:8123/#/deck/' + bio); await page.waitForSelector('#exportDeck');
+await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#exApkg')]);
+await dl.saveAs(SP + '/exports/cloze.apkg');
+await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+await page.setInputFiles('#fileIn', SP + '/exports/cloze.apkg');
+await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+const fr = await page.$$eval('.prow textarea[data-side=front]', t => t.map(x => x.value));
+ok(fr.join('|') === 'The […] makes ATP for the cell|The mitochondria makes […] for the cell|The mitochondria makes ATP for the […]', 'export round trip: the Anki file brings the 3 cards back: ' + fr.join('|'));
+await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+const rt = await deckCards('Round trip'), orig = await deckCards('Cell biology');
+ok(rt.length === 3 && new Set(rt.map(c => c.noteId)).size === 1 && rt[0].noteText === orig[0].noteText && rt.every(c => c.noteExtra === orig[0].noteExtra), 'round trip: same text and Extra, one note with 3 sibling cards');
+ok(rt.every(c => c.ankiGuid === rt[0].ankiGuid) && rt[0].ankiGuid.length === 10, 'round trip: the Anki guid is the note\'s (shared by its cards)');
+
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();

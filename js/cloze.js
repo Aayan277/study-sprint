@@ -172,3 +172,21 @@ export function planLinks(cards) {
   }
   return { notes, skipped };
 }
+
+// ---------- pasted cloze notes ----------
+// Pasted lines with blanks ({{c1::…}}), one note per line, as an import result (the shape import.js and anki.js
+// give: columns, rows and, for each row, its place in a note). Lines without a blank are left out.
+//   Returns { result, notes, skipped }: notes is how many lines made cards.
+export function parseCloze(text) {
+  const rows = [], clozes = [];
+  let notes = 0, skipped = 0;
+  String(text ?? '').replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean).forEach((line, i) => {
+    const nums = clozeNumbers(line);
+    if (!nums.length) { skipped++; return; }
+    notes++;
+    for (const n of nums) { const { front, back } = clozeCard(line, n); rows.push([front, back]); clozes.push({ noteKey: 'paste' + i, n, text: line }); }
+  });
+  return { result: { columns: ['Front', 'Back'], rows, clozes, format: { id: 'cloze', label: 'as cloze notes', skipped }, headerSkipped: false }, notes, skipped };
+}
+// Does pasted text have any line with a blank?
+export const hasClozeLines = text => /\{\{c\d+::/.test(String(text ?? ''));
