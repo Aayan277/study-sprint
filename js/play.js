@@ -8,7 +8,7 @@
 
 import * as db from './db.js';
 import {
-  questionFor, isCloze, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
+  questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
@@ -24,6 +24,7 @@ import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
+import { occlusionHTML } from './occlusion.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
@@ -109,8 +110,8 @@ export async function renderPlay(el) {
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || defaultQuestionType(pool);
     const suggested = !picked && prefs.qtype === 'back';
-    // Cloze cards can't be asked back → front, so with some in the deck that choice only needs the other cards to fit.
-    const hasCloze = pool.some(isCloze);
+    // Cloze and image-occlusion cards can't be asked back → front, so with some in the deck that choice only needs the other cards to fit.
+    const hasCloze = pool.some(isFrontOnly);
     const mcFront = canMultipleChoice(pool, 'front'), mcBack = canMultipleChoice(pool, 'back');
     const mcOk = mcFront && (mcBack || hasCloze);
     if (hasCloze && !mcBack && prefs.qtype === 'back') prefs.qtype = 'front';
@@ -304,7 +305,8 @@ function showQuestion() {
   $('pLabel').textContent = { front: 'Pick the matching answer', back: 'Which card is this?', typing: 'Type the answer' }[G.qtype];
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
-  p.innerHTML = imgHTML(q.image) + esc(q.prompt);      // the prompt side's picture, if it has one
+  // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
+  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + esc(q.prompt);
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
@@ -407,7 +409,7 @@ function answer(choice) {
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
   const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
-    chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length };     // text read, for speed relative to you
+    chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
   const round = G;
@@ -613,6 +615,7 @@ async function finish() {
       ${missed.length ? missed.map(l => `
         <div class="miss">
           <div class="m">${esc(l.q.prompt)}</div>
+          ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
           <div class="r">${esc(l.q.answer)}</div>
           <div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>
         </div>`).join('')

@@ -23,6 +23,7 @@ import { isHidden } from './browse-logic.js';
 import { formatInterval } from './queue.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
+import { hasMasks, occlusionHTML, occLabel } from './occlusion.js';
 import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
 
 const GUIDE_CARDS = 3;
@@ -220,7 +221,11 @@ function drawGuide() {
   if (i >= cards.length) return drawGuideDone();
   const card = cards[i];
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
-  const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
+  // A picture with hidden boxes (image occlusion) is drawn by occlusion.js; its back uncovers the box and shows the label.
+  const occ = hasMasks(card);
+  const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
+  const front = occ ? occlusionHTML(card, 'front') : `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
+  if (occ) import('./occlusion-view.js').catch(err => console.error(err));
   const ivl = G.srs ? G.srs.previewIntervals(null, optsFor(card)) : null;
   const fullPath = deckPath(G.decks, card.deckId);
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}</span>`;
@@ -237,8 +242,10 @@ function drawGuide() {
             <div class="flash-front${size}">${front}</div>
             <p class="flash-hint">Tap to flip</p></div>
           <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
-            <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
-            <div class="flash-ans"><div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div></div></div>
+            ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
+            <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ
+              ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>`
+              : `${imgHTML(card.backImage)}${formatHTML(card.back)}`}</div></div></div>
         </div>
       </article>
       <div class="ratebar" id="ratebar">${flipped ? `
@@ -249,7 +256,11 @@ function drawGuide() {
   setFocusMode(true);
   $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
   $('showBtn')?.addEventListener('click', flipGuide);
-  $('flash').addEventListener('click', () => { if (!G.flipped) flipGuide(); });
+  $('flash').addEventListener('click', e => {
+    const zoom = e.target.closest('.occ-zoom');
+    if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }
+    if (!G.flipped) flipGuide();
+  });
   el.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => rateGuide(+b.dataset.rate)));
   // Keep focus on the card (the page was just redrawn). After a flip it goes to the answer, so screen readers read it out.
   (flipped ? $('flash').querySelector('.rv-back') : $('flash')).focus({ preventScroll: true });

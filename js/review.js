@@ -11,6 +11,7 @@ import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
+import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -112,12 +113,19 @@ const schedFor = (card, now = Date.now()) => {
 };
 
 const deckOf = card => R.effective.get(card.deckId);
+// Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
+// label to type (without one you flip, saying it in your head).
+const typesAnswer = card => {
+  if (!R.typing) return false;
+  const label = hasMasks(card) ? occLabel(card.occlusion.masks, card.occlusion.n) : null;
+  return label !== null ? !!label && canType(label) : canType(plainText(card.back));
+};
 // Read the side showing (the back once flipped) in the deck's language.
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
-  // A cloze card says "blank" for the hidden part, and the whole sentence once flipped.
-  const text = hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
+  const text = hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
@@ -154,18 +162,28 @@ function renderSession(el, enter = false) {
   if (!R.current) return finish(el);
   const { card } = R.current;
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
-  const typeThis = R.typing && canType(plainText(card.back));
-  const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
+  const typeThis = typesAnswer(card);
+  const occ = hasMasks(card);
+  const size = occ ? '' : plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
   // the note's Extra under it. Everything goes through renderCloze/formatHTML, so nothing in the text can inject HTML.
   const cloze = hasBlank(card);
-  const backSize = answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
-  const front = `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
-  const answerHTML = cloze
-    ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
-    : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
+  // An image-occlusion card shows its picture with every box hidden and the highlighted one to name; the back uncovers that
+  // box, with its label, and a button shows the whole picture. (occlusion.js builds the HTML, escaping the text.)
+  const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
+  const backSize = occ ? '' : answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const front = occ
+    ? `${card.occlusion.header ? `<p class="occ-head">${esc(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
+    : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
+  const answerHTML = occ
+    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>
+       <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
+    : cloze
+      ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
+      : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
+  if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   const head = `
     <div class="rv-head">
@@ -185,11 +203,11 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          ${cloze ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
+          ${cloze || occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back${cloze ? ' cloze-full' : ''}${backSize}">${answerHTML}</div>
-            ${cloze && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
+            <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${backSize}">${answerHTML}</div>
+            ${(cloze || occ) && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
           </div>
         </div>
       </div>
@@ -199,7 +217,7 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !R.flipped ? '<p class="note center" id="longNote">Long answer: say it in your head, then flip.</p>' : ''}
+    ${R.typing && !typeThis && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
   drawSessionPage(el, head, body);
@@ -211,7 +229,13 @@ function renderSession(el, enter = false) {
   $('speakBtn')?.addEventListener('click', () => readAloud());
   autoSpeak(card);
   wireRatebar(el);
-  $('flash').addEventListener('click', () => { if (!R.flipped && !typeThis) flip(el); });
+  $('flash').addEventListener('click', e => {
+    const zoom = e.target.closest('.occ-zoom');
+    if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
+    if (e.target.closest('.occ-peek')) return;
+    if (!R.flipped && !typeThis) flip(el);
+  });
+  $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
   if (typeThis && !R.flipped) $('typeIn').focus();
@@ -281,7 +305,7 @@ function flip(el) {
   R.flipped = true;
   R.answerMs = Date.now() - R.shownAt;
   // "I don't know" while typing counts as a miss.
-  if (R.typing && canType(plainText(R.current.card.back)) && !R.typed) R.suggest = Rating.Again;
+  if (typesAnswer(R.current.card) && !R.typed) R.suggest = Rating.Again;
   const flash = $('flash');
   flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
   flash.classList.add('flipped');
@@ -298,6 +322,13 @@ function flip(el) {
   back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
   $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
+}
+
+// "Show whole picture": uncovers every box of the picture on the back (the CSS does it, from the figure's .peek class).
+function togglePeek(button) {
+  const on = button.getAttribute('aria-pressed') !== 'true';
+  button.setAttribute('aria-pressed', String(on));
+  button.closest('.rv-back')?.querySelector('.occ')?.classList.toggle('peek', on);
 }
 
 function submitTyped(el) {
@@ -511,6 +542,7 @@ async function finish(el) {
 // Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.
 document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
+  if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the zoom viewer and the box editor have their own keys
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const inInput = e.target.matches('input, textarea, select');
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
@@ -519,6 +551,10 @@ document.addEventListener('keydown', e => {
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
+    // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
+    const face = $('flash').querySelector('.rv-face:not([inert])');
+    if (k === 'z' && face?.querySelector('.occ-zoom')) { e.preventDefault(); face.querySelector('.occ-zoom').click(); return; }
+    if (k === 'm' && face?.querySelector('.occ-peek')) { e.preventDefault(); togglePeek(face.querySelector('.occ-peek')); return; }
   }
   if (!R.flipped) {
     if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }

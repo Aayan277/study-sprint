@@ -10,6 +10,7 @@ import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } fro
 import { esc, toast } from './ui.js';
 import { addImage, imgHTML } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt } from './cloze.js';
+import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
 
@@ -230,3 +231,77 @@ document.addEventListener('change', e => {
   (document.getElementById(p + (cloze ? 'Text' : 'Front')))?.focus();
 });
 export const lastKind = () => { try { return localStorage.getItem('study-sprint-add-kind') === 'cloze' ? 'cloze' : 'basic'; } catch { return 'basic'; } };
+
+// ---------- Image occlusion ----------
+// A picture with boxes over the parts to learn (see occlusion.js). Each numbered group of boxes is one card. This form
+// shows the picture with its boxes, the header, a label for each group (typing the labels works without drawing, and
+// is the way to label with a keyboard or a screen reader) and the Extra text. The boxes themselves are drawn in the
+// box editor (later); until then they come from an import or an earlier save.
+//   occlusionFields(p, card)   the form for the ids that start with p; card = the card being edited (null for a new note)
+//   readOcclusion(p)           { masks, header, w, h, image, maxN }: the note as it stands, ready for planOcclusionSave
+//   setOcclusion(p, note)      replace the picture and boxes (note: { masks, image, w, h, header?, maxN? }) and redraw
+const occForms = new Map();       // p → { masks, image, w, h, maxN, n }: the form's state (n = the card being edited)
+
+export function occlusionFields(p, card = null, extra = '') {
+  const o = card?.occlusion;
+  const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
+  occForms.set(p, st);
+  const parts = occParts(p, st, o?.header || '');
+  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}">
+      <div class="occ-form-prev" id="${p}OccPrev">${parts.preview}</div>
+      <p class="cloze-makes" id="${p}OccMakes" aria-live="polite">${esc(parts.makes)}</p>
+      <label class="field"><span>Header (optional)</span><input id="${p}OccHead" data-occ-head="${p}" maxlength="${MAX_HEADER}" autocomplete="off" placeholder="e.g. Heart anatomy" value="${esc(o?.header || '')}"></label>
+      <fieldset class="occ-labels" id="${p}OccLabels" data-sig="${groupsOf(st.masks).join()}"><legend>Labels (optional)</legend>${parts.labels}</fieldset>
+      ${cardTextField(p + 'Extra', 'Extra (optional)', extra || card?.noteExtra || '', { rows: 2, images: false, placeholder: 'Shown under the answer' })}
+    </div>`;
+}
+// The three parts of the form that come from its state, as HTML: the preview, the "Makes N cards" line and the label boxes.
+function occParts(p, st, header) {
+  const groups = groupsOf(st.masks);
+  return {
+    preview: st.image && st.masks.length
+      ? occlusionHTML({ backImage: st.image, occlusion: { n: st.n, w: st.w, h: st.h, header, masks: st.masks } }, 'all', { zoom: false })
+      : '<p class="note">No picture or boxes yet.</p>',
+    makes: groups.length ? `Makes ${groups.length} card${groups.length === 1 ? '' : 's'}` : 'No boxes yet: draw at least one box over the part to hide.',
+    labels: groups.map((n, i) =>
+      `<label class="field occ-lbl"><span>Part ${i + 1}${n === st.n ? ' (this card)' : ''}</span><input id="${p}OccLbl${n}" data-occ-label="${n}" maxlength="${MAX_LABEL}" autocomplete="off" aria-label="Label for part ${i + 1}" placeholder="e.g. Left ventricle" value="${esc(occLabel(st.masks, n))}"></label>`).join('')
+  };
+}
+// Draw the parts of the form that come from its state again (after setOcclusion or a header change).
+export function drawOcclusion(p) {
+  const st = occForms.get(p), prev = document.getElementById(p + 'OccPrev');
+  if (!st || !prev) return;
+  const parts = occParts(p, st, document.getElementById(p + 'OccHead')?.value ?? '');
+  prev.innerHTML = parts.preview;
+  const makes = document.getElementById(p + 'OccMakes');
+  if (makes.textContent !== parts.makes) makes.textContent = parts.makes;
+  // The label boxes keep what was typed in them unless the groups changed.
+  const labels = document.getElementById(p + 'OccLabels'), sig = groupsOf(st.masks).join();
+  if (labels.dataset.sig !== sig) { labels.dataset.sig = sig; labels.innerHTML = '<legend>Labels (optional)</legend>' + parts.labels; }
+}
+export function readOcclusion(p) {
+  const st = occForms.get(p);
+  if (!st) return null;
+  const masks = st.masks.map(m => ({ ...m }));
+  // A label typed for a group goes on all of its boxes (an untouched label box changes nothing).
+  for (const n of groupsOf(masks)) {
+    const input = document.getElementById(`${p}OccLbl${n}`);
+    if (!input) continue;
+    const typed = input.value.trim().slice(0, MAX_LABEL);
+    if (typed === occLabel(masks, n)) continue;
+    for (const m of masks) if (m.n === n) { if (typed) m.label = typed; else delete m.label; }
+  }
+  return { masks, header: (document.getElementById(p + 'OccHead')?.value ?? '').trim().slice(0, MAX_HEADER), w: st.w, h: st.h, image: st.image, maxN: st.maxN };
+}
+export function setOcclusion(p, note) {
+  const st = occForms.get(p);
+  if (!st) return;
+  Object.assign(st, { masks: note.masks.map(m => ({ ...m })), image: note.image, w: note.w, h: note.h, maxN: Math.max(st.maxN, note.maxN ?? 0, ...note.masks.map(m => m.n)) });
+  const head = document.getElementById(p + 'OccHead');
+  if (head && note.header !== undefined) head.value = note.header;
+  const labels = document.getElementById(p + 'OccLabels');
+  if (labels) delete labels.dataset.sig;           // new boxes: draw the label boxes again
+  drawOcclusion(p);
+}
+// The header changes the picture's description in the preview.
+document.addEventListener('input', e => { const p = e.target.dataset?.occHead; if (p) drawOcclusion(p); });

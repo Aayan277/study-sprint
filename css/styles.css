@@ -1603,3 +1603,68 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .inst-btns .ico{width:16px;height:16px}
 .inst-x{position:absolute;top:8px;right:8px;width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:50%;background:none;color:var(--text-3);cursor:pointer}
 .inst-x .ico{width:16px;height:16px}
+
+/* ---------- 19. Image occlusion (js/occlusion.js draws it, js/occlusion-view.js zooms it) ----------
+   A picture with boxes over the parts to learn. The box (.occ) has the picture's own shape (aspect-ratio, set inline),
+   so the boxes, placed in % of it, line up even before the picture has loaded. Every box is grey; the one to name is the
+   accent colour with a "?" (.occ-ask); on the back it is uncovered with a ring (.occ-reveal). */
+.occ{position:relative;display:block;width:100%;max-width:min(100%,calc(52dvh * var(--ar,1.5)));margin:0 auto;border-radius:var(--r-md);background:#fff;box-shadow:0 0 0 1px var(--line-strong);overflow:hidden;container-type:inline-size;-webkit-user-select:none;user-select:none}
+.occ-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;font-size:var(--fs-sm);color:var(--text-2)}
+:root:not([data-theme="light"]) .occ-img{filter:brightness(.92)}
+.occ-flow{aspect-ratio:auto}
+.occ-flow .occ-img{position:static;height:auto;min-height:96px}
+.occ-mask{position:absolute;box-sizing:border-box;background:#8b919c;box-shadow:inset 0 0 0 2px rgb(255 255 255 / .55)}
+.occ-ask{background:var(--accent);box-shadow:inset 0 0 0 2px #fff,0 0 0 2px rgb(0 0 0 / .65);z-index:1}
+.occ-ask::after{content:"?";position:absolute;inset:0;display:grid;place-items:center;color:var(--on-accent);font:700 clamp(.8rem,6cqw,1.9rem)/1 var(--f-ui)}
+.occ-all.occ-ask::after{content:none}
+.occ-reveal{background:transparent;box-shadow:inset 0 0 0 3px var(--accent),0 0 0 2px #fff;z-index:1}
+.peek .occ-mask:not(.occ-reveal){opacity:0}
+/* the editor's preview: every box an outline with its number */
+.occ-all{background:rgb(var(--acc) / .25);box-shadow:inset 0 0 0 2px var(--accent)}
+.occ-all.occ-ask{background:rgb(var(--acc) / .55);box-shadow:inset 0 0 0 3px #fff,0 0 0 2px var(--accent)}
+.occ-num{position:absolute;left:0;top:0;min-width:1.4em;padding:0 .35em;border-radius:0 0 .5em 0;background:var(--accent);color:var(--on-accent);font:700 clamp(.65rem,3.4cqw,.95rem)/1.5 var(--f-ui);text-align:center}
+.occ-tag{position:absolute;z-index:2;transform:translateX(-50%);margin-top:6px;max-width:80%;padding:3px 10px;border-radius:var(--r-pill);background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 2px #fff;font:600 clamp(.75rem,4cqw,1rem)/1.3 var(--f-ui);text-align:center;overflow-wrap:anywhere}
+.occ-tag-up{transform:translate(-50%,-100%);margin-top:-6px}
+.occ-tag-in{margin-top:0;transform:translateX(-50%)}
+.occ-zoom{position:absolute;top:6px;right:6px;z-index:3;display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:rgb(0 0 0 / .62);color:#fff;cursor:pointer}
+.occ-zoom:hover{background:rgb(0 0 0 / .78)}
+.occ-head{margin:0 0 var(--s-2);font-size:var(--fs-sm);font-weight:600;color:var(--text-2);text-align:center;overflow-wrap:anywhere}
+.flash-back.occ-back{display:grid;justify-items:center;gap:var(--s-2)}
+.occ-label{margin:var(--s-1) 0 0;font-size:clamp(1.15rem,5vw,1.5rem);font-weight:600;line-height:1.3;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere}
+.occ-label.none{font-size:var(--fs-base);font-weight:450;color:var(--text-3)}
+.occ-peek{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);min-height:44px;padding:0 var(--s-4);border-radius:var(--r-pill);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
+.occ-peek[aria-pressed="true"]{background:var(--accent-tint);border-color:var(--accent-line);color:var(--accent-text)}
+.occ-peek .key-hint{margin:0}
+.play-card .occ{max-width:min(100%,calc(34dvh * var(--ar,1.5)))}
+.occ-mini{margin:var(--s-2) 0}
+.occ-mini .occ{max-width:min(100%,220px);margin:0}
+@media (min-width:1024px){.occ{max-width:min(100%,calc(62dvh * var(--ar,1.5)))}.play-card .occ{max-width:min(100%,calc(40dvh * var(--ar,1.5)))}}
+
+/* the form in the card editor: preview, header, a label for each part */
+.occ-form{display:grid;gap:var(--s-3)}
+.occ-form-prev .occ{margin:0}
+.occ-form-prev .note{margin:0}
+.occ-labels{display:grid;gap:var(--s-2);margin:0;padding:0;border:0;min-width:0}
+.occ-labels legend{padding:0 0 var(--s-2);font-size:var(--fs-sm);font-weight:500;color:var(--text-2)}
+.occ-lbl{margin:0}
+
+/* the full-screen picture viewer */
+dialog.occ-view{position:fixed;inset:0;display:flex;flex-direction:column;width:100dvw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:var(--bg);color:var(--text);overflow:hidden}
+dialog.occ-view:not([open]){display:none}
+dialog.occ-view::backdrop{background:var(--scrim)}
+.occ-view-bar{display:flex;align-items:center;gap:var(--s-2);flex:none;padding:max(var(--s-2),env(safe-area-inset-top)) max(var(--s-3),env(safe-area-inset-right)) var(--s-2) max(var(--s-3),env(safe-area-inset-left))}
+.occ-view .btn.small{min-height:44px}
+.occ-view .icon-btn{border-color:var(--line-strong);background:var(--surface-2);font-size:1.3rem;color:var(--text)}
+.occ-view-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.occ-view-tools{display:flex;align-items:center;gap:6px}
+.occ-view-stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;overscroll-behavior:contain;background:var(--surface-sunken);-webkit-user-select:none;user-select:none}
+.occ-view-canvas .occ{width:100%;height:100%;max-width:none;margin:0;border-radius:0;box-shadow:none}
+/* keep Windows high-contrast mode readable: no colour fills to rely on */
+@media (forced-colors:active){
+  .occ-mask{background:Canvas;border:2px solid CanvasText;box-shadow:none}
+  .occ-ask{background:Highlight;border-color:HighlightText}
+  .occ-ask::after{color:HighlightText}
+  .occ-reveal,.occ-all{background:transparent;border:3px solid Highlight}
+  .occ-tag,.occ-num{background:Highlight;color:HighlightText}
+  .occ-zoom{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
+}

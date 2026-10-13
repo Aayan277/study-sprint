@@ -3,6 +3,7 @@
 
 import { canType, normalizeAnswer } from './match.js';
 import { dupKey } from './import.js';
+import { hasMasks, occLabel } from './occlusion.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
 export const PENALTY_MS = 3000;      // Lightning: a wrong answer costs 3 seconds
@@ -26,8 +27,17 @@ export function shuffle(a, rnd = Math.random) {
 // What a question asks: the prompt shown and the answer expected, plus the prompt side's picture (if any).
 // A cloze card (one blank of a note, see cloze.js) always asks front → back: its front is the sentence with the blank.
 export const isCloze = card => !!card.noteId && card.cloze !== undefined;
+// An image-occlusion card (see occlusion.js) is front-only too: the picture with its highlighted box is the question, the
+// box's label the answer. Cards that can't be asked back → front.
+export const isFrontOnly = card => isCloze(card) || hasMasks(card);
 
 export function questionFor(card, qtype) {
+  if (hasMasks(card)) {
+    // Needs a label to be an answer. The picture is drawn by Play (q.occ), not here.
+    const label = occLabel(card.occlusion.masks, card.occlusion.n);
+    const ask = { prompt: String(card.occlusion.header ?? '').trim() || 'Name the highlighted part', answer: label, occ: true };
+    return label && (qtype === 'front' || (qtype === 'typing' && canType(label))) ? ask : null;
+  }
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
     return image ? { prompt, answer, image } : { prompt, answer };
@@ -50,9 +60,9 @@ export function playableCards(cards, qtype) {
 // definition and pick the term. Picking among similar-looking terms is harder, and closer to an exam,
 // than spotting the one definition that's about the right topic. Short-back decks start on Front → back.
 export const LONG_BACK = 40;
-// (Cloze cards don't count: they can't be asked back → front.)
+// (Cloze and image-occlusion cards don't count: they can't be asked back → front.)
 export function defaultQuestionType(cards) {
-  cards = cards.filter(c => !isCloze(c));
+  cards = cards.filter(c => !isFrontOnly(c));
   const long = cards.filter(c => String(c.back ?? '').length > LONG_BACK).length;
   return cards.length && long > cards.length / 2 ? 'back' : 'front';
 }
@@ -106,7 +116,9 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
   const tags = new Set(card.tags || []);
   const scored = [];
   const consider = other => {
-    if (other.id === card.id || (card.noteId && other.noteId === card.noteId)) return;     // never a sibling: its answer is on this card's front
+    // Never a sibling: its answer is on this card's front. (For an image-occlusion card the other boxes' labels are the
+    // best wrong options: the picture doesn't show them.)
+    if (other.id === card.id || (card.noteId && other.noteId === card.noteId && !hasMasks(card))) return;
     const label = questionFor(other, qtype).answer;
     const key = dupKey(label);
     if (!key || seen.has(key)) return;      // no duplicate options, and never the right answer twice
@@ -114,6 +126,8 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
     let score = 0;
     if (other.deckId === card.deckId) score += 2;
     if (isCloze(card) && isCloze(other)) score += 3;                   // a cloze answer looks best among other cloze answers
+    if (hasMasks(card) && hasMasks(other)) score += 3;                 // and a label among other labels
+    if (hasMasks(card) && card.noteId && other.noteId === card.noteId) score += 4;     // best of all: the same picture
     const ratio = label.length / Math.max(1, answer.length);
     if (ratio >= 0.5 && ratio <= 1.5) score += 2;
     score += Math.min(2, (other.tags || []).filter(t => tags.has(t)).length);

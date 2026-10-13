@@ -7,8 +7,9 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind } from './card-editor.js';
+import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
+import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
@@ -104,7 +105,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${esc(plainText(card.front))}</span><span class="b">${esc(plainText(card.back))}</span>
+          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${esc(plainText(card.front))}</span><span class="b">${esc(plainText(card.back))}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -195,6 +196,7 @@ export async function openCardPanel(card, ctx) {
       <summary>Card info</summary>
       <dl class="info-grid">
         <dt>Added</dt><dd>${card.created > 1e12 ? shortDate(card.created) : '–'}</dd>
+        ${hasMasks(card) ? `<dt>Type</dt><dd>Image occlusion, part ${groupIndex(card.occlusion.masks, card.occlusion.n).k} of ${groupIndex(card.occlusion.masks, card.occlusion.n).total}</dd>` : ''}
         <dt>Status</dt><dd>${esc(status.label)}</dd>
         ${studied ? `
         <dt>Due</dt><dd>${state.due <= now ? 'Now' : `${shortDate(state.due)} (in ${formatInterval(state.due - now)})`}</dd>
@@ -217,7 +219,8 @@ export async function openCardPanel(card, ctx) {
     if (act === 'suspend') toggleSuspend(card, save);
     if (act === 'bury') toggleBury(card, save);
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
-    if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
+    if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
   }));
   wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
   wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
@@ -301,8 +304,14 @@ function cardOps(card, ctx) {
 }
 // Is this a cloze card (one of the cards made from a cloze note)?
 const isClozeCard = card => !!card.noteId && typeof card.noteText === 'string';
+// A badge for the list: which part of its picture an image-occlusion card hides ("2/5").
+const occBadge = card => {
+  if (!hasMasks(card)) return '';
+  const { k, total } = groupIndex(card.occlusion.masks, card.occlusion.n);
+  return `<span class="ckind" title="Image occlusion, part ${k} of ${total}">${k}/${total}</span> `;
+};
 const cardFieldsHTML = card => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : `
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card) : `
       ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
       ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
@@ -314,6 +323,7 @@ function wireCardForm(card, ctx, msg) {
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
     if (isClozeCard(card)) return saveClozeNote(card, ops, msg);
+    if (hasMasks(card)) return saveOcclusionNote(card, ops, msg);
     const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
     const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
     // Each side needs something on it: text, a picture, or both.
@@ -355,6 +365,33 @@ async function saveClozeNote(card, ops, msg) {
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
+  return guarded(() => go(new Set()));
+}
+
+// Saving an image-occlusion picture: every card of the note at once, the same way as a cloze note (above). Labels and
+// the header go to all of them; a box taken out deletes its card and history, so that asks first.
+async function saveOcclusionNote(card, ops, msg) {
+  const planNow = async () => {
+    const sibs = (await db.getAll('cards')).filter(c => c.noteId === card.noteId);
+    const states = new Set((await db.getAll('cardStates')).map(s => s.cardId));
+    const reviews = new Map(await Promise.all(sibs.map(async c => [c.id, (await db.getCardLogs(c.id)).length])));
+    return planOcclusionSave(sibs, readOcclusion('ce'), c => (states.has(c.id) ? 1e9 : 0) + reviews.get(c.id));
+  };
+  const busy = on => document.querySelectorAll('#ceForm button, button[form=ceForm]').forEach(b => { b.disabled = on; });
+  const guarded = async fn => {
+    if (savingNote) return;
+    savingNote = true; busy(true);
+    try { await fn(); } finally { savingNote = false; busy(false); }
+  };
+  const go = async confirmed => {
+    const plan = await planNow();
+    if (plan.error) { showErr('ceErr', plan.error); return; }
+    $('ceErr').hidden = true;
+    if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim() });
+    return ops.again(msg, 'edit');
+  };
+  const ask = plan => confirmIn('ceFormConfirm', occRemovalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
   return guarded(() => go(new Set()));
 }
 const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
