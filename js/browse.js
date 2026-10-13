@@ -8,7 +8,7 @@ import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, F
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind } from './card-editor.js';
-import { planNoteSave, planLinks, clozeCard, renderCloze } from './cloze.js';
+import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { plainText } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
@@ -329,7 +329,10 @@ function wireCardForm(card, ctx, msg) {
 async function saveClozeNote(card, ops, msg) {
   const text = readCardText('ceText').trim();
   const sibs = (await db.getAll('cards')).filter(c => c.noteId === card.noteId);
-  const plan = planNoteSave(sibs, text);
+  // Of two cards with the same blank number, the one with a schedule or the most reviews stays.
+  const states = new Set((await db.getAll('cardStates')).map(s => s.cardId));
+  const reviews = new Map(await Promise.all(sibs.map(async c => [c.id, (await db.getCardLogs(c.id)).length])));
+  const plan = planNoteSave(sibs, text, c => (states.has(c.id) ? 1e9 : 0) + reviews.get(c.id));
   if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
   $('ceErr').hidden = true;
   const go = async () => {
@@ -337,9 +340,7 @@ async function saveClozeNote(card, ops, msg) {
     return ops.again(msg, 'edit');
   };
   if (!plan.remove.length) return go();
-  const gone = plan.remove.map(c => 'c' + c.cloze);
-  const [one, list] = [gone.length === 1, gone.length < 3 ? gone.join(' and ') : gone.slice(0, -1).join(', ') + ' and ' + gone.at(-1)];
-  confirmIn('ceFormConfirm', `${list} ${one ? 'was' : 'were'} removed: ${one ? 'its card and review history go' : 'their cards and review history go'} too.`, 'Remove and save', go);
+  confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', go);
 }
 const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
 const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');

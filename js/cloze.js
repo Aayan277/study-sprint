@@ -89,13 +89,19 @@ export function makesText(text) {
 //   update  existing cards whose blank is still there: same id (so the schedule stays), new text, front and back
 //   add     blanks that are new: { cloze, front, back, noteText }, for db.saveNote to give an id
 //   remove  existing cards whose blank is gone (the editor asks first: their history goes too)
-export function planNoteSave(oldSiblings, newText) {
+//   duplicates  the part of remove that is not a gone blank: a second card with the same number, or one without
+//           a number. Of two cards with one number the higher score(card) stays (the caller scores a schedule and
+//           reviews higher); on a tie the first stays.
+export function planNoteSave(oldSiblings, newText, score = () => 0) {
   const byNumber = new Map();
-  const remove = [];
+  const duplicates = [];
   for (const card of oldSiblings) {
-    if (card.cloze !== undefined && !byNumber.has(card.cloze)) byNumber.set(card.cloze, card);
-    else remove.push(card);          // a second card with the same number, or one without a number
+    if (card.cloze === undefined) duplicates.push(card);
+    else if (!byNumber.has(card.cloze)) byNumber.set(card.cloze, card);
+    else if (score(card) > score(byNumber.get(card.cloze))) { duplicates.push(byNumber.get(card.cloze)); byNumber.set(card.cloze, card); }
+    else duplicates.push(card);
   }
+  const remove = [...duplicates];
   const update = [], add = [];
   const nums = clozeNumbers(newText);
   for (const n of nums) {
@@ -105,7 +111,20 @@ export function planNoteSave(oldSiblings, newText) {
     else add.push({ cloze: n, front, back, noteText: newText });
   }
   for (const [n, card] of byNumber) if (!nums.includes(n)) remove.push(card);
-  return { update, add, remove };
+  return { update, add, remove, duplicates };
+}
+
+// What the editor says before it deletes cards: "c3 was removed: its card and review history go too." For
+// duplicates it says "duplicate c4 removed", and a card without a blank number is "an extra card".
+export function removalText({ remove, duplicates = [] }) {
+  const gone = remove.filter(c => !duplicates.includes(c)).map(c => 'c' + c.cloze);
+  const extra = duplicates.map(c => (c.cloze === undefined ? 'an extra card without a blank number' : 'duplicate c' + c.cloze));
+  const join = list => (list.length < 3 ? list.join(' and ') : list.slice(0, -1).join(', ') + ' and ' + list.at(-1));
+  const parts = [];
+  if (gone.length) parts.push(`${join(gone)} ${gone.length === 1 ? 'was' : 'were'} removed`);
+  if (extra.length) parts.push(`${join(extra)} removed`);
+  const one = remove.length === 1;
+  return `${parts.join(' and ')}: ${one ? 'its card and review history go' : 'their cards and review history go'} too.`;
 }
 
 // Two devices can edit different siblings of one note while offline, and syncing keeps the newest of each card,

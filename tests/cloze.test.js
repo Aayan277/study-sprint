@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clozeNumbers, clozeCard, renderCloze, wrapBlank, nextNumber, lastNumber, makesText, planNoteSave, healNotes, planLinks } from '../js/cloze.js';
+import { clozeNumbers, clozeCard, renderCloze, wrapBlank, nextNumber, lastNumber, makesText, planNoteSave, removalText, healNotes, planLinks } from '../js/cloze.js';
 
 const T = 'The {{c1::mitochondria::organelle}} makes {{c2::ATP}} for the {{c3::cell}}';
 
@@ -80,6 +80,23 @@ test('saving a note: a new note adds every blank; a duplicate number is cleaned 
   const plan = planNoteSave([sib(1), sib(1, { id: 'dup' })], '{{c1::x}}');
   assert.deepEqual(plan.update.map(c => c.id), ['k1']);
   assert.deepEqual(plan.remove.map(c => c.id), ['dup']);
+});
+
+test('saving a note: of two cards with one number, the scheduled one stays and the other is a duplicate', () => {
+  const score = c => (c.id === 'dup' ? 5 : 0);              // the caller scores cards by schedule and reviews
+  const plan = planNoteSave([sib(1), sib(1, { id: 'dup' }), sib(2)], '{{c1::x}}', score);
+  assert.deepEqual(plan.update.map(c => c.id), ['dup']);
+  assert.deepEqual(plan.remove.map(c => c.id).sort(), ['k1', 'k2']);
+  assert.deepEqual(plan.duplicates.map(c => c.id), ['k1']);
+  assert.equal(removalText(plan), 'c2 was removed and duplicate c1 removed: their cards and review history go too.');
+  assert.equal(removalText(planNoteSave([sib(1), sib(1, { id: 'dup' })], '{{c1::x}}')), 'duplicate c1 removed: its card and review history go too.');
+  assert.equal(removalText(planNoteSave([sib(1), sib(2)], '{{c1::x}}')), 'c2 was removed: its card and review history go too.');
+});
+
+test('saving a note: a sibling without a blank number is an extra card, never "cundefined"', () => {
+  const plan = planNoteSave([sib(1), { id: 'odd', noteId: 'N', noteText: T }], '{{c1::x}}');
+  assert.deepEqual(plan.remove.map(c => c.id), ['odd']);
+  assert.equal(removalText(plan), 'an extra card without a blank number removed: its card and review history go too.');
 });
 
 test('healing: the newest sibling wins and the others follow it', () => {
