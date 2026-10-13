@@ -257,6 +257,7 @@ export function nearestExamDeck(decks, cards, now = Date.now()) {
 export const READY_R = 0.9;
 export function readiness(cards, statesById, when) {
   let ready = 0;
+  cards = cards.filter(c => !c.suspended);        // suspended cards are not being studied: they count neither as ready nor in the total
   for (const c of cards) {
     const st = statesById.get(c.id);
     if (st && st.state !== 0 && recallAt(st, when) >= READY_R) ready++;

@@ -248,6 +248,16 @@ async function openCardActions(card, ctx) {
   wireFlags(f => { const next = f === card.flag ? 0 : f; save({ flag: next }, next ? `${FLAGS.find(x => x.id === next).name} flag` : 'Flag removed', 'flag'); });
 }
 
+// The shortcuts shown in the short sheet (E, - and @) work while it is open. Review's and Play's own keys stand aside
+// when a sheet is open, so they are handled here, on whatever short sheet is showing.
+document.addEventListener('keydown', e => {
+  const sheet = document.getElementById('sheet');
+  if (!sheet?.open || !sheet.querySelector('.act-list') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select')) return;
+  const pick = { e: '[data-go="edit"]', E: '[data-go="edit"]', '-': '[data-act="bury"]', '@': '[data-act="suspend"]' }[e.key];
+  if (pick) { e.preventDefault(); sheet.querySelector(pick)?.click(); }
+});
+
 // The short editor: Front, Back and Tags (with the formatting buttons and pictures), Cancel and Save always in view.
 async function openCardEdit(card, ctx) {
   openSheet(`

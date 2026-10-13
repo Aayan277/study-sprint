@@ -97,7 +97,7 @@ export function openSheet(html, { side = false } = {}) {
   foot.className = 'sheet-foot' + (actions?.classList.contains('stack') ? ' stack' : '');
   if (actions) {
     const form = actions.closest('form');
-    if (form && !form.id) form.id = 'sheetForm';
+    if (form && !form.id) form.id = 'sheetFormAuto';
     for (const b of [...actions.children]) {
       if (form && b.matches('button[type=submit]')) b.setAttribute('form', form.id);
       foot.appendChild(b);
@@ -137,7 +137,14 @@ function afterClose() {
 // header (the grab bar) and lets go of the screen once it has moved far or fast enough.
 export function initSheet() {
   const d = $('sheet');
-  d.addEventListener('click', e => { if (e.target === d) closeSheet(); });
+  // A click on the dim area closes the sheet. It must really be outside the sheet's box: a tap on the header or a drag
+  // that ends there is aimed at the dialog itself too, and must not close it.
+  d.addEventListener('click', e => {
+    if (e.target !== d) return;
+    const r = d.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) closeSheet();
+  });
   d.addEventListener('close', afterClose);          // closed another way (e.g. Escape on a pop-up)
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
@@ -146,7 +153,7 @@ export function initSheet() {
   d.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x')) return;
     drag = { id: e.pointerId, y: e.clientY, t: e.timeStamp, dy: 0 };
-    d.setPointerCapture(e.pointerId);
+    e.target.closest('.sheet-head').setPointerCapture(e.pointerId);        // on the header, not the dialog: the click that follows a tap must not land on the dialog itself
     d.style.transition = 'none';
   });
   d.addEventListener('pointermove', e => {

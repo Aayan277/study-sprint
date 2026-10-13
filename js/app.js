@@ -589,7 +589,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
     err.hidden = true;
     if (!passwordOk(pw)) { err.textContent = `The password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
     if (pw !== $('pw2').value) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
-    const btn = e.submitter || $('pwForm').querySelector('[type=submit]');
+    const btn = e.submitter || [...$('pwForm').elements].find(b => b.type === 'submit');   // the footer's button lives outside the form but is linked to it
     btn.disabled = true;
     try {
       await save(pw);

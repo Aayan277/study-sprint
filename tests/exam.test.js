@@ -286,3 +286,10 @@ test('readiness: the share of cards predicted at 90% or better at a time, with n
   assert.equal(readiness(cards, new Map([['a', st('a', 10, 10)]]), NOW).ready, 1);
   assert.deepEqual(readiness([], new Map(), NOW), { ready: 0, total: 0, share: 0 });
 });
+
+test('readiness: suspended cards are left out of both the ready count and the total', () => {
+  const cards = [{ id: 'a' }, { id: 'b', suspended: true }, { id: 'c' }];
+  const st = id => ({ cardId: id, state: 2, stability: 100, lastReview: NOW - DAY, due: NOW + DAY, scheduledDays: 1 });
+  const states = new Map([['a', st('a')], ['b', st('b')]]);
+  assert.deepEqual(readiness(cards, states, NOW), { ready: 1, total: 2, share: 0.5 });
+});

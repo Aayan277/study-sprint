@@ -380,6 +380,13 @@ function replaceInSession(card) {
   R.queue = R.queue.map(swap);
   R.waiting = R.waiting.map(swap);
   if (R.current?.card.id === card.id) R.current = { ...R.current, card };
+  // Undo brings these cards back, so they must carry the edit too (or Undo would show the old text, and editing from it would save it again).
+  // cardBefore is the card as it was before it became a leech: it keeps that, but gets the new content.
+  R.undo = R.undo.map(u => {
+    if (u.item.card.id !== card.id) return u;
+    const before = u.cardBefore && { ...card, tags: (card.tags || []).filter(t => (u.cardBefore.tags || []).includes(t) || t !== 'leech'), suspended: u.cardBefore.suspended, buriedUntil: u.cardBefore.buriedUntil };
+    return { ...u, item: { ...u.item, card }, cardBefore: before || u.cardBefore };
+  });
 }
 
 // The ⋯ button opens a short sheet of card actions (Edit, Flag, Bury, Suspend, More). E opens the editor straight
@@ -387,14 +394,23 @@ function replaceInSession(card) {
 // Whatever you change, the sheet closes and you are back at the same card.
 const LEAVES = ['suspend', 'bury', 'delete', 'reset', 'due'];
 const BACK_TO_CARD = [...LEAVES, 'edit', 'flag', 'move', 'unsuspend', 'unbury'];
-function openCardMenu(mode = 'actions') {
+async function openCardMenu(mode = 'actions') {
   if (!R?.current) return;
-  openCardPanel(R.current.card, {
+  // The saved copy of the card, in case it was changed since it was drawn (the same way Play does it).
+  const id = R.current.card.id;
+  const card = (await db.get('cards', id)) || R.current.card;
+  if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
+  openCardPanel(card, {
     decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
     onAction: (act, fresh) => {
       R.version = db.scheduleVersion();
       if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
-      else { replaceInSession(fresh); renderSession(R.el); }
+      else {
+        // Redrawing the card must not wipe an answer half typed in the box.
+        const typed = $('typeIn')?.value;
+        replaceInSession(fresh); renderSession(R.el);
+        if (typed && $('typeIn')) $('typeIn').value = typed;
+      }
     }
   });
 }

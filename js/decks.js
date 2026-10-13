@@ -69,9 +69,9 @@ function setFolded(id, isFolded) {
   try { localStorage.setItem(FOLD_KEY, JSON.stringify([...f])); } catch { /* private mode: just not remembered */ }
 }
 // `today` (from loadAll) makes the numbers today's: the same ones Today and "Study N" use, with the daily limits applied.
-function subdeckRows(items, baseDepth, today = null) {
+function subdeckRows(items, baseDepth, today = null, count = null) {
   return items.map(({ deck, depth, stats }) => {
-    const c = today ? countFor(today, [deck.id]) : { due: stats.due, fresh: stats.new };
+    const c = count ? count(deck.id) : today ? countFor(today, [deck.id]) : { due: stats.due, fresh: stats.new };
     return `
     <button class="subdeck" type="button" data-open="${esc(deck.id)}" style="--depth:${depth - baseDepth - 1};--deck:${esc(deck.color)}">
       <span class="sd-name">${esc(deck.name)}</span>
@@ -85,12 +85,12 @@ function inside(list, id) {
   for (let j = i + 1; j < list.length && list[j].depth > list[i].depth; j++) out.push(list[j]);
   return out;
 }
-function subdeckBox(list, item, open, today) {
+function subdeckBox(list, item, open, today, count = null) {
   const kids = inside(list, item.deck.id);
   if (!kids.length) return '';
   return `<details class="subdecks" data-fold="${esc(item.deck.id)}" ${open ? 'open' : ''}>
       <summary>${plural(kids.filter(k => k.depth === item.depth + 1).length, 'subdeck')}</summary>
-      ${subdeckRows(kids, item.depth, today)}
+      ${subdeckRows(kids, item.depth, today, count)}
     </details>`;
 }
 
@@ -119,6 +119,9 @@ export async function renderLibrary(el, showStarters = false) {
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
   const todayAll = countFor(today, top.map(x => x.deck.id));      // today's numbers: daily limits applied
   const fold = folded();
+  // Each deck's numbers are worked out once per render (the queues are not cheap), then reused by the tiles, the sort and the search.
+  const countsMemo = new Map();
+  const cnt = id => { let c = countsMemo.get(id); if (!c) countsMemo.set(id, c = countFor(today, [id])); return c; };
   // Starter decks you haven't added yet.
   const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
   const starters = STARTER_DECKS.filter(s => !added.has(s.key)).map(s => ({ ...s, count: starterCards(s.level).length }));
@@ -126,7 +129,7 @@ export async function renderLibrary(el, showStarters = false) {
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
   const tile = (item, q = '', first = false) => {
-    const { deck, stats } = item; const c = countFor(today, [deck.id]), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0;
+    const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0;
     return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
@@ -148,7 +151,7 @@ export async function renderLibrary(el, showStarters = false) {
             : (go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
                   : `<span class="deck-done">${icon('check')} Done for today</span>`)}
         </div>
-        ${compact ? compactSubdecks(item, q) : subdeckBox(list, item, !fold.has(deck.id), today)}
+        ${compact ? compactSubdecks(item, q) : subdeckBox(list, item, !fold.has(deck.id), today, cnt)}
       </article>`;
   };
   // Compact: the subdecks start folded under their course, and what you open is remembered on this device.
@@ -161,15 +164,15 @@ export async function renderLibrary(el, showStarters = false) {
     const open = q ? true : foldOpen('deck-' + item.deck.id);
     return `<details class="subdecks" data-xfold="${esc(item.deck.id)}" ${q ? 'data-forced' : ''} ${open ? 'open' : ''}>
       <summary>${icon('layers')}<span>${plural(direct, 'subdeck')}${kids.length > direct ? ` · ${kids.length} in all` : ''}</span>${icon('chevron', 'sub-chev')}</summary>
-      ${subdeckRows(kids, item.depth, today)}
+      ${subdeckRows(kids, item.depth, today, cnt)}
     </details>`;
   };
   const matches = (item, q) => `${item.deck.name} ${item.deck.course || ''}`.toLowerCase().includes(q);
   // The courses to show, in the chosen order (the numbers are today's: the same ones Today and the play button use).
   const shown = () => {
     const q = view.query.trim().toLowerCase();
-    const due = x => countFor(today, [x.deck.id]).due;
-    const tot = x => countFor(today, [x.deck.id]).total;
+    const due = x => cnt(x.deck.id).due;
+    const tot = x => cnt(x.deck.id).total;
     const days = x => examInfo(x.deck)?.daysLeft ?? Infinity;
     const by = {
       due: (a, b) => due(b) - due(a) || tot(b) - tot(a),
@@ -217,7 +220,7 @@ export async function renderLibrary(el, showStarters = false) {
   const drawGrid = () => {
     if (!grid) return;
     const { q, rows } = shown();
-    const firstDue = view.sort === 'due' ? rows.find(x => countFor(today, [x.deck.id]).total) : null;
+    const firstDue = view.sort === 'due' ? rows.find(x => cnt(x.deck.id).total) : null;
     grid.innerHTML = rows.map(x => tile(x, q, x === firstDue)).join('');
     $('deckNone').hidden = rows.length > 0;
     $('deckNone').textContent = rows.length ? '' : `No decks match “${view.query.trim()}”.`;
