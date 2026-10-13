@@ -122,6 +122,10 @@ test('healing: equal edit times are settled by card id; cards without an edit ti
   assert.equal(healNotes([a, legacy]).length, 0);         // legacy's blank isn't in the winner: left alone, and it can't win
 });
 
+test('healing: an empty noteExtra and a missing one are the same', () => {
+  assert.equal(healNotes([sib(1), sib(2, { noteExtra: '' })]).length, 0);
+});
+
 const old = (id, front, back, deckId = 'd') => ({ id, deckId, front, back });
 
 test('link tool: cards of one older import become a note', () => {

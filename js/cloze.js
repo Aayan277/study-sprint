@@ -121,7 +121,8 @@ export function healNotes(cards) {
   for (const c of cards) if (c.noteId && c.noteText !== undefined) (notes.get(c.noteId) || notes.set(c.noteId, []).get(c.noteId)).push(c);
   const fixed = [];
   for (const sibs of notes.values()) {
-    if (sibs.every(s => s.noteText === sibs[0].noteText && s.noteExtra === sibs[0].noteExtra)) continue;
+    const extraOf = s => s.noteExtra || '';          // '' and missing are the same
+    if (sibs.every(s => s.noteText === sibs[0].noteText && extraOf(s) === extraOf(sibs[0]))) continue;
     const stamped = sibs.filter(s => s.noteEditedAt !== undefined);
     const time = stamped.length ? s => s.noteEditedAt : s => s.updatedAt || 0;
     const newest = (stamped.length ? stamped : sibs).reduce((a, b) => (time(b) > time(a) || (time(b) === time(a) && b.id > a.id) ? b : a));
@@ -129,7 +130,7 @@ export function healNotes(cards) {
     for (const s of sibs) {
       if (!nums.includes(s.cloze)) continue;
       const { front, back } = clozeCard(newest.noteText, s.cloze);
-      if (s.noteText === newest.noteText && s.noteExtra === newest.noteExtra && s.front === front && s.back === back) continue;
+      if (s.noteText === newest.noteText && extraOf(s) === extraOf(newest) && s.front === front && s.back === back) continue;
       const card = { ...s, front, back, noteText: newest.noteText };
       if (newest.noteExtra) card.noteExtra = newest.noteExtra; else delete card.noteExtra;
       if (newest.noteEditedAt !== undefined) card.noteEditedAt = newest.noteEditedAt;
