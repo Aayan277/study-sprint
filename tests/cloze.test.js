@@ -162,6 +162,14 @@ test('link tool: cards of one older import become a note', () => {
   assert.equal(clozeCard(notes[0].noteText, 2).front, cards[1].front);
 });
 
+test('link tool: answers or hints holding :: or braces would break the note text, so the group is skipped', () => {
+  const cards = [old('a', 'Print with […] in C++', 'std::cout'), old('b', 'Print with std::cout in [language]', 'C++')];
+  assert.equal(planLinks(cards).notes.length, 0);
+  assert.equal(planLinks([old('a', 'Use […] to open', '{{'), old('b', 'Use {{ to [do what]', 'open')]).notes.length, 0);
+  assert.equal(planLinks([old('a', 'Use […] to open', 'x'), old('b', 'Use x to [a::b]', 'open')]).notes.length, 0);   // a hint with ::
+  assert.equal(planLinks([old('a', 'A […] b', 'x'), old('b', 'A x [c]', 'b')]).notes.length, 1);                     // still links normally
+});
+
 test('link tool: a lone card, other decks, cards in notes and two blanks are not linked', () => {
   const cards = [
     old('a', 'The […] is big', 'sun'), old('b', 'The sun is […]', 'big', 'other'),       // different decks

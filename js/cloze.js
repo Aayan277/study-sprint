@@ -186,6 +186,8 @@ export function planLinks(cards) {
   let skipped = 0;
   for (const g of groups.values()) {
     if (g.found.length < 2) continue;
+    // "::" or braces in an answer or hint would be read as part of the {{c1::answer::hint}} markup.
+    if (g.found.some(f => /::|\{\{|\}\}/.test(f.back + '\u0000' + f.hint))) { skipped++; continue; }
     const spans = g.found.slice().sort((a, b) => a.at - b.at);
     // Blanks must not overlap, or we can't tell which words each card hid.
     if (spans.some((s, i) => i && s.at < spans[i - 1].at + spans[i - 1].len)) { skipped++; continue; }
