@@ -427,6 +427,10 @@ test('editing the list: next number never reused, group, split, delete', () => {
   const g = groupMasks(MASKS, ['m1', 'm2']);
   assert.deepEqual(g.map(m => m.n), [1, 1, 3]);
   assert.deepEqual(groupMasks(MASKS, ['nope']), MASKS);
+  // the first box picked keeps its number, not the lowest; preferN wins when it is among them
+  assert.deepEqual(groupMasks(MASKS, ['m2', 'm1']).map(m => m.n), [3, 3, 3]);
+  assert.deepEqual(groupMasks(MASKS, ['m2', 'm1'], 1).map(m => m.n), [1, 1, 3]);
+  assert.deepEqual(groupMasks(MASKS, ['m1', 'm2'], 7).map(m => m.n), [1, 1, 3]);
   const s = splitMask(g, 'm2', 3);
   assert.deepEqual(s.map(m => m.n), [1, 4, 3]);
   assert.deepEqual(deleteMasks(MASKS, ['m1', 'm3']).map(m => m.id), ['m2']);

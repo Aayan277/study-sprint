@@ -150,9 +150,24 @@ async function makePicture(page) {
     await touch('touchEnd', []);
   }
   ok((await masks()).length === 4 && !(await page.locator('.occ-ed-draft').count()), 'a first finger that gets a second one leaves no box behind');
+  {
+    const a = await at(0.45, 0.74);                                 // the system takes the touch: no box either
+    await touch('touchStart', [a]); await touch('touchMove', [[a[0] + 30, a[1] + 25]]); await touch('touchCancel', []);
+    ok((await masks()).length === 4 && !(await page.locator('.occ-ed-draft').count()), 'a touchCancel in the middle of a drag leaves no box');
+  }
   await page.screenshot({ path: SP + '/occ-editor-zoomed-375.png' });
   await page.click('[data-tool=fit]');
   ok((await scale()) === 1, 'Fit shows the whole picture again');
+  // a touch inside a small box (under 60px on screen) moves it; the corner is not grabbed
+  {
+    await tap(await at(boxD[0] + boxD[2] / 2, boxD[1] + boxD[3] / 2));
+    const d = (await masks())[3], br = await at(d.x + d.w - 0.002, d.y + d.h - 0.002), r = await rect();
+    ok(Math.max(d.w * r.w, d.h * r.h) < 60, 'box D is under 60px on screen');
+    await swipe(br, [br[0] + 14, br[1] + 10]);
+    const d2 = (await masks())[3];
+    ok(near(d2.w, d.w, 0.0015) && near(d2.h, d.h, 0.0015) && d2.x > d.x + 0.003, 'a touch near the corner of a small box moves it instead of resizing it');
+    await page.click('[data-tool=undo]');
+  }
 
   // ---- 5. group two, label, split ----
   await tap(await at(boxB[0] + 0.1, boxB[1] + 0.1));                // select B
@@ -179,6 +194,7 @@ async function makePicture(page) {
   await noSideways('with four boxes');
   await page.click('[data-act=done]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
   ok(await page.locator('#acOccBody').isVisible() && (await page.textContent('#acOccMakes')) === 'Makes 3 cards', 'Done returns to the form with "Makes 3 cards"');
+  ok(await page.evaluate(() => document.activeElement?.id === 'acOccEdit'), 'after the first Done the focus is on Edit boxes (not lost on the page)');
   ok(await page.locator('#acOcc .occ').count() === 1 && await page.locator('#acOcc .occ-mask').count() === 4, 'the form shows the picture with its four boxes');
   const lbls = await page.locator('#acOcc .occ-lbl input').evaluateAll(l => l.map(i => i.value));
   ok(lbls.join('|') === '||Aorta' || lbls.join('|') === '|Aorta|' || lbls.join('|') === 'Aorta||', 'the Labels list has the label: ' + lbls.join('|'));
@@ -192,6 +208,7 @@ async function makePicture(page) {
   ok(await page.locator('#acForm').isVisible(), 'Cancel without changes closes at once (no question)');
 
   // ---- 7. Add → three sibling cards ----
+  await page.fill('#acOccExtra', 'Mnemonic: apex');
   await page.click('#sheet button[type=submit][form=acForm], #acForm button[type=submit]');
   await page.waitForFunction(() => document.getElementById('toast')?.textContent.includes('Added 3 cards'));
   ok(true, 'the toast says "Added 3 cards"');
@@ -204,6 +221,7 @@ async function makePicture(page) {
   ok(saved.n === 3 && saved.same && saved.image && saved.w === 2048 && saved.h === 1365 && saved.nmasks === 4, 'three siblings share a note id, the picture (backImage), w 2048 and four boxes');
   ok(saved.backs.filter(Boolean).join() === 'Aorta' && saved.header === 'Heart anatomy' && saved.fronts[0] === 'Heart anatomy: hidden part 1 of 3', 'the label and header are on the cards: ' + saved.backs.join('|'));
   ok(await page.locator('#acOccBody').isHidden() && await page.locator('#acOccChoose').isVisible() && await page.locator('#acForm').isVisible(), 'the form is ready for the next picture');
+  ok(await page.evaluate(async deckId => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.deckId === deckId).every(c => c.noteExtra === 'Mnemonic: apex'), deckId), 'the Extra typed in the Add form is saved on every card (noteExtra)');
 
   // ---- 8. editing a note that was reviewed: delete a group ----
   await page.evaluate(async ids => {
@@ -225,8 +243,17 @@ async function makePicture(page) {
   ok((await masks()).find(m => m.id === lastBox.id).sel, 'tapping selects the box of part 3');
   await page.click('[data-tool=delete]');
   ok((await count()) === '3 boxes · 2 cards', 'Delete removes it: ' + (await count()));
+  const nsNow = () => page.$$eval('.occ-ed-mask', els => els.map(e => +e.dataset.n));
+  const topN = Math.max(...await nsNow());
+  await page.click('[data-tool=add]'); const addedN = Math.max(...await nsNow());
+  await page.click('[data-tool=delete]'); await page.click('[data-tool=add]');
+  const reN = Math.max(...await nsNow());
+  ok(addedN > topN && reN === addedN + 1, `a number is never reused, even after deleting the highest part (${topN} → ${addedN} → ${reN})`);
+  await page.click('[data-tool=delete]');
+  ok((await count()) === '3 boxes · 2 cards', 'the extra boxes are gone again');
   await page.click('[data-act=done]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
   ok((await page.textContent('#ceOccMakes')) === 'Makes 2 cards', 'the card form now says "Makes 2 cards"');
+  await page.fill('#ceOccExtra', 'Edited extra');
   await page.click('#ceForm button[type=submit], button[type=submit][form=ceForm]');
   await page.waitForSelector('#ceFormConfirm .confirm');
   const ask = await page.textContent('#ceFormConfirm .confirm');
@@ -245,6 +272,7 @@ async function makePicture(page) {
     return { ids: cs.map(c => c.id), masks: cs[0].occlusion.masks.length, same: JSON.stringify(cs[0].occlusion.masks) === JSON.stringify(cs[1].occlusion.masks), states: (await db.getAll('cardStates')).sort((a, b) => a.cardId.localeCompare(b.cardId)) };
   }, deckId);
   ok(rest.ids.join() === saved.ids.slice(0, 2).join() && rest.masks === 3 && rest.same, 'confirming removed only that card; the other two keep their ids and the new boxes');
+  ok(await page.evaluate(async deckId => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.deckId === deckId).every(c => c.noteExtra === 'Edited extra'), deckId), 'the Extra typed in the edit form is saved on the cards (noteExtra)');
   ok(JSON.stringify(rest.states) === JSON.stringify(states0.filter(s => rest.ids.includes(s.cardId))) && rest.states.length === 2, 'the other cards keep their schedules exactly');
 
   // ---- 9. Cancel with changes asks first (in the page, never confirm()) ----
@@ -281,6 +309,87 @@ async function makePicture(page) {
   ok(await page.locator('.rv-front .occ-ask').count() >= 1 && (await page.locator('.rv-front .occ-mask').count()) === 3, 'Review shows the picture made in the editor with its boxes');
   await page.screenshot({ path: SP + '/occ-editor-review-375.png' });
   await noSideways('in Review');
+  // the box editor opened over Review (E → Edit boxes) leaves Review's keys alone
+  await page.keyboard.press('Space');                               // flip, so the rating keys would count
+  await page.keyboard.press('e'); await page.waitForSelector('#ceOccEdit');
+  await page.click('#ceOccEdit'); await page.waitForSelector('dialog.occ-ed[open]');
+  for (const k of ['1', '2', '3', '4', 'Space', 'Enter', 'z', 'm', '-', '@', 'e', 'r']) await page.keyboard.press(k);
+  const reviewed = await page.evaluate(async deckId => {
+    const db = await import('./js/db.js');
+    const cs = (await db.getAll('cards')).filter(c => c.deckId === deckId);
+    return { logs: (await Promise.all(cs.map(c => db.getCardLogs(c.id)))).flat().length, states: (await db.getAll('cardStates')).length, zoom: document.querySelectorAll('dialog.occ-view').length, editors: document.querySelectorAll('dialog.occ-ed').length, buried: cs.some(c => c.buriedUntil || c.suspended) };
+  }, deckId);
+  ok(reviewed.logs === 0 && reviewed.states === 0 && !reviewed.buried && reviewed.zoom === 0 && reviewed.editors === 1, 'Review keys (1-4, Space, Enter, Z, M, -, @, E, R) do nothing while the editor is open over Review: ' + JSON.stringify(reviewed));
+  await page.click('[data-act=cancel]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  await page.click('#sheet .sheet-x');
+
+  // ---- 11. join and split on a reviewed note keep that card's schedule ----
+  const cardsNow = () => page.evaluate(async deckId => {
+    const db = await import('./js/db.js');
+    const cs = (await db.getAll('cards')).filter(c => c.deckId === deckId).sort((a, b) => a.occlusion.n - b.occlusion.n);
+    const st = await db.getAll('cardStates');
+    return cs.map(c => ({ id: c.id, n: c.occlusion.n, state: JSON.stringify(st.find(x => x.cardId === c.id) ?? null) }));
+  }, deckId);
+  await page.evaluate(async ids => {
+    const db = await import('./js/db.js'), now = Date.now();
+    await db.putStates(ids.map((id, i) => ({ cardId: id, due: now + (i + 3) * 86400000, stability: 9 + i, difficulty: 3 + i, reps: 5 + i, lapses: i, state: 2, scheduledDays: i + 3 })));
+  }, rest.ids);
+  const before2 = await cardsNow();
+  const settle = async want => { for (let i = 0; i < 50; i++) { const c = await cardsNow(); if (c.length === want) return c; await page.waitForTimeout(100); } return cardsNow(); };
+  const saveForm = () => page.click('#ceForm button[type=submit], button[type=submit][form=ceForm]');
+  await page.goto(URL + '#/deck/' + deckId); await page.waitForSelector('.crow');
+  await page.locator('.crow', { hasText: 'hidden part 2 of 2' }).click();      // the higher number, so "lowest wins" would pick the other card
+  await page.waitForSelector('#ceOccEdit'); await page.click('#ceOccEdit'); await page.waitForSelector('dialog.occ-ed[open]');
+  const other = (await masks()).find(m => !m.sel), mine = (await masks()).find(m => m.sel);
+  await tap(await at(other.x + other.w / 2, other.y + other.h / 2));      // the other card's box first ...
+  await page.click('[data-tool=group]');
+  await tap(await at(mine.x + mine.w / 2, mine.y + mine.h / 2));          // ... then this card's
+  await page.click('[data-tool=group]');
+  ok((await count()) === '3 boxes · 1 card', 'joined into one card: ' + (await count()));
+  await page.click('[data-act=done]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  await saveForm(); await page.waitForSelector('#cfYes'); await page.click('#cfYes');
+  let after2 = await settle(1);
+  ok(after2.length === 1 && after2[0].id === before2[1].id && after2[0].state === before2[1].state, 'joining the other card\'s box to the opened card keeps the opened card (not the lowest number) and its schedule');
+  await page.click('#sheet .sheet-x');
+  await page.locator('.crow').first().click();
+  await page.waitForSelector('#ceOccEdit'); await page.click('#ceOccEdit'); await page.waitForSelector('dialog.occ-ed[open]');
+  ok((await page.textContent('[data-tool=group] span')) === 'Split', 'with the whole card selected the button splits');
+  await page.click('[data-tool=group]');
+  await page.click('[data-act=done]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  await saveForm();
+  after2 = await settle(3);
+  const kept = after2.find(c => c.id === before2[1].id);
+  ok(after2.length === 3 && kept?.n === before2[1].n && kept.state === before2[1].state, 'splitting a reviewed card keeps its number and schedule; the new parts are new cards');
+  await page.click('#sheet .sheet-x');
+
+  // ---- 12. a sibling whose number is missing from the boxes keeps it reserved ----
+  await page.evaluate(async deckId => {
+    const db = await import('./js/db.js'), occ = await import('./js/occlusion.js');
+    const base = (await db.getAll('cards')).find(c => c.deckId === deckId);
+    // card 4 exists, but its box is not among the boxes the cards hold (as after a sync heal)
+    const own = [1, 2, 3].map(n => ({ id: 'm' + n, n, shape: 'rect', x: 0.1 + (n - 1) * 0.25, y: 0.1, w: 0.2, h: 0.2 }));
+    for (const n of [1, 2, 3, 4]) {
+      const { front, back } = occ.occFrontBack({ header: 'Seed', masks: own }, Math.min(n, 3));
+      await db.saveCards([{ ...base, id: 'seed' + n, noteId: 'seedNote', front: n === 4 ? 'Seed: four' : front, back, occlusion: { ...base.occlusion, n, header: 'Seed', masks: own } }]);
+    }
+    await db.putStates([{ cardId: 'seed4', due: Date.now() + 5 * 86400000, stability: 20, difficulty: 6, reps: 9, lapses: 1, state: 2, scheduledDays: 5 }]);
+  }, deckId);
+  await page.reload(); await page.waitForSelector('.crow');
+  const seed4 = () => page.evaluate(async () => { const db = await import('./js/db.js'); return JSON.stringify([(await db.getAll('cards')).find(c => c.id === 'seed4'), (await db.getAll('cardStates')).find(s => s.cardId === 'seed4')]); });
+  const seed4Before = await seed4();
+  await page.locator('.crow', { hasText: 'Seed: hidden part 1 of 3' }).click();
+  await page.waitForSelector('#ceOccEdit'); await page.click('#ceOccEdit'); await page.waitForSelector('dialog.occ-ed[open]');
+  await draw([0.1, 0.6, 0.2, 0.2]);
+  await page.click('[data-act=done]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  await saveForm(); await page.waitForSelector('#cfYes');
+  ok(/removed/.test(await page.textContent('#ceFormConfirm .confirm')) && (await seed4()) === seed4Before, 'the new box does not take over card 4: saving asks before removing it, and nothing changed yet');
+  await page.click('#cfYes');
+  let seedNs = '';
+  for (let i = 0; i < 50 && !seedNs.endsWith(',5'); i++) {            // wait for the save to land
+    await page.waitForTimeout(100);
+    seedNs = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.noteId === 'seedNote').map(c => c.occlusion.n).sort((x, y) => x - y).join());
+  }
+  ok(seedNs === '1,2,3,5', 'the new box got number 5, not the missing 4: ' + seedNs);
   ok(errors.length === 0, 'no page errors on the phone: ' + errors.join(' | '));
   await ctx.close();
 }
@@ -326,7 +435,7 @@ async function makePicture(page) {
   ok(true, 'dropping a picture opens the editor');
   const dlg = await page.locator('dialog.occ-ed').boundingBox();
   ok(Math.abs(dlg.width - 1200) <= 2 && Math.abs(dlg.height - 828) <= 2 && Math.abs(dlg.x - 120) <= 2, `on a computer the editor is a 1200×828 window in the middle (${Math.round(dlg.width)}×${Math.round(dlg.height)})`);
-  ok((await page.locator('.occ-ed-hint').textContent()).includes('Scroll to zoom'), 'the first-use hint speaks of the wheel and Space');
+  ok((await page.locator('.occ-ed-hint').textContent()).includes('Pinch or Ctrl/⌘+scroll to zoom · scroll or Space+drag to move'), 'the first-use hint speaks of Ctrl/⌘+scroll, scroll and Space');
 
   // draw three boxes with the mouse
   await drawBox([0.1, 0.2, 0.2, 0.15]); await drawBox([0.5, 0.5, 0.2, 0.2]); await drawBox([0.65, 0.1, 0.25, 0.2]);
@@ -337,11 +446,22 @@ async function makePicture(page) {
   const fr0 = await rect();
   const frac = [(cur[0] - fr0.x) / fr0.w, (cur[1] - fr0.y) / fr0.h];
   await page.mouse.move(cur[0], cur[1]);
-  await page.mouse.wheel(0, -400);
+  await page.mouse.wheel(0, -400);                                  // a plain wheel moves the picture, it does not zoom
+  await page.waitForTimeout(100);
+  ok((await scale()) === 1, 'a plain wheel at 1× does not zoom');
+  await page.keyboard.down('Control'); await page.mouse.wheel(0, -400); await page.keyboard.up('Control');
   await page.waitForTimeout(100);
   const s1 = await scale(), fr1 = await rect();
   const back = [fr1.x + fr1.w * frac[0], fr1.y + fr1.h * frac[1]];
-  ok(s1 > 1.5 && Math.abs(back[0] - cur[0]) <= 2 && Math.abs(back[1] - cur[1]) <= 2, `the wheel zooms to ${s1.toFixed(2)}× around the cursor (off by ${Math.abs(back[0] - cur[0]).toFixed(1)}, ${Math.abs(back[1] - cur[1]).toFixed(1)}px)`);
+  ok(s1 > 1.5 && Math.abs(back[0] - cur[0]) <= 2 && Math.abs(back[1] - cur[1]) <= 2, `Ctrl+wheel zooms to ${s1.toFixed(2)}× around the cursor (off by ${Math.abs(back[0] - cur[0]).toFixed(1)}, ${Math.abs(back[1] - cur[1]).toFixed(1)}px)`);
+  // a plain wheel (or two-finger scroll) while zoomed moves the picture
+  const tw = await page.locator('.occ-ed-canvas').evaluate(e => e.style.transform);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(100);
+  ok(tw !== await page.locator('.occ-ed-canvas').evaluate(e => e.style.transform) && near(await scale(), s1, 1e-6) && (await masks()).length === 3, 'a plain wheel while zoomed pans the picture and keeps the zoom');
+  // a double-click does not zoom the editor
+  await page.mouse.dblclick(cur[0], cur[1]);
+  ok(near(await scale(), s1, 1e-6), 'a double-click in the editor does not zoom');
   // Space + drag moves the zoomed picture
   const t0 = await page.locator('.occ-ed-canvas').evaluate(e => e.style.transform);
   await page.keyboard.down('Space'); await drag([600, 450], [540, 420], 5); await page.keyboard.up('Space');
@@ -387,6 +507,9 @@ async function makePicture(page) {
   // label by keyboard
   await page.keyboard.press('l');
   ok(await page.evaluate(() => document.activeElement?.id === 'occEdLabel'), 'L opens the label row with the cursor in it');
+  const snap = JSON.stringify(await masks());
+  for (const k of ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift+ArrowDown']) await page.keyboard.press(k);
+  ok(JSON.stringify(await masks()) === snap && (await count()) === '4 boxes · 3 cards', 'Backspace, Delete and the arrows typed in the label field leave the boxes alone');
   await page.keyboard.type('Valve');
   await page.keyboard.press('Enter');
   ok(/label Valve/.test(await page.locator('.occ-ed-mask').last().getAttribute('aria-label')), 'typing a label labels the selected box');
@@ -419,10 +542,22 @@ async function makePicture(page) {
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
   ok(await page.locator('#sheet').evaluate(e => e.open), 'Escape in the editor leaves the card panel open');
-  await page.click('#acForm button[type=submit], #sheet button[type=submit][form=acForm]');
+  await page.click('#acForm button[type=submit], #sheet button[type=submit][form=acForm]', { clickCount: 2 });               // a double tap on Add must not add twice
   await page.waitForFunction(() => document.getElementById('toast')?.textContent.includes('Added 3 cards'));
+  await page.waitForTimeout(400);
   const n = await page.evaluate(async deckId => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.deckId === deckId && c.occlusion).length, deckId);
-  ok(n === 3, 'Add makes the 3 cards from the desktop session');
+  ok(n === 3, 'Add makes the 3 cards from the desktop session, and a double-click on Add makes only one set');
+  // Cancel on a fresh picture: the focus stays in the form (on Edit boxes)
+  await page.setInputFiles('#acOccFile', { name: 'heart.png', mimeType: 'image/png', buffer: png });
+  await page.waitForSelector('dialog.occ-ed[open]'); await page.waitForSelector('.occ-ed-img[src]');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  ok(await page.evaluate(() => document.activeElement?.id === 'acOccEdit'), 'after Cancel on a new picture the focus is on Edit boxes');
+  // the Android back button closes the dialog without Cancel or Discard: unsaved boxes are kept (as Done)
+  await page.click('#acOccEdit'); await page.waitForSelector('dialog.occ-ed[open]');
+  await drawBox([0.2, 0.2, 0.2, 0.2]);
+  await page.evaluate(() => document.querySelector('dialog.occ-ed').close());
+  await page.waitForFunction(() => !document.querySelector('dialog.occ-ed'));
+  ok((await page.textContent('#acOccMakes')) === 'Makes 1 card', 'closing the editor some other way (Android back) keeps the unsaved boxes: ' + await page.textContent('#acOccMakes'));
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll on the desktop');
   ok(errors.length === 0, 'no page errors on the desktop: ' + errors.join(' | '));
   await ctx.close();

@@ -168,6 +168,7 @@ export async function openCardPanel(card, ctx) {
   const state = statesById.get(card.id);
   const studied = state && state.state !== 0;
   const logs = await db.getCardLogs(card.id);
+  const maxN = await noteMaxN(card);
   const now = Date.now();
   const status = cardStatus(card, state, now);
   // In a side panel (wide screens), highlight the card it's showing.
@@ -176,7 +177,7 @@ export async function openCardPanel(card, ctx) {
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card)}
+      ${cardFieldsHTML(card, maxN)}
       <div class="sheet-actions"><button class="btn primary" type="submit">Save changes</button></div>
     </form>
 
@@ -264,10 +265,11 @@ document.addEventListener('keydown', e => {
 
 // The short editor: Front, Back and Tags (with the formatting buttons and pictures), Cancel and Save always in view.
 async function openCardEdit(card, ctx) {
+  const maxN = await noteMaxN(card);
   openSheet(`
     <h2 id="sheetTitle">Edit card</h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card)}
+      ${cardFieldsHTML(card, maxN)}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="ceCancel">Cancel</button>
         <button class="btn primary" type="submit">Save <kbd aria-hidden="true">${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl+↵'}</kbd></button>
@@ -310,8 +312,13 @@ const occBadge = card => {
   const { k, total } = groupIndex(card.occlusion.masks, card.occlusion.n);
   return `<span class="ckind" title="Image occlusion, part ${k} of ${total}">${k}/${total}</span> `;
 };
-const cardFieldsHTML = card => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card) : `
+// The highest part number used by any card of this picture note: a new box must never reuse one, even a number that
+// is missing from the boxes this card holds (a sync can leave a sibling's number out).
+const noteMaxN = async card => (card.noteId && hasMasks(card)
+  ? Math.max(0, ...(await db.getAll('cards')).filter(c => c.noteId === card.noteId).map(c => c.occlusion?.n).filter(Number.isInteger))
+  : 0);
+const cardFieldsHTML = (card, maxN = 0) => `
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
       ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
       ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
@@ -577,6 +584,10 @@ export function openAddCard({ decks, deckId, refresh }) {
       adding = true;
       try {
         await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
+      } catch (err) {
+        console.error(err);
+        showErr('acErr', "Couldn't save the cards. Try again.");
+        return;
       } finally { adding = false; }
       resetOcclusion('ac'); $('acErr').hidden = true;
       $('acOccChoose').focus();

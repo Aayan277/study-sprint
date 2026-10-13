@@ -1,4 +1,4 @@
-// The part of image occlusion that touches the page: a pan-and-zoom controller (pinch, wheel, double-tap, keys) and
+// The part of image occlusion that touches the page: a pan-and-zoom controller (pinch, Ctrl/⌘+wheel, double-tap, keys) and
 // the full-screen picture viewer that opens from the Zoom button on a card. The drawing editor uses the same
 // controller (panZoom), so there is one place that knows how to pinch.
 // Loaded the first time a picture card is shown (review.js), not at start-up. The maths is in occlusion.js.
@@ -12,7 +12,7 @@ const DOUBLE_ZOOM = 2.5;   // where a double-tap zooms to
 
 // Make `canvas` (the picture and its boxes) pan and zoom inside `stage` (the frame that clips it).
 //   oneFinger  'pan': one finger or the mouse drags the picture. 'none': it doesn't (the editor draws with one finger);
-//              two fingers pinch and pan either way.
+//              two fingers pinch and pan either way; 'none' also turns off double-click and double-tap zoom.
 //   aspect     the picture's width / height (else read from the canvas's --ar)
 //   onChange(view)  after every move: { s, x, y }
 //   onPinch()  when a second finger arrives, so an editor can drop the box it was drawing
@@ -97,7 +97,7 @@ export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange
       drag = { id, start: p, from: { ...view }, at: e.timeStamp, moved: true };
     } else drag = null;
     // A double-tap with a finger zooms in or back out (the mouse has dblclick).
-    if (tapped) {
+    if (tapped && oneFinger !== 'none') {
       const p = local(e);
       if (lastTap && e.timeStamp - lastTap.at < TAP_MS && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < TAP_PX) { lastTap = null; zoomTo(view.s > 1.01 ? 1 : DOUBLE_ZOOM, p.x, p.y); }
       else lastTap = { at: e.timeStamp, x: p.x, y: p.y };
@@ -107,15 +107,18 @@ export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange
   stage.addEventListener('pointercancel', release, opt);
   stage.addEventListener('lostpointercapture', release, opt);
   stage.addEventListener('dblclick', e => {
+    if (oneFinger === 'none') return;           // the editor draws and selects: a double-click must not zoom
     if (e.target.closest?.('button, input, textarea, select, [data-nopan]')) return;
     const p = local(e);
     zoomTo(view.s > 1.01 ? 1 : DOUBLE_ZOOM, p.x, p.y);
   }, opt);
-  // The wheel (and a trackpad pinch, which arrives as a wheel with ctrlKey) zooms around the cursor.
+  // Ctrl/⌘ + wheel (a trackpad pinch arrives as a wheel with ctrlKey) zooms around the cursor; a plain wheel or
+  // two-finger trackpad scroll moves the picture.
   stage.addEventListener('wheel', e => {
     e.preventDefault();
     const p = local(e);
-    zoomTo(view.s * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), p.x, p.y);
+    if (e.ctrlKey || e.metaKey) zoomTo(view.s * Math.exp(-e.deltaY * 0.01), p.x, p.y);
+    else { const k = e.deltaMode === 1 ? 16 : 1; put({ ...view, x: view.x - e.deltaX * k, y: view.y - e.deltaY * k }); }
   }, { ...opt, passive: false });
   // Keys: + and - zoom, 0 fits the picture, the arrows move a zoomed picture.
   stage.ownerDocument.addEventListener('keydown', e => {
@@ -148,7 +151,7 @@ export function panZoom(stage, canvas, { oneFinger = 'pan', aspect = 0, onChange
 }
 
 // ---------- the picture viewer ----------
-// Opens the picture full screen: pinch, wheel or the buttons to zoom, drag to move. Escape or Close to leave.
+// Opens the picture full screen: pinch, Ctrl/⌘+wheel or the buttons to zoom, drag or wheel to move. Escape or Close to leave.
 //   figureHTML  the card's picture as occlusion.js drew it (the same boxes and covers)
 export function openZoom(figureHTML, title = 'Picture', returnTo = null) {
   if (document.querySelector('dialog.occ-view')) return;

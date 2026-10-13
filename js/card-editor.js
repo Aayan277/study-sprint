@@ -239,16 +239,17 @@ export const lastKind = () => { try { const k = localStorage.getItem('study-spri
 // shows the picture with its boxes, an "Edit boxes" button (the drawing editor, occlusion-editor.js), the header, a
 // label for each group (typing the labels works without drawing, and is the way to label with a keyboard or a screen
 // reader) and the Extra text. A new note starts with "Choose a picture": a file, a dropped file, or a pasted screenshot.
-//   occlusionFields(p, card)   the form for the ids that start with p; card = the card being edited (null for a new note)
+//   occlusionFields(p, card, extra, { hidden, maxN })   the form for the ids that start with p; card = the card being edited
+//                              (null for a new note); maxN = the highest part number any card of the note has (a floor)
 //   readOcclusion(p)           { masks, header, w, h, image, maxN }: the note as it stands, ready for planOcclusionSave
 //   setOcclusion(p, note)      replace the picture and boxes (note: { masks, image, w, h, header?, maxN? }) and redraw
 //   resetOcclusion(p)          back to an empty form (after a note was added)
 const occForms = new Map();       // p → { masks, image, w, h, maxN, n }: the form's state (n = the card being edited)
 const CAMERA = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg>';
 
-export function occlusionFields(p, card = null, extra = '', { hidden = false } = {}) {
+export function occlusionFields(p, card = null, extra = '', { hidden = false, maxN = 0 } = {}) {
   const o = card?.occlusion;
-  const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
+  const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, maxN, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
   occForms.set(p, st);
   const parts = occParts(p, st, o?.header || '');
   const desk = RICH.matches;
@@ -340,7 +341,14 @@ async function editBoxes(p) {
   try {
     const { openOcclusionEditor } = await import('./occlusion-editor.js');
     const res = await openOcclusionEditor({ image: st.image, w: st.w, h: st.h, masks: note.masks, focusN: st.n, maxN: st.maxN });
-    if (res && document.getElementById(p + 'Occ')?.isConnected) setOcclusion(p, { masks: res.masks, image: st.image, w: st.w, h: st.h, maxN: res.maxN });
+    const occ = document.getElementById(p + 'Occ');
+    if (res && occ?.isConnected) setOcclusion(p, { masks: res.masks, image: st.image, w: st.w, h: st.h, maxN: res.maxN });
+    // The button that opened the editor may be disabled or hidden by now: keep the focus inside the form.
+    const form = occ?.closest('form');
+    if (form && !form.contains(document.activeElement)) {
+      const edit = document.getElementById(p + 'OccEdit');
+      (st.image && edit && !edit.closest('[hidden]') ? edit : document.getElementById(p + 'OccChoose'))?.focus({ preventScroll: true });
+    }
   } catch (err) {
     console.error(err);
     toast("Couldn't open the box editor");

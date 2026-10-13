@@ -446,10 +446,13 @@ export function resizeMask(m, corner, x, y, minW = 0, minH = 0) {
 // ---------- editing the list of boxes ----------
 // The next free group number (never one used before: floor is the highest n the picture has ever had).
 export const nextN = (masks, floor = 0) => Math.max(floor, 0, ...masks.map(m => m?.n).filter(Number.isInteger)) + 1;
-// Put the masks with these ids into one group (the lowest n among them).
-export function groupMasks(masks, ids) {
-  const set = new Set(ids), n = Math.min(...masks.filter(m => set.has(m?.id)).map(m => m.n));
-  return Number.isFinite(n) ? masks.map(m => (set.has(m?.id) ? { ...m, n } : m)) : masks;
+// Put the masks with these ids into one group. It keeps the number of the FIRST id (the box picked first), or
+// preferN when one of them has it: joining a new box to a reviewed card must not drop the reviewed card.
+export function groupMasks(masks, ids, preferN = null) {
+  const set = new Set(ids), mine = masks.filter(m => set.has(m?.id) && Number.isInteger(m.n));
+  const first = ids.map(id => mine.find(m => m.id === id)).find(Boolean);
+  const n = mine.some(m => m.n === preferN) ? preferN : first?.n;
+  return Number.isInteger(n) ? masks.map(m => (set.has(m?.id) ? { ...m, n } : m)) : masks;
 }
 // Take one mask out of its group, into a group of its own.
 export function splitMask(masks, id, floor = 0) {

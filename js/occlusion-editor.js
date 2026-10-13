@@ -1,5 +1,5 @@
 // The image-occlusion box editor: a full-screen dialog where you draw boxes over the parts of a picture to hide.
-// One finger (or the mouse) draws, selects, moves and resizes boxes; two fingers, the wheel or a double-tap zoom (that
+// One finger (or the mouse) draws, selects, moves and resizes boxes; two fingers or Ctrl/⌘+wheel zoom (that
 // part is panZoom in occlusion-view.js). Boxes that share a number are one group = one card; "Group" joins them.
 //
 //   openOcclusionEditor({ image, w, h, masks, focusN, maxN })  →  Promise<{ masks, maxN } | null>
@@ -22,7 +22,10 @@ import {
 const DRAW_PX = 8;         // a drag shorter than this (on screen) is a tap, not a box
 const MIN_FRAC = 0.003;    // ... and a box is at least 0.3% of the picture on each side
 const MOVE_PX = 4;         // a touch on a box must move this far before the box moves
-const GRAB_PX = 22;        // how close to a corner handle counts as holding it
+const GRAB_MOUSE = 8, GRAB_TOUCH = 22;   // how close (px) to a corner handle counts as holding it
+const GRAB_FRAC = 0.25;    // ... but never more than this share of the box's on-screen size
+const SMALL_PX = 60;       // a touch inside a box smaller than this (both sides) moves it (no corner is grabbed)
+const TINY_PX = 28;        // a box smaller than this on screen has no number badge
 const NUDGE = 0.005;       // arrow keys move a box by 0.5% of the picture (Shift: 5%)
 const ADD_SIZE = 0.2;      // "Add box" makes a box 20% wide
 const HINT_KEY = 'study-sprint-occ-hint';
@@ -74,7 +77,8 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     let lastKey = null, lastAt = 0;               // lets a run of arrow-key nudges be one undo step
     let g = null;                                 // the gesture going on (draw, move, resize, pan)
     const down = new Set();                       // pointers that are down
-    let spaceDown = false, escAt = 0, result = null, noteTimer = 0;
+    let pz = null;                                // the pan-and-zoom controller (set once the dialog is open)
+    let spaceDown = false, escAt = 0, result = null, closed = false, noteTimer = 0;   // closed: Done, Cancel or Discard was chosen
     const ac = new AbortController();
     const opt = { signal: ac.signal };
 
@@ -84,7 +88,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
     let seen = false;
     try { seen = !!localStorage.getItem(HINT_KEY); } catch { /* fine */ }
-    const hint = fine ? 'Drag over a part to hide it. Scroll to zoom; hold Space and drag to move the picture.' : 'Drag over a part to hide it. Pinch with two fingers to zoom.';
+    const hint = fine ? 'Drag over a part to hide it. Pinch or Ctrl/⌘+scroll to zoom · scroll or Space+drag to move.' : 'Drag over a part to hide it. Pinch with two fingers to zoom.';
     dlg.innerHTML = `
       <div class="occ-ed-bar">
         <button type="button" class="occ-ed-x" data-act="cancel" aria-label="Cancel" title="Cancel (Esc)">${ICON.x}</button>
@@ -101,7 +105,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
         <input id="occEdLabel" maxlength="${MAX_LABEL}" autocomplete="off" enterkeyhint="done" placeholder="e.g. Left ventricle">
         <button type="button" class="btn ghost" data-act="label-ok">OK</button>
       </div>
-      <div class="occ-ed-tools" role="toolbar" aria-label="Box tools">
+      <div class="occ-ed-tools" role="group" aria-label="Box tools">
         ${TOOLS.map(([id, text, title, keys]) => `<button type="button" class="occ-ed-tool" data-tool="${id}" title="${esc(title)}" aria-label="${esc(title.replace(/ \(.*\)$/, ''))}" ${keys ? `aria-keyshortcuts="${keys}"` : ''}><i>${toolIcon[id]}</i><span>${text}</span></button>`).join('')}
       </div>
       <div class="occ-ed-confirm" role="alertdialog" aria-labelledby="occEdCfT" aria-describedby="occEdCfD" hidden>
@@ -119,7 +123,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     const tool = id => $q(`[data-tool="${id}"]`);
     dlg.showModal();
 
-    const pz = panZoom(stage, canvas, { oneFinger: 'none', aspect: w > 0 && h > 0 ? w / h : 0, onPinch: () => abort(), arrowsBusy: () => sel.size > 0 });
+    pz = panZoom(stage, canvas, { oneFinger: 'none', aspect: w > 0 && h > 0 ? w / h : 0, onPinch: () => abort(), onChange: () => markTiny(), arrowsBusy: () => sel.size > 0 });
     // Without a saved size the picture's own shape is used once it has loaded.
     const img = canvas.querySelector('img');
     img?.addEventListener('load', () => { if (!(w > 0 && h > 0)) pz.setAspect(img.naturalWidth / img.naturalHeight); }, opt);
@@ -146,9 +150,9 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
         clip = ` style="clip-path:polygon(${m.points.map(([px, py]) => `${(clamp((px - m.x) / m.w, 0, 1) * 100).toFixed(2)}% ${(clamp((py - m.y) / m.h, 0, 1) * 100).toFixed(2)}%`).join(',')})"`;
       }
       const handles = on && sel.size === 1 ? ['nw', 'ne', 'sw', 'se'].map(c => `<i class="occ-ed-h occ-ed-h-${c}"></i>`).join('') : '';
-      return `<div class="occ-ed-mask${on ? ' sel' : ''}${!on && mates.has(m.n) ? ' mate' : ''}${m.shape === 'ellipse' ? ' round' : ''}" data-id="${esc(m.id)}"
+      return `<div class="occ-ed-mask${on ? ' sel' : ''}${!on && mates.has(m.n) ? ' mate' : ''}${m.shape === 'ellipse' ? ' round' : ''}" data-id="${esc(m.id)}" data-n="${m.n}"
         style="left:${pct(m.x)};top:${pct(m.y)};width:${pct(m.w)};height:${pct(m.h)}" tabindex="0" role="button" aria-pressed="${on}"
-        aria-label="Part ${k} of ${total}, ${label ? 'label ' + esc(label) : 'no label'}${on ? ', selected' : ''}"><span class="occ-ed-fill"${clip}></span><span class="occ-ed-num">${k}</span>${handles}</div>`;
+        aria-label="Part ${k} of ${total}, ${label ? 'label ' + esc(label) : 'no label'}"><span class="occ-ed-fill"${clip}></span><span class="occ-ed-num">${k}</span>${handles}</div>`;
     }
     let mates = new Set();       // groups that have a selected box (their other boxes are tinted)
     function render() {
@@ -159,7 +163,17 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       // Redrawing replaced the box that had the keyboard focus: put the focus back on its copy.
       if (focusId) maskBox.querySelector(`[data-id="${CSS.escape(focusId)}"]`)?.focus({ preventScroll: true });
       if (!dlg.contains(document.activeElement)) stage.focus({ preventScroll: true });
+      markTiny();
       status();
+    }
+    // Boxes under TINY_PX on screen lose their number badge.
+    function markTiny() {
+      if (!pz) return;
+      const { cw, ch } = pz.size(), s = pz.view.s;
+      maskBox.querySelectorAll('.occ-ed-mask').forEach(el => {
+        const m = byId(el.dataset.id);
+        el.classList.toggle('tiny', !!m && Math.min(m.w * cw, m.h * ch) * s < TINY_PX);
+      });
     }
 
     // What the Group button does for the selection now.
@@ -179,7 +193,8 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     }
     function status() {
       const masks = hist.present;
-      countEl.textContent = masks.length ? `${boxes(masks.length)} · ${cards(groupsOf(masks).length)}` : 'No boxes yet';
+      const count = masks.length ? `${boxes(masks.length)} · ${cards(groupsOf(masks).length)}` : 'No boxes yet';
+      if (countEl.textContent !== count) countEl.textContent = count;     // the live region only speaks real changes
       tool('undo').disabled = !hist.past.length;
       tool('redo').disabled = !hist.future.length;
       tool('delete').disabled = !sel.size;
@@ -248,7 +263,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       if (!gs.enabled) return;
       if (joining || (mine.length >= 2 && gs.icon === 'group')) {
         joining = false;
-        commit(groupMasks(hist.present, mine.map(m => m.id)));
+        commit(groupMasks(hist.present, [...sel], focusN));      // [...sel] is in the order they were picked
         say('Joined into one card.');
       } else if (gs.icon === 'split') {
         // Each box gets a card of its own; when the whole group is selected the first one keeps the old card.
@@ -302,16 +317,19 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
 
     // ---------- leaving ----------
     const dirty = () => JSON.stringify(hist.present) !== startJSON;
-    function finish(value) { result = value; dlg.close(); }
-    function done() {
-      if (!hist.present.length) { say('Draw at least one box over the part to hide.'); return; }
-      // Labels lose spaces at both ends; boxes with an empty label lose it.
+    function finish(value) { result = value; closed = true; dlg.close(); }
+    // The boxes as they go back to the caller. Labels lose spaces at both ends; boxes with an empty label lose it.
+    function outcome() {
       const out = hist.present.map(m => {
         const { label, ...rest } = m;
         const text = String(label ?? '').trim();
         return text ? { ...rest, label: text } : rest;
       });
-      finish({ masks: out, maxN: Math.max(top, ...out.map(m => m.n)) });
+      return { masks: out, maxN: Math.max(top, ...out.map(m => m.n)) };
+    }
+    function done() {
+      if (!hist.present.length) { say('Draw at least one box over the part to hide.'); return; }
+      finish(outcome());
     }
     function showConfirm() {
       cfBox.hidden = false;
@@ -345,11 +363,14 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       if (el) Object.assign(el.style, { left: pct(m.x), top: pct(m.y), width: pct(m.w), height: pct(m.h) });
     };
     // Where is the pointer: on a corner handle of the one selected box, on a box, or on nothing?
-    function whatIsAt(pt) {
+    function whatIsAt(pt, e) {
       const { fx, fy } = perPx();
       if (sel.size === 1) {
         const m = firstSel();
-        const corner = m && handleAt(m, pt.x, pt.y, Math.min(GRAB_PX * fx, m.w * 0.45), Math.min(GRAB_PX * fy, m.h * 0.45));
+        const grab = e.pointerType === 'mouse' ? GRAB_MOUSE : GRAB_TOUCH;
+        // On a small box a touch moves it: the corners are too close together to tell apart.
+        const small = e.pointerType === 'touch' && Math.max(m.w / fx, m.h / fy) < SMALL_PX;
+        const corner = m && !small && handleAt(m, pt.x, pt.y, Math.min(grab * fx, m.w * GRAB_FRAC), Math.min(grab * fy, m.h * GRAB_FRAC));
         if (corner) return { corner, mask: m };
       }
       const hit = hitTest(hist.present, pt.x, pt.y);
@@ -380,7 +401,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       }
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       capture(e);
-      const pt = toImg(p), at = whatIsAt(pt);
+      const pt = toImg(p), at = whatIsAt(pt, e);
       if (at.corner) {
         const m = at.mask;
         const cx = at.corner.includes('w') ? m.x : m.x + m.w, cy = at.corner.includes('n') ? m.y : m.y + m.h;
@@ -457,7 +478,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       let c = 'crosshair';
       if (spaceDown) c = 'grab';
       else {
-        const at = whatIsAt(toImg(local(e)));
+        const at = whatIsAt(toImg(local(e)), e);
         c = at.corner ? (at.corner === 'nw' || at.corner === 'se' ? 'nwse-resize' : 'nesw-resize') : at.mask ? 'move' : 'crosshair';
       }
       stage.style.cursor = c;
@@ -556,6 +577,8 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     fitScreen();
 
     dlg.addEventListener('close', () => {
+      // Closed some other way (Android back) with changes: keep the boxes rather than lose them.
+      if (!closed && dirty() && hist.present.length) result = outcome();
       ac.abort();
       pz.destroy();
       clearTimeout(noteTimer);

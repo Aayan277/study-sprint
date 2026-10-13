@@ -1702,6 +1702,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .occ-ed-mask:focus-visible{outline:calc(2px / var(--s,1)) solid var(--text);outline-offset:calc(4px / var(--s,1))}
 /* the number of the card, never bigger than its box */
 .occ-ed-num{position:absolute;left:0;top:0;display:grid;place-items:center;box-sizing:border-box;width:min(calc(20px / var(--s,1)),100cqw);height:min(calc(20px / var(--s,1)),100cqh);border-radius:0 0 calc(6px / var(--s,1)) 0;background:var(--accent);color:var(--on-accent);font:700 min(calc(12px / var(--s,1)),80cqh)/1 var(--f-ui)}
+/* ... and left out of boxes too small on screen to hold it (set by the editor) */
+.occ-ed-mask.tiny .occ-ed-num{display:none}
 /* corner handles: drawn 14px, grabbed from 22px around */
 .occ-ed-h{position:absolute;box-sizing:border-box;width:calc(14px / var(--s,1));height:calc(14px / var(--s,1));margin:calc(-7px / var(--s,1)) 0 0 calc(-7px / var(--s,1));border:calc(2px / var(--s,1)) solid var(--accent);border-radius:50%;background:#fff;box-shadow:0 calc(1px / var(--s,1)) calc(3px / var(--s,1)) rgb(0 0 0 / .45)}
 .occ-ed-h-nw{left:0;top:0}.occ-ed-h-ne{left:100%;top:0}.occ-ed-h-sw{left:0;top:100%}.occ-ed-h-se{left:100%;top:100%}
