@@ -166,6 +166,17 @@ await page.evaluate(async ([id, ymd]) => { const db = await import('./js/db.js')
 await page.evaluate(async id => { const sd = await import('./js/study-data.js'); sd.launchStudy({ deckIds: [id], deckId: id, kind: 'prep' }); }, bio);
 await page.waitForSelector('#flash');
 ok((await page.textContent('.rv-counts .c-new')) === '2', 'Exam prep shows both siblings that were not seen today');
+// Editing the note in the middle of a session: the sibling whose blank is removed can't be rated any more
+const sess = await mk('Session edit', 'Alpha {{c1::one}} beta {{c2::two}} gamma {{c3::three}}');
+await page.evaluate(async ([id, ymd]) => { const db = await import('./js/db.js'); await db.saveDeck({ ...(await db.getDeck(id)), examDate: ymd }); }, [sess, ymd]);
+await page.evaluate(async id => { const sd = await import('./js/study-data.js'); sd.launchStudy({ deckIds: [id], deckId: id, kind: 'prep' }); }, sess);
+await page.waitForSelector('#flash');
+ok((await page.textContent('.rv-counts .c-new')) === '3', 'Exam prep starts with all 3 siblings');
+await page.keyboard.press('e'); await page.waitForSelector('#ceText');
+await page.fill('#ceText', 'Alpha {{c1::one}} beta {{c2::two}} gamma three');
+await page.click('button[type=submit][form=ceForm]'); await page.waitForSelector('#cfYes'); await page.click('#cfYes');
+await page.waitForFunction(() => document.querySelector('.rv-counts .c-new')?.textContent === '2', null, { timeout: 5000 }).catch(() => {});
+ok((await page.textContent('.rv-counts .c-new')) === '2', 'after the edit removed c3, the session no longer holds it');
 await page.evaluate(() => { location.hash = '#/today'; });
 
 // ---- 6. typed answers, Play, and nothing can inject HTML ----

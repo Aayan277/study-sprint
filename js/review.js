@@ -404,6 +404,16 @@ function replaceInSession(card) {
   });
 }
 
+// A cloze note was edited: swap in the new version of each of its cards the session holds, and take out the ones
+// that no longer exist (a removed blank), so they can't be rated.
+async function refreshNoteInSession(noteId) {
+  const sibs = (await db.getAll('cards')).filter(c => c.noteId === noteId);
+  const alive = new Set(sibs.map(c => c.id));
+  const held = [...R.queue, ...R.waiting, ...R.undo.map(u => u.item)].filter(q => q.card.noteId === noteId);
+  for (const q of held) if (!alive.has(q.card.id)) dropFromSession(q.card.id);
+  for (const c of sibs) replaceInSession(c);
+}
+
 // The ⋯ button opens a short sheet of card actions (Edit, Flag, Bury, Suspend, More). E opens the editor straight
 // away and I the full panel with the card's info (browse.js openCardPanel; More in the short sheet opens that panel too).
 // Whatever you change, the sheet closes and you are back at the same card.
@@ -417,8 +427,11 @@ async function openCardMenu(mode = 'actions') {
   if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
   openCardPanel(card, {
     decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
-    onAction: (act, fresh) => {
+    onAction: async (act, fresh) => {
       R.version = db.scheduleVersion();
+      // Editing a cloze note changes all its cards (and may delete some): bring the session in line first.
+      if (act === 'edit' && card.noteId) await refreshNoteInSession(card.noteId);
+      if (!R?.current) return;
       if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
       else {
         // Redrawing the card must not wipe an answer half typed in the box.
