@@ -228,7 +228,11 @@ ok(b.role === 'progressbar' && b.min === '0' && b.now === 0 && b.max === 6 && b.
 ok((await box(p, '.rv-prog')).h <= 2.5, 'it is 2px tall');
 ok(await p.$eval('#undoBtn', e => !!e.querySelector('svg') && e.textContent.trim() === '' && e.getAttribute('aria-label') === 'Undo'), 'Undo is an icon button with a label');
 ok(await p.$eval('.rv-head', h => [...h.querySelectorAll('.link')].every(l => { const r = l.getBoundingClientRect(); return l.id === 'endBtn' || (Math.round(r.width) === 40 && Math.round(r.height) === 40); })), 'the toolbar buttons share one size');
+// the tests run with reduced motion on (pw.mjs): the bar has no transition then, and the normal one comes back without it
+ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transitionDuration === '0s'), 'with reduced motion the fill changes without a transition');
+await p.emulateMedia({ reducedMotion: 'no-preference' });
 ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transitionProperty.includes('width')), 'the fill has a width transition');
+await p.emulateMedia({ reducedMotion: 'reduce' });
 await p.$eval('.rv-prog', e => { e.__keep = true; });
 await p.click('#showBtn'); await p.click('[data-rate="3"]'); await p.waitForFunction(() => document.querySelector('#undoBtn') && !document.querySelector('#undoBtn').disabled);
 b = await bar();

@@ -15,7 +15,9 @@ export const chromium = {
   launch: async (...args) => {
     const browser = await realChromium.launch(...args);
     const newContext = browser.newContext.bind(browser);
-    browser.newContext = async (...a) => { const ctx = await newContext(...a); await ctx.addInitScript(SKIP); return ctx; };
+    // Reduced motion is on by default in the tests (the motion code skips its effects, so screens, sheets and counts settle at
+    // once and the checks are deterministic). e2e-motion.mjs asks for 'no-preference' to test the effects themselves.
+    browser.newContext = async (opts = {}, ...rest) => { const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest); await ctx.addInitScript(SKIP); return ctx; };
     return browser;
   }
 };
