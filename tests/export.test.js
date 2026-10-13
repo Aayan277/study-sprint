@@ -107,3 +107,19 @@ test('cloze round trip: export, then read the notes back as the importer sees th
   assert.deepEqual(r.noteExtras, ['Extra', 'Extra', 'Extra']);
   assert.deepEqual(r.tags, [['bio'], ['bio'], ['bio']]);
 });
+
+test('import then export keeps the Anki guids, so re-importing updates the notes instead of copying them', async () => {
+  const { notesToImport } = await import('../js/anki.js');
+  const models = new Map([['1', { name: 'Basic', fields: ['Front', 'Back'], cloze: false }], ['2', { name: 'Cloze', fields: ['Text', 'Back Extra'], cloze: true }]]);
+  const r = notesToImport([
+    { id: '10', guid: 'plainGuid', mid: '1', fields: ['Q', 'A'], tags: [], deck: 'Bio' },
+    { id: '11', guid: 'clozeGuid', mid: '2', fields: ['{{c1::a}} and {{c2::b}}', ''], tags: [], deck: 'Bio' }], models);
+  // What the import screen saves on each card (import-screen.js): the guid and, for cloze rows, the note.
+  const cards = r.rows.map((row, i) => ({ id: 'c' + i, front: row[0], back: row[1], tags: [], deckName: 'Bio', ankiGuid: r.guids[i],
+    ...(r.clozes[i] ? { noteId: 'N' + r.clozes[i].noteKey, cloze: r.clozes[i].n, noteText: r.clozes[i].text } : {}) }));
+  const { notes } = await ankiContents({ id: 'd', name: 'Bio' }, cards, 1_800_000_000_000);
+  assert.deepEqual(notes.map(n => n.guid), ['plainGuid', 'clozeGuid']);
+  // Cards that were made here have no saved guid: it comes from their id, as before.
+  const mine = await ankiContents({ id: 'd', name: 'Bio' }, [{ id: 'p', front: 'a', back: 'b', tags: [], deckName: 'Bio' }], 1_800_000_000_000);
+  assert.equal(mine.notes[0].guid, ankiGuid('p'));
+});

@@ -118,7 +118,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     if (g.cloze) {
       const text = withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile);
       const extra = withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile);
-      note = { id: noteId, guid: ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
+      note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
         flds: `${text}\x1f${extra}`, sfld: plainText(first.noteText), csum: await ankiChecksum(plainText(first.noteText)), flags: 0, data: '' };
       // Blank number n is Anki card number n - 1.
       for (const c of g.cards.slice().sort((a, b) => a.cloze - b.cloze)) {
@@ -128,7 +128,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     } else {
       const c = g.card;
       const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
-      note = { id: noteId, guid: ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
+      note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order.
       ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
