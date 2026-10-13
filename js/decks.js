@@ -9,6 +9,7 @@ import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, badgeClass } from './exam.js';
+import { drawSidebar } from './sidebar.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
@@ -586,7 +587,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       </div>`;
     $('delNo').focus();
     $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone); });
-    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); onDone('deleted'); };
+    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); drawSidebar(); onDone('deleted'); };
     $('delYes').addEventListener('click', async () => {
       for (const id of tree) await db.deleteDeck(id);
       done();

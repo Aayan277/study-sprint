@@ -47,6 +47,8 @@
     r.setAttribute('data-theme', mode);
     if (t.oled === true || t.skin === 'onyx' || t.skin === 'kuro') r.setAttribute('data-oled', 'on');
   } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  // The desktop sidebar's collapsed (icon rail) state is remembered per device the same way (see js/sidebar.js).
+  try { if (localStorage.getItem('study-sprint-rail') === '1') document.documentElement.setAttribute('data-rail', 'on'); } catch (e) { /* fine */ }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,6 +83,7 @@
 <link rel="modulepreload" href="js/sync-config.js">
 <link rel="modulepreload" href="js/password.js">
 <link rel="modulepreload" href="js/install.js">
+<link rel="modulepreload" href="js/sidebar.js">
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -100,15 +103,31 @@
 <main id="screen"></main>
 
 <nav class="tabs" aria-label="Sections">
+  <!-- The desktop sidebar (from 1024px; hidden on phones). js/sidebar.js fills in the counts, the deck list and the footer. -->
+  <a class="side-add" href="#/import" data-tip="Add cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add cards</span></a>
   <div class="tabs-in">
     <a class="tab" href="#/today" data-tab="today">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/><path d="M7 13l2.5 2.5L14 11"/></svg>Today</a>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/><path d="M7 13l2.5 2.5L14 11"/></svg>Today<span class="side-badge" id="sideBadge" hidden></span></a>
     <a class="tab" href="#/decks" data-tab="decks">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>Decks</a>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>Decks<span class="side-dot" id="sideDot" hidden></span></a>
     <a class="tab" href="#/play" data-tab="play">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Play</a>
     <a class="tab" href="#/stats" data-tab="stats">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</a>
+  </div>
+  <section class="side-decks" aria-labelledby="sideDecksH">
+    <button class="side-head" type="button" id="sideDecksH" aria-label="Your decks" aria-expanded="true" aria-controls="sideList"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>Decks</button>
+    <div class="side-list" id="sideList"></div>
+  </section>
+  <div class="side-foot" id="sideFoot">
+    <a class="side-streak" id="sideStreak" href="#/stats"></a>
+    <a class="side-sync" id="sideSync" href="#/settings"></a>
+    <div class="side-tools">
+      <a class="side-set" id="sideSet" href="#/settings" data-tab="settings" data-tip="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+      <span class="side-ver" id="sideVer"></span>
+      <button class="side-ib" id="sideMode" type="button"></button>
+      <button class="side-ib" id="sideCollapse" type="button" aria-expanded="true" aria-label="Collapse sidebar" data-tip="Collapse sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/><path d="M15.5 10l-2 2 2 2"/></svg></button>
+    </div>
   </div>
 </nav>
 

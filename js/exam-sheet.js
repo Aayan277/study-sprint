@@ -5,6 +5,7 @@
 //     forward (pullIn in exam.js), and the same date check runs (examDateError).
 
 import * as db from './db.js';
+import { drawSidebar } from './sidebar.js';
 import { dayStart } from './days.js';
 import { $, esc, toast, closeSheet, openSheet, plural } from './ui.js';
 import { effectiveDeck, subtreeIds } from './deck-tree.js';
@@ -34,6 +35,7 @@ export async function commitDeck(saved, decks, { isNew = false } = {}) {
     if (changed.length) await db.putStates(changed);
     moved = changed.length;
   }
+  drawSidebar();          // the sidebar's deck list and exam markers
   return { moved };
 }
 // YYYY-MM-DD for the study day (days.js: it starts at 4am) plus n days, in local time (what a date box wants).

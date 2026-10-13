@@ -21,6 +21,7 @@ import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, 
 import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
+import { drawSidebar } from './sidebar.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
 import * as fx from './fx.js';
 
@@ -497,6 +498,7 @@ async function finish(el) {
   R.active = false;
   publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
+  if (el.isConnected) drawSidebar();            // the sidebar's counts and ring, now the round is done
   const { reviewed, again, spent } = R.stats;
   // Reviews due by the end of tomorrow in the decks you just studied.
   const decks = new Set(R.deckIds);

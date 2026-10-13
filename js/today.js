@@ -17,6 +17,7 @@ import { addSampleDeck } from './sample.js';
 import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
+import { drawSidebar } from './sidebar.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
 //   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
@@ -72,6 +73,7 @@ export async function renderToday(el) {
   const draw = () => {
     const ids = chosen.length ? chosen : allIds;
     const c = countFor(data, ids);
+    drawSidebar({ data, streak, chosen });          // the sidebar shows the same count as Start, from the data loaded here
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
     const answered = answeredToday(data, chosen);          // the same decks as the cards still to go
     const goal = answered + c.total;

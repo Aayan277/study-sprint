@@ -25,6 +25,7 @@ import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
+import { drawSidebar } from './sidebar.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
@@ -570,6 +571,7 @@ async function finish() {
   const el = G.el, round = G;
   G = null;
   setFocusMode(false);
+  drawSidebar();          // the sidebar's counts and ring, now the round is done
   const total = round.log.length, correct = round.log.filter(l => l.ok).length;
   const acc = total ? correct / total : 0;
   const oks = round.log.filter(l => l.ok);
