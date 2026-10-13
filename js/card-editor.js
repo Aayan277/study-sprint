@@ -181,6 +181,11 @@ function addBlank(id, which) {
     const sel = getSelection();
     if (!sel.rangeCount || !el.contains(sel.anchorNode)) return;
     const range = sel.getRangeAt(0);
+    // Nothing selected: hide the word the cursor is in or touching, like the plain box does.
+    if (range.collapsed && range.startContainer.nodeType === 3) {
+      const [a, b] = wordAt(range.startContainer.data, range.startOffset);
+      range.setStart(range.startContainer, a); range.setEnd(range.startContainer, b);
+    }
     // Wrap with two text pieces (not by replacing the selection), so bold inside the blank stays.
     const end = range.cloneRange(); end.collapse(false); end.insertNode(document.createTextNode('}}'));
     const start = range.cloneRange(); start.collapse(true); start.insertNode(document.createTextNode(`{{c${n}::`));

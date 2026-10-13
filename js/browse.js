@@ -347,6 +347,7 @@ async function saveClozeNote(card, ops, msg) {
   // confirmed: ids of the cards the person agreed to remove
   const go = async confirmed => {
     const plan = await planNow();
+    if (plan.error) { showErr('ceErr', plan.error); return; }
     if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
@@ -525,6 +526,7 @@ export function openAddCard({ decks, deckId, refresh }) {
     if (readKind('ac') === 'cloze') {
       const text = readCardText('acText').trim();
       const plan = planNoteSave([], text);
+      if (plan.error) { showErr('acErr', plan.error); return; }
       if (!plan.add.length) { showErr('acErr', 'Add at least one blank: select a word, then press New blank.'); return; }
       await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
       setCardText('acText', ''); setCardText('acExtra', ''); $('acErr').hidden = true;

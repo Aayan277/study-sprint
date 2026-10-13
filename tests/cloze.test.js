@@ -93,6 +93,15 @@ test('saving a note: of two cards with one number, the scheduled one stays and t
   assert.equal(removalText(planNoteSave([sib(1), sib(2)], '{{c1::x}}')), 'c2 was removed: its card and review history go too.');
 });
 
+test('saving a note: an empty blank is rejected with a message, and nothing is removed', () => {
+  for (const text of ['A {{c1::}} b', 'A {{c1::ok}} {{c2:: }} b', 'A {{c1::::hint}} b']) {
+    const plan = planNoteSave([sib(1), sib(2)], text);
+    assert.match(plan.error, /empty/);
+    assert.deepEqual([plan.update, plan.add, plan.remove], [[], [], []]);
+  }
+  assert.equal(planNoteSave([sib(1)], 'A {{c1::ok}} b').error, undefined);
+});
+
 test('saving a note: removed blanks are listed in number order, whatever order the cards come in', () => {
   const plan = planNoteSave([sib(4), sib(2), sib(3), sib(1)], '{{c1::x}}');
   assert.equal(removalText(plan), 'c2, c3 and c4 were removed: their cards and review history go too.');

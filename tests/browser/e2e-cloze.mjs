@@ -117,6 +117,11 @@ ok((await noteCards()).filter(c => c.cloze === 5).length === 1, 'submitting twic
   const txt = await desk.evaluate(async () => (await import('./js/card-editor.js')).readCardText('acText'));
   ok(txt === 'The cell {{c1::wall}} holds the {{c1::cell}}', 'Ctrl+Shift+C makes a new blank, Ctrl+Alt+Shift+C reuses the last number: ' + txt);
   ok((await desk.textContent('#acTextPrev .cloze-makes')) === 'Makes 1 card: c1', 'two blanks with one number make one card');
+  // nothing selected: the word at the cursor is hidden (not an empty blank)
+  await desk.locator('#acText').evaluate(el => { const w = [...el.childNodes].find(n => n.nodeType === 3 && n.textContent.includes('holds')), r = document.createRange(), i = w.textContent.indexOf('holds') + 2; r.setStart(w, i); r.setEnd(w, i); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await desk.click('[data-cloze=new]');
+  const withCaret = await desk.evaluate(async () => (await import('./js/card-editor.js')).readCardText('acText'));
+  ok(withCaret === 'The cell {{c1::wall}} {{c2::holds}} the {{c1::cell}}', 'New blank with only a cursor hides the word at the cursor: ' + withCaret);
   await desk.click('button[type=submit][form=acForm]'); await desk.waitForFunction(() => document.querySelector('.ckind'));
   await desk.click('#acDone'); await desk.waitForFunction(() => !document.getElementById('sheet').open);
   // the short editor (the one Review and Play open with E)

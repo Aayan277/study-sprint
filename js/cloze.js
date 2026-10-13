@@ -92,7 +92,11 @@ export function makesText(text) {
 //   duplicates  the part of remove that is not a gone blank: a second card with the same number, or one without
 //           a number. Of two cards with one number the higher score(card) stays (the caller scores a schedule and
 //           reviews higher); on a tie the first stays.
+//   error   set (and nothing else to do) when a blank is empty, with the message to show
 export function planNoteSave(oldSiblings, newText, score = () => 0) {
+  for (const m of String(newText ?? '').matchAll(CLOZE)) {
+    if (!m[2].trim()) return { update: [], add: [], remove: [], duplicates: [], error: `Blank c${m[1]} is empty. Select the words to hide, then press New blank.` };
+  }
   const byNumber = new Map();
   const duplicates = [];
   for (const card of oldSiblings) {
