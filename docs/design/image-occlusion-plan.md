@@ -1,5 +1,7 @@
 # Image occlusion: implementation plan (2 stages)
 
+**Status: DONE (v3.8).** Stage 1 (commits af8aa3a..054ffce) and Stage 2 (the drawing editor, entry points and `tests/browser/e2e-occlusion-editor.mjs`) are built; this file is kept as the record of the design.
+
 Written by the planning review against `experiment` at db55738, after reading the code. Line numbers are approximate.
 It refines `image-occlusion.md`; where the two disagree, **this file wins**. The owner approved section 0, including the
 data changes and real Anki occlusion export.
