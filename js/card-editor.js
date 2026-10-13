@@ -146,10 +146,11 @@ export const readKind = p => document.querySelector(`input[name="${p}Kind"]:chec
 export function clozeFields(p, text = '', extra = '') {
   const id = p + 'Text';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const mod = mac ? '⌘' : 'Ctrl';
+  const mod = mac ? '⌘' : 'Ctrl', alt = mac ? 'Option' : 'Alt';
+  // The Ctrl/⌘ keys are Anki's, but browsers keep Ctrl/⌘+Shift+C for their developer tools, so Alt+Shift+C (new) and Alt+Shift+S (same) also work.
   return `<div class="cloze-tools" role="group" aria-label="Blanks">
-      <button type="button" class="btn ghost small" data-cloze="new" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Shift+C' : 'Control+Shift+C'}" title="Hide the selected words (${mod}+Shift+C)"><span aria-hidden="true">[…]</span> New blank</button>
-      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'}" title="Hide the selected words in the same card (${mod}+Alt+Shift+C)"><span aria-hidden="true">[…]=</span> Same blank</button>
+      <button type="button" class="btn ghost small" data-cloze="new" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Shift+C' : 'Control+Shift+C'} Alt+Shift+C" title="Hide the selected words (${mod}+Shift+C or ${alt}+Shift+C)"><span aria-hidden="true">[…]</span> New blank</button>
+      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'} Alt+Shift+S" title="Hide the selected words in the same card (${mod}+${alt}+Shift+C or ${alt}+Shift+S)"><span aria-hidden="true">[…]=</span> Same blank</button>
     </div>
     ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The {{c1::mitochondria}} makes {{c2::ATP}}', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
@@ -206,13 +207,17 @@ document.addEventListener('click', e => {
   const b = e.target.closest?.('[data-cloze]');
   if (b) addBlank(b.dataset.for, b.dataset.cloze);
 });
-// Ctrl/⌘+Shift+C: new blank. Ctrl/⌘+Alt+Shift+C: same blank (the same keys as Anki).
+// Ctrl/⌘+Shift+C: new blank. Ctrl/⌘+Alt+Shift+C: same blank (the same keys as Anki). Browsers may keep those for
+// their developer tools, so Alt+Shift+C (new) and Alt+Shift+S (same) do the same.
 document.addEventListener('keydown', e => {
-  if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.code !== 'KeyC') return;
+  if (!e.shiftKey) return;
+  const mod = e.ctrlKey || e.metaKey;
+  const which = mod && e.code === 'KeyC' ? (e.altKey ? 'same' : 'new')
+    : !mod && e.altKey ? ({ KeyC: 'new', KeyS: 'same' })[e.code] : null;
   const t = e.target;
-  if (!t?.dataset?.clozeBox) return;
+  if (!which || !t?.dataset?.clozeBox) return;
   e.preventDefault();
-  addBlank(t.id, e.altKey ? 'same' : 'new');
+  addBlank(t.id, which);
 });
 // Basic | Cloze: show one half of the form.
 document.addEventListener('change', e => {

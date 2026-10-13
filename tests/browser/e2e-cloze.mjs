@@ -122,6 +122,13 @@ ok((await noteCards()).filter(c => c.cloze === 5).length === 1, 'submitting twic
   await desk.click('[data-cloze=new]');
   const withCaret = await desk.evaluate(async () => (await import('./js/card-editor.js')).readCardText('acText'));
   ok(withCaret === 'The cell {{c1::wall}} {{c2::holds}} the {{c1::cell}}', 'New blank with only a cursor hides the word at the cursor: ' + withCaret);
+  // the keys a browser doesn't keep for itself: Alt+Shift+C (new blank) and Alt+Shift+S (same blank), named in the button titles
+  ok((await desk.getAttribute('[data-cloze=new]', 'title')).includes('Alt+Shift+C') && (await desk.getAttribute('[data-cloze=same]', 'title')).includes('Alt+Shift+S') && (await desk.getAttribute('[data-cloze=new]', 'title')).includes('Ctrl+Shift+C'), 'the button titles name both shortcuts');
+  const caretIn = text => desk.locator('#acText').evaluate((el, text) => { const w = [...el.childNodes].find(n => n.nodeType === 3 && n.textContent.includes(text)), r = document.createRange(), i = w.textContent.indexOf(text) + 1; r.setStart(w, i); r.setEnd(w, i); getSelection().removeAllRanges(); getSelection().addRange(r); }, text);
+  await caretIn('The'); await desk.keyboard.press('Alt+Shift+C');
+  await caretIn(' the '); await desk.keyboard.press('Alt+Shift+S');
+  const withAlt = await desk.evaluate(async () => (await import('./js/card-editor.js')).readCardText('acText'));
+  ok(withAlt === '{{c3::The}} cell {{c1::wall}} {{c2::holds}} {{c3::the}} {{c1::cell}}', 'Alt+Shift+C makes a new blank and Alt+Shift+S reuses the last number: ' + withAlt);
   await desk.click('button[type=submit][form=acForm]'); await desk.waitForFunction(() => document.querySelector('.ckind'));
   await desk.click('#acDone'); await desk.waitForFunction(() => !document.getElementById('sheet').open);
   // the short editor (the one Review and Play open with E)
