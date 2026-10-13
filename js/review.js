@@ -10,6 +10,7 @@ import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
+import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { noteSession } from './install.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -115,7 +116,9 @@ const deckOf = card => R.effective.get(card.deckId);
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
-  speak(R.flipped ? card.back : card.front, deckOf(card)?.ttsLang || '');
+  // A cloze card says "blank" for the hidden part, and the whole sentence once flipped.
+  const text = hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
@@ -155,8 +158,14 @@ function renderSession(el, enter = false) {
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
-  const backSize = answerSize(plainText(card.back));          // a long answer is smaller and left-aligned
-  const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
+  // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
+  // the note's Extra under it. Everything goes through renderCloze/formatHTML, so nothing in the text can inject HTML.
+  const cloze = hasBlank(card);
+  const backSize = answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const front = `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
+  const answerHTML = cloze
+    ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
+    : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
 
   const head = `
     <div class="rv-head">
@@ -176,10 +185,11 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
+          ${cloze ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+            <div class="flash-back${cloze ? ' cloze-full' : ''}${backSize}">${answerHTML}</div>
+            ${cloze && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
           </div>
         </div>
       </div>

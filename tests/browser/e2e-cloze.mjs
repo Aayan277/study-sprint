@@ -113,5 +113,58 @@ ok(after.find(c => c.cloze === 4).front === 'The mitochondria makes ATP for […
   await desk.close();
 }
 
+// ---- 5. Review: one sibling a day, Today agrees, the faces, Exam prep shows all ----
+const mk = (name, text, extra = '') => page.evaluate(async ([name, text, extra]) => {
+  const db = await import('./js/db.js'), cz = await import('./js/cloze.js');
+  const deck = { id: db.newId(), name, color: '#8F80FF', created: Date.now() + Math.random() };
+  await db.saveDeck(deck);
+  await db.saveNote(cz.planNoteSave([], text), { deckId: deck.id, noteId: db.newId(), tags: [], noteExtra: extra });
+  return deck.id;
+}, [name, text, extra]);
+const bio = await mk('Cell biology', 'The {{c1::mitochondria}} makes {{c2::ATP}} for the {{c3::cell}}', 'Powerhouse of the **cell**');
+await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('.tdeck');
+const todayRow = async id => (await page.locator(`[data-start="${bio}"]`).textContent().catch(() => '')) || '';
+ok(/\b0\s*due.*1\s*new/s.test(await todayRow()), 'Today counts the 3-blank note as 1 new card: ' + (await todayRow()).replace(/\s+/g, ' ').trim());
+await page.locator(`[data-start="${bio}"]`).click(); await page.waitForSelector('#flash');
+ok((await page.textContent('.rv-counts .c-new')) === '1', 'Review has the same 1 new card');
+ok((await page.locator('.rv-front .cloze-blank').count()) === 1 && (await page.textContent('.rv-front .flash-front')).includes('The […] makes ATP for the cell'), 'front: the blank is […], the other answers are shown');
+ok((await page.locator('.rv-front').getAttribute('aria-hidden')) === null && (await page.locator('.rv-back').getAttribute('aria-hidden')) === 'true' && await page.locator('.rv-back').evaluate(e => e.inert), 'front face is live, back face is hidden and inert');
+await page.waitForFunction(() => document.getElementById('toast').hidden); await page.screenshot({ path: SP + '/cloze-review-front-375.png' });
+await page.click('#flash');
+ok((await page.textContent('.rv-back mark.cloze-ans')) === 'mitochondria' && (await page.textContent('.rv-back .flash-back')).includes('The mitochondria makes ATP for the cell'), 'back: the full sentence with the answer marked');
+ok((await page.locator('.rv-back .flash-extra b').textContent()) === 'cell', 'back: the note\'s Extra is under it, formatted');
+ok(await page.locator('.rv-front').evaluate(e => e.inert) && !(await page.locator('.rv-back').evaluate(e => e.inert)), 'after the flip the faces swap (front inert, back live)');
+await page.waitForTimeout(700); await page.screenshot({ path: SP + '/cloze-review-back-375.png' });
+await page.keyboard.press('4'); await page.waitForSelector('.stats4');
+ok((await page.textContent('.stats4')).includes('1'), 'rating is instant; Easy graduates the card and the session ends after one card (the other 2 siblings wait for tomorrow)');
+await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('.tdeck');
+ok(/\b0\s*due\s*0\s*new/s.test(await todayRow()) || (await page.locator(`a[href="#/deck/${bio}"]`).count()) === 1, 'Today now shows nothing left for the note');
+// Exam prep: every sibling that was not seen in the last 3 days
+const d5 = new Date(Date.now() + 5 * 864e5), ymd = `${d5.getFullYear()}-${String(d5.getMonth() + 1).padStart(2, '0')}-${String(d5.getDate()).padStart(2, '0')}`;
+await page.evaluate(async ([id, ymd]) => { const db = await import('./js/db.js'); await db.saveDeck({ ...(await db.getDeck(id)), examDate: ymd }); }, [bio, ymd]);
+await page.evaluate(async id => { const sd = await import('./js/study-data.js'); sd.launchStudy({ deckIds: [id], deckId: id, kind: 'prep' }); }, bio);
+await page.waitForSelector('#flash');
+ok((await page.textContent('.rv-counts .c-new')) === '2', 'Exam prep shows both siblings that were not seen today');
+await page.evaluate(() => { location.hash = '#/today'; });
+
+// ---- 6. typed answers, Play, and nothing can inject HTML ----
+const geo = await mk('Geography', 'The capital of France is {{c1::Paris}}');
+await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', true); });
+await page.goto('http://localhost:8123/#/review/' + geo); await page.waitForSelector('#typeIn');
+ok((await page.textContent('.rv-front .flash-front')).includes('The capital of France is […]'), 'typed answer: the sentence is the prompt');
+await page.fill('#typeIn', 'paris'); await page.click('#typeForm button[type=submit]'); await page.waitForSelector('.typed.ok');
+ok((await page.textContent('.rv-back .typed')).includes('Correct') && (await page.textContent('.rv-back mark.cloze-ans')) === 'Paris', 'typing the answer is checked against the hidden words');
+await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', false); });
+await page.goto('http://localhost:8123/#/play'); await page.waitForSelector('#pDeck');
+await page.selectOption('#pDeck', geo); await page.click('#startBtn'); await page.waitForSelector('#pPrompt');
+ok((await page.textContent('#pPrompt')).includes('The capital of France is […]'), 'Play asks the sentence with the blank as its prompt');
+await page.click('#quitBtn');
+const evil = await mk('Injection', 'Try {{c1::<script>window.__pwned=1</script>}} and <img src=x onerror="window.__pwned=2"> {{c2::<b>x</b>}}', '<script>window.__pwned=3</script>');
+await page.goto('http://localhost:8123/#/review/' + evil); await page.waitForSelector('#flash');
+await page.click('#flash');
+const html = await page.innerHTML('#flash');
+ok(!html.includes('<script') && !html.includes('<img') && await page.evaluate(() => window.__pwned === undefined), 'HTML in answers, text and Extra is shown as text, never run');
+ok((await page.textContent('.rv-back mark.cloze-ans')).includes('<script>'), 'the answer shows the characters as written');
+
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();

@@ -24,15 +24,18 @@ export function shuffle(a, rnd = Math.random) {
 // 'typing' show one side, type the other (the short side, so you never type a long definition)
 
 // What a question asks: the prompt shown and the answer expected, plus the prompt side's picture (if any).
+// A cloze card (one blank of a note, see cloze.js) always asks front → back: its front is the sentence with the blank.
+export const isCloze = card => !!card.noteId && card.cloze !== undefined;
+
 export function questionFor(card, qtype) {
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
     return image ? { prompt, answer, image } : { prompt, answer };
   };
   if (qtype === 'front') return q(true, card.frontImage);
-  if (qtype === 'back') return q(false, card.backImage);
+  if (qtype === 'back') return isCloze(card) ? null : q(false, card.backImage);
   if (canType(card.back)) return q(true, card.frontImage);
-  if (canType(card.front)) return q(false, card.backImage);
+  if (canType(card.front) && !isCloze(card)) return q(false, card.backImage);
   return null;   // both sides too long to type
 }
 
@@ -47,14 +50,16 @@ export function playableCards(cards, qtype) {
 // definition and pick the term. Picking among similar-looking terms is harder, and closer to an exam,
 // than spotting the one definition that's about the right topic. Short-back decks start on Front → back.
 export const LONG_BACK = 40;
+// (Cloze cards don't count: they can't be asked back → front.)
 export function defaultQuestionType(cards) {
+  cards = cards.filter(c => !isCloze(c));
   const long = cards.filter(c => String(c.back ?? '').length > LONG_BACK).length;
   return cards.length && long > cards.length / 2 ? 'back' : 'front';
 }
 
 // Multiple choice needs at least 4 different possible answers.
 export function canMultipleChoice(cards, qtype) {
-  return new Set(cards.map(c => dupKey(questionFor(c, qtype).answer))).size >= MIN_CARDS;
+  return new Set(playableCards(cards, qtype).map(c => dupKey(questionFor(c, qtype).answer))).size >= MIN_CARDS;
 }
 
 // ---------- distractors (wrong options) ----------
@@ -101,13 +106,14 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
   const tags = new Set(card.tags || []);
   const scored = [];
   const consider = other => {
-    if (other.id === card.id) return;
+    if (other.id === card.id || (card.noteId && other.noteId === card.noteId)) return;     // never a sibling: its answer is on this card's front
     const label = questionFor(other, qtype).answer;
     const key = dupKey(label);
     if (!key || seen.has(key)) return;      // no duplicate options, and never the right answer twice
     seen.add(key);
     let score = 0;
     if (other.deckId === card.deckId) score += 2;
+    if (isCloze(card) && isCloze(other)) score += 3;                   // a cloze answer looks best among other cloze answers
     const ratio = label.length / Math.max(1, answer.length);
     if (ratio >= 0.5 && ratio <= 1.5) score += 2;
     score += Math.min(2, (other.tags || []).filter(t => tags.has(t)).length);
@@ -125,8 +131,10 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
 // ---------- the round ----------
 
 // Pick `len` cards, weighted so cards you struggle with come up more often,
-// without the same card twice in a row. Every card is used once before any repeats.
-export function weightedQueue(items, len, weightOf = () => 1, rnd = Math.random) {
+// without the same card twice in a row, and without two cards of one cloze note in a row (the first one gives the
+// second one away). Every card is used once before any repeats.
+//   before  the card shown just before this list, if it continues an earlier one
+export function weightedQueue(items, len, weightOf = () => 1, rnd = Math.random, before = null) {
   const out = [];
   let bag = [];
   while (out.length < len && items.length) {
@@ -135,8 +143,19 @@ export function weightedQueue(items, len, weightOf = () => 1, rnd = Math.random)
     let r = rnd() * w.reduce((a, b) => a + b, 0), idx = 0;
     for (; idx < bag.length; idx++) { r -= w[idx]; if (r <= 0) break; }
     idx = Math.min(idx, bag.length - 1);
-    const prev = out[out.length - 1];
-    if (prev && bag.length > 1 && bag[idx].id === prev.id) idx = (idx + 1) % bag.length;
+    const prev = out[out.length - 1] || before;
+    const clash = c => c.id === prev.id || (!!c.noteId && c.noteId === prev.noteId);
+    if (prev && clash(bag[idx])) {
+      // Take the next card that doesn't clash. If only siblings are left in the bag, bring in another card early
+      // (a repeat, which is better than two siblings in a row). If there is nothing else, at least not the same card.
+      const fits = [...bag.keys()].map(k => (idx + k) % bag.length);
+      let fit = fits.find(k => !clash(bag[k]));
+      if (fit === undefined) {
+        const others = items.filter(c => !clash(c));
+        if (others.length) { bag.push(others[Math.floor(rnd() * others.length)]); fit = bag.length - 1; }
+      }
+      idx = fit ?? fits.find(k => bag[k].id !== prev.id) ?? idx;
+    }
     out.push(bag.splice(idx, 1)[0]);
   }
   return out;

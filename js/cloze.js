@@ -29,6 +29,13 @@ export function clozeCard(text, n) {
 // Does a text have at least one blank?
 export const hasCloze = text => clozeNumbers(text).length > 0;
 
+// The text with every blank filled in (what read-aloud says after the flip).
+export const clozeFull = text => String(text ?? '').replace(CLOZE, (m, num, answer) => answer);
+
+// Does this card show a blank of its note? (A card of a note whose text no longer has its number is shown as an
+// ordinary card, from its saved front and back.)
+export const hasBlank = card => !!card?.noteId && typeof card.noteText === 'string' && clozeNumbers(card.noteText).includes(card.cloze);
+
 // ---------- showing a cloze card ----------
 // Private characters stand in for the tags while formatHTML (which escapes everything) does its work, and are
 // swapped for the real tags afterwards. So the card's text can never bring in a tag of its own.
