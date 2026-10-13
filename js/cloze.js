@@ -117,8 +117,9 @@ export function planNoteSave(oldSiblings, newText, score = () => 0) {
 // What the editor says before it deletes cards: "c3 was removed: its card and review history go too." For
 // duplicates it says "duplicate c4 removed", and a card without a blank number is "an extra card".
 export function removalText({ remove, duplicates = [] }) {
-  const gone = remove.filter(c => !duplicates.includes(c)).map(c => 'c' + c.cloze);
-  const extra = duplicates.map(c => (c.cloze === undefined ? 'an extra card without a blank number' : 'duplicate c' + c.cloze));
+  const byNumber = (a, b) => (a.cloze ?? 0) - (b.cloze ?? 0);
+  const gone = remove.filter(c => !duplicates.includes(c)).sort(byNumber).map(c => 'c' + c.cloze);
+  const extra = duplicates.slice().sort(byNumber).map(c => (c.cloze === undefined ? 'an extra card without a blank number' : 'duplicate c' + c.cloze));
   const join = list => (list.length < 3 ? list.join(' and ') : list.slice(0, -1).join(', ') + ' and ' + list.at(-1));
   const parts = [];
   if (gone.length) parts.push(`${join(gone)} ${gone.length === 1 ? 'was' : 'were'} removed`);
