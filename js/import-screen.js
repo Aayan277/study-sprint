@@ -4,6 +4,7 @@
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
+import { clozeCard, parseCloze, hasClozeLines } from './cloze.js';
 import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
@@ -97,6 +98,7 @@ export async function renderImport(el, arg) {
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
+        <button class="btn ghost small" type="button" id="clozeBtn" hidden>Make cloze notes</button>
         <button class="btn ghost small" type="button" id="swapBtn">${icon('swap')} Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
       </div>
@@ -153,7 +155,7 @@ function wirePaste() {
   // Re-detect shortly after typing or pasting stops.
   $('pasteBox').addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => showResult(parseText($('pasteBox').value)), 250);
+    timer = setTimeout(() => showResult(parseText($('pasteBox').value), false, $('pasteBox').value), 250);
   });
   $('clearBtn').addEventListener('click', () => {
     $('pasteBox').value = '';
@@ -285,7 +287,9 @@ function showError(msg) {
 // ---------- preview ----------
 
 // A new detection result: rebuild the whole preview.
-function showResult(result, keepError = false) {
+//   pasted: the pasted text this result came from (Paste tab only), so "Make cloze notes" can read it again
+function showResult(result, keepError = false, pasted = '') {
+  S.pasted = pasted;
   if (!keepError) $('loadErr').hidden = true;
   S.result = result && result.rows.length ? result : null;
   S.frontCol = 0; S.backCol = 1;
@@ -314,10 +318,15 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
+  });
+
+  // Pasted lines with {{c1::…}}: turn them into cloze notes (one note per line).
+  $('clozeBtn').addEventListener('click', () => {
+    showResult(parseCloze(S.pasted).result, false, S.pasted);
   });
 
   $('dupBtn').addEventListener('click', () => {
@@ -351,8 +360,8 @@ function renderList() {
     <li class="prow" data-i="${i}">
       <span class="pnum mono">${i + 1}</span>
       <div class="pcells">
-        <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front">${esc(c.front)}</textarea>
-        <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back">${esc(c.back)}</textarea>
+        <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front" ${c.cloze ? 'readonly' : ''}>${esc(c.front)}</textarea>
+        <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back" ${c.cloze ? 'readonly' : ''}>${esc(c.back)}</textarea>
         <span class="badge" hidden></span>
       </div>
       <button class="icon-btn" type="button" data-del aria-label="Delete card ${i + 1}">
@@ -381,9 +390,9 @@ function refreshFlags() {
     const badge = row.querySelector('.badge');
     row.classList.toggle('incomplete', !isComplete(c));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(c);
+    badge.hidden = !flag && isComplete(c) && !c.cloze;
     badge.textContent = !isComplete(c) ? 'Missing a side, will be skipped'
-      : flag === 'deck' ? 'Already in this deck' : 'Duplicate of an earlier card';
+      : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card' : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 
   const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
@@ -392,6 +401,14 @@ function refreshFlags() {
     parts.push(`${plural(S.result.images, 'note')} ${S.result.images === 1 ? 'has' : 'have'} pictures, which come along too${S.result.extraImages ? ' (the first one on each side)' : ''}.`);
   }
   const prog = S.result.progress;
+  // Cloze notes: how many notes the cards come from.
+  const notesN = new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
+  if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
+  if (S.result.format.skipped) parts.push(`<span class="warn">${plural(S.result.format.skipped, 'line')} without a blank ${S.result.format.skipped === 1 ? 'was' : 'were'} left out.</span>`);
+  const offerCloze = !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'cloze';
+  $('clozeBtn').hidden = !offerCloze;
+  if (offerCloze) parts.push('<b>Some lines have blanks like {{c1::answer}}.</b> Press “Make cloze notes” to turn each line into a note with one card per blank.');
+  $('swapBtn').hidden = S.cards.length > 0 && S.cards.every(c => c.cloze);          // nothing to swap in cloze cards
   const occluded = (S.result.occluded || []).filter(Boolean).length;
   if (occluded) parts.push(`<span class="warn">${plural(occluded, 'image-occlusion note')} ${occluded === 1 ? 'comes' : 'come'} in as ${occluded === 1 ? 'a plain picture card' : 'plain picture cards'}: the heading on the front, the whole picture on the back. Hiding parts of a picture comes in a later update.</span>`);
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
@@ -413,7 +430,7 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiDeck: c.ankiDeck, pictures: c.pictures }));
+  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, cloze: c.cloze, noteExtra: c.noteExtra }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -457,7 +474,18 @@ async function save() {
   try {
     const now = Date.now();
     // created + i keeps the cards in the order they were pasted.
-    const cards = toAdd.map((c, i) => ({ id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i }));
+    // A cloze note's cards share a noteId and the note's text; their front and back come from that text (cloze.js).
+    const noteIds = new Map();
+    const cards = toAdd.map((c, i) => {
+      const card = { id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i };
+      if (c.ankiGuid) card.ankiGuid = c.ankiGuid;
+      if (c.cloze) {
+        if (!noteIds.has(c.cloze.noteKey)) noteIds.set(c.cloze.noteKey, db.newId());
+        Object.assign(card, clozeCard(c.cloze.text, c.cloze.n), { noteId: noteIds.get(c.cloze.noteKey), cloze: c.cloze.n, noteText: c.cloze.text });
+        if (c.noteExtra) card.noteExtra = c.noteExtra;
+      }
+      return card;
+    });
     // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
     const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
     if (withPics.length) {

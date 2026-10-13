@@ -148,3 +148,51 @@ test('a big pool mostly of Yes/No still gives enough different wrong options', (
     assert.equal(pickDistractors(target, pool, 'front', { rnd: seeded(seed) }).length, 3, `normal, seed ${seed}`);
   }
 });
+
+// ---------- cloze cards in Play ----------
+const clz = (id, note, n, front, back, extra = {}) => ({ id, deckId: 'd', noteId: note, cloze: n, front, back, ...extra });
+
+test('cloze cards always ask front → back', async () => {
+  const { questionFor, playableCards, isCloze } = await import('../js/game.js');
+  const c = clz('a', 'N', 1, 'The […] makes ATP', 'mitochondria');
+  assert.ok(isCloze(c) && !isCloze({ id: 'x', front: 'a', back: 'b' }));
+  assert.deepEqual(questionFor(c, 'front'), { prompt: 'The […] makes ATP', answer: 'mitochondria' });
+  assert.equal(questionFor(c, 'back'), null);
+  assert.deepEqual(questionFor(c, 'typing'), { prompt: 'The […] makes ATP', answer: 'mitochondria' });
+  const long = clz('b', 'N', 2, 'Short front', 'x'.repeat(60));
+  assert.equal(questionFor(long, 'typing'), null);          // the back is too long to type, and it is never turned round
+  const basic = { id: 'p', front: 'cell', back: 'unit of life' };
+  assert.deepEqual(playableCards([c, basic], 'back').map(x => x.id), ['p']);
+  assert.deepEqual(playableCards([c, basic], 'front').map(x => x.id), ['a', 'p']);
+});
+
+test('cloze cards: options never include a sibling, and prefer other cloze answers', async () => {
+  const { pickDistractors, canMultipleChoice, defaultQuestionType } = await import('../js/game.js');
+  const cards = [
+    clz('a', 'N', 1, 'The […] makes ATP', 'mitochondria'), clz('b', 'N', 2, 'The mitochondria makes […]', 'ATP'),
+    clz('c', 'M', 1, 'The […] holds DNA', 'nucleus'), clz('d', 'M', 2, 'The nucleus holds […]', 'DNA'),
+    clz('e', 'O', 1, 'The […] makes protein', 'ribosome'),
+    { id: 'p', deckId: 'd', front: 'Cell', back: 'The basic unit of life' }
+  ];
+  for (let i = 0; i < 30; i++) {
+    const opts = pickDistractors(cards[0], cards, 'front', { count: 3 });
+    assert.ok(!opts.includes('ATP'), 'a sibling answer is never an option');
+    assert.deepEqual(opts.sort(), ['DNA', 'nucleus', 'ribosome']);       // other cloze answers beat the long definition
+  }
+  assert.equal(canMultipleChoice(cards, 'front'), true);
+  assert.equal(canMultipleChoice(cards, 'back'), false);                  // only one card can be asked back → front
+  assert.equal(defaultQuestionType(cards.slice(0, 5)), 'front');
+});
+
+test('play: two cards of one note are never back to back', async () => {
+  const { weightedQueue } = await import('../js/game.js');
+  const cards = [clz('a', 'N', 1, 'f', 'b'), clz('b', 'N', 2, 'f', 'b'), clz('c', 'N', 3, 'f', 'b'), clz('d', 'M', 1, 'f', 'b'), clz('e', 'M', 2, 'f', 'b'), { id: 'p', front: 'x', back: 'y' }];
+  for (let seed = 1; seed < 40; seed++) {
+    let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const q = weightedQueue(cards, 60, () => 1, rnd);
+    for (let i = 1; i < q.length; i++) assert.ok(!(q[i].noteId && q[i].noteId === q[i - 1].noteId), `seed ${seed} at ${i}`);
+    // a list that continues an earlier one doesn't start with a sibling of the last card either
+    const more = weightedQueue(cards, 10, () => 1, rnd, q.at(-1));
+    assert.ok(!(more[0].noteId && more[0].noteId === q.at(-1).noteId));
+  }
+});

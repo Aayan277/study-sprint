@@ -10,6 +10,7 @@ import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
+import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { noteSession } from './install.js';
 import { speak, stopSpeaking, canSpeak } from './speech.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -80,7 +81,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -115,7 +116,9 @@ const deckOf = card => R.effective.get(card.deckId);
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
-  speak(R.flipped ? card.back : card.front, deckOf(card)?.ttsLang || '');
+  // A cloze card says "blank" for the hidden part, and the whole sentence once flipped.
+  const text = hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
@@ -155,8 +158,14 @@ function renderSession(el, enter = false) {
   const size = plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
-  const backSize = answerSize(plainText(card.back));          // a long answer is smaller and left-aligned
-  const front = `${imgHTML(card.frontImage)}${formatHTML(card.front)}`;
+  // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
+  // the note's Extra under it. Everything goes through renderCloze/formatHTML, so nothing in the text can inject HTML.
+  const cloze = hasBlank(card);
+  const backSize = answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const front = `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
+  const answerHTML = cloze
+    ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
+    : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
 
   const head = `
     <div class="rv-head">
@@ -176,10 +185,11 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          <div class="flash-recap${backSize ? ' small' : ''}">${front}</div>
+          ${cloze ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back${backSize}">${imgHTML(card.backImage)}${formatHTML(card.back)}</div>
+            <div class="flash-back${cloze ? ' cloze-full' : ''}${backSize}">${answerHTML}</div>
+            ${cloze && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
           </div>
         </div>
       </div>
@@ -394,6 +404,16 @@ function replaceInSession(card) {
   });
 }
 
+// A cloze note was edited: swap in the new version of each of its cards the session holds, and take out the ones
+// that no longer exist (a removed blank), so they can't be rated.
+async function refreshNoteInSession(noteId) {
+  const sibs = (await db.getAll('cards')).filter(c => c.noteId === noteId);
+  const alive = new Set(sibs.map(c => c.id));
+  const held = [...R.queue, ...R.waiting, ...R.undo.map(u => u.item)].filter(q => q.card.noteId === noteId);
+  for (const q of held) if (!alive.has(q.card.id)) dropFromSession(q.card.id);
+  for (const c of sibs) replaceInSession(c);
+}
+
 // The ⋯ button opens a short sheet of card actions (Edit, Flag, Bury, Suspend, More). E opens the editor straight
 // away and I the full panel with the card's info (browse.js openCardPanel; More in the short sheet opens that panel too).
 // Whatever you change, the sheet closes and you are back at the same card.
@@ -407,8 +427,11 @@ async function openCardMenu(mode = 'actions') {
   if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
   openCardPanel(card, {
     decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
-    onAction: (act, fresh) => {
+    onAction: async (act, fresh) => {
       R.version = db.scheduleVersion();
+      // Editing a cloze note changes all its cards (and may delete some): bring the session in line first.
+      if (act === 'edit' && card.noteId) await refreshNoteInSession(card.noteId);
+      if (!R?.current) return;
       if (LEAVES.includes(act) || !fresh) { dropFromSession(R.current.card.id); nextCard(R.el); }
       else {
         // Redrawing the card must not wipe an answer half typed in the box.

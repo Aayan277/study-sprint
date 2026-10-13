@@ -8,6 +8,16 @@ import { checkAnswer, canType } from '../js/match.js';
 
 const good = { format: BACKUP_FORMAT, version: BACKUP_VERSION, decks: [], cards: [], cardStates: [], reviewLog: [], settings: {} };
 
+test('cloze fields must have the right type', () => {
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  const bad = /invalid cloze fields/;
+  assert.equal(checkBackup({ ...good, cards: [card({ noteId: 'N', cloze: 2, noteText: '{{c2::x}}' }), card({ id: 'd' })] }), null);
+  assert.match(checkBackup({ ...good, cards: [card({ cloze: '1" onmouseover="alert(1)' })] }), bad);
+  for (const cloze of [0, -1, 1.5, null, NaN, '2']) assert.match(checkBackup({ ...good, cards: [card({ cloze })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ noteId: 5 })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ noteText: { a: 1 } })] }), bad);
+});
+
 test('a real backup passes the check', () => {
   assert.equal(checkBackup(good), null);
 });

@@ -108,3 +108,42 @@ test('review ahead by 3 days and by 7 days are different sessions', () => {
   assert.equal(scopeKey(['b', 'a'], 'ahead', 7), scopeKey(['a', 'b'], 'ahead', 7));
   assert.equal(scopeKey(['a']), scopeKey(['a'], null, 3));      // days left out means the usual 3
 });
+
+test('Today counts a cloze note once, the same as the Review queue, and exam prep keeps every sibling', async () => {
+  const { customQueue } = await import('../js/study-data.js');
+  const { answeredNotes } = await import('../js/queue.js');
+  const cl = [1, 2, 3].map(n => ({ id: 'k' + n, deckId: 'b', front: 'f', back: 'b', noteId: 'N', cloze: n, created: 1000 + n }));
+  const plain = { id: 'p', deckId: 'b', front: 'p', back: 'p', created: 1 };
+  const all = [plain, ...cl];
+  const st = new Map(all.map(c => [c.id, { cardId: c.id, state: 2, due: now - DAY, lastReview: now - 5 * DAY }]));
+  const d = { ...data, cards: all, statesById: st, logs: [], answered: new Map(), deckOf: new Map(all.map(c => [c.id, 'b'])) };
+  d.split = splitCards(all, st, now); d.splitAt = Date.now();
+  d.exam = { caps: new Map(), gain: new Map() };
+  const c = countFor(d, ['b']);
+  const { queue } = buildQueue(all, st, d.newLeft, now, d.reviewLeft, null, d.answered);
+  assert.equal(c.due, 2);                      // the plain card and one sibling
+  assert.equal(queue.length, c.due);
+  // one sibling answered today: the other two stay out, the answered one is not due any more
+  st.set('k1', { cardId: 'k1', state: 2, due: now + 4 * DAY, lastReview: now - 1000 });
+  d.answered = answeredNotes([{ cardId: 'k1', timestamp: now - 1000, source: 'review' }], all, now);
+  d.split = splitCards(all, st, now); d.splitAt = Date.now();
+  assert.equal(countFor(d, ['b']).due, 1);
+  // exam prep: every sibling due for a look, whatever Review shows
+  const ymd = new Date(now + 5 * DAY);
+  const examDate = `${ymd.getFullYear()}-${String(ymd.getMonth() + 1).padStart(2, '0')}-${String(ymd.getDate()).padStart(2, '0')}`;
+  const deckExam = { ...d, decks: d.decks.map(x => (x.id === 'b' ? { ...x, examDate } : x)) };
+  const prep = customQueue('prep', deckExam, all, 3);
+  assert.deepEqual(prep.queue.map(x => x.card.id).filter(id => id.startsWith('k')).sort(), ['k2', 'k3']);
+});
+
+test('review ahead leaves out siblings of a card that is still due today', async () => {
+  const { customQueue } = await import('../js/study-data.js');
+  const cl = [1, 2, 3].map(n => ({ id: 'k' + n, deckId: 'b', front: 'f', back: 'b', noteId: 'N', cloze: n, created: n }));
+  const st = new Map(cl.map(c => [c.id, { cardId: c.id, state: 2, due: now + 2 * DAY, lastReview: now - DAY }]));
+  const d = { ...data, cards: cl, statesById: st, logs: [], answered: new Map(), exam: { caps: new Map(), gain: new Map() } };
+  d.split = splitCards(cl, st, now);
+  assert.equal(customQueue('ahead', d, cl, 3).queue.length, 1);          // nothing due today: one of the three
+  st.set('k1', { cardId: 'k1', state: 2, due: now - DAY, lastReview: now - 5 * DAY });
+  d.split = splitCards(cl, st, now);                                      // k1 is due today and will be in Review
+  assert.equal(customQueue('ahead', d, cl, 3).queue.length, 0);
+});

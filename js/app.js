@@ -18,7 +18,7 @@ import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.6';
+const APP_VERSION = '3.7';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)

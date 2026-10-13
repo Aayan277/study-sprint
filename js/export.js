@@ -5,6 +5,7 @@
 // makeApkg() packs the Anki file in the browser, with the same libraries the Anki import uses.
 
 import { formatHTML, plainText } from './format.js';
+import { hasBlank } from './cloze.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
@@ -49,6 +50,7 @@ export function ankiGuid(cardId) {
 }
 
 const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-exports reuse it in Anki)
+const CLOZE_ID = 1_600_000_000_002;   // the Cloze note type
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
 
 // Everything that goes in the Anki database, as plain values (no database yet).
@@ -74,6 +76,14 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     css: ANKI_CSS, latexPre: '\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n',
     latexPost: '\\end{document}', tags: [], vers: [], req: [[0, 'any', [0]]]
   };
+  const usesCloze = cards.some(hasBlank);
+  // Anki's own Cloze note type (type 1): the Text field has the blanks, "{{cloze:Text}}" shows one at a time.
+  const clozeModel = {
+    ...model, id: CLOZE_ID, name: 'Study Sprint Cloze', type: 1, sortf: 0,
+    tmpls: [{ name: 'Cloze', ord: 0, qfmt: '{{cloze:Text}}', afmt: '{{cloze:Text}}<br>\n{{Back Extra}}', did: null, bqfmt: '', bafmt: '' }],
+    flds: ['Text', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
+    css: `${ANKI_CSS}\n.cloze {\n  font-weight: bold;\n  color: blue;\n}\n.nightMode .cloze {\n  color: lightblue;\n}\n`, req: [[0, 'any', [0]]]
+  };
   const deckRow = (id, name) => ({ id, name, desc: '', mod: secs, usn: -1, collapsed: false, browserCollapsed: false, newToday: [0, 0], revToday: [0, 0], lrnToday: [0, 0], timeToday: [0, 0], dyn: 0, conf: 1, extendNew: 10, extendRev: 50 });
   const dconf = { 1: { id: 1, name: 'Default', mod: 0, usn: 0, maxTaken: 60, autoplay: true, timer: 0, replayq: true, dyn: false,
     new: { delays: [1, 10], ints: [1, 4, 7], initialFactor: 2500, order: 1, perDay: 20, bury: false },
@@ -82,22 +92,49 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const conf = { activeDecks: [1], curDeck: 1, newSpread: 0, collapseTime: 1200, timeLim: 0, estTimes: true, dueCounts: true, curModel: String(BASIC_ID), nextPos: cards.length + 1, sortType: 'noteFld', sortBackwards: false };
   const col = {
     id: 1, crt: secs - (secs % 86400), mod: now, scm: now, ver: 11, dty: 0, usn: 0, ls: 0,
-    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model }),
+    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}) }),
     decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
+  // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
+  // rest are Basic notes, one each.
+  const groups = [];                       // [{ cloze: true, cards: [...] } | { cloze: false, card }]
+  const byNote = new Map();
+  for (const c of cards) {
+    if (hasBlank(c)) {
+      if (!byNote.has(c.noteId)) { byNote.set(c.noteId, { cloze: true, cards: [] }); groups.push(byNote.get(c.noteId)); }
+      byNote.get(c.noteId).cards.push(c);
+    } else groups.push({ cloze: false, card: c });
+  }
+  // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
+  const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
+  const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');
   const notes = [], ankiCards = [];
-  for (const [i, c] of cards.entries()) {
-    // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
-    const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
-    const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
-    const noteId = now + i, cardId = now + cards.length + i;
-    notes.push({ id: noteId, guid: ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1,
-      tags: (c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '',
-      flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' });
-    // New cards, in the deck's order.
-    ankiCards.push({ id: cardId, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: i + 1,
-      ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+  let cardCount = 0;
+  for (const [i, g] of groups.entries()) {
+    const noteId = now + i;
+    const first = g.cloze ? g.cards[0] : g.card;
+    let note;
+    if (g.cloze) {
+      const text = withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile);
+      const extra = withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile);
+      note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
+        flds: `${text}\x1f${extra}`, sfld: plainText(first.noteText), csum: await ankiChecksum(plainText(first.noteText)), flags: 0, data: '' };
+      // Blank number n is Anki card number n - 1.
+      for (const c of g.cards.slice().sort((a, b) => a.cloze - b.cloze)) {
+        ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: c.cloze - 1, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
+          ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+      }
+    } else {
+      const c = g.card;
+      const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
+      note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
+        flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
+      // New cards, in the deck's order.
+      ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
+        ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+    }
+    notes.push(note);
   }
   return { col, notes, cards: ankiCards };
 }

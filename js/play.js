@@ -8,7 +8,7 @@
 
 import * as db from './db.js';
 import {
-  questionFor, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
+  questionFor, isCloze, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
@@ -109,7 +109,11 @@ export async function renderPlay(el) {
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || defaultQuestionType(pool);
     const suggested = !picked && prefs.qtype === 'back';
-    const mcOk = canMultipleChoice(pool, 'front') && canMultipleChoice(pool, 'back');
+    // Cloze cards can't be asked back → front, so with some in the deck that choice only needs the other cards to fit.
+    const hasCloze = pool.some(isCloze);
+    const mcFront = canMultipleChoice(pool, 'front'), mcBack = canMultipleChoice(pool, 'back');
+    const mcOk = mcFront && (mcBack || hasCloze);
+    if (hasCloze && !mcBack && prefs.qtype === 'back') prefs.qtype = 'front';
     const typeCount = playableCards(pool, 'typing').length;
     if (!mcOk && prefs.qtype !== 'typing') prefs.qtype = 'typing';
     const best = settings.playBest?.[bestKey(prefs)];
@@ -157,10 +161,11 @@ export async function renderPlay(el) {
       <fieldset><legend>Question</legend>
         <div class="chips">
           ${radio('qtype', 'front', 'Front → pick the back', prefs.qtype === 'front', mcOk ? '' : 'disabled')}
-          ${radio('qtype', 'back', 'Back → pick the front', prefs.qtype === 'back', mcOk ? '' : 'disabled')}
+          ${radio('qtype', 'back', 'Back → pick the front', prefs.qtype === 'back', mcOk && mcBack ? '' : 'disabled')}
           ${radio('qtype', 'typing', 'Typing', typing, typeCount ? '' : 'disabled')}
         </div>
-        ${(!mcOk || typing || suggested) ? `<p class="note">${!mcOk ? 'Multiple choice needs 4+ cards with different answers.'
+        ${(!mcOk || typing || suggested || (hasCloze && prefs.qtype !== 'front')) ? `<p class="note">${!mcOk ? 'Multiple choice needs 4+ cards with different answers.'
+          : hasCloze && !typing && !suggested ? 'Cloze cards are always asked front → back.'
           : typing ? `${typeCount} of ${pool.length} cards fit typing (40 characters max).`
           : suggested ? 'Back → front suits this deck’s long answers.'
           : ''}</p>` : ''}
@@ -287,7 +292,7 @@ function updateHud(penalty) {
 
 function showQuestion() {
   clearTimeout(G.autoTimer);
-  if (G.i >= G.queue.length) G.queue.push(...weightedQueue(G.pool, 30, G.weightOf));
+  if (G.i >= G.queue.length) G.queue.push(...weightedQueue(G.pool, 30, G.weightOf, Math.random, G.queue[G.i - 1]));
   const card = G.queue[G.i];
   if (!card) { finish(); return; }      // every card in the round was suspended, buried or deleted
   const q = questionFor(card, G.qtype);

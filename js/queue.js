@@ -27,8 +27,9 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   reviewLimit  optional: how many reviews (of graduated cards) are still allowed today, a number or
 //                { total, byDeck } from reviewLimits(). Learning cards are never held back.
 //   exam      optional, from examSchedule() in exam.js: the exam's final pass (see splitCards)
-export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null) {
-  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit);
+//   answered  optional: the cards of each cloze note answered today, from answeredNotes() (see limitSiblings)
+export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined) {
+  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered);
 }
 
 // Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
@@ -62,9 +63,57 @@ export function splitCards(cards, statesById, now = Date.now(), exam = null) {
   return { reviews, waiting, fresh };
 }
 // Step 2: apply today's new-card and review limits.
-export function queueFrom({ reviews, waiting, fresh }, newLimit, reviewLimit = Infinity) {
+// Cloze cards of one note are siblings: only one of them is shown a day (limitSiblings), before the limits are applied.
+export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map()) {
+  const { reviews, waiting, fresh } = withoutSiblings(split, answered);
   const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
   return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable: fresh.length };
+}
+
+// ---------- cloze siblings ----------
+// The cards made from one cloze note share a noteId. Showing all of them on the same day gives the answer away
+// (the other cards show it), so like Anki only one card per note is shown a day: a learning card first, then the
+// most overdue review, then a new card. A note with a card answered today shows no other card until tomorrow.
+// Nothing is saved: a card that sits out just stays due and comes up the next day.
+//   items     [{ card, kind: 'learn' | 'review' | 'new', due }] in the order they would be shown
+//   noteOf    card → its noteId (undefined for ordinary cards, which are never held back)
+//   answered  Map noteId → Set of the card ids of that note answered today (answeredNotes)
+// Returns the items that stay, in the same order.
+export function limitSiblings(items, noteOf = c => c.noteId, answered = new Map()) {
+  const rank = x => (x.kind === 'learn' ? 0 : x.kind === 'review' ? 1 : 2);
+  const best = new Map();
+  const learning = new Set();                                         // learning cards are never held back
+  const kept = items.filter(x => {
+    const note = noteOf(x.card);
+    if (!note) return true;
+    const today = answered.get(note);
+    if (today && x.kind === 'learn') { learning.add(x); return true; }
+    if (today && !today.has(x.card.id)) return false;                // a sibling was answered today
+    const cur = best.get(note);
+    if (!cur || rank(x) < rank(cur) || (rank(x) === rank(cur) && rank(x) < 2 && (x.due ?? 0) < (cur.due ?? 0))) best.set(note, x);
+    return true;
+  });
+  return kept.filter(x => { const note = noteOf(x.card); return !note || learning.has(x) || best.get(note) === x; });
+}
+// The cards of each cloze note answered today, from today's review log: Map noteId → Set of card ids.
+// (Play answers that were only logged, not applied to the schedule, don't count.)
+export function answeredNotes(logs, cards, now = Date.now()) {
+  const start = dayStart(now);
+  const noteOf = new Map(cards.filter(c => c.noteId).map(c => [c.id, c.noteId]));
+  const out = new Map();
+  for (const l of logs) {
+    if (l.timestamp < start || !(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    const note = noteOf.get(l.cardId);
+    if (note) (out.get(note) || out.set(note, new Set()).get(note)).add(l.cardId);
+  }
+  return out;
+}
+// Apply limitSiblings to the three lists of a split.
+function withoutSiblings({ reviews, waiting, fresh }, answered) {
+  if (![...reviews, ...waiting, ...fresh.map(card => ({ card }))].some(x => x.card.noteId)) return { reviews, waiting, fresh };   // no cloze cards: nothing to do
+  const asNew = fresh.map(card => ({ card, kind: 'new' }));
+  const keep = new Set(limitSiblings([...reviews, ...waiting, ...asNew], c => c.noteId, answered));
+  return { reviews: reviews.filter(x => keep.has(x)), waiting: waiting.filter(x => keep.has(x)), fresh: asNew.filter(x => keep.has(x)).map(x => x.card) };
 }
 
 // Keep reviews within today's review limit (overall and per deck), most overdue first.

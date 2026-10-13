@@ -317,6 +317,34 @@ export async function deleteCards(cardIds) {
   changed();
 }
 
+// Save a cloze note: every card of the note in one transaction, with the same change time.
+//   plan    { update, add, remove } from planNoteSave() in cloze.js: cards to rewrite, blanks that need a new card,
+//           and cards whose blank is gone (they are deleted with their schedule and history: the editor asks first)
+//   common  fields every card of the note shares (deckId, noteId, tags, noteExtra). A value of undefined or ''
+//           takes the field off the cards.
+// Returns the saved cards.
+export async function saveNote({ update = [], add = [], remove = [] }, common = {}) {
+  const db = await openDB();
+  const tx = db.transaction(['cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  const saved = [];
+  const shared = card => {
+    const out = { ...card, ...common, noteEditedAt: now };     // when the note's text was last edited (healNotes picks the newest)
+    for (const [k, v] of Object.entries(common)) if (v === undefined || v === '') delete out[k];
+    return out;
+  };
+  await inTx(tx, () => {
+    const cards = tx.objectStore('cards');
+    for (const c of update) saved.push(shared(c));
+    add.forEach((c, i) => saved.push(shared({ id: newId(), created: now + i, ...c })));
+    saved.forEach(c => cards.put(stamp('cards', c, now)));
+    for (const c of remove) deleteCardIn(tx, c.id, now);
+  });
+  scheduleChanges++;
+  changed();
+  return saved;
+}
+
 // Change schedules directly (set a due date), or remove them (reset a card to new).
 // The review history is kept either way.
 export async function putStates(states) { await putMany('cardStates', states); scheduleChanges++; }
@@ -400,6 +428,10 @@ export function checkBackup(data) {
   const keyField = { decks: 'id', cards: 'id', cardStates: 'cardId' };
   for (const [k, field] of Object.entries(keyField)) {
     if (!data[k].every(r => r && typeof r === 'object' && validKey(r[field]))) return 'This backup file is damaged (a record in ' + k + ' has no ' + field + ').';
+  }
+  // Cloze fields end up in the page, so they must have the right type: a positive whole number, and text.
+  if (!data.cards.every(c => (c.cloze === undefined || (Number.isInteger(c.cloze) && c.cloze > 0)) && [c.noteId, c.noteText].every(v => v === undefined || typeof v === 'string'))) {
+    return 'This backup file is damaged (a card has invalid cloze fields).';
   }
   // A review's id can be missing (one is given when it's saved), but otherwise must be a number.
   if (!data.reviewLog.every(r => r && typeof r === 'object' && (r.id === undefined || Number.isFinite(r.id)))) return 'This backup file is damaged (a record in reviewLog is broken).';

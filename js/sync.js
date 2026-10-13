@@ -152,6 +152,16 @@ async function session() {
   }
 }
 
+// Siblings of a cloze note edited on two devices can end up with different texts (the newest of each card wins
+// while syncing). The newest sibling's text wins for all of them; this saves the others again, so every
+// device agrees. cloze.js is only loaded when a pulled card belongs to a note.
+export async function healNotes() {
+  const { healNotes: heal } = await import('./cloze.js');
+  const fixed = heal(await db.getAll('cards'));
+  if (fixed.length) await db.saveCards(fixed);
+  return fixed.length;
+}
+
 // ---------- syncing ----------
 // Sync now. If a sync is already running, one more runs straight after it (so nothing is missed).
 export function syncNow() {
@@ -176,17 +186,21 @@ async function run() {
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time.
-  let applied = 0, pulled = 0;
+  let applied = 0, pulled = 0, gotNotes = false;
   for (;;) {
     const rows = await supa.getChanges(token, st.lastSeq, PAGE);
     if (!rows.length) break;
     applied += await db.applyRemote(rows);
+    if (rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;
     pulled += rows.length;
     if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
     st = { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => Number(r.seq))) };
     await db.setSetting('syncState', st);
     if (rows.length < PAGE) break;
   }
+
+  // Cloze cards from two devices can disagree about their note's text: make them agree again.
+  if (gotNotes) await healNotes();
 
   // 2. Pictures first: send new ones before the cards that use them, and fetch ones that cards from other
   //    devices use (so they work offline). A picture problem (e.g. storage not set up yet) doesn't stop the

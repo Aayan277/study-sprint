@@ -223,7 +223,7 @@ export function parseRows(rows) {
 
 // Pick which columns are the front and back.
 export function buildCards(result, frontCol = 0, backCol = 1) {
-  // tags, ankiId, ankiDeck and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
+  // tags, ankiId, ankiGuid, ankiDeck, cloze and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
   // review history; ankiDeck is the Anki deck it came from, for keeping subdecks).
   return result.rows.map((r, i) => ({
     front: r[frontCol] ?? '', back: r[backCol] ?? '',
@@ -231,7 +231,10 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
     ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),
     ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {}),
-    ...(result.occluded?.[i] ? { occluded: true } : {})        // image-occlusion notes (see anki.js)
+    ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
+    ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
+    ...(result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {}),
+    ...(result.guids?.[i] ? { ankiGuid: result.guids[i] } : {})
   }));
 }
 
