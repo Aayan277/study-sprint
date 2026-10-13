@@ -41,7 +41,7 @@ export async function loadAll({ history = false } = {}) {
   // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
   const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
   // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
-  const answered = answeredNotes(logs, visible, now);
+  const answered = answeredNotes(logs, cards, now);       // every card, so a buried or suspended sibling answered today still counts
   return { settings, decks, answered, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }

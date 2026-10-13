@@ -179,6 +179,18 @@ await page.waitForFunction(() => document.querySelector('.rv-counts .c-new')?.te
 ok((await page.textContent('.rv-counts .c-new')) === '2', 'after the edit removed c3, the session no longer holds it');
 await page.evaluate(() => { location.hash = '#/today'; });
 
+// A sibling answered today and then suspended still counts as answered: the other sibling waits for tomorrow
+const sus = await mk('Suspended sibling', 'The {{c1::sun}} is a {{c2::star}}');
+await page.evaluate(async deckId => {
+  const db = await import('./js/db.js');
+  const c1 = (await db.getAll('cards')).find(c => c.deckId === deckId && c.cloze === 1);
+  await db.saveReview({ cardId: c1.id, due: Date.now() + 864e5, stability: 3, difficulty: 5, reps: 1, lapses: 0, state: 2 },
+    { cardId: c1.id, timestamp: Date.now() - 1000, source: 'review', correct: true, rating: 3, ms: 1, state: 0 });
+  await db.saveCards([{ ...c1, suspended: true }]);
+}, sus);
+const susLeft = await page.evaluate(async deckId => { const sd = await import('./js/study-data.js'); return sd.countFor(await sd.loadAll(), [deckId]).total; }, sus);
+ok(susLeft === 0, 'a sibling answered today and then suspended still holds the other one back (cards left: ' + susLeft + ')');
+
 // ---- 6. typed answers, Play, and nothing can inject HTML ----
 const geo = await mk('Geography', 'The capital of France is {{c1::Paris}}');
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', true); });
