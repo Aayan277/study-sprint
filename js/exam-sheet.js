@@ -36,9 +36,9 @@ export async function commitDeck(saved, decks, { isNew = false } = {}) {
   }
   return { moved };
 }
-
+// YYYY-MM-DD for the study day (days.js: it starts at 4am) plus n days, in local time (what a date box wants).
 // YYYY-MM-DD for today plus n days, in local time (what a date box wants).
-const isoIn = (n, from = new Date()) => {
+const isoIn = (n, from = new Date(dayStart())) => {
   const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };

@@ -16,7 +16,8 @@ const p = await open(375, 812);
 await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 await p.evaluate(async () => {
   const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
-  const iso = n => { const x = new Date(now + n * D); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  // the study day starts at 4am (days.js), so before 4am "today" is still yesterday
+  const iso = n => { const x = new Date(now - (new Date(now).getHours() < 4 ? D : 0) + n * D); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
   const cards = (id, n) => Array.from({ length: n }, (_, i) => ({ id: id + i, deckId: id, front: 'Q' + i, back: 'A' + i, tags: [], created: i }));
   await db.addDeckWithCards({ id: 'soon', name: 'Soon exam', color: '#E5484D', created: now + 1, examDate: iso(2) }, cards('soon', 3));
   await db.addDeckWithCards({ id: 'far', name: 'Far exam', color: '#46A758', created: now + 2, examDate: iso(20) }, cards('far', 3));

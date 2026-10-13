@@ -14,14 +14,14 @@ const go = async (p, hash, sel) => { await p.evaluate(h => { location.hash = h; 
 const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom }; });
 const card = (p, id) => p.evaluate(async i => (await import('./js/db.js')).get('cards', i), id);
 const state = (p, id) => p.evaluate(async i => (await import('./js/db.js')).get('cardStates', i), id);
-const isoIn = n => { const d = new Date(Date.now() + n * DAY); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const isoIn = n => { const d = new Date(Date.now() - (new Date().getHours() < 4 ? DAY : 0) + n * DAY); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // The library every test below uses.
 async function seed(p) {
   await p.evaluate(async () => {
     const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
     const cards = (id, n, p = '') => Array.from({ length: n }, (_, i) => ({ id: id + i, deckId: id, front: `${p || id} question ${i}`, back: `${p || id} answer ${i}`, tags: [], created: i }));
-    const iso = n => { const d = new Date(now + n * D); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const iso = n => { const d = new Date(now - (new Date(now).getHours() < 4 ? D : 0) + n * D); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     await db.addDeckWithCards({ id: 'bio', name: 'Cell Biology', course: 'BIOL 201', color: '#46A758', created: now + 1, examDate: iso(9) }, cards('bio', 8));
     await db.addDeckWithCards({ id: 'econ', name: 'Microeconomics', color: '#3E63DD', created: now + 2 }, cards('econ', 6));
     await db.addDeckWithCards({ id: 'span', name: 'Spanish B1', color: '#F76B15', created: now + 3 }, cards('span', 4));
