@@ -55,7 +55,7 @@ ok(await page.evaluate(() => document.documentElement.dataset.skin === 'rose' &&
 await page.screenshot({ path: SP + '/5-settings.png', fullPage: true });
 await page.reload(); await page.waitForSelector('.skin');
 ok(await page.evaluate(() => document.documentElement.dataset.skin === 'rose'), 'theme persists');
-ok((await page.locator('meta[name=theme-color]').getAttribute('content')) === '#0C080A', 'browser bar color follows theme');
+ok((await page.locator('meta[name=theme-color]').first().getAttribute('content')) === '#0C080A', 'browser bar color follows theme');
 await page.click('[data-tab=decks]'); await page.waitForSelector('.deck'); await page.screenshot({ path: SP + '/6-library-rose-dark.png' });
 // reset
 await page.click('[data-tab=settings]'); await page.click('#dangerZone > summary'); await page.click('#resetBtn'); await page.click('#rsYes');

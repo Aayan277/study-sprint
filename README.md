@@ -2,16 +2,49 @@
 
 A mobile-first flashcard app for university courses. It combines real spaced repetition (FSRS-6, like modern Anki) with timed game rounds for cramming, and your game answers feed the review schedule automatically.
 
-**Use it:** [aayan277.github.io/study-sprint](https://aayan277.github.io/study-sprint/)
-
-<p>
-  <img src="docs/screenshots/decks.png" width="200" alt="Deck library with due and new counts">
-  <img src="docs/screenshots/review.png" width="200" alt="Review: a card flipped, with Again, Hard, Good and Easy buttons showing the next interval">
-  <img src="docs/screenshots/play.png" width="200" alt="Play: Lightning round, pick the term that matches a definition">
-  <img src="docs/screenshots/stats.png" width="200" alt="Stats: day streak and retention">
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.png">
+    <img src="docs/hero.png" width="100%" alt="Study Sprint: Today, Review and Play on three phones, above the line “Free flashcards that remember your exam date”">
+  </picture>
 </p>
 
-## Features
+<p align="center"><b>Free flashcards that remember your exam date.</b><br>
+Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, works offline.</p>
+
+<p align="center"><a href="https://aayan277.github.io/study-sprint/"><b>Open the app →</b></a></p>
+
+<p align="center">
+  <img src="docs/screenshots/today.png" width="150" alt="Today: a daily goal ring, one Start button and upcoming exams">
+  <img src="docs/screenshots/review.png" width="150" alt="Review: a flipped card with Again, Hard, Good and Easy and the next interval on each">
+  <img src="docs/screenshots/play.png" width="150" alt="Play: timed rounds, Classic, Survival and Lightning">
+  <img src="docs/screenshots/stats.png" width="150" alt="Stats: streak, retention and a study calendar">
+  <img src="docs/screenshots/decks.png" width="150" alt="Decks: courses with due and new counts and exam badges">
+  <img src="docs/screenshots/import.png" width="150" alt="Import: pasted notes turned into cards, with a preview">
+</p>
+
+## Why Study Sprint
+
+| | Study Sprint | Anki | Quizlet (free) |
+| --- | --- | --- | --- |
+| Price | Free, no ads | Free, but the iPhone app is paid | Free with ads; the best study modes are paid |
+| Spaced repetition | FSRS-6, with an exam-date mode | FSRS | Basic |
+| Timed game rounds that update your schedule | Yes | No | Games don't change your schedule |
+| Works offline, installs on your phone | Yes (PWA) | Yes (native apps) | Needs the paid app |
+| Imports Anki decks, Quizlet exports, CSV, Excel | Yes | Anki decks and text files | Pasted text and files |
+| Needs an account | No (optional sync) | No (AnkiWeb for sync) | Yes |
+
+## Headline features
+
+- **Spaced repetition that fits your day.** One Start button on Today for everything due, with a time estimate from your own pace.
+- **Exam date mode.** Give a course an exam date and every card comes back before it; Exam prep goes over what you haven't seen lately.
+- **Timed game rounds.** Classic, Survival and Lightning rounds for cramming, and right answers on due cards count as reviews.
+- **Paste notes, get cards.** Paste almost any format, or import .apkg, Quizlet, CSV and Excel, and check an editable preview first.
+- **Stats that mean something.** Retention, a year-long study calendar, hardest cards and a readiness ring for each course.
+- **Yours.** Works offline, keeps your data on your device, syncs only if you sign in, and installs from the browser as a home-screen app.
+
+<details>
+<summary><b>The full feature list</b></summary>
 
 - **Decks:** create, rename, recolor and delete decks. Each shows its cards, how many are due and new, a mastery ring and a Study button. A deck can have its own new-cards-per-day limit (Edit), inside the overall one.
 - **Formatting:** **bold**, *italics* and bullet lists on cards. On a phone, the B / I / • buttons add simple marks (`**bold**`, `*italic*`, `- item`) with a live preview; on a computer, the box shows formatting as you type (Ctrl/⌘+B, Ctrl/⌘+I). Typed answers and Play use the plain text. Anki imports keep bold, italics and lists, and Anki exports turn them back into formatting.
@@ -62,7 +95,8 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - under **More stats** on phones (always shown on a computer): answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, how FSRS difficulty is spread across your cards, and a mastery grid you can tap card by card
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
 - **Starter decks:** optional JLPT N5 and N4 kanji decks, tucked away (Decks tab → Starter decks, or Import → Ready-made decks).
-- **First run:** a fresh install opens on a short, skippable start: name your course, add cards (paste, file or the sample deck), then a guided review of 3 cards. It never shows again, and existing users never see it.
+- **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: name your course, add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
+- **Install card:** after your first finished Review session, Today offers to install the app (Install / Not now on Android and desktop, Add to Home Screen steps on iPhone Safari). It is remembered per device, hidden once the app is installed, and Settings has an Install app row.
 - **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono (monospace only for numbers and key hints).
 - **Appearance** (Settings → Appearance, this device only; none of these sync):
   - **Card text alignment** is Auto (short text centred, long answers left-aligned so they are easier to read), Center or Left. It applies to Review, the first-run card and Play questions.
@@ -72,6 +106,8 @@ A mobile-first flashcard app for university courses. It combines real spaced rep
   - **Smooth transitions** (on by default): moving between tabs slides the new screen in (the header and tab bar stay still), and pop-up sheets spring open and slide away. Not used during Review or Play rounds. Turn it off for instant changes.
   - Some motion has no switch: the goal ring on Today fills from where it was and turns green when the goal is done, the Review finish screen counts its numbers up (with a small confetti burst at most once a day, when you clear the whole queue of 5 or more cards, and a one-time badge at 7, 30 and 100 days), and Play has combo flames, a score count-up and a heavier grade stamp. If your device is set to reduce motion, none of it moves: numbers are simply shown and everything else stays still.
 - **Works offline,** installs on your phone, and keeps your data on your device.
+
+</details>
 
 ## Install it on your phone
 
@@ -118,7 +154,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/exam-sheet.js` | Setting an exam date: the short "Add exam date" sheet, and the save shared with Edit deck |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
-| `js/onboarding.js` | The first-run start and the guided first review |
+| `js/onboarding.js` | The first-run start (landing-page welcome, name, add cards) and the guided first review |
+| `js/install.js` | The Install card on Today and the Install app row in Settings |
 | `js/review.js` | The Review session (flip, rate, finish) |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
@@ -130,6 +167,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/stats.js`, `js/stats-calc.js` | The Stats screen and the numbers behind it |
 | `js/jlpt.js` | The optional JLPT kanji starter decks |
 | `js/themes.js`, `js/sample.js`, `js/ui.js` | Themes, the sample deck, shared helpers |
+| `tests/browser/readme-shots.mjs` | Makes the README and manifest screenshots in `docs/screenshots/` from the real app |
 | `tests/*.test.js` | Tests for every rule above that doesn't need a browser |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
@@ -149,7 +187,12 @@ Then open the address it prints.
 
 Phones keep the old copy of the app files until `CACHE` in `sw.js` changes. So **bump `CACHE` (for example `v37` to `v38`)
 on every release that changes any app file**, then run `node tests/update-sw-hash.mjs` to save the files' new fingerprint
-in `sw.js`. `npm test` fails with a reminder until you do both.
+in `sw.js` (it covers `css/`, `js/`, `icons/`, `index.html` and the manifest). `npm test` fails with a reminder until you do both.
+
+If the look of the app changed, also run `node tests/browser/readme-shots.mjs`: it remakes the screenshots in `docs/screenshots/`
+(Today, Review, Play, Stats, Decks, Import and a computer shot) from the real app in Violet Dark. The README and the manifest
+(`screenshots`) use them, so they never go stale. The pictures at the top of the README (`docs/hero.png` and `docs/hero-light.png`)
+and the link-preview image (`icons/og-1200x630.png`) are designed pictures: redo them only when the headline changes.
 
 ## Running the tests
 

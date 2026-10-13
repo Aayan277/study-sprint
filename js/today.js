@@ -13,6 +13,8 @@ import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
+import { addSampleDeck } from './sample.js';
+import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
 
@@ -54,6 +56,18 @@ export async function renderToday(el) {
   let typing = data.settings.reviewTyping;
   const top = data.decks.filter(d => !data.depth.get(d.id));       // courses: decks not inside another deck
 
+  // Nothing to study at all (after Skip in the first-run start, or after deleting everything): not a dead end.
+  // Paste notes (into the course, when there is just one), try the sample cards, or read how it works again.
+  const emptyToday = () => {
+    const courses = top.filter(d => d.id !== 'sample');
+    const art = '<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M58 30l-12 18h9l-2 14 12-18h-9z" fill="var(--accent)" style="filter:drop-shadow(0 0 6px var(--glow))"/><circle cx="96" cy="20" r="2.5" fill="var(--accent-text)"/><circle cx="104" cy="34" r="1.8" fill="var(--accent-text)"/><circle cx="14" cy="70" r="2" fill="var(--accent-text)"/></svg>';
+    return `<div class="empty empty-first">${art}<b>Nothing to study yet</b>
+      <p>Paste your lecture notes and Study Sprint turns them into cards. Or try 12 sample cards first.</p>
+      <div class="empty-btns"><a class="btn primary" href="#/import${courses.length === 1 ? '/' + encodeURIComponent(courses[0].id) : ''}">${icon('paste')} Paste notes</a>
+        <button class="btn ghost" type="button" id="trySample">Try sample cards</button></div>
+      <a class="fr-how" href="#/welcome/again">How it works ›</a></div>`;
+  };
+
   // ----- the screen -----
   const draw = () => {
     const ids = chosen.length ? chosen : allIds;
@@ -69,8 +83,7 @@ export async function renderToday(el) {
         <div><span class="eyebrow mono">${esc(day.toUpperCase())}</span><h1>Today</h1></div>
         ${data.decks.length ? `<div class="head-actions"><button class="btn ghost small" type="button" id="optBtn">${icon('sliders')} Options</button></div>` : ''}
       </div>
-      ${!data.cards.length && !data.hiddenCount ? `
-        <div class="empty"><b>${data.decks.length ? 'No cards yet.' : 'No decks yet.'}</b><br>Add some cards to start studying.<br><a class="btn primary" href="#/import">Import cards</a></div>`
+      ${!data.cards.length && !data.hiddenCount ? emptyToday()
       : `
       ${resume ? `<div class="resume">
         <span>${icon('clock')} Session in progress · ${plural(resume.left, 'card')} left</span>
@@ -93,6 +106,7 @@ export async function renderToday(el) {
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <a class="btn primary wide big" href="#/play">${icon('bolt')} Play a round</a></div>`}
       </section>
+      <div id="installSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
       ${exams.length ? `
       <section class="section" aria-labelledby="exTitle">
@@ -116,6 +130,7 @@ export async function renderToday(el) {
       </section>`}`;
     wire(c);
     fx.goalRing(el, answered, goal);
+    drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
   };
 
   // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.
@@ -185,6 +200,16 @@ export async function renderToday(el) {
   const deckRow = deck => {
     const c = countFor(data, [deck.id]);
     const info = examInfo(deck);
+    // A course with no cards at all is not "done": it says so and offers Add cards (instead of a green tick).
+    const inside = subtreeIds(data.decks, deck.id);
+    const empty = !c.total && ![...data.deckOf.values()].some(id => inside.has(id));
+    if (empty) return `<a class="tdeck fr-emptydeck" href="#/import/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: no cards yet. Add cards">
+      <span class="td-main">
+        ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
+        <span class="td-name">${esc(deck.name)}</span>
+        <span class="td-counts"><span>No cards yet</span>${info ? ` <span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
+      </span>
+      <span class="td-go"><span class="fr-add">${icon('plus')} Add cards</span></span></a>`;
     const inner = `
       <span class="td-main">
         ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
@@ -199,6 +224,11 @@ export async function renderToday(el) {
   };
 
   const wire = c => {
+    $('trySample')?.addEventListener('click', async e => {
+      e.currentTarget.disabled = true;
+      await addSampleDeck();
+      location.hash = '#/welcome/review/sample';          // three guided cards, then "Add your own cards"
+    });
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
@@ -340,6 +370,9 @@ export async function renderToday(el) {
   }
 
   draw();
+  // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
+  const onInstall = () => { if (el.isConnected) drawInstallCard($('installSlot')); else window.removeEventListener('install-change', onInstall); };
+  window.addEventListener('install-change', onInstall);
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant.
   import('./review.js').catch(() => {});
 }

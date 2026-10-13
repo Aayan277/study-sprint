@@ -1,16 +1,18 @@
 // The first-run start: what a brand-new install opens on instead of a filled-in sample deck.
 //
-//   1. Pitch          one screen on what the app is
+//   1. Pitch          a landing page: a mini card, three points and one button (two columns on a computer)
 //   2. Name your course   a name (plus an optional course code and exam date). This makes the first deck.
-//   3. Add cards      paste notes, import a file or Anki deck, or try the sample deck
+//   3. Add cards      try the sample cards first, or paste notes, or import a file or Anki deck
 //   4. Guided review  about 3 cards, with short hints (a real review: the answers are saved)
 //
 // Every step can be skipped, and once it has been finished or skipped it never shows again (the `onboarded`
 // setting, on this device only: see checkFirstRun() in app.js). Existing installs never see it.
-// It lives at #/welcome (the guided review at #/welcome/review/<deck id>).
+// It lives at #/welcome (the guided review at #/welcome/review/<deck id>). Once it is done, #/welcome goes to Today,
+// but #/welcome/again re-opens the pitch (Today's "How it works" link).
 //
 // app.js passes in two things so this file doesn't need app.js's private state:
 //   seedSample()  adds the sample deck          finish()  remembers that the first-run start is done
+// (the empty Today screen adds the sample deck itself, with addSampleDeck() from sample.js)
 
 import * as db from './db.js';
 import { DECK_COLORS } from './decks.js';
@@ -63,20 +65,39 @@ function draw(el, api) {
 }
 
 // ----- 1. the pitch -----
+// The mini card shows what a rating does: the gaps are what the scheduler gives a brand-new card with the default
+// settings (learning steps 1m and 10m). It is a picture of the product, so it is the same for everyone.
+const DEMO = [['r1', 'Again', '1m'], ['r2', 'Hard', '6m'], ['r3', 'Good', '10m'], ['r4', 'Easy', '7d']];
+const demoHTML = () => `
+  <div class="lp-card lp-back" aria-hidden="true"></div>
+  <div class="lp-card"><span class="lp-deck">Cell Biology</span><b class="lp-q">Mitochondria</b><i class="lp-line"></i><span class="lp-a">Makes ATP for the cell</span></div>
+  <div class="lp-rates" aria-hidden="true">${DEMO.map(([c, l, t]) => `<span class="${c}"><b>${l}</b>${t}</span>`).join('')}</div>`;
+
 function drawPitch(el, api) {
   el.innerHTML = `
-    <div class="welcome">
+    <div class="welcome lp">
       <div class="wl-top"><span class="brand">${MARK} Study Sprint</span><button class="link" type="button" id="wlSkip">Skip</button></div>
-      ${stepBar(1)}
-      <h1 tabindex="-1">Remember it for the exam, not just the night before.</h1>
-      <p class="lede">Study Sprint is a flashcard app for your university courses. It shows each card right before you would forget it, and it has quick game rounds for cramming.</p>
-      <ul class="wl-points">
-        <li>${icon('clock')}<span><b>Spaced repetition.</b> A few minutes a day, and the app works out what to show you.</span></li>
-        <li>${icon('bolt')}<span><b>Game rounds.</b> Timed Classic, Survival and Lightning rounds for cramming.</span></li>
-        <li>${icon('calendar')}<span><b>Exam dates.</b> Set one, and every card in that course comes back before the exam.</span></li>
-      </ul>
-      <button class="btn primary wide cta" type="button" id="wlNext">Get started</button>
-      <p class="wl-foot">Already use Study Sprint? <a href="#/settings" id="wlSignIn">Sign in or restore a backup</a></p>
+      <div class="lp-grid">
+        <div class="lp-copy">
+          <span class="lp-eyebrow">Free flashcards for university</span>
+          <h1 tabindex="-1">Remember it for the exam, not just the night before.</h1>
+          <p class="lede">Each card comes back just before you'd forget it, so you're ready by exam day.</p>
+          <div class="lp-demo lp-phone-only">${demoHTML()}</div>
+          <ul class="lp-points">
+            <li>${icon('clock')}<span><b>A few minutes a day.</b> The app picks what to review.</span></li>
+            <li>${icon('calendar')}<span><b>Set your exam date.</b> Everything comes back in time.</span></li>
+            <li>${icon('bolt')}<span><b>Cram with games.</b> Timed rounds that still count.</span></li>
+          </ul>
+          <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Try it: 30 seconds</button></div>
+          <p class="lp-free">Free · no account · works offline</p>
+          <p class="lp-imports">Bring your cards: <span>Anki .apkg</span><span>Quizlet</span><span>CSV</span><span>Excel</span></p>
+          <p class="wl-foot lp-signin">Already use Study Sprint? <a href="#/settings" id="wlSignIn">Sign in or restore a backup</a></p>
+        </div>
+        <div class="lp-stage lp-desk-only" aria-hidden="true"><div class="lp-phone"><div class="lp-screen">
+          <div class="lp-ph-head"><span class="lp-pill"><i>New</i> 4 <i>Learn</i> 1 <i>Due</i> 7</span><span class="lp-dots">${icon('more')}</span></div>
+          <div class="lp-ph-prog"><i></i></div>
+          ${demoHTML()}</div></div></div>
+      </div>
     </div>`;
   $('wlNext').addEventListener('click', () => { flow.step = 'name'; draw(el, api); });
   $('wlSkip').addEventListener('click', () => leave(api));
@@ -134,17 +155,17 @@ function drawAdd(el, api) {
       <h1 tabindex="-1">Add cards to ${esc(flow.name)}</h1>
       <p class="lede">Pick the quickest way in. You can do all of them later.</p>
       <div class="wl-opts">
+        <button class="wl-opt fr-first" type="button" id="wlSample">
+          <span class="wl-opt-t">Try it with sample cards <span class="fr-tag">Fastest · 30 s</span></span>
+          <span class="wl-opt-d">Review 3 psychology cards to feel how it works. Your ${esc(flow.name)} deck stays ready for your own cards.</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlPaste">
           <span class="wl-opt-t">Paste your notes</span>
           <span class="wl-opt-d">Copy from your notes, Quizlet or a table. The format is worked out for you.</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlFile">
           <span class="wl-opt-t">Import a file or Anki deck</span>
           <span class="wl-opt-d">A spreadsheet (.csv, .xlsx) or an Anki deck (.apkg).</span>${icon('chevron')}</button>
-        <button class="wl-opt" type="button" id="wlSample">
-          <span class="wl-opt-t">Try the sample deck</span>
-          <span class="wl-opt-d">12 psychology cards, so you can see how studying feels. Delete it whenever you like.</span>${icon('chevron')}</button>
       </div>
-      <p class="wl-foot"><button class="link" type="button" id="wlLater">I will add cards later</button></p>
+      <p class="wl-foot"><button class="link" type="button" id="wlLater">I'll add cards later</button></p>
     </div>`;
   $('wlBack').addEventListener('click', () => { flow.step = 'name'; draw(el, api); });
   $('wlSkip').addEventListener('click', () => leave(api, '#/today'));
@@ -181,7 +202,7 @@ async function renderGuide(el, deckId, api) {
   // would stamp them with "now" and could overwrite that progress when syncing.
   if (deckId === 'sample' && (settings.syncAuth || settings.syncState)) { location.replace('#/today'); return; }
   if (!cards.length) { location.hash = '#/today'; return; }
-  G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, srs: null, deckId };
+  G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, seen: [], srs: null, deckId };
   // The scheduler library comes from the internet the first time; if that fails the walk-through still works, it just can't save.
   try { G.srs = await import('./srs.js'); } catch (err) { console.error(err); }
   if (!el.isConnected) return;
@@ -259,30 +280,50 @@ async function rateGuide(rating) {
       const next = G.srs.rate(card.id, null, rating, optsFor(card, now), now);
       await db.saveReview(next, { cardId: card.id, timestamp: now, source: 'review', mode: 'flip', correct: rating !== 1, ms: G.answerMs || now - G.shownAt, rating, state: 0 });
       G.saved++;
+      G.seen.push({ card, due: next.due });        // for the done screen: when each card comes back
     } catch (err) { console.error(err); }
   }
   G.i++; G.flipped = false; G.shownAt = Date.now(); G.busy = false;
   drawGuide();
 }
 
-function drawGuideDone() {
-  const { el, saved, cards } = G;
+// "in 10 minutes", "in 6 days": how far away a card's next showing is.
+function comesBack(due, now = Date.now()) {
+  const m = Math.max(1, Math.round((due - now) / 60000));
+  if (m < 60) return `in ${plural(m, 'minute')}`;
+  if (m < 1440) return `in ${plural(Math.round(m / 60), 'hour')}`;
+  return `in ${plural(Math.max(1, Math.round(m / 1440)), 'day')}`;
+}
+
+async function drawGuideDone() {
+  const { el, saved, cards, seen } = G;
   const api = G.api, deckId = G.deckId;
   G = null;
   setFocusMode(false);
+  // After the sample cards, the next step is the course named in step 2 (the newest deck that is not the sample),
+  // or the person's own cards if there is none. After cards the person added themselves, there is nothing to add.
+  const sample = deckId === 'sample';
+  const course = sample ? (await db.getDecks()).filter(d => d.id !== 'sample').sort((a, b) => b.created - a.created)[0] : null;
+  if (!el.isConnected) return;
   el.innerHTML = `
     <div class="welcome">
       <div class="wl-top"><span class="brand">${MARK} Study Sprint</span></div>
-      <div class="wl-done" aria-hidden="true">${icon('check')}</div>
-      <h1 tabindex="-1">You are set</h1>
-      <p class="lede">${saved ? `You reviewed ${plural(saved, 'card')}, and the app has scheduled them.` : `That is how a review works.`}
-        Come back each day: <b>Today</b> shows what is due, and you rate each card the same way.</p>
+      <div class="wl-done fr-done" aria-hidden="true">${icon('check')}</div>
+      <h1 tabindex="-1">That's the whole trick.</h1>
+      <p class="lede">${saved
+        ? `Cards you know drift further away. Cards you miss come back sooner. Here's when you'll see ${seen.length === 1 ? 'this one' : 'these'} again:`
+        : `That is how a review works. Come back each day: <b>Today</b> shows what is due, and you rate each card the same way.`}</p>
+      ${seen.length ? `<ul class="fr-when">${seen.map(x => `<li><b>${esc(plainText(x.card.front))}</b><span>${comesBack(x.due)}</span></li>`).join('')}</ul>` : ''}
       ${saved < cards.length ? '<p class="note">The scheduler could not load, so nothing was saved. Connect to the internet and review these cards from Today.</p>' : ''}
-      <ul class="wl-points">
-        <li>${icon('play')}<span><b>Today</b> has one Start button for everything due.</span></li>
-        <li>${icon('bolt')}<span><b>Play</b> turns your cards into timed rounds for cramming.</span></li>
-      </ul>
-      <button class="btn primary wide cta" type="button" id="wlGo">Go to Today</button>
+      ${sample ? `<div class="fr-next"><span class="fr-k">Next</span>
+          <b>${course ? `Add your ${esc(course.name)} cards` : 'Add your own cards'}</b>
+          <p>Paste your notes or import a file. It takes about a minute.</p>
+          <a class="btn primary wide cta" id="wlAdd" href="#/import${course ? '/' + esc(course.id) : ''}">${icon('paste')} ${course ? `Add ${esc(course.name)} cards` : 'Add cards'}</a></div>`
+        : `<ul class="wl-points">
+          <li>${icon('play')}<span><b>Today</b> has one Start button for everything due.</span></li>
+          <li>${icon('bolt')}<span><b>Play</b> turns your cards into timed rounds for cramming.</span></li>
+        </ul>`}
+      <button class="btn ${sample ? 'ghost' : 'primary'} wide cta" type="button" id="wlGo">${sample ? 'See today’s plan' : 'Go to Today'}</button>
       <p class="wl-foot"><a href="#/deck/${esc(deckId)}">See the deck</a></p>
     </div>`;
   el.querySelector('h1').focus({ preventScroll: true });
