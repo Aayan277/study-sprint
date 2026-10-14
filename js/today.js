@@ -13,7 +13,7 @@ import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
-import { addSampleDeck } from './sample.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
@@ -57,18 +57,6 @@ export async function renderToday(el) {
   let typing = data.settings.reviewTyping;
   const top = data.decks.filter(d => !data.depth.get(d.id));       // courses: decks not inside another deck
 
-  // Nothing to study at all (after Skip in the first-run start, or after deleting everything): not a dead end.
-  // Paste notes (into the course, when there is just one), try the sample cards, or read how it works again.
-  const emptyToday = () => {
-    const courses = top.filter(d => d.id !== 'sample');
-    const art = '<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M58 30l-12 18h9l-2 14 12-18h-9z" fill="var(--accent)" style="filter:drop-shadow(0 0 6px var(--glow))"/><circle cx="96" cy="20" r="2.5" fill="var(--accent-text)"/><circle cx="104" cy="34" r="1.8" fill="var(--accent-text)"/><circle cx="14" cy="70" r="2" fill="var(--accent-text)"/></svg>';
-    return `<div class="empty empty-first">${art}<b>Nothing to study yet</b>
-      <p>Paste your lecture notes and Study Sprint turns them into cards. Or try 12 sample cards first.</p>
-      <div class="empty-btns"><a class="btn primary" href="#/import${courses.length === 1 ? '/' + encodeURIComponent(courses[0].id) : ''}">${icon('paste')} Paste notes</a>
-        <button class="btn ghost" type="button" id="trySample">Try sample cards</button></div>
-      <a class="fr-how" href="#/welcome/again">How it works ›</a></div>`;
-  };
-
   // ----- the screen -----
   const draw = () => {
     const ids = chosen.length ? chosen : allIds;
@@ -85,7 +73,7 @@ export async function renderToday(el) {
         <div><span class="eyebrow mono">${esc(day.toUpperCase())}</span><h1>Today</h1></div>
         ${data.decks.length ? `<div class="head-actions"><button class="btn ghost small" type="button" id="optBtn">${icon('sliders')} Options</button></div>` : ''}
       </div>
-      ${!data.cards.length && !data.hiddenCount ? emptyToday()
+      ${!data.cards.length && !data.hiddenCount ? emptyStartHTML({ courseId: top.filter(d => d.id !== 'sample').length === 1 ? top.filter(d => d.id !== 'sample')[0].id : '' })
       : `
       ${resume ? `<div class="resume">
         <span>${icon('clock')} Session in progress · ${plural(resume.left, 'card')} left</span>
@@ -225,11 +213,7 @@ export async function renderToday(el) {
   };
 
   const wire = c => {
-    $('trySample')?.addEventListener('click', async e => {
-      e.currentTarget.disabled = true;
-      await addSampleDeck();
-      location.hash = '#/welcome/review/sample';          // three guided cards, then "Add your own cards"
-    });
+    wireEmptyStart(el);
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
     // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).

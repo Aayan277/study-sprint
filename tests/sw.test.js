@@ -56,7 +56,7 @@ test('keepLibraries copies pinned libraries from the newest old cache only', asy
     ['study-sprint-v66', new Map([[KATEX + 'katex.mjs', good('v66')]])]
   ]);
   const { ctx, caches } = boot(stores);
-  const into = await caches.open('study-sprint-v67');
+  const into = await caches.open('study-sprint-v68');
   await ctx.keepLibraries(into);
   assert.equal((await into.match(KATEX + 'katex.mjs')).tag, 'v66');
   assert.equal(await into.match(KATEX + 'only-in-ancient.js'), undefined, 'older caches are not read');
@@ -76,7 +76,7 @@ test('keepLibraries skips opaque and failed responses, and URLs this release no 
   const opaque = KATEX + 'fonts/KaTeX_Size1-Regular.woff2';
   const stores = new Map([['study-sprint-v66', new Map([...keep.map(u => [u, good(u)]), ...drop, [opaque, { ok: false, type: 'opaque' }]])]]);
   const { ctx, caches } = boot(stores);
-  const into = await caches.open('study-sprint-v67');
+  const into = await caches.open('study-sprint-v68');
   await ctx.keepLibraries(into);
   for (const u of keep) assert.equal((await into.match(u))?.tag, u, 'kept ' + u);
   for (const [u] of drop) assert.equal(await into.match(u), undefined, 'left behind ' + u);
@@ -84,9 +84,9 @@ test('keepLibraries skips opaque and failed responses, and URLs this release no 
 });
 
 test('keepLibraries does not overwrite what is already saved, and survives a broken cache', async () => {
-  const stores = new Map([['study-sprint-v66', new Map([[KATEX + 'katex.min.css', good('old')]])], ['study-sprint-v67', new Map([[KATEX + 'katex.min.css', good('new')]])]]);
+  const stores = new Map([['study-sprint-v66', new Map([[KATEX + 'katex.min.css', good('old')]])], ['study-sprint-v68', new Map([[KATEX + 'katex.min.css', good('new')]])]]);
   const { ctx, caches } = boot(stores);
-  const into = await caches.open('study-sprint-v67');
+  const into = await caches.open('study-sprint-v68');
   await ctx.keepLibraries(into);
   assert.equal((await into.match(KATEX + 'katex.min.css')).tag, 'new');
   ctx.caches.keys = async () => { throw new Error('storage gone'); };
@@ -94,20 +94,20 @@ test('keepLibraries does not overwrite what is already saved, and survives a bro
 });
 
 test('jsdelivr is matched ignoring ?search (an old ?again=2 address is still the saved file)', async () => {
-  const stores = new Map([['study-sprint-v67', new Map([[KATEX + 'katex.mjs', good('saved')]])]]);
+  const stores = new Map([['study-sprint-v68', new Map([[KATEX + 'katex.mjs', good('saved')]])]]);
   const { request, fetched } = boot(stores);
   assert.equal((await request(KATEX + 'katex.mjs?again=2')).tag, 'saved');
   assert.equal((await request(KATEX + 'katex.mjs')).tag, 'saved');
   assert.equal(fetched.length, 0);
   // other hosts are matched exactly
-  stores.get('study-sprint-v67').set('https://unpkg.com/x@1/a.js', good('unpkg'));
+  stores.get('study-sprint-v68').set('https://unpkg.com/x@1/a.js', good('unpkg'));
   assert.equal((await request('https://unpkg.com/x@1/a.js?v=2')).from, 'network');
   assert.equal(fetched.length, 1);
 });
 
 test('a saved opaque copy does not answer a cors request (module and stylesheet loads)', async () => {
   const url = KATEX + 'katex.min.css';
-  const stores = new Map([['study-sprint-v67', new Map([[url, { ok: false, type: 'opaque', tag: 'opaque' }]])]]);
+  const stores = new Map([['study-sprint-v68', new Map([[url, { ok: false, type: 'opaque', tag: 'opaque' }]])]]);
   const { request, fetched } = boot(stores);
   assert.equal((await request(url, 'no-cors')).tag, 'opaque');
   assert.equal(fetched.length, 0);
