@@ -30,10 +30,19 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
   fs.createReadStream(file).pipe(res);
 });
-await new Promise((ok, fail) => server.once('error', fail).listen(8123, ok)).catch(err => {
-  console.error(err.code === 'EADDRINUSE' ? 'Port 8123 is busy: stop whatever is using it and try again.' : err);
-  process.exit(1);
-});
+// If another test run holds the port (e.g. two checkouts testing at once), wait for it to finish
+// instead of failing: retry every 5 seconds for up to an hour. WAIT_FOR_PORT=0 turns the waiting off.
+const listen = () => new Promise((ok, fail) => server.once('error', fail).listen(8123, ok));
+for (let tries = 0; ; tries++) {
+  try { await listen(); break; } catch (err) {
+    if (err.code !== 'EADDRINUSE' || process.env.WAIT_FOR_PORT === '0' || tries >= 720) {
+      console.error(err.code === 'EADDRINUSE' ? 'Port 8123 is busy: stop whatever is using it and try again.' : err);
+      process.exit(1);
+    }
+    if (tries === 0) console.log('Port 8123 is busy (another test run?). Waiting for it to free up…');
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
 
 const only = process.argv[2];
 const tests = fs.readdirSync(HERE).filter(f => /^(e2e.*|sweep)\.mjs$/.test(f) && (!only || f.includes(only))).sort();
