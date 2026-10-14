@@ -441,3 +441,11 @@ Not covered by the hunt:
 - iOS Safari
 - SW update flow
 - whether removing an exam date should restore earlier due dates (currently it doesn't; owner to decide)
+
+## 8. B1 simulation result (Batch 0A, 30 seeds; full report: tests/sim/compare/report-rescue.md on the batch-0 branch)
+- Rule 1 (peak day cut ≥40%): **pass** (56–84% across N=3–10).
+- Rule 2 (recall within 0.5 pp): **fails for N≥5** (N=5: 1/27 cells, −0.73 pp after a 30-day break, forgetful learner; N=7: 3 cells; N=10: 11). N=3 passes everywhere.
+- Rules 3, 4: pass.
+- Rule 5 (away mode): **fails**. Return day is lighter and day-1 recall is +1.5–3.2 pp, but R7 is below baseline in all 18 no-limit/150 cells, and R30end is −0.6 to −0.7 pp after 30 days.
+- **Recommendation, following the pre-set rules:** cap the plan at N=3 (`RESCUE_MAX_DAYS = 3`; N=4 untested), and drop "I'm away until…" (or offer it only as plain "review ahead" with no memory claim). Owner to confirm before Batch 2A builds the UI.
+- Batch 2 note: review.js calls `buildQueue` directly, so it must pass `data.rescue` (8th argument) or Review ignores the plan.
