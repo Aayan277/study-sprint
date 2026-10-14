@@ -288,7 +288,7 @@ export function healOcclusion(cards) {
 // ---------- showing a card ----------
 // Only numbers get into style attributes: a percentage with 3 decimals.
 const pct = v => (clamp01(Number(v)) * 100).toFixed(3) + '%';
-const ZOOM_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>';
+const ZOOM_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>';
 
 // The boxes that can be drawn: a known shape and finite numbers (anything else is dropped).
 const drawable = masks => (Array.isArray(masks) ? masks : []).filter(m => isPlain(m) && SHAPES.includes(m.shape) && Number.isInteger(m.n) && [m.x, m.y, m.w, m.h].every(isNum) && m.w > 0 && m.h > 0);
