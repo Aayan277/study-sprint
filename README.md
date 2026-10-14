@@ -67,6 +67,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
 - **Today** (the home screen): your day streak, a daily goal ring, one **Start** button for everything due (with a time estimate from your own answer speed), a row per course to study just that deck, and your upcoming exams. **Add exam date** chips offer a quick way to give a course an exam: tap the course, pick In 1, 2 or 4 weeks (or a date) and Save, and it joins the upcoming exams. The deck page has the same button. **Options** on Today holds which decks to study, answering by flipping or typing, and Custom study.
+- **Typed answers show what went wrong:** when a typed answer is wrong or needed a typo forgiven, Review and Play line it up with the answer and mark the wrong, extra and missing letters (bold wavy, struck through, dotted with a caret, so colour is never the only cue), with a short summary like "1 letter wrong · 1 missing". Capitals, accents, punctuation and a leading the/a/an are never marked. Very different answers just show both texts. Play's missed list keeps the marks.
 - **Review:** daily spaced repetition with FSRS-6. The card turns over when you flip it (a quick fade if your device asks for reduced motion).
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
   - Undo, keyboard shortcuts (Space flip, 1–4 rate, E edit, I card info, - bury, @ suspend, R read aloud), and a summary at the end.
@@ -165,6 +166,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
 | `js/match.js` | Checking typed answers (typos, alternates, articles, spaces) |
+| `js/answer-diff.js` | Which letters of a typed answer were wrong (marks wrong, extra and missing letters) |
 | `js/play.js` | The Play screen |
 | `js/game.js` | Game rules: scoring, timers, wrong-answer options |
 | `js/autograde.js` | Turning Play answers into review ratings |

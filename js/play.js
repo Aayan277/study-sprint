@@ -23,6 +23,7 @@ import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
 import { plainText } from './format.js';
+import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
@@ -380,10 +381,10 @@ function answer(choice) {
   const elapsed = performance.now() - G.qStart;
   const lightning = G.fmt === 'lightning';
   const seconds = (lightning ? elapsed : Math.min(elapsed, G.limit)) / 1000;
-  let ok = false, given = '';
+  let ok = false, given = '', exact = true;
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; ok = checkAnswer(choice, G.q.answer, { forgiving: !G.hard }).correct; }
+    if (choice !== null) { given = choice; const res = checkAnswer(choice, G.q.answer, { forgiving: !G.hard }); ok = res.correct; exact = res.exact; }
   } else {
     if (choice !== null) { given = G.opts[choice]; ok = given === G.q.answer; }
     document.querySelectorAll('#options .opt').forEach((b, j) => {
@@ -409,7 +410,11 @@ function answer(choice) {
     if (G.lives <= 0) G.over = true;
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
+  // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
+  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, G.q.answer) : null;
+  if (diff && ok && !hasMarks(diff)) diff = null;
   const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+    typed: diff ? given : undefined, target: diff ? G.q.answer : undefined,
     chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
@@ -421,15 +426,15 @@ function answer(choice) {
   const head = ok
     ? `<div class="fb ok"><span class="fb-mark">${icon('check')} Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
-  const yours = !ok && given ? `<span class="given">You answered: ${esc(given)}</span>` : '';
+  const yours = !ok && given && !diff ? `<span class="given">You answered: ${esc(given)}</span>` : '';
   const info = ok ? '' : `<p class="fb-info"><b>${esc(G.q.answer)}</b>${yours}</p>`;
-  $('feedback').innerHTML = `${head}${info}<div class="fb-btns">
+  $('feedback').innerHTML = `${head}${info}${diff ? diffHTML(diff) : ''}<div class="fb-btns">
     <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
     <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
   $('nextBtn').addEventListener('click', next);
   $('cardBtn').addEventListener('click', openCardMenu);
   if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
-  else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : 750);
+  else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : diff ? 1600 : 750);
   else {
     $('nextBtn').focus({ preventScroll: true });
     // Long answers can push the Next button below the screen, so bring it into view.
@@ -619,7 +624,8 @@ async function finish() {
           <div class="m">${esc(l.q.prompt)}</div>
           ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
           <div class="r">${esc(l.q.answer)}</div>
-          <div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>
+          ${l.typed && hasMarks(diffAgainstBack(l.typed, l.target)) ? diffHTML(diffAgainstBack(l.typed, l.target), { small: true })
+            : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
         </div>`).join('')
       : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
     </section>

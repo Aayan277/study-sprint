@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAnswer, acceptedAnswers, allowedTypos, editDistance, checkAnswer, canType } from '../js/match.js';
+import { normalizeAnswer, acceptedAnswers, allowedTypos, editDistance, checkAnswer, canType, answerChoices, closestChoice } from '../js/match.js';
 
 const ok = (typed, back, opts) => checkAnswer(typed, back, opts).correct;
 
@@ -57,4 +57,22 @@ test('edit distance', () => {
 test('typing is only offered for backs of 40 characters or less', () => {
   assert.equal(canType('x'.repeat(40)), true);
   assert.equal(canType('x'.repeat(41)), false);
+});
+
+test('answerChoices: pieces, then pieces without brackets, then the whole back, de-duplicated by key', () => {
+  assert.deepEqual(answerChoices('red / scarlet (dark red)'),
+    [{ display: 'red', key: 'red' }, { display: 'scarlet (dark red)', key: 'scarletdarkred' }, { display: 'scarlet', key: 'scarlet' },
+      { display: 'red / scarlet (dark red)', key: 'redscarletdarkred' }]);
+  assert.deepEqual(answerChoices('The Mitochondria'), [{ display: 'The Mitochondria', key: 'mitochondria' }]);
+  assert.deepEqual(answerChoices('self-esteem; Self Esteem').map(c => c.key), ['selfesteem', 'selfesteemselfesteem']);   // the 2nd piece has the same key as the 1st
+  assert.deepEqual(answerChoices(''), []);
+  assert.deepEqual(answerChoices(null), []);
+});
+
+test('closestChoice: the nearest answer, the earliest on a tie', () => {
+  assert.equal(closestChoice('scarlett', 'red / scarlet').display, 'scarlet');
+  assert.equal(closestChoice('crimsin', 'red; crimson').display, 'crimson');
+  assert.equal(closestChoice('scarlet', 'scarlet (dark red)').display, 'scarlet');      // the bracket-free version is exact
+  assert.equal(closestChoice('xx', 'ab; cd').display, 'ab');
+  assert.equal(closestChoice('x', ''), null);
 });

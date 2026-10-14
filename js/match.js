@@ -63,3 +63,32 @@ export function checkAnswer(typed, back, { forgiving = true } = {}) {
   const close = answers.some(a => editDistance(t, a) <= allowedTypos(a.length));
   return { correct: close, exact: false };
 }
+
+// The answers a typed answer can be compared with, to show which letters were wrong.
+// Order: the pieces split on ; and /, then each piece without its (brackets), then the whole back.
+// De-duplicated by key (the answer with capitals, accents, punctuation and spaces removed).
+export function answerChoices(back) {
+  const raw = String(back ?? '');
+  const pieces = raw.split(/[;/]/);
+  const clean = s => s.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  const seen = new Set(), out = [];
+  for (const text of [...pieces, ...pieces.map(clean), raw]) {
+    const display = text.trim();
+    const key = normalizeAnswer(display).replace(/ /g, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ display, key });
+  }
+  return out;
+}
+
+// The choice the typed answer is nearest to (the earliest on a tie), or null when there is none.
+export function closestChoice(typed, back) {
+  const t = normalizeAnswer(typed).replace(/ /g, '');
+  let best = null, bestD = Infinity;
+  for (const c of answerChoices(back)) {
+    const d = editDistance(t, c.key);
+    if (d < bestD) { best = c; bestD = d; }
+  }
+  return best;
+}

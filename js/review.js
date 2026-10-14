@@ -8,6 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
+import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
@@ -294,9 +295,13 @@ function rateButtonsHTML() {
 }
 
 function typedResultHTML() {
-  const { value, result } = R.typed;
-  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact ? '' : `: <span class="given">${esc(value)}</span>`}</p>`;
-  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite. You typed <span class="given">${esc(value)}</span>` : 'No answer'}</p>`;
+  const { value, result, target } = R.typed;
+  // A wrong or inexact answer shows which letters differ (the diff has the "You typed" row, so the line doesn't repeat it).
+  let diff = !result.exact && value.trim() ? diffAgainstBack(value, target) : null;
+  if (diff && result.correct && !hasMarks(diff)) diff = null;
+  const shown = diff ? diffHTML(diff) : '';
+  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
+  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}`;
 }
 
 // Turn the card over. Only the parts that change are touched (the card stays in the page, so the CSS
@@ -335,8 +340,9 @@ function togglePeek(button) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const result = checkAnswer(value, plainText(R.current.card.back));
-  R.typed = { value, result };
+  const target = plainText(R.current.card.back);
+  const result = checkAnswer(value, target);
+  R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();
   flip(el);
