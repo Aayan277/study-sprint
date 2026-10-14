@@ -166,3 +166,25 @@ test('days off: sameDayFlags compares what the merge would keep', () => {
   assert.ok(!sameDayFlags(a, { '2026-10-20': { on: false, at: 1 } }, T));
   assert.ok(!sameDayFlags(a, { '2026-10-20': { on: true, at: 2 } }, T));
 });
+
+
+// ---------- v4.2.1: junk in day flags ----------
+test('days off: a huge or unsafe decision time is dropped, so a day off can always be removed', () => {
+  const key = '2026-10-20';
+  for (const at of [1e308, Infinity, 2 ** 53, -5, 0, 1.5, T + 2 * 86400000]) assert.deepEqual(mergeDayFlags({ [key]: { on: true, at } }, null, T), {}, 'at = ' + at);
+  const kept = { [key]: { on: true, at: T + 3600000 } };           // a clock an hour ahead is fine
+  assert.deepEqual(mergeDayFlags(kept, null, T), kept);
+  // so removing it later works: the removal's time is just a normal time
+  assert.equal(mergeDayFlags({ [key]: { on: true, at: 1e308 } }, { [key]: { on: false, at: T } }, T)[key].on, false);
+});
+
+test('days off: keys beyond what can be planned are dropped and the number of future entries is capped', () => {
+  const day = n => { const d = new Date(T); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const many = {};
+  for (let n = 1; n <= 400; n++) many[day(n)] = { on: true, at: 5 };
+  const out = Object.keys(mergeDayFlags(many, null, T));
+  assert.ok(out.length <= 63, 'at most 63 future entries, got ' + out.length);
+  assert.ok(out.includes(day(60)) && out.includes(day(62)) && !out.includes(day(63)) && !out.includes(day(399)));
+  assert.ok(!Object.keys(mergeDayFlags({ '9999-12-31': { on: true, at: 5 } }, null, T)).length);
+  assert.ok(sameDayFlags(many, Object.fromEntries(Object.entries(many).slice(0, 62)), T));     // the junk beyond is ignored when comparing
+});

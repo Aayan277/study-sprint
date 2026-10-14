@@ -158,3 +158,20 @@ test('leeches: Play misses on cards that were not due do not count', () => {
   assert.equal(isNewLeechCounted(7, 8, [], 8), true);                                  // no Play misses: as before
   assert.equal(notDueMisses([{ source: 'play', applied: true, reason: 'again', state: 1, rating: 1 }]), 0);   // a learning step is no lapse
 });
+
+
+// ---------- v4.2.1: searching for symbols ----------
+test('search finds symbols and does not match everything for a symbol-only query', () => {
+  const mk = (id, front, back = 'x') => ({ id, deckId: 'd', front, back, tags: [], created: NOW });
+  const cards = [mk('a', 'C++ basics'), mk('b', 'C# basics'), mk('c', 'C intro'), mk('d', 'Brain 🧠'), mk('e', 'Really?! yes'), mk('f', 'plain'), mk('g', '1 + 1', 'two'), mk('h', 'ぱん bread'), mk('i', 'はん stamp')];
+  const find = query => browseCards(cards, new Map(), { query, sort: 'added-old', now: NOW }).map(x => x.card.id).sort();
+  assert.deepEqual(find('c++'), ['a']);
+  assert.deepEqual(find('C#'), ['b']);
+  assert.deepEqual(find('🧠'), ['d']);
+  assert.deepEqual(find('?!'), ['e']);
+  assert.deepEqual(find('+'), ['a', 'g']);
+  assert.deepEqual(find('ぱ'), ['h']);
+  assert.deepEqual(find('はん'), ['i']);
+  assert.deepEqual(find('  '), cards.map(c => c.id).sort());       // blank: everything
+  assert.deepEqual(find('basics'), ['a', 'b']);
+});

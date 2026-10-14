@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeAnswer, acceptedAnswers, allowedTypos, editDistance, checkAnswer, canType, answerChoices, closestChoice } from '../js/match.js';
+import { diffAgainstBack, hasMarks } from '../js/answer-diff.js';
 
 const ok = (typed, back, opts) => checkAnswer(typed, back, opts).correct;
 
@@ -62,7 +63,9 @@ test('typing is only offered for backs of 40 characters or less', () => {
 test('answerChoices: pieces, then pieces without brackets, then the whole back, de-duplicated by key', () => {
   assert.deepEqual(answerChoices('red / scarlet (dark red)'),
     [{ display: 'red', key: 'red' }, { display: 'scarlet (dark red)', key: 'scarletdarkred' }, { display: 'scarlet', key: 'scarlet' },
-      { display: 'red / scarlet (dark red)', key: 'redscarletdarkred' }]);
+      { display: 'red / scarlet (dark red)', key: 'redscarletdarkred' },
+      // v4.2.1: the whole back without its brackets is accepted by checkAnswer, so it is a choice too
+      { display: 'red / scarlet', key: 'redscarlet' }]);
   assert.deepEqual(answerChoices('The Mitochondria'), [{ display: 'The Mitochondria', key: 'mitochondria' }]);
   assert.deepEqual(answerChoices('self-esteem; Self Esteem').map(c => c.key), ['selfesteem', 'selfesteemselfesteem']);   // the 2nd piece has the same key as the 1st
   assert.deepEqual(answerChoices(''), []);
@@ -85,4 +88,78 @@ test('maths: the answer to type is the formula as plain text', async () => {
   assert.equal(checkAnswer('x3', back).correct, false);
   assert.equal(checkAnswer('a/b', answerText('$\\frac{a}{b}$')).correct, true);
   assert.equal(canType(answerText('$\\frac{a}{b}$')), true);
+});
+
+
+// ---------- v4.2.1 ----------
+test('normalizeAnswer keeps marks that change the letter (kana, Devanagari) and folds only Latin accents', () => {
+  assert.notEqual(normalizeAnswer('か'), normalizeAnswer('が'));
+  assert.notEqual(normalizeAnswer('は'), normalizeAnswer('ぱ'));
+  assert.notEqual(normalizeAnswer('は'), normalizeAnswer('ば'));
+  assert.notEqual(normalizeAnswer('कताब'), normalizeAnswer('किताब'));
+  assert.notEqual(normalizeAnswer('कि'), normalizeAnswer('की'));
+  assert.equal(normalizeAnswer('が'), 'が');                       // composed and decomposed forms agree
+  assert.equal(normalizeAnswer('が'), 'が');
+  assert.equal(normalizeAnswer('Café'), 'cafe');
+  assert.equal(normalizeAnswer('Ελλάς'), normalizeAnswer('ΕΛΛΑΣ'));  // Greek tonos folds like any accent
+  assert.equal(checkAnswer('か', 'が').correct, false);
+  assert.equal(checkAnswer('ぱん', 'はん').correct, false);
+  assert.equal(checkAnswer('がっこう', 'がっこう').exact, true);
+});
+
+test('normalizeAnswer: a final sigma is a sigma, and an answer made only of symbols can be typed', () => {
+  assert.equal(normalizeAnswer('λόγος'), normalizeAnswer('λόγοσ'));
+  assert.equal(normalizeAnswer('ΛΌΓΟΣ'), normalizeAnswer('λόγος'));
+  for (const sym of ['🧠', '+', '❤️', '?!']) {
+    assert.notEqual(normalizeAnswer(sym), '', sym);
+    assert.deepEqual(checkAnswer(sym, sym), { correct: true, exact: true });
+  }
+  assert.equal(checkAnswer('❤', '❤️').exact, true);              // with or without the emoji selector
+  assert.equal(checkAnswer('-', '+').correct, false);
+  assert.equal(normalizeAnswer('+ '), '+');
+});
+
+test('answerChoices is exactly the set acceptedAnswers allows', () => {
+  for (const back of ['red / scarlet (dark red)', 'The Mitochondria', 'a (b) / c; d (e) f', 'self-esteem; Self Esteem', '(optional) word', 'ひと(つ)', '+; 🧠', '']) {
+    const fromChoices = [...new Set(answerChoices(back).map(c => normalizeAnswer(c.display)))].sort();
+    assert.deepEqual(fromChoices, [...acceptedAnswers(back)].sort(), back);
+  }
+});
+
+test('closestChoice prefers a choice that accepts the answer over a nearer one that does not', () => {
+  const back = 'abc; abcde';        // typed 'abcd': 'abc' is 1 away but allows no typos (3 letters); 'abcde' is 1 away and allows 1
+  assert.equal(checkAnswer('abcd', back).correct, true);
+  assert.equal(closestChoice('abcd', back).display, 'abcde');          // (the earliest nearest choice, 'abc', would not accept it)
+  assert.equal(closestChoice('abd', 'abc; xyz').display, 'abc');     // nothing accepts it: the nearest
+});
+
+test('a typed answer that is accepted exactly has no marks; one accepted with a typo has marks within its budget (property)', () => {
+  let seed = 11;
+  const rnd = n => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  const words = ['mitochondria', 'photosynthesis', 'scarlet', 'Café au lait', 'the Nile', 'self-esteem', 'neuron', 'ribosome', 'cat', 'Ελλάς'];
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+  for (let round = 0; round < 400; round++) {
+    const back = [words[rnd(words.length)], words[rnd(words.length)]].join(rnd(2) ? ' / ' : '; ') + (rnd(3) ? '' : ' (extra)');
+    const choices = answerChoices(back);
+    const base = choices[rnd(choices.length)].display;
+    if (checkAnswer(base, back).exact) {
+      const d = diffAgainstBack(base, back);
+      assert.ok(d && !d.tooDifferent && !hasMarks(d), 'exact has no marks: ' + base + ' | ' + back);
+    }
+    // up to 3 random edits
+    let typed = Array.from(base);
+    for (let e = rnd(4); e > 0; e--) {
+      const at = rnd(typed.length + 1), op = rnd(3);
+      if (op === 0) typed.splice(at, 0, alphabet[rnd(26)]); else if (op === 1) typed.splice(at, 1); else if (at < typed.length) typed[at] = alphabet[rnd(26)];
+    }
+    typed = typed.join('');
+    const r = checkAnswer(typed, back);
+    if (!r.correct || r.exact || !typed.trim()) continue;
+    const d = diffAgainstBack(typed, back);
+    assert.ok(d, typed);
+    if (d.tooDifferent) continue;                                   // (two texts shown instead: nothing to bound)
+    const marks = d.counts.wrong + d.counts.extra + d.counts.missing;
+    const c = closestChoice(typed, back);
+    assert.ok(marks <= allowedTypos(c.key.length), `marks ${marks} within budget for "${typed}" vs "${c.display}" (${back})`);
+  }
 });

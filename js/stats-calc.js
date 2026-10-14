@@ -33,11 +33,14 @@ export function daysAgoStart(n, now = Date.now()) {
 // The streak counts back from today, or from yesterday if you haven't studied yet today.
 //
 // Streak freeze (worked out from the log, nothing is stored): a missed day is covered ("frozen") when
-//   (a) no other day in its week (Monday 4am to Monday 4am) is frozen: one freeze a week, not banked;
+//   (a) no other day in its week (Monday 4am to Monday 4am) is frozen: one freeze a week, not banked. The freeze
+//       stays on the EARLIEST coverable missed day of the week (owner decision, 14 Oct), so a later miss in the
+//       same week ends the streak instead of taking the freeze away from the first one;
 //   (b) the next newer day was studied, was a day off, or is today: two missed days in a row are never both covered;
 //   (c) a studied day exists further back in the run (a freeze with nothing before it is dropped).
 // A frozen day keeps the streak alive but does not add to the count. A day off adds 0 and never breaks it.
-// Every decision looks only at newer days, so lazyStreak can stop reading as soon as the walk ends.
+// A decision looks at newer days and at up to 6 older days of the same week (see `earliestCoverable`), so
+// lazyStreak keeps a 7-day margin before it stops reading.
 // Days are named by the device's current time zone (dayKey), so moving between zones can move a day.
 export const EMPTY_SET = new Set();
 const MAX_DAYS = 3650;
@@ -47,7 +50,14 @@ export function restDaySet(settings) {
   const out = new Set();
   const flags = settings && settings.restDays;
   if (!flags || typeof flags !== 'object') return out;
-  for (const [k, v] of Object.entries(flags)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v && v.on === true) out.add(k);
+  for (const [k, v] of Object.entries(flags)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !v || v.on !== true) continue;
+    // A day off is planned before the day: one decided on or after the day itself (it can only arrive through sync,
+    // a backup or devtools) is ignored, so it can't rescue a streak after the fact.
+    const [y, m, d] = k.split('-').map(Number);
+    if (Number.isFinite(v.at) && v.at >= new Date(y, m - 1, d, ROLLOVER_HOUR).getTime()) continue;
+    out.add(k);
+  }
   return out;
 }
 
@@ -75,8 +85,27 @@ function walk(days, rest, now, freezes, limit, all) {
     n = 0;
     okNewer = false;
   };
+  const keyAt = i => dayKey(daysAgoStart(i, now));
+  // Could a freeze cover day j (missed, the day before it studied / a day off / today, and a studied day further back)?
+  const coverable = j => {
+    const k = keyAt(j);
+    if (days.has(k) || rest.has(k)) return false;
+    if (j - 1 > 0 ? !(days.has(keyAt(j - 1)) || rest.has(keyAt(j - 1))) : false) return false;
+    let b = j + 1;
+    while (b < limit && rest.has(keyAt(b)) && !days.has(keyAt(b))) b++;
+    return b < limit && days.has(keyAt(b));
+  };
+  // The earliest day of day i's week (looking up to 6 days back) that a freeze could cover.
+  const earliestCoverable = (i, week) => {
+    let best = -1;
+    for (let j = i; j <= i + 6 && j < limit; j++) {
+      if (j > i && weekOf(keyAt(j)) !== week) break;
+      if (coverable(j)) best = j;
+    }
+    return best;
+  };
   for (let i = 0; i < limit; i++) {
-    const key = dayKey(daysAgoStart(i, now));
+    const key = keyAt(i);
     if (days.has(key)) {
       n++;
       for (const p of pending) frozen.push(p.key);
@@ -86,7 +115,7 @@ function walk(days, rest, now, freezes, limit, all) {
       okNewer = true;                                      // a day off, or today (not over yet): nothing lost
     } else {
       const week = weekOf(key);
-      if (freezes && okNewer && !frozenWeeks.has(week)) {
+      if (freezes && okNewer && !frozenWeeks.has(week) && earliestCoverable(i, week) === i) {
         pending.push({ key, week });
         frozenWeeks.add(week);
         okNewer = false;
@@ -137,7 +166,7 @@ export function streakText(streak, now = Date.now()) {
   else line = 'Study today to start one';
   let sub = '';
   if (streak.freeze.usedOn) sub = `Freeze used ${WEEKDAY_NAME.format(new Date(`${streak.freeze.usedOn}T12:00:00`))}`;
-  else if (streak.days) sub = '1 freeze ready this week';
+  else if (streak.days && streak.frozen[0] !== yesterday) sub = '1 freeze ready this week';   // (missing today would break it anyway after a freeze yesterday)
   return { line, sub };
 }
 
@@ -145,11 +174,14 @@ export function streakText(streak, now = Date.now()) {
 // function) and only looks further back while the streak runs right up to the oldest day read.
 // `first` is what the first 60 days look like if the caller already has them. Today and the end of a Review
 // session use this, so they always agree with Stats.
+// readSince may return log rows or just their timestamps (numbers: cheaper to read, see db.getStudyDayTimes).
+const LAZY_MARGIN = 8;                 // a freeze decision can look 6 days further back than the break itself
 export async function lazyStreak(readSince, now = Date.now(), first = null, days = 60, opts) {
   let logs = first || await readSince(daysAgoStart(days, now));
   for (;;) {
-    const streak = dayStreak(logs.filter(isAnswerLog), now, opts);
-    if (streak.span < days - 1 || days >= MAX_DAYS) return streak;      // it ended inside what was read
+    const times = logs.map(l => (typeof l === 'number' ? l : isAnswerLog(l) ? l.timestamp : NaN)).filter(t => t === t);
+    const streak = streakFromDays(new Set(times.map(dayKey)), now, opts);
+    if (streak.span < days - LAZY_MARGIN || days >= MAX_DAYS) return streak;      // it ended inside what was read
     days *= 2;
     logs = await readSince(daysAgoStart(days, now));
   }

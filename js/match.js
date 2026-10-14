@@ -10,26 +10,41 @@
 export const TYPE_MAX = 40;
 export const canType = back => String(back ?? '').trim().length <= TYPE_MAX;
 
-// "The Mitochondria!" → "mitochondria"
-export function normalizeAnswer(s) {
-  return String(s ?? '').toLowerCase()
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // café → cafe
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')                   // punctuation → space
-    .replace(/\s+/g, ' ').trim()
-    .replace(/^(?:the|a|an) /, '');
+// What a text is compared by (shared with import.js dupKey, so duplicates and typed answers agree):
+// lower case (final sigma ς is σ), accents off (only the Latin combining marks U+0300 to U+036F: other marks such as
+// the kana dakuten or a Hindi vowel sign change the letter, so they stay), punctuation and symbols → space.
+// A text made only of symbols ("+", "🧠", "?!") would be empty, so it keeps its symbols instead.
+export function foldText(s) {
+  const t = String(s ?? '').toLowerCase().replace(/ς/g, 'σ')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')          // café → cafe
+    .replace(/[\ufe00-\ufe0f]/g, '');                                // emoji variation selectors (❤ and ❤️ are the same)
+  const letters = t.replace(/[^\p{L}\p{N}\p{M}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (/[\p{L}\p{N}]/u.test(letters)) return letters.normalize('NFC');
+  return t.replace(/\s+/g, '').normalize('NFC');
 }
 
-// Every answer the back allows. "red / scarlet (dark red)" accepts the whole thing, "red",
-// "scarlet (dark red)" and also "scarlet", since words in brackets are optional.
-export function acceptedAnswers(back) {
+// "The Mitochondria!" → "mitochondria"
+export function normalizeAnswer(s) {
+  return foldText(s).replace(/^(?:the|a|an) /, '');
+}
+
+// Every wording of the back that is allowed, as written. "red / scarlet (dark red)" gives the whole thing, "red",
+// "scarlet (dark red)", and each without its (brackets), since words in brackets are optional.
+const unbracketed = s => s.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+function wordings(back, wholeFirst = false) {
   const raw = String(back ?? '');
-  const pieces = [raw, ...raw.split(/[;/]/)];
+  const pieces = raw.split(/[;/]/);
+  const whole = [raw, unbracketed(raw)];
+  const list = wholeFirst ? [...whole, ...pieces.flatMap(p => [p, unbracketed(p)])] : [...pieces, ...pieces.map(unbracketed), ...whole];
+  return list.map(t => t.trim());
+}
+
+// Every answer the back allows (normalized).
+export function acceptedAnswers(back) {
   const out = new Set();
-  for (const p of pieces) {
-    for (const v of [p, p.replace(/\([^)]*\)/g, ' ')]) {
-      const n = normalizeAnswer(v);
-      if (n) out.add(n);
-    }
+  for (const w of wordings(back, true)) {
+    const n = normalizeAnswer(w);
+    if (n) out.add(n);
   }
   return [...out];
 }
@@ -64,16 +79,12 @@ export function checkAnswer(typed, back, { forgiving = true } = {}) {
   return { correct: close, exact: false };
 }
 
-// The answers a typed answer can be compared with, to show which letters were wrong.
-// Order: the pieces split on ; and /, then each piece without its (brackets), then the whole back.
-// De-duplicated by key (the answer with capitals, accents, punctuation and spaces removed).
+// The answers a typed answer can be compared with, to show which letters were wrong: exactly the set
+// acceptedAnswers allows. Order: the pieces split on ; and /, then each piece without its (brackets), then the
+// whole back (with and without brackets). De-duplicated by key (the answer folded and without spaces).
 export function answerChoices(back) {
-  const raw = String(back ?? '');
-  const pieces = raw.split(/[;/]/);
-  const clean = s => s.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
   const seen = new Set(), out = [];
-  for (const text of [...pieces, ...pieces.map(clean), raw]) {
-    const display = text.trim();
+  for (const display of wordings(back)) {
     const key = normalizeAnswer(display).replace(/ /g, '');
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -83,12 +94,13 @@ export function answerChoices(back) {
 }
 
 // The choice the typed answer is nearest to (the earliest on a tie), or null when there is none.
+// A choice that accepts the answer (within its typo budget) beats one that doesn't, however near the other is.
 export function closestChoice(typed, back) {
   const t = normalizeAnswer(typed).replace(/ /g, '');
-  let best = null, bestD = Infinity;
+  let best = null, bestD = Infinity, bestOk = false;
   for (const c of answerChoices(back)) {
-    const d = editDistance(t, c.key);
-    if (d < bestD) { best = c; bestD = d; }
+    const d = editDistance(t, c.key), ok = d <= allowedTypos(c.key.length);
+    if ((ok && !bestOk) || (ok === bestOk && d < bestD)) { best = c; bestD = d; bestOk = ok; }
   }
   return best;
 }

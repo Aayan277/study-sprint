@@ -120,3 +120,71 @@ test('diffHTML marks and describes the differences', () => {
   assert.ok(diffHTML(diffAnswer('scarlett', 'scarlet')).includes('<del class="d-extra">'));
   assert.ok(diffHTML(diffAnswer('recieve', 'receive'), { small: true }).startsWith('<div class="adiff small'));
 });
+
+
+// ---------- v4.2.1 ----------
+test('a final sigma and a medial sigma are the same letter', () => {
+  assert.ok(clean(diffAnswer('λόγοσ', 'λόγος')));
+  assert.ok(clean(diffAnswer('ΛΌΓΟΣ', 'λόγος')));
+});
+
+test('a wrong answer with no marked letters has no empty summary and no stray full stop', () => {
+  const d = diffAnswer('the', 'a the');            // differs only in what is ignored
+  const html = diffHTML(diffAnswer('hello!', 'hello'));
+  assert.ok(!html.includes('adiff-sum'));
+  assert.ok(!/ \./.test(html.match(/<span class="sr-only">([^<]*)<\/span>/)[1]));
+  assert.ok(d === null || !diffHTML(d).includes('adiff-sum'));
+  assert.ok(diffHTML(diffAnswer('mitocondria', 'mitochondria')).includes('adiff-sum'));
+});
+
+test('decomposed accents and kana stay inside one cluster', () => {
+  assert.ok(clean(diffAnswer('café', 'café')));                       // e + combining accent vs é
+  const d = diffAnswer('ぱん', 'はん');
+  assert.deepEqual([d.counts.wrong, d.counts.extra, d.counts.missing], [1, 0, 0]);
+  assert.deepEqual(marked(d.typed, 'wrong'), ['ぱ']);                        // the mark is not split off the kana
+  const decomposed = diffAnswer('ぱん', 'はん');                         // は + combining handakuten (ぱ)
+  assert.equal(marked(decomposed.typed, 'wrong').join(''), 'ぱ');
+  const sr = diffHTML(diffAnswer('caféx', 'café'));
+  assert.ok(sr.includes('1 extra (x)'));
+});
+
+test('astral characters are not split in the screen-reader text', () => {
+  const html = diffHTML(diffAnswer('a𐐨b𐐨', 'ab𐐨'));
+  const sr = html.match(/<span class="sr-only">([^<]*)<\/span>/)[1];
+  assert.ok(sr.includes('𐐨') && !/[\ud800-\udbff](?![\udc00-\udfff])/.test(sr), sr);
+  assert.ok(sr.includes('1 extra (𐐨)'), sr);
+});
+
+test('"cat" and "dog" share nothing: the two texts, no marks', () => {
+  const d = diffAnswer('cat', 'dog');
+  assert.equal(d.tooDifferent, true);
+  assert.ok(!/<mark|<ins|<del/.test(diffHTML(d)));
+  assert.equal(diffAnswer('cot', 'cat').tooDifferent, false);
+});
+
+test('the screen-reader text for wrong letters says what was typed and what the answer has', () => {
+  const sr = diffHTML(diffAnswer('recieve', 'receive')).match(/<span class="sr-only">([^<]*)<\/span>/)[1];
+  assert.ok(sr.includes('2 letters wrong (you typed i e, the answer has e i)'), sr);
+});
+
+test('answerRow: false is one corrected line and says nothing about "the answer"', () => {
+  const html = diffHTML(diffAnswer('mitocondrix', 'mitochondria'), { answerRow: false });
+  assert.equal((html.match(/class="adiff-row"/g) || []).length, 1);
+  assert.ok(html.includes('<mark class="d-wrong">x</mark>') && html.includes('<ins class="d-miss">h</ins>'));
+  assert.ok(!html.includes('d-caret') && !html.includes('Answer</span>'));
+  assert.ok(!/The answer is/.test(html));
+  const withExtra = diffHTML(diffAnswer('scarlett', 'scarlet'), { answerRow: false });
+  assert.ok(withExtra.includes('<del class="d-extra">t</del>'));
+  // the two-row version still has "The answer is"
+  assert.ok(/The answer is mitochondria/.test(diffHTML(diffAnswer('mitocondria', 'mitochondria'))));
+  // a "Closest answer" row only when asked for
+  assert.ok(!diffHTML(diffAnswer('scarlett', 'scarlet'), { answerRow: false }).includes('Closest answer'));
+  const closest = diffHTML(diffAnswer('scarlett', 'scarlet'), { answerRow: false, closest: true });
+  assert.ok(closest.includes('Closest answer') && /Closest answer: scarlet/.test(closest));
+});
+
+test('diffAgainstBack says whether the target is an alternate', () => {
+  assert.equal(diffAgainstBack('scarlett', 'red / scarlet').alternate, true);
+  assert.equal(diffAgainstBack('mitocondria', 'mitochondria').alternate, false);
+  assert.equal(diffAgainstBack('mitocondria', ' mitochondria ').alternate, false);
+});

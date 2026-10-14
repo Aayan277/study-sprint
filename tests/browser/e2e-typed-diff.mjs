@@ -48,7 +48,8 @@ const seed = page => page.evaluate(async () => {
       ok((await page.textContent('.rv-typed ins.d-miss')) === 'h', 'Review: the missing letter is h');
       ok((await page.textContent('.rv-typed .sr-only')).includes('missing'), 'Review: the screen-reader sentence mentions missing');
       ok(typed.includes('1 missing'), 'Review: summary says 1 missing');
-      ok(await page.locator('.rv-typed .d-caret').count() === 1, 'Review: a caret shows where it goes');
+      // v4.2.1: Review has one corrected line, so the missing letter is inserted in place (ins.d-miss above) and there is no caret
+      ok(await page.locator('.rv-typed .d-caret').count() === 0 && await page.locator('.rv-typed .adiff-row').count() === 1, 'Review: the missing letter is inserted inline (one line, no caret)');
       ok((await page.getAttribute('.rv-typed .adiff-row', 'aria-hidden')) === 'true', 'Review: the rows are hidden from screen readers');
       ok(typed.includes('Correct, with a small typo'), 'Review: verdict line kept');
       await noHScroll(page, 'review diff'); await page.waitForTimeout(600); await page.screenshot({ path: SP + '/f3-review-dark-375.png' });
@@ -61,7 +62,8 @@ const seed = page => page.evaluate(async () => {
         'Review: "scarlett" is compared with "scarlet" (nearest allowed answer), 1 extra');
     }
     if (f === 'Long') {
-      ok(typed.includes('Not quite') && await page.locator('.rv-typed .adiff.plain').count() === 1 && await page.locator('.rv-typed mark, .rv-typed ins, .rv-typed del').count() === 0, 'Review: a very different answer shows both texts, no marks');
+      // v4.2.1: too different is just "Not quite. You typed X" (the card shows the answer): no diff box at all
+      ok(typed.includes('Not quite. You typed xqzvbnm') && await page.locator('.rv-typed .adiff').count() === 0 && await page.locator('.rv-typed mark, .rv-typed ins, .rv-typed del').count() === 0, 'Review: a very different answer shows "You typed X", no diff box, no marks');
       await noHScroll(page, 'review plain'); await page.waitForTimeout(600); await page.screenshot({ path: SP + '/f3-review-plain-375.png' });
     }
     if (f === 'Close') ok(!(await page.locator('.rv-typed .adiff').count()), 'Review: case, accents and article differences are not marked');
@@ -115,7 +117,8 @@ const seed = page => page.evaluate(async () => {
     } else if (prompt === 'P-hello') {
       ok((await page.textContent('.fb-mark')).includes('Not quite') && await page.locator('#feedback mark.d-wrong').count() >= 1 && !(await page.textContent('#feedback')).includes('You answered'),
         'Play: a wrong answer shows the diff instead of "You answered"');
-      ok((await page.textContent('.fb-info')).includes('hello'), 'Play: the right answer is still shown');
+      // v4.2.1: the bold answer is dropped when a diff is shown; the diff's Answer row has it
+      ok(!(await page.locator('.fb-info').count()) && (await page.textContent('#feedback .adiff')).includes('hello'), 'Play: the right answer is shown once, in the diff');
       await noHScroll(page, 'play wrong diff'); await page.screenshot({ path: SP + '/f3-play-wrong-375.png' });
     } else {
       ok(await page.locator('#feedback .adiff.plain').count() === 1, 'Play: a very different answer shows both texts');

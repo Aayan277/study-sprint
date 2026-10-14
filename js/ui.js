@@ -69,7 +69,7 @@ export const icon = (name, cls = '') =>
 export function streakHTML(streak, { button = false } = {}) {
   const { line, sub } = streakText(streak);
   const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}">${icon('snow')}${esc(sub)}</span>` : '';
-  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span>${esc(line)}</span>${pill}`;
+  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
   const cls = `streak${streak.studiedToday ? ' kept' : ''}`;
   return button
     ? `<button type="button" class="${cls} streak-btn" id="streakBtn" aria-haspopup="dialog" title="Your streak, streak freeze and days off">${inner}${icon('chevron', 'sb-go')}</button>`
@@ -80,12 +80,16 @@ export function streakHTML(streak, { button = false } = {}) {
 // freeze covered the day, a moon = a planned day off. Each has a shape as well as a colour. `week` is streak.week.
 const DOT_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 const DOT_NAME = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+// "Tue 13 Oct", in the reader's language but always weekday, day, month.
+const dotSaid = time => { const p = Object.fromEntries(DOT_DAY.formatToParts(time).map(x => [x.type, x.value])); return `${p.weekday} ${p.day} ${p.month}`; };
 export function weekDotsHTML(week, label = 'Last 7 days') {
-  return `<div class="week" aria-label="${esc(label)}">${week.map(d => {
+  // A list for screen readers: each day says what happened ("Tue 13 Oct: streak freeze used"); the squares are only pictures.
+  return `<div class="week" role="list" aria-label="${esc(label)}">${week.map(d => {
     const kind = d.on ? 'on' : d.frozen ? 'frz' : d.rest ? 'rest' : '';
     const note = d.on ? ', studied' : d.frozen ? ', streak freeze used' : d.rest ? ', day off' : '';
-    return `<div class="wd${kind ? ' ' + kind : ''}${d.today ? ' today' : ''}" title="${esc(DOT_DAY.format(d.time) + note)}">
-      <i>${d.frozen && !d.on ? icon('snow') : d.rest && !d.on ? icon('moon') : ''}</i><span>${esc(DOT_NAME.format(d.time).slice(0, 2))}</span></div>`;
+    const said = `${dotSaid(d.time)}: ${(d.on ? 'studied' : d.frozen ? 'streak freeze used' : d.rest ? 'day off' : d.today ? 'not studied yet' : 'not studied')}${d.today && d.on ? ' (today)' : ''}`;
+    return `<div class="wd${kind ? ' ' + kind : ''}${d.today ? ' today' : ''}" role="listitem" title="${esc(DOT_DAY.format(d.time) + note)}"><span class="sr-only">${esc(said)}</span>
+      <i aria-hidden="true">${d.frozen && !d.on ? icon('snow') : d.rest && !d.on ? icon('moon') : ''}</i><span aria-hidden="true">${esc(DOT_NAME.format(d.time).slice(0, 2))}</span></div>`;
   }).join('')}</div>`;
 }
 

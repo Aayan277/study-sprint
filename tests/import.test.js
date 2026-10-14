@@ -276,3 +276,16 @@ test('maths: a separator inside a formula does not split the line', () => {
   assert.deepEqual(cards('Gap - $a - b$\nSum - $a + b$'), [['Gap', '$a - b$'], ['Sum', '$a + b$']]);
   assert.deepEqual(cards('$a - b$ - the gap'), [['$a - b$', 'the gap']]);
 });
+
+
+// ---------- v4.2.1: dupKey agrees with the typed-answer check ----------
+test('dupKey keeps kana and Devanagari marks, folds Latin accents, and keeps symbol-only text', () => {
+  assert.equal(new Set(['か', 'が', 'は', 'ば', 'ぱ'].map(dupKey)).size, 5);
+  assert.notEqual(dupKey('कि'), dupKey('की'));
+  assert.equal(dupKey('Café'), dupKey('CAFE'));
+  assert.equal(dupKey('λόγος'), dupKey('ΛΌΓΟΣ'));
+  for (const s of ['🧠', '+', '?!', '❤️']) assert.notEqual(dupKey(s), '', s);
+  assert.notEqual(dupKey('+'), dupKey('-'));
+  assert.equal(dupKey(' '), '');
+  assert.deepEqual(findDuplicates([{ front: 'か', back: '1' }, { front: 'が', back: '2' }, { front: 'は', back: '3' }, { front: 'ぱ', back: '4' }, { front: 'ば', back: '5' }]).map(x => x), [null, null, null, null, null]);
+});

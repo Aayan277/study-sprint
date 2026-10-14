@@ -287,6 +287,22 @@ export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
 }
 
+// One answer time for each study day that has any answer since a moment ([time, …], oldest first). Uses a key cursor on
+// the timestamp index and jumps to the next day each time, so no rows are read and the work follows the days studied
+// (not the 300k rows of a heavy user). The streak uses this.
+export async function getStudyDayTimes(timestamp) {
+  const index = (await store('reviewLog')).index('timestamp');
+  const out = [];
+  let t = timestamp;
+  for (;;) {    // only IndexedDB requests are awaited in this loop, so the transaction stays open
+    const next = await done(index.openKeyCursor(IDBKeyRange.lowerBound(t)));
+    if (!next) break;
+    out.push(next.key);
+    t = dayEnd(next.key);
+  }
+  return out;
+}
+
 // How many answers were logged on each study day, as [[start of the day, count], …] for days that have any.
 // Counts with the timestamp index, so none of the (many) rows are read. Stats uses it for the streak and calendar.
 // Every row in the log is an answer (review, play or anki: see isAnswerLog), so none are filtered out here:
@@ -386,7 +402,12 @@ export async function setSetting(key, value) {
   const os = tx.objectStore('settings');
   os.put(value, key);
   if (SYNCED_SETTINGS.includes(key)) {
-    os.get(SETTING_TIMES).onsuccess = e => os.put({ ...(e.target.result || {}), [key]: Date.now() }, SETTING_TIMES);
+    // A merged setting must beat the version the server already holds even if another device's clock is ahead.
+    os.get(SETTING_TIMES).onsuccess = e => {
+      const times = e.target.result || {};
+      const at = MERGED_SETTINGS.includes(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
+      os.put({ ...times, [key]: at }, SETTING_TIMES);
+    };
   }
   await finished(tx);
   if (SYNCED_SETTINGS.includes(key)) changed();
@@ -494,11 +515,13 @@ export async function importAll(data, { everywhere = false } = {}) {
         for (const id of before[name]) if (!kept[name].has(id)) markDeleted(tx, name, id, now);
       }
     }
-    // Settings are replaced too, except this device's sign-in and sync bookmarks.
+    // Settings are replaced too (on this device), except this device's sign-in and sync bookmarks.
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
     const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
     restored.forEach(([k, v]) => settings.put(v, k));
+    // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
+    // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
     if (everywhere) {
       // The backup's study settings win in the account too.
       settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
@@ -620,7 +643,7 @@ export async function applyRemote(rows) {
           if (changed) { settingsStore.put(merged, row.id); applied++; }
           if (changed || !sameAsRemote) {
             // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.
-            times = { ...times, [row.id]: sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Date.now() };
+            times = { ...times, [row.id]: sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Math.max(Date.now(), row.updated_at + 1) };
           }
           continue;
         }

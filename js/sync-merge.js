@@ -86,23 +86,33 @@ export function parseAuthLink(hash) {
 // Junk keys and values are dropped, and so is anything over 400 days old (the streak never needs those).
 const DAY_KEY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const MAX_FLAG_AGE_DAYS = 400;
-function cleanDayFlags(flags, cutoff) {
+export const MAX_AHEAD_DAYS = 60;      // how far ahead a day off can be planned (streak-sheet.js re-exports it)
+const FUTURE_SLACK_DAYS = 2;           // time zones and the 4am rollover: a key can be a day or two beyond the limit
+const MAX_FUTURE_ENTRIES = MAX_AHEAD_DAYS + FUTURE_SLACK_DAYS + 1;
+const DAY = 86400000;
+const keyOf = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// Junk is dropped: bad keys, bad values, a decision time that is not a positive safe integer or lies more than a day
+// in the future (a huge `at` would make a day off unremovable), keys older than 400 days or further ahead than a
+// day off can be planned, and (if there are still too many) the furthest-future keys.
+function cleanDayFlags(flags, cutoff, now, latest) {
   const out = {};
   if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
   for (const [k, v] of Object.entries(flags)) {
-    if (!DAY_KEY.test(k) || k < cutoff || !v || typeof v !== 'object' || typeof v.on !== 'boolean' || !Number.isFinite(v.at)) continue;
+    if (!DAY_KEY.test(k) || k < cutoff || k > latest || !v || typeof v !== 'object' || typeof v.on !== 'boolean') continue;
+    if (!Number.isSafeInteger(v.at) || v.at <= 0 || v.at > now + DAY) continue;
     out[k] = { on: v.on, at: v.at };
   }
+  const today = keyOf(now);
+  const future = Object.keys(out).filter(k => k > today).sort();
+  for (const k of future.slice(MAX_FUTURE_ENTRIES)) delete out[k];
   return out;
 }
-const flagCutoff = now => {
-  const d = new Date(now - MAX_FLAG_AGE_DAYS * 86400000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+const flagCutoff = now => keyOf(now - MAX_FLAG_AGE_DAYS * DAY);
+const flagLatest = now => keyOf(now + (MAX_AHEAD_DAYS + FUTURE_SLACK_DAYS) * DAY);
 export function mergeDayFlags(a, b, now = Date.now()) {
-  const cutoff = flagCutoff(now);
-  const out = cleanDayFlags(a, cutoff);
-  for (const [k, v] of Object.entries(cleanDayFlags(b, cutoff))) {
+  const cutoff = flagCutoff(now), latest = flagLatest(now);
+  const out = cleanDayFlags(a, cutoff, now, latest);
+  for (const [k, v] of Object.entries(cleanDayFlags(b, cutoff, now, latest))) {
     const mine = out[k];
     if (!mine || v.at > mine.at || (v.at === mine.at && v.on)) out[k] = v;
   }
@@ -110,8 +120,8 @@ export function mergeDayFlags(a, b, now = Date.now()) {
 }
 // Do two sets of day flags say the same thing? (Junk is ignored, as in the merge.)
 export function sameDayFlags(a, b, now = Date.now()) {
-  const cutoff = flagCutoff(now);
-  const x = cleanDayFlags(a, cutoff), y = cleanDayFlags(b, cutoff);
+  const cutoff = flagCutoff(now), latest = flagLatest(now);
+  const x = cleanDayFlags(a, cutoff, now, latest), y = cleanDayFlags(b, cutoff, now, latest);
   const keys = Object.keys(x);
   return keys.length === Object.keys(y).length && keys.every(k => y[k] && y[k].on === x[k].on && y[k].at === x[k].at);
 }

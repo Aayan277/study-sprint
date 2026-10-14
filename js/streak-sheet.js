@@ -8,11 +8,11 @@
 import * as db from './db.js';
 import { loadStreak } from './study-data.js';
 import { daysAgoStart, dayKey, restDaySet } from './stats-calc.js';
-import { mergeDayFlags } from './sync-merge.js';
+import { mergeDayFlags, MAX_AHEAD_DAYS } from './sync-merge.js';
 import { examInfo } from './exam.js';
 import { openSheet, closeSheet, esc, icon, streakHTML, weekDotsHTML, $, toast } from './ui.js';
 
-export const MAX_AHEAD_DAYS = 60;      // how far ahead a day off can be planned
+export { MAX_AHEAD_DAYS };             // how far ahead a day off can be planned (defined in sync-merge.js)
 export const MAX_FUTURE_DAYS = 14;     // how many planned days off there can be at once
 
 const LONG = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -55,7 +55,7 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
       <div class="ys">
         ${streakHTML(streak)}
         ${weekDotsHTML(streak.week)}
-        <ul class="ys-key" aria-hidden="true">
+        <ul class="ys-key">
           <li><i class="k-on"></i>Studied</li><li><i class="k-frz">${icon('snow')}</i>Streak freeze</li><li><i class="k-rest">${icon('moon')}</i>Day off</li>
         </ul>
         <section aria-labelledby="ysFrz">
@@ -70,8 +70,9 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
               ${k > today ? `<button class="link" type="button" data-rm="${esc(k)}" aria-label="Remove the day off on ${esc(niceDay(k))}">Remove</button>` : ''}</li>`).join('')}</ul>`
             : '<p class="muted small" id="ysNone">No days off planned.</p>'}
           ${exams.size ? `<div class="ys-exams" role="group" aria-label="Day off on exam day">${[...exams].map(([k, names]) => {
-            const on = rest.has(k);
-            return `<button type="button" class="tchip" data-exam-day="${esc(k)}" aria-pressed="${on}"${on ? ' disabled' : ''}>${icon(on ? 'check' : 'moon')}Day off on exam day (${esc(niceDay(k))})<small>${esc(names.join(', '))}</small></button>`;
+            // Already a day off: a plain label (not a pressed button), "Day off planned".
+            if (rest.has(k)) return `<span class="tchip on">${icon('check')}Day off planned: exam day (${esc(niceDay(k))})<small>${esc(names.join(', '))}</small></span>`;
+            return `<button type="button" class="tchip" data-exam-day="${esc(k)}">${icon('moon')}Day off on exam day (${esc(niceDay(k))})<small>${esc(names.join(', '))}</small></button>`;
           }).join('')}</div>` : ''}
           <form id="ysForm" class="ys-add" novalidate>
             <label class="field"><span>Add a day off</span>

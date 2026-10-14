@@ -8,6 +8,7 @@
 //     headerSkipped: false }
 
 import { maskMath } from './math.js';
+import { foldText } from './match.js';
 
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
 // because fronts are usually short terms (so "Term: def - more" splits at ': ', not ' - ').
@@ -247,9 +248,10 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
 export const isComplete = c => !!c.occlusion || !!((c.front.trim() || c.pictures?.front) && (c.back.trim() || c.pictures?.back));
 
 // Two fronts that differ only in capitals, spaces or punctuation count as the same.
+// Folded like a typed answer (match.js foldText): Latin accents off, but か ≠ が and कि ≠ की; a text of only
+// symbols ("+", "🧠") keeps them.
 export function dupKey(s) {
-  return String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return foldText(s);
 }
 
 // For each card: 'deck' if the deck already has that front, 'import' if it appeared earlier in

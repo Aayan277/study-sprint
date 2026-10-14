@@ -1917,9 +1917,10 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .adiff.small .adiff-txt{font-size:var(--fs-base)}
 .adiff.small .adiff-row{grid-template-columns:64px minmax(0,1fr);gap:var(--s-2)}
 .rv-typed .adiff{max-width:100%}
-@media (min-width:1024px){.adiff{padding:12px 16px}.adiff-row{grid-template-columns:84px minmax(0,1fr)}}
+.adiff.one .adiff-row{grid-template-columns:104px minmax(0,1fr)}      /* room for "Closest answer" on one line */
+@media (min-width:1024px){.adiff{padding:12px 16px}.adiff-row{grid-template-columns:84px minmax(0,1fr)}.adiff.one .adiff-row{grid-template-columns:116px minmax(0,1fr)}}
 
-/* ---------- 19. Streak freeze and days off (js/stats-calc.js works them out, js/streak-sheet.js plans them) ----------
+/* ---------- 22. Streak freeze and days off (js/stats-calc.js works them out, js/streak-sheet.js plans them) ----------
    A covered day (streak freeze) is a diagonal hatch + a snowflake; a planned day off is a dotted pattern + a moon.
    Each has a pattern or a shape as well as a colour, so neither depends on colour alone. */
 :root{
@@ -1977,7 +1978,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .ys-list .link{color:var(--accent-text);flex:none}
 .ys-exams{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 var(--s-3)}
 .ys-exams .tchip{flex-wrap:wrap;row-gap:0;text-align:left;border-radius:var(--r-md)}
-.ys-exams .tchip:disabled{opacity:.7;cursor:default}
+.ys-exams .tchip.on{opacity:.8;cursor:default;border-color:var(--accent);background:var(--accent-tint)}
 .ys-exams .tchip .ico{width:15px;height:15px}
 .ys-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-3);align-items:end}
 .ys-add .btn{min-height:46px}
@@ -1987,7 +1988,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .today-hero .streak-btn{width:fit-content;min-width:280px;max-width:100%}
 }
 
-/* ---------- 20. Maths on cards (js/math.js draws them with KaTeX, which is fetched when a card first shows maths) ----------
+/* ---------- 23. Maths on cards (js/math.js draws them with KaTeX, which is fetched when a card first shows maths) ----------
    KaTeX paints with the text colour, so every skin (dark, light, OLED) works without its own rules. The KaTeX stylesheet
    is added to the page after this file, so these rules use two classes to win over its one. */
 .tex{font-style:normal;font-weight:400;letter-spacing:0;text-indent:0}

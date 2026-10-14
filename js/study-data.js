@@ -156,4 +156,4 @@ export const live = { resume: null };
 // The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
 // if it has them, and reads further back only while the streak does.
 // ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
-export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getLogsSince(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });
+export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });

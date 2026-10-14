@@ -202,7 +202,8 @@ const chip = await norm(e, '.ys-exams .tchip');
 ok(chip.startsWith('Day off on exam day (') && chip.includes('Cell Biology'), 'an exam chip: ' + chip);
 await e.screenshot({ path: SP + '/streak-sheet-exam-375-dark.png' });
 await e.click('.ys-exams .tchip'); await e.waitForSelector('.ys-list li');
-ok(await e.locator('.ys-list li').count() === 1 && await e.$eval('.ys-exams .tchip', b => b.disabled), 'one tap adds the exam day as a day off, and the chip is then done');
+// v4.2.1: once added, the chip is a plain "Day off planned" label (no aria-pressed, no disabled button)
+ok(await e.locator('.ys-list li').count() === 1 && await e.locator('.ys-exams button').count() === 0 && (await norm(e, '.ys-exams .tchip')).startsWith('Day off planned'), 'one tap adds the exam day as a day off, and the chip is then a "Day off planned" label');
 const exStored = await e.evaluate(async () => (await (await import('./js/db.js')).getSettings()).restDays);
 ok(exStored[examDay]?.on === true, 'saved as a normal day off for ' + examDay);
 
@@ -234,7 +235,10 @@ await g.goto(URL + '#/today'); await g.waitForSelector('.today-hero');
 await seed(g, [2, 4, 7]);                                                           // Wed 14, Mon 12 and Fri 9; Thu 15 and Tue 13 missed
 await g.reload(); await g.waitForSelector('#streakBtn');
 const second = await norm(g, '.streak');
-ok(/^1\s*day streak/.test(second) && second.includes('Freeze used yesterday'), 'a second miss in the same week breaks the older run (Wed only counts): ' + second);
+// v4.2.1 (owner decision): the week's freeze stays on the EARLIEST missed day (Tue 13), so the newer miss (Thu 15) ends
+// the streak at once. Before, the freeze moved to Thu and the streak was 1 ("Freeze used yesterday").
+ok(/^0\s*day streak/.test(second) && second.includes('Study today to start one') && !second.includes('Freeze used') && !second.includes('freeze ready'),
+  'a second miss in the same week ends the streak, the freeze stays on the first miss: ' + second);
 
 // ============================ backup and sync keep the days off ============================
 const h = await open(375, 740, { touch: true });

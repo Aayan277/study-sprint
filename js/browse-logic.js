@@ -72,16 +72,29 @@ export const SORTS = [
   ['az', 'A → Z']
 ];
 
+// What search compares: lower case, Latin accents off (other marks stay, so か ≠ が), and punctuation as a space, but
+// symbols that mean something (+ # & % @ * and anything in \p{S}, emoji included) kept, so "c++" doesn't match "c".
+// A query with nothing else in it ("?!", "+", "🧠") is looked for as it is typed (lower case, spaces collapsed).
+const searchFold = s => String(s ?? '').toLowerCase().replace(/ς/g, 'σ').normalize('NFKD')
+  .replace(/[\u0300-\u036f\ufe00-\ufe0f]/g, '').replace(/[^\p{L}\p{N}\p{M}\p{S}#%&@*]+/gu, ' ').replace(/\s+/g, ' ').trim().normalize('NFC');
+const rawFold = s => String(s ?? '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+export function searchMatcher(query) {
+  const q = searchFold(query);
+  if (/[\p{L}\p{N}\p{S}#%&@*]/u.test(q)) return text => searchFold(text).includes(q);
+  const raw = rawFold(query);
+  return raw ? text => rawFold(text).includes(raw) : null;
+}
+
 // Search, filter and sort a list of cards.
 //   cards      all cards to consider
 //   statesById Map of cardId → schedule
 //   opts       { query, filter, sort, now }
 // Search matches the front, back and tags, ignoring capitals and accents.
 export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now() } = {}) {
-  const q = dupKey(query);
+  const match = searchMatcher(query);
   let list = cards.map(card => ({ card, state: statesById.get(card.id), status: null }));
   for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
-  if (q) list = list.filter(({ card }) => dupKey(`${card.front} ${card.back} ${(card.tags || []).join(' ')}`).includes(q));
+  if (match) list = list.filter(({ card }) => match(`${card.front} ${card.back} ${(card.tags || []).join(' ')}`));
   if (filter === 'flagged') list = list.filter(x => x.card.flag);
   else if (/^flag\d$/.test(filter)) list = list.filter(x => x.card.flag === +filter.slice(4));
   else if (filter === 'leech') list = list.filter(x => (x.card.tags || []).includes('leech'));

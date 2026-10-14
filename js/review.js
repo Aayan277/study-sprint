@@ -216,7 +216,7 @@ function renderSession(el, enter = false) {
     </article>
     ${typeThis && !R.flipped ? `
       <form class="typeform" id="typeForm" autocomplete="off">
-        <input id="typeIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
+        <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
     ${R.typing && !typeThis && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
@@ -298,8 +298,9 @@ function typedResultHTML() {
   const { value, result, target } = R.typed;
   // A wrong or inexact answer shows which letters differ (the diff has the "You typed" row, so the line doesn't repeat it).
   let diff = !result.exact && value.trim() ? diffAgainstBack(value, target) : null;
-  if (diff && result.correct && !hasMarks(diff)) diff = null;
-  const shown = diff ? diffHTML(diff) : '';
+  if (diff && (diff.tooDifferent || (result.correct && !hasMarks(diff)))) diff = null;     // too different: just "You typed X"
+  // One corrected line (the card shows the answer itself); a "Closest answer" row only when the back has several answers.
+  const shown = diff ? diffHTML(diff, { answerRow: false, closest: !!diff.alternate }) : '';
   if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
   return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}`;
 }

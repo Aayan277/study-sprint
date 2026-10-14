@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQueue, queueFrom, splitCards, rescueToday, rescueOffer, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, RELEARNING, REVIEW } from '../js/queue.js';
+import { buildQueue, queueFrom, splitCards, rescueToday, rescueOffer, RESCUE_MAX_DAYS, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, RELEARNING, REVIEW } from '../js/queue.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();      // 7 Oct 2026, 3pm local time
@@ -400,14 +400,15 @@ test('rescue: day counting survives a daylight-saving change', () => {
   assert.equal(rescueToday(p, cards, states, new Set(), new Date(2026, 9, 24 + 10, 12).getTime()), null);
 });
 
-test('rescueOffer: only for a big, unusual pile; picks N from 3 to 5 (the simulated cap)', () => {
+test('rescueOffer: only for a big, unusual pile; N is capped at RESCUE_MAX_DAYS (3, round2-plan section 9)', () => {
   assert.equal(rescueOffer({ backlog: 29, typicalDaily: 5, now: NOW }), null);               // under 30
   assert.equal(rescueOffer({ backlog: 35, typicalDaily: 20, now: NOW }), null);              // under twice a typical day
   const o = rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW });
-  assert.equal(o.n, 5);                                                                      // ceil(120/20) = 6, capped at 5
-  assert.equal(o.perDay, 24);
+  assert.equal(RESCUE_MAX_DAYS, 3);
+  assert.equal(o.n, 3);                                                                      // ceil(120/20) = 6, capped at 3 (was 5 before the round 2 decision)
+  assert.equal(o.perDay, 40);
   assert.equal(rescueOffer({ backlog: 40, typicalDaily: 5, now: NOW }).n, 3);               // at least 3
-  assert.equal(rescueOffer({ backlog: 900, typicalDaily: 20, now: NOW }).n, 5);              // at most 5
+  assert.equal(rescueOffer({ backlog: 900, typicalDaily: 20, now: NOW }).n, 3);              // at most 3 (was 5)
   assert.equal(rescueOffer({ backlog: 120, now: NOW }).typical, 20);                         // default typical day
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, active: true }), null);
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) }), null);

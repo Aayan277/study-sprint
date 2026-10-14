@@ -266,7 +266,7 @@ function start(el, opts) {
     <div class="timer" aria-hidden="true"><div class="timer-fill" id="pTimer"></div></div>
     <div class="options" id="options"></div>
     <form class="typeform" id="pType" hidden autocomplete="off">
-      <input id="pInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer" placeholder="Type the answer">
+      <input id="pInput" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer" placeholder="Type the answer">
       <button class="btn primary" type="submit">Check</button>
       <button class="btn ghost" type="button" id="skipBtn">Skip</button>
     </form>
@@ -427,7 +427,7 @@ function answer(choice) {
     ? `<div class="fb ok"><span class="fb-mark">${icon('check')} Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
   const yours = !ok && given && !diff ? `<span class="given">You answered: ${esc(given)}</span>` : '';
-  const info = ok ? '' : `<p class="fb-info"><b>${mathHTML(G.q.answer)}</b>${yours}</p>`;
+  const info = ok || diff ? '' : `<p class="fb-info"><b>${mathHTML(G.q.answer)}</b>${yours}</p>`;
   $('feedback').innerHTML = `${head}${info}${diff ? diffHTML(diff) : ''}<div class="fb-btns">
     <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
     <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
@@ -619,14 +619,14 @@ async function finish() {
     ${schedule}
     <section class="missed">
       <h2>Missed</h2>
-      ${missed.length ? missed.map(l => `
+      ${missed.length ? missed.map(l => { const diff = l.typed ? diffAgainstBack(l.typed, l.target) : null; return `
         <div class="miss">
           <div class="m">${mathHTML(l.q.prompt)}</div>
           ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
           <div class="r">${mathHTML(l.q.answer)}</div>
-          ${l.typed && hasMarks(diffAgainstBack(l.typed, l.target)) ? diffHTML(diffAgainstBack(l.typed, l.target), { small: true })
+          ${hasMarks(diff) ? diffHTML(diff, { small: true })
             : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
-        </div>`).join('')
+        </div>`; }).join('')
       : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
     </section>
     <div class="res-actions">
