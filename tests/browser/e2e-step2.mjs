@@ -138,9 +138,11 @@ await page.click('.tdeck:has-text("Short answers")'); await page.waitForSelector
 await page.click('#showBtn'); await page.click('[data-rate="3"]'); await page.waitForFunction(() => !document.querySelector('.rv-card.flipped'));
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
 const answeredAll = await run(async () => (await (await import('./js/db.js')).getLogsSince((await import('./js/days.js')).dayStart())).filter(l => l.source === 'review').length);
-ok(answeredAll > 1 && (await page.textContent('.today-hero')).includes(`${answeredAll} answers today`), `all decks: the goal counts all ${answeredAll} answers`);
+// (Round 2 A6: the "N answers today" line is gone; the goal ring's own number is the answers done)
+const goalDone = () => page.evaluate(() => { const b = document.querySelector('.th-main .ring-in b'); return b ? +b.textContent : null; });
+ok(answeredAll > 1 && (await goalDone()) === answeredAll, `all decks: the goal counts all ${answeredAll} answers`);
 await page.click('#optBtn'); await page.click('#deckChips [data-deck="L"]'); await page.click('#optDone');
-ok((await page.textContent('.today-hero')).includes('0 answers today'), 'one other deck chosen: its goal does not count answers from elsewhere');
+ok((await goalDone()) === 0, 'one other deck chosen: its goal does not count answers from elsewhere');
 await page.click('#allDecksBtn');
 
 // ---- A failed Review load keeps you on Today, and nothing starts later ----

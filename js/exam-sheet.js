@@ -67,13 +67,18 @@ export async function openExamSheet(deckId, onDone = () => {}) {
   sync();
   $('xdDate').addEventListener('input', sync);
   document.querySelectorAll('#sheet [data-days]').forEach(b => b.addEventListener('click', () => { $('xdDate').value = isoIn(+b.dataset.days); sync(); $('xdErr').hidden = true; }));
+  // A double-click or a second Enter must not save twice: two saves ran two deck-page redraws at the same moment.
+  let saving = false;
   $('xdForm').addEventListener('submit', async e => {
     e.preventDefault();
+    if (saving) return;
     const value = $('xdDate').value;
     const problem = value ? examDateError(value) : 'Pick an exam date.';
     if (problem) { $('xdErr').textContent = problem; $('xdErr').hidden = false; return; }
     const saved = { ...deck, examDate: value };
-    const { moved } = await commitDeck(saved, decks);
+    saving = true;
+    let moved;
+    try { ({ moved } = await commitDeck(saved, decks)); } catch (err) { saving = false; throw err; }
     closeSheet();
     toast(`${deck.name}: ${countdown(examInfo(saved)).toLowerCase()}${moved ? `. ${plural(moved, 'card')} brought forward to before it` : ''}`);
     onDone(saved);

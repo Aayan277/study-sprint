@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -17,8 +17,7 @@ await page.evaluate(async () => {
   await db.putStates([st(0, now + 60 * D, 600, now - 20 * D), st(1, now + 45 * D, 20, now - 10 * D), st(2, now + 90 * D, 1500, now - 30 * D), st(3, now + 2 * D, 6, now - D), st(4, now + 5 * D, 9, now - 6 * D)]);
 });
 const examDate = inDays(10);
-await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
-await page.click('#editDeck'); await page.waitForSelector('#deckExam');
+await page.goto('http://localhost:8123/#/deck/sample'); await deckMenu(page); await page.click('#editDeck'); await page.waitForSelector('#deckExam');
 await page.fill('#deckExam', examDate);
 await page.screenshot({ path: SP + '/exam-editor.png', fullPage: true });
 await page.click('button[type=submit][form=deckForm]');
@@ -75,12 +74,11 @@ await page.waitForSelector('#endBtn'); await page.click('#endBtn'); await page.w
 const endStreak = (await page.textContent('.finish-next .streak')).replace(/\s+/g, ' ').trim();
 ok(!todayStreak.startsWith('0 ') && endStreak === todayStreak, `end of Exam prep shows the same streak as Today: "${endStreak}" vs "${todayStreak}"`);
 // clearing the date turns it off
-await page.goto('http://localhost:8123/#/deck/sample'); await page.waitForSelector('#editDeck');
-await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('button[type=submit][form=deckForm]');
+await page.goto('http://localhost:8123/#/deck/sample'); await deckMenu(page); await page.click('#editDeck'); await page.fill('#deckExam', ''); await page.click('button[type=submit][form=deckForm]');
 await page.waitForFunction(() => !document.querySelector('.exam-line .exam-badge'));
 ok(await page.isVisible('#addExam'), 'clearing the date removes exam mode, and the deck page offers Add exam date again');
 // the Exam date field is near the top of Edit deck (right after the name and course code), above Study options and Read aloud
-await page.click('#editDeck'); await page.waitForSelector('#deckExam');
+await deckMenu(page); await page.click('#editDeck'); await page.waitForSelector('#deckExam');
 const order = await page.$$eval('#deckForm [id=deckName], #deckForm [id=deckCourse], #deckForm [id=deckExam], #deckForm [id=deckOpts], #deckForm [id=deckTts]', els => els.map(e => e.id));
 ok(order.join() === 'deckName,deckCourse,deckExam,deckOpts,deckTts', 'Edit deck: Exam date comes right after name and course code: ' + order.join());
 await page.click('#deckCancel');

@@ -360,7 +360,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-new .small:not(.on-track){display:block;margin-top:4px}
 .exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
-.exam-add{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
+.exam-add{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.exam-add::-webkit-scrollbar{display:none}
+.exam-add > *{flex:none;white-space:nowrap}
 .exam-add .link{padding:4px 6px;min-height:32px}
 .exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
 .exam-chip:hover{background:var(--surface-2)}
@@ -383,7 +385,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .td-counts .due.zero,.deck-counts .due.zero{background:none;box-shadow:none;padding:0;color:var(--text-2)}
 .td-counts .due.zero b,.deck-counts .due.zero b{color:var(--text)}
 .td-go{display:flex;align-items:center;gap:var(--s-2);flex:none}
-.td-min{font-size:var(--fs-xs);color:var(--text-2)}
 .td-go .ico{width:36px;height:36px;padding:9px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .tdeck.done .td-go .ico{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good)}
 .tdeck.done .td-name{color:var(--text-2)}
@@ -484,9 +485,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
 .deck-summary .deck-counts .due{order:0}
 main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3);margin-bottom:var(--s-4)}
-main[data-route="deck"] .screen-head .head-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-main[data-route="deck"] .screen-head .head-actions .btn{padding:6px 2px;white-space:nowrap;font-size:var(--fs-sm)}
-main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / -1;order:-1;min-height:46px;font-size:var(--fs-base)}
 .exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--exam-tint);color:var(--exam);box-shadow:inset 0 0 0 1px var(--exam-line);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
 .exam-badge.soon{background:var(--again-tint);color:var(--again);box-shadow:inset 0 0 0 1px var(--again-line)}
 .deck .exam-badge{margin-top:4px;justify-self:start}
@@ -1213,8 +1211,6 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   main[data-route="decks"] .decks.compact{align-items:start}
   main[data-route="decks"] .decks.compact .deck{min-height:0}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
-  main[data-route="deck"] .screen-head .head-actions{display:flex;gap:var(--s-2)}
-  main[data-route="deck"] .screen-head .head-actions .btn.primary{order:0;min-height:34px;font-size:var(--fs-sm);padding:6px 14px}
   /* Today: the goal and streak on the left, the big Start button beside them */
   .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-8);align-items:center;padding:var(--s-8)}
   .th-big{font-size:2.25rem}
@@ -1264,20 +1260,22 @@ dialog.sheet.side .sheet-head{padding:20px 14px 12px 22px;border-bottom:1px soli
 dialog.sheet.side > .sheet-in{padding:18px 22px 24px}
 dialog.sheet.side .sheet-foot{padding:12px 22px}
 
-/* A deck's page on a wide screen: tree of decks | the deck | the card editor docked on the right. The tree and the empty
-   dock are only shown from 1200px (the panel itself is the card panel, a side sheet). Below that, nothing changes. */
-.deck-tree,.dock-empty{display:none}
+/* A deck's page on a wide screen: [tree of decks |] the deck [| the card editor docked on the right].
+   The tree is only a column from 1200px and only while the sidebar is collapsed to its icon rail (html[data-rail="on"]):
+   with the sidebar open, the sidebar already lists the decks and the page gets the width. The card editor (the card panel,
+   a side sheet) opens on the right when a card is picked, and the page narrows for it (body.has-side); Esc gives the width back.
+   Below 1200px, nothing changes. */
+.deck-tree{display:none}
 @media (min-width:1200px){
   :root:has(main[data-route="deck"]){--panel:400px}
-  main[data-route="deck"]{margin-left:calc(var(--side) + 240px);margin-right:var(--panel);padding:28px 32px 56px}
+  main[data-route="deck"]{padding:28px 32px 56px}
+  html[data-rail="on"] main[data-route="deck"]{margin-left:calc(var(--side) + 240px)}
   main[data-route="deck"] > .view{max-width:none}
   main[data-route="deck"] .back{display:none}
   main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3)}
-  main[data-route="deck"] .screen-head .head-actions{display:flex;flex-wrap:wrap}
-  main[data-route="deck"] .screen-head .head-actions .btn{min-height:40px;font-size:var(--fs-sm);padding:6px 14px}
   main[data-route="deck"] .br-controls{grid-template-columns:1fr 1fr}
   main[data-route="deck"] .br-controls input{grid-column:1 / -1}
-  .deck-tree{display:block;position:fixed;top:0;bottom:0;left:var(--side);width:240px;z-index:4;padding:22px 12px;background:var(--bg);border-right:1px solid var(--line);overflow:auto}
+  html[data-rail="on"] .deck-tree{display:block;position:fixed;top:0;bottom:0;left:var(--side);width:240px;z-index:4;padding:22px 12px;background:var(--bg);border-right:1px solid var(--line);overflow:auto}
   .dt-head{display:flex;align-items:center;justify-content:space-between;padding:0 6px 12px}
   .dt-head b{font-size:var(--fs-md);letter-spacing:-.02em}
   .dt-search{margin:0 0 10px}
@@ -1296,15 +1294,10 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   .dt-row.ctx .dt-node{color:var(--text-2)}
   .dt-node .dot{width:7px;height:7px;border-radius:50%;background:var(--deck);flex:none}
   .dt-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dt-n{font-size:var(--fs-2xs);color:var(--text-2)}
+  .dt-n{flex:none;min-width:20px;padding:1px 6px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);font-size:var(--fs-2xs);text-align:center}
   .dt-all{display:inline-flex;align-items:center;gap:2px;margin:14px 8px 0;font-size:var(--fs-sm);color:var(--text-2);text-decoration:none}
   .dt-all:hover{color:var(--text)}
   .dt-all .ico{width:14px;height:14px}
-  /* the dock waits for a card: the card panel opens over it, in the same place */
-  .dock-empty{position:fixed;top:0;right:0;bottom:0;width:var(--panel);z-index:3;display:grid;place-content:center;padding:32px;text-align:center;background:var(--surface-1);border-left:1px solid var(--line);color:var(--text-2);font-size:var(--fs-sm)}
-  .dock-empty p{margin:0;max-width:24ch}
-  .dock-empty b{display:block;color:var(--text);font-size:var(--fs-md);margin-bottom:4px}
-  body.has-side .dock-empty{display:none}
   :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
 }
 
@@ -2018,3 +2011,39 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .pv-math .pv-b{color:var(--text-2)}
 .math-hint{display:block;margin:4px 0 0}
 .fmt-preview .tex-d{margin:.2em 0}
+
+/* ---------- 22b. Counts and decks (Round 2: A2 due numbers, A4 deck page, A6 empty deck / % ring / ⋯ menu) ---------- */
+/* A deck tile's ring: "43%" inside, "mastered" under it. An empty deck has no ring and offers Add cards instead of a tick. */
+.deck-ring{display:grid;justify-items:center;gap:3px;margin-top:0}
+.deck-ring .ring-in .mono{font-size:.75rem;font-weight:600;letter-spacing:-.03em;color:var(--text)}
+.deck-ring .ring-in small{font-size:.5625rem;font-weight:500;color:var(--text-2);margin:0 0 0 1px;letter-spacing:0}
+.dr-cap{font-size:var(--fs-2xs);line-height:1;color:var(--text-2)}
+.deck .icon-btn{grid-column:3;grid-row:1}
+.deck-go.add{width:auto;height:40px;padding:0 16px;border-radius:var(--r-pill);font:600 var(--fs-sm) var(--f-ui);white-space:nowrap;text-decoration:none}
+.deck-go.add:hover{background:var(--accent-line)}
+/* A deck page's numbers: what is held back until tomorrow, and the shared-limit note */
+.held-note{margin:var(--s-2) 0 0;font-size:var(--fs-sm);color:var(--text-2)}
+.held-note span{color:var(--text-2)}
+/* A long unbroken name wraps inside the page instead of running under the docked card editor */
+main[data-route="deck"] .screen-head h1,main[data-route="deck"] .crumbs,main[data-route="deck"] .crumbs a,main[data-route="deck"] .eyebrow{overflow-wrap:anywhere;min-width:0}
+main[data-route="deck"] .screen-head > div:first-child{min-width:0;max-width:100%}
+/* The deck page's header buttons: the main one on its own row (phones), Import, and the ⋯ menu */
+main[data-route="deck"] .screen-head .head-actions{display:flex;flex-wrap:wrap;gap:6px}
+main[data-route="deck"] .screen-head .head-actions .btn{flex:1 1 0;min-width:0;min-height:40px;padding:6px 10px;font-size:var(--fs-sm)}
+main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;order:-1;min-height:46px;font-size:var(--fs-base)}
+.more-wrap{position:relative;display:flex;flex:none}
+.more-btn{width:40px;height:auto;min-height:40px;border:1px solid var(--line);background:var(--surface-2);border-radius:var(--r-sm)}
+.more-btn:hover,.more-btn[aria-expanded="true"]{background:var(--surface-3);border-color:var(--line-strong);color:var(--text)}
+.more-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.more-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:8;min-width:190px;display:grid;padding:6px;background:var(--surface-3);border-radius:var(--r-md);box-shadow:var(--e-2),0 18px 40px -12px rgb(0 0 0 / .5)}
+.more-menu[hidden]{display:none}
+.more-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:var(--r-sm);font:500 var(--fs-base) var(--f-ui);color:var(--text);cursor:pointer;white-space:nowrap}
+.more-menu button .ico{width:18px;height:18px;color:var(--text-2)}
+.more-menu button:hover,.more-menu button:focus-visible{background:var(--surface-2)}
+.more-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media (min-width:1024px){
+  main[data-route="deck"] .screen-head .head-actions .btn{flex:none;padding:6px 14px}
+  main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:none;order:0;min-height:40px;font-size:var(--fs-sm)}
+}
+/* Today: keep a little room so the chips' focus rings aren't clipped by the sideways scroll */
+.exam-add{padding:3px 2px;margin-left:-2px;margin-right:-2px}

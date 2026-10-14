@@ -132,7 +132,9 @@ ok(!(await p.$eval('.subdecks', d => d.open)), 'and so is a closed one');
 ok(await p.$$eval('.deck-act .btn', b => b.length) === 0, 'no full-width Study buttons');
 const go1 = await box(p, '.deck-go'); ok(go1.w === 40 && go1.h === 40, 'the play button is a 40px circle');
 ok((await p.getAttribute('[data-study="econ"]', 'aria-label')) === 'Study Microeconomics: 6 cards', 'with an accessible name: ' + await p.getAttribute('[data-study="econ"]', 'aria-label'));
-ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e) && await p.$('.deck-go.done') !== null, 'a deck with nothing to do shows a check instead');
+ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e), 'a deck with cards to study has a play button');
+// Round 2 A6: a deck with no cards at all is not "done": it offers + Add cards (the check is for decks that are caught up; see e2e-counts.mjs)
+ok(await p.locator('.deck:has-text("Chemistry") a.deck-go.add[href="#/import/chem"]').count() === 1 && await p.$('.deck-go.done') === null, 'an empty deck shows + Add cards instead of a check');
 await p.click('[data-study="econ"]'); await p.waitForSelector('#flash');
 ok(await p.evaluate(() => location.hash) === '#/review/econ', 'the play button starts the deck');
 await p.click('#endBtn'); await p.waitForSelector('.finish-next');
@@ -323,6 +325,10 @@ await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('co
 
 // ---------- B7: three columns ----------
 await go(p, '#/deck/law', '.crow');
+// Round 2 A4: with the sidebar open its deck list is enough, so the tree column is hidden and the card list gets the width;
+// the tree is a column only beside the collapsed icon rail.
+ok(!(await p.isVisible('.deck-tree')) && (await box(p, '.crows')).w > 800, 'sidebar open: no deck-tree column, and the card list is wide: ' + Math.round((await box(p, '.crows')).w));
+await p.click('#sideCollapse'); await p.waitForTimeout(150);
 const tree = await box(p, '.deck-tree'), side = await box(p, '.tabs');
 ok(tree.x === side.r && Math.round(tree.w) === 240, `the deck tree is a left column next to the sidebar: x ${tree.x}, width ${tree.w}`);
 ok((await p.$$eval('.dt-row', r => r.length)) >= 8 && (await p.textContent('.dt-row.cur')).includes('Law'), 'it lists the decks and highlights this one');
@@ -334,13 +340,13 @@ await p.fill('#dtQ', 'lecture'); ok((await p.$$eval('.dt-row', r => r.length)) =
 await p.fill('#dtQ', '');
 const view = await box(p, 'main > .view');
 ok(view.x >= tree.r + 20, 'the deck sits in the middle column, right of the tree: x ' + Math.round(view.x));
-const dock = await box(p, '.dock-empty');
-ok(await p.isVisible('.dock-empty') && dock.x > 1000 && dock.r >= 1439 && view.r <= dock.x, 'the card editor column is docked on the right, waiting for a card: x ' + Math.round(dock.x));
+ok(await p.locator('.dock-empty').count() === 0 && view.r <= 1440, 'no empty "pick a card" column: the editor only opens when a card is picked');
+const dock = { x: 1440 - 400 };
 await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm'); await p.waitForTimeout(400);
 sh = await box(p, '#sheet');
 ok(await p.evaluate(() => document.getElementById('sheet').classList.contains('side') && document.getElementById('sheet').open && !document.getElementById('sheet').matches(':modal')), 'a card opens in the docked panel (not a pop-up)');
 ok(Math.abs(sh.x - dock.x) < 2 && Math.round(sh.w) === 400 && sh.b >= 899, 'in the same place, 400px wide, full height: x ' + Math.round(sh.x));
-ok(!(await p.isVisible('.dock-empty')), 'the placeholder is hidden while a card is open');
+ok(await p.evaluate(() => document.body.classList.contains('has-side')), 'the page narrows while a card is open');
 ok((await box(p, '.crows')).r <= sh.x && (await box(p, '.crows')).x > tree.r, 'the card list sits between the tree and the editor, not under it');
 ok(await p.isVisible('.sheet-x') && (await box(p, '.sheet-x')).r > sh.r - 24, 'the editor has a × at the top');
 sf = await box(p, '.sheet-foot'); ok(Math.abs(sf.b - sh.b) < 2 && await p.isVisible('button[type=submit][form=ceForm]'), 'Save changes is in a footer that stays in view');
@@ -350,7 +356,7 @@ ok(await p.isVisible('#ceForm') && (await p.$eval('.crow.sel .f', e => e.textCon
 await p.locator('.crow').nth(1).click(); await p.waitForTimeout(400);
 ok((await p.textContent('#ceFront')) !== 'Docked edit', 'clicking another card switches the dock to that card');
 await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-ok(!(await p.evaluate(() => document.getElementById('sheet').open)) && await p.isVisible('.dock-empty'), 'Escape closes the panel and the dock waits again');
+ok(!(await p.evaluate(() => document.getElementById('sheet').open)) && !(await p.evaluate(() => document.body.classList.contains('has-side'))), 'Escape closes the panel and the page has its width back');
 await p.click('.dt-row:has-text("Microeconomics") a'); await p.waitForFunction(() => location.hash === '#/deck/econ');
 await p.waitForSelector('.dt-row.cur:has-text("Microeconomics")');
 ok((await p.textContent('h1')) === 'Microeconomics', 'a deck in the tree opens that deck');

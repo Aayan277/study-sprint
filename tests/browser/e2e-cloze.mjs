@@ -1,6 +1,6 @@
 // Cloze cards in a real browser: saving notes, siblings in Review and Today, the editor, Play, export and import,
 // and the "Link cloze cards" tool. Run with: node tests/browser/run.mjs cloze
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -246,8 +246,7 @@ ok(ak.length === 2 && ak[0].noteId === ak[1].noteId && ak.map(c => c.cloze).sort
 ok(ac.length === 7 && ac.every(c => typeof c.ankiGuid === 'string' && c.ankiGuid), 'Anki import: every card keeps its Anki guid');
 
 // export our own notes as an Anki file and bring them back
-await page.goto('http://localhost:8123/#/deck/' + bio); await page.waitForSelector('#exportDeck');
-await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+await page.goto('http://localhost:8123/#/deck/' + bio); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#exApkg')]);
 await dl.saveAs(SP + '/exports/cloze.apkg');
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');

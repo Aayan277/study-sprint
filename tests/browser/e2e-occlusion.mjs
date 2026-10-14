@@ -1,7 +1,7 @@
 // Image occlusion (stage 1) in a real browser: the 2048px picture, saving a note, Review (front, zoom, flip, peek, typing),
 // Browse (badge, editing a label), Play, importing Anki's occlusion notes, export and back, backups and syncing.
 // Run with: node tests/browser/run.mjs occlusion
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -251,8 +251,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
 }
 
 // ---- 7. export as an Anki Image Occlusion note, and read it back ----
-await page.goto(URL + '#/deck/' + seed.deckId); await page.waitForSelector('#exportDeck');
-await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+await page.goto(URL + '#/deck/' + seed.deckId); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
 ok((await page.textContent('#sheet')).includes('Image-occlusion cards need Anki 23.10+'), 'the export sheet warns that occlusion needs Anki 23.10+');
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#exApkg')]);
 await dl.saveAs(SP + '/exports/occlusion.apkg');

@@ -52,22 +52,44 @@ export async function loadAll({ history = false } = {}) {
 // A set of decks and everything inside them.
 export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
 
-// How many cards a set of decks (and their subdecks) has for today.
+// How many cards a set of decks (and their subdecks) has for today: what Review will show if you start them now.
+//   due     already-studied cards Review will show (daily limits, one card per cloze note a day and exam pull-ins applied)
+//   fresh   new cards it will introduce        total  due + fresh
+//   scheduled      the raw count: reviews and learning cards due today, before limits and the sibling rule
+//   heldBySiblings scheduled cards that wait until tomorrow because a sibling of the same note is shown
+//   heldByLimit    cards that wait until tomorrow because of a daily review limit (or the catch-up plan)
 // The cards were sorted into due / waiting / new once, in loadAll(), so counting a deck only looks at the short
-// lists (not every card), however many decks are counted.
-export function countFor(data, deckIds) {
+// lists (not every card), however many decks are counted. The two "held" numbers are worked out only when read.
+export function deckCounts(data, deckIds) {
   const ids = withSubdecks(data, deckIds);
   if (Date.now() - data.splitAt > 60000) { data.split = splitCards(data.cards, data.statesById, Date.now(), data.exam); data.splitAt = Date.now(); }   // a minute old: learning cards may have come due
   const { split } = data;
-  const { queue, waiting } = queueFrom({
+  const lists = {
     reviews: split.reviews.filter(x => ids.has(x.card.deckId)),
     waiting: split.waiting.filter(x => ids.has(x.card.deckId)),
     fresh: split.fresh.filter(c => ids.has(c.deckId))
-  }, data.newLeft, data.reviewLeft, data.answered, data.rescue);
+  };
+  const { queue, waiting } = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, data.rescue);
   const fresh = queue.filter(q => q.kind === 'new').length;
   const due = queue.length - fresh + waiting.length;
-  // `cards` (every card in these decks) is only worked out if someone asks for it.
-  return { get cards() { return data.cards.filter(c => ids.has(c.deckId)); }, due, fresh, total: due + fresh };
+  const scheduled = lists.reviews.length + lists.waiting.length;
+  // What Review would show with no review limit (and no catch-up plan): the difference to `due` is the limit's doing.
+  const noLimit = () => {
+    const q = queueFrom(lists, 0, { total: Infinity, byDeck: new Map() }, data.answered, null);
+    return q.queue.length + q.waiting.length;
+  };
+  return {
+    due, fresh, total: due + fresh, scheduled,
+    get heldByLimit() { return noLimit() - due; },
+    get heldBySiblings() { return scheduled - noLimit(); }
+  };
+}
+// deckCounts plus `cards` (every card in these decks), which is only worked out if someone asks for it.
+export function countFor(data, deckIds) {
+  const c = deckCounts(data, deckIds);
+  const ids = withSubdecks(data, deckIds);
+  Object.defineProperty(c, 'cards', { get: () => data.cards.filter(x => ids.has(x.deckId)), enumerable: true });
+  return c;
 }
 
 // Answers given today in a set of decks (all decks when none are chosen): what the daily goal counts as done.

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countFor, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { countFor, deckCounts, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 
@@ -158,4 +158,67 @@ test('countFor passes the catch-up plan on: the backlog is capped and new cards 
   const rescue = { cutoff: now - DAY, allow: 10, k: 1, days: 5, remaining: 50, pauseNew: true, exempt: new Set() };
   const got = countFor({ ...base, rescue }, ['b']);
   assert.deepEqual([got.due, got.fresh], [10, 0]);
+});
+
+// ---------- Round 2 A2: "Due" means what Review will show today ----------
+// A small world: parent P with kids K1 and K2, and an unrelated deck Q. Every card in review state, overdue.
+const world = ({ reviewPerDay = Infinity, suspended = [], cloze = false, examCap = false } = {}) => {
+  const ds = [{ id: 'P', name: 'P', created: 1 }, { id: 'K1', name: 'K1', parentId: 'P', created: 2 }, { id: 'K2', name: 'K2', parentId: 'P', created: 3 }, { id: 'Q', name: 'Q', created: 4 }];
+  const cs = [], st = new Map();
+  const add = (id, deckId, extra = {}) => { cs.push({ id, deckId, created: cs.length, ...extra }); st.set(id, { cardId: id, state: 2, due: now - DAY - cs.length, lastReview: now - 5 * DAY }); };
+  for (let i = 0; i < 4; i++) add('p' + i, 'P');
+  for (let i = 0; i < 3; i++) add('a' + i, 'K1');
+  if (cloze) for (let n = 1; n <= 3; n++) add('z' + n, 'K2', { noteId: 'N', cloze: n }); else for (let i = 0; i < 2; i++) add('b' + i, 'K2');
+  for (let i = 0; i < 5; i++) add('q' + i, 'Q');
+  const visible = cs.filter(c => !suspended.includes(c.id));
+  const ch = chainMap(ds), dOf = new Map(cs.map(c => [c.id, c.deckId]));
+  const d = { decks: ds, cards: visible, statesById: st, deckOf: dOf, logs: [], answered: new Map(), chains: ch, rescue: null,
+    newLeft: newLimits({ perDay: 20, decks: ds, logs: [], deckOf: dOf, chains: ch }),
+    reviewLeft: reviewLimits({ perDay: reviewPerDay, decks: ds, logs: [], deckOf: dOf, chains: ch }),
+    exam: { caps: new Map(), gain: new Map() } };
+  if (examCap) st.set('a0', { ...st.get('a0'), due: now + 30 * DAY });
+  if (examCap) d.exam = { caps: new Map([['a0', now - DAY]]), gain: new Map() };
+  d.split = splitCards(visible, st, now, d.exam); d.splitAt = Date.now();
+  return d;
+};
+
+test('deckCounts without limits: a parent is its own cards plus its subdecks, and nothing is held back', () => {
+  const d = world();
+  const [p, k1, k2] = [['P'], ['K1'], ['K2']].map(ids => deckCounts(d, ids));
+  assert.equal(p.due, 9);
+  assert.equal(p.due, 4 + k1.due + k2.due);
+  assert.deepEqual([p.scheduled, p.heldByLimit, p.heldBySiblings], [9, 0, 0]);
+  assert.equal(p.total, p.due + p.fresh);
+});
+
+test('deckCounts: a daily review limit holds cards back and says how many', () => {
+  const d = world({ reviewPerDay: 6 });
+  const all = deckCounts(d, ['P', 'Q']);
+  assert.equal(all.due, 6);
+  assert.equal(all.heldByLimit, 8);
+  assert.equal(all.heldBySiblings, 0);
+  assert.equal(all.scheduled, 14);
+  // the parent alone gets the first 6 of its 9 (most overdue first); the rest wait
+  const p = deckCounts(d, ['P']);
+  assert.deepEqual([p.due, p.heldByLimit], [6, 3]);
+});
+
+test('deckCounts: cloze siblings wait until tomorrow and are counted as held by siblings, not by the limit', () => {
+  const d = world({ cloze: true });
+  const k2 = deckCounts(d, ['K2']);
+  assert.deepEqual([k2.due, k2.scheduled, k2.heldBySiblings, k2.heldByLimit], [1, 3, 2, 0]);
+});
+
+test('deckCounts: suspended cards are not counted, and a card an exam pulled in counts as due', () => {
+  const s = deckCounts(world({ suspended: ['a0', 'a1'] }), ['K1']);
+  assert.deepEqual([s.due, s.scheduled], [1, 1]);
+  const e = world({ examCap: true });
+  assert.equal(deckCounts(e, ['K1']).due, 3);           // a0 is saved as due in 30 days, but the exam plan wants it today
+});
+
+test('countFor keeps giving the same due/fresh/total as deckCounts, plus the cards', () => {
+  const d = world({ reviewPerDay: 5 });
+  const a = countFor(d, ['P']), b = deckCounts(d, ['P']);
+  assert.deepEqual([a.due, a.fresh, a.total, a.heldByLimit], [b.due, b.fresh, b.total, b.heldByLimit]);
+  assert.equal(a.cards.length, 9);
 });

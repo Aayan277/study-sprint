@@ -85,7 +85,6 @@ export async function renderToday(el) {
             <span class="th-label mono">DAILY GOAL</span>
             <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
             <span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
-            <span class="th-sub">${plural(answered, 'answer')} today</span>
           </div>
         </div>
         ${streakHTML(streak, { button: true })}
@@ -206,7 +205,7 @@ export async function renderToday(el) {
         <span class="td-counts"><span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
           ${info ? `<span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
       </span>
-      <span class="td-go">${c.total ? `<span class="td-min">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
+      <span class="td-go">${c.total ? icon('play') : icon('check')}</span>`;
     return c.total
       ? `<button class="tdeck" type="button" data-start="${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="Study ${esc(deck.name)}: ${plural(c.total, 'card')}">${inner}</button>`
       : `<a class="tdeck done" href="#/deck/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: all done. Open deck">${inner}</a>`;

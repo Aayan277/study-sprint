@@ -9,8 +9,8 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v68';
-// files-hash: 24c982bbb3c6160b
+const CACHE = 'study-sprint-v69';
+// files-hash: dc9e7473330aef86
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js',

@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -15,8 +15,7 @@ await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 const said = () => p.evaluate(() => window.__said);
 
 // ---- read aloud ----
-await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('#editDeck');
-await p.click('#editDeck'); await p.waitForSelector('#deckTts');
+await p.goto('http://localhost:8123/#/deck/sample'); await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckTts');
 await p.selectOption('#deckTts', 'en-GB'); await p.check('#deckTtsAuto');
 await p.click('button[type=submit][form=deckForm]'); await p.waitForTimeout(300);
 const deck = await p.evaluate(async () => (await import('./js/db.js')).getDeck('sample'));

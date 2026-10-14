@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -29,8 +29,7 @@ for (const [file, deckName] of [['anki-media-new.apkg', 'Anatomy new'], ['anki-m
 // export a deck with a picture and check it with real Anki (next step)
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 const deckId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Anatomy new').id);
-await page.goto('http://localhost:8123/#/deck/' + deckId); await page.waitForSelector('#exportDeck');
-await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+await page.goto('http://localhost:8123/#/deck/' + deckId); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
 ok((await page.textContent('#sheet')).includes('Pictures go in the Anki deck'), 'export explains where pictures go');
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#exApkg')]);
 await dl.saveAs(SP + '/exports/with-pics.apkg');
