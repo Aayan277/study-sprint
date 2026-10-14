@@ -393,3 +393,51 @@ Written by the planning review against `quick-wins` at b257ca9. Line numbers are
 - **Q8, B7:** a fixed leech keeps its schedule. Recommended: yes.
 - **Q9, A1:** Keep going = exactly Today's Start session. Recommended: yes.
 - **Q10, B4:** remember the scratchpad's on/off per device; drawings are never saved. Recommended: yes.
+
+## 6. Owner answers (asked 14 Oct)
+- Q1 A4: **hide the deck-tree column** while the sidebar is expanded (kept with the rail); editor panel opens only when a card is picked.
+- Q3/Q4 B1: **approved as planned** (synced `rescue` setting; new cards pause during a plan; exam decks exempt).
+- Q5 B2: **approved** (`mixedWith` log field).
+- Q7 B7: **memory hook reuses `noteExtra`** (shown under the answer on Basic cards too; Anki export appends it to Back).
+- Q2, Q6, Q8, Q9, Q10: not asked separately; go with the recommendations above unless the owner objects.
+
+## 7. Bug-hunter findings (14 Oct, v4.0). Fix in the owning batch, each with a failing test first.
+Scripts and screenshots were in the session scratchpad (`bughunt/fNN.mjs`); they don't survive the session, so the steps are below.
+1. **Medium. Double-click creates duplicates.**
+   - Where: decks.js deckForm submit (~535) and browse.js `openAddCard` basic/cloze (~592-618).
+   - Double-click "Create deck" or "Add card" → 2 decks or 2 cards. Two `requestSubmit` calls on a 2-blank cloze give 4 cards.
+   - Fix: an `adding` guard like the occlusion branch.
+2. **Medium. Double-tapping Undo loses an entry.**
+   - Where: review.js `undo` (~378).
+   - Cause: `R.undo.pop()` runs before the `R.busy` check, so 1 review stays logged and can't be undone.
+3. **Medium. The typed-answer check is too loose or too strict.**
+   - Where: match.js `normalizeAnswer`.
+   - Accepted wrongly: か for が, は for ぱ, Hindi कि for की, "C" for "C++", "-1" for "1".
+   - Rejected wrongly: 🧠, ❤️ and "+" as answers can never be typed correctly.
+   - Cause: the combining-mark strip and `[^\p{L}\p{N}\s]` remove meaningful marks and symbols. Keep the accent folding for Latin only (or compare NFC first); keep symbols when the answer is symbol-only.
+4. **Medium/low. `dupKey` makes false duplicates and breaks symbol search.**
+   - Where: import.js `dupKey`, used by browse-logic `browseCards`.
+   - か/が/は/ば/ぱ → 3 of 5 flagged; कि/की; C++/C#/C.
+   - Browse search for "🧠", "+" or "?!" returns everything; "c++" matches 12 of 18.
+5. **Low/medium. CSV round trip damage.**
+   - Where: import.js ~41, ~182.
+   - `cleanLines` runs before Papa: it drops blank lines inside quoted cells, trims, and strips "•" inside cells. The Tags column is ignored on import, though the export sheet says CSV imports back.
+   - A front that is just "-", "*" or "•" is eaten by `stripMarker`.
+   - Exported cells starting with = + @ aren't neutralised (CSV formula injection in Excel).
+6. **Low. Exam sheet double-save throws a pageerror.**
+   - Where: exam-sheet.js (no submit guard) → concurrent `renderDeck` → browse.js:127 `addEventListener` on null.
+7. **Low. Docked editor Escape at 1440** leaves focus on BODY instead of the card row (ui.js `openSheet` side / card-editor.js).
+8. **Low. Re-tapping the Play tab on the results screen does nothing** (app.js route same-hash handling / play.js).
+9. **Low. Empty deck says "All caught up".**
+   - `#/review/<emptyDeck>` says "All caught up"; a nonexistent deck id is titled "This deck". It should say "No cards yet · Add cards" (overlaps A6).
+   - Also: a deck with 0 cards shows a green ✓ on the Decks screen. That is the same problem as A6's "empty deck tick", so fix it there.
+10. **Low. A long unbroken parent-deck name** in the deck page header overflows under the docked editor at 1440 (css/decks.js; needs `overflow-wrap`/ellipsis).
+
+Not covered by the hunt:
+- real Supabase sync
+- .apkg import/export
+- Sheets import
+- a full Lightning round
+- iOS Safari
+- SW update flow
+- whether removing an exam date should restore earlier due dates (currently it doesn't; owner to decide)
