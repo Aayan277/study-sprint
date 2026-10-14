@@ -18,7 +18,8 @@ const open = async (w, h, { touch = false, init = null } = {}) => {
 const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom }; });
 const go = async (p, hash, sel) => { await p.evaluate(h => { location.hash = h; }, hash); await p.waitForSelector(sel); await p.waitForTimeout(200); };
 const redraw = p => p.evaluate(async () => { await (await import('./js/sidebar.js')).drawSidebar(); });
-const iso = n => { const d = new Date(Date.now() + n * DAY); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// n study days from now: the day starts at 4am (days.js), so before 04:00 "today" is still yesterday's date.
+const iso = n => { const d = new Date(Date.now() - 4 * 3600000); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 // What a CSS colour token is right now (as the browser writes a computed colour), to compare with what an element uses.
 const token = (p, name, prop = 'color') => p.evaluate(([n, pr]) => { const s = document.createElement('i'); s.style[pr] = `var(${n})`; document.body.append(s); const c = getComputedStyle(s)[pr]; s.remove(); return c; }, [name, prop]);
 
@@ -26,7 +27,7 @@ const token = (p, name, prop = 'color') => p.evaluate(([n, pr]) => { const s = d
 async function seed(p) {
   await p.evaluate(async () => {
     const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
-    const iso = n => { const d = new Date(now + n * D); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const iso = n => { const d = new Date(now - 4 * 3600000); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     const cards = (id, n) => Array.from({ length: n }, (_, i) => ({ id: id + i, deckId: id, front: `${id} q${i}`, back: `${id} a${i}`, tags: [], created: i }));
     const defs = [['bio', 'Cell Biology', '#46A758', 5, 3], ['org', 'Organic Chemistry', '#12A594', 2, 4], ['eco', 'Microeconomics', '#3E63DD', null, 6],
       ['neu', 'Neuroscience', '#8E4EC6', 23, 2], ['spa', 'Spanish B1 Vocabulary', '#F76B15', 12, 2], ['lin', 'Linear Algebra', '#D6409F', null, 0]];
@@ -97,7 +98,7 @@ ok((await p.getAttribute('.side-deck[data-key=org]', 'aria-label')).includes('4 
 await p.click('.side-deck[data-key=eco]'); await p.waitForSelector('main[data-route=deck]');
 ok(p.url().endsWith('#/deck/eco'), 'clicking a deck opens it');
 ok(await p.locator('.side-deck[aria-current="page"]').count() === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'eco', 'and marks it aria-current');
-ok((await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === 'page', 'the Decks link is current too');
+ok((await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === 'true', 'the Decks link is current too, as the section ("true"; the deck row holds "page")');
 await p.click('.side-deck[data-key=bio]'); await p.waitForSelector('main[data-route=deck] h1');
 ok((await p.locator('.side-deck[aria-current="page"]').count()) === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'bio', 'the highlight moves to the next deck');
 await go(p, '#/stats', 'main[data-route=stats] .card');
@@ -223,6 +224,14 @@ ok(await p.isVisible('.deck-tree') && Math.round((await box(p, '.deck-tree')).x)
 
 // ---------- keyboard order follows the visual order ----------
 await go(p, '#/today', '#startBtn');
+// the first Tab stop is "Skip to page"; Enter moves focus to the page (and leaves the URL alone)
+await p.reload(); await p.waitForSelector('#startBtn'); await p.waitForSelector('.side-deck');      // a fresh page: focus starts at the top
+await p.keyboard.press('Tab');
+ok(await p.evaluate(() => document.activeElement.classList.contains('skip') && document.activeElement.textContent === 'Skip to page'), 'the first Tab stop is the "Skip to page" link');
+ok((await box(p, '.skip')).y >= 0, 'and it is visible once focused');
+await p.keyboard.press('Enter');
+ok(await p.evaluate(() => document.activeElement === document.querySelector('main')) && p.url().endsWith('#/today'), 'Enter moves focus to the page, and the address stays');
+await p.evaluate(() => document.activeElement?.blur());
 await p.evaluate(() => document.querySelector('.top .brand').focus());
 const order = [];
 for (let i = 0; i < 40; i++) {
@@ -241,7 +250,7 @@ ok(mainFirst === 'main', 'the page follows the sidebar');
 
 // ---------- contrast (AA) in dark, light and OLED for every accent ----------
 await go(p, '#/deck/bio', '.deck-tree');
-await p.evaluate(async () => { const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.id === 'org'); await db.saveDeck({ ...d, examDate: new Date(Date.now() + 2 * 86400000 - 3 * 3600000).toISOString().slice(0, 10) }); });
+await p.evaluate(async iso2 => { const db = await import('./js/db.js'); const dk = (await db.getDecks()).find(x => x.id === 'org'); await db.saveDeck({ ...dk, examDate: iso2 }); }, iso(2));
 await redraw(p);
 const contrast = () => p.evaluate(() => {
   const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
@@ -287,6 +296,25 @@ ok((await p.getAttribute('#sideCollapse', 'aria-expanded')) === 'false' && (awai
 ok(!(await p.isVisible('.side-name >> nth=0')) || (await p.$eval('.side-name', e => getComputedStyle(e.parentElement).fontSize)) === '0px', 'icons only: no names');
 ok((await box(p, '#sideBadge')).w === 7 && (await box(p, '#sideBadge')).h === 7, 'the Today count becomes a dot');
 ok(await p.isVisible('#sideDot') && (await box(p, '#sideDot')).w === 7, 'the Decks exam dot stays');
+// the sync line is hidden in the rail: a problem shows as a dot on the Settings icon
+const setDot = () => p.evaluate(() => getComputedStyle(document.getElementById('sideSet'), '::after').display);
+ok((await setDot()) === 'none', 'rail: no dot on Settings while sync is fine');
+await p.evaluate(async () => {
+  const db = await import('./js/db.js'), sync = await import('./js/sync.js');
+  await db.setSetting('syncAuth', { user: { email: 'a@b.c', id: 'u1' }, access_token: 'x', refresh_token: 'y' });
+  Object.assign(sync.lastStatus(), { state: 'error', error: 'offline', at: 0 });
+  dispatchEvent(new CustomEvent('sync', { detail: { state: 'error' } }));
+});
+await p.waitForFunction(() => document.getElementById('sideSet').classList.contains('warn'));
+ok((await setDot()) === 'block' && (await p.getAttribute('#sideSet', 'data-tip')).includes("Couldn't sync"), 'rail: a sync problem puts a warn dot on the Settings icon (and in its tooltip)');
+await p.evaluate(async () => {
+  const db = await import('./js/db.js'), sync = await import('./js/sync.js');
+  Object.assign(sync.lastStatus(), { state: 'idle', error: null });
+  await db.setSetting('syncAuth', null);
+  dispatchEvent(new CustomEvent('sync', { detail: { state: 'signed-out' } }));
+});
+await p.waitForFunction(() => !document.getElementById('sideSet').classList.contains('warn'));
+ok((await setDot()) === 'none', 'rail: the dot goes when sync is fine or signed out');
 const dotInfo = await p.$$eval('.side-deck[data-key]:not(.side-new)', r => r.map(x => { const b = getComputedStyle(x, '::before'); return { key: x.dataset.key, w: b.width, shadow: b.boxShadow }; }));
 ok(dotInfo.every(d => d.w === '10px'), 'decks are colour dots');
 const ringOf = k => dotInfo.find(d => d.key === k).shadow;
@@ -350,6 +378,15 @@ await p.click('#gearBtn'); await p.waitForSelector('#startBtn');
 ok(p.url().endsWith('#/today'), 'phone: and goes back');
 await p.screenshot({ path: `${SP}/desk/sidebar-phone.png` });
 await p.context().close();
+
+// always-dark skins have nothing to toggle (their names are kept for old saved themes; the picker no longer offers them)
+{
+  const q = await open(1440, 900);
+  await q.goto(URL + '#/today'); await q.waitForSelector('#sideMode');
+  ok(await q.evaluate(async () => { const t = await import('./js/themes.js'); return ['neon', 'onyx', 'kuro'].every(t.isAlwaysDark) && !t.isAlwaysDark('violet'); }), 'isAlwaysDark: neon, onyx and kuro, not violet');
+  ok(!(await q.getAttribute('#sideMode', 'aria-disabled')), 'a normal skin: the toggle is enabled');
+  await q.context().close();
+}
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close();

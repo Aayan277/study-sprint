@@ -11,11 +11,11 @@
 // Collapsed, the sidebar is a 72px icon rail; the choice is kept per device and applied from index.html's head script.
 
 import { loadAll, countFor, answeredToday, loadStreak } from './study-data.js';
-import { examInfo, badgeClass } from './exam.js';
+import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
 import * as sync from './sync.js';
-import { toggleMode } from './themes.js';
+import { toggleMode, isAlwaysDark } from './themes.js';
 
 const DESKTOP = matchMedia('(min-width: 1024px)');
 const RAIL_KEY = 'study-sprint-rail';
@@ -32,7 +32,6 @@ const PANEL = SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path 
 const PANEL_OPEN = SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/><path d="M13.5 10l2 2-2 2"/>');
 
 const short = d => (d === 0 ? 'Today' : `${d}d`);
-const long = d => (d === 0 ? 'Exam today' : d === 1 ? 'Exam tomorrow' : `Exam in ${d} days`);
 
 // "Synced 2m ago", "Syncing…" or what went wrong: the one wording for Settings and the sidebar.
 export function syncWording(lastSync) {
@@ -53,7 +52,7 @@ const shouldDraw = () => DESKTOP.matches && !document.body.classList.contains('f
 // loaded: { data, streak, chosen } when the caller (Today) has just loaded them (chosen: the decks picked in Today's Options).
 export async function drawSidebar(loaded = null) {
   if (!shouldDraw()) return;
-  if (running) { queued = loaded || {}; return; }
+  if (running) { queued = loaded || queued || {}; return; }
   running = true;
   try {
     let next = loaded;
@@ -92,9 +91,9 @@ async function paint(loaded) {
   const dot = $('sideDot');
   dot.hidden = !near;
   dot.className = 'side-dot' + (near && badgeClass(near.info).includes('soon') ? ' soon' : '');
-  dot.innerHTML = near ? `<span class="sr-only">, ${esc(near.d.name)}: ${long(near.info.daysLeft).toLowerCase()}</span>` : '';
+  dot.innerHTML = near ? `<span class="sr-only">, ${esc(near.d.name)}: ${countdown(near.info).toLowerCase()}</span>` : '';
   const decksTab = document.querySelector('.tab[data-tab="decks"]');
-  decksTab.dataset.tip = near ? `Decks · ${near.d.name}: ${long(near.info.daysLeft).toLowerCase()}` : 'Decks';
+  decksTab.dataset.tip = near ? `Decks · ${near.d.name}: ${countdown(near.info).toLowerCase()}` : 'Decks';
 
   // The deck list (top-level decks, in tree order)
   const list = $('sideList');
@@ -105,7 +104,7 @@ async function paint(loaded) {
     const due = countFor(data, [d.id]).due, info = examInfo(d);
     const show = info && info.daysLeft <= EXAM_PILL_DAYS;
     const soon = show && badgeClass(info).includes('soon');
-    const label = [d.name, plural(due, 'card') + ' due', info ? long(info.daysLeft).toLowerCase() : ''].filter(Boolean).join(', ');
+    const label = [d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : ''].filter(Boolean).join(', ');
     const tip = [d.name, `${due} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
     return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}" style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
       <span class="side-name">${esc(d.name)}</span>
@@ -137,6 +136,10 @@ export async function drawSync() {
   el.innerHTML = `<i aria-hidden="true"></i><span>${esc(acct ? w.text : 'Sign in to sync')}</span>`;
   el.title = acct ? w.text : '';
   el.dataset.tip = acct ? w.text : 'Sign in to sync';
+  // In the rail the sync line is hidden: a dot on the Settings icon says something needs a look.
+  const set = $('sideSet'), warn = !!(acct && w.warn);
+  set?.classList.toggle('warn', warn);
+  if (set) set.dataset.tip = warn ? `Settings · ${w.text}` : 'Settings';
 }
 
 // The deck page open now gets aria-current (the other links are marked by route() through data-tab).
@@ -146,6 +149,9 @@ export function markCurrent() {
   document.querySelectorAll('#sideList .side-deck[data-key]').forEach(a => {
     if (a.dataset.key === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  // On a deck page the deck row is the page; the Decks tab is only the section it belongs to.
+  const decksTab = document.querySelector('.tab[data-tab="decks"]');
+  if (id && decksTab) decksTab.setAttribute('aria-current', 'true');
 }
 
 // A fade at the foot of the list while there is more to scroll to.
@@ -160,7 +166,9 @@ function drawModeButton() {
   const dark = root.getAttribute('data-theme') !== 'light';
   b.innerHTML = dark ? SUN : MOON;
   b.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} mode`);
-  b.dataset.tip = `${dark ? 'Light' : 'Dark'} mode`;
+  const locked = isAlwaysDark(root.getAttribute('data-skin'));
+  b.dataset.tip = locked ? 'This skin is always dark' : `${dark ? 'Light' : 'Dark'} mode`;
+  if (locked) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
 }
 
 const railOn = () => root.getAttribute('data-rail') === 'on';
@@ -182,7 +190,9 @@ function setRail(on) {
 function placeNav() {
   const nav = document.querySelector('nav.tabs'), main = $('screen');
   if (!nav || !main) return;
+  const focused = nav.contains(document.activeElement) ? document.activeElement : null;      // moving a node drops focus
   if (DESKTOP.matches) main.before(nav); else main.after(nav);
+  focused?.focus({ preventScroll: true });
 }
 
 // ---------- tooltips for the rail (names are hidden there) ----------
@@ -228,7 +238,7 @@ export function initSidebar({ version = '' } = {}) {
       openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; });
     } catch { toast("Couldn't open the deck editor. Check your connection and try again."); }
   });
-  $('sideList').addEventListener('scroll', fadeList, { passive: true });
+  $('sideList').addEventListener('scroll', () => { fadeList(); hideTip(); }, { passive: true });
   addEventListener('resize', fadeList);
 
   nav.addEventListener('pointerover', e => { const el = e.target.closest('[data-tip]'); if (el) showTip(el); });

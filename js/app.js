@@ -729,8 +729,8 @@ addEventListener('sync', async e => {
   }
   if (state !== 'done' || !applied) return;
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
-  if (currentRoute !== 'today') drawSidebar();          // (Today hands its own fresh data over when it redraws)
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
+  if (currentRoute !== 'today' || busy) drawSidebar();          // (Today hands its own fresh data over when it redraws, unless a sheet or field keeps it from)
   if (busy) return;
   if (currentRoute === 'stats') redrawStatsSoon();
   else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
@@ -823,9 +823,12 @@ async function route() {
   });
   markCurrent();                // the deck page open now, in the sidebar's list
   // After a Review or Play round, or an import, the sidebar's counts are out of date (Today hands over its own fresh data).
-  if (['review', 'play', 'import'].includes(prevRoute) && name !== prevRoute && name !== 'today') { setFocusMode(false); drawSidebar(); }
+  // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
+  const sidebarStale = name !== prevRoute && name !== 'today'
+    && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
   closeSheet();
   setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
+  if (sidebarStale) drawSidebar();
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');
@@ -925,11 +928,14 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
+  document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
   // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.
   addEventListener('themechange', e => {
     settings.theme = e.detail;
     const r = document.querySelector(`input[name="mode"][value="${e.detail.mode}"]`);
     if (r) r.checked = true;
+    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new light/dark
   });
   try {
     settings = await db.getSettings();

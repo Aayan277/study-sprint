@@ -87,6 +87,7 @@
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
+<a class="skip" href="#screen">Skip to page</a>
 <header class="top">
   <div class="top-in">
     <a class="brand" href="#/today">
@@ -100,7 +101,7 @@
 </header>
 
 <!-- Each screen is drawn into here by js/app.js -->
-<main id="screen"></main>
+<main id="screen" tabindex="-1"></main>
 
 <nav class="tabs" aria-label="Sections">
   <!-- The desktop sidebar (from 1024px; hidden on phones). js/sidebar.js fills in the counts, the deck list and the footer. -->

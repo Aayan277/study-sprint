@@ -150,8 +150,9 @@ for (let i = 0; i < 3; i++) {
   seen.add(info.label + '|' + info.typed + '|' + info.note);
   if (info.typed) { await page.fill('#typeIn', info.label.toLowerCase()); await page.click('#typeForm button[type=submit]'); await page.waitForSelector('.typed.ok'); }
   else await page.keyboard.press('Space');
+  await page.evaluate(() => { document.getElementById('flash').dataset.rated = '1'; });   // mark this card, so the wait below is for the NEXT one
   await page.keyboard.press('4');
-  if (i < 2) await page.waitForSelector('#flash');
+  if (i < 2) await page.waitForSelector('#flash:not([data-rated])');
 }
 const seenList = [...seen].sort();
 ok(seenList.join(' / ') === ['Aorta|true|', 'Left ventricle|true|', 'No label|false|No label on this box: say it in your head, then flip.'].sort().join(' / '), 'typed answer: offered for labelled boxes only; the unlabelled one says so: ' + seenList.join(' / '));
@@ -176,7 +177,15 @@ await page.screenshot({ path: SP + '/occ-browse-edit-375.png' });
 await noSideways(page, 'in the card editor');
 await page.fill('#ceOccLbl1', 'Aortic arch'); await page.fill('#ceOccLbl3', 'Atrium'); await page.fill('#ceOccHead', 'Heart');
 await page.click('button[type=submit][form=ceForm], #ceForm button[type=submit]');
-await page.waitForTimeout(500);
+// every sibling is saved asynchronously: wait (in the page, until a deadline) for the last one to land
+await page.evaluate(async deckId => {
+  const db = await import('./js/db.js'), end = Date.now() + 10000;
+  while (Date.now() < end) {
+    const cs = (await db.getAll('cards')).filter(c => c.deckId === deckId && c.occlusion);
+    if (cs.length === 3 && cs.every(c => c.front.startsWith('Heart:')) && cs.some(c => c.back === 'Atrium') && cs.some(c => c.back === 'Aortic arch')) return;
+    await new Promise(r => setTimeout(r, 25));
+  }
+}, seed.deckId);
 const after = await page.evaluate(async deckId => {
   const db = await import('./js/db.js');
   const cs = (await db.getAll('cards')).filter(c => c.deckId === deckId && c.occlusion).sort((a, b) => a.occlusion.n - b.occlusion.n);

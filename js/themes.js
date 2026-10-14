@@ -26,6 +26,7 @@ const OLD_NAMES = {
   blossom: 'rose', sakura: 'rose'
 };
 const ALWAYS_DARK = ['neon', 'onyx', 'kuro'];
+export const isAlwaysDark = skin => ALWAYS_DARK.includes(skin);
 
 // Turn whatever was saved (maybe an old theme) into a valid { skin, mode, oled }.
 export function cleanTheme(theme) {
@@ -58,8 +59,10 @@ export function applyTheme(theme) {
 // The sidebar's light/dark button. "Auto" becomes the explicit mode that is showing now, flipped.
 // Saves like the Settings picker does (the device copy in localStorage and the settings store).
 export function toggleMode() {
+  if (!current) return null;                      // settings have not loaded yet
+  if (isAlwaysDark(current.skin)) return current;  // a skin that is always dark has nothing to toggle
   const showing = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const next = applyTheme({ ...(current || cleanTheme({})), mode: showing === 'light' ? 'dark' : 'light' });
+  const next = applyTheme({ ...current, mode: showing === 'light' ? 'dark' : 'light' });
   db.setSetting('theme', next);
   return next;
 }

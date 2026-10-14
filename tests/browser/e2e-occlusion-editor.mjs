@@ -264,7 +264,14 @@ async function makePicture(page) {
   ok((await page.evaluate(async deckId => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.deckId === deckId).length, deckId)) === 3 && await page.locator('#ceForm').isVisible(), 'Cancel keeps all three cards');
   await page.click('#ceForm button[type=submit], button[type=submit][form=ceForm]');
   await page.waitForSelector('#cfYes'); await page.click('#cfYes');
-  await page.waitForFunction(async deckId => { const cs = (await (await import('./js/db.js')).getAll('cards')).filter(c => c.deckId === deckId); return cs.length === 2 && cs.every(c => c.occlusion.masks.length === 3); }, deckId);
+  await page.evaluate(async deckId => {      // (waitForFunction does not await an async predicate: poll in the page)
+    const db = await import('./js/db.js'), end = Date.now() + 10000;
+    while (Date.now() < end) {
+      const cs = (await db.getAll('cards')).filter(c => c.deckId === deckId);
+      if (cs.length === 2 && cs.every(c => c.occlusion.masks.length === 3)) return;
+      await new Promise(r => setTimeout(r, 25));
+    }
+  }, deckId);
   await page.click('#sheet .sheet-x');
   const rest = await page.evaluate(async deckId => {
     const db = await import('./js/db.js');
