@@ -1,5 +1,7 @@
 // Small helpers shared by every screen.
 
+import { streakText } from './stats-calc.js';
+
 export const $ = id => document.getElementById(id);
 
 // Make user text safe to put inside HTML (so a deck called "<b>" shows as text, not as bold).
@@ -55,10 +57,37 @@ const ICON_PATHS = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  snow: '<path d="M12.0 3.0L12.0 21.0M4.2 7.5L19.8 16.5M4.2 16.5L19.8 7.5"/><path d="M12.0 5.6L10.5 7.4M12.0 5.6L13.5 7.4M6.5 8.8L7.3 11.1M6.5 8.8L8.8 8.4M6.5 15.2L8.8 15.6M6.5 15.2L7.3 12.9M12.0 18.4L13.5 16.6M12.0 18.4L10.5 16.6M17.5 15.2L16.7 12.9M17.5 15.2L15.2 15.6M17.5 8.8L15.2 8.4M17.5 8.8L16.7 11.1"/>',
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 export const icon = (name, cls = '') =>
   `<svg class="ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+
+// The streak line shared by Today and the end of a Review session: flame, the count, what to do about it, and
+// (when there is one) a freeze note. `button` makes it a button that opens the "Your streak" sheet (Today).
+// Keep both the same text: tests compare Today's streak with the one at the end of a session.
+export function streakHTML(streak, { button = false } = {}) {
+  const { line, sub } = streakText(streak);
+  const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}">${icon('snow')}${esc(sub)}</span>` : '';
+  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span>${esc(line)}</span>${pill}`;
+  const cls = `streak${streak.studiedToday ? ' kept' : ''}`;
+  return button
+    ? `<button type="button" class="${cls} streak-btn" id="streakBtn" aria-haspopup="dialog" title="Your streak, streak freeze and days off">${inner}${icon('chevron', 'sb-go')}</button>`
+    : `<p class="${cls}">${inner}</p>`;
+}
+
+// The last 7 days as little squares (Stats and the "Your streak" sheet): a check = studied, a snowflake = a streak
+// freeze covered the day, a moon = a planned day off. Each has a shape as well as a colour. `week` is streak.week.
+const DOT_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const DOT_NAME = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+export function weekDotsHTML(week, label = 'Last 7 days') {
+  return `<div class="week" aria-label="${esc(label)}">${week.map(d => {
+    const kind = d.on ? 'on' : d.frozen ? 'frz' : d.rest ? 'rest' : '';
+    const note = d.on ? ', studied' : d.frozen ? ', streak freeze used' : d.rest ? ', day off' : '';
+    return `<div class="wd${kind ? ' ' + kind : ''}${d.today ? ' today' : ''}" title="${esc(DOT_DAY.format(d.time) + note)}">
+      <i>${d.frozen && !d.on ? icon('snow') : d.rest && !d.on ? icon('moon') : ''}</i><span>${esc(DOT_NAME.format(d.time).slice(0, 2))}</span></div>`;
+  }).join('')}</div>`;
+}
 
 // A progress ring (SVG). frac is 0 to 1; `inner` is drawn in the middle. Colors come from .ring-bg / .ring-fg in styles.css.
 export function ring(frac, size, stroke, inner = '', cls = '') {

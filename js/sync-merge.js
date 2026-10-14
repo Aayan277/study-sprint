@@ -79,3 +79,39 @@ export function parseAuthLink(hash) {
     expires_at: Number(p.get('expires_at')) || Math.floor(Date.now() / 1000) + expiresIn
   } };
 }
+
+// ---------- days off (the restDays setting) ----------
+// { 'YYYY-MM-DD': { on, at } }: whether a day is a day off, and when that was last decided. Merged per day,
+// so two devices that each add a day off keep both; for the same day the later decision wins (on a tie, "on").
+// Junk keys and values are dropped, and so is anything over 400 days old (the streak never needs those).
+const DAY_KEY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const MAX_FLAG_AGE_DAYS = 400;
+function cleanDayFlags(flags, cutoff) {
+  const out = {};
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
+  for (const [k, v] of Object.entries(flags)) {
+    if (!DAY_KEY.test(k) || k < cutoff || !v || typeof v !== 'object' || typeof v.on !== 'boolean' || !Number.isFinite(v.at)) continue;
+    out[k] = { on: v.on, at: v.at };
+  }
+  return out;
+}
+const flagCutoff = now => {
+  const d = new Date(now - MAX_FLAG_AGE_DAYS * 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+export function mergeDayFlags(a, b, now = Date.now()) {
+  const cutoff = flagCutoff(now);
+  const out = cleanDayFlags(a, cutoff);
+  for (const [k, v] of Object.entries(cleanDayFlags(b, cutoff))) {
+    const mine = out[k];
+    if (!mine || v.at > mine.at || (v.at === mine.at && v.on)) out[k] = v;
+  }
+  return out;
+}
+// Do two sets of day flags say the same thing? (Junk is ignored, as in the merge.)
+export function sameDayFlags(a, b, now = Date.now()) {
+  const cutoff = flagCutoff(now);
+  const x = cleanDayFlags(a, cutoff), y = cleanDayFlags(b, cutoff);
+  const keys = Object.keys(x);
+  return keys.length === Object.keys(y).length && keys.every(k => y[k] && y[k].on === x[k].on && y[k].at === x[k].at);
+}

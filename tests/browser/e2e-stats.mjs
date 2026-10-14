@@ -29,7 +29,7 @@ await page.evaluate(async () => {
   ]);
   const logs = [];
   for (let d = 0; d < 30; d++) {
-    if (d >= 5 && d % 3 === 0) continue;               // gaps, but the last 5 days are all studied
+    if ((d >= 5 && d % 3 === 0) || d === 7) continue;     // gaps, but the last 5 days are all studied. Days 6 and 7 are both missed: a streak freeze covers one missed day, not two (v4.1), so the streak is still 6
     const n = 3 + ((d * 7) % 11);
     for (let i = 0; i < n; i++) {
       const c = cs[(d + i) % 8];

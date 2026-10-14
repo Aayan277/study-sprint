@@ -2,8 +2,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS } from '../js/sync-data.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
+import { mergeDayFlags, sameDayFlags, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
 const NOW = 1_800_000_000_000;
@@ -120,4 +120,49 @@ test('cloze fields sync as they are, and siblings that diverged are healed', asy
   assert.deepEqual(fixed.map(c => c.id), ['k1']);
   assert.equal(fixed[0].noteText, textB);
   assert.equal(fixed[0].front, 'A […] c dee');
+});
+
+// ---------- days off (the restDays setting, v4.1) ----------
+const T = new Date(2026, 9, 14, 12).getTime();      // Wed 14 Oct 2026
+test('restDays is a synced setting that is merged, not replaced', () => {
+  assert.ok(SYNCED_SETTINGS.includes('restDays'));
+  assert.deepEqual(MERGED_SETTINGS, ['restDays']);
+});
+
+test('days off: two devices that each add a day keep both', () => {
+  const a = { '2026-10-20': { on: true, at: 100 } };
+  const b = { '2026-10-21': { on: true, at: 200 } };
+  const merged = mergeDayFlags(a, b, T);
+  assert.deepEqual(Object.keys(merged).sort(), ['2026-10-20', '2026-10-21']);
+  assert.deepEqual(mergeDayFlags(b, a, T), merged);                       // the order does not matter
+  assert.ok(sameDayFlags(mergeDayFlags(merged, a, T), merged, T));         // merging again changes nothing
+});
+
+test('days off: for one day, the newest decision wins (also a removal)', () => {
+  const on = { '2026-10-20': { on: true, at: 100 } };
+  const off = { '2026-10-20': { on: false, at: 200 } };
+  assert.equal(mergeDayFlags(on, off, T)['2026-10-20'].on, false);
+  assert.equal(mergeDayFlags(off, on, T)['2026-10-20'].on, false);
+  const again = { '2026-10-20': { on: true, at: 300 } };
+  assert.equal(mergeDayFlags(mergeDayFlags(on, off, T), again, T)['2026-10-20'].on, true);
+  // the same time: "on" wins, on both devices
+  const x = { '2026-10-20': { on: true, at: 5 } }, y = { '2026-10-20': { on: false, at: 5 } };
+  assert.deepEqual(mergeDayFlags(x, y, T), mergeDayFlags(y, x, T));
+});
+
+test('days off: entries over 400 days old and junk are dropped', () => {
+  const old = { '2025-01-01': { on: true, at: 1 }, '2025-09-01': { on: true, at: 1 }, '2026-10-20': { on: true, at: 1 } };
+  assert.deepEqual(Object.keys(mergeDayFlags(old, null, T)), ['2026-10-20']);
+  const junk = { nope: { on: true, at: 1 }, '2026-13-40': { on: true, at: 1 }, '2026-10-22': { on: 'yes', at: 1 }, '2026-10-23': { on: true }, '2026-10-24': null, '2026-10-25': 7, '2026-10-26': { on: true, at: 'x' }, '2026-10-27': { on: true, at: 9 } };
+  assert.deepEqual(mergeDayFlags(junk, undefined, T), { '2026-10-27': { on: true, at: 9 } });
+  for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeDayFlags(bad, bad, T), {});
+});
+
+test('days off: sameDayFlags compares what the merge would keep', () => {
+  const a = { '2026-10-20': { on: true, at: 1 } };
+  assert.ok(sameDayFlags(a, { ...a, junk: 1 }, T));
+  assert.ok(sameDayFlags({}, null, T));
+  assert.ok(!sameDayFlags(a, {}, T));
+  assert.ok(!sameDayFlags(a, { '2026-10-20': { on: false, at: 1 } }, T));
+  assert.ok(!sameDayFlags(a, { '2026-10-20': { on: true, at: 2 } }, T));
 });

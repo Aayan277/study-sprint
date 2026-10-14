@@ -66,7 +66,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS with the deck's own settings, the way Anki's own FSRS reads them: cram reviews from filtered decks are ignored, Forget resets the card, and a history that starts partway starts from Anki's interval and ease. Off, or with no history, cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
-- **Today** (the home screen): your day streak, a daily goal ring, one **Start** button for everything due (with a time estimate from your own answer speed), a row per course to study just that deck, and your upcoming exams. **Add exam date** chips offer a quick way to give a course an exam: tap the course, pick In 1, 2 or 4 weeks (or a date) and Save, and it joins the upcoming exams. The deck page has the same button. **Options** on Today holds which decks to study, answering by flipping or typing, and Custom study.
+- **Today** (the home screen): your day streak, a daily goal ring, one **Start** button for everything due (with a time estimate from your own answer speed), a row per course to study just that deck, and your upcoming exams. The streak is a button: it opens **Your streak** (see **Streak freeze and days off** below). **Add exam date** chips offer a quick way to give a course an exam: tap the course, pick In 1, 2 or 4 weeks (or a date) and Save, and it joins the upcoming exams. The deck page has the same button. **Options** on Today holds which decks to study, answering by flipping or typing, and Custom study.
 - **Typed answers show what went wrong:** when a typed answer is wrong or needed a typo forgiven, Review and Play line it up with the answer and mark the wrong, extra and missing letters (bold wavy, struck through, dotted with a caret, so colour is never the only cue), with a short summary like "1 letter wrong · 1 missing". Capitals, accents, punctuation and a leading the/a/an are never marked. Very different answers just show both texts. Play's missed list keeps the marks.
 - **Review:** daily spaced repetition with FSRS-6. The card turns over when you flip it (a quick fade if your device asks for reduced motion).
   - Flip a card (tap or Space) or type the answer, then rate it Again / Hard / Good / Easy. Each button shows when the card comes back.
@@ -91,11 +91,16 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 - **Sheets:** every pop-up has the same frame: the title and a × at the top right, and the buttons in a footer that stays in view (the main button on the right, Cancel beside it). On a phone, drag the sheet down by its grab bar to close it.
 - **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) and delete your synced data are all in Settings → Sync. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:**
-  - day streak and retention (recall answers only: flipping, typing and Anki, not multiple choice)
-  - a study calendar: a year of study days as squares (darker = more answers), with your best streak
+  - day streak (with its streak freeze and days off) and retention (recall answers only: flipping, typing and Anki, not multiple choice)
+  - a study calendar: a year of study days as squares (darker = more answers), with your best streak. Days a streak freeze covered have a diagonal hatch, days off a dotted pattern
   - reviews per day for 30 days, and cards due over the next 7 days
   - hardest cards, with a **Drill these** button
   - under **More stats** on phones (always shown on a computer): answer buttons (how often you press Again / Hard / Good / Easy), the time of day you remember best, how FSRS difficulty is spread across your cards, and a mastery grid you can tap card by card
+- **Streak freeze and days off** (v4.1):
+  - **Streak freeze:** one missed day a week is covered for you, so a single slip doesn't end your streak. It is automatic and not saved up (a week runs Monday 4am to Monday 4am). A covered day keeps the streak alive but doesn't add to the count, and two missed days in a row still break it. Today and the sidebar say when one was used or is ready, and Stats marks the covered day with a snowflake (hatched in the calendar).
+  - **Days off:** tap the streak on Today (or "Plan a day off" in Stats) to plan days off for an exam week or a trip: starting tomorrow, up to 60 days ahead, up to 14 at a time, and you can remove them again. A day off never breaks the streak and doesn't add to it. Courses with an exam offer a one-tap "Day off on exam day". Days off sync between your devices (two devices that each add one keep both).
+  - **How it is worked out:** from your review history each time, nothing extra is stored, so every device agrees once they have synced. Because of that, streaks (and the best streak) you already had may now be longer than before: the freeze is applied to all your history.
+  - **Time zones:** days are named in the time zone your device is in now (a day starts at 4am there). If you travel or change time zone, a day's boundary moves with it, so one day can look doubled or missed around the change; the freeze usually absorbs that.
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
 - **Starter decks:** optional JLPT N5 and N4 kanji decks, tucked away (Decks tab → Starter decks, or Import → Ready-made decks).
 - **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: name your course, add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
@@ -170,7 +175,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/play.js` | The Play screen |
 | `js/game.js` | Game rules: scoring, timers, wrong-answer options |
 | `js/autograde.js` | Turning Play answers into review ratings |
-| `js/stats.js`, `js/stats-calc.js` | The Stats screen and the numbers behind it |
+| `js/stats.js`, `js/stats-calc.js` | The Stats screen and the numbers behind it (the streak walk with its freeze and days off is in `stats-calc.js`) |
+| `js/streak-sheet.js` | The "Your streak" sheet: the freeze explained, the last 7 days, planning and removing days off |
 | `js/jlpt.js` | The optional JLPT kanji starter decks |
 | `js/themes.js`, `js/sample.js`, `js/ui.js` | Themes, the sample deck, shared helpers |
 | `tests/browser/readme-shots.mjs` | Makes the README and manifest screenshots in `docs/screenshots/` from the real app |

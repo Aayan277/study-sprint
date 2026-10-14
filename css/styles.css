@@ -1918,3 +1918,71 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .adiff.small .adiff-row{grid-template-columns:64px minmax(0,1fr);gap:var(--s-2)}
 .rv-typed .adiff{max-width:100%}
 @media (min-width:1024px){.adiff{padding:12px 16px}.adiff-row{grid-template-columns:84px minmax(0,1fr)}}
+
+/* ---------- 19. Streak freeze and days off (js/stats-calc.js works them out, js/streak-sheet.js plans them) ----------
+   A covered day (streak freeze) is a diagonal hatch + a snowflake; a planned day off is a dotted pattern + a moon.
+   Each has a pattern or a shape as well as a colour, so neither depends on colour alone. */
+:root{
+  --hatch:repeating-linear-gradient(135deg,transparent 0 2.5px,var(--easy) 2.5px 3.5px);
+  --dots:radial-gradient(circle at center,var(--text-2) .9px,transparent 1.3px);
+}
+/* Today: the streak is a button that opens "Your streak" */
+.streak-btn{appearance:none;position:relative;width:calc(100% + 16px);margin:calc(var(--s-4) - 6px) -8px calc(var(--s-5) - 6px);padding:6px 32px 6px 8px;border:0;border-radius:var(--r-md);background:none;
+  font:inherit;font-size:var(--fs-sm);text-align:left;color:var(--text-2);cursor:pointer;min-height:44px;transition:background var(--t-fast)}
+.streak-btn:hover{background:var(--surface-2)}
+.streak .sb-go{position:absolute;right:8px;top:50%;width:16px;height:16px;margin-top:-8px;color:var(--text-3);filter:none}
+.streak.kept .sb-go{color:var(--text-3);filter:none}
+/* the freeze note under the streak line */
+.streak .frz-pill{flex-basis:auto;display:inline-flex;align-items:center;gap:5px;margin-left:24px;padding:2px 10px 2px 7px;border-radius:var(--r-pill);
+  background:var(--easy-tint);box-shadow:inset 0 0 0 1px var(--easy-line);color:var(--text);font-size:var(--fs-xs);font-weight:500}
+.streak .frz-pill .ico,.streak.kept .frz-pill .ico{width:13px;height:13px;color:var(--easy);filter:none}
+.streak .frz-pill:not(.used){background:none;box-shadow:none;border:1px dashed var(--line-strong);padding:1px 9px 1px 6px;color:var(--text-2)}
+/* the last 7 days (Stats and the sheet): hatch + snowflake = covered, dotted + moon = day off */
+.wd.frz i{background-color:var(--easy-tint);background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy);color:var(--easy)}
+.wd.rest i{background-color:transparent;background-image:var(--dots);background-size:4px 4px;box-shadow:none;border:1.5px dotted var(--text-2);color:var(--text-2)}
+.wd i .ico{width:11px;height:11px;stroke-width:2.4;background:var(--surface-1);border-radius:50%}
+.wd.rest i .ico{background:none;stroke-width:2.2}
+.frz-note{margin-top:var(--s-2)}
+.pgrid .frz-note .link,.frz-note .link{display:inline;padding:0;min-height:24px;font-size:inherit;color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+/* the study calendar */
+.cal-grid i.frz,.cal-key i.frz{background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy)}
+.cal-grid i.rest,.cal-key i.rest{background-image:var(--dots);background-size:4px 4px;background-position:1px 1px}
+.cal-key2{margin-left:auto;white-space:nowrap}
+.cal-key2 i{margin:0 3px 0 8px}
+.cal-key2 i:first-child{margin-left:0}
+/* the sidebar footer: a small snowflake while a freeze was used in the last 7 days */
+.side-snow{width:12px;height:12px;margin-left:5px;vertical-align:-1px;color:var(--easy)}
+/* the "Your streak" sheet */
+.ys{display:grid;gap:var(--s-4)}
+.ys .streak{margin:0}
+.ys .week{padding-top:0;gap:6px}
+.ys .wd{gap:6px;font-size:.6875rem}
+.ys .wd i{width:30px;height:30px;border-radius:8px}
+.ys .wd.on i::after{width:6px;height:12px;border-width:0 2.5px 2.5px 0}
+.ys .wd i .ico{width:16px;height:16px}
+.ys h3{margin:0 0 var(--s-2);font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}
+.ys p{margin:0 0 var(--s-2);font-size:var(--fs-sm);line-height:1.5;color:var(--text-2)}
+.ys .ys-key{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0;padding:0;list-style:none;font-size:var(--fs-xs);color:var(--text-2)}
+.ys .ys-key li{display:inline-flex;align-items:center;gap:6px}
+.ys-key i{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.ys-key .k-on{background:var(--accent);box-shadow:none}
+.ys-key .k-frz{background-color:var(--easy-tint);background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy);color:var(--easy)}
+.ys-key .k-rest{background:var(--dots) 0 0/4px 4px;box-shadow:none;border:1.5px dotted var(--text-2);color:var(--text-2)}
+.ys-key .ico{width:10px;height:10px;stroke-width:2.6}
+.ys-list{display:grid;gap:6px;margin:0 0 var(--s-3);padding:0;list-style:none}
+.ys-list li{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);min-height:44px;padding:2px 4px 2px 12px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:var(--e-1);font-size:var(--fs-base)}
+.ys-list li > span{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.ys-list .ico{width:16px;height:16px;color:var(--text-2);flex:none}
+.ys-list small{color:var(--text-2)}
+.ys-list .link{color:var(--accent-text);flex:none}
+.ys-exams{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 var(--s-3)}
+.ys-exams .tchip{flex-wrap:wrap;row-gap:0;text-align:left;border-radius:var(--r-md)}
+.ys-exams .tchip:disabled{opacity:.7;cursor:default}
+.ys-exams .tchip .ico{width:15px;height:15px}
+.ys-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-3);align-items:end}
+.ys-add .btn{min-height:46px}
+.ys .err{margin:var(--s-2) 0 0;font-size:var(--fs-sm)}
+@media (min-width:1024px){
+  /* On a computer the streak button is only as wide as its text, so the arrow stays next to it */
+  .today-hero .streak-btn{width:fit-content;min-width:280px;max-width:100%}
+}
