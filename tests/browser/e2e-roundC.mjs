@@ -128,7 +128,7 @@ await p.setInputFiles('#fileIn', SP + '/files/anki-new.apkg');
 await p.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok(await p.isVisible('#subRow') && (await p.textContent('#subInfo')).includes('Unit 2'), 'offers to keep subdecks: ' + await p.textContent('#subInfo'));
 await p.screenshot({ path: SP + '/C-import.png', fullPage: true });
-await p.fill('#newName', 'Psych'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
+await p.selectOption('#deckSel', '__new'); await p.fill('#newName', 'Psych'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
 const imp = await DB(async () => { const db = await import('./js/db.js'); const ds = await db.getDecks(); const cs = await db.getAll('cards');
   return ds.map(d => `${d.name}<${ds.find(x => x.id === d.parentId)?.name || ''}>:${cs.filter(c => c.deckId === d.id).length}`).sort(); });
 ok(imp.join() === 'Psych<>:2,Unit 2<Psych>:5', 'imported into Psych with its Unit 2 subdeck: ' + imp.join());

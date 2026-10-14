@@ -11,8 +11,10 @@ import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
+// A cell that starts with = + - @ would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
-  const s = String(v ?? '');
+  let s = String(v ?? '');
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function toCSV(cards) {

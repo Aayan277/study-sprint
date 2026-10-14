@@ -14,7 +14,7 @@ for (const [file, deckName] of [['anki-media-new.apkg', 'Anatomy new'], ['anki-m
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
   const found = await page.textContent('#found');
   ok(found.includes('Found 4 cards') && found.includes('have pictures, which come along too (the first one on each side)'), `${file}: ${found}`);
-  await page.fill('#newName', deckName); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+  await page.selectOption('#deckSel', '__new'); await page.fill('#newName', deckName); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const cards = await page.evaluate(async n => {
     const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.name === n);
     const cs = await db.getCardsInDeck(d.id);

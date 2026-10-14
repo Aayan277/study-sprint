@@ -117,9 +117,11 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 //                     A submit button in it still submits its form (it gets a form="..." link, because it is
 //                     no longer inside the <form>). A sheet with no such row has no footer.
 // On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
+let opener = null;       // what had the focus when a side panel opened (the button that opened it)
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
   const asSide = side && WIDE.matches;
+  if (asSide && !d.open) opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
   d.classList.toggle('side', asSide);
   d.style.transform = d.style.transition = '';                          // undo a half-finished swipe
@@ -158,8 +160,12 @@ export function openSheet(html, { side = false } = {}) {
 }
 export function closeSheet() {
   const d = $('sheet');
+  // A pop-up gives the focus back to where it came from by itself; a side panel does not, so the focus goes to the card
+  // that was open (or the button that opened the panel) instead of being lost on the page.
+  const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) d.close();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
+  back?.focus({ preventScroll: true });
 }
 // The page gets its full width back, and the card list stops highlighting the card that was open.
 function afterClose() {

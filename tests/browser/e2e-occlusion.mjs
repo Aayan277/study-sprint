@@ -241,7 +241,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   ok(badges.filter(b => b.startsWith('Image occlusion: box')).join() === 'Image occlusion: box 1,Image occlusion: box 2', `${file}: the preview badges the occlusion rows "box 1" and "box 2"`);
   const roRows = await page.locator('.prow', { hasText: 'Image occlusion' }).locator('textarea').evaluateAll(t => t.every(x => x.readOnly));
   ok(roRows, `${file}: occlusion rows are read-only`);
-  await page.fill('#newName', 'IO ' + file.slice(12, 15)); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+  await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'IO ' + file.slice(12, 15)); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const io = await page.evaluate(async name => {
     const db = await import('./js/db.js');
     const d = (await db.getDecks()).find(x => x.name === name);
@@ -260,7 +260,7 @@ await page.goto(URL + '#/import'); await page.waitForSelector('#tab-file'); awai
 await page.setInputFiles('#fileIn', SP + '/exports/occlusion.apkg');
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok((await page.textContent('#found')).includes('Found 4 cards') && (await page.textContent('#found')).includes('1 image-occlusion note makes these cards'), 'the exported file reads back as 1 occlusion note with 4 cards');
-await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
 const rt = await page.evaluate(async seedDeck => {
   const db = await import('./js/db.js');
   const decks = await db.getDecks();

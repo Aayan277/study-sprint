@@ -50,7 +50,9 @@ await A.click('.sheet-x');
 ok(await A.locator('.crow').nth(0).locator('.pic-mark').count() === 1, 'card list marks cards with pictures');
 // a card whose back is only a picture
 await A.click('#brAdd'); await A.waitForSelector('#acFront');
-await A.fill('#acFront', 'Which organ is this?'); await A.click('button[type=submit][form=acForm]');
+await A.fill('#acFront', 'Which organ is this?');
+ok(await A.locator('button[type=submit][form=acForm]').isDisabled() && (await A.textContent('#acWhy')).includes('back'), 'empty back: Add is disabled and the reason asks for the back');
+await A.evaluate(() => document.getElementById('acForm').requestSubmit());          // Ctrl+Enter still gets the message
 ok((await A.textContent('#acErr')).includes('text or a picture'), 'empty back caught');
 await A.setInputFiles('#acBackFile', photo); await A.waitForSelector('#acBackImg img[src^="blob:"]');
 await A.click('button[type=submit][form=acForm]'); await A.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Card added');

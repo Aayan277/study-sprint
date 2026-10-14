@@ -10,7 +10,7 @@ console.log('sheets:', (await p.textContent('#found')) || (await p.textContent('
 await p.screenshot({ path: process.argv[2] + '/i3-sheet.png' });
 // history: deck list -> import -> save -> back should land on the deck list
 await p.click('#tab-paste'); await p.fill('#pasteBox', 'x - y'); await p.waitForSelector('#preview:not([hidden])');
-await p.fill('#newName', 'Hist'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
+await p.selectOption('#deckSel', '__new'); await p.fill('#newName', 'Hist'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
 await p.goBack(); await p.waitForTimeout(500);
 console.log(p.url().endsWith('#/decks') ? 'PASS back after save goes to decks' : 'FAIL back went to ' + p.url());
 await b.close();
