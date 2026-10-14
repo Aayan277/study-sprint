@@ -270,3 +270,9 @@ test('cloze fields and the Anki guid come through buildCards', () => {
     { front: 'A […]', back: 'x', cloze: { noteKey: 'n', n: 1, text: 'A {{c1::x}}' }, noteExtra: 'more', ankiGuid: 'g1' },
     { front: 'plain', back: 'y', ankiGuid: 'g2' }]);
 });
+
+test('maths: a separator inside a formula does not split the line', () => {
+  assert.deepEqual(cards('Energy - $E = mc^2$'), [['Energy', '$E = mc^2$']]);
+  assert.deepEqual(cards('Gap - $a - b$\nSum - $a + b$'), [['Gap', '$a - b$'], ['Sum', '$a + b$']]);
+  assert.deepEqual(cards('$a - b$ - the gap'), [['$a - b$', 'the gap']]);
+});

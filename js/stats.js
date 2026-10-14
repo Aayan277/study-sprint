@@ -13,7 +13,7 @@ import { openExamSheet } from './exam-sheet.js';
 import { cardLevel } from './decks.js';
 import { streakFromDays, restDaySet, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { plainText } from './format.js';
+import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
 
 // Where an answer came from, for tooltips.
@@ -273,8 +273,8 @@ export async function renderStats(el) {
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
         ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
       ${hardest.length ? `<ol class="hard-list" id="hardList">${hardest.map((h, i) => `
-        <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}><div class="f">${esc(plainText(h.card.front))}</div>
-          <div class="b">${esc(plainText(h.card.back))}</div>
+        <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}><div class="f">${mathHTML(plainText(h.card.front), { inline: true })}</div>
+          <div class="b">${mathHTML(plainText(h.card.back), { inline: true })}</div>
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
         ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
@@ -370,8 +370,8 @@ export async function renderStats(el) {
     if (selected !== c.id || !el.isConnected) return;         // tapped something else while that loaded
     const due = !st || st.state === 0 ? '' : st.due <= now ? 'Due now' : `Due in ${formatInterval(st.due - now)}`;
     q('mDetail').innerHTML = `
-      <div class="f">${esc(plainText(c.front))}</div>
-      <div class="b">${esc(plainText(c.back))}</div>
+      <div class="f">${mathHTML(plainText(c.front), { inline: true })}</div>
+      <div class="b">${mathHTML(plainText(c.back), { inline: true })}</div>
       <div class="meta"><span><i class="sw lv-${lvl}"></i>${LEVEL_NOTE[lvl]}</span>${due ? `<span>${due}</span>` : ''}
         ${st && st.state !== 0 ? `<span>${plural(st.reps, 'review')}, forgotten ${st.lapses}×</span>` : ''}</div>
       <div class="meta">${last10.length ? `<span aria-label="Last ${last10.length} answers, oldest first: ${last10.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${last10.map(l =>

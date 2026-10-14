@@ -9,7 +9,7 @@ import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEAR
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkAnswer } from './match.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
+import { formatHTML, mathHTML, plainText, answerText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
@@ -120,14 +120,14 @@ const deckOf = card => R.effective.get(card.deckId);
 const typesAnswer = card => {
   if (!R.typing) return false;
   const label = hasMasks(card) ? occLabel(card.occlusion.masks, card.occlusion.n) : null;
-  return label !== null ? !!label && canType(label) : canType(plainText(card.back));
+  return label !== null ? !!label && canType(answerText(label)) : canType(answerText(card.back));
 };
 // Read the side showing (the back once flipped) in the deck's language.
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
-  const text = hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  const text = hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
@@ -177,10 +177,10 @@ function renderSession(el, enter = false) {
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
   const backSize = occ ? '' : answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
-    ? `${card.occlusion.header ? `<p class="occ-head">${esc(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
+    ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
     : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
   const answerHTML = occ
-    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>
+    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'No label'}</p>
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
     : cloze
       ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
@@ -340,7 +340,7 @@ function togglePeek(button) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const target = plainText(R.current.card.back);
+  const target = answerText(R.current.card.back);
   const result = checkAnswer(value, target);
   R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;

@@ -28,8 +28,8 @@ export const fileName = (name, ext) => `${String(name || 'deck').replace(/[\\/:*
 
 // ---------- Anki ----------
 // Card text → Anki's HTML: special characters escaped, line breaks as <br>, and bold, italics and lists
-// as real formatting (format.js).
-export const toAnkiHTML = text => formatHTML(text);
+// as real formatting (format.js). Formulas become \( ... \) and \[ ... \], which Anki draws.
+export const toAnkiHTML = text => formatHTML(text, { math: 'anki' });
 
 // Anki's duplicate check: the first 8 hex digits of the SHA-1 of the first field (as plain text), as a number.
 export async function ankiChecksum(text) {

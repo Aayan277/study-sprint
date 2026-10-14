@@ -6,6 +6,8 @@
 // Cards stay plain text underneath, so they sync, back up and export cleanly. The marks only count when
 // they hug a word: "5 * 3 * 2" stays as it is. card-editor.js gives the B / I / • buttons.
 
+import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain, STRAY_PLACEHOLDER } from './math.js';
+
 const escapeHTML = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 const BOTH = /\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*/g;      // ***bold and italic***
@@ -15,12 +17,29 @@ const BULLET = /^\s*[-•]\s+(.*)$/;
 
 const inline = html => html.replace(BOTH, '<b><i>$1</i></b>').replace(BOLD, '<b>$1</b>').replace(ITALIC, '$1<i>$2</i>');
 
+// A formula as HTML.
+//   'span'  a placeholder that js/math.js draws with KaTeX (the raw text shows until it has loaded, or if it can't)
+//   'raw'   the formula as typed (the rich editor box, so it can be saved again exactly)
+//   'anki'  \( ... \) or \[ ... \], which Anki draws
+const mathPiece = (it, mode) => {
+  if (mode === 'raw') return escapeHTML(it.raw).replace(/\n/g, '<br>');
+  if (mode === 'anki') {
+    const tex = escapeHTML(it.tex.replace(/\s*\n\s*/g, ' '));
+    return it.display ? `\\[${tex}\\]` : `\\(${tex}\\)`;
+  }
+  return `<span class="tex${it.display ? ' tex-d' : ''}" data-tex="${escapeHTML(it.tex)}">${escapeHTML(it.raw)}</span>`;
+};
+
 // Card text → HTML for showing it (everything else is escaped, so card text can't inject anything).
 // No line-break characters in the result: lines are joined with <br>, and bullet lines become a list.
-export function formatHTML(text) {
+//   math: how formulas come out (see mathPiece). Formulas are lifted out first, so the marks inside them
+//   ($a*b*c$) are never read as formatting.
+export function formatHTML(text, { math = 'span' } = {}) {
+  const held = holdMath(String(text ?? '').replace(STRAY_PLACEHOLDER, ''));
   const blocks = [];
   let list = null;
-  for (const line of escapeHTML(text).split(/\r?\n/)) {
+  const source = math === 'raw' ? held.text : unescapeDollar(held.text);
+  for (const line of escapeHTML(source).split(/\r?\n/)) {
     const m = BULLET.exec(line);
     if (m) { if (!list) blocks.push(list = []); list.push(inline(m[1])); continue; }
     list = null;
@@ -31,17 +50,37 @@ export function formatHTML(text) {
     if (Array.isArray(b)) out += `<ul>${b.map(li => `<li>${li}</li>`).join('')}</ul>`;
     else out += (i > 0 && !Array.isArray(blocks[i - 1]) ? '<br>' : '') + b;
   });
-  return out;
+  return unholdMath(out, held.items, it => mathPiece(it, math));
 }
 
-// Card text without the marks: for typed answers, Play's options, searching and short previews.
-export const plainText = text => String(text ?? '')
+// Only the formulas of a text drawn, the rest escaped (no bold, italics or lists): for lists and short previews that
+// are plain text underneath. inline: true draws every formula in line (a display one too), for one-line places.
+export function mathHTML(text, { inline: flat = false } = {}) {
+  return splitMath(text).map(s => (s.type === 'text' ? escapeHTML(s.value)
+    : mathPiece(flat ? { ...s, display: false } : s, 'span'))).join('');
+}
+
+// The marks taken out of text that has no formulas in it.
+const stripMarks = s => s
   .split(/\r?\n/).map(l => { const m = BULLET.exec(l); return m ? `• ${m[1]}` : l; }).join('\n')
   .replace(BOTH, '$1').replace(BOLD, '$1').replace(ITALIC, '$1$2');
 
-// Does the text use any formatting marks?
+// Card text without the marks: for typed answers, Play's options, searching and short previews.
+// A formula is kept exactly as written.
+export function plainText(text) {
+  const held = holdMath(String(text ?? ''));
+  return unholdMath(stripMarks(held.text), held.items, it => it.raw);
+}
+
+// What to type to get a card right: plainText with each formula as plain words (\frac{a}{b} → a/b) and "\$" as "$".
+export function answerText(text) {
+  const held = holdMath(String(text ?? ''));
+  return unholdMath(unescapeDollar(stripMarks(held.text)), held.items, it => texToPlain(it.tex));
+}
+
+// Does the text use any formatting marks? (Formulas don't count, and their insides are not looked at.)
 export const hasFormatting = text => {
-  const s = String(text ?? '');
+  const s = holdMath(String(text ?? '')).text;
   return new RegExp(BOLD.source).test(s) || new RegExp(ITALIC.source).test(s) || /^\s*[-•]\s+/m.test(s);
 };
 

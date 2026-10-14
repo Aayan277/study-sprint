@@ -210,3 +210,9 @@ test('image-occlusion export: a sibling whose group is not among the note\'s box
   assert.equal(notes[1].mid, 1_600_000_000_001);
   assert.deepEqual(notes[1].flds.split('\x1f'), ['Stray', 'Card<br><img src="m1.jpg">']);
 });
+
+test('maths: Anki gets \\( \\) and \\[ \\], CSV keeps the text as typed', () => {
+  assert.equal(toAnkiHTML('Area $\\pi r^2$ and $$x<y$$'), 'Area \\(\\pi r^2\\) and \\[x&lt;y\\]');
+  assert.equal(toAnkiHTML('$5 and $10'), '$5 and $10');
+  assert.ok(toCSV([{ front: 'What is $x^2$?', back: '$$E=mc^2$$', tags: [] }]).includes('What is $x^2$?,$$E=mc^2$$'));
+});

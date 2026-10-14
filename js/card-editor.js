@@ -7,6 +7,7 @@
 // setCardText(id, ''). The buttons and shortcuts are wired once, below, for every box.
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
+import { hasMath, wrapMath } from './math.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt } from './cloze.js';
@@ -25,15 +26,19 @@ export function cardTextField(id, label, value = '', { rows = 2, placeholder = '
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
       <button type="button" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
       <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
+      <button type="button" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
       ${!images ? '' : `<button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>`}</span>`;
+  // Said once, under the Back box: maths goes between $ signs.
+  const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
     return `<div class="field fmt-field"><span class="fmt-head"><span id="${id}Lbl">${esc(label)}</span>${tools}</span>
       <div class="rich" id="${id}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${id}Lbl"
-        data-rich="1" ${cloze ? 'data-cloze-box="1"' : ''} data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value)}</div>${pics}</div>`;
+        data-rich="1" ${cloze ? 'data-cloze-box="1"' : ''} data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value, { math: 'raw' })}</div>
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
   }
   return `<div class="field fmt-field"><span class="fmt-head"><label for="${id}">${esc(label)}</label>${tools}</span>
       <textarea id="${id}" rows="${rows}" placeholder="${esc(placeholder)}" ${cloze ? 'data-cloze-box="1"' : ''}>${esc(value)}</textarea>
-      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}</div>`;
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) || hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
 }
 
 const pictureHTML = (id, image) => (image
@@ -54,7 +59,7 @@ export function readCardText(id) {
 }
 export function setCardText(id, text) {
   const el = document.getElementById(id);
-  if (el.dataset.rich) el.innerHTML = formatHTML(text);
+  if (el.dataset.rich) { el.innerHTML = formatHTML(text, { math: 'raw' }); showMathPreview(el); }
   else { el.value = text; el.dispatchEvent(new Event('input', { bubbles: true })); }
   if (el.dataset.clozeBox) updateClozePreview(id);
 }
@@ -64,11 +69,19 @@ function applyFormat(id, kind) {
   if (!el) return;
   if (el.dataset.rich) {
     el.focus();
+    if (kind === 'math') {
+      // The selected words between $ signs; with nothing selected, an empty pair with the cursor inside.
+      const sel = getSelection(), picked = sel.toString();
+      document.execCommand('insertText', false, `$${picked}$`);
+      if (!picked) getSelection().modify?.('move', 'backward', 'character');
+      return;
+    }
     document.execCommand(kind === 'list' ? 'insertUnorderedList' : kind);
     return;
   }
   const r = kind === 'list'
     ? toggleBullets(el.value, el.selectionStart, el.selectionEnd)
+    : kind === 'math' ? wrapMath(el.value, el.selectionStart, el.selectionEnd)
     : toggleWrap(el.value, el.selectionStart, el.selectionEnd, kind === 'bold' ? '**' : '*');
   el.value = r.value;
   el.focus();
@@ -110,9 +123,19 @@ document.addEventListener('input', e => {
   if (e.target.dataset?.clozeBox) updateClozePreview(e.target.id);
   const prev = e.target.id && document.getElementById(e.target.id + 'Prev');
   if (!prev || !prev.classList.contains('fmt-preview')) return;
+  if (e.target.dataset.rich) { showMathPreview(e.target); return; }
   prev.innerHTML = formatHTML(e.target.value);
-  prev.hidden = !hasFormatting(e.target.value);
+  prev.hidden = !hasFormatting(e.target.value) && !hasMath(e.target.value);
 });
+// Under the Word-style box the formatting shows as you type, so the preview is only for maths.
+function showMathPreview(box) {
+  const prev = document.getElementById(box.id + 'Prev');
+  if (!prev || !prev.classList.contains('fmt-preview')) return;
+  const text = htmlToMarks(box.innerHTML);
+  const has = hasMath(text);
+  prev.hidden = !has;
+  if (has && prev.dataset.src !== text) { prev.dataset.src = text; prev.innerHTML = formatHTML(text); }
+}
 // Ctrl/⌘+B and Ctrl/⌘+I in either kind of box.
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
@@ -156,7 +179,7 @@ export function clozeFields(p, text = '', extra = '') {
     ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The {{c1::mitochondria}} makes {{c2::ATP}}', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
     ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <p class="note cloze-help">A hint goes after the answer: {{c1::mitochondria::organelle}}.</p>`;
+    <p class="note cloze-help">A hint goes after the answer: {{c1::mitochondria::organelle}}. Maths goes between $ signs, like $x^2$.</p>`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
   ${text.trim() ? `<div class="cloze-render">${renderCloze(text, 0, 'all')}</div>` : ''}`;

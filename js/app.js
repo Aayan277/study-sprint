@@ -16,9 +16,10 @@ import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
+import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.1';
+const APP_VERSION = '4.2';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -928,6 +929,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  watchMath();       // draws the maths on cards (js/math.js) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
   document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
   // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.

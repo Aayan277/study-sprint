@@ -76,3 +76,13 @@ test('closestChoice: the nearest answer, the earliest on a tie', () => {
   assert.equal(closestChoice('xx', 'ab; cd').display, 'ab');
   assert.equal(closestChoice('x', ''), null);
 });
+
+test('maths: the answer to type is the formula as plain text', async () => {
+  const { answerText } = await import('../js/format.js');
+  const back = answerText('$x^2$');
+  assert.equal(checkAnswer('x^2', back).correct, true);
+  assert.equal(checkAnswer('x2', back).correct, true);
+  assert.equal(checkAnswer('x3', back).correct, false);
+  assert.equal(checkAnswer('a/b', answerText('$\\frac{a}{b}$')).correct, true);
+  assert.equal(canType(answerText('$\\frac{a}{b}$')), true);
+});

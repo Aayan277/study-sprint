@@ -1986,3 +1986,30 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   /* On a computer the streak button is only as wide as its text, so the arrow stays next to it */
   .today-hero .streak-btn{width:fit-content;min-width:280px;max-width:100%}
 }
+
+/* ---------- 20. Maths on cards (js/math.js draws them with KaTeX, which is fetched when a card first shows maths) ----------
+   KaTeX paints with the text colour, so every skin (dark, light, OLED) works without its own rules. The KaTeX stylesheet
+   is added to the page after this file, so these rules use two classes to win over its one. */
+.tex{font-style:normal;font-weight:400;letter-spacing:0;text-indent:0}
+.tex .katex{font-size:1.08em;letter-spacing:0;font-weight:400;text-align:left}
+.tex:not([data-done]){opacity:.75}
+/* The raw text, until KaTeX has drawn it or if it can't (offline on the first visit) */
+.tex-raw{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-decoration:underline dotted var(--text-3);text-underline-offset:.2em;overflow-wrap:anywhere;white-space:pre-wrap}
+/* Display maths sits on its own line and scrolls sideways inside its own box, never the page */
+.tex-d{display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:.3em 0;padding:.1em 0;text-align:center;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.tex-d .katex-display{margin:.2em 0}
+.tex-d .katex-display > .katex{display:block;width:max-content;min-width:100%;text-align:center;white-space:nowrap}
+.tex-d:focus-visible,.tex-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-xs)}
+/* An inline formula wider than its line (found after drawing) scrolls inside the line instead of widening the page */
+.tex-scroll{display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:bottom}
+.tex .katex-error{color:inherit;text-decoration:underline wavy var(--again);text-underline-offset:.2em}
+.flash-front .tex-d,.flash-back .tex-d,.flash-recap .tex-d{text-align:center}
+.flash-front.xlong .tex-d{text-align:left}
+.flash-recap .tex .katex{font-size:1em}
+/* Lists and rows: one line, so a formula never makes a row taller */
+.crow-main .tex .katex,.hard-list .tex .katex,.opt .tex .katex{font-size:1.02em}
+/* The preview under the editor's boxes and the import list */
+.pv-math{display:grid;gap:2px;min-width:0;padding:6px 10px;border-left:3px solid var(--accent-line);font-size:var(--fs-base);overflow-wrap:anywhere}
+.pv-math .pv-b{color:var(--text-2)}
+.math-hint{display:block;margin:4px 0 0}
+.fmt-preview .tex-d{margin:.2em 0}

@@ -7,6 +7,8 @@
 //     format:  { id: 'separator', label: "separated by ' - '" }   what was detected, for the "Found 42 cards ..." line
 //     headerSkipped: false }
 
+import { maskMath } from './math.js';
+
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
 // because fronts are usually short terms (so "Term: def - more" splits at ': ', not ' - ').
 const STRONG = ['\t', ' | '];                        // almost never appear by accident: take them if they fit
@@ -116,7 +118,7 @@ function boldSplit(line) {
 
 // Split one line at the first place the separator appears.
 function splitFirst(line, sep) {
-  const at = line.indexOf(sep);
+  const at = maskMath(line).indexOf(sep);          // a separator inside a formula ($a - b$) doesn't count
   if (at <= 0) return null;
   const front = line.slice(0, at).trim(), back = line.slice(at + sep.length).trim();
   return front && back ? [front, back] : null;

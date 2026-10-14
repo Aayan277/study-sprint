@@ -9,11 +9,11 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v63';
-// files-hash: 617555991c4a0aef
+const CACHE = 'study-sprint-v64';
+// files-hash: 91d0a5ab02cdcc3b
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
-  'js/app.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/answer-diff.js',
+  'js/app.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/answer-diff.js', 'js/math.js',
   'js/fx.js', 'js/play.js', 'js/queue.js', 'js/review.js', 'js/today.js', 'js/study-data.js', 'js/onboarding.js', 'js/install.js', 'js/sample.js', 'js/sched-settings.js', 'js/srs.js', 'js/stats.js', 'js/stats-calc.js', 'js/streak-sheet.js', 'js/themes.js', 'js/ui.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/icon-monochrome-512.png', 'icons/icon.svg', 'icons/favicon.svg', 'icons/apple-touch-icon.png'
 ];
@@ -28,8 +28,25 @@ self.addEventListener('install', e => {
     // version never installs half old files.
     await Promise.all(CORE.map(file => c.add(new Request(file, { cache: 'reload' }))));
     await Promise.all(PRELOAD.map(url => c.add(url).catch(() => {})));
+    await keepLibraries(c);
   }).then(() => self.skipWaiting()));
 });
+
+// A new CACHE name starts empty, but the libraries (maths, fonts…) were saved the first time they were used and may be
+// needed offline: copy them over from the old copies before those are thrown away.
+async function keepLibraries(into) {
+  try {
+    for (const key of await caches.keys()) {
+      if (key === CACHE || !key.startsWith('study-sprint-')) continue;
+      const old = await caches.open(key);
+      for (const req of await old.keys()) {
+        if (!CACHE_FIRST_HOSTS.includes(new URL(req.url).hostname) || await into.match(req)) continue;
+        const res = await old.match(req);
+        if (res) await into.put(req, res);
+      }
+    }
+  } catch { /* the libraries just download again when they are next used */ }
+}
 
 self.addEventListener('activate', e => {
   e.waitUntil(

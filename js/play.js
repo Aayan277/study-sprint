@@ -22,7 +22,7 @@ import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkAnswer } from './match.js';
-import { plainText } from './format.js';
+import { plainText, mathHTML, answerText } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
@@ -308,7 +308,7 @@ function showQuestion() {
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
   // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
-  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + esc(q.prompt);
+  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt);
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
@@ -325,7 +325,7 @@ function showQuestion() {
     const long = G.opts.some(o => o.length > 28);
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
-      `<button type="button" class="opt" data-i="${i}"><span class="key">${i + 1}</span><span class="lbl">${esc(o)}</span></button>`).join('');
+      `<button type="button" class="opt" data-i="${i}"><span class="key">${i + 1}</span><span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
   }
   G.limit = timeLimit({ fmt: G.fmt, pace: G.pace, typing, i: G.i });
   G.qStart = performance.now();
@@ -384,7 +384,7 @@ function answer(choice) {
   let ok = false, given = '', exact = true;
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; const res = checkAnswer(choice, G.q.answer, { forgiving: !G.hard }); ok = res.correct; exact = res.exact; }
+    if (choice !== null) { given = choice; const res = checkAnswer(choice, answerText(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; }
   } else {
     if (choice !== null) { given = G.opts[choice]; ok = given === G.q.answer; }
     document.querySelectorAll('#options .opt').forEach((b, j) => {
@@ -411,10 +411,10 @@ function answer(choice) {
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
-  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, G.q.answer) : null;
+  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, answerText(G.q.answer)) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
   const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
-    typed: diff ? given : undefined, target: diff ? G.q.answer : undefined,
+    typed: diff ? given : undefined, target: diff ? answerText(G.q.answer) : undefined,
     chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
@@ -427,7 +427,7 @@ function answer(choice) {
     ? `<div class="fb ok"><span class="fb-mark">${icon('check')} Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
   const yours = !ok && given && !diff ? `<span class="given">You answered: ${esc(given)}</span>` : '';
-  const info = ok ? '' : `<p class="fb-info"><b>${esc(G.q.answer)}</b>${yours}</p>`;
+  const info = ok ? '' : `<p class="fb-info"><b>${mathHTML(G.q.answer)}</b>${yours}</p>`;
   $('feedback').innerHTML = `${head}${info}${diff ? diffHTML(diff) : ''}<div class="fb-btns">
     <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
     <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
@@ -621,9 +621,9 @@ async function finish() {
       <h2>Missed</h2>
       ${missed.length ? missed.map(l => `
         <div class="miss">
-          <div class="m">${esc(l.q.prompt)}</div>
+          <div class="m">${mathHTML(l.q.prompt)}</div>
           ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
-          <div class="r">${esc(l.q.answer)}</div>
+          <div class="r">${mathHTML(l.q.answer)}</div>
           ${l.typed && hasMarks(diffAgainstBack(l.typed, l.target)) ? diffHTML(diffAgainstBack(l.typed, l.target), { small: true })
             : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
         </div>`).join('')

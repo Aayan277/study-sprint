@@ -16,6 +16,9 @@ import { parseAnkiOcclusion, occFrontBack, groupsOf } from './occlusion.js';
 // italics and lists as marks: see htmlToMarks in format.js.
 export const htmlToText = html => htmlToMarks(html, { marks: false });
 
+// Anki's editor writes formulas as [$]x[/$] and [$$]x[/$$]; here they are $x$ and $$x$$. (\( ... \) and \[ ... \] are read as they are.)
+export const ankiMath = text => String(text ?? '').replace(/\[\$\$\]([\s\S]+?)\[\/\$\$\]/g, (m, t) => `$$${t}$$`).replace(/\[\$\]([\s\S]+?)\[\/\$\]/g, (m, t) => `$${t}$`);
+
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
 // The picture file names in a field, in order: <img src="brain.png"> → ['brain.png'].
@@ -120,7 +123,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const enhancedSeen = new Set();
   for (const [index, note] of notes.entries()) {
     const model = models.get(String(note.mid)) || { name: '', fields: [], cloze: false };
-    const text = note.fields.map(f => htmlToMarks(f));       // bold, italics and lists kept as marks
+    const text = note.fields.map(f => ankiMath(htmlToMarks(f)));       // bold, italics and lists kept as marks
     if (isEnhancedNote(model)) {
       // One picture card for each group of the add-on's notes (the ID without its last "-number").
       const idText = htmlToText(note.fields[fieldIndex(model, 'id', 0)] || '').trim();

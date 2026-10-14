@@ -5,6 +5,8 @@ import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
 import { clozeCard, parseCloze, hasClozeLines } from './cloze.js';
+import { formatHTML } from './format.js';
+import { hasMath } from './math.js';
 import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
 import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -364,6 +366,7 @@ function renderList() {
         <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.front)}</textarea>
         <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.back)}</textarea>
         <span class="badge" hidden></span>
+        <div class="pv-math" hidden aria-label="Maths preview"></div>
       </div>
       <button class="icon-btn" type="button" data-del aria-label="Delete card ${i + 1}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -389,6 +392,13 @@ function refreshFlags() {
   $('plist').querySelectorAll('.prow').forEach(row => {
     const i = +row.dataset.i, c = S.cards[i], flag = S.flags[i];
     const badge = row.querySelector('.badge');
+    // A card with maths in it shows the drawn formulas under its boxes (only redrawn when its text changed).
+    const pv = row.querySelector('.pv-math'), mathSrc = hasMath(c.front) || hasMath(c.back) ? `${c.front}\u0000${c.back}` : '';
+    if (pv && pv.dataset.src !== mathSrc) {
+      pv.dataset.src = mathSrc;
+      pv.hidden = !mathSrc;
+      pv.innerHTML = mathSrc ? `<div class="pv-f">${formatHTML(c.front)}</div><div class="pv-b">${formatHTML(c.back)}</div>` : '';
+    }
     row.classList.toggle('incomplete', !isComplete(c));
     row.classList.toggle('dup', !!flag);
     badge.hidden = !flag && isComplete(c) && !c.cloze && !c.occlusion;

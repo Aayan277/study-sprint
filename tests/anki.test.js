@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
+import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -339,4 +339,11 @@ test('a cloze note: its cards share one note key, with the note text and Back Ex
   const picked = onlyDeck({ ...r, decks: ['A', 'A', 'B', 'B'] }, 'B');
   assert.deepEqual(picked.clozes.map(c => c && c.noteKey), ['102', null]);
   assert.deepEqual(picked.guids, ['g-two', 'g-three']);
+});
+
+test('maths: Anki [$] and [$$] become $ and $$, \\( \\) is kept', () => {
+  assert.equal(ankiMath('A [$]x^2[/$] and [$$]y[/$$]'), 'A $x^2$ and $$y$$');
+  assert.equal(ankiMath('plain'), 'plain');
+  const r = notesToImport([{ mid: '1', fields: ['Area [$]\\pi r^2[/$]', 'Energy \\(E=mc^2\\) and [$$]a[/$$]'], tags: [], deck: 'D' }], models);
+  assert.deepEqual(r.rows, [['Area $\\pi r^2$', 'Energy \\(E=mc^2\\) and $$a$$']]);
 });

@@ -17,3 +17,9 @@ test('language from the writing system', () => {
 test('what gets read out', () => {
   assert.equal(speakableText('The **cell** has:\n- a *nucleus*\n- ribosomes'), 'The cell has: a nucleus ribosomes');
 });
+
+test('maths is read as words', () => {
+  assert.equal(speakableText('What is $x^2$?'), 'What is x squared ?');
+  assert.equal(speakableText('Half is $\\frac{1}{2}$ and **bold**'), 'Half is 1 over 2 and bold');
+  assert.equal(speakableText('Cost \\$5 and $5'), 'Cost $5 and $5');
+});

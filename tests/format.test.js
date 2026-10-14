@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatHTML, plainText, hasFormatting, htmlToMarks, toggleWrap, toggleBullets } from '../js/format.js';
+import { formatHTML, plainText, hasFormatting, htmlToMarks, toggleWrap, toggleBullets, mathHTML, answerText } from '../js/format.js';
 
 test('showing formatted text', () => {
   assert.equal(formatHTML('The **mitochondria** is *the* powerhouse'), 'The <b>mitochondria</b> is <i>the</i> powerhouse');
@@ -51,4 +51,57 @@ test('the • button', () => {
   assert.deepEqual(toggleBullets('one\ntwo\nthree', 0, 7), { value: '- one\n- two\nthree', start: 0, end: 11 });
   assert.deepEqual(toggleBullets('- one\n- two', 0, 11), { value: 'one\ntwo', start: 0, end: 7 });
   assert.equal(toggleBullets('intro\nitem', 8, 8).value, 'intro\n- item');                                          // just the cursor's line
+});
+
+// ---------- maths (js/math.js) ----------
+test('maths: formulas become spans for KaTeX, in the three modes', () => {
+  assert.equal(formatHTML('What is $x^2$?'), 'What is <span class="tex" data-tex="x^2">$x^2$</span>?');
+  assert.equal(formatHTML('$$E=mc^2$$'), '<span class="tex tex-d" data-tex="E=mc^2">$$E=mc^2$$</span>');
+  assert.equal(formatHTML('a $x<y$ b', { math: 'raw' }), 'a $x&lt;y$ b');
+  assert.equal(formatHTML('a $x<y$ b', { math: 'anki' }), 'a \\(x&lt;y\\) b');
+  assert.equal(formatHTML('$$x\ny$$', { math: 'anki' }), '\\[x y\\]');
+  assert.equal(formatHTML('a $x$', { math: 'raw' }).includes('<span'), false);
+});
+
+test('maths: bold and italics around a formula, and stars inside one', () => {
+  assert.equal(formatHTML('**$x$**'), '<b><span class="tex" data-tex="x">$x$</span></b>');
+  assert.equal(formatHTML('*$x$* and **b**'), '<i><span class="tex" data-tex="x">$x$</span></i> and <b>b</b>');
+  assert.equal(formatHTML('$a*b*c$'), '<span class="tex" data-tex="a*b*c">$a*b*c$</span>');       // not read as italics
+  assert.equal(formatHTML('$a**b**c$ **d**'), '<span class="tex" data-tex="a**b**c">$a**b**c$</span> <b>d</b>');
+  assert.equal(formatHTML('- $x$\n- y'), '<ul><li><span class="tex" data-tex="x">$x$</span></li><li>y</li></ul>');
+});
+
+test('maths: prices and escaped dollars are plain text', () => {
+  assert.equal(formatHTML('$5 and $10'), '$5 and $10');
+  assert.equal(formatHTML('\\$x\\$'), '$x$');
+  assert.equal(formatHTML('It is \\$5'), 'It is $5');
+});
+
+test('maths: tags in a formula cannot get out, and stray placeholders are dropped', () => {
+  const html = formatHTML('$"><img src=x onerror=alert(1)>$');
+  assert.ok(!html.includes('<img'));
+  assert.ok(html.includes('data-tex="&quot;&gt;&lt;img'));
+  assert.equal(formatHTML('ab'), 'ab');
+});
+
+test('maths: plainText and hasFormatting leave formulas alone', () => {
+  assert.equal(plainText('**bold** $a*b*c$'), 'bold $a*b*c$');
+  assert.equal(plainText('- $x$'), '• $x$');
+  assert.equal(plainText('\\$5'), '\\$5');
+  assert.equal(hasFormatting('$a*b*c$'), false);
+  assert.equal(hasFormatting('$a*b*c$ and *i*'), true);
+});
+
+test('maths: answerText is what to type', () => {
+  assert.equal(answerText('$x^2$'), 'x^2');
+  assert.equal(answerText('**$\\frac{a}{b}$**'), 'a/b');
+  assert.equal(answerText('about \\$5 or $\\alpha$'), 'about $5 or alpha');
+  assert.equal(answerText('- one\n- $\\sqrt{x}$'), '• one\n• sqrt(x)');
+  assert.equal(answerText('plain *text*'), 'plain text');
+});
+
+test('maths: mathHTML escapes and draws formulas only', () => {
+  assert.equal(mathHTML('**a** < $x$'), '**a** &lt; <span class="tex" data-tex="x">$x$</span>');
+  assert.equal(mathHTML('$$x$$', { inline: true }), '<span class="tex" data-tex="x">$$x$$</span>');
+  assert.equal(mathHTML('\\$5'), '$5');
 });

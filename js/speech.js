@@ -3,6 +3,7 @@
 // reads cards out by itself (deck.ttsAuto). detectLang is a pure function, tested by tests/speech.test.js.
 
 import { plainText } from './format.js';
+import { replaceMath, texToSpeech } from './math.js';
 
 // Languages offered in Edit deck. The code tells the device which voice to use.
 export const SPEECH_LANGS = [
@@ -29,7 +30,7 @@ export function detectLang(text, fallback = 'en-US') {
 }
 
 // What to say: the card's text without formatting marks or bullet dots.
-export const speakableText = text => plainText(text).replace(/^• /gm, '').replace(/\s+/g, ' ').trim();
+export const speakableText = text => replaceMath(plainText(text), s => ` ${texToSpeech(s.tex)} `).replace(/^• /gm, '').replace(/\s+/g, ' ').trim();
 
 export const canSpeak = () => typeof speechSynthesis !== 'undefined';
 

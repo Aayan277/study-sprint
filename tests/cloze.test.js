@@ -210,3 +210,9 @@ test('pasted lines: one note per line, lines without blanks left out', async () 
   assert.deepEqual(result.clozes.map(c => c.noteKey), ['paste0', 'paste0', 'paste2']);
   assert.equal(result.format.id, 'cloze');
 });
+
+test('maths inside a blank is drawn in the answer', () => {
+  const html = renderCloze('The area is {{c1::$\\pi r^2$}} here', 1, 'back');
+  assert.match(html, /<mark class="cloze-ans"><span class="tex" data-tex="\\pi r\^2">\$\\pi r\^2\$<\/span><\/mark>/);
+  assert.match(renderCloze('Solve $x^2$ for {{c1::x}}', 1, 'front'), /<span class="tex" data-tex="x\^2">.*<span class="cloze-blank">\[…\]<\/span>/);
+});
