@@ -449,3 +449,8 @@ Not covered by the hunt:
 - Rule 5 (away mode): **fails**. Return day is lighter and day-1 recall is +1.5–3.2 pp, but R7 is below baseline in all 18 no-limit/150 cells, and R30end is −0.6 to −0.7 pp after 30 days.
 - **Recommendation, following the pre-set rules:** cap the plan at N=3 (`RESCUE_MAX_DAYS = 3`; N=4 untested), and drop "I'm away until…" (or offer it only as plain "review ahead" with no memory claim). Owner to confirm before Batch 2A builds the UI.
 - Batch 2 note: review.js calls `buildQueue` directly, so it must pass `data.rescue` (8th argument) or Review ignores the plan.
+
+## 9. Decisions (owner delegated to Claude, 14 Oct: "you decide for now, I'll change it later")
+- B1: rescue capped at **N=3** (`RESCUE_MAX_DAYS = 3`), default 3; **no "I'm away until…"**. Away mode failed rule 5.
+- Removing an exam date does **not** restore earlier due dates (FSRS recovers on its own; simpler).
+- Q2, Q6, Q8, Q9, Q10: as recommended. "Due" = what Review shows today; the `Step N:` syntax; a fixed leech keeps its schedule; Keep going = Today's Start; scratchpad on/off per device.
