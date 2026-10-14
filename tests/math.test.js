@@ -104,8 +104,63 @@ test('texToSpeech', () => {
   const table = [
     ['x^2', 'x squared'], ['x^3', 'x cubed'], ['x^n', 'x to the power n'], ['x^{n+1}', 'x to the power n plus 1'], ['x_i', 'x sub i'],
     ['\\frac{a}{b}', 'a over b'], ['\\sqrt{x}', 'square root of x'], ['a = b + c - d', 'a equals b plus c minus d'],
-    ['\\int f(x)', 'integral f x'], ['\\sum_{i=1}^{n} i', 'sum sub i equals 1 to the power n i'], ['\\alpha', 'alpha'], ['a \\cdot b', 'a times b'],
+    ['\\int f(x)', 'integral f x'], ['\\sum_{i=1}^{n} i', 'sum from i equals 1 to n i'], ['\\alpha', 'alpha'], ['a \\cdot b', 'a times b'],
     ['\\text{mass}', 'mass'], ['\\pi', 'pi'], ['\\left( x \\right)', 'x']
   ];
   for (const [tex, want] of table) assert.equal(texToSpeech(tex), want, tex);
+});
+
+// ---------- v4.2.2 (docs/design/katex-review.md) ----------
+import fs from 'node:fs';
+import { KATEX_JS_INTEGRITY, KATEX_CSS_INTEGRITY } from '../js/math.js';
+
+test('a formula of exactly 1000 characters is maths, 1001 is not', () => {
+  assert.equal(maths('$' + 'x'.repeat(1000) + '$').length, 1);
+  assert.equal(maths('$' + 'x'.repeat(1001) + '$').length, 0);
+});
+
+test('$$ is display maths wherever it stands (the header comment no longer claims an own-line rule)', () => {
+  assert.deepEqual(splitMath('$$5 and $$10').map(s => s.type + ':' + (s.tex ?? s.value)), ['math:5 and', 'text:10']);
+  assert.deepEqual(splitMath('see $$x$$ now').map(s => s.type), ['text', 'math', 'text']);
+  assert.ok(!/own line/.test(fs.readFileSync(new URL('../js/math.js', import.meta.url), 'utf8').split('\n').slice(0, 14).join('\n')));
+});
+
+test('existing private characters get placeholders that output themselves', () => {
+  const text = 'a $x$ ';
+  const { text: held, items } = holdMath(text);
+  assert.equal(items.length, 3);
+  assert.equal(unholdMath(held, items, it => it.raw), text);
+  assert.equal(unholdMath(held, items, () => 'M'), 'a M ');
+  // placeholders that are not ours are still dropped
+  assert.equal(unholdMath('x\ue900y', [{ raw: 'r' }], it => it.raw), 'xy');
+});
+
+test('texToSpeech: absolute value, limits of integrals and sums', () => {
+  assert.equal(texToSpeech('|x|'), 'absolute value of x');
+  assert.equal(texToSpeech('|x| + |y|'), 'absolute value of x plus absolute value of y');
+  assert.equal(texToSpeech('\\int_0^1 f(x)'), 'integral from 0 to 1 f x');
+  assert.equal(texToSpeech('\\int_{0}^{\\infty} e'), 'integral from 0 to infinity e');
+  assert.equal(texToSpeech('\\sum_{k=1}^{n} k'), 'sum from k equals 1 to n k');
+  assert.equal(texToSpeech('\\int f'), 'integral f');
+  assert.equal(texToSpeech('\\int^2 f'), 'integral to 2 f');
+});
+
+test('texToPlain: Greek letters as names, or as letters', () => {
+  assert.equal(texToPlain('2\\pi r'), '2 pi r');
+  assert.equal(texToPlain('2\\pi r', { greek: true }), '2 π r');
+  assert.equal(texToPlain('\\Omega + \\vartheta', { greek: true }), 'Ω + θ');
+});
+
+test('the fingerprints in math.js are the ones in index.html (import map for katex.mjs)', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(map.integrity[KATEX_BASE + 'katex.mjs'], KATEX_JS_INTEGRITY);
+  assert.match(KATEX_CSS_INTEGRITY, /^sha384-[A-Za-z0-9+/]{64}$/);
+  assert.match(KATEX_JS_INTEGRITY, /^sha384-[A-Za-z0-9+/]{64}$/);
+});
+
+test('loadKatex: no ?again retry address, integrity on the stylesheet, crossorigin anonymous', () => {
+  const src = fs.readFileSync(new URL('../js/math.js', import.meta.url), 'utf8');
+  assert.ok(!src.includes('again='), 'a retry address would not match the import map');
+  assert.ok(src.includes('link.integrity = KATEX_CSS_INTEGRITY') && src.includes("link.crossOrigin = 'anonymous'"));
 });

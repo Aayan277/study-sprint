@@ -59,7 +59,7 @@ test('maths: formulas become spans for KaTeX, in the three modes', () => {
   assert.equal(formatHTML('$$E=mc^2$$'), '<span class="tex tex-d" data-tex="E=mc^2">$$E=mc^2$$</span>');
   assert.equal(formatHTML('a $x<y$ b', { math: 'raw' }), 'a $x&lt;y$ b');
   assert.equal(formatHTML('a $x<y$ b', { math: 'anki' }), 'a \\(x&lt;y\\) b');
-  assert.equal(formatHTML('$$x\ny$$', { math: 'anki' }), '\\[x y\\]');
+  assert.equal(formatHTML('$$x\ny$$', { math: 'anki' }), '\\[x\ny\\]');       // v4.2.2: the newline stays (a % comment ends at its line end)
   assert.equal(formatHTML('a $x$', { math: 'raw' }).includes('<span'), false);
 });
 
@@ -77,11 +77,11 @@ test('maths: prices and escaped dollars are plain text', () => {
   assert.equal(formatHTML('It is \\$5'), 'It is $5');
 });
 
-test('maths: tags in a formula cannot get out, and stray placeholders are dropped', () => {
+test('maths: tags in a formula cannot get out, and private characters in the text are kept (v4.2.2)', () => {
   const html = formatHTML('$"><img src=x onerror=alert(1)>$');
   assert.ok(!html.includes('<img'));
   assert.ok(html.includes('data-tex="&quot;&gt;&lt;img'));
-  assert.equal(formatHTML('ab'), 'ab');
+  assert.equal(formatHTML('a\ue100b'), 'a\ue100b');
 });
 
 test('maths: plainText and hasFormatting leave formulas alone', () => {
@@ -104,4 +104,53 @@ test('maths: mathHTML escapes and draws formulas only', () => {
   assert.equal(mathHTML('**a** < $x$'), '**a** &lt; <span class="tex" data-tex="x">$x$</span>');
   assert.equal(mathHTML('$$x$$', { inline: true }), '<span class="tex" data-tex="x">$$x$$</span>');
   assert.equal(mathHTML('\\$5'), '$5');
+});
+
+// ---------- v4.2.2 (docs/design/katex-review.md) ----------
+import { answerTargets, rawAnswerText } from '../js/format.js';
+import { holdMath, unholdMath } from '../js/math.js';
+import { checkTyped } from '../js/match.js';
+
+test('typed answers: the words or the text as written, for texts that only look like maths (finding 1)', () => {
+  // a price, a shell command and a regex: nothing here is maths, so the raw text is what to type
+  assert.deepEqual(answerTargets('Costs \\$5 and \\$10'), ['Costs $5 and $10']);
+  assert.deepEqual(answerTargets('echo $HOME and $PATH'), ['echo $HOME and $PATH']);
+  assert.deepEqual(answerTargets('^\\d+$'), ['^\\d+$']);
+  assert.deepEqual(answerTargets('https://x.org/a?b=$1&c=\\$2'), ['https://x.org/a?b=$1&c=$2']);
+  // a real formula: the words, the LaTeX as written, and the Greek letter as a letter
+  assert.deepEqual(answerTargets('Area $\\pi r^2$'), ['Area pi r^2', 'Area $\\pi r^2$', 'Area π r^2']);
+  assert.deepEqual(answerTargets('**bold** \\$3 and $\\frac{a}{b}$'), ['bold $3 and a/b', 'bold $3 and $\\frac{a}{b}$']);
+  assert.equal(rawAnswerText('**Cost** \\$5 $a*b*c$'), 'Cost $5 $a*b*c$');
+  const t = answerTargets('$\\frac{a}{b}$');
+  assert.equal(checkTyped('a/b', t).correct, true);
+  assert.equal(checkTyped('\\frac{a}{b}', t).correct, true, 'the LaTeX itself is right too');
+  assert.equal(checkTyped('\\frac{a}{b}', t).target, '$\\frac{a}{b}$');
+  assert.equal(checkTyped('zzz', t).correct, false);
+  assert.equal(checkTyped('zzz', t).target, 'a/b', 'a wrong answer is compared with the first wording');
+  assert.equal(checkTyped('α', answerTargets('$\\alpha$')).correct, true, 'typing α matches \\alpha');
+  assert.equal(checkTyped('alpha', answerTargets('$\\alpha$')).correct, true);
+  assert.equal(checkTyped('$5', answerTargets('\\$5')).correct, true);
+  assert.equal(checkTyped('anything', answerTargets('')).correct, false);
+});
+
+test('answerText measures words, not LaTeX (what the size classes use)', () => {
+  const tex = '$\\frac{\\alpha_{1}}{\\beta_{2}} + \\sqrt{x}$';
+  assert.ok(!answerText(tex).includes('\\') && answerText(tex).length < tex.length - 10, answerText(tex));
+});
+
+test('maths: anki mode keeps line breaks, so a % comment ends at its line', () => {
+  assert.equal(formatHTML('$$a % note\nb$$', { math: 'anki' }), '\\[a % note\nb\\]');
+});
+
+test('private characters in the text survive (the rich editor round trip) and are never read as placeholders', () => {
+  const text = 'ab  $x$  ';
+  const held = holdMath(text);
+  assert.equal(unholdMath(held.text, held.items, it => it.raw), text);
+  assert.equal(held.items.filter(i => i.literal).length, 4);
+  assert.equal(plainText(text), text);
+  assert.equal(formatHTML(' **b** $y$').includes(' <b>b</b>'), true);
+  // the editor round trip: text → rich box HTML → text
+  assert.equal(htmlToMarks(formatHTML(text, { math: 'raw' })), text);
+  // a lone character with nothing to swap behaves as before
+  assert.deepEqual(holdMath('plain'), { text: 'plain', items: [] });
 });

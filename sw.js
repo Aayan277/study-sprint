@@ -9,8 +9,8 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v66';
-// files-hash: ae51e49aa2aa5ff4
+const CACHE = 'study-sprint-v67';
+// files-hash: 4ade3192c70e3481
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js',
@@ -20,6 +20,16 @@ const CORE = [
 // The scheduling library, saved at install so reviews work offline from the first launch.
 // Saved separately so a slow CDN can't stop the rest from installing.
 const PRELOAD = ['https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs'];
+// Everything else the app loads from a CDN, at the pinned versions of this release (js/math.js, js/anki-read.js,
+// js/import-screen.js). Only these are carried over from an old cache (see keepLibraries). tests/sw.test.js checks that
+// every versioned CDN address in js/ starts with one of them.
+const KATEX_BASE = 'https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/';
+const PINNED = [
+  ...PRELOAD, KATEX_BASE,
+  'https://cdn.jsdelivr.net/npm/fflate@0.8.2/', 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/', 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/',
+  'https://cdn.sheetjs.com/xlsx-0.20.3/'
+];
+const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'cdn.sheetjs.com'];
 
 self.addEventListener('install', e => {
@@ -32,18 +42,24 @@ self.addEventListener('install', e => {
   }).then(() => self.skipWaiting()));
 });
 
-// A new CACHE name starts empty, but the libraries (maths, fonts…) were saved the first time they were used and may be
-// needed offline: copy them over from the old copies before those are thrown away.
+// A new CACHE name starts empty, but the libraries (maths, fonts...) were saved the first time they were used and may be
+// needed offline: copy them over from the newest old copy before the old ones are thrown away. Only what this release
+// still uses is copied (PINNED and the fonts), and only good responses: an "opaque" one (saved from a no-cors request, so it
+// can't be checked and can't answer a cors request) or a failed one is left behind.
+const stillUsed = url => {
+  const u = new URL(url);
+  return FONT_HOSTS.includes(u.hostname) || PINNED.some(p => url.startsWith(p));
+};
 async function keepLibraries(into) {
   try {
-    for (const key of await caches.keys()) {
-      if (key === CACHE || !key.startsWith('study-sprint-')) continue;
-      const old = await caches.open(key);
-      for (const req of await old.keys()) {
-        if (!CACHE_FIRST_HOSTS.includes(new URL(req.url).hostname) || await into.match(req)) continue;
-        const res = await old.match(req);
-        if (res) await into.put(req, res);
-      }
+    const version = key => +(/^study-sprint-v(\d+)$/.exec(key)?.[1] ?? -1);
+    const old = (await caches.keys()).filter(k => k !== CACHE && version(k) >= 0).sort((a, b) => version(b) - version(a))[0];
+    if (!old) return;
+    const from = await caches.open(old);
+    for (const req of await from.keys()) {
+      if (!stillUsed(req.url) || await into.match(req)) continue;
+      const res = await from.match(req);
+      if (res && res.type !== 'opaque' && res.ok) await into.put(req, res);
     }
   } catch { /* the libraries just download again when they are next used */ }
 }
@@ -69,7 +85,10 @@ self.addEventListener('fetch', e => {
   if (url.origin === location.origin) {
     e.respondWith(savedThenUpdate(e, req));
   } else if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
-    e.respondWith(caches.match(req).then(r => r || fetch(req).then(save)));
+    // jsdelivr addresses carry the version, so a query string (an old "?again=2" retry) never means a different file.
+    // A saved "opaque" copy can't answer a cors request (the module and stylesheet loads ask with cors), so that one is fetched again.
+    const find = caches.match(req, { ignoreSearch: url.hostname === 'cdn.jsdelivr.net' });
+    e.respondWith(find.then(r => (r && !(r.type === 'opaque' && req.mode === 'cors') ? r : fetch(req).then(save))));
   }
 });
 

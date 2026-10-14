@@ -163,3 +163,13 @@ test('a typed answer that is accepted exactly has no marks; one accepted with a 
     assert.ok(marks <= allowedTypos(c.key.length), `marks ${marks} within budget for "${typed}" vs "${c.display}" (${back})`);
   }
 });
+
+// ---------- v4.2.2 ----------
+import { checkTyped } from '../js/match.js';
+test('checkTyped: an exact wording wins, then one right with typos, else the first wording is the verdict', () => {
+  assert.deepEqual(checkTyped('b', ['a', 'b']), { correct: true, exact: true, target: 'b' });
+  assert.equal(checkTyped('photosinthesis', ['photosynthesis', 'photosynthesis!']).target, 'photosynthesis');
+  const none = checkTyped('zzzz', ['alpha', 'omega']);
+  assert.deepEqual([none.correct, none.target], [false, 'alpha']);
+  assert.equal(checkTyped('x', []).correct, false);
+});

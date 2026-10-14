@@ -7,9 +7,9 @@ import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
-import { canType, checkAnswer } from './match.js';
+import { canType, checkTyped } from './match.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, mathHTML, plainText, answerText, shortDeckPath, answerSize } from './format.js';
+import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
@@ -166,7 +166,8 @@ function renderSession(el, enter = false) {
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = typesAnswer(card);
   const occ = hasMasks(card);
-  const size = occ ? '' : plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
+  const frontLen = occ ? 0 : answerText(card.front).length;          // measured as words, not as LaTeX
+  const size = frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
@@ -175,7 +176,7 @@ function renderSession(el, enter = false) {
   // An image-occlusion card shows its picture with every box hidden and the highlighted one to name; the back uncovers that
   // box, with its label, and a button shows the whole picture. (occlusion.js builds the HTML, escaping the text.)
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
-  const backSize = occ ? '' : answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const backSize = occ ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
     ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
     : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
@@ -341,8 +342,8 @@ function togglePeek(button) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const target = answerText(R.current.card.back);
-  const result = checkAnswer(value, target);
+  // Either the answer as words or the text as written is right (typing the LaTeX works, and so does the literal text).
+  const { target, ...result } = checkTyped(value, answerTargets(R.current.card.back));
   R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();

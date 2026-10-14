@@ -16,8 +16,9 @@ import { parseAnkiOcclusion, occFrontBack, groupsOf } from './occlusion.js';
 // italics and lists as marks: see htmlToMarks in format.js.
 export const htmlToText = html => htmlToMarks(html, { marks: false });
 
-// Anki's editor writes formulas as [$]x[/$] and [$$]x[/$$]; here they are $x$ and $$x$$. (\( ... \) and \[ ... \] are read as they are.)
-export const ankiMath = text => String(text ?? '').replace(/\[\$\$\]([\s\S]+?)\[\/\$\$\]/g, (m, t) => `$$${t}$$`).replace(/\[\$\]([\s\S]+?)\[\/\$\]/g, (m, t) => `$${t}$`);
+// Anki's editor writes formulas as [$]x[/$] and [$$]x[/$$]; here they are \(x\) and \[x\], which (unlike $ ... $) take
+// spaces and line breaks inside, as Anki's do. (\( ... \) and \[ ... \] themselves are read as they are.)
+export const ankiMath = text => String(text ?? '').replace(/\[\$\$\]([\s\S]+?)\[\/\$\$\]/g, (m, t) => `\\[${t}\\]`).replace(/\[\$\]([\s\S]+?)\[\/\$\]/g, (m, t) => `\\(${t}\\)`);
 
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 

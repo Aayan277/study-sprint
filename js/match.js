@@ -79,6 +79,19 @@ export function checkAnswer(typed, back, { forgiving = true } = {}) {
   return { correct: close, exact: false };
 }
 
+// checkAnswer against each wording a card accepts (format.js answerTargets). An exact match wins, then one that is right with typos; when none
+// is, the first one is the verdict. Returns the verdict and the wording it was judged against (what the diff compares with).
+export function checkTyped(typed, targets, opts) {
+  let first = null, right = null;
+  for (const target of targets) {
+    const res = { ...checkAnswer(typed, target, opts), target };
+    if (res.exact) return res;                 // no typos needed
+    if (res.correct) right ??= res;
+    first ??= res;
+  }
+  return right ?? first ?? { ...checkAnswer(typed, '', opts), target: '' };
+}
+
 // The answers a typed answer can be compared with, to show which letters were wrong: exactly the set
 // acceptedAnswers allows. Order: the pieces split on ; and /, then each piece without its (brackets), then the
 // whole back (with and without brackets). De-duplicated by key (the answer folded and without spaces).

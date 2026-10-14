@@ -21,8 +21,8 @@ import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
-import { checkAnswer } from './match.js';
-import { plainText, mathHTML, answerText } from './format.js';
+import { checkTyped } from './match.js';
+import { plainText, mathHTML, answerText, answerTargets } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
@@ -50,7 +50,7 @@ export function drillCards(cardIds) {
 }
 
 const fmtClock = ms => { const s = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-const sizeClass = text => (text.length > 120 ? ' xlong' : text.length > 50 ? ' long' : '');
+const sizeClass = text => { const n = answerText(text).length; return n > 120 ? ' xlong' : n > 50 ? ' long' : ''; };      // measured as words, not as LaTeX
 
 // Stop timers when a round is abandoned (leaving the tab, or quitting).
 function stopRound() {
@@ -381,10 +381,10 @@ function answer(choice) {
   const elapsed = performance.now() - G.qStart;
   const lightning = G.fmt === 'lightning';
   const seconds = (lightning ? elapsed : Math.min(elapsed, G.limit)) / 1000;
-  let ok = false, given = '', exact = true;
+  let ok = false, given = '', exact = true, target = '';
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; const res = checkAnswer(choice, answerText(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; }
+    if (choice !== null) { given = choice; const res = checkTyped(choice, answerTargets(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; }
   } else {
     if (choice !== null) { given = G.opts[choice]; ok = given === G.q.answer; }
     document.querySelectorAll('#options .opt').forEach((b, j) => {
@@ -411,11 +411,11 @@ function answer(choice) {
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
-  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, answerText(G.q.answer)) : null;
+  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
   const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
-    typed: diff ? given : undefined, target: diff ? answerText(G.q.answer) : undefined,
-    chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
+    typed: diff ? given : undefined, target: diff ? target : undefined,
+    chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
   const round = G;

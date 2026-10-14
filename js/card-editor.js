@@ -70,9 +70,10 @@ function applyFormat(id, kind) {
   if (el.dataset.rich) {
     el.focus();
     if (kind === 'math') {
-      // The selected words between $ signs; with nothing selected, an empty pair with the cursor inside.
+      // The selected words between $ signs (or, if they already are, without them); with nothing selected, an empty pair
+      // with the cursor inside.
       const sel = getSelection(), picked = sel.toString();
-      document.execCommand('insertText', false, `$${picked}$`);
+      document.execCommand('insertText', false, wrapMath(picked, 0, picked.length).value);
       if (!picked) getSelection().modify?.('move', 'backward', 'character');
       return;
     }

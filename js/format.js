@@ -6,7 +6,7 @@
 // Cards stay plain text underneath, so they sync, back up and export cleanly. The marks only count when
 // they hug a word: "5 * 3 * 2" stays as it is. card-editor.js gives the B / I / • buttons.
 
-import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain, STRAY_PLACEHOLDER } from './math.js';
+import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain } from './math.js';
 
 const escapeHTML = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
@@ -24,7 +24,7 @@ const inline = html => html.replace(BOTH, '<b><i>$1</i></b>').replace(BOLD, '<b>
 const mathPiece = (it, mode) => {
   if (mode === 'raw') return escapeHTML(it.raw).replace(/\n/g, '<br>');
   if (mode === 'anki') {
-    const tex = escapeHTML(it.tex.replace(/\s*\n\s*/g, ' '));
+    const tex = escapeHTML(it.tex);              // newlines stay: a % comment in the TeX ends at the end of its line
     return it.display ? `\\[${tex}\\]` : `\\(${tex}\\)`;
   }
   return `<span class="tex${it.display ? ' tex-d' : ''}" data-tex="${escapeHTML(it.tex)}">${escapeHTML(it.raw)}</span>`;
@@ -35,7 +35,7 @@ const mathPiece = (it, mode) => {
 //   math: how formulas come out (see mathPiece). Formulas are lifted out first, so the marks inside them
 //   ($a*b*c$) are never read as formatting.
 export function formatHTML(text, { math = 'span' } = {}) {
-  const held = holdMath(String(text ?? '').replace(STRAY_PLACEHOLDER, ''));
+  const held = holdMath(String(text ?? ''));
   const blocks = [];
   let list = null;
   const source = math === 'raw' ? held.text : unescapeDollar(held.text);
@@ -76,6 +76,23 @@ export function plainText(text) {
 export function answerText(text) {
   const held = holdMath(String(text ?? ''));
   return unholdMath(unescapeDollar(stripMarks(held.text)), held.items, it => texToPlain(it.tex));
+}
+
+// The raw text typed as it stands (formulas as written), with "\$" as "$". The other thing a typed answer may match.
+export function rawAnswerText(text) {
+  const held = holdMath(String(text ?? ''));
+  return unholdMath(unescapeDollar(stripMarks(held.text)), held.items, it => it.raw);
+}
+
+// Everything a typed answer can match, best first: the formulas as plain words (answerText), the text as written
+// (so typing the LaTeX works, or a price or a path with its \$ signs), and the plain words with Greek letters as
+// letters (α for \alpha).
+export function answerTargets(text) {
+  const held = holdMath(String(text ?? ''));
+  const base = unescapeDollar(stripMarks(held.text));
+  const out = [unholdMath(base, held.items, it => texToPlain(it.tex)), unholdMath(base, held.items, it => it.raw),
+    unholdMath(base, held.items, it => texToPlain(it.tex, { greek: true }))];
+  return out.filter((t, i) => t.trim() && out.indexOf(t) === i);
 }
 
 // Does the text use any formatting marks? (Formulas don't count, and their insides are not looked at.)

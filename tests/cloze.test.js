@@ -216,3 +216,26 @@ test('maths inside a blank is drawn in the answer', () => {
   assert.match(html, /<mark class="cloze-ans"><span class="tex" data-tex="\\pi r\^2">\$\\pi r\^2\$<\/span><\/mark>/);
   assert.match(renderCloze('Solve $x^2$ for {{c1::x}}', 1, 'front'), /<span class="tex" data-tex="x\^2">.*<span class="cloze-blank">\[…\]<\/span>/);
 });
+
+// ---------- v4.2.2: maths inside blanks (docs/design/katex-review.md, should-fix 3) ----------
+import { clozeFull, hasCloze } from '../js/cloze.js';
+
+test('a }} inside a formula does not end the blank', () => {
+  const t = 'Find {{c1::$\\sqrt{x^{2}}$}} and {{c2::$\\frac{a}{b}$::hint}}';
+  assert.deepEqual(clozeNumbers(t), [1, 2]);
+  assert.deepEqual(clozeCard(t, 1), { front: 'Find […] and $\\frac{a}{b}$', back: '$\\sqrt{x^{2}}$' });
+  assert.deepEqual(clozeCard(t, 2), { front: 'Find $\\sqrt{x^{2}}$ and [hint]', back: '$\\frac{a}{b}$' });
+  assert.equal(clozeFull(t), 'Find $\\sqrt{x^{2}}$ and $\\frac{a}{b}$');
+  const html = renderCloze(t, 1, 'back');
+  assert.ok(html.includes('<mark class="cloze-ans"><span class="tex" data-tex="\\sqrt{x^{2}}">$\\sqrt{x^{2}}$</span></mark>'), html);
+  assert.ok(renderCloze(t, 1, 'front').includes('<span class="cloze-blank">[…]</span>'));
+  assert.ok(renderCloze(t, 2, 'all').split('<mark class="cloze-ans">').length === 3);
+  assert.equal(planNoteSave([], t).add.length, 2);
+  assert.equal(planNoteSave([], 'x {{c1::$a$}}').error, undefined);
+});
+
+test('a blank that starts inside a formula is not a blank (it shows as typed); prices and private characters are fine', () => {
+  assert.deepEqual(clozeNumbers('$x + {{c1::y}}$'), []);
+  assert.equal(hasCloze('{{c1::$5}} and $10'), true);
+  assert.equal(clozeCard('{{c1::ab}} $x$', 1).back, 'ab');
+});

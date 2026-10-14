@@ -50,6 +50,21 @@
   // The desktop sidebar's collapsed (icon rail) state is remembered per device the same way (see js/sidebar.js).
   try { if (localStorage.getItem('study-sprint-rail') === '1') document.documentElement.setAttribute('data-rail', 'on'); } catch (e) { /* fine */ }
 </script>
+<!-- Integrity for the libraries the app imports from the CDN: the browser refuses a file whose SHA-384 fingerprint differs,
+     so a tampered or swapped file is never run. It must come before the first module script or preload. Pinned versions only;
+     when one changes, recompute its hash (openssl dgst -sha384 -binary FILE | openssl base64 -A) and update js/math.js too for KaTeX.
+     tests/integrity.test.js checks every versioned CDN module in js/ has an entry. -->
+<script type="importmap">
+{
+  "integrity": {
+    "https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.mjs": "sha384-7P2cqEHJR2IlPITv70b7D/BOl8yOGOe/LHzf5acWjXiVJl0HVGb0aGUG8Jc8FA+2",
+    "https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs": "sha384-OeqvdN9AydEUN/AbwPmQJUIpNEccDtOW7Agq8BEILaYEkupNtqgV0p2ijEwzAOM0",
+    "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js": "sha384-SNKgXdor2lJGkzPBg9ywUthk1cf7jcEOGewjMgbgasovEnR+wHQyNIf318oz4E/E",
+    "https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs": "sha384-/9U+PI4QddC9gB4/70Oc1Jky1kqgNYz0C+Bne06NjReFT5QhWw5R7nz2a+sIGmQ9",
+    "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs": "sha384-Z4EKe5a5DXkOl0inZS9gbLhWC3oWGsUGEe39GJ62+77NMKyfNjPWtP1Ilgb1Jzzy"
+  }
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">

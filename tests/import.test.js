@@ -289,3 +289,13 @@ test('dupKey keeps kana and Devanagari marks, folds Latin accents, and keeps sym
   assert.equal(dupKey(' '), '');
   assert.deepEqual(findDuplicates([{ front: 'か', back: '1' }, { front: 'が', back: '2' }, { front: 'は', back: '3' }, { front: 'ぱ', back: '4' }, { front: 'ば', back: '5' }]).map(x => x), [null, null, null, null, null]);
 });
+
+// ---------- v4.2.2: commas inside formulas (docs/design/katex-review.md, should-fix 4) ----------
+test('comma-separated lines: a comma inside a formula does not split', () => {
+  assert.deepEqual(cards('Point, $f(a,b)$\nLine, $g(x,y,z)$'), [['Point', '$f(a,b)$'], ['Line', '$g(x,y,z)$']]);
+  assert.equal(formatOf('Point, $f(a,b)$\nLine, $g(x,y,z)$').sep, ',');
+  // a quoted field and an adjacent pair of formulas keep working
+  assert.deepEqual(cards('"One, two", $a,b$\\(c,d\\)\nx, y'), [['One, two', '$a,b$\\(c,d\\)'], ['x', 'y']]);
+  // no formulas: as before
+  assert.deepEqual(cards('Paris, France\nRome, Italy'), [['Paris', 'France'], ['Rome', 'Italy']]);
+});

@@ -7,7 +7,7 @@
 //     format:  { id: 'separator', label: "separated by ' - '" }   what was detected, for the "Found 42 cards ..." line
 //     headerSkipped: false }
 
-import { maskMath } from './math.js';
+import { maskMath, MASK_CHAR } from './math.js';
 import { foldText } from './match.js';
 
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
@@ -15,6 +15,7 @@ import { foldText } from './match.js';
 const STRONG = ['\t', ' | '];                        // almost never appear by accident: take them if they fit
 const NORMAL = [' - ', ' – ', ' — ', ': ', ' = '];
 const WEAK = [','];                                  // prose is full of commas, so only use commas as a last resort
+const MASK_RUN = new RegExp(MASK_CHAR, 'g');
 const MIN_SCORE = 0.7;                               // at least 70% of lines must split cleanly
 
 const SEP_LABEL = { '\t': 'tabs', ',': 'commas' };
@@ -125,11 +126,22 @@ function splitFirst(line, sep) {
   return front && back ? [front, back] : null;
 }
 
+// Commas inside a formula ("Point, $f(a,b)$") don't separate fields: parse the text with the formulas masked (same
+// length), then put the original characters back at the masked places, in order.
+function parseCommaRows(text) {
+  const masked = maskMath(text);
+  if (masked === text || text.includes(MASK_CHAR)) return parseDelimited(text, ',');
+  const pieces = [];
+  for (let i = 0; i < text.length; i++) if (masked[i] === MASK_CHAR) pieces.push(text[i]);
+  let at = 0;
+  return parseDelimited(masked, ',').map(r => r.map(f => (f.includes(MASK_CHAR) ? f.replace(MASK_RUN, () => pieces[at++]) : f)));
+}
+
 // Tabs and commas go through the quote-aware parser. If every row has the same number of columns
 // it's a real spreadsheet export, so the columns are kept. Otherwise everything after the first
 // field is the back (so a definition can contain commas).
 function delimitedRows(lines, sep) {
-  const rows = parseDelimited(lines.join('\n'), sep);
+  const rows = sep === ',' ? parseCommaRows(lines.join('\n')) : parseDelimited(lines.join('\n'), sep);
   const same = rows.length > 0 && rows.every(r => r.length === rows[0].length);
   if (same) return rows;
   const joiner = sep === ',' ? ', ' : ' ';
