@@ -31,3 +31,14 @@ node summarize2.mjs out.jsonl base new
 recall and long-run retention no worse than A by more than 0.3–0.5 points in any cell".
 
 `deps/`, `base/`, `new/` and `*.jsonl` are not saved in git.
+
+## B1 rescue grid (Round 2)
+
+`harness2.mjs` Gb/Ab take `RESCUE=N` (a catch-up plan over N days on the day the break ends, only where `rescueOffer()` would
+offer it), `PAUSE=0|1`, `AWAY=all|<n>` (review ahead what comes due during the break) and `CARDS=n`. Break scenarios also report
+`recPeak`, `recP90`, `R30end` and `Rret`. Results and the pass rules: `report-rescue.md`.
+
+```
+node run2.mjs out.jsonl 30 new Gb default,forgetful,strong '[{"BREAK":"14","RL":"none"},{"BREAK":"14","RL":"none","RESCUE":"5","PAUSE":"1"}]'
+node summarize2.mjs out.jsonl new new rescue        # several files can be joined with commas
+```

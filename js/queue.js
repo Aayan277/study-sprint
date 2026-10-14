@@ -28,8 +28,9 @@ export function newStudiedToday(logs, now = Date.now()) {
 //                { total, byDeck } from reviewLimits(). Learning cards are never held back.
 //   exam      optional, from examSchedule() in exam.js: the exam's final pass (see splitCards)
 //   answered  optional: the cards of each cloze note answered today, from answeredNotes() (see limitSiblings)
-export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined) {
-  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered);
+//   rescue    optional: today's catch-up plan, from rescueToday() (see queueFrom)
+export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined, rescue = null) {
+  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered, rescue);
 }
 
 // Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
@@ -64,10 +65,68 @@ export function splitCards(cards, statesById, now = Date.now(), exam = null) {
 }
 // Step 2: apply today's new-card and review limits.
 // Cloze cards of one note are siblings: only one of them is shown a day (limitSiblings), before the limits are applied.
-export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map()) {
-  const { reviews, waiting, fresh } = withoutSiblings(split, answered);
+// rescue (optional) is today's catch-up plan from rescueToday(): after the sibling rule and before the review limit,
+// only the first `allow` backlog cards stay (still most overdue first); other cards are never touched by the plan.
+// With rescue.pauseNew, decks without an exam get no new cards while the plan runs.
+export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map(), rescue = null) {
+  let { reviews, waiting, fresh } = withoutSiblings(split, answered);
+  const newAvailable = fresh.length;
+  if (rescue) {
+    let room = rescue.allow;
+    reviews = reviews.filter(x => {
+      if (!isBacklog(x, rescue)) return true;
+      return room-- > 0;
+    });
+    if (rescue.pauseNew) fresh = fresh.filter(c => rescue.exempt?.has(c.deckId));
+  }
   const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
-  return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable: fresh.length };
+  return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable };
+}
+
+// ---------- "back from a break" catch-up plan ----------
+// A stateless plan kept in settings.rescue = { start, days: N, backlog, pauseNew, at }:
+//   start    when the plan began (the study day start): cards due before this are the backlog
+//   backlog  how many there were at the start; days  how many days to spread them over
+// Day k of the plan allows max(0, remaining - floor(backlog * (N - k) / N)) backlog cards, so it corrects itself:
+// a skipped day just means more the next day, and on day N everything left is allowed.
+// Cards in decks with an exam (exemptDeckIds) are never part of the backlog.
+const DAY_MS = 86400000;
+const isBacklog = (x, r) => x.kind === 'review' && x.due < r.cutoff && !r.exempt?.has(x.card.deckId);
+export const rescueBacklog = (cards, statesById, exemptDeckIds, cutoff) => cards.filter(c => {
+  const st = statesById.get(c.id);
+  return st && st.state === REVIEW && st.due < cutoff && !exemptDeckIds?.has(c.deckId);
+}).length;
+
+// Today's slice of the plan: null (no plan, over, or nothing left) or { cutoff, allow, k, days, remaining, pauseNew, exempt }.
+//   cards  the visible cards (suspended and buried ones are left out by the caller)
+export function rescueToday(rescue, cards, statesById, exemptDeckIds = new Set(), now = Date.now()) {
+  if (!rescue || !(rescue.days >= 1) || !Number.isFinite(rescue.start)) return null;
+  // Whole days between the two day starts. Rounding absorbs the 23/25-hour days around daylight saving.
+  const k = Math.round((dayStart(now) - dayStart(rescue.start)) / DAY_MS) + 1;
+  if (k < 1 || k > rescue.days) return null;
+  const remaining = rescueBacklog(cards, statesById, exemptDeckIds, rescue.start);
+  if (remaining === 0) return null;
+  const backlog = Number.isFinite(rescue.backlog) ? rescue.backlog : remaining;
+  const allow = Math.max(0, remaining - Math.floor(backlog * (rescue.days - k) / rescue.days));
+  return { cutoff: rescue.start, allow, k, days: rescue.days, remaining, pauseNew: rescue.pauseNew !== false, exempt: exemptDeckIds };
+}
+
+// Should Today offer a catch-up plan? Offers when the backlog is 30+ cards and at least twice a typical day,
+// there is no plan yet and it wasn't dismissed today.
+//   backlog        cards due before today          typicalDaily  median reviews of the last 14 study days (default 20)
+//   lastStudyDay   timestamp of the last study day (only used to say how long you were away)
+//   active         true when a plan already exists   dismissedDay  dayStart a dismissal was made (localStorage)
+// Returns null, or { n, backlog, typical, perDay, awayDays } where n is the suggested number of days.
+// The cap on N comes from the simulation (tests/sim/compare/report-rescue.md): N up to 5 keeps recall within 0.5 points
+// except in 1 of 27 cells; 7 and 10 fail in several. The UI should offer 3 to RESCUE_MAX_DAYS days, not 3, 5, 7 and 10.
+export const RESCUE_MIN = 30, RESCUE_MAX_DAYS = 5;
+export function rescueOffer({ backlog, typicalDaily, lastStudyDay, now = Date.now(), active = false, dismissedDay = null } = {}) {
+  const typical = Number.isFinite(typicalDaily) && typicalDaily > 0 ? typicalDaily : 20;
+  if (active || !(backlog >= RESCUE_MIN) || backlog < 2 * typical) return null;
+  if (dismissedDay != null && dismissedDay === dayStart(now)) return null;
+  const n = Math.min(RESCUE_MAX_DAYS, Math.max(3, Math.ceil(backlog / Math.max(typical, 20))));
+  const awayDays = Number.isFinite(lastStudyDay) ? Math.max(0, Math.round((dayStart(now) - dayStart(lastStudyDay)) / DAY_MS)) : null;
+  return { n, backlog, typical, perDay: Math.ceil(backlog / n), awayDays };
 }
 
 // ---------- cloze siblings ----------

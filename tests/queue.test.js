@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQueue, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, RELEARNING, REVIEW } from '../js/queue.js';
+import { buildQueue, queueFrom, splitCards, rescueToday, rescueOffer, interleave, takeNext, addWaiting, newStudiedToday, formatInterval, limitSiblings, answeredNotes, NEW, LEARNING, RELEARNING, REVIEW } from '../js/queue.js';
 import { dayStart, dayEnd } from '../js/days.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();      // 7 Oct 2026, 3pm local time
@@ -293,4 +293,124 @@ test('siblings: the boxes of one picture are one card a day, like cloze blanks',
   const answered = answeredNotes([{ cardId: 'o1', timestamp: NOW - HOUR, source: 'review' }], cards, NOW);
   states.set('o1', { state: REVIEW, due: NOW + 5 * DAY });
   assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.map(q => q.card.id), ['plain']);   // answered today: no other box
+});
+
+// ---------- "back from a break" catch-up plan (B1) ----------
+// 100 cards overdue by 10 days, plan over 5 days starting today. b99 is the most overdue.
+const rescueSetup = (n = 100, deckId = 'd', prefix = 'b') => {
+  const cards = [], states = new Map();
+  for (let i = 0; i < n; i++) {
+    const c = { id: `${prefix}${i}`, deckId, front: 'x', back: 'x' };
+    cards.push(c);
+    states.set(c.id, { cardId: c.id, state: REVIEW, due: NOW - 10 * DAY - i * MIN });
+  }
+  return { cards, states };
+};
+const plan = (over = {}) => ({ start: dayStart(NOW), days: 5, backlog: 100, pauseNew: true, at: NOW, ...over });
+const todayQueue = (cards, states, rescue, now = NOW, newLimit = 20, reviewLimit = Infinity) =>
+  buildQueue(cards, states, newLimit, now, reviewLimit, null, undefined, rescueToday(rescue, cards, states, new Set(), now));
+
+test('rescue: day 1 of 5 allows a fifth, a done day allows none, a skipped day allows two fifths', () => {
+  const { cards, states } = rescueSetup();
+  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW).allow, 20);
+  assert.equal(todayQueue(cards, states, plan()).queue.length, 20);
+  // 20 done today: they are no longer overdue (due in a few days), so 80 remain and none more are allowed
+  for (let i = 0; i < 20; i++) states.get(`b${99 - i}`).due = NOW + 4 * DAY;
+  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW).allow, 0);
+  assert.equal(todayQueue(cards, states, plan()).queue.filter(q => q.kind === 'review').length, 0);
+  // nothing done on day 1, so on day 2 all 100 remain and floor(100*3/5)=60 may wait: 40 are allowed
+  const fresh = rescueSetup();
+  assert.equal(rescueToday(plan(), fresh.cards, fresh.states, new Set(), NOW + DAY).allow, 40);
+});
+
+test('rescue: the most overdue cards come first, and day N allows everything left', () => {
+  const { cards, states } = rescueSetup();
+  const q = todayQueue(cards, states, plan(), NOW, 0).queue;
+  assert.equal(q[0].card.id, 'b99');
+  assert.equal(q.length, 20);
+  const last = rescueToday(plan(), cards, states, new Set(), NOW + 4 * DAY);        // day 5
+  assert.equal(last.k, 5);
+  assert.equal(last.allow, 100);
+});
+
+test('rescue: the plan ends after N days or when nothing is left, and is null without a plan', () => {
+  const { cards, states } = rescueSetup();
+  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW + 5 * DAY), null);       // day 6
+  assert.equal(rescueToday(null, cards, states, new Set(), NOW), null);
+  assert.equal(rescueToday(plan(), cards, new Map(), new Set(), NOW), null);              // nothing overdue left
+  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW - DAY), null);           // before it starts
+  assert.equal(todayQueue(cards, states, plan(), NOW + 5 * DAY, 0).queue.length, 100);    // back to normal: everything due
+});
+
+test('rescue: cards in exam decks are exempt, and other cards are never capped', () => {
+  const a = rescueSetup(60, 'exam', 'e'), b = rescueSetup(60, 'plain', 'p');
+  const cards = [...a.cards, ...b.cards], states = new Map([...a.states, ...b.states]);
+  cards.push({ id: 'today', deckId: 'plain' }, { id: 'learn', deckId: 'plain' });
+  states.set('today', { state: REVIEW, due: NOW + HOUR });       // due today, not overdue before the start
+  states.set('learn', { state: LEARNING, due: NOW - MIN });
+  const r = rescueToday(plan({ backlog: 60 }), cards, states, new Set(['exam']), NOW);
+  assert.equal(r.remaining, 60);
+  assert.equal(r.allow, 12);
+  const q = buildQueue(cards, states, 0, NOW, Infinity, null, undefined, r).queue;
+  assert.equal(q.filter(x => x.card.deckId === 'exam').length, 60);       // exam deck uncapped
+  assert.equal(q.filter(x => x.card.id.startsWith('p')).length, 12);
+  assert.ok(q.some(x => x.card.id === 'today') && q.some(x => x.card.id === 'learn'));
+});
+
+test('rescue: works together with the review limit', () => {
+  const { cards, states } = rescueSetup();
+  assert.equal(todayQueue(cards, states, plan(), NOW, 0, 15).queue.length, 15);       // allow 20, limit 15
+  assert.equal(todayQueue(cards, states, plan(), NOW, 0, 50).queue.length, 20);       // allow 20, limit 50
+});
+
+test('rescue: cloze siblings still show once a day inside the plan', () => {
+  const cards = [], states = new Map();
+  for (let i = 0; i < 50; i++) for (const j of [1, 2]) {
+    const c = { id: `n${i}_${j}`, deckId: 'd', noteId: `n${i}` };
+    cards.push(c); states.set(c.id, { cardId: c.id, state: REVIEW, due: NOW - 5 * DAY - i * MIN });
+  }
+  const r = rescueToday(plan({ backlog: 100 }), cards, states, new Set(), NOW);
+  const q = buildQueue(cards, states, 0, NOW, Infinity, null, undefined, { ...r, allow: 10 }).queue;
+  assert.equal(q.length, 10);
+  assert.equal(new Set(q.map(x => x.card.noteId)).size, 10);
+});
+
+test('rescue: pauseNew stops new cards in decks without an exam only', () => {
+  const { cards, states } = rescueSetup(40);
+  cards.push({ id: 'newPlain', deckId: 'd' }, { id: 'newExam', deckId: 'exam' });
+  const r = rescueToday(plan({ backlog: 40 }), cards, states, new Set(['exam']), NOW);
+  const paused = buildQueue(cards, states, 20, NOW, Infinity, null, undefined, r);
+  assert.deepEqual(paused.queue.filter(x => x.kind === 'new').map(x => x.card.id), ['newExam']);
+  assert.equal(paused.newAvailable, 2);                                       // how many new cards exist is unchanged
+  const free = buildQueue(cards, states, 20, NOW, Infinity, null, undefined, { ...r, pauseNew: false });
+  assert.equal(free.queue.filter(x => x.kind === 'new').length, 2);
+  assert.equal(buildQueue(cards, states, 20, NOW).queue.filter(x => x.kind === 'new').length, 2);   // no plan: as before
+});
+
+test('rescue: day counting survives a daylight-saving change', () => {
+  // A plan that starts on 24 Oct 2026 spans the end of daylight saving in Europe (25 Oct) and the US (1 Nov).
+  const start = dayStart(new Date(2026, 9, 24, 12).getTime());
+  const { cards, states } = rescueSetup(100);
+  states.forEach(s => { s.due = start - 3 * DAY; });
+  const p = { start, days: 10, backlog: 100, pauseNew: true, at: start };
+  for (let k = 1; k <= 10; k++) {
+    const day = new Date(2026, 9, 24 + k - 1, 12).getTime();
+    assert.equal(rescueToday(p, cards, states, new Set(), day).k, k, `day ${k}`);
+  }
+  assert.equal(rescueToday(p, cards, states, new Set(), new Date(2026, 9, 24 + 10, 12).getTime()), null);
+});
+
+test('rescueOffer: only for a big, unusual pile; picks N from 3 to 5 (the simulated cap)', () => {
+  assert.equal(rescueOffer({ backlog: 29, typicalDaily: 5, now: NOW }), null);               // under 30
+  assert.equal(rescueOffer({ backlog: 35, typicalDaily: 20, now: NOW }), null);              // under twice a typical day
+  const o = rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW });
+  assert.equal(o.n, 5);                                                                      // ceil(120/20) = 6, capped at 5
+  assert.equal(o.perDay, 24);
+  assert.equal(rescueOffer({ backlog: 40, typicalDaily: 5, now: NOW }).n, 3);               // at least 3
+  assert.equal(rescueOffer({ backlog: 900, typicalDaily: 20, now: NOW }).n, 5);              // at most 5
+  assert.equal(rescueOffer({ backlog: 120, now: NOW }).typical, 20);                         // default typical day
+  assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, active: true }), null);
+  assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) }), null);
+  assert.ok(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) - DAY }));
+  assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, lastStudyDay: NOW - 9 * DAY }).awayDays, 9);
 });

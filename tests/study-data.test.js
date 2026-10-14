@@ -147,3 +147,15 @@ test('review ahead leaves out siblings of a card that is still due today', async
   d.split = splitCards(cl, st, now);                                      // k1 is due today and will be in Review
   assert.equal(customQueue('ahead', d, cl, 3).queue.length, 0);
 });
+
+test('countFor passes the catch-up plan on: the backlog is capped and new cards pause', () => {
+  const cs = [], st = new Map();
+  for (let i = 0; i < 50; i++) { cs.push({ id: 'o' + i, deckId: 'b', created: i }); st.set('o' + i, { cardId: 'o' + i, state: 2, due: now - 8 * DAY - i }); }
+  cs.push({ id: 'n1', deckId: 'b', created: 99 });
+  const base = { ...data, cards: cs, statesById: st, split: splitCards(cs, st, now), splitAt: Date.now(), rescue: null,
+    newLeft: newLimits({ perDay: 5, decks, logs: [], deckOf: new Map(cs.map(c => [c.id, 'b'])), chains }), reviewLeft: { total: Infinity, byDeck: new Map(), chains } };
+  assert.deepEqual([countFor(base, ['b']).due, countFor(base, ['b']).fresh], [50, 1]);
+  const rescue = { cutoff: now - DAY, allow: 10, k: 1, days: 5, remaining: 50, pauseNew: true, exempt: new Set() };
+  const got = countFor({ ...base, rescue }, ['b']);
+  assert.deepEqual([got.due, got.fresh], [10, 0]);
+});

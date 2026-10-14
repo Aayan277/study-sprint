@@ -1,0 +1,63 @@
+// "You mix these up" (B2). Pure functions (no DOM), tested by tests/confusion.test.js.
+//
+// Play and typed Review record `mixedWith: '<cardId>'` on a log row when the wrong answer given was the answer of
+// another card. This file turns those rows into pairs of cards that keep being confused.
+
+export const MIX_WINDOW_DAYS = 90;            // the surfaces read the last 90 days of the log
+export const MIX_MIN_COUNT = 2;               // a pair needs at least this many mix-ups
+export const MIX_DEBOUNCE_MS = 2 * 60 * 1000; // the same mix-up within 2 minutes counts once
+
+// The same key for A→B and B→A.
+export const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+// Pairs of cards the person mixes up, most often first.
+//   logs       review log rows; a row counts when it has a mixedWith card id
+//   cardsById  Map (or plain object) of the cards that exist; a pair with a deleted card is left out
+//   since      ignore rows older than this timestamp (default: all)
+//   dismissed  { 'a|b': count when "Not confused" was pressed }; hidden until two more mix-ups have happened
+// Returns [{ key, a, b, count, last }] (a and b in key order, last = timestamp of the latest mix-up).
+export function mixPairs(logs, { cardsById, since = 0, dismissed = {} } = {}) {
+  const has = id => (cardsById instanceof Map ? cardsById.has(id) : !!cardsById && Object.hasOwn(cardsById, id));
+  const rows = logs.filter(l => typeof l.mixedWith === 'string' && l.mixedWith && l.cardId && l.mixedWith !== l.cardId && l.timestamp >= since)
+    .sort((x, y) => x.timestamp - y.timestamp);
+  const lastCounted = new Map();              // "from>to" → timestamp of the mix-up last counted in that direction
+  const pairs = new Map();
+  for (const l of rows) {
+    const dir = `${l.cardId}>${l.mixedWith}`;
+    const prev = lastCounted.get(dir);
+    if (prev !== undefined && l.timestamp - prev < MIX_DEBOUNCE_MS) continue;
+    lastCounted.set(dir, l.timestamp);
+    const key = pairKey(l.cardId, l.mixedWith);
+    const [a, b] = l.cardId < l.mixedWith ? [l.cardId, l.mixedWith] : [l.mixedWith, l.cardId];
+    const p = pairs.get(key) || { key, a, b, count: 0, last: 0 };
+    p.count++; p.last = Math.max(p.last, l.timestamp);
+    pairs.set(key, p);
+  }
+  return [...pairs.values()]
+    .filter(p => p.count >= MIX_MIN_COUNT && has(p.a) && has(p.b) && !((dismissed[p.key] ?? -Infinity) >= p.count - 1))
+    .sort((x, y) => y.count - x.count || y.last - x.last || (x.key < y.key ? -1 : 1));
+}
+
+// The pairs that involve any of these cards (ids in an array or Set).
+export function pairsFor(cardIds, pairs) {
+  const ids = cardIds instanceof Set ? cardIds : new Set(cardIds);
+  return pairs.filter(p => ids.has(p.a) || ids.has(p.b));
+}
+
+// The card on the other side of a pair.
+export const partnerOf = (pair, id) => (pair.a === id ? pair.b : pair.a);
+
+// "Not confused": remember how many mix-ups there were, so the pair returns after two more.
+export const dismissPair = (dismissed, pair) => ({ ...dismissed, [pair.key]: pair.count });
+
+// Dismissals live on this device (localStorage), not in backups or sync.
+export const DISMISS_KEY = 'study-sprint-mix-dismissed';
+export function loadDismissed(storage = globalThis.localStorage) {
+  try {
+    const v = JSON.parse(storage.getItem(DISMISS_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+export function saveDismissed(dismissed, storage = globalThis.localStorage) {
+  try { storage.setItem(DISMISS_KEY, JSON.stringify(dismissed)); } catch { /* private window: it just won't be remembered */ }
+}

@@ -284,6 +284,11 @@ Four design reviews (visual, layout, motion, first impression) and before/after 
 
 Later: "These look like notes" paste banner (B8), with the one-tap AI cards.
 
+## Round 2 (in progress, plan in `docs/design/round2-plan.md`)
+
+- **Batch 0A, rescue logic (B1), no UI yet:** `rescueToday`, `rescueBacklog`, `rescueOffer` and the `rescue` parameter of `queueFrom`/`buildQueue` in `js/queue.js`; `loadAll` computes `data.rescue` from `settings.rescue` and `countFor` passes it on (the `rescue` setting itself, its sync and the Today banner are Batch 2; Review still has to pass `data.rescue` to `buildQueue`). Simulated first (`tests/sim/compare/report-rescue.md`, 30 seeds): the plan cuts the worst day after a break by 56 to 84% but costs a little recall while it runs, so rule 2 failed at larger N; the offered N is capped at 5 (`RESCUE_MAX_DAYS`; the rule to the letter gives 3). "I'm away" review-ahead failed its rule (recall on the first day back +1.5 to +3.2 points, but lower a week later), so describe it as lighter, not better.
+- **Batch 0B, pure modules not yet wired in:** `js/steps.js` (B5, `Step N:` parsing with a maths mask), `js/confusion.js` (B2, mix-up pairs from `mixedWith` log rows), `js/scratchpad.js` (B4, pen/finger drawing over a Review card).
+
 ## Parked (not planned for now)
 
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.

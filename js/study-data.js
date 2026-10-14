@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { splitCards, queueFrom, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
+import { splitCards, queueFrom, rescueToday, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -42,7 +42,10 @@ export async function loadAll({ history = false } = {}) {
   const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
   // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
   const answered = answeredNotes(logs, cards, now);       // every card, so a buried or suspended sibling answered today still counts
-  return { settings, decks, answered, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
+  // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
+  const exempt = new Set(decks.filter(d => examInfo(effectiveDeck(decks, d.id), now)).map(d => d.id));
+  const rescue = rescueToday(settings.rescue, visible, statesById, exempt, now);
+  return { settings, decks, answered, rescue, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
 
@@ -60,7 +63,7 @@ export function countFor(data, deckIds) {
     reviews: split.reviews.filter(x => ids.has(x.card.deckId)),
     waiting: split.waiting.filter(x => ids.has(x.card.deckId)),
     fresh: split.fresh.filter(c => ids.has(c.deckId))
-  }, data.newLeft, data.reviewLeft, data.answered);
+  }, data.newLeft, data.reviewLeft, data.answered, data.rescue);
   const fresh = queue.filter(q => q.kind === 'new').length;
   const due = queue.length - fresh + waiting.length;
   // `cards` (every card in these decks) is only worked out if someone asks for it.
