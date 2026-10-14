@@ -400,14 +400,14 @@ test('rescue: day counting survives a daylight-saving change', () => {
   assert.equal(rescueToday(p, cards, states, new Set(), new Date(2026, 9, 24 + 10, 12).getTime()), null);
 });
 
-test('rescueOffer: only for a big, unusual pile; picks N from 3 to 10', () => {
+test('rescueOffer: only for a big, unusual pile; picks N from 3 to 5 (the simulated cap)', () => {
   assert.equal(rescueOffer({ backlog: 29, typicalDaily: 5, now: NOW }), null);               // under 30
   assert.equal(rescueOffer({ backlog: 35, typicalDaily: 20, now: NOW }), null);              // under twice a typical day
   const o = rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW });
-  assert.equal(o.n, 6);                                                                      // ceil(120/20)
-  assert.equal(o.perDay, 20);
+  assert.equal(o.n, 5);                                                                      // ceil(120/20) = 6, capped at 5
+  assert.equal(o.perDay, 24);
   assert.equal(rescueOffer({ backlog: 40, typicalDaily: 5, now: NOW }).n, 3);               // at least 3
-  assert.equal(rescueOffer({ backlog: 900, typicalDaily: 20, now: NOW }).n, 10);            // at most 10
+  assert.equal(rescueOffer({ backlog: 900, typicalDaily: 20, now: NOW }).n, 5);              // at most 5
   assert.equal(rescueOffer({ backlog: 120, now: NOW }).typical, 20);                         // default typical day
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, active: true }), null);
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) }), null);

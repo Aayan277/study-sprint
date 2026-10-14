@@ -117,7 +117,9 @@ export function rescueToday(rescue, cards, statesById, exemptDeckIds = new Set()
 //   lastStudyDay   timestamp of the last study day (only used to say how long you were away)
 //   active         true when a plan already exists   dismissedDay  dayStart a dismissal was made (localStorage)
 // Returns null, or { n, backlog, typical, perDay, awayDays } where n is the suggested number of days.
-export const RESCUE_MIN = 30, RESCUE_MAX_DAYS = 10;
+// The cap on N comes from the simulation (tests/sim/compare/report-rescue.md): N up to 5 keeps recall within 0.5 points
+// except in 1 of 27 cells; 7 and 10 fail in several. The UI should offer 3 to RESCUE_MAX_DAYS days, not 3, 5, 7 and 10.
+export const RESCUE_MIN = 30, RESCUE_MAX_DAYS = 5;
 export function rescueOffer({ backlog, typicalDaily, lastStudyDay, now = Date.now(), active = false, dismissedDay = null } = {}) {
   const typical = Number.isFinite(typicalDaily) && typicalDaily > 0 ? typicalDaily : 20;
   if (active || !(backlog >= RESCUE_MIN) || backlog < 2 * typical) return null;

@@ -2,8 +2,11 @@
 // (t·sd/√n over seeds) and the paired Δ. Criterion: the retention metrics (exam-day true R for exam decks; final
 // and last-60-day mean true R for non-exam decks; end-of-recovery R for breaks) must not drop by more than 0.3 pp.
 //   node summarize2.mjs <file.jsonl> <base> <variant> <kind: play|break> [filter env key=value,...]
+// B1 rescue grid (one copy, the env decides the variant; several files may be joined with commas):
+//   node summarize2.mjs <gb.jsonl,ab.jsonl> new new rescue
 import { readFileSync } from 'node:fs';
 const [,, file, base, cmp, kind = 'play', filt = ''] = process.argv;
+if (kind === 'rescue') { await import('./summarize-rescue.mjs').then(m => m.default(file.split(','))); process.exit(0); }
 const rows = readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
 const filters = filt ? filt.split(',').map(x => x.split('=')) : [];
 const T975 = n => (n >= 30 ? 2.045 : n >= 20 ? 2.09 : n >= 10 ? 2.26 : 2.78);
