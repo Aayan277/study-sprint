@@ -228,8 +228,6 @@ const bar = () => p.$eval('.rv-prog', e => ({ now: +e.getAttribute('aria-valueno
 let b = await bar();
 ok(b.role === 'progressbar' && b.min === '0' && b.now === 0 && b.max === 6 && b.w === 0 && b.label, 'progress bar: role, 0 of 6 at the start: ' + JSON.stringify(b));
 ok((await box(p, '.rv-prog')).h <= 2.5, 'it is 2px tall');
-ok(await p.$eval('#undoBtn', e => !!e.querySelector('svg') && e.textContent.trim() === '' && e.getAttribute('aria-label') === 'Undo'), 'Undo is an icon button with a label');
-ok(await p.$eval('.rv-head', h => [...h.querySelectorAll('.link')].every(l => { const r = l.getBoundingClientRect(); return l.id === 'endBtn' || (Math.round(r.width) === 40 && Math.round(r.height) === 40); })), 'the toolbar buttons share one size');
 // the tests run with reduced motion on (pw.mjs): the bar has no transition then, and the normal one comes back without it
 ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transitionDuration === '0s'), 'with reduced motion the fill changes without a transition');
 await p.emulateMedia({ reducedMotion: 'no-preference' });
@@ -237,6 +235,8 @@ ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transiti
 await p.emulateMedia({ reducedMotion: 'reduce' });
 await p.$eval('.rv-prog', e => { e.__keep = true; });
 await p.click('#showBtn'); await p.click('[data-rate="3"]'); await p.waitForFunction(() => document.querySelector('#undoBtn') && !document.querySelector('#undoBtn').disabled);
+ok(await p.$eval('#undoBtn', e => !!e.querySelector('svg') && e.textContent.trim() === '' && e.getAttribute('aria-label') === 'Undo'), 'Undo is an icon button with a label (it appears once there is something to undo)');
+ok(await p.$eval('.rv-head', h => [...h.querySelectorAll('.link')].every(l => { const r = l.getBoundingClientRect(); return l.id === 'endBtn' || (Math.round(r.width) === 40 && Math.round(r.height) === 40); })), 'the toolbar buttons share one size');
 b = await bar();
 ok(b.now === 1 && b.max === 6 && Math.abs(b.w - 100 / 6) < 0.2 && b.keep, 'Good on a due card: 1 of 6, and it is the same bar element (outside what is redrawn): ' + JSON.stringify(b));
 await p.click('#showBtn'); await p.click('[data-rate="1"]'); await p.waitForTimeout(400);

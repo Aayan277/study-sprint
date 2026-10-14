@@ -66,9 +66,32 @@ export async function renderReview(el, deckId) {
   // From a deck's page (or a reload): straight into its cards (no setup screen).
   const c = countFor(data, [deckId]);
   if (c.total) return start(el, data, c.cards, typing, deckId, null, scopeKey([deckId]));
-  const name = data.decks.find(d => d.id === deckId)?.name || 'This deck';
+  const deck = data.decks.find(d => d.id === deckId);
+  if (!deck) {
+    el.innerHTML = `
+      <div class="screen-head"><div><h1>Deck not found</h1></div></div>
+      <div class="empty"><b>That deck isn’t here any more.</b><br>It may have been deleted, or the link is wrong.</div>
+      <div class="res-actions">
+        <a class="btn primary" href="#/decks">Open Decks</a>
+        <a class="btn ghost" href="#/today">Back to Today</a>
+      </div>`;
+    return;
+  }
+  // A deck with no cards at all (suspended and buried ones count) is not "caught up": it has nothing to study yet.
+  const inDeck = withSubdecks(data, [deckId]);
+  const anyCards = [...data.deckOf.values()].some(d => inDeck.has(d));
+  if (!anyCards) {
+    el.innerHTML = `
+      <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
+      <div class="empty"><b>No cards yet.</b><br>Add some cards to start studying this deck.</div>
+      <div class="res-actions">
+        <a class="btn primary" href="#/import/${encodeURIComponent(deckId)}">+ Add cards</a>
+        <a class="btn ghost" href="#/today">Back to Today</a>
+      </div>`;
+    return;
+  }
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">REVIEW</span><h1>${esc(name)}</h1></div></div>
+    <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
     <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}</div>
     <div class="res-actions">
       <a class="btn primary" href="#/today">Back to Today</a>
@@ -102,6 +125,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     shownAt: 0, answerMs: 0, busy: false,
     stats: { reviewed: 0, again: 0, spent: 0, started: Date.now() },
     undo: [],
+    answered: new Set(), leeches: [],      // cards answered and leeches caught this session (for the finish screen), kept in step with Undo
     version: db.scheduleVersion()
   };
   nextCard(el);
@@ -191,13 +215,13 @@ function renderSession(el, enter = false) {
   const head = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
-      <button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer" ${R.undo.length ? '' : 'disabled'}>${icon('undo')}</button>
-      ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
+      ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+      ${canSpeak() ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
@@ -226,10 +250,10 @@ function renderSession(el, enter = false) {
   drawSessionPage(el, head, body);
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
-  $('undoBtn').addEventListener('click', () => undo(el));
+  $('undoBtn')?.addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
-  $('speakBtn')?.addEventListener('click', () => readAloud());
+  $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
   wireRatebar(el);
   $('flash').addEventListener('click', e => {
@@ -376,17 +400,20 @@ async function answer(el, rating) {
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
     // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
-    let cardBefore = null;
+    let cardBefore = null, leeched = false;
     if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
       await db.saveCards([leech]);
       R.version = db.scheduleVersion();
       if (leech.suspended) dropFromSession(id); else replaceInSession(leech);
-      toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+      leeched = true;
+      toast(leech.suspended ? 'Leech: suspended. You can fix it at the end of the session.' : 'Leech: tagged “leech”. You can fix it at the end of the session.');
     }
     const spent = Math.min(now - R.shownAt, MAX_CARD_MS);
-    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent, cardBefore });
+    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent, cardBefore, leeched });
+    R.answered.add(id);
+    if (leeched) R.leeches.push(id);
     R.stats.reviewed++; R.stats.spent += spent;
     if (rating === Rating.Again) R.stats.again++;
     nextCard(el);
@@ -397,8 +424,8 @@ async function answer(el, rating) {
 
 // Take back the last rating: restore the card's old schedule and show it again.
 async function undo(el) {
+  if (R.busy || !R.undo.length) return;      // (check busy first: a second tap while the first undo is saving must not drop an entry)
   const u = R.undo.pop();
-  if (!u || R.busy) return;
   R.busy = true;
   try {
     const id = u.item.card.id;
@@ -412,6 +439,8 @@ async function undo(el) {
     }
     if (R.current) R.queue.unshift(R.current);
     R.stats.reviewed--; R.stats.spent -= u.spent;
+    if (!R.undo.some(x => x.item.card.id === id)) R.answered.delete(id);      // (a card answered twice stays answered until both are undone)
+    if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null;
@@ -508,41 +537,62 @@ async function finish(el) {
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   if (el.isConnected) drawSidebar();            // the sidebar's counts and ring, now the round is done
   const { reviewed, again, spent } = R.stats;
-  // Reviews due by the end of tomorrow in the decks you just studied.
-  const decks = new Set(R.deckIds);
-  const cards = (await db.getAll('cards')).filter(c => decks.has(c.deckId));
-  const ids = new Set(cards.map(c => c.id));
-  const tomorrowEnd = dayEnd(Date.now(), 1);
-  const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
+  const endedEarly = !!R.current;
+  // What "Keep going" would start: exactly Today's Start session (the decks chosen on Today, otherwise all of them).
+  const data = await loadAll();
+  const allIds = data.decks.map(d => d.id);
+  const chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
+  const scope = chosen.length ? chosen : allIds;
+  const rest = countFor(data, scope);
+  // Reviews due by the end of tomorrow (already studied, not suspended or buried), in the same decks.
+  const inScope = withSubdecks(data, scope), tomorrowEnd = dayEnd(Date.now(), 1);
+  const dueTomorrow = data.cards.filter(c => {
+    const st = data.statesById.get(c.id);
+    return inScope.has(c.deckId) && st && st.state !== NEW && st.due <= tomorrowEnd;
+  }).length;
   const streak = await loadStreak(null, { settings: R.settings });
   // You may have switched to another screen while that loaded: don't draw over it.
-  if (!location.hash.startsWith('#/review')) return;
+  if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
   const mins = Math.floor(spent / 60000), secs = Math.round((spent % 60000) / 1000);
+  const title = endedEarly ? 'Session ended' : reviewed && !rest.total ? 'Nice work' : 'Session done';
 
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">${R.current ? 'SESSION ENDED' : 'DONE FOR NOW'}</span><h1>${reviewed ? 'Nice work' : 'Review'}</h1></div></div>
+    <div class="screen-head"><div><span class="eyebrow mono">${endedEarly ? 'ENDED EARLY' : 'DONE FOR NOW'}</span><h1>${title}</h1></div></div>
     <div class="stats4">
       <div><div class="v">${reviewed}</div><div class="l">Cards reviewed</div></div>
       <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
       <div><div class="v">${mins}:${String(secs).padStart(2, '0')}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
-    <p class="note">${R.current ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <div class="res-actions">
+      ${rest.total
+        ? `<button class="btn primary" type="button" id="keepBtn">Keep going · ${plural(rest.total, 'card')}</button>
+           <button class="btn ghost" type="button" id="againBtn">Back to Today</button>`
+        : '<button class="btn primary" type="button" id="againBtn">Back to Today</button>'}
+    </div>
+    <p class="fin-links"><a class="link" href="#/decks">Decks</a>${R.undo.length ? '<span aria-hidden="true">·</span><button class="link" type="button" id="undoLast">Undo last</button>' : ''}</p>
+    <div id="finishMore" class="finish-more" hidden></div>
     <section class="finish-next" aria-label="What's next">
       ${streakHTML(streak)}
-      <p class="fn-line">${icon('calendar')} <span>${dueTomorrow ? `<b>${plural(dueTomorrow, 'card')}</b> due tomorrow.` : 'Nothing due tomorrow.'}</span></p>
       <p class="fn-line">${icon('bolt')} <span>Lock it in with a quick Play round. Right answers on due cards count toward your schedule.</span></p>
       <a class="btn ghost" href="#/play">Play a round</a>
-    </section>
-    <div class="res-actions">
-      <button class="btn primary" type="button" id="againBtn">Back to Today</button>
-      <a class="btn ghost" href="#/decks">Decks</a>
-      ${R.undo.length ? '<button class="btn ghost" type="button" id="undoLast">Undo last</button>' : ''}
-    </div>`;
+    </section>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
+  $('keepBtn')?.addEventListener('click', async () => {
+    R = null; publishLive();
+    const { startStudy } = await import('./today.js');
+    const before = location.hash;
+    await startStudy({ deckIds: chosen });
+    // Today's Start with one deck goes to #/review/<deck>: the address we are already on, so nothing would redraw. Do it here.
+    if (location.hash === before && el.isConnected) renderReview(el, chosen.length === 1 ? chosen[0] : undefined);
+  });
   $('undoLast')?.addEventListener('click', () => undo(el));
+  const slot = $('finishMore'), cardIds = [...R.answered], leechIds = [...R.leeches];
+  slot.dataset.answered = cardIds.length; slot.dataset.leeches = leechIds.length;
+  import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'review', cardIds, leechIds })).catch(err => console.error(err));
   fx.finished(el, { complete: !R.current, reviewed });
 }
 

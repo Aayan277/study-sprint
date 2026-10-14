@@ -99,7 +99,7 @@ ok((await counts()) === left, 'Keep going returns to the same session');
 await goToday();
 await page.click('.tdeck:has-text("Short answers")'); await page.waitForSelector('#soNew'); await page.click('#soNew');
 await page.waitForSelector('#flash');
-ok((await page.textContent('.flash-deck')).includes('Short answers') && await page.$eval('#undoBtn', b => b.disabled), 'Start over begins the other deck\'s session');
+ok((await page.textContent('.flash-deck')).includes('Short answers') && await page.locator('#undoBtn').count() === 0, 'Start over begins the other deck\'s session');
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
 
 // ---- Exam prep is not swallowed by a session in progress ----
