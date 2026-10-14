@@ -235,3 +235,39 @@ export function parseCloze(text) {
 }
 // Does pasted text have any line with a blank?
 export const hasClozeLines = text => /\{\{c\d+::/.test(String(text ?? ''));
+
+// Pasted text where some lines are cloze notes and the rest are ordinary cards ("term - definition"): both come in.
+//   parse   the normal text parser (import.js parseText; passed in so this file stays free of it)
+//   Returns { result, notes }: result is an import result like parse gives, with the cloze rows added after the others
+//   and `clozes` null-padded so it lines up with `rows`; notes is how many cloze lines made cards (0: nothing changed).
+// The other lines only count when they split cleanly into two sides; lines that don't are left out, like lines without a
+// blank always were ("N lines without a blank were left out"). A markdown table is left alone.
+export function withClozeLines(text, parse) {
+  const src = String(text ?? '');
+  const plain = parse(src);
+  if (!hasClozeLines(src) || plain.format.id === 'table') return { result: plain, notes: 0 };
+  const lines = src.replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
+  const isCloze = lines.map(hasClozeLines);
+  const made = parseCloze(lines.filter((_, i) => isCloze[i]).join('\n'));
+  if (!made.notes) return { result: plain, notes: 0 };
+  const others = lines.filter((_, i) => !isCloze[i]);
+  const rest = others.length ? parse(others.join('\n')) : null;
+  const usable = rest && ['separator', 'bold'].includes(rest.format.id) && rest.rows.length;
+  if (!usable) {
+    made.result.format.skipped = others.length;
+    return { result: made.result, notes: made.notes };
+  }
+  const width = rest.columns.length;
+  const clozeRows = made.result.rows.map(r => Array.from({ length: width }, (_, i) => r[i] ?? ''));
+  const label = `${rest.format.label}, plus ${made.notes} cloze note${made.notes === 1 ? '' : 's'}`;
+  return {
+    notes: made.notes,
+    result: {
+      ...rest,
+      rows: [...rest.rows, ...clozeRows],
+      clozes: [...rest.rows.map(() => null), ...made.result.clozes],
+      ...(rest.tags ? { tags: [...rest.tags, ...clozeRows.map(() => [])] } : {}),
+      format: { ...rest.format, label }
+    }
+  };
+}

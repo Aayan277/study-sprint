@@ -67,8 +67,9 @@ async function makePicture(page) {
   ok(await page.locator('#acOcc').isVisible() && !(await page.locator('#acBasic').isVisible()) && await page.locator('#acOccChoose').isVisible(), 'the Image occlusion pane shows a Choose a picture button');
   ok(await page.locator('#acOccBody').isHidden(), 'no preview, header or labels before a picture is chosen');
   await noSideways('in the Add card sheet (Image occlusion)');
-  await page.click('#sheet button[type=submit][form=acForm], #acForm button[type=submit]');
-  ok(await page.locator('#acErr').isVisible() && (await page.textContent('#acErr')) === 'Choose a picture first.', 'Add without a picture says "Choose a picture first."');
+  ok(await page.locator('button[type=submit][form=acForm]').isDisabled() && (await page.textContent('#acWhy')) === 'Choose a picture first.', 'Add without a picture is disabled and says "Choose a picture first."');
+  await page.evaluate(() => document.getElementById('acForm').requestSubmit());          // Ctrl+Enter still gets the message
+  ok(await page.locator('#acErr').isVisible() && (await page.textContent('#acErr')) === 'Choose a picture first.', 'submitting without a picture (Ctrl+Enter) says "Choose a picture first."');
   await page.setInputFiles('#acOccFile', { name: 'heart.png', mimeType: 'image/png', buffer: png });
   await page.waitForSelector('dialog.occ-ed[open]');
   await page.waitForSelector('.occ-ed-img[src]');

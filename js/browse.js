@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion } from './card-editor.js';
+import { watchAdd, cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText, mathHTML } from './format.js';
@@ -32,7 +32,7 @@ function filterOptions(current) {
 export async function renderBrowseAll(el) {
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ Decks</button>
-    <div class="screen-head"><div><span class="eyebrow mono">BROWSE</span><h1>All cards</h1></div></div>
+    <div class="screen-head"><div><h1>All cards</h1></div></div>
     <section id="browser"></section>`;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
   await mountBrowser($('browser'), { deckId: null });
@@ -554,67 +554,70 @@ export function openAddCard({ decks, deckId, refresh }) {
   const kind = lastKind();
   openSheet(`
     <h2 id="sheetTitle">Add a card</h2>
-    <form id="acForm" class="sheet-in" style="padding:0">
+    <form id="acForm" class="sheet-in ac-form" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
-      <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
-        ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
-        ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
+      <div class="kind-body">
+        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
+          ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
+          ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
+        </div>
+        <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
+        ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
-      ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="acDone">Done</button>
-        <button class="btn primary" type="submit">Add card</button>
+        <p class="ac-why" id="acWhy" aria-live="polite"></p>
+        <button class="btn ghost" type="button" id="acDone">Close</button>
+        <button class="btn primary" type="submit" disabled>Add card</button>
       </div>
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   $('acDone').addEventListener('click', closeSheet);
+  const updateAdd = watchAdd('ac');           // Add stays disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
     e.preventDefault();
+    if (adding) return;
     const deck = $('acDeck')?.value || target, tags = parseTags($('acTags').value);
-    if (readKind('ac') === 'occlusion') {
-      if (adding) return;
+    const kindNow = readKind('ac');
+    // What to save, or the message to show (Ctrl+Enter can submit a form whose button is disabled).
+    let save, count = 1;
+    if (kindNow === 'occlusion') {
       const note = readOcclusion('ac');
       const plan = note.image ? planOcclusionSave([], note) : { error: 'Choose a picture first.' };
       if (plan.error) { showErr('acErr', plan.error); return; }
-      adding = true;
-      try {
-        await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
-      } catch (err) {
-        console.error(err);
-        showErr('acErr', "Couldn't save the cards. Try again.");
-        return;
-      } finally { adding = false; }
-      resetOcclusion('ac'); $('acErr').hidden = true;
-      $('acOccChoose').focus();
-      toast(`Added ${plural(plan.add.length, 'card')}`);
-      refresh();
-      return;
-    }
-    if (readKind('ac') === 'cloze') {
+      count = plan.add.length;
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
+    } else if (kindNow === 'cloze') {
       const text = readCardText('acText').trim();
       const plan = planNoteSave([], text);
       if (plan.error) { showErr('acErr', plan.error); return; }
       if (!plan.add.length) { showErr('acErr', 'Add at least one blank: select a word, then press New blank.'); return; }
-      await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
-      setCardText('acText', ''); setCardText('acExtra', ''); $('acErr').hidden = true;
-      $('acText').focus();
-      toast(`Added ${plural(plan.add.length, 'card')}`);
-      refresh();
-      return;
+      count = plan.add.length;
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
+    } else {
+      const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
+      const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
+      if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
+      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, tags, created: Date.now() }]);
     }
-    const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
-    const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
-    if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
-    await db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, tags, created: Date.now() }]);
+    adding = true;
+    try {
+      await save();
+    } catch (err) {
+      console.error(err);
+      showErr('acErr', "Couldn't save the cards. Try again.");
+      return;
+    } finally { adding = false; }
     // Stay open for the next card, like Anki.
-    setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acErr').hidden = true;
-    $('acFront').focus();
-    toast('Card added');
+    $('acErr').hidden = true;
+    if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }
+    else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
+    else { setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acFront').focus(); }
+    updateAdd();
+    toast(kindNow === 'basic' ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();
   });
   $('acForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('acForm').requestSubmit(); } });

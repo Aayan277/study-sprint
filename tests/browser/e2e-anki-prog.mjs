@@ -30,7 +30,7 @@ await load('anki-sched-new.apkg');
 ok(await page.isVisible('#progRow') && await page.isChecked('#ankiProg'), 'progress switch shown, on by default');
 ok((await page.textContent('#progInfo')).startsWith('10 reviews on 3 cards'), 'progress info: ' + await page.textContent('#progInfo'));
 await page.screenshot({ path: SP + '/anki-prog.png' });
-await page.fill('#newName', 'Bio new'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Bio new'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
 ok((await page.textContent('#toast')).includes('3 with Anki progress'), 'toast: ' + await page.textContent('#toast'));
 let d = await deckData('Bio new');
 const m = d['Mitochondria'];
@@ -59,7 +59,7 @@ await page.screenshot({ path: SP + '/anki-stats.png', fullPage: true });
 await load('anki-sched-legacy.apkg');
 ok((await page.textContent('#progInfo')).startsWith('10 reviews on 3 cards'), 'legacy file has progress too');
 await page.click('#ankiProg');
-await page.fill('#newName', 'Bio fresh'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Bio fresh'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
 d = await deckData('Bio fresh');
 ok(Object.values(d).every(x => !x.state && !x.logs.length), 'switch off: all new, no history');
 

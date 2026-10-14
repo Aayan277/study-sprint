@@ -38,11 +38,43 @@ export function normalize(text) {
 
 // Remove "1." "1)" "-" "*" "•" from the start of a line. Needs a space after it,
 // so "**bold**" and "-5 degrees" are left alone.
+// A bullet followed by a tab or a "|" is a front that is just that mark ("-<tab>dash"), so it stays.
 export function stripMarker(line) {
-  return line.replace(/^\s*(?:\d{1,3}[.)]|[-*•–])\s+/, '').trim();
+  return line.replace(/^\s*(?:\d{1,3}[.)]\s+|[-*•–] +(?![|\t]))/, '').trim();
 }
 
 const cleanLines = text => text.split('\n').map(stripMarker).filter(Boolean);
+
+// A spreadsheet export keeps line breaks inside "quoted cells". Cut the text into lines the way a spreadsheet would,
+// so a cell with blank lines, bullets and spaces comes through whole (cleanLines would drop and strip them).
+// Returns null when no cell spans lines, or when the quotes don't look like a spreadsheet's (a quote that never closes,
+// or text right after a closing quote): then the text is plain lines, as before.
+function quoteAwareLines(text) {
+  if (!text.includes('"')) return null;
+  const out = [], after = /[ ]*(?:[,\t\n]|$)/y;
+  let cur = '', quoted = false, atStart = true, multi = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      cur += ch;
+      if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; continue; }
+      if (ch === '"') {
+        quoted = false;
+        after.lastIndex = i + 1;
+        if (!after.test(text)) return null;
+      } else if (ch === '\n') multi = true;
+      continue;
+    }
+    if (ch === '\n') { out.push(cur); cur = ''; atStart = true; continue; }
+    cur += ch;
+    if (ch === '"' && atStart) { quoted = true; atStart = false; continue; }
+    if (ch === ',' || ch === '\t') atStart = true;
+    else if (!/\s/.test(ch)) atStart = false;
+  }
+  if (quoted || !multi) return null;
+  out.push(cur);
+  return out;
+}
 
 // ---------- CSV / TSV ----------
 
@@ -79,14 +111,32 @@ export function isHeaderRow(row) {
 }
 
 // Turn rows into a result, skipping a header row if there is one.
+// Export writes a ' in front of cells that start with = + - @ (so Excel doesn't run them as formulas): take it off again.
+const FORMULA_GUARD = /^'(?=[=+\-@])/;
+
+// Tags in one cell: "a b c" (what Export writes), or with commas ("cell biology, week 1": then spaces belong to a tag).
+const splitTags = cell => {
+  const s = String(cell ?? '');
+  return [...new Set(s.split(s.includes(',') ? /\s*,\s*/ : /\s+/).map(t => t.trim().toLowerCase()).filter(Boolean))];
+};
+
 function finish(rows, format, names = null) {
   let headerSkipped = false;
+  rows = rows.map(r => r.map(c => (typeof c === 'string' ? c.replace(FORMULA_GUARD, '') : c)));
   if (!names && rows.length && isHeaderRow(rows[0])) { names = rows[0]; rows = rows.slice(1); headerSkipped = true; }
+  // A "Tags" column (what Export writes) holds the cards' tags; it is not a side of the card.
+  let tags = null;
+  const at = names ? names.findIndex(n => /^tags?$/i.test(String(n ?? '').trim())) : -1;
+  if (at >= 2) {
+    tags = rows.map(r => splitTags(r[at]));
+    rows = rows.map(r => r.filter((_, i) => i !== at));
+    names = names.filter((_, i) => i !== at);
+  }
   const width = Math.max(2, ...rows.map(r => r.length));
   rows = rows.map(r => Array.from({ length: width }, (_, i) => r[i] ?? ''));
   const columns = Array.from({ length: width }, (_, i) =>
     (names && names[i]) || (width === 2 ? ['Front', 'Back'][i] : `Column ${i + 1}`));
-  return { columns, rows, format, headerSkipped: headerSkipped || !!names };
+  return { columns, rows, format, headerSkipped: headerSkipped || !!names, ...(tags ? { tags } : {}) };
 }
 
 // ---------- rule 6: markdown / Notion tables ----------
@@ -193,11 +243,22 @@ export function parseText(text) {
   text = normalize(text);
   const empty = { columns: ['Front', 'Back'], rows: [], format: { id: 'empty', label: '' }, headerSkipped: false };
   if (!text) return empty;
-  const rawLines = text.split('\n').filter(l => l.trim());
-  const lines = cleanLines(text);
+  // Lines the way a spreadsheet reads them (a quoted cell can hold line breaks); plain lines otherwise.
+  const records = quoteAwareLines(text);
+  const rawLines = (records || text.split('\n')).filter(l => l.trim());
+  const lines = records ? records.map(r => (r.includes('\n') ? r : stripMarker(r))).filter(r => r.trim()) : cleanLines(text);
 
   // Rule 6: a markdown or Notion table.
   if (rawLines.filter(isTableLine).length / rawLines.length >= MIN_SCORE) return parseMarkdownTable(rawLines);
+
+  // A spreadsheet export (a header row of Front, Back... or cells spanning lines): its commas or tabs are the columns,
+  // even when the cells have ": " or " - " in them.
+  for (const sep of ['\t', ',']) {
+    const t = trySeparator(lines, sep);
+    if (t.score >= MIN_SCORE && (records || isHeaderRow(t.rows[0] || []))) {
+      return finish(t.rows, { id: 'separator', sep, label: `separated by ${sepLabel(sep)}` });
+    }
+  }
 
   // Rule 8: bold terms.
   const bold = lines.map(boldSplit);
@@ -241,7 +302,8 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
   // tags, ankiId, ankiGuid, ankiDeck, cloze and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
   // review history; ankiDeck is the Anki deck it came from, for keeping subdecks).
   return result.rows.map((r, i) => ({
-    front: r[frontCol] ?? '', back: r[backCol] ?? '',
+    // A cloze note's card always has its front and back in the first two columns, whichever columns were picked.
+    front: (result.clozes?.[i] ? r[0] : r[frontCol]) ?? '', back: (result.clozes?.[i] ? r[1] : r[backCol]) ?? '',
     ...(result.tags ? { tags: result.tags[i] } : {}),
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
     ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),

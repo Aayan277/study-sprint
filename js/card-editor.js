@@ -10,7 +10,7 @@ import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } fro
 import { hasMath, wrapMath } from './math.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
-import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt } from './cloze.js';
+import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
 import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
@@ -168,6 +168,44 @@ export function noteKinds(p, kind = 'basic') {
 }
 export const readKind = p => document.querySelector(`input[name="${p}Kind"]:checked`)?.value || 'basic';
 
+// Why the add form (ids starting with p) can't save yet, in a few plain words; '' when it can.
+export function whyNotAdd(p) {
+  const kind = readKind(p);
+  if (kind === 'occlusion') {
+    const note = readOcclusion(p);
+    if (!note?.image) return 'Choose a picture first.';
+    return groupsOf(note.masks).length ? '' : 'Draw at least one box over the part to hide.';
+  }
+  if (kind === 'cloze') {
+    const text = readCardText(p + 'Text').trim();
+    if (!text) return 'Type your text, then select a word to hide.';
+    if (!clozeNumbers(text).length) return 'Select a word and press New blank to hide it.';
+    return planNoteSave([], text).error || '';
+  }
+  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front'), back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back');
+  if (front && back) return '';
+  return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
+}
+// Keep the form's Add button and the reason line (#{p}Why) in step with the form: disabled, with the reason, until it can save.
+// Typing, picking a type, a picture added or removed, boxes drawn: all of them change the form, so it watches the form itself.
+export function watchAdd(p) {
+  const form = document.getElementById(p + 'Form'), why = document.getElementById(p + 'Why');
+  const add = document.querySelector(`button[type=submit][form="${p}Form"]`);
+  if (!form || !why || !add) return () => {};
+  const update = () => {
+    const reason = whyNotAdd(p);
+    add.disabled = !!reason;
+    if (why.textContent !== reason) why.textContent = reason;
+    why.hidden = !reason;
+  };
+  const watcher = new MutationObserver(update);
+  watcher.observe(form, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-media-id', 'hidden'] });
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+  return update;
+}
+
 export function clozeFields(p, text = '', extra = '') {
   const id = p + 'Text';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -175,12 +213,12 @@ export function clozeFields(p, text = '', extra = '') {
   // The Ctrl/⌘ keys are Anki's, but browsers keep Ctrl/⌘+Shift+C for their developer tools, so Alt+Shift+C (new) and Alt+Shift+S (same) also work.
   return `<div class="cloze-tools" role="group" aria-label="Blanks">
       <button type="button" class="btn ghost small" data-cloze="new" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Shift+C' : 'Control+Shift+C'} Alt+Shift+C" title="Hide the selected words (${mod}+Shift+C or ${alt}+Shift+C)"><span aria-hidden="true">[…]</span> New blank</button>
-      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'} Alt+Shift+S" title="Hide the selected words in the same card (${mod}+${alt}+Shift+C or ${alt}+Shift+S)"><span aria-hidden="true">[…]=</span> Same blank</button>
+      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'} Alt+Shift+S" title="Hide the selected words in the same card (${mod}+${alt}+Shift+C or ${alt}+Shift+S)"><span aria-hidden="true">[…]=</span> Same blank as the last one</button>
     </div>
-    ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The {{c1::mitochondria}} makes {{c2::ATP}}', images: false, cloze: true })}
+    ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The mitochondria makes ATP for the cell', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
     ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <p class="note cloze-help">A hint goes after the answer: {{c1::mitochondria::organelle}}. Maths goes between $ signs, like $x^2$.</p>`;
+    <p class="note cloze-help">Select a word and press New blank to hide it: each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p>`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
   ${text.trim() ? `<div class="cloze-render">${renderCloze(text, 0, 'all')}</div>` : ''}`;

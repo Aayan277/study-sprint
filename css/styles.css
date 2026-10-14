@@ -606,11 +606,11 @@ button.act-row:hover{background:var(--surface-3)}
 .history .no{color:var(--again);font-weight:600}
 
 /* ---------- 10. Import ---------- */
-/* On Import the deck picker sits below the preview, so the order of the boxes is set here */
+/* On Import the deck picker comes first, above the paste box, so the order of the boxes is set here */
 main[data-route="import"] > .view{display:flex;flex-direction:column}
 main[data-route="import"] > .view > *{order:2}
 main[data-route="import"] > .view > .back,main[data-route="import"] > .view > .screen-head{order:0}
-main[data-route="import"] > .view > .section:not(#preview){order:4;margin:var(--s-3) 0 var(--s-2);padding:var(--s-3) var(--s-4) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1)}
+main[data-route="import"] > .view > .section:not(#preview){order:1;margin:var(--s-3) 0 var(--s-2);padding:var(--s-3) var(--s-4) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1)}
 main[data-route="import"] > .view > #preview{order:3}
 main[data-route="import"] > .view > .savebar{order:5}
 .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:3px;background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);margin-bottom:var(--s-3)}
@@ -2018,3 +2018,35 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .pv-math .pv-b{color:var(--text-2)}
 .math-hint{display:block;margin:4px 0 0}
 .fmt-preview .tex-d{margin:.2em 0}
+
+/* ---------- 25. Import and the card editor (Round 2: js/import-screen.js, js/card-editor.js, js/onboarding.js) ---------- */
+/* Import: the deck picker is first; the new deck's name sits under it */
+#newNameRow{margin-top:var(--s-3)}
+#clozeNote{margin:var(--s-2) 0 0}
+#clozeNote .link{padding:8px 0;min-height:36px;color:var(--accent-text);text-align:left}
+#clozeNote .link:hover:not(:disabled){background:none;text-decoration:underline}
+/* The save button names the deck; a new deck without a name asks for it just above the button */
+.savebar .save-hint{margin:0 0 var(--s-2);text-align:center;font-size:var(--fs-sm);color:var(--text-2)}
+.savebar .btn{white-space:normal;line-height:1.25;padding-block:10px;overflow-wrap:anywhere}
+/* The add-card panel: one gap (--s-3) between every field, whichever type is showing, and a body that keeps its height
+   when the type changes, so the buttons below don't jump */
+.ac-form{gap:var(--s-3)}
+.ac-form .kind-switch{margin-bottom:0}
+.ac-form .kind-body{min-height:18rem}
+.ac-form #acBasic,.ac-form #acCloze{display:grid;gap:var(--s-3);align-content:start}
+.ac-form #acBasic[hidden],.ac-form #acCloze[hidden]{display:none}
+.ac-form .cloze-tools{margin-bottom:0}
+.ac-form .cloze-prev{margin:0}
+.ac-form .cloze-help{margin:0;color:var(--text-2);line-height:1.5}
+.ac-form .math-hint{margin-top:var(--s-1)}
+.ac-form .err{margin:0}
+/* Why Add is greyed out, beside the buttons so it is in view whenever they are */
+.sheet-foot:has(> .ac-why){flex-wrap:wrap}
+.sheet-foot .ac-why{flex:0 0 100%;margin:0;font-size:var(--fs-sm);line-height:1.4;color:var(--text-2)}
+.sheet-foot .ac-why[hidden]{display:none}
+/* Welcome: an empty exam date looks like a placeholder, not a chosen date */
+#wlExam.empty{color:var(--text-3)}
+#wlExam.empty::-webkit-datetime-edit{color:var(--text-3)}
+#wlExam{text-align:left}
+#wlExam::-webkit-date-and-time-value{text-align:left}
+#wlExam::-webkit-datetime-edit{padding:0}
