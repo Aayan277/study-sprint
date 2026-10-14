@@ -18,8 +18,8 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
-import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 
@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS = {
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
+  restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
   seeded: false,     // true once the sample deck has been added on first open
   onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped (kept in backups)
@@ -609,6 +610,20 @@ export async function applyRemote(rows) {
     const todo = new Map();
     for (const row of rows) {
       if (row.store === 'settings') {
+        if (MERGED_SETTINGS.includes(row.id)) {
+          // Merged, not replaced: keep this device's days off and add the server's (per day, the later decision wins).
+          const local = await done(settingsStore.get(row.id));
+          const remote = row.data?.value;
+          const merged = mergeDayFlags(local, remote);
+          const changed = !sameDayFlags(merged, local);
+          const sameAsRemote = sameDayFlags(merged, remote);
+          if (changed) { settingsStore.put(merged, row.id); applied++; }
+          if (changed || !sameAsRemote) {
+            // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.
+            times = { ...times, [row.id]: sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Date.now() };
+          }
+          continue;
+        }
         if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
         settingsStore.put(row.data?.value, row.id);
         times = { ...times, [row.id]: row.updated_at };

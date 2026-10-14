@@ -7,7 +7,7 @@ import { splitCards, queueFrom, buildQueue, limitSiblings, answeredNotes, newLim
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
-import { lazyStreak, daysAgoStart } from './stats-calc.js';
+import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
 const HISTORY_DAYS = 60;
@@ -152,4 +152,5 @@ export const live = { resume: null };
 
 // The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
 // if it has them, and reads further back only while the streak does.
-export const loadStreak = (history = null) => lazyStreak(t => db.getLogsSince(t), Date.now(), history);
+// ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
+export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getLogsSince(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });

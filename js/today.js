@@ -12,7 +12,7 @@ import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStrea
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
 import { addSampleDeck } from './sample.js';
 import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
@@ -49,7 +49,7 @@ const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row off
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
-  const streak = await loadStreak(data.history);
+  const streak = await loadStreak(data.history, data);
   if (!el.isConnected) return;
   const cardMs = typicalCardMs(data.history);
   const allIds = data.decks.map(d => d.id);
@@ -100,8 +100,7 @@ export async function renderToday(el) {
             <span class="th-sub">${plural(answered, 'answer')} today</span>
           </div>
         </div>
-        <p class="streak ${streak.studiedToday ? 'kept' : ''}">${icon('flame')}<b class="mono">${streak.days}</b> day streak
-          <span>${streak.studiedToday ? 'Kept for today' : streak.days ? 'Study today to keep it' : 'Study today to start one'}</span></p>
+        ${streakHTML(streak, { button: true })}
         ${c.total
           ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs)}</button>`
           : `<div class="th-done"><b>All done for today</b>
@@ -233,6 +232,8 @@ export async function renderToday(el) {
     });
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
+    // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).
+    $('streakBtn')?.addEventListener('click', async () => (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderToday(el), returnFocus: 'streakBtn' }));
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
     el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));

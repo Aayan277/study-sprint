@@ -22,7 +22,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
+import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
 import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -506,7 +506,7 @@ async function finish(el) {
   const ids = new Set(cards.map(c => c.id));
   const tomorrowEnd = dayEnd(Date.now(), 1);
   const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
-  const streak = await loadStreak();
+  const streak = await loadStreak(null, { settings: R.settings });
   // You may have switched to another screen while that loaded: don't draw over it.
   if (!location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
@@ -523,8 +523,7 @@ async function finish(el) {
     </div>
     <p class="note">${R.current ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
     <section class="finish-next" aria-label="What's next">
-      <p class="streak ${streak.studiedToday ? 'kept' : ''}">${icon('flame')}<b class="mono">${streak.days}</b> day streak
-        <span>${streak.studiedToday ? 'Kept for today' : streak.days ? 'Study today to keep it' : 'Study today to start one'}</span></p>
+      ${streakHTML(streak)}
       <p class="fn-line">${icon('calendar')} <span>${dueTomorrow ? `<b>${plural(dueTomorrow, 'card')}</b> due tomorrow.` : 'Nothing due tomorrow.'}</span></p>
       <p class="fn-line">${icon('bolt')} <span>Lock it in with a quick Play round. Right answers on due cards count toward your schedule.</span></p>
       <a class="btn ghost" href="#/play">Play a round</a>

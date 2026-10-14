@@ -11,6 +11,7 @@
 // Collapsed, the sidebar is a 72px icon rail; the choice is kept per device and applied from index.html's head script.
 
 import { loadAll, countFor, answeredToday, loadStreak } from './study-data.js';
+import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
@@ -70,7 +71,7 @@ export async function drawSidebar(loaded = null) {
 
 async function paint(loaded) {
   const data = loaded?.data || await loadAll({ history: true });
-  const streak = loaded?.streak || await loadStreak(data.history);
+  const streak = loaded?.streak || await loadStreak(data.history, data);
   if (!shouldDraw()) return;
   const allIds = data.decks.map(d => d.id);
   const chosen = loaded?.chosen || data.settings.reviewDecks.filter(id => allIds.includes(id));
@@ -119,10 +120,14 @@ async function paint(loaded) {
   // Footer: goal ring and streak
   const st = $('sideStreak');
   st.className = 'side-streak' + (streak.studiedToday ? ' kept' : '');
-  st.setAttribute('aria-label', `${streak.days}-day streak. ${answered} of ${goal} cards today`);
-  st.dataset.tip = `${streak.days}-day streak · ${answered} of ${goal} today`;
+  // A streak freeze: "freeze ready" (none used this week) or "freeze used Tue"; a snowflake while one was used in the last 7 days.
+  const { sub } = streakText(streak);
+  const usedRecently = streak.week.some(d => d.frozen);
+  const note = !streak.days ? '' : streak.freeze.usedOn ? ', ' + sub[0].toLowerCase() + sub.slice(1) : ', freeze ready';
+  st.setAttribute('aria-label', `${streak.days}-day streak${note}. ${answered} of ${goal} cards today`);
+  st.dataset.tip = `${streak.days}-day streak${note ? ' · ' + note.slice(2) : ''} · ${answered} of ${goal} today`;
   st.innerHTML = `${ring(goal ? answered / goal : 0, 30, 3, icon('flame'))}
-    <span class="side-st"><b>${streak.days}-day streak</b><span>${answered} of ${goal} today</span></span>`;
+    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b><span>${answered} of ${goal} today</span></span>`;
   await drawSync();
 }
 

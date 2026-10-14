@@ -11,10 +11,10 @@ import { openDeckPicker } from './deck-picker.js';
 import { startStudy } from './today.js';
 import { openExamSheet } from './exam-sheet.js';
 import { cardLevel } from './decks.js';
-import { streakFromDays, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
+import { streakFromDays, restDaySet, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText } from './format.js';
-import { esc, plural, icon, foldOpen, saveFold, ring } from './ui.js';
+import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
 
 // Where an answer came from, for tooltips.
 const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
@@ -72,7 +72,7 @@ const weekday = t => WEEKDAY.format(t);
 // ---------- study calendar ----------
 // A year of study days as a grid of squares (darker = more answers). Tap or hover a day to see it.
 const longDate = t => LONG.format(t);
-const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}`;
+const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}${d.frozen ? ' · streak freeze' : d.rest ? ' · day off' : ''}`;
 function calendarHTML(cal, now) {
   const todayKey = dayKey(now);
   let lastMonth = -1;
@@ -82,13 +82,13 @@ function calendarHTML(cal, now) {
     const label = m !== lastMonth ? MONTH.format(week[0].time) : '';
     lastMonth = m;
     return `<span class="cal-m">${esc(label)}</span>` + week.map(d => d.future ? '<i class="fut"></i>'
-      : `<i class="lv${d.level}${dayKey(d.time) === todayKey ? ' today' : ''}" data-t="${d.time}" data-n="${d.count}" title="${esc(dayText(d))}"></i>`).join('');
+      : `<i class="lv${d.level}${d.frozen ? ' frz' : d.rest ? ' rest' : ''}${dayKey(d.time) === todayKey ? ' today' : ''}" data-t="${d.time}" data-n="${d.count}"${d.frozen ? ' data-f="1"' : d.rest ? ' data-r="1"' : ''} title="${esc(dayText(d))}"></i>`).join('');
   }).join('');
   return `
     <section class="card section cal-card" aria-labelledby="calTitle">
       <div class="mhead"><h2 id="calTitle">Study calendar</h2>
         <span class="muted small">Studied ${plural(cal.daysStudied, 'day')} in the past year · best streak ${plural(cal.longest, 'day')}</span></div>
-      <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.`)}">
+      <div class="cal" role="img" aria-label="${esc(`Studied on ${cal.daysStudied} of the last ${cal.daysShown} days, ${plural(cal.answers, 'answer')} in all. Longest streak ${plural(cal.longest, 'day')}.${cal.weeks.some(w => w.some(d => d.frozen)) ? ' Days covered by a streak freeze have a diagonal hatch.' : ''}`)}">
         <span class="cal-wd" aria-hidden="true"><b></b><b>Mon</b><b></b><b>Wed</b><b></b><b>Fri</b><b></b><b></b></span>
         <div class="cal-scroll" id="calScroll">
           <div class="cal-grid" id="calGrid" aria-hidden="true">${cols}</div>
@@ -97,6 +97,7 @@ function calendarHTML(cal, now) {
       <div class="cal-foot">
         <span class="muted small" id="calInfo" aria-live="polite">Tap a day to see it.</span>
         <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
+        <span class="cal-key cal-key2 muted small" aria-hidden="true"><i class="lv0 frz"></i> Streak freeze <i class="lv0 rest"></i> Day off</span>
       </div>
     </section>`;
 }
@@ -115,7 +116,7 @@ function wireCalendar(el) {
     if (!cell) return;
     grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
     cell.classList.add('sel');
-    el.querySelector('#calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n });
+    el.querySelector('#calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n, frozen: !!cell.dataset.f, rest: !!cell.dataset.r });
   });
 }
 
@@ -154,7 +155,8 @@ export async function renderStats(el) {
   const allDays = logs.days;
   const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
   const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
-  const streak = streakFromDays(allDays, now);
+  const rest = restDaySet(settings);
+  const streak = streakFromDays(allDays, now, { rest });
   const ret = retention(recent, now);
   const perDay = reviewsPerDay(recent, now);
   const cardStates = cards.map(c => statesById.get(c.id));
@@ -163,7 +165,7 @@ export async function renderStats(el) {
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
-  const cal = calendarFromDays(pickedDays, now);
+  const cal = calendarFromDays(pickedDays, now, 53, { rest });
   const buttons = buttonCounts(recent, now);
   const hours = hourly(recent, now);
   const bands = difficultyBands(cardStates);
@@ -230,10 +232,8 @@ export async function renderStats(el) {
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
         <p>${streak.days === 0 ? 'Review or play today to start a streak.' : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
-        <div class="week" aria-label="Last 7 days">${streak.week.map(d => `
-          <div class="wd${d.on ? ' on' : ''}${d.today ? ' today' : ''}" title="${esc(shortDate(d.time))}${d.on ? ', studied' : ''}">
-            <i></i><span>${esc(weekday(d.time).slice(0, 2))}</span></div>`).join('')}
-        </div>
+        ${weekDotsHTML(streak.week)}
+        <p class="frz-note">One freeze a week covers a missed day. It doesn’t add to the count. <button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>
       <div class="card">
         <h2>Retention</h2>
@@ -349,6 +349,9 @@ export async function renderStats(el) {
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   wireCalendar(el);
+  q('planRest')?.addEventListener('click', async () => {
+    (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderStats(el), returnFocus: 'planRest' });
+  });
   q('hardAll')?.addEventListener('click', e => {
     const open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
     el.querySelectorAll('#hardList [data-more]').forEach(li => { li.hidden = !open; });
