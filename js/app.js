@@ -880,6 +880,12 @@ let lastHash = '#/today';
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
 // (The gear in the phone header and the Settings link in the desktop sidebar both count.)
 function wireGear() {
+  // Tapping the Play tab on a Play screen that is already showing (e.g. the results) starts a fresh setup:
+  // the address does not change, so there is no hashchange to do it.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('a[data-tab="play"]') || e.defaultPrevented) return;
+    if (currentRoute === 'play' && location.hash === '#/play') { e.preventDefault(); route(); }
+  });
   document.addEventListener('click', e => {
     if (!e.target.closest('a[data-tab="settings"]') || e.defaultPrevented) return;
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal

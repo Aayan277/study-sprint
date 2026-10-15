@@ -27,6 +27,7 @@ import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
@@ -135,9 +136,9 @@ export async function renderPlay(el) {
     const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
 
     el.innerHTML = `
-      <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1></div></div>
+      <div class="screen-head"><div><h1>Play</h1></div></div>
 
-      ${!cards.length ? `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
+      ${!cards.length ? emptyStartHTML() : `
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
           <option value="all" ${prefs.deckId === 'all' ? 'selected' : ''}>All decks (${plural(cards.length, 'card')})</option>
@@ -203,9 +204,9 @@ export async function renderPlay(el) {
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
         <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
-      <p class="hint mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
+      <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
-    if (!cards.length) return;
+    if (!cards.length) { wireEmptyStart(el); return; }
     const save = () => db.setSetting('playPrefs', { ...prefs });
     $('customBtn').addEventListener('click', () => {
       customOpen = $('customBtn').getAttribute('aria-expanded') !== 'true';
@@ -246,7 +247,7 @@ function start(el, opts) {
   G = {
     ...opts, fmt, all, pool, total, weightOf, source: opts.pool,
     queue: weightedQueue(pool, total || 30, weightOf), i: 0,
-    score: 0, streak: 0, bestStreak: 0, log: [], lives: LIVES, clock: LIGHTNING_MS, over: false,
+    score: 0, streak: 0, bestStreak: 0, log: [], leeches: [], lives: LIVES, clock: LIGHTNING_MS, over: false,
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
@@ -509,6 +510,7 @@ async function checkLeech(round, card, prev, next, log) {
   if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
   const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
   await db.saveCards([leech]);
+  if (!round.leeches.includes(card.id)) round.leeches.push(card.id);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
   toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
 }
@@ -584,12 +586,12 @@ async function finish() {
   const { letter, label } = gradeFor(acc, avgSpeed);
   const avgTime = total ? round.log.reduce((a, l) => a + l.seconds, 0) / total : 0;
 
-  let isBest = false;
+  let isBest = false, firstScore = false;
   if (!round.drill && total) {
     const settings = await db.getSettings();
     const bests = { ...(settings.playBest || {}) };
     const k = bestKey(round);
-    if (round.score > (bests[k] || 0)) { bests[k] = round.score; isBest = true; await db.setSetting('playBest', bests); }
+    if (round.score > (bests[k] || 0)) { firstScore = !bests[k]; bests[k] = round.score; isBest = true; await db.setSetting('playBest', bests); }
   }
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
@@ -600,14 +602,25 @@ async function finish() {
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
     : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
 
+  const strong = 'SAB'.includes(letter);          // the big stamp is for S, A and B; a C or D gets a quiet one
+  const gradeText = isBest ? `Grade ${letter}` : label;
+  const missedRow = l => { const diff = l.typed ? diffAgainstBack(l.typed, l.target) : null; return `
+        <div class="miss">
+          <div class="m">${mathHTML(l.q.prompt)}</div>
+          ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
+          <div class="r">${mathHTML(l.q.answer)}</div>
+          ${hasMarks(diff) ? diffHTML(diff, { small: true })
+            : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
+        </div>`; };
+  const SHOWN = 3;
   el.innerHTML = `
     <div class="res-head">
-      <div class="stamp press" aria-label="Grade ${letter}"><span>${letter}</span></div>
+      <div class="stamp press${strong ? '' : ' quiet'}" aria-label="Grade ${letter}"><span>${letter}</span></div>
       <div style="min-width:0">
-        <p class="res-grade">${label} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
+        <p class="res-grade">${gradeText} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
         <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
         ${line ? `<p class="res-line">${line}</p>` : ''}
-        ${isBest ? '<p class="newbest">New best for this setup</p>' : ''}
+        ${isBest ? `<p class="newbest">${firstScore ? 'First score for this setup' : 'New best for this setup'}</p>` : ''}
       </div>
     </div>
     <div class="stats4">
@@ -616,24 +629,25 @@ async function finish() {
       <div><div class="v">${round.bestStreak}</div><div class="l">Best streak</div></div>
       <div><div class="v">${correct}/${total}</div><div class="l">Correct</div></div>
     </div>
-    ${schedule}
-    <section class="missed">
-      <h2>Missed</h2>
-      ${missed.length ? missed.map(l => { const diff = l.typed ? diffAgainstBack(l.typed, l.target) : null; return `
-        <div class="miss">
-          <div class="m">${mathHTML(l.q.prompt)}</div>
-          ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
-          <div class="r">${mathHTML(l.q.answer)}</div>
-          ${hasMarks(diff) ? diffHTML(diff, { small: true })
-            : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
-        </div>`; }).join('')
-      : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
-    </section>
     <div class="res-actions">
       <button class="btn primary" id="againBtn" type="button">Play again</button>
       ${missed.length ? '<button class="btn ghost" id="drillBtn" type="button">Drill missed</button>' : ''}
       <button class="btn ghost" id="menuBtn" type="button">Change setup</button>
-    </div>`;
+    </div>
+    ${schedule}
+    <div id="resultsMore" class="finish-more" hidden></div>
+    <section class="missed">
+      <h2>Missed</h2>
+      ${missed.length ? missed.map((l, i) => i < SHOWN ? missedRow(l) : `<div class="miss-extra" hidden>${missedRow(l)}</div>`).join('')
+        + (missed.length > SHOWN ? `<button class="btn ghost" id="showAllMiss" type="button">Show all ${missed.length}</button>` : '')
+      : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
+    </section>`;
+  $('showAllMiss')?.addEventListener('click', e => {
+    el.querySelectorAll('.miss-extra').forEach(x => { x.hidden = false; });
+    e.currentTarget.remove();
+  });
+  const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
+  import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
   $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));

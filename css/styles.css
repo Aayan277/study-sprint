@@ -2131,3 +2131,18 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .hard-occ{display:flex;gap:var(--s-3);align-items:center;min-width:0}
 .hard-thumb{flex:none;width:40px;height:40px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface-2)}
 .hard-occ-t{min-width:0;flex:1}
+
+/* ---------- 24 (Round 2). Play: results order, quiet grade stamp, key hint, empty start (js/play.js) ---------- */
+/* The keyboard line shows only with a mouse and keyboard */
+.hint.keys{display:none}
+@media (hover:hover) and (pointer:fine){.hint.keys{display:block}}
+/* Results: stats, then the actions, then the schedule note; the missed list comes last */
+.res-actions{margin-top:var(--s-4)}
+.sched-note{margin:var(--s-4) 0 0}
+.missed{margin-top:var(--s-6)}
+.miss-extra .miss{border-top:1px solid var(--line)}
+.missed > #showAllMiss{margin-top:var(--s-3)}
+/* A C or D is not a medal: a smaller, plain mark */
+.stamp.quiet{width:68px;height:68px;font-size:2.2rem;border-width:2px;border-color:var(--line-strong);color:var(--text-2);text-shadow:none;transform:none}
+.stamp.quiet.press::after{display:none}
+@media (max-width:480px){.res-head .stamp.quiet{width:56px;height:56px;font-size:1.8rem;border-width:2px}}

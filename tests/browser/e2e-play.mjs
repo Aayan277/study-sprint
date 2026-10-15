@@ -44,7 +44,8 @@ ok(!(await focusOn()), 'focus mode is off on the Play result screen');
 const res = { stamp: await page.textContent('.stamp'), score: await page.textContent('.res-score'), acc: await page.textContent('.stats4 .v') };
 console.log('   classic result:', JSON.stringify(res));
 ok(res.acc === '100%' && /^[SA]$/.test(res.stamp.trim()), 'all right gives 100% and an S/A stamp');
-ok(await page.isVisible('.newbest'), 'first score is a new best');
+ok((await page.textContent('.newbest')).trim() === 'First score for this setup', 'the first score for a setup says so, not "New best"');
+ok(!(await page.textContent('.res-grade')).includes('Keep practicing') && /^Grade [SAB]/.test((await page.textContent('.res-grade')).trim()), 'a best shows "Grade X" in the head');
 await page.screenshot({ path: SP + '/p-results.png', fullPage: true }); await noHScroll('results');
 
 // Play again -> wrong answer shows correct one, then Quit
