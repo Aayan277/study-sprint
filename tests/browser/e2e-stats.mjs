@@ -57,7 +57,7 @@ await noHScroll('stats');
 await page.screenshot({ path: SP + '/s-top.png' });
 // tooltip by tap
 await page.locator('#forecast .col').first().tap();
-ok(!(await page.isHidden('#forecast .chart-tip')) && (await page.textContent('#forecast .chart-tip')).includes('Due today'), 'tapping a column shows its tooltip: ' + await page.textContent('#forecast .chart-tip'));
+ok(!(await page.isHidden('#forecast .chart-tip')) && (await page.textContent('#forecast .chart-tip')).includes('Scheduled for today'), 'tapping a column shows its tooltip: ' + await page.textContent('#forecast .chart-tip'));
 await page.locator('#forecast').scrollIntoViewIfNeeded(); await page.screenshot({ path: SP + '/s-forecast.png' });
 // table view
 await page.locator('#perDay + .chart-table summary').click();
