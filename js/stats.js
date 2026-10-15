@@ -11,7 +11,10 @@ import { openDeckPicker } from './deck-picker.js';
 import { startStudy } from './today.js';
 import { openExamSheet } from './exam-sheet.js';
 import { cardLevel } from './decks.js';
-import { streakFromDays, restDaySet, calendarFromDays, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
+import { isOcclusion, occLabel } from './occlusion.js';
+import { imgHTML } from './media.js';
+import { streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
@@ -76,10 +79,12 @@ const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer')
 function calendarHTML(cal, now) {
   const todayKey = dayKey(now);
   let lastMonth = -1;
-  const cols = cal.weeks.map(week => {
+  const cols = cal.weeks.map((week, wi) => {
     // A month's name over the first week that starts in it.
     const m = new Date(week[0].time).getMonth();
-    const label = m !== lastMonth ? MONTH.format(week[0].time) : '';
+    // (The first column is left unnamed when the next week starts a new month: two names would run together.)
+    const nextM = cal.weeks[wi + 1] ? new Date(cal.weeks[wi + 1][0].time).getMonth() : m;
+    const label = m !== lastMonth && !(wi === 0 && nextM !== m) ? MONTH.format(week[0].time) : '';
     lastMonth = m;
     return `<span class="cal-m">${esc(label)}</span>` + week.map(d => d.future ? '<i class="fut"></i>'
       : `<i class="lv${d.level}${d.frozen ? ' frz' : d.rest ? ' rest' : ''}${dayKey(d.time) === todayKey ? ' today' : ''}" data-t="${d.time}" data-n="${d.count}"${d.frozen ? ' data-f="1"' : d.rest ? ' data-r="1"' : ''} title="${esc(dayText(d))}"></i>`).join('');
@@ -165,7 +170,7 @@ export async function renderStats(el) {
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
-  const cal = calendarFromDays(pickedDays, now, 53, { rest });
+  const cal = calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) });
   const buttons = buttonCounts(recent, now);
   const hours = hourly(recent, now);
   const bands = difficultyBands(cardStates);
@@ -211,7 +216,7 @@ export async function renderStats(el) {
   const scopeHTML = scoped ? `
     <div class="stats-scope">
       <button type="button" class="pick-btn" id="sDeckBtn" aria-haspopup="dialog" aria-label="Show stats for: ${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}. Change deck">
-        ${course ? `<i class="dot" style="background:${esc(course.color)}"></i>` : ''}<span>${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}</span>${icon('down')}</button>
+        ${icon('search')}${course ? `<i class="dot" style="background:${esc(course.color)}"></i>` : ''}<span>${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}</span>${icon('down')}</button>
       <span class="pick-hint">Search ${plural(decks.length, 'deck')}</span>
     </div>` : `
     <div class="filter-row">
@@ -222,8 +227,8 @@ export async function renderStats(el) {
     </div>`;
 
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">PROGRESS</span><h1>Stats</h1></div></div>
-    ${!allCards.length ? `<div class="empty"><b>No cards yet.</b><br>Add a deck and study it to see your stats here.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
+    <div class="screen-head"><div><h1>Stats</h1></div></div>
+    ${!allCards.length ? emptyStartHTML({ courseId: decks.length === 1 ? decks[0].id : '' }) : `
     ${scopeHTML}
     ${course ? readyHTML() + masteryHTML : ''}
 
@@ -238,8 +243,9 @@ export async function renderStats(el) {
       <div class="card">
         <h2>Retention</h2>
         <div class="big">${ret.rate === null ? '–' : Math.round(ret.rate * 100)}<small>${ret.rate === null ? '' : '%'}</small></div>
-        <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}
-          <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></p>
+        <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
+        <details class="info-fold"><summary aria-label="What counts as a review"><span aria-hidden="true">i</span></summary>
+          <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></details>
       </div>
     </div>
 
@@ -262,7 +268,7 @@ export async function renderStats(el) {
       ${columnChart({
         id: 'forecast', rows: forecast, value: d => d.count,
         x: (d, i) => i === 0 ? 'Today' : weekday(d.time),
-        tip: (d, i) => [plural(d.count, 'card'), i === 0 ? 'Due today (including overdue)' : `Due ${weekday(d.time)} ${shortDate(d.time)}`],
+        tip: (d, i) => [plural(d.count, 'card'), i === 0 ? 'Scheduled for today (before daily limits)' : `Due ${weekday(d.time)} ${shortDate(d.time)}`],
         tableHead: ['Day', 'Cards due'],
         tableRow: (d, i) => [i === 0 ? 'Today' : `${weekday(d.time)} ${shortDate(d.time)}`, d.count],
         label: 'Cards due on each of the next 7 days'
@@ -273,8 +279,7 @@ export async function renderStats(el) {
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
         ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
       ${hardest.length ? `<ol class="hard-list" id="hardList">${hardest.map((h, i) => `
-        <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}><div class="f">${mathHTML(plainText(h.card.front), { inline: true })}</div>
-          <div class="b">${mathHTML(plainText(h.card.back), { inline: true })}</div>
+        <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}>${hardRow(h.card)}
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
         ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
@@ -329,7 +334,7 @@ export async function renderStats(el) {
       </div>
     </section>`}`;
 
-  if (!allCards.length) return;
+  if (!allCards.length) { wireEmptyStart(el); return; }
   const q = id => el.querySelector('#' + id);
   q('moreBtn').addEventListener('click', () => {
     const open = q('moreBtn').getAttribute('aria-expanded') !== 'true';
@@ -396,6 +401,18 @@ export async function renderStats(el) {
     showDetail();
   });
   showDetail();
+}
+
+// One Hardest card. A picture-hiding card shows a 40px thumbnail of the picture and the label of the hidden part
+// (its front is only "Diagram: hidden part 2 of 5"); other cards show their text.
+function hardRow(card) {
+  if (isOcclusion(card) && card.backImage) {
+    const label = occLabel(card.occlusion.masks, card.occlusion.n);
+    return `<div class="hard-occ">${imgHTML(card.backImage, 'hard-thumb')}<div class="hard-occ-t">
+      <div class="f">${esc(label || 'Hidden part')}</div><div class="b">${esc(plainText(card.front))}</div></div></div>`;
+  }
+  return `<div class="f">${mathHTML(plainText(card.front), { inline: true })}</div>
+          <div class="b">${mathHTML(plainText(card.back), { inline: true })}</div>`;
 }
 
 // The Hardest cards list shows this many until "Show all".

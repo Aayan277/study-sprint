@@ -212,11 +212,21 @@ export function studyCalendar(logs, now = Date.now(), weeks = 53, opts) {
 // The same, from answers per day already counted (a Map of dayKey -> count, see answerDays()).
 // opts as for streakFromDays: days off (`rest`) and whether freezes count. Each day also says whether a streak
 // freeze covered it (`frozen`) or it was a day off (`rest`).
+// opts.from (a time): start the grid at the week holding the 1st of that time's month, if that is later than `weeks`
+// weeks ago, so a new account does not open on a year of empty squares.
 export function calendarFromDays(perDay, now = Date.now(), weeks = 53, opts = {}) {
   const rest = opts.rest || EMPTY_SET;
   // Start on the Monday `weeks - 1` weeks before this week's Monday.
   const todayStart = daysAgoStart(0, now);
   const fromMonday = (new Date(todayStart).getDay() + 6) % 7;      // Mon = 0 … Sun = 6
+  if (Number.isFinite(opts.from)) {
+    const f = new Date(opts.from); f.setDate(1); f.setHours(12, 0, 0, 0);
+    const t = new Date(todayStart); t.setHours(12, 0, 0, 0);
+    const firstMonday = new Date(f); firstMonday.setDate(1 - ((f.getDay() + 6) % 7));
+    const thisMonday = new Date(t); thisMonday.setDate(t.getDate() - fromMonday);
+    const needed = Math.round((thisMonday - firstMonday) / 604800000) + 1;
+    weeks = Math.max(1, Math.min(weeks, needed));
+  }
   const first = fromMonday + (weeks - 1) * 7;
   const runs = streakRuns(perDay, now, opts);
   const days = [];
@@ -373,4 +383,16 @@ export function difficultyBands(states) {
     bands[Math.min(9, Math.max(0, Math.ceil(s.difficulty) - 1))].count++;
   }
   return bands;
+}
+
+// The time of the earliest day in an answers-per-day Map (dayKey -> count) that has answers, or null.
+export function firstAnswerTime(perDay) {
+  let best = null;
+  for (const [k, n] of perDay) {
+    if (!n) continue;
+    const [y, m, d] = k.split('-').map(Number);
+    const t = new Date(y, m - 1, d, 12).getTime();
+    if (best === null || t < best) best = t;
+  }
+  return best;
 }
