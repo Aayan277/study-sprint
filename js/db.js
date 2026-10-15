@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS = {
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
   restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
+  rescue: null,      // catch-up plan after a break: { start, days, backlog, pauseNew, at } (queue.js rescueToday). Synced, newest wins; Today clears it when it is over
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
   seeded: false,     // true once the sample deck has been added on first open
   onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped (kept in backups)
@@ -467,8 +468,12 @@ export function checkBackup(data) {
   if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {
     return 'This backup file is damaged (a picture is invalid or not a supported image type).';
   }
+  // The catch-up plan is read as numbers and a flag, so nothing else may sit in it.
+  if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
 }
+export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
+  && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
 const validKey = v => (typeof v === 'string' && v !== '') || (typeof v === 'number' && Number.isFinite(v));
 const SAFE_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];   // no SVG: it can contain scripts

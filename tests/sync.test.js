@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
 import { mergeDayFlags, sameDayFlags, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
 const NOW = 1_800_000_000_000;
@@ -127,6 +128,16 @@ const T = new Date(2026, 9, 14, 12).getTime();      // Wed 14 Oct 2026
 test('restDays is a synced setting that is merged, not replaced', () => {
   assert.ok(SYNCED_SETTINGS.includes('restDays'));
   assert.deepEqual(MERGED_SETTINGS, ['restDays']);
+});
+
+test('rescue (the catch-up plan) is a synced setting: the newest copy wins, it is not merged', () => {
+  assert.ok(SYNCED_SETTINGS.includes('rescue'));
+  assert.ok(!MERGED_SETTINGS.includes('rescue'));
+  assert.equal(DEFAULT_SETTINGS.rescue, null);
+  const plan = { start: NOW, days: 3, backlog: 150, pauseNew: true, at: NOW };
+  assert.equal(decide(rowFromSetting('rescue', plan, NOW + 5), NOW), 'put');          // a newer plan from another device is taken
+  assert.equal(decide(rowFromSetting('rescue', null, NOW - 5), NOW), 'skip');         // an older "no plan" is not
+  assert.equal(decide(rowFromSetting('rescue', null, NOW + 5), NOW), 'put');          // cancelling on another device cancels here
 });
 
 test('days off: two devices that each add a day keep both', () => {

@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { splitCards, queueFrom, rescueToday, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -45,7 +45,7 @@ export async function loadAll({ history = false } = {}) {
   // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
   const exempt = new Set(decks.filter(d => examInfo(effectiveDeck(decks, d.id), now)).map(d => d.id));
   const rescue = rescueToday(settings.rescue, visible, statesById, exempt, now);
-  return { settings, decks, allCards: cards, answered, rescue, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
+  return { settings, decks, allCards: cards, answered, rescue, exempt, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
 
@@ -139,6 +139,37 @@ export function customQueue(kind, data, cards, days = 3) {
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
   return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById), label: 'Exam prep' };
+}
+
+// ---------- the catch-up plan on Today ----------
+// What Today needs to know about "back from a break" (queue.js has the arithmetic):
+//   active    a plan is saved and still running (or not started yet)
+//   finished  a plan is saved but over (its days are up, or nothing overdue is left): Today clears it
+//   offer     null, or { n, backlog, typical, perDay, awayDays } to show the banner (rescueOffer)
+//   backlog   overdue cards right now (exam decks left out)      typical  your usual reviews a day
+// `data` must come from loadAll({ history: true }). dismissedDay is the dayStart of a dismissal made today.
+export function rescueState(data, now = Date.now(), dismissedDay = null) {
+  const saved = data.settings.rescue;
+  const today = dayStart(now);
+  let finished = false;
+  if (saved) {
+    const k = Number.isFinite(saved.start) ? Math.round((today - dayStart(saved.start)) / 86400000) + 1 : Infinity;
+    finished = !(saved.days >= 1) || k > saved.days || (k >= 1 && !data.rescue);
+  }
+  const active = !!saved && !finished;
+  const backlog = rescueBacklog(data.cards, data.statesById, data.exempt, today);
+  const days = new Map();                            // study day → reviews that day (not today: it is only part done)
+  for (const l of data.history || []) {
+    if (l.source !== 'review' || l.timestamp >= today || !(l.timestamp > 0)) continue;
+    const d = dayStart(l.timestamp);
+    days.set(d, (days.get(d) || 0) + 1);
+  }
+  const recent = [...days.entries()].sort((a, b) => b[0] - a[0]).slice(0, 14);      // the last 14 study days
+  const counts = recent.map(x => x[1]).sort((a, b) => a - b);
+  const mid = counts.length >> 1;
+  const typical = counts.length < 3 ? null : (counts.length % 2 ? counts[mid] : (counts[mid - 1] + counts[mid]) / 2);
+  const offer = rescueOffer({ backlog, typicalDaily: typical, lastStudyDay: recent[0]?.[0], now, active, dismissedDay });
+  return { active, finished, offer, backlog, typical: offer?.typical ?? (typical || 20) };
 }
 
 // ---------- how long a session takes ----------

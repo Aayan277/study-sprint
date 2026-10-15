@@ -2,9 +2,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { rescueState, countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
+import { dayStart } from '../js/days.js';
 
 const DAY = 86400000;
 const now = Date.now();
@@ -247,4 +248,40 @@ test('hasReviewLimit looks at review limits only (newPerDay is always set)', () 
   assert.equal(hasReviewLimit({ settings: { reviewLimit: Infinity, newPerDay: 20 }, decks: [{ newPerDay: 5 }] }), false);
   assert.equal(hasReviewLimit({ settings: { reviewLimit: 100 }, decks: [] }), true);
   assert.equal(hasReviewLimit({ settings: {}, decks: [{ reviewPerDay: 10 }] }), true);
+});
+
+// ---------- rescueState: what Today shows for "back from a break" ----------
+const RNOW = new Date(2026, 9, 14, 12).getTime();
+const rescueData = (overdue, { saved = null, rescue = null, history = [] } = {}) => {
+  const cs = [], st = new Map();
+  for (let i = 0; i < overdue; i++) { cs.push({ id: 'r' + i, deckId: 'a' }); st.set('r' + i, { cardId: 'r' + i, state: 2, due: RNOW - 10 * DAY }); }
+  return { settings: { rescue: saved }, rescue, cards: cs, statesById: st, exempt: new Set(), history };
+};
+const studied = (daysAgo, n) => Array.from({ length: n }, (_, i) => ({ source: 'review', timestamp: RNOW - daysAgo * DAY + i * 1000 }));
+test('rescueState: offers 3 days for 150 overdue cards, using 20 a day when there is too little history', () => {
+  const s = rescueState(rescueData(150), RNOW);
+  assert.equal(s.offer.n, 3); assert.equal(s.offer.backlog, 150); assert.equal(s.offer.perDay, 50); assert.equal(s.typical, 20);
+  assert.equal(s.active, false); assert.equal(s.finished, false);
+});
+test('rescueState: your usual day is the median of the last 14 study days (today left out)', () => {
+  const history = [...studied(12, 30), ...studied(13, 30), ...studied(14, 50), ...studied(0, 500)];
+  const s = rescueState(rescueData(150, { history }), RNOW);
+  assert.equal(s.typical, 30); assert.equal(s.offer.typical, 30);
+  assert.equal(rescueState(rescueData(50, { history }), RNOW).offer, null);       // 50 < 2 x 30: not a pile-up
+});
+test('rescueState: no offer for a small pile, after dismissing today, or while a plan runs', () => {
+  assert.equal(rescueState(rescueData(29), RNOW).offer, null);
+  assert.equal(rescueState(rescueData(150), RNOW, dayStart(RNOW)).offer, null);
+  assert.ok(rescueState(rescueData(150), RNOW, dayStart(RNOW) - DAY).offer);            // dismissed yesterday: offered again
+  const plan = { start: dayStart(RNOW), days: 3, backlog: 150, pauseNew: true };
+  const s = rescueState(rescueData(150, { saved: plan, rescue: { k: 1, days: 3, remaining: 150 } }), RNOW);
+  assert.equal(s.active, true); assert.equal(s.offer, null);
+});
+test('rescueState: a plan that is over (days up, or nothing left) is finished, so Today clears it', () => {
+  const plan = { start: dayStart(RNOW) - 3 * DAY, days: 3, backlog: 150, pauseNew: true };        // day 4
+  assert.equal(rescueState(rescueData(40, { saved: plan }), RNOW).finished, true);
+  const fresh = { ...plan, start: dayStart(RNOW) - DAY };                                       // day 2 but nothing overdue left (data.rescue null)
+  assert.equal(rescueState(rescueData(0, { saved: fresh }), RNOW).finished, true);
+  assert.equal(rescueState(rescueData(40, { saved: fresh, rescue: { k: 2 } }), RNOW).finished, false);
+  assert.equal(rescueState(rescueData(40, { saved: { ...plan, start: dayStart(RNOW) + DAY } }), RNOW).finished, false);   // not started yet: kept
 });

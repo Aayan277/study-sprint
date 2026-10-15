@@ -76,6 +76,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **Read aloud:** 🔊 (or R) reads the card with your device's voices; each deck picks a language (or works it out from the text) and can read cards out automatically.
   - A thin **progress bar** under the header fills as you go (cards done out of cards done plus cards left, with cards coming back to relearn counted as left).
   - The ⋯ button opens a short sheet: **Edit**, **Flag**, **Bury**, **Suspend** and **More** (More is the full card panel: move, reset, set due date, delete, card info). Edit is a short editor (Front, Back, Tags, formatting and pictures) with Cancel and Save always in view; saving closes the sheet and you are back on the same card.
+  - **Back from a break:** after a few days away, Today may say "150 overdue cards piled up. Spread them over 2 or 3 days?" (it shows when 30 or more are overdue and that is at least twice your usual day). Choosing it gives you about a half or a third of the overdue cards each day, the most overdue first, on top of what is due that day. New cards are paused until you've caught up (a switch; decks with an exam keep theirs, and exam decks are never held back). Today shows "Catch-up plan: day 2 of 3 · 64 left"; skipping a day just means more the next day, and **Show everything now** cancels it. "Not today" hides the offer until tomorrow. The plan syncs between devices and is part of a backup.
   - **Custom study** (Today → Options): add extra new cards for today, review ahead (cards due in the next day to 2 weeks), or go over the cards you forgot today.
   - **Leeches:** a card you forget 8 times (changeable in Settings) is tagged “leech” and suspended (or just tagged), like Anki. Misses in Play on cards that weren't due don't count.
   - Advanced scheduling in Settings: learning and relearning steps, a maximum interval (handy before exams), spreading due dates onto the least busy days, and **easy days** (Normal / Reduced / Minimum per weekday).
@@ -166,6 +167,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/exam-sheet.js` | Setting an exam date: the short "Add exam date" sheet, and the save shared with Edit deck |
 | `supabase/setup.sql`, `supabase/media.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync |
 | `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
+| `js/rescue-sheet.js` | The "Back from a break" catch-up plan sheet (lazy) |
 | `js/onboarding.js` | The first-run start (landing-page welcome, name, add cards) and the guided first review |
 | `js/install.js` | The Install card on Today and the Install app row in Settings |
 | `js/review.js` | The Review session (flip, rate, finish) |

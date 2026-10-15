@@ -78,3 +78,15 @@ test('starter cards: typing a meaning or a reading counts as right', () => {
   const typeable = STARTER_DECKS.flatMap(d => starterCards(d.level)).filter(c => canType(c.back)).length;
   assert.ok(typeable > 270, `${typeable} of 282 typeable`);
 });
+
+test('the catch-up plan in a backup: a good one (or none) passes, a damaged one is refused', () => {
+  const plan = { start: 1_800_000_000_000, days: 3, backlog: 150, pauseNew: true, at: 1_800_000_000_000 };
+  const withPlan = rescue => ({ ...good, settings: { rescue } });
+  assert.equal(checkBackup(withPlan(plan)), null);
+  assert.equal(checkBackup(withPlan(null)), null);
+  assert.equal(checkBackup(good), null);
+  assert.equal(checkBackup(withPlan({ ...plan, pauseNew: undefined })), null);
+  const bad = /catch-up plan/;
+  for (const r of [{ ...plan, start: 'x' }, { ...plan, days: 0 }, { ...plan, days: 2.5 }, { ...plan, days: 99 }, { ...plan, backlog: -1 }, { ...plan, backlog: '5' },
+    { ...plan, pauseNew: 'yes' }, { ...plan, at: NaN }, '<img src=x>', 7, [plan]]) assert.match(checkBackup(withPlan(r)), bad);
+});

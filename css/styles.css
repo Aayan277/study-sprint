@@ -2146,3 +2146,16 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .stamp.quiet{width:68px;height:68px;font-size:2.2rem;border-width:2px;border-color:var(--line-strong);color:var(--text-2);text-shadow:none;transform:none}
 .stamp.quiet.press::after{display:none}
 @media (max-width:480px){.res-head .stamp.quiet{width:56px;height:56px;font-size:1.8rem;border-width:2px}}
+
+/* ---------- 31. Rescue: "back from a break" catch-up plan (js/today.js, js/rescue-sheet.js) ---------- */
+.rescue-banner{margin-bottom:var(--s-3);padding:var(--s-4);border-radius:var(--r-lg);background:var(--surface-1);box-shadow:var(--e-1),inset 0 0 0 1px var(--accent-line);display:grid;gap:var(--s-3)}
+.rescue-banner p{margin:0}
+.rb-title{font-size:var(--fs-md);line-height:2.4}
+.rb-chips{display:inline-flex;gap:var(--s-2);vertical-align:middle;margin:0 2px}
+.rb-pre{color:var(--text-2);font-size:var(--fs-sm)}
+.rb-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--s-2)}
+.rescue-line{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);margin-bottom:var(--s-3);background:var(--accent-tint);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:var(--fs-sm)}
+.rescue-line .ico{vertical-align:-3px;margin-right:4px}
+.rs-warn{margin:var(--s-3) 0 0;padding:var(--s-3);border-radius:var(--r-md);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line);color:var(--text);font-size:var(--fs-sm)}
+.rs-warn[hidden]{display:none}
+@media (max-width:480px){.rb-actions .btn{flex:1}}

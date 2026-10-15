@@ -8,7 +8,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live, rescueState } from './study-data.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
@@ -45,12 +45,18 @@ export async function startStudy(spec = {}) {
   $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
 }
 const launch = startStudy;
+const RESCUE_DISMISS = 'study-sprint-rescue-dismissed';       // this device only: the study day the banner was dismissed
+const dismissedDay = () => { try { return Number(localStorage.getItem(RESCUE_DISMISS)) || null; } catch { return null; } };
 const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row offers; the rest are one tap away in Decks
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
   const streak = await loadStreak(data.history, data);
   if (!el.isConnected) return;
+  // "Back from a break": a finished plan is cleared here (loadAll never writes), then the banner or the plan line is worked out.
+  let rescue = rescueState(data, Date.now(), dismissedDay());
+  if (rescue.finished) { data.settings.rescue = null; db.setSetting('rescue', null); rescue = rescueState(data, Date.now(), dismissedDay()); }
+  let rescueDays = rescue.offer?.n;
   const cardMs = typicalCardMs(data.history);
   const allIds = data.decks.map(d => d.id);
   let chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
@@ -94,6 +100,7 @@ export async function renderToday(el) {
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <a class="btn primary wide big" href="#/play">${icon('bolt')} Play a round</a></div>`}
       </section>
+      ${rescueHTML()}
       <div id="installSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
       ${exams.length ? `
@@ -119,6 +126,33 @@ export async function renderToday(el) {
     wire(c);
     fx.goalRing(el, answered, goal);
     drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
+  };
+
+  // "Back from a break": a banner offering to spread the overdue cards over a few days, or the line for the running plan.
+  const rescueHTML = () => {
+    const o = rescue.offer, r = data.rescue;
+    if (r && rescue.active) {
+      return `<div class="rescue-line" role="group" aria-label="Catch-up plan">
+        <span>${icon('clock')} <b>Catch-up plan:</b> day ${r.k} of ${r.days} · ${r.remaining} left</span>
+        <button class="btn ghost small" type="button" id="rescueManage">Details</button></div>`;
+    }
+    if (!o) return '';
+    const choices = [2, 3];
+    const per = Math.ceil(o.backlog / rescueDays);
+    return `<section class="rescue-banner" aria-labelledby="rbTitle">
+      <p class="rb-title" id="rbTitle"><b>${plural(o.backlog, 'overdue card')}</b> piled up. Spread them over
+        <span class="chips rb-chips" role="group" aria-label="Number of days">${choices.map(n => `<button type="button" class="tchip" data-rdays="${n}" aria-pressed="${n === rescueDays}">${n} days</button>`).join('')}</span>?</p>
+      <p class="rb-pre mono" id="rbPre">About ${per} overdue + ${o.typical} of your usual cards a day.</p>
+      <div class="rb-actions">
+        <button class="btn ghost small" type="button" id="rescueNo">Not today</button>
+        <button class="btn primary small" type="button" id="rescueGo">Spread them out</button>
+      </div></section>`;
+  };
+  const openRescue = async opts => {
+    try {
+      const { openRescueSheet } = await import('./rescue-sheet.js');
+      openRescueSheet({ data, state: rescue, onChange: () => renderToday(el), returnFocus: opts.focus, ...opts });
+    } catch { toast("Couldn't open the catch-up plan. Check your connection and try again."); }
   };
 
   // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.
@@ -213,6 +247,18 @@ export async function renderToday(el) {
 
   const wire = c => {
     wireEmptyStart(el);
+    $('rescueManage')?.addEventListener('click', () => openRescue({ focus: 'rescueManage' }));
+    $('rescueGo')?.addEventListener('click', () => openRescue({ offer: { ...rescue.offer, n: rescueDays }, focus: 'rescueGo' }));
+    $('rescueNo')?.addEventListener('click', () => {
+      try { localStorage.setItem(RESCUE_DISMISS, String(dayStart())); } catch { /* the banner just comes back on a reload */ }
+      rescue = { ...rescue, offer: null };
+      draw();
+    });
+    el.querySelectorAll('[data-rdays]').forEach(b => b.addEventListener('click', () => {
+      rescueDays = +b.dataset.rdays;
+      el.querySelectorAll('[data-rdays]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      $('rbPre').textContent = `About ${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} of your usual cards a day.`;
+    }));
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
     // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).
