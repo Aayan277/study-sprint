@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countFor, deckCounts, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 
@@ -221,4 +221,30 @@ test('countFor keeps giving the same due/fresh/total as deckCounts, plus the car
   const a = countFor(d, ['P']), b = deckCounts(d, ['P']);
   assert.deepEqual([a.due, a.fresh, a.total, a.heldByLimit], [b.due, b.fresh, b.total, b.heldByLimit]);
   assert.equal(a.cards.length, 9);
+});
+
+// ---------- Batch 1 review ----------
+test('deckCounts: heldByRescue is 0 without a plan; with one it is what the plan holds back, apart from the limit', () => {
+  const none = deckCounts(world(), ['P']);
+  assert.equal(none.heldByRescue, 0);
+  const d = world();
+  const rescue = { cutoff: now, allow: 2, k: 1, days: 5, remaining: 9, pauseNew: false, exempt: new Set() };
+  const got = deckCounts({ ...d, rescue }, ['P']);
+  assert.equal(got.due, 2);
+  assert.equal(got.heldByRescue, 7);
+  assert.equal(got.heldByLimit, 0);
+  assert.equal(got.heldBySiblings, 0);
+  const lim = deckCounts({ ...world({ reviewPerDay: 6 }), rescue }, ['P']);
+  assert.deepEqual([lim.due, lim.heldByRescue, lim.heldByLimit], [2, 4, 3]);
+});
+
+test('deckCounts: the no-limit queue is worked out once however often the held numbers are read', () => {
+  const c = deckCounts(world({ reviewPerDay: 6 }), ['P']);
+  assert.deepEqual([c.heldByLimit, c.heldBySiblings, c.heldByLimit], [3, 0, 3]);
+});
+
+test('hasReviewLimit looks at review limits only (newPerDay is always set)', () => {
+  assert.equal(hasReviewLimit({ settings: { reviewLimit: Infinity, newPerDay: 20 }, decks: [{ newPerDay: 5 }] }), false);
+  assert.equal(hasReviewLimit({ settings: { reviewLimit: 100 }, decks: [] }), true);
+  assert.equal(hasReviewLimit({ settings: {}, decks: [{ reviewPerDay: 10 }] }), true);
 });

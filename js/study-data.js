@@ -45,9 +45,12 @@ export async function loadAll({ history = false } = {}) {
   // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
   const exempt = new Set(decks.filter(d => examInfo(effectiveDeck(decks, d.id), now)).map(d => d.id));
   const rescue = rescueToday(settings.rescue, visible, statesById, exempt, now);
-  return { settings, decks, answered, rescue, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
+  return { settings, decks, allCards: cards, answered, rescue, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
+
+// Is any review limit set (overall or on a deck)? Without one, subdecks' due counts can't add up to more than their parent's.
+export const hasReviewLimit = data => Number.isFinite(data.settings.reviewLimit) || data.decks.some(d => Number.isFinite(d.reviewPerDay));
 
 // A set of decks and everything inside them.
 export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
@@ -57,7 +60,8 @@ export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [..
 //   fresh   new cards it will introduce        total  due + fresh
 //   scheduled      the raw count: reviews and learning cards due today, before limits and the sibling rule
 //   heldBySiblings scheduled cards that wait until tomorrow because a sibling of the same note is shown
-//   heldByLimit    cards that wait until tomorrow because of a daily review limit (or the catch-up plan)
+//   heldByLimit    cards that wait until tomorrow because of a daily review limit
+//   heldByRescue   cards the catch-up plan holds back (0 when data.rescue is empty)
 // The cards were sorted into due / waiting / new once, in loadAll(), so counting a deck only looks at the short
 // lists (not every card), however many decks are counted. The two "held" numbers are worked out only when read.
 export function deckCounts(data, deckIds) {
@@ -74,13 +78,27 @@ export function deckCounts(data, deckIds) {
   const due = queue.length - fresh + waiting.length;
   const scheduled = lists.reviews.length + lists.waiting.length;
   // What Review would show with no review limit (and no catch-up plan): the difference to `due` is the limit's doing.
+  let free = null, plain = null;
   const noLimit = () => {
-    const q = queueFrom(lists, 0, { total: Infinity, byDeck: new Map() }, data.answered, null);
-    return q.queue.length + q.waiting.length;
+    if (free === null) {
+      const q = queueFrom(lists, 0, { total: Infinity, byDeck: new Map() }, data.answered, null);
+      free = q.queue.length + q.waiting.length;
+    }
+    return free;
+  };
+  // What Review would show with the limits but without the catch-up plan: the difference to `due` is the plan's doing.
+  const noRescue = () => {
+    if (plain === null) {
+      if (!data.rescue) return (plain = due);
+      const q = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, null);
+      plain = q.queue.filter(x => x.kind !== 'new').length + q.waiting.length;
+    }
+    return plain;
   };
   return {
     due, fresh, total: due + fresh, scheduled,
-    get heldByLimit() { return noLimit() - due; },
+    get heldByLimit() { return noLimit() - noRescue(); },
+    get heldByRescue() { return noRescue() - due; },       // cards the catch-up plan (data.rescue) holds back for later days
     get heldBySiblings() { return scheduled - noLimit(); }
   };
 }

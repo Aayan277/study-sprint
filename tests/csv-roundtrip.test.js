@@ -63,3 +63,55 @@ test('a comma file whose cells contain ": " still reads as columns', () => {
   const r = parseText('Front,Back\r\nMitosis,"Note: two cells"\r\nMeiosis,"Note: four cells"\r\n');
   assert.deepEqual(pairs(buildCards(r)), [['Mitosis', 'Note: two cells'], ['Meiosis', 'Note: four cells']]);
 });
+
+// ---- batch 1 review fixes ----
+import { withClozeLines } from '../js/cloze.js';
+
+test('a CSV with a cloze card and a multi-line cell: cloze per parsed row, tags kept, nothing re-split', () => {
+  const multi = 'Line one\n\nLine three, with a comma';
+  const cards = [
+    { front: 'Topic', back: multi, tags: ['week 1', 'x'] },
+    { front: '{{c1::DNA}} carries {{c2::genes}}', back: 'Extra, with comma', tags: ['bio', 'cell biology'] },
+    { front: 'plain', back: 'card', tags: [] }
+  ];
+  const { result, notes } = withClozeLines(toCSV(cards), parseText);
+  assert.equal(notes, 1);
+  const list = buildCards(result);
+  assert.equal(list.length, 4);
+  assert.deepEqual(pairs(list), [['Topic', multi], ['[…] carries genes', 'DNA'], ['DNA carries […]', 'genes'], ['plain', 'card']]);
+  assert.deepEqual(list.map(c => c.tags), [['week 1', 'x'], ['bio', 'cell biology'], ['bio', 'cell biology'], []]);
+  assert.equal(list[1].noteExtra, 'Extra, with comma');
+  assert.equal(list[1].cloze.text, '{{c1::DNA}} carries {{c2::genes}}');
+  assert.ok(!list.some(c => c.front.includes(',,')), 'no CSV tail in the front');
+});
+test('a value starting with an apostrophe and a quote-led formula both round trip; a spaced tag stays one tag', () => {
+  const cards = [
+    { front: "'=x", back: "'quoted", tags: ['two words', 'one'] },
+    { front: '=SUM(A1)', back: "''-1", tags: [] },
+    { front: '\tTabbed', back: 'CR', tags: [] }
+  ];
+  const csv = toCSV(cards);
+  assert.ok(csv.includes("''=x,'quoted"));
+  const list = roundTrip(cards);
+  assert.deepEqual(pairs(list), pairs(cards));
+  assert.deepEqual(list[0].tags, ['two words', 'one']);
+});
+test('export guards a leading tab or carriage return and writes tags comma-separated', () => {
+  const csv = toCSV([{ front: '\tx', back: '\ry', tags: ['a b', 'c'] }]);
+  assert.ok(csv.includes("'\tx"));
+  assert.ok(csv.includes('"\'\ry"'));
+  assert.ok(csv.includes('"a b, c"'));
+});
+test('pasted text keeps its leading apostrophe (only the export header turns the guard off)', () => {
+  assert.deepEqual(pairs(buildCards(parseText("'+' operator - adds\n'-' operator - subtracts"))), [["'+' operator", 'adds'], ["'-' operator", 'subtracts']]);
+  assert.deepEqual(pairs(buildCards(parseText("Front,Back\r\n'=x,'+y\r\n"))), [["'=x", "'+y"]]);
+});
+test('a Word bullet list with tabs loses its bullets', () => {
+  assert.deepEqual(pairs(buildCards(parseText('•\tMitosis - cell division\n•\tMeiosis - makes gametes'))), [['Mitosis', 'cell division'], ['Meiosis', 'makes gametes']]);
+  assert.deepEqual(pairs(buildCards(parseText('-\tMitosis - cell division\n-\tMeiosis - makes gametes\n-\tOsmosis - water moves'))), [['Mitosis', 'cell division'], ['Meiosis', 'makes gametes'], ['Osmosis', 'water moves']]);
+});
+test('only a column headed exactly Tags is the tags column', () => {
+  const r = parseText('Term,Meaning,Tag\r\nhola,hello,spanish\r\nadios,bye,spanish\r\n');
+  assert.equal(r.columns.length, 3);
+  assert.equal(r.tags, undefined);
+});

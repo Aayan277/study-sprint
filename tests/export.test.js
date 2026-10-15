@@ -14,7 +14,7 @@ const cards = [
 test('CSV: quoted where needed, Excel-friendly, and imports back in', () => {
   const csv = toCSV(cards);
   assert.ok(csv.startsWith('﻿Front,Back,Tags\r\n'));
-  assert.ok(csv.includes('Classical conditioning,"Learning by association, e.g. ""Pavlov""",learning exam 1'));
+  assert.ok(csv.includes('Classical conditioning,"Learning by association, e.g. ""Pavlov""","learning, exam 1"'));
   assert.ok(csv.includes('Café,"Line one\nLine two",'));
   const back = parseText(csv.replace(/^﻿/, ''));          // round trip through the importer
   assert.equal(back.rows.length, 2);

@@ -246,6 +246,26 @@ export function withClozeLines(text, parse) {
   const src = String(text ?? '');
   const plain = parse(src);
   if (!hasClozeLines(src) || plain.format.id === 'table') return { result: plain, notes: 0 };
+  // A spreadsheet-style paste (commas or tabs, maybe with quoted multi-line cells): decide per parsed row, never re-split the text.
+  if (plain.format.id === 'separator' && (plain.format.sep === ',' || plain.format.sep === '\t')) {
+    const width = plain.columns.length;
+    const rows = [], clozes = [], tags = [], extras = [];
+    let notes = 0;
+    plain.rows.forEach((r, i) => {
+      const nums = hasClozeLines(r[0]) ? clozeNumbers(r[0]) : [];
+      if (!nums.length) { rows.push(r); clozes.push(null); tags.push(plain.tags?.[i] || []); extras.push(null); return; }
+      notes++;
+      for (const n of nums) {
+        const { front, back } = clozeCard(r[0], n);
+        rows.push(Array.from({ length: width }, (_, k) => [front, back][k] ?? ''));
+        clozes.push({ noteKey: 'paste' + i, n, text: r[0] });
+        tags.push(plain.tags?.[i] || []); extras.push(String(r[1] ?? '').trim() || null);
+      }
+    });
+    if (!notes) return { result: plain, notes: 0 };
+    return { notes, result: { ...plain, rows, clozes, noteExtras: extras, ...(plain.tags ? { tags } : {}),
+      format: { ...plain.format, label: `${plain.format.label}, plus ${notes} cloze note${notes === 1 ? '' : 's'}` } } };
+  }
   const lines = src.replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
   const isCloze = lines.map(hasClozeLines);
   const made = parseCloze(lines.filter((_, i) => isCloze[i]).join('\n'));

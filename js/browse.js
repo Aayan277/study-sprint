@@ -570,12 +570,12 @@ export function openAddCard({ decks, deckId, refresh }) {
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>
         <button class="btn ghost" type="button" id="acDone">Close</button>
-        <button class="btn primary" type="submit" disabled>Add card</button>
+        <button class="btn primary" type="submit" aria-disabled="true" aria-describedby="acWhy">Add card</button>
       </div>
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   $('acDone').addEventListener('click', closeSheet);
-  const updateAdd = watchAdd('ac');           // Add stays disabled, with the reason beside it, until the card can be saved
+  const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
     e.preventDefault();

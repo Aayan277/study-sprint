@@ -38,6 +38,7 @@ await p.click('#endBtn'); await p.waitForSelector('.finish-next');
 const keep = await p.textContent('#keepBtn');
 await p.waitForFunction(() => document.querySelector('#sideBadge span')?.textContent === '3'); const badge = (await p.textContent('#sideBadge span[aria-hidden]')).trim();
 ok(/^Keep going · 3 cards$/.test(keep.trim()), 'Keep going · N cards after ending early: "' + keep.trim() + '"');
+ok((await p.getAttribute('#keepBtn', 'aria-label')) === 'Keep going: 3 cards', 'Keep going has aria-label "Keep going: N cards"');
 ok(keep.match(/(\d+) cards/)[1] === badge, 'Keep going N equals the sidebar badge (' + badge + ')');
 ok(await p.$eval('#keepBtn', b => b.classList.contains('primary')) && await p.$eval('#againBtn', b => b.classList.contains('ghost')), 'Keep going is the primary button, Back to Today is ghost');
 ok((await p.textContent('h1')).trim() === 'Session ended', 'ended early: the title says "Session ended"');

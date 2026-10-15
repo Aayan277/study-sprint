@@ -48,6 +48,7 @@ await p.click('#brAdd'); await p.waitForSelector('#acForm');
 await kind(p, 'Basic'); await p.waitForSelector('#acFront');
 await kind(p, 'Basic');
 ok((await p.textContent('#acDone')).trim() === 'Close', 'the add panel button says Close, not Done');
+ok(await p.getAttribute('button[type=submit][form=acForm]', 'aria-describedby') === 'acWhy' && await p.getAttribute('button[type=submit][form=acForm]', 'aria-disabled') === 'true', 'Add is aria-disabled and described by the reason');
 ok(await p.isDisabled('button[type=submit][form=acForm]') && (await p.textContent('#acWhy')).toLowerCase().includes('front'), 'Add is disabled and the reason says what is missing: ' + await p.textContent('#acWhy'));
 await p.fill('#acFront', 'Only a front');
 ok(await p.isDisabled('button[type=submit][form=acForm]') && (await p.textContent('#acWhy')).toLowerCase().includes('back'), 'with a front only, the reason asks for the back: ' + await p.textContent('#acWhy'));

@@ -157,6 +157,9 @@ ok(await p.getAttribute('#deckMore', 'aria-expanded') === 'true' && await p.isVi
 ok(await p.evaluate(() => document.activeElement.id) === 'editDeck', 'focus moves to the first item');
 await p.keyboard.press('ArrowDown'); ok(await p.evaluate(() => document.activeElement.id) === 'addSub', 'arrow keys move between items');
 await p.screenshot({ path: SP + '/c-deck-menu-1440-light.png' });
+ok(await p.evaluate(() => [...document.querySelectorAll('#deckMenu [role=menuitem]')].every(b => b.getAttribute('tabindex') === '-1')), 'menu items use roving focus (tabindex -1)');
+await p.keyboard.press('End'); ok(await p.evaluate(() => document.activeElement.id) === 'exportDeck', 'End goes to the last item');
+await p.keyboard.press('Home'); ok(await p.evaluate(() => document.activeElement.id) === 'editDeck', 'Home goes to the first item');
 await p.keyboard.press('Escape');
 ok(!(await p.isVisible('#deckMenu')) && await p.evaluate(() => document.activeElement.id) === 'deckMore', 'Esc closes it and puts focus back on ⋯');
 await p.click('#deckMore'); await p.mouse.click(700, 600);
@@ -164,6 +167,11 @@ ok(!(await p.isVisible('#deckMenu')), 'a click outside closes it');
 await p.click('#deckMore'); await p.click('#editDeck'); await p.waitForSelector('#deckName');
 ok(!(await p.isVisible('#deckMenu')) && (await p.inputValue('#deckName')) === 'Chemistry', 'choosing Edit deck closes the menu and opens the editor');
 await p.keyboard.press('Escape');
+await p.waitForFunction(() => !document.getElementById('sheet').open);
+ok(await p.evaluate(() => document.activeElement.id) === 'deckMore', 'after Edit and Esc the focus is back on the ⋯ button, not the page body');
+await p.click('#deckMore'); await p.click('#addSub'); await p.waitForSelector('#deckName'); await p.keyboard.press('Escape');
+await p.waitForFunction(() => !document.getElementById('sheet').open);
+ok(await p.evaluate(() => document.activeElement.id) === 'deckMore', 'after Add subdeck and Esc the focus is back on ⋯');
 // exam far away: Review is the main button, Exam prep a quiet link
 await setDeck(p, 'Chem', { examDate: iso(40) });
 await go(p, '#/deck/Chem', '#prepBtn');
@@ -173,6 +181,7 @@ await ctx.close();
 // ======================= 375: phone =======================
 ({ ctx, p } = await open(375, 740));
 await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck'); await seed(p);
+ok(!(await p.textContent('main')).includes('LIBRARY') && (await p.locator('.screen-head .eyebrow').count()) === 0, 'the Decks screen has no LIBRARY eyebrow');
 await setDeck(p, 'Chem', { examDate: iso(9) });
 await go(p, '#/deck/Chem', '#prepBtn');
 const hb = await p.evaluate(() => [...document.querySelectorAll('.head-actions > *')].map(e => { const r = e.getBoundingClientRect(); return { id: e.id || e.className, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), r: Math.round(r.right) }; }));

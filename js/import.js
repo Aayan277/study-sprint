@@ -38,12 +38,22 @@ export function normalize(text) {
 
 // Remove "1." "1)" "-" "*" "•" from the start of a line. Needs a space after it,
 // so "**bold**" and "-5 degrees" are left alone.
-// A bullet followed by a tab or a "|" is a front that is just that mark ("-<tab>dash"), so it stays.
-export function stripMarker(line) {
-  return line.replace(/^\s*(?:\d{1,3}[.)]\s+|[-*•–] +(?![|\t]))/, '').trim();
+// A bullet followed by a tab or a "|" is a front that is just that mark ("-<tab>dash"), so it stays,
+// unless `bullets` says the whole paste is a bullet list ("•<tab>Term - def", from Word).
+export function stripMarker(line, bullets = false) {
+  return line.replace(bullets ? /^\s*(?:\d{1,3}[.)]\s+|[-*•–][ \t]+)/ : /^\s*(?:\d{1,3}[.)]\s+|[-*•–] +(?![|\t]))/, '').trim();
 }
 
-const cleanLines = text => text.split('\n').map(stripMarker).filter(Boolean);
+// At least 70% of the lines start with the same bullet and a tab: that bullet is list formatting, not a front.
+function isBulletList(lines) {
+  const used = lines.filter(l => l.trim());
+  if (!used.length) return false;
+  return ['-', '*', '•', '–'].some(m => used.filter(l => l.trim().startsWith(m + '\t')).length / used.length >= MIN_SCORE);
+}
+const cleanLines = text => {
+  const raw = text.split('\n'), bullets = isBulletList(raw);
+  return raw.map(l => stripMarker(l, bullets)).filter(Boolean);
+};
 
 // A spreadsheet export keeps line breaks inside "quoted cells". Cut the text into lines the way a spreadsheet would,
 // so a cell with blank lines, bullets and spaces comes through whole (cleanLines would drop and strip them).
@@ -112,7 +122,9 @@ export function isHeaderRow(row) {
 
 // Turn rows into a result, skipping a header row if there is one.
 // Export writes a ' in front of cells that start with = + - @ (so Excel doesn't run them as formulas): take it off again.
-const FORMULA_GUARD = /^'(?=[=+\-@])/;
+const FORMULA_GUARD = /^'(?='*[=+\-@\t\r])/;
+// Only the export's own header ("Front,Back,Tags...") means the guard marks are ours to remove.
+const isExportHeader = names => !!names && /^front$/i.test(String(names[0] ?? '').trim()) && /^back$/i.test(String(names[1] ?? '').trim()) && /^tags$/i.test(String(names[2] ?? '').trim());
 
 // Tags in one cell: "a b c" (what Export writes), or with commas ("cell biology, week 1": then spaces belong to a tag).
 const splitTags = cell => {
@@ -122,11 +134,11 @@ const splitTags = cell => {
 
 function finish(rows, format, names = null) {
   let headerSkipped = false;
-  rows = rows.map(r => r.map(c => (typeof c === 'string' ? c.replace(FORMULA_GUARD, '') : c)));
   if (!names && rows.length && isHeaderRow(rows[0])) { names = rows[0]; rows = rows.slice(1); headerSkipped = true; }
+  if (isExportHeader(names)) rows = rows.map(r => r.map(c => (typeof c === 'string' ? c.replace(FORMULA_GUARD, '') : c)));
   // A "Tags" column (what Export writes) holds the cards' tags; it is not a side of the card.
   let tags = null;
-  const at = names ? names.findIndex(n => /^tags?$/i.test(String(n ?? '').trim())) : -1;
+  const at = names ? names.findIndex(n => /^tags$/i.test(String(n ?? '').trim())) : -1;
   if (at >= 2) {
     tags = rows.map(r => splitTags(r[at]));
     rows = rows.map(r => r.filter((_, i) => i !== at));

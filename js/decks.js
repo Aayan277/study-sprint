@@ -2,7 +2,7 @@
 
 import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold } from './ui.js';
-import { loadAll, countFor } from './study-data.js';
+import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
@@ -50,10 +50,10 @@ function summarize(cards, statesById) {
 }
 
 // Load every deck with its counts, in tree order (each deck followed by its subdecks). A deck's counts
-// include its subdecks. Reads all cards once, which is fast even for a few thousand.
-async function loadDecks() {
-  const [decks, cards, states] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
-  const statesById = new Map(states.map(s => [s.cardId, s]));
+// include its subdecks. Uses the cards loadAll() read, so nothing is read twice.
+// Takes what loadAll() already read (its decks, every card and every state), so a page reads the database once.
+function loadDecks(data) {
+  const decks = [...data.decks], cards = data.allCards, statesById = data.statesById;
   const byDeck = new Map(decks.map(d => [d.id, []]));
   const chains = chainMap(decks);
   for (const c of cards) for (const id of chains.get(c.deckId) || []) byDeck.get(id).push(c);
@@ -115,7 +115,7 @@ const savedSort = () => { try { const v = localStorage.getItem(SORT_KEY); return
 
 // showStarters: open the Starter decks section (the Import screen's "Ready-made decks" link does this).
 export async function renderLibrary(el, showStarters = false) {
-  const [list, today] = await Promise.all([loadDecks(), loadAll()]);
+  const today = await loadAll(), list = loadDecks(today);
   const compact = today.settings.compactDecks !== false;
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
@@ -188,7 +188,7 @@ export async function renderLibrary(el, showStarters = false) {
 
   el.innerHTML = `
     <div class="screen-head">
-      <div><span class="eyebrow mono">LIBRARY</span><h1>Decks</h1></div>
+      <div><h1>Decks</h1></div>
       <div class="head-actions">
         <a class="btn ghost small" href="#/import">Import</a>
         <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
@@ -271,7 +271,7 @@ export async function renderLibrary(el, showStarters = false) {
 
 // ---------- one deck and its cards ----------
 export async function renderDeck(el, deckId) {
-  const [list, today] = await Promise.all([loadDecks(), loadAll()]);
+  const today = await loadAll(), list = loadDecks(today);
   const item = list.find(x => x.deck.id === deckId);
   if (!item) { location.hash = '#/decks'; return; }
   const { deck, cards, stats: s } = item;
@@ -299,9 +299,9 @@ export async function renderDeck(el, deckId) {
         <div class="more-wrap">
           <button class="icon-btn more-btn" type="button" id="deckMore" aria-haspopup="menu" aria-expanded="false" aria-controls="deckMenu" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>
           <div class="more-menu" id="deckMenu" role="menu" aria-label="${esc(deck.name)}" hidden>
-            <button type="button" role="menuitem" id="editDeck">${icon('edit')} Edit deck</button>
-            <button type="button" role="menuitem" id="addSub">${icon('plus')} Add subdeck</button>
-            ${cards.length ? `<button type="button" role="menuitem" id="exportDeck">${icon('download')} Export</button>` : ''}
+            <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
+            <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
+            ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
           </div>
         </div>
       </div>
@@ -340,9 +340,8 @@ function sharedLimitNote(today, deck, kids, depth, counts) {
   const direct = kids.filter(k => k.depth === depth + 1).map(k => countFor(today, [k.deck.id]));
   if (!direct.length) return '';
   const sumDue = direct.reduce((n, c) => n + c.due, 0), sumNew = direct.reduce((n, c) => n + c.fresh, 0);
-  const anyLimit = Number.isFinite(today.settings.reviewLimit) || Number.isFinite(today.settings.newPerDay)
-    || today.decks.some(d => Number.isFinite(d.reviewPerDay) || Number.isFinite(d.newPerDay));
-  if (!anyLimit && (sumDue > counts.due || sumNew > counts.fresh) && /^(localhost|127\.)/.test(location.hostname)) console.warn(`Deck counts: the subdecks of "${deck.name}" add up to more than the deck`, { sumDue, sumNew, counts });
+  // Only a review limit can make the subdecks' due add up to more than the deck (newPerDay is always set, so it says nothing).
+  if (!hasReviewLimit(today) && (sumDue > counts.due) && /^(localhost|127\.)/.test(location.hostname)) console.warn(`Deck counts: the subdecks of "${deck.name}" add up to more than the deck`, { sumDue, sumNew, counts });
   const [n, word] = sumDue > counts.due ? [counts.due, 'due'] : sumNew > counts.fresh ? [counts.fresh, 'new'] : [0, ''];
   return word ? `Daily limits are shared, so the subdecks can add up to more than ${deck.name}'s ${n} ${word}.` : '';
 }
@@ -356,20 +355,26 @@ function wireDeckMenu(el) {
   const close = (focus = false) => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); if (focus) btn.focus(); };
   const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); items()[0]?.focus(); };
   btn.addEventListener('click', () => (menu.hidden ? open() : close()));
-  menu.addEventListener('click', () => close());
+  // Capture: close (and put focus on the ⋯ button) before the item's own handler runs, so a sheet it opens remembers the button.
+  menu.addEventListener('click', () => close(true), true);
   menu.addEventListener('keydown', e => {
     const list = items(), i = list.indexOf(document.activeElement);
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); list[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); list[list.length - 1].focus(); }
     else if (e.key === 'Tab') close();
   });
   const outside = e => {
-    if (!el.isConnected) { document.removeEventListener('pointerdown', outside, true); return; }
+    if (!menu.isConnected) { stopOutside?.(); return; }
     if (!menu.hidden && !e.target.closest('.more-wrap')) close();
   };
+  stopOutside?.();                                   // a re-render replaced the last menu: drop its listener
   document.addEventListener('pointerdown', outside, true);
+  stopOutside = () => { document.removeEventListener('pointerdown', outside, true); stopOutside = null; };
 }
+let stopOutside = null;
 
 // On a wide screen (1200px and up) a deck's page has three columns: this tree of decks on the left, the deck in the
 // middle, and the card editor docked on the right (the card panel, see openSheet's `side`). Below 1200px the tree is
@@ -378,7 +383,8 @@ function wireDeckMenu(el) {
 function drawDeckTree(list, currentId, today) {
   const decks = list.map(x => x.deck);
   const size = new Map(list.map(x => [x.deck.id, x.stats.total]));
-  const dueOf = id => countFor(today, [id]).due;                    // what Review shows today; the card count is in the tooltip
+  const dues = new Map();                                            // a search keystroke redraws every row: count each deck once
+  const dueOf = id => { let n = dues.get(id); if (n === undefined) dues.set(id, n = countFor(today, [id]).due); return n; };   // what Review shows today; the card count is in the tooltip
   const here = new Set(ancestors(decks, currentId).map(d => d.id));          // the deck and the decks it is inside
   const hasKids = new Set(decks.map(d => d.parentId).filter(Boolean));
   const isOpen = id => foldOpen('tree-' + id, here.has(id));
@@ -411,15 +417,15 @@ function drawDeckTree(list, currentId, today) {
 async function refreshCounts(el, deckId) {
   const box = el.querySelector('.deck-summary');
   if (!box) return;
-  const [list, today] = await Promise.all([loadDecks(), loadAll()]);
+  const today = await loadAll(), list = loadDecks(today);
   const item = list.find(x => x.deck.id === deckId);
   if (item && box.isConnected) { box.innerHTML = summaryHTML(item.stats, countFor(today, [deckId])); box.hidden = !item.stats.total; }
 }
 
 // c = countFor() for the deck: "13 due today · 5 new today · 23 cards", and what waits until tomorrow, if anything.
 function summaryHTML(s, c) {
-  const held = c.heldByLimit + c.heldBySiblings;
-  const why = [c.heldBySiblings ? 'one card per note a day' : '', c.heldByLimit ? 'daily limit' : ''].filter(Boolean).join(', ');
+  const held = c.heldByLimit + c.heldBySiblings + c.heldByRescue;
+  const why = [c.heldBySiblings ? 'one card per note a day' : '', c.heldByLimit ? 'daily limit' : '', c.heldByRescue ? 'catch-up plan' : ''].filter(Boolean).join(', ');
   return `
       <div class="deck-counts" style="margin-top:0">
         <span class="due${c.due ? '' : ' zero'}"><b>${c.due}</b> due today</span>
