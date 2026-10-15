@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion } from './card-editor.js';
+import { watchAdd, readCardText, setCardText, readCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, clearBasic } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText, mathHTML } from './format.js';
@@ -299,7 +299,9 @@ function cardOps(card, ctx) {
     const wholeNote = card.noteId && ('deckId' in changes || 'tags' in changes);
     const sibs = wholeNote ? (await db.getAll('cards')).filter(c => c.noteId === card.noteId && c.id !== card.id) : [];
     const shared = { ...('deckId' in changes ? { deckId: changes.deckId } : {}), ...('tags' in changes ? { tags: changes.tags } : {}) };
-    await db.saveCards([{ ...card, ...changes }, ...sibs.map(c => ({ ...c, ...shared }))]);
+    const merged = { ...card, ...changes };
+    if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
+    await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
     return again(msg, act);
   };
   return { again, save };
@@ -319,8 +321,7 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
   : 0);
 const cardFieldsHTML = (card, maxN = 0) => `
       ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
-      ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
-      ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}`}
+      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
@@ -331,11 +332,13 @@ function wireCardForm(card, ctx, msg) {
     e.preventDefault();
     if (isClozeCard(card)) return saveClozeNote(card, ops, msg);
     if (hasMasks(card)) return saveOcclusionNote(card, ops, msg);
-    const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
+    const front = readCardText('ceFront').trim(), back = readBack('ce').trim();
     const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
     // Each side needs something on it: text, a picture, or both.
     if (!(front || frontImage) || !(back || backImage)) { showErr('ceErr', 'A card needs a front and a back (text or a picture).'); return; }
-    ops.save({ front, back, frontImage, backImage, tags: parseTags($('ceTags').value) }, msg, 'edit');
+    const why = stepsProblem('ce');
+    if (why) { showErr('ceErr', why); return; }
+    ops.save({ front, back, frontImage, backImage, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -559,8 +562,7 @@ export function openAddCard({ decks, deckId, refresh }) {
       ${noteKinds('ac', kind)}
       <div class="kind-body">
         <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
-          ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
-          ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
+          ${basicFields('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' })}
         </div>
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
@@ -598,10 +600,12 @@ export function openAddCard({ decks, deckId, refresh }) {
       count = plan.add.length;
       save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
     } else {
-      const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
+      const front = readCardText('acFront').trim(), back = readBack('ac').trim(), hook = readCardText('acHook').trim();
       const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
       if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
-      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, tags, created: Date.now() }]);
+      const why = stepsProblem('ac');
+      if (why) { showErr('acErr', why); return; }
+      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, ...(hook ? { noteExtra: hook } : {}), tags, created: Date.now() }]);
     }
     adding = true;
     try {
@@ -615,7 +619,7 @@ export function openAddCard({ decks, deckId, refresh }) {
     $('acErr').hidden = true;
     if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }
     else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
-    else { setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acFront').focus(); }
+    else { clearBasic('ac'); $('acFront').focus(); }
     updateAdd();
     toast(kindNow === 'basic' ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();

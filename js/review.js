@@ -14,7 +14,10 @@ import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
-import { speak, stopSpeaking, canSpeak } from './speech.js';
+import { speak, stopSpeaking, canSpeak, stepsSpeech } from './speech.js';
+import { parseSteps } from './steps.js';
+import { maskMath } from './math.js';
+import { mountScratch } from './scratchpad.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
@@ -139,10 +142,13 @@ const schedFor = (card, now = Date.now()) => {
 };
 
 const deckOf = card => R.effective.get(card.deckId);
+// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). → { intro, steps, final } or null.
+const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseSteps(card.back, { mask: maskMath }));
+const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.current.card); return sp ? sp.steps.length - R.stepShown : 0; };
 // Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
 // label to type (without one you flip, saying it in your head).
 const typesAnswer = card => {
-  if (!R.typing) return false;
+  if (!R.typing || stepsOf(card)) return false;
   const label = hasMasks(card) ? occLabel(card.occlusion.masks, card.occlusion.n) : null;
   return label !== null ? !!label && canType(answerText(label)) : canType(answerText(card.back));
 };
@@ -151,14 +157,15 @@ function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
-  const text = hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  const sp = stepsOf(card);
+  const text = sp ? (R.flipped ? stepsSpeech(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
   stopSpeaking();
   R.current = takeNext(R.queue, R.waiting);
-  R.flipped = false; R.typed = null; R.suggest = null;
+  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
   renderSession(el, true);
@@ -187,6 +194,11 @@ function renderSession(el, enter = false) {
   R.el = el;
   if (!R.current) return finish(el);
   const { card } = R.current;
+  const sp = stepsOf(card);
+  R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
+  // The drawing stays when the same card is drawn again (an edit from the menu), and goes with the next card.
+  const kept = pad && padKey === R.shownAt ? pad.canvas : null;
+  destroyPad();
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = typesAnswer(card);
   const occ = hasMasks(card);
@@ -200,7 +212,7 @@ function renderSession(el, enter = false) {
   // An image-occlusion card shows its picture with every box hidden and the highlighted one to name; the back uncovers that
   // box, with its label, and a button shows the whole picture. (occlusion.js builds the HTML, escaping the text.)
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
-  const backSize = occ ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const backSize = occ || sp ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
     ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
     : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
@@ -209,13 +221,16 @@ function renderSession(el, enter = false) {
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
     : cloze
       ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
-      : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
+      : sp
+        ? `${imgHTML(card.backImage)}${stepsHTML(sp)}`
+        : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   const head = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
+      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad (D)" title="Scratchpad (D)">${PEN_ICON}</button>
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
@@ -230,11 +245,11 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          ${cloze || occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
+          ${cloze || occ ? '' : `<div class="flash-recap${backSize || sp ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${backSize}">${answerHTML}</div>
-            ${(cloze || occ) && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
+            <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${sp ? ' steps-back' : ''}${backSize}">${answerHTML}</div>
+            ${card.noteExtra ? `<p class="flash-extra"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${formatHTML(card.noteExtra)}</p>` : ''}
           </div>
         </div>
       </div>
@@ -244,19 +259,22 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
+    ${R.typing && !typeThis && !sp && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
+    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
+    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad</p>`;
   drawSessionPage(el, head, body);
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn')?.addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
+  $('scratchBtn').addEventListener('click', toggleScratch);
   $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
   wireRatebar(el);
+  mountPad(kept);
   $('flash').addEventListener('click', e => {
+    if (e.target.closest('.scratch, .scratch-tools')) return;      // drawing (or choosing a tool) is not a tap on the card
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
@@ -296,6 +314,8 @@ const showButtonHTML = typeThis =>
 // The buttons under the card: Show answer, or the four ratings.
 function wireRatebar(el) {
   $('showBtn')?.addEventListener('click', () => flip(el));
+  $('stepBtn')?.addEventListener('click', () => revealStep(el));
+  $('stepAllBtn')?.addEventListener('click', () => revealStep(el, true));
   $('ratebar').querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => answer(el, +b.dataset.rate)));
 }
 
@@ -347,14 +367,91 @@ function flip(el) {
   back.removeAttribute('aria-hidden'); back.inert = false;
   $('typeForm')?.remove();
   $('longNote')?.remove();
-  $('ratebar').innerHTML = rateButtonsHTML();
+  $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
   // The button that was pressed is gone, so move focus to the answer: screen readers read it out, and the
   // keyboard stays where it was (1–4 and Space still rate).
   back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
-  $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
+  ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
 }
+
+// ---------- step-by-step cards (B5) ----------
+// The back of a "Step 1: ... Step 2: ..." card is a list with every step hidden. After the flip the bar under the card
+// reveals one step at a time (Space, Enter, → or the button), A shows them all, and the rating buttons come once every step
+// is on screen (1–4 rate at any time). Each revealed step takes the focus and the list is a polite live region.
+function stepsHTML(sp) {
+  const shown = R.stepShown, all = shown >= sp.steps.length;
+  return `${sp.intro ? `<div class="steps-intro">${formatHTML(sp.intro)}</div>` : ''}
+    <ol class="steps" id="steps" aria-live="polite" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
+    ${sp.final ? `<div class="steps-final" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
+}
+// What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
+function backBarHTML() {
+  const sp = stepsOf(R.current.card);
+  if (!sp || R.stepShown >= sp.steps.length) return rateButtonsHTML();
+  const n = R.stepShown + 1, m = sp.steps.length;
+  return `<p class="step-try" id="stepTry">Try step ${n} yourself, then reveal.</p>
+    <div class="step-actions">
+      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal step ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
+      <button class="btn ghost wide" type="button" id="stepAllBtn" aria-keyshortcuts="A">Show all <kbd class="key-hint" aria-hidden="true">A</kbd></button>
+    </div>`;
+}
+function revealStep(el, all = false) {
+  const sp = R?.flipped && R.current && stepsOf(R.current.card);
+  if (!sp || R.stepShown >= sp.steps.length) return;
+  const from = R.stepShown;
+  R.stepShown = all ? sp.steps.length : from + 1;
+  const flash = $('flash'), items = [...flash.querySelectorAll('#steps > li')];
+  items.forEach((li, i) => { li.hidden = i >= R.stepShown; });
+  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra').forEach(x => { x.hidden = false; });
+  $('ratebar').innerHTML = backBarHTML();
+  wireRatebar(el);
+  items[from]?.focus();                         // the step just revealed (the first of them, for Show all)
+}
+
+// ---------- scratchpad (B4) ----------
+// A pen icon in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
+// on this device. The drawing is never saved: a new card starts clean, a flip keeps it, leaving Review throws it away.
+const SCRATCH_KEY = 'study-sprint-scratch';
+const PEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5l3.5 3.5L8 19.5l-4.5 1 1-4.5z"/><path d="M14.5 6l3.5 3.5"/></svg>';
+const scratchPref = () => { try { return localStorage.getItem(SCRATCH_KEY) === '1'; } catch { return false; } };
+const setScratchPref = on => { try { localStorage.setItem(SCRATCH_KEY, on ? '1' : '0'); } catch { /* fine: it just isn't remembered */ } };
+let pad = null, padKey = 0, zoomWatch = null;
+function destroyPad() {
+  pad?.destroy(); pad = null;
+  zoomWatch?.disconnect(); zoomWatch = null;
+}
+function mountPad(kept) {
+  const card = $('flash');
+  if (!card) return;
+  padKey = R.shownAt;
+  pad = mountScratch(card, {
+    onChange: on => {
+      setScratchPref(on);
+      $('scratchBtn')?.setAttribute('aria-pressed', String(on));
+      card.classList.toggle('scratching', on);
+    }
+  });
+  if (kept) {
+    const g = pad.canvas.getContext('2d');
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(kept, 0, 0); g.restore();
+  }
+  // Hidden while the zoom viewer is open (it is a dialog added to the page).
+  const mine = pad;
+  const hideForZoom = () => {
+    const v = document.querySelector('dialog.occ-view') ? 'hidden' : '';
+    mine.canvas.style.visibility = v; mine.tools.style.visibility = v;
+  };
+  zoomWatch = new MutationObserver(hideForZoom);
+  zoomWatch.observe(document.body, { childList: true });
+  if (scratchPref()) pad.on();
+}
+function toggleScratch() {
+  if (!pad) return;
+  if (pad.isOn()) pad.off(); else pad.on();
+}
+window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/review')) destroyPad(); });
 
 // "Show whole picture": uncovers every box of the picture on the back (the CSS does it, from the figure's .peek class).
 function togglePeek(button) {
@@ -443,7 +540,7 @@ async function undo(el) {
     if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
-    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null;
+    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
   } finally {
@@ -532,6 +629,7 @@ async function quick(act) {
 
 // ---------- 3. finish ----------
 async function finish(el) {
+  destroyPad();
   R.active = false;
   publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
@@ -610,6 +708,8 @@ document.addEventListener('keydown', e => {
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
+    if (k === 'd') { e.preventDefault(); toggleScratch(); return; }
+    if (k === 'a' && stepsLeft()) { e.preventDefault(); revealStep(R.el, true); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
     if (k === 'z' && face?.querySelector('.occ-zoom')) {
@@ -625,6 +725,7 @@ document.addEventListener('keydown', e => {
     if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
     return;
   }
+  if (stepsLeft() && !inInput && ((!onButton && (e.key === ' ' || e.key === 'Enter')) || e.key === 'ArrowRight')) { e.preventDefault(); revealStep(R.el); return; }
   if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
   else if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
 });

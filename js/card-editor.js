@@ -7,7 +7,8 @@
 // setCardText(id, ''). The buttons and shortcuts are wired once, below, for every box.
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
-import { hasMath, wrapMath } from './math.js';
+import { hasMath, wrapMath, maskMath } from './math.js';
+import { parseSteps, joinSteps } from './steps.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
@@ -154,6 +155,116 @@ document.addEventListener('paste', e => {
   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
 });
 
+// ---------- Basic card: Front, Back (or steps) and a memory hook ----------
+// "Answer in steps" swaps the Back box for one box per step (+ Add step, move up / down, delete) and an optional Final answer.
+// Saving writes the steps into the back as "Step 1: ...", "Step 2: ..." lines (steps.js joinSteps), so the card needs nothing new
+// in the data. Editing a card whose back has those lines opens with the switch on. The memory hook is the card's noteExtra.
+//   basicFields(p, { front, back, frontImage, backImage, hook, frontPh, backPh })   the HTML for the form whose ids start with p
+//   readBack(p)       the back to save (from the steps when the switch is on)
+//   stepsOn(p)        is the switch on?      stepsProblem(p)   why the steps can't be saved ('' when they can)
+//   clearBasic(p)     empty the form after a card was added
+const stepRowHTML = (i, text = '', n = 3) => `<li class="step-row" data-step-row>
+      <span class="step-n" aria-hidden="true">${i + 1}</span>
+      <textarea class="step-in" rows="2" data-step-in aria-label="Step ${i + 1}" placeholder="${i ? 'Next step' : 'The first step'}">${esc(text)}</textarea>
+      <span class="step-tools" role="group" aria-label="Step ${i + 1} actions">
+        <button type="button" class="step-btn" data-step="up" ${i === 0 ? 'disabled' : ''} aria-label="Move step ${i + 1} up" title="Move up">↑</button>
+        <button type="button" class="step-btn" data-step="down" ${i === n - 1 ? 'disabled' : ''} aria-label="Move step ${i + 1} down" title="Move down">↓</button>
+        <button type="button" class="step-btn" data-step="del" ${n <= 2 ? 'disabled' : ''} aria-label="Delete step ${i + 1}" title="Delete step">×</button>
+      </span></li>`;
+
+export function basicFields(p, { front = '', back = '', frontImage = null, backImage = null, hook = '', frontPh = '', backPh = '' } = {}) {
+  const parsed = parseSteps(back, { mask: maskMath });
+  const rows = parsed ? parsed.steps : ['', ''];
+  return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
+      <label class="adv-row switch-row steps-switch"><span><b>Answer in steps</b><span>Review shows the answer one step at a time.</span></span>
+        <input type="checkbox" class="switch" id="${p}StepsOn" data-steps-for="${p}" ${parsed ? 'checked' : ''}></label>
+      <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
+      <div class="steps-ed" id="${p}Steps" data-intro="${esc(parsed?.intro || '')}" ${parsed ? '' : 'hidden'}>
+        <ol class="step-list" id="${p}StepList" aria-label="Steps">${rows.map((t, i) => stepRowHTML(i, t, rows.length)).join('')}</ol>
+        <button type="button" class="btn ghost small" data-step-add="${p}">+ Add step</button>
+        <label class="field"><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(parsed?.final || '')}</textarea></label>
+      </div>
+      ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'A trick to remember it. Shown under the answer.' })}`;
+}
+export const stepsOn = p => !!document.getElementById(p + 'StepsOn')?.checked;
+const stepRows = p => [...document.querySelectorAll(`#${p}StepList [data-step-row]`)];
+const stepValues = p => stepRows(p).map(r => r.querySelector('textarea').value.trim()).filter(Boolean);
+export function stepsProblem(p) {
+  if (!stepsOn(p)) return '';
+  return stepValues(p).length >= 2 ? '' : 'Add at least two steps, or switch off “Answer in steps”.';
+}
+export function readBack(p) {
+  if (!stepsOn(p)) return readCardText(p + 'Back');
+  return joinSteps({ intro: document.getElementById(p + 'Steps').dataset.intro || '', steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+}
+// Number the rows again (after adding, moving or deleting) and keep the names the buttons speak.
+function renumberSteps(p) {
+  const rows = stepRows(p);
+  rows.forEach((r, i) => {
+    r.querySelector('.step-n').textContent = i + 1;
+    r.querySelector('textarea').setAttribute('aria-label', `Step ${i + 1}`);
+    r.querySelector('.step-tools').setAttribute('aria-label', `Step ${i + 1} actions`);
+    const names = { up: 'Move step N up', down: 'Move step N down', del: 'Delete step N' };
+    r.querySelectorAll('[data-step]').forEach(b => { b.setAttribute('aria-label', names[b.dataset.step].replace('N', i + 1)); });
+    r.querySelector('[data-step=up]').disabled = i === 0;
+    r.querySelector('[data-step=down]').disabled = i === rows.length - 1;
+    r.querySelector('[data-step=del]').disabled = rows.length <= 2;
+  });
+}
+function fillSteps(p, steps, final = '', intro = '') {
+  document.getElementById(p + 'StepList').innerHTML = steps.map((t, i) => stepRowHTML(i, t, steps.length)).join('');
+  document.getElementById(p + 'Final').value = final;
+  document.getElementById(p + 'Steps').dataset.intro = intro;
+  renumberSteps(p);
+}
+export function clearBasic(p) {
+  setCardText(p + 'Front', ''); setCardText(p + 'Back', ''); setCardText(p + 'Hook', '');
+  setCardImage(p + 'Front', null); setCardImage(p + 'Back', null);
+  fillSteps(p, ['', '']);
+}
+document.addEventListener('change', e => {
+  const p = e.target.dataset?.stepsFor;
+  if (!p) return;
+  const on = e.target.checked, steps = document.getElementById(p + 'Steps'), wrap = document.getElementById(p + 'BackWrap');
+  if (on) {
+    const back = readCardText(p + 'Back').trim(), parsed = parseSteps(back, { mask: maskMath });
+    if (parsed) fillSteps(p, parsed.steps, parsed.final || '', parsed.intro);
+    else if (back) fillSteps(p, [back, ''], '', '');            // what was in Back becomes the first step
+    else if (stepValues(p).length === 0) fillSteps(p, ['', ''], '', '');
+  } else {
+    const joined = joinSteps({ intro: steps.dataset.intro || '', steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+    if (joined) setCardText(p + 'Back', joined);
+  }
+  steps.hidden = !on; wrap.hidden = on;
+  renumberSteps(p);
+  (on ? stepRows(p)[0]?.querySelector('textarea') : document.getElementById(p + 'Back'))?.focus();
+});
+document.addEventListener('click', e => {
+  const add = e.target.closest?.('[data-step-add]');
+  if (add) {
+    const p = add.dataset.stepAdd, list = document.getElementById(p + 'StepList');
+    list.insertAdjacentHTML('beforeend', stepRowHTML(stepRows(p).length));
+    renumberSteps(p);
+    list.lastElementChild.querySelector('textarea').focus();
+    return;
+  }
+  const b = e.target.closest?.('[data-step]');
+  if (!b || b.disabled) return;
+  const row = b.closest('[data-step-row]'), list = row.parentElement, p = list.id.replace(/StepList$/, '');
+  if (b.dataset.step === 'up' && row.previousElementSibling) row.previousElementSibling.before(row);
+  else if (b.dataset.step === 'down' && row.nextElementSibling) row.nextElementSibling.after(row);
+  else if (b.dataset.step === 'del') {
+    const next = row.nextElementSibling || row.previousElementSibling;
+    row.remove(); renumberSteps(p);
+    next?.querySelector('textarea').focus();
+    return;
+  }
+  renumberSteps(p);
+  // After a move the pressed button may be disabled (first / last row): keep the focus on a button that still works.
+  const keep = b.disabled ? row.querySelector(`[data-step=${b.dataset.step === 'up' ? 'down' : 'up'}]`) : b;
+  keep.focus();
+});
+
 // ---------- Basic | Cloze | Image occlusion ----------
 // A cloze note is one text with hidden parts: "The {{c1::mitochondria}} makes {{c2::ATP}}". Each blank number is
 // one card (see cloze.js). In the add form a switch picks Basic or Cloze; the editor of a card that already is
@@ -182,7 +293,10 @@ export function whyNotAdd(p) {
     if (!clozeNumbers(text).length) return 'Select a word and press New blank to hide it.';
     return planNoteSave([], text).error || '';
   }
-  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front'), back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back');
+  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front');
+  const stepsWhy = stepsProblem(p);
+  if (stepsOn(p)) return !front ? 'Add a front to save the card.' : stepsWhy;
+  const back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back');
   if (front && back) return '';
   return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
 }

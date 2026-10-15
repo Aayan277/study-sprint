@@ -242,3 +242,26 @@ test('occlusion cards: a picture with 4 labelled boxes can be played as multiple
   assert.equal(defaultQuestionType([...pool, { id: 'p', front: 'a', back: 'x'.repeat(50) }]), 'back');       // only the plain card counts
   assert.equal(defaultQuestionType(pool), 'front');
 });
+
+// ---------- step-by-step cards in Play (B5) ----------
+test('stepped cards are asked front → final step, never back → front', async () => {
+  const { isFrontOnly, defaultQuestionType } = await import('../js/game.js');
+  const withAnswer = { id: 's1', front: 'Solve 2x + 3 = 7', back: 'Step 1: subtract 3\nStep 2: divide by 2\nAnswer: x = 2' };
+  const lastStep = { id: 's2', front: 'Solve 2x = 4', back: 'Step 1: halve both sides\nStep 2: x = 2' };
+  const plain = { id: 'p', front: 'cell', back: 'unit of life' };
+  assert.ok(isFrontOnly(withAnswer) && isFrontOnly(lastStep) && !isFrontOnly(plain));
+  assert.deepEqual(questionFor(withAnswer, 'front'), { prompt: 'Solve 2x + 3 = 7', answer: 'x = 2' });
+  assert.deepEqual(questionFor(withAnswer, 'typing'), { prompt: 'Solve 2x + 3 = 7', answer: 'x = 2' });
+  assert.equal(questionFor(lastStep, 'front').answer, 'x = 2');             // no Answer line: the last step
+  assert.equal(questionFor(withAnswer, 'back'), null);
+  // a long final step can be picked from a list but not typed
+  const long = { id: 's3', front: 'Why?', back: `Step 1: a\nStep 2: ${'long answer '.repeat(10)}` };
+  assert.ok(questionFor(long, 'front'));
+  assert.equal(questionFor(long, 'typing'), null);
+  assert.equal(questionFor({ ...withAnswer, frontImage: 'm1' }, 'front').image, 'm1');
+  assert.deepEqual(playableCards([withAnswer, plain], 'back').map(c => c.id), ['p']);
+  assert.equal(defaultQuestionType([withAnswer, lastStep]), 'front');
+  // one step only, or steps inside a formula, is an ordinary card
+  assert.ok(!isFrontOnly({ id: 'o', front: 'q', back: 'Step 1: only one' }));
+  assert.ok(!isFrontOnly({ id: 'm', front: 'q', back: 'Use $$\nStep 1: a\nStep 2: b\n$$ here' }));
+});

@@ -2146,3 +2146,50 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .stamp.quiet{width:68px;height:68px;font-size:2.2rem;border-width:2px;border-color:var(--line-strong);color:var(--text-2);text-shadow:none;transform:none}
 .stamp.quiet.press::after{display:none}
 @media (max-width:480px){.res-head .stamp.quiet{width:56px;height:56px;font-size:1.8rem;border-width:2px}}
+
+/* ---------- 32. Scratchpad and step-by-step cards (js/scratchpad.js, js/steps.js, js/review.js, js/card-editor.js) ---------- */
+/* Scratchpad: the pen button lights up while drawing is on; the tools sit in the card's top-right corner */
+.rv-head .link[aria-pressed="true"]{background:var(--accent-tint);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent-line)}
+.rv-card.scratching .scratch{cursor:crosshair}
+.rv-card.scratching .rv-speak,.rv-card.scratching .occ-zoom{visibility:hidden}
+.scratch-tools{padding:4px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:var(--e-2),0 0 0 1px var(--line-strong)}
+.scratch-tool{min-width:40px;height:40px;padding:0 10px;border-radius:var(--r-sm);border:1px solid transparent;background:transparent;color:var(--text-2);font:600 var(--fs-xs) var(--f-ui);cursor:pointer;touch-action:manipulation}
+.scratch-tool:hover{background:var(--surface-3);color:var(--text)}
+.scratch-tool[aria-pressed="true"]{background:var(--accent-tint);color:var(--accent-text);border-color:var(--accent-line)}
+.scratch-tool[data-tool="close"]{color:var(--text)}
+@media (max-width:420px){.scratch-tool{padding:0 7px;min-width:36px}}
+/* Steps on the back of a card: numbered, revealed one at a time */
+.steps-back{text-align:left;white-space:normal;font-size:var(--fs-md);line-height:1.5;font-weight:450}
+.steps-intro{margin:0 0 var(--s-3);color:var(--text-2);white-space:pre-line}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-3);counter-reset:step}
+.step{counter-increment:step;display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s-3);align-items:start;padding:var(--s-2);margin:0 calc(var(--s-2) * -1);border-radius:var(--r-md);outline:none;white-space:pre-line;overflow-wrap:anywhere}
+.step[hidden],.steps-final[hidden],.flash-extra[hidden]{display:none}
+.step::before{content:counter(step);display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);font:700 var(--fs-xs) var(--f-num)}
+.step:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.step-body{min-width:0;padding-top:3px}
+.steps-final{margin-top:var(--s-4);padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border-left:3px solid var(--accent);white-space:pre-line;overflow-wrap:anywhere}
+.steps-final-l{display:block;margin-bottom:2px;font:700 var(--fs-xs) var(--f-ui);letter-spacing:.04em;text-transform:uppercase;color:var(--accent-text)}
+@media (prefers-reduced-motion:no-preference){.step:not([hidden]),.steps-final:not([hidden]){animation:step-in 220ms var(--ease)}}
+@keyframes step-in{from{opacity:0;transform:translateY(6px)}}
+/* The bar under a stepped card */
+.step-try{margin:0 0 var(--s-2);text-align:center;font:500 var(--fs-sm) var(--f-ui);color:var(--text-2)}
+.step-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-2)}
+.step-actions .btn.wide{width:auto;min-height:56px}
+.step-actions #stepAllBtn{padding-inline:var(--s-5)}
+.step-actions .key-hint{margin:0 0 0 8px;background:transparent;color:inherit;border-color:currentColor}
+/* Card editor: Answer in steps, Memory hook */
+.steps-switch{margin:var(--s-1) 0}
+.steps-ed{display:grid;gap:var(--s-3)}
+.step-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
+.step-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s-2);align-items:start}
+.step-n{display:grid;place-items:center;width:28px;height:28px;margin-top:8px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);font:700 var(--fs-xs) var(--f-num)}
+.step-in{width:100%;min-width:0;font-size:var(--fs-md);line-height:1.45;resize:vertical;padding:9px 12px;border-radius:var(--r-md);border:1px solid var(--control);background:var(--surface-sunken);color:var(--text)}
+.step-in:focus{outline:2px solid var(--accent);outline-offset:1px}
+.step-tools{grid-column:2;display:flex;justify-content:flex-end;gap:4px}
+.step-btn{display:grid;place-items:center;width:36px;height:36px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface-1);color:var(--text-2);font-size:var(--fs-md);line-height:1;cursor:pointer;touch-action:manipulation}
+.step-btn:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
+.step-btn:disabled{opacity:.35;cursor:default}
+.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}
+@media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
+/* The Basic form grew (steps switch, memory hook): the fixed body height grows with it so switching card types does not jump */
+.ac-form .kind-body{min-height:31rem}

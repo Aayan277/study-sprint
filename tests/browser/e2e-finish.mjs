@@ -149,10 +149,10 @@ ok(await p.locator('.rv-head #speakBtn').count() === 0, 'and no longer in the to
 const flipped = await p.evaluate(() => { document.querySelector('#speakBtn').click(); return document.querySelector('#flash').classList.contains('flipped'); });
 ok(!flipped, 'pressing Speak does not flip the card');
 const bar = await p.$$eval('.rv-head > *', els => els.map(e => e.id || e.className.split(' ')[0]));
-ok(bar.join() === 'rv-counts,moreBtn,endBtn', 'phone bar before any answer: counts, more, End (' + bar.join() + ')');
+ok(bar.join() === 'rv-counts,scratchBtn,moreBtn,endBtn', 'phone bar before any answer: counts, scratchpad, more, End (' + bar.join() + ')');
 await p.screenshot({ path: SP + '/review-bar-375.png' });
 await answerOne(p);
-ok((await p.$$eval('.rv-head > *', els => els.map(e => e.id || e.className.split(' ')[0]))).join() === 'rv-counts,undoBtn,moreBtn,endBtn', 'after an answer: counts, Undo, more, End');
+ok((await p.$$eval('.rv-head > *', els => els.map(e => e.id || e.className.split(' ')[0]))).join() === 'rv-counts,undoBtn,scratchBtn,moreBtn,endBtn', 'after an answer: counts, Undo, scratchpad, more, End');
 await noSideways(p, 'in the Review bar');
 
 // ---------- 7. Key hints only where there is a mouse ----------
