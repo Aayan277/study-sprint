@@ -2097,3 +2097,18 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .rv-card .occ-head{margin:0 0 var(--s-2);font:600 var(--fs-md)/1.3 var(--f-ui);letter-spacing:normal;color:var(--text-2);text-wrap:balance}
 :root[data-theme="light"] .occ-mask:not(.occ-ask):not(.occ-reveal):not(.occ-all){background:color-mix(in oklab,var(--text) 78%,transparent);box-shadow:inset 0 0 0 1.5px rgb(255 255 255 / .6)}
 @media (forced-colors:active){:root[data-theme="light"] .occ-mask:not(.occ-ask):not(.occ-reveal):not(.occ-all){background:Canvas;box-shadow:none}}
+
+/* ---------- 24 (Round 2). Play: results order, quiet grade stamp, key hint, empty start (js/play.js) ---------- */
+/* The keyboard line shows only with a mouse and keyboard */
+.hint.keys{display:none}
+@media (hover:hover) and (pointer:fine){.hint.keys{display:block}}
+/* Results: stats, then the actions, then the schedule note; the missed list comes last */
+.res-actions{margin-top:var(--s-4)}
+.sched-note{margin:var(--s-4) 0 0}
+.missed{margin-top:var(--s-6)}
+.miss-extra .miss{border-top:1px solid var(--line)}
+.missed > #showAllMiss{margin-top:var(--s-3)}
+/* A C or D is not a medal: a smaller, plain mark */
+.stamp.quiet{width:68px;height:68px;font-size:2.2rem;border-width:2px;border-color:var(--line-strong);color:var(--text-2);text-shadow:none;transform:none}
+.stamp.quiet.press::after{display:none}
+@media (max-width:480px){.res-head .stamp.quiet{width:56px;height:56px;font-size:1.8rem;border-width:2px}}
