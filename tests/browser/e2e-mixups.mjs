@@ -184,6 +184,7 @@ await p.waitForSelector('.crow[data-id=bg0] .crow-btn');
 await p.click('.crow[data-id=bg0] .crow-btn'); await p.waitForSelector('#sheet .card-info');
 await p.waitForTimeout(600);
 ok(await p.locator('#ceMixed').isHidden(), 'after "Not confused" the card panel no longer lists the partner');
+await p.keyboard.press('Escape'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 
 // Make a comparison card
 await p.evaluate(() => { localStorage.removeItem('study-sprint-mix-dismissed'); });
