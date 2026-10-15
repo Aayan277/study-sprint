@@ -39,13 +39,17 @@ const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: fal
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
 let pendingDrill = null;   // card ids sent from another screen (Stats → "Drill these")
+let pendingDrillOpts = {}; // { mix: Map(cardId → partner id), drillTotal }: the "You mix these up" drill (see compare-sheet.js)
 // Has the deck been picked in this visit? Until it has, Play opens on the deck with the nearest exam (see defaultDeck).
 let deckChosen = false;
 let customOpen = null;     // is the "Customise" fold open? (read from this device's saved choice the first time)
 
 // Open Play and start a drill round on these cards straight away.
-export function drillCards(cardIds) {
+//   mix    pairs [[cardId, partnerCardId]]: the partner's answer is always one of that card's options
+//   total  how many questions (default: twice the cards, at least 6)
+export function drillCards(cardIds, { mix = [], total = 0 } = {}) {
   pendingDrill = cardIds;
+  pendingDrillOpts = { mix: new Map(mix), drillTotal: total };
   if (location.hash === '#/play') renderPlay(document.getElementById('screen'));
   else location.hash = '#/play';
 }
@@ -96,13 +100,14 @@ export async function renderPlay(el) {
   // Back → front (shows the definition, you pick the term), then Typing.
   if (pendingDrill) {
     const ids = new Set(pendingDrill);
-    pendingDrill = null;
+    const drillOpts = pendingDrillOpts;
+    pendingDrill = null; pendingDrillOpts = {};
     const drill = cards.filter(c => ids.has(c.id));
     const decksUsed = new Set(drill.map(c => c.deckId));
     const pool = cards.filter(c => decksUsed.has(c.deckId));   // wrong options come from the same decks
     const qtype = [prefs.qtype, 'back', 'typing'].find(q =>
       q === 'typing' ? playableCards(drill, q).length : canMultipleChoice(pool, q) && playableCards(drill, q).length);
-    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill });
+    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill, ...drillOpts });
   }
 
   const draw = () => {
@@ -241,7 +246,7 @@ function start(el, opts) {
   const all = playableCards(opts.pool, opts.qtype);         // every card that works for this question type
   const pool = opts.drill ? playableCards(opts.drill, opts.qtype) : all;
   const fmt = opts.drill ? 'classic' : opts.fmt;
-  const total = fmt === 'classic' ? (opts.drill ? Math.max(pool.length * 2, 6) : opts.len) : null;
+  const total = fmt === 'classic' ? (opts.drill ? opts.drillTotal || Math.max(pool.length * 2, 6) : opts.len) : null;
   // Cards you've forgotten before (lapses) come up more often.
   const weightOf = c => { const s = data.statesById.get(c.id); return 1 + 2 * Math.min(s?.lapses || 0, 5); };
   G = {
@@ -316,13 +321,19 @@ function showQuestion() {
 
   const typing = G.qtype === 'typing';
   $('options').hidden = typing; $('pType').hidden = !typing;
+  G.optIds = [];
   if (typing) {
     const inp = $('pInput');
     inp.value = ''; inp.disabled = false;
     inp.focus();
   } else {
-    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard });
-    G.opts = shuffle([q.answer, ...wrong]);
+    // A drill from "You mix these up" always offers the partner's answer. Each option remembers which card it is the
+    // answer of, so picking another card's answer can be recorded as a mix-up (log.mixedWith).
+    const partner = G.mix?.get(card.id);
+    const include = partner ? G.all.filter(c => c.id === partner).map(c => questionFor(c, G.qtype).answer) : [];
+    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true, include });
+    const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
+    G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
     const long = G.opts.some(o => o.length > 28);
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
@@ -382,12 +393,16 @@ function answer(choice) {
   const elapsed = performance.now() - G.qStart;
   const lightning = G.fmt === 'lightning';
   const seconds = (lightning ? elapsed : Math.min(elapsed, G.limit)) / 1000;
-  let ok = false, given = '', exact = true, target = '';
+  let ok = false, given = '', exact = true, target = '', mixedWith;
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; const res = checkTyped(choice, answerTargets(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; }
+    if (choice !== null) { given = choice; const res = checkTyped(choice, answerTargets(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; if (!ok) mixedWith = typedMixup(choice); }
   } else {
-    if (choice !== null) { given = G.opts[choice]; ok = given === G.q.answer; }
+    if (choice !== null) {
+      given = G.opts[choice]; ok = given === G.q.answer;
+      const other = G.optIds[choice];
+      if (!ok && other && other !== G.card.id) mixedWith = other;       // the answer of another card
+    }
     document.querySelectorAll('#options .opt').forEach((b, j) => {
       b.disabled = true;
       if (G.opts[j] === G.q.answer) b.classList.add('correct');
@@ -414,7 +429,7 @@ function answer(choice) {
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
   let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
-  const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
     typed: diff ? given : undefined, target: diff ? target : undefined,
     chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
@@ -441,6 +456,20 @@ function answer(choice) {
     // Long answers can push the Next button below the screen, so bring it into view.
     $('nextBtn').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+}
+
+// A wrong typed answer that is exactly (no typo forgiveness) the answer of another card of this round's pool: that card's
+// id. Siblings of the same note don't count (their answers are on this card's front). The look-through is capped.
+const MIX_SCAN_MAX = 2000;
+function typedMixup(typed) {
+  if (!String(typed).trim()) return undefined;          // a skip
+  const card = G.card;
+  for (const other of G.all.slice(0, MIX_SCAN_MAX)) {
+    if (other.id === card.id || (card.noteId && other.noteId === card.noteId)) continue;
+    const ans = questionFor(other, 'typing')?.answer;
+    if (ans && checkTyped(typed, answerTargets(ans), { forgiving: false }).correct) return other.id;
+  }
+  return undefined;
 }
 
 // Save one answer: always to the review log (for stats), and to the review schedule when the
@@ -472,6 +501,7 @@ async function record(round, entry) {
     applied: false,                    // did it change the schedule?
     reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
   };
+  if (entry.mixedWith) log.mixedWith = entry.mixedWith;     // the card whose answer was given instead (confusion.js)
   if (applies(decision)) {
     let next = null;
     try {
@@ -649,7 +679,7 @@ async function finish() {
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
   import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
-  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
+  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill, mix: round.mix, drillTotal: round.drillTotal } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   $('againBtn').focus({ preventScroll: true });

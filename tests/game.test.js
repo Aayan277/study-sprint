@@ -242,3 +242,38 @@ test('occlusion cards: a picture with 4 labelled boxes can be played as multiple
   assert.equal(defaultQuestionType([...pool, { id: 'p', front: 'a', back: 'x'.repeat(50) }]), 'back');       // only the plain card counts
   assert.equal(defaultQuestionType(pool), 'front');
 });
+
+test('distractors: withIds returns { label, id } of the card each option answers; the default stays labels', () => {
+  const pool = ['Mitosis', 'Meiosis', 'Osmosis', 'Diffusion', 'Respiration', 'Glycolysis'].map((f, i) => card(f, `def ${i}`));
+  const labels = pickDistractors(pool[0], pool, 'front', { rnd: seeded(5) });
+  assert.ok(labels.every(l => typeof l === 'string'));
+  const withIds = pickDistractors(pool[0], pool, 'front', { rnd: seeded(5), withIds: true });
+  assert.deepEqual(withIds.map(o => o.label), labels);
+  for (const o of withIds) {
+    const owner = pool.find(c => c.id === o.id);
+    assert.ok(owner && owner.id !== pool[0].id);
+    assert.equal(questionFor(owner, 'front').answer, o.label);
+  }
+});
+
+test('distractors: include forces an option in, for every seed, even from a big pool; the answer itself is never forced', () => {
+  const pool = Array.from({ length: 30 }, (_, i) => card(`Term ${i}`, `definition number ${i}`));
+  const want = pool[17].back;
+  for (let s = 1; s <= 25; s++) {
+    for (const hard of [false, true]) {
+      const got = pickDistractors(pool[0], pool, 'front', { hard, rnd: seeded(s), include: [want] });
+      assert.ok(got.includes(want), `seed ${s} hard ${hard}`);
+      assert.equal(got.length, hard ? 5 : 3);
+    }
+  }
+  const big = Array.from({ length: 700 }, (_, i) => card(`T${i}`, `unique answer ${i}`));
+  assert.ok(pickDistractors(big[0], big, 'front', { rnd: seeded(2), include: [big[650].back] }).includes(big[650].back));
+  assert.ok(!pickDistractors(pool[0], pool, 'front', { rnd: seeded(2), include: [pool[0].back] }).includes(pool[0].back));
+  assert.equal(pickDistractors(pool[0], pool, 'front', { rnd: seeded(2), include: ['no such answer'] }).length, 3);
+});
+
+test('distractors: include never brings in a sibling of the card', () => {
+  const a = card('{{c1::x}} and y', 'x', { noteId: 'N', cloze: 1 }), sib = card('x and {{c2::y}}', 'y', { noteId: 'N', cloze: 2 });
+  const rest = Array.from({ length: 6 }, (_, i) => card(`s${i}`, `ans${i}`, { noteId: `M${i}`, cloze: 1 }));
+  assert.ok(!pickDistractors(a, [a, sib, ...rest], 'front', { rnd: seeded(1), include: ['y'] }).includes('y'));
+});

@@ -2146,3 +2146,33 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .stamp.quiet{width:68px;height:68px;font-size:2.2rem;border-width:2px;border-color:var(--line-strong);color:var(--text-2);text-shadow:none;transform:none}
 .stamp.quiet.press::after{display:none}
 @media (max-width:480px){.res-head .stamp.quiet{width:56px;height:56px;font-size:1.8rem;border-width:2px}}
+
+/* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
+.mixups{margin-top:var(--s-6)}
+.mixups > h2{margin:0 0 var(--s-2)}
+.mix-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
+.mix-row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md)}
+.mix-pair{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--s-2)}
+.mix-card{min-width:0;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.mix-vs{flex:none;color:var(--text-2);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.06em}
+.mix-n{flex:none;color:var(--text-2);font-size:var(--fs-sm)}
+.mix-row .btn{flex:none}
+@media (max-width:480px){
+  .mix-row{flex-wrap:wrap}
+  .mix-pair{flex-basis:100%}
+  .mix-n{margin-right:auto}
+}
+/* The Compare sheet: two columns, stacked under 600px */
+.cmp-note{margin:0}
+.cmp{display:grid;grid-template-columns:1fr;gap:var(--s-3)}
+@media (min-width:600px){.cmp{grid-template-columns:1fr 1fr}}
+.cmp-col{min-width:0;padding:var(--s-3) var(--s-4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md)}
+.cmp-lbl{margin:0 0 4px;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.cmp-text{margin:0 0 var(--s-3);overflow-wrap:anywhere;font-size:var(--fs-md)}
+.cmp-text.cmp-back{margin-bottom:0;font-weight:600}
+.cmp-img{max-height:140px;width:auto;max-width:100%;display:block;margin-bottom:var(--s-2)}
+/* The card panel's partner line */
+.mixed-with{margin:0}
+.mixed-line{margin:0;font-size:var(--fs-sm);color:var(--text-2)}
+.mixed-line b{color:var(--text);font-weight:600}
+.mixed-line .link{padding:4px 6px;min-height:32px;color:var(--accent-text);text-decoration:underline}

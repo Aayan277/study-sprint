@@ -193,6 +193,8 @@ export async function openCardPanel(card, ctx) {
     <div class="field"><span>Move to deck</span>${moveRow(decks, card.deckId)}</div>
     <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review this card once first, then you can set its due date.</p>'}</div>
 
+    <div id="ceMixed" class="mixed-with" hidden></div>
+
     <details class="card-info" ${showInfo ? 'open' : ''}>
       <summary>Card info</summary>
       <dl class="info-grid">
@@ -225,7 +227,28 @@ export async function openCardPanel(card, ctx) {
   }));
   wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
   wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
+  showMixedWith(card);
   if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
+}
+
+// "Often mixed up with: X (3×) · Compare": the cards this one is confused with (see confusion.js), filled in a moment
+// after the panel opens because it reads the last 90 days of the log. Up to two partners.
+async function showMixedWith(card) {
+  try {
+    const { loadPairs, cardLabel } = await import('./compare-sheet.js');
+    const { cardsById, pairs } = await loadPairs();
+    const box = $('ceMixed');
+    if (!box?.isConnected) return;
+    const mine = pairs.filter(p => p.a === card.id || p.b === card.id).slice(0, 2);
+    if (!mine.length) return;
+    box.innerHTML = mine.map(p => { const other = cardsById.get(p.a === card.id ? p.b : p.a);
+      return `<p class="mixed-line">Often mixed up with: <b>${esc(cardLabel(other, 40))}</b> <span class="mono">(${p.count}×)</span> · <button type="button" class="link" data-mix-with="${esc(other.id)}">Compare</button></p>`; }).join('');
+    box.hidden = false;
+    box.addEventListener('click', async e => {
+      const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;
+      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {} });
+    });
+  } catch (err) { console.warn('mixed up with:', err); }     // the panel is fine without it
 }
 
 // The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.

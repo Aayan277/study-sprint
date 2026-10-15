@@ -109,12 +109,16 @@ function candidatesFor(card, pool, rnd) {
 // Pick wrong options for a card from the other cards' answers.
 //   Normal: prefer the same deck, a similar length (within ±50%), and shared tags or words, plus some randomness.
 //   Hard:   rank by how alike the text looks, so the traps are plausible.
-export function pickDistractors(card, pool, qtype, { hard = false, count = hard ? 5 : 3, rnd = Math.random } = {}) {
+// Returns the labels, or with { withIds: true } [{ label, id }] (id = the card the option is the answer of).
+// include: [label]: these options are always among the wrong ones (if a card in the pool has that answer), e.g. the
+// card a "You mix these up" pair is confused with.
+export function pickDistractors(card, pool, qtype, { hard = false, count = hard ? 5 : 3, rnd = Math.random, withIds = false, include = [] } = {}) {
   const answer = questionFor(card, qtype).answer;
   const seen = new Set([dupKey(answer)]);
   const words = contentWords(answer);
   const tags = new Set(card.tags || []);
   const scored = [];
+  const want = new Set(include.map(dupKey).filter(Boolean));
   const consider = other => {
     // Never a sibling: its answer is on this card's front. (For an image-occlusion card the other boxes' labels are the
     // best wrong options: the picture doesn't show them.)
@@ -133,13 +137,16 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
     score += Math.min(2, (other.tags || []).filter(t => tags.has(t)).length);
     score += Math.min(2, [...contentWords(label)].filter(w => words.has(w)).length);
     score = hard ? similarity(label, answer) * 10 + score * 0.5 + rnd() * 0.5 : score + rnd() * 2.5;
-    scored.push({ label, score });
+    if (want.has(key)) score += 1e6;        // forced in
+    scored.push({ label, id: other.id, score });
   };
   const sample = candidatesFor(card, pool, rnd);
   sample.forEach(consider);
   // A sample of a big pool can hold too few different answers (e.g. mostly Yes/No): look through the rest.
   if (scored.length < count && pool.length > sample.length) shuffle(pool.slice(), rnd).forEach(consider);
-  return scored.sort((a, b) => b.score - a.score).slice(0, count).map(s => s.label);
+  if (want.size && [...want].some(k => !seen.has(k))) pool.forEach(o => { if (want.has(dupKey(questionFor(o, qtype)?.answer))) consider(o); });
+  const top = scored.sort((a, b) => b.score - a.score).slice(0, count);
+  return withIds ? top.map(({ label, id }) => ({ label, id })) : top.map(s => s.label);
 }
 
 // ---------- the round ----------
