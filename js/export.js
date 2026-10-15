@@ -207,7 +207,10 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       }
     } else {
       const c = g.card;
-      const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
+      const front = withPic(toAnkiHTML(c.front), c.frontImageFile);
+      let back = withPic(toAnkiHTML(c.back), c.backImageFile);
+      // The memory hook (noteExtra) goes at the end of Back as an Extra line.
+      if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
       note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order.

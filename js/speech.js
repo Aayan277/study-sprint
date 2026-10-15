@@ -32,6 +32,17 @@ export function detectLang(text, fallback = 'en-US') {
 // What to say: the card's text without formatting marks or bullet dots.
 export const speakableText = text => replaceMath(plainText(text), s => ` ${texToSpeech(s.tex)} `).replace(/^• /gm, '').replace(/\s+/g, ' ').trim();
 
+// What a step-by-step card says: its intro and the steps shown so far ("Step 1. ...", each ending with a full stop), then the
+// final answer once every step is shown. p = parseSteps(...) from steps.js; shown = how many steps are on screen.
+export function stepsSpeech(p, shown) {
+  const stop = t => String(t).trim().replace(/([^.!?:;,…。！？])$/, '$1.');
+  const out = [];
+  if (p.intro) out.push(stop(p.intro));
+  p.steps.slice(0, shown).forEach((t, i) => out.push(`Step ${i + 1}. ${stop(t)}`));
+  if (shown >= p.steps.length && p.final) out.push(`Answer. ${stop(p.final)}`);
+  return out.join('\n');
+}
+
 export const canSpeak = () => typeof speechSynthesis !== 'undefined';
 
 // Read some text aloud (stopping anything already being read). lang: a code from SPEECH_LANGS, or ''.
