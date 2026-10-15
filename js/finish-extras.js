@@ -8,7 +8,10 @@ const pairsPanel = (/* { entries } */) => '';
 // source: 'review' | 'play'. cardIds: cards answered. leechIds: leeches hit. entries: Play's answer log.
 export const drawFinishExtras = (slot, { source, cardIds = [], leechIds = [], entries = [] } = {}) => {
   if (!slot) return;
-  const html = leechPanel({ source, leechIds }) + pairsPanel({ source, cardIds, entries });
+  // Cards can be deleted (or synced away) mid-session: panels must skip ids that no longer have a card, and a panel
+  // that fails leaves the finish screen as it was.
+  const safe = fn => { try { return fn() || ''; } catch (err) { console.warn('finish extras:', err); return ''; } };
+  const html = safe(() => leechPanel({ source, leechIds })) + safe(() => pairsPanel({ source, cardIds, entries }));
   slot.innerHTML = html;
   slot.hidden = !html;
 };

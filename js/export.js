@@ -11,16 +11,16 @@ import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
-// A cell that starts with = + - @ would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
+// A cell that starts with = + - @ (or a tab or line break) would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
   let s = String(v ?? '');
-  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  if (/^'*[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function toCSV(cards) {
   const several = new Set(cards.map(c => c.deckName)).size > 1;
   const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : [])],
-    ...cards.map(c => [c.front, c.back, (c.tags || []).join(' '), ...(several ? [c.deckName] : [])])];
+    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : [])])];
   // The invisible mark at the start (a "BOM") tells Excel the file is UTF-8, so accents and emoji survive.
   return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }

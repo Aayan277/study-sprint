@@ -569,7 +569,7 @@ async function finish(el) {
     <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
     <div class="res-actions">
       ${rest.total
-        ? `<button class="btn primary" type="button" id="keepBtn">Keep going · ${plural(rest.total, 'card')}</button>
+        ? `<button class="btn primary" type="button" id="keepBtn" aria-label="Keep going: ${plural(rest.total, 'card')}">Keep going · ${plural(rest.total, 'card')}</button>
            <button class="btn ghost" type="button" id="againBtn">Back to Today</button>`
         : '<button class="btn primary" type="button" id="againBtn">Back to Today</button>'}
     </div>

@@ -186,7 +186,7 @@ export function whyNotAdd(p) {
   if (front && back) return '';
   return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
 }
-// Keep the form's Add button and the reason line (#{p}Why) in step with the form: disabled, with the reason, until it can save.
+// Keep the form's Add button and the reason line (#{p}Why) in step with the form: aria-disabled, with the reason, until it can save.
 // Typing, picking a type, a picture added or removed, boxes drawn: all of them change the form, so it watches the form itself.
 export function watchAdd(p) {
   const form = document.getElementById(p + 'Form'), why = document.getElementById(p + 'Why');
@@ -194,7 +194,10 @@ export function watchAdd(p) {
   if (!form || !why || !add) return () => {};
   const update = () => {
     const reason = whyNotAdd(p);
-    add.disabled = !!reason;
+    // aria-disabled, not disabled: the button stays focusable, so a keyboard or screen-reader user can reach it and hear
+    // the reason (aria-describedby). The submit handler checks the form again, so pressing it does nothing harmful.
+    add.setAttribute('aria-disabled', reason ? 'true' : 'false');
+    add.setAttribute('aria-describedby', why.id);
     if (why.textContent !== reason) why.textContent = reason;
     why.hidden = !reason;
   };
