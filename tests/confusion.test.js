@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mixPairs, pairsFor, partnerOf, pairKey, dismissPair, loadDismissed, saveDismissed, DISMISS_KEY } from '../js/confusion.js';
+import { mixPairs, pairsFor, partnerOf, pairKey, dismissPair, loadDismissed, saveDismissed, DISMISS_KEY, cardLabel, neighbours, comparisonText } from '../js/confusion.js';
 
 const MIN = 60000, DAY = 86400000;
 const T = new Date(2026, 9, 14, 12).getTime();
@@ -71,4 +71,39 @@ test('dismissals are kept in storage, and bad or missing storage gives {}', () =
   assert.deepEqual(loadDismissed(storage), {});
   assert.deepEqual(loadDismissed(undefined), {});
   saveDismissed({}, { setItem() { throw new Error('blocked'); } });                    // must not throw
+});
+
+test('cardLabel: plain text, one line, shortened; a picture card uses its hidden part', () => {
+  assert.equal(cardLabel({ front: '**Mitosis**\nphase' }), 'Mitosis phase');
+  assert.equal(cardLabel({ front: 'x'.repeat(80) }, 10), 'xxxxxxxxx…');
+  assert.equal(cardLabel({ front: '' }), 'Picture');
+  assert.equal(cardLabel(undefined), '');
+});
+
+test('neighbours: same decks, nearest wording first, no siblings, no repeated answers, at most 4', () => {
+  const c = (id, front, back, extra = {}) => ({ id, deckId: 'd', front, back, ...extra });
+  const a = c('a', 'Mitosis', 'Cell division', { noteId: 'N1' }), b = c('b', 'Meiosis', 'Sex cell division');
+  const cards = [a, b, c('s', 'Sib', 'Sibling answer', { noteId: 'N1' }), c('x1', 'Cytokinesis', 'Cell division, split'), c('x2', 'Osmosis', 'Water moving'),
+    c('x3', 'Diffusion', 'Spreading out'), c('x4', 'Glycolysis', 'Sugar breakdown'), c('x5', 'Other', 'Cell division'),
+    c('far', 'Elsewhere', 'Cell division, split again', { deckId: 'other' }), c('sus', 'Sus', 'Cell wall', { suspended: true })];
+  const n = neighbours(a, b, cards);
+  assert.equal(n.length, 4);
+  const ids = n.map(x => x.id);
+  assert.equal(ids[0], 'x1');                                   // the closest wording comes first
+  for (const bad of ['a', 'b', 's', 'x5', 'far', 'sus']) assert.ok(!ids.includes(bad), bad);   // itself, sibling, same answer as the pair, other deck, suspended
+  assert.equal(neighbours(a, b, [a, b]).length, 0);
+});
+
+test('comparisonText asks for the difference and lists both cards', () => {
+  const t = comparisonText({ front: 'Mitosis' }, { front: 'Meiosis' });
+  assert.equal(t.front, "Mitosis vs Meiosis: what's the difference?");
+  assert.equal(t.back, '- Mitosis: …\n- Meiosis: …');
+});
+
+test('a pair that comes back after "Not confused" shows the mix-ups since', () => {
+  const rows = [0, 10, 20, 30].map(i => log('a', 'b', T + i * MIN * 3));
+  const first = mixPairs(rows.slice(0, 2), { cardsById });
+  const dismissed = dismissPair({}, first[0]);
+  assert.deepEqual(mixPairs(rows.slice(0, 3), { cardsById, dismissed }), []);
+  assert.equal(mixPairs(rows, { cardsById, dismissed })[0].count, 4);
 });

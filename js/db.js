@@ -474,6 +474,16 @@ export function checkBackup(data) {
 }
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
+// A log row's `mixedWith` (the card whose answer was given by mistake, see confusion.js) is kept only when it is a
+// string of 1 to 200 characters; anything else is dropped from the row.
+export const MIXED_WITH_MAX = 200;
+export function cleanMixedWith(row) {
+  if (!row || !Object.hasOwn(row, 'mixedWith')) return row;
+  const v = row.mixedWith;
+  if (typeof v === 'string' && v.length >= 1 && v.length <= MIXED_WITH_MAX) return row;
+  const { mixedWith, ...rest } = row;
+  return rest;
+}
 const validKey = v => (typeof v === 'string' && v !== '') || (typeof v === 'number' && Number.isFinite(v));
 const SAFE_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];   // no SVG: it can contain scripts
@@ -509,6 +519,7 @@ export async function importAll(data, { everywhere = false } = {}) {
       kept[name] = new Set();
       for (const x of data[name]) {
         let rec = upgradeRecord(name, x, now);
+        if (name === 'reviewLog') rec = cleanMixedWith(rec);
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
         tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing

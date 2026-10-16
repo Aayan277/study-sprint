@@ -3,6 +3,11 @@
 // Play and typed Review record `mixedWith: '<cardId>'` on a log row when the wrong answer given was the answer of
 // another card. This file turns those rows into pairs of cards that keep being confused.
 
+import { similarity } from './game.js';
+import { dupKey } from './import.js';
+import { hasMasks, occLabel } from './occlusion.js';
+import { plainText } from './format.js';
+
 export const MIX_WINDOW_DAYS = 90;            // the surfaces read the last 90 days of the log
 export const MIX_MIN_COUNT = 2;               // a pair needs at least this many mix-ups
 export const MIX_DEBOUNCE_MS = 2 * 60 * 1000; // the same mix-up within 2 minutes counts once
@@ -60,4 +65,38 @@ export function loadDismissed(storage = globalThis.localStorage) {
 }
 export function saveDismissed(dismissed, storage = globalThis.localStorage) {
   try { storage.setItem(DISMISS_KEY, JSON.stringify(dismissed)); } catch { /* private window: it just won't be remembered */ }
+}
+
+// ---------- what the Compare sheet shows and builds (compare-sheet.js) ----------
+
+// A card's front as one short line of plain text (a picture-hiding card: the hidden part's label).
+export function cardLabel(card, max = 60) {
+  if (!card) return '';
+  const t = hasMasks(card) ? (occLabel(card.occlusion.masks, card.occlusion.n) || card.occlusion.header || 'Picture') : plainText(card.front);
+  const s = String(t ?? '').replace(/\s+/g, ' ').trim() || 'Picture';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+// Four look-alikes to drill with the pair: other cards of the pair's decks, nearest in wording first, never a sibling
+// of either card and never an answer the pair already has.
+export function neighbours(a, b, cards, n = 4) {
+  const taken = new Set([dupKey(a.back), dupKey(b.back)]);
+  const sib = c => !!c.noteId && (c.noteId === a.noteId || c.noteId === b.noteId);
+  const decks = new Set([a.deckId, b.deckId]);
+  const rank = c => similarity(c.back, a.back) + similarity(c.back, b.back) + similarity(c.front, a.front) + similarity(c.front, b.front);
+  const out = [];
+  for (const c of cards.filter(c => c.id !== a.id && c.id !== b.id && !sib(c) && !c.suspended && decks.has(c.deckId))
+    .map(c => ({ c, r: rank(c) })).sort((x, y) => y.r - x.r).map(x => x.c)) {
+    const k = dupKey(c.back);
+    if (!k || taken.has(k)) continue;
+    taken.add(k); out.push(c);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+// The text of a comparison card: it asks for the difference, and the back lists one line per card to fill in.
+export function comparisonText(a, b) {
+  const [x, y] = [cardLabel(a, 40), cardLabel(b, 40)];
+  return { front: `${x} vs ${y}: what's the difference?`, back: `- ${x}: …\n- ${y}: …` };
 }
