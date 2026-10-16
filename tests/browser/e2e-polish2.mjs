@@ -210,7 +210,10 @@ await p.click('#readyPrep'); await p.waitForSelector('#flash');
 ok((await p.textContent('.flash-deck')).includes('Exam prep'), 'Exam prep starts an exam prep session');
 await p.click('#endBtn'); await p.waitForSelector('.finish-next');
 // no exam: readiness for today, and a way to add one
-await go(p, '#/stats', '#sDeckBtn'); await p.click('#sDeckBtn'); await p.click('.pick-row[data-id="zed"]'); await p.waitForSelector('.ready-card');
+// The card for the previous deck (bio, "Exam readiness") is still on screen right after the pick, so waiting for
+// '.ready-card' alone returns at once and, on a busy machine, reads the old card. Wait until it has been redrawn.
+await go(p, '#/stats', '#sDeckBtn'); await p.click('#sDeckBtn'); await p.click('.pick-row[data-id="zed"]');
+await p.waitForFunction(() => document.querySelector('.ready-card h2')?.textContent !== 'Exam readiness');
 ok((await p.textContent('.ready-card h2')) === 'Readiness today' && !(await p.$('.ready-card .exam-badge')) && await p.isVisible('#readyExam') && !(await p.$('#readyPrep')), 'without an exam: Readiness today, and Add exam date instead of Exam prep');
 await p.click('#sDeckBtn'); await p.keyboard.press('Escape'); await p.waitForFunction(() => !document.getElementById('sheet').open);
 ok(await p.evaluate(() => document.activeElement?.id) === 'sDeckBtn', 'Escape closes the picker and focus goes back to its button');
