@@ -1,3 +1,4 @@
+import { keepFocusOnPress } from './ui.js';
 // Scratchpad (B4): draw on top of a Review card with a pen, finger or mouse. A DOM module; Review wires it up.
 //
 //   const pad = mountScratch(cardEl, { onChange: on => ... });
@@ -71,6 +72,8 @@ export function mountScratch(card, { onChange } = {}) {
   let active = null;                 // pointerId being drawn with (one at a time)
   let last = null, mid = null;       // previous point, and the midpoint the last curve ended at
   let penSeen = false, penDown = false, lastPen = 0;
+  let activeType = '', snapshot = null;   // what the active pointer is, and the picture from just before a touch began
+  let colour = '#888';                // the stroke colour, read once when a stroke starts
 
   const point = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === 'pen' ? e.pressure : 0.5 }; };
   const widthFor = p => (tool === 'eraser' ? ERASER_WIDTH : BASE_WIDTH * (0.4 + p));
@@ -78,8 +81,7 @@ export function mountScratch(card, { onChange } = {}) {
     if (tool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; }
     else {
       ctx.globalCompositeOperation = 'source-over';
-      const c = getComputedStyle(card).getPropertyValue('--text').trim() || getComputedStyle(card).color || '#888';
-      ctx.strokeStyle = c; ctx.fillStyle = c;
+      ctx.strokeStyle = colour; ctx.fillStyle = colour;
     }
   };
   function dot(pt) {
@@ -99,9 +101,18 @@ export function mountScratch(card, { onChange } = {}) {
   canvas.addEventListener('pointerdown', e => {
     if (!enabled) return;
     if (e.pointerType === 'pen') { penSeen = true; penDown = true; lastPen = e.timeStamp; }
+    // A palm that landed first is drawing a blob: let go of it, undo what it drew, and let the pen take over.
+    if (e.pointerType === 'pen' && active !== null && activeType === 'touch') {
+      try { canvas.releasePointerCapture(active); } catch { /* already released */ }
+      if (snapshot) { try { ctx.putImageData(snapshot, 0, 0); } catch { /* no snapshot to restore */ } }
+      active = null; last = null; mid = null;
+    }
     if (palmRejected(e) || active !== null || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.preventDefault();
-    active = e.pointerId;
+    active = e.pointerId; activeType = e.pointerType;
+    snapshot = null;
+    if (e.pointerType === 'touch') { try { snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch { /* an empty canvas */ } }
+    colour = getComputedStyle(card).getPropertyValue('--text').trim() || getComputedStyle(card).color || '#888';
     try { canvas.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
     const pt = point(e);
     last = pt; mid = pt;
@@ -147,6 +158,7 @@ export function mountScratch(card, { onChange } = {}) {
   closeBtn.addEventListener('click', off);
   // A tap on a tool must not flip the card behind it (Review ignores clicks inside .scratch-tools too).
   tools.addEventListener('click', e => e.stopPropagation());
+  keepFocusOnPress(tools);                   // a mouse click on a tool must not take focus (Space would press it instead of flipping)
   canvas.addEventListener('click', e => e.stopPropagation());       // finishing a stroke is not a tap on the card
 
   function destroy() { enabled = false; ro?.disconnect(); canvas.remove(); tools.remove(); }

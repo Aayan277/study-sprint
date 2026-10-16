@@ -435,6 +435,7 @@ function summaryHTML(s, c) {
         ${s.hidden ? `<span><b>${s.hidden}</b> suspended or buried</span>` : ''}
       </div>
       ${held > 0 ? `<p class="held-note">${held} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
+      ${c.heldNewByRescue > 0 ? '<p class="held-note">New cards paused <span>(catch-up plan)</span></p>' : ''}
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">
         <span><i class="sw lv-new"></i>New <b>${s.new}</b></span>

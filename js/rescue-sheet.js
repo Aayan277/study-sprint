@@ -6,6 +6,8 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
+import { rescueBacklog } from './queue.js';
+import { dismissRescueToday } from './study-data.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
 
 // The warning text for a review limit that is lower than the plan needs ('' when it is fine).
@@ -15,6 +17,13 @@ export function limitWarning(reviewLimit, quota, usual) {
   const need = Math.ceil(quota + usual);
   if (reviewLimit >= need) return '';
   return `Your limit of ${plural(reviewLimit, 'review')} a day is lower than the ${need} this plan needs, so it will take longer. Raise "Reviews per day" in Settings, or clear it.`;
+}
+
+// The plan a new "Start" saves. The backlog is counted again now: Today may have been open past the new day's start,
+// and the plan counts cards due before its own start.
+export function newPlan(data, days, pauseNew, now = Date.now()) {
+  const start = dayStart(now);
+  return { start, days, backlog: rescueBacklog(data.cards, data.statesById, data.exempt, start), pauseNew, at: now };
 }
 
 // data: from loadAll (needs data.settings, data.rescue). state: { backlog, typical } from rescueState.
@@ -50,13 +59,14 @@ export function openRescueSheet({ data, state, offer = null, onChange = () => {}
   $('rsCancel')?.addEventListener('click', closeSheet);
   $('rsDone')?.addEventListener('click', closeSheet);
   $('rsStart')?.addEventListener('click', async () => {
-    await db.setSetting('rescue', { start: dayStart(), days, backlog: state.backlog, pauseNew, at: Date.now() });
+    await db.setSetting('rescue', newPlan(data, days, pauseNew));
     closeSheet();
     toast(`Catch-up plan started: ${days} days`);
     onChange();
   });
   $('rsAll')?.addEventListener('click', async () => {
     await db.setSetting('rescue', null);
+    dismissRescueToday();                                                // or the banner would offer a new plan straight away
     closeSheet();
     toast('Catch-up plan stopped. Everything is back.');
     onChange();

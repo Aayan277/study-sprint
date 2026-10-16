@@ -80,6 +80,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.keyboard.press('d');
   ok((await p.getAttribute(btn, 'aria-pressed')) === 'true' && (await style(p, 'pointerEvents')) === 'auto' && (await style(p, 'touchAction')) === 'none', `${tag}: D turns it on (pointer-events auto, touch-action none)`);
   ok(await p.evaluate(() => localStorage.getItem('study-sprint-scratch')) === '1', `${tag}: on is remembered on this device`);
+  ok(await p.$eval('.rv-card.scratching', e => getComputedStyle(e).userSelect === 'none' && (getComputedStyle(e).webkitTouchCallout ?? 'none') === 'none'), `${tag}: a scratching card cannot be text-selected (no long-press selection while drawing)`);
   ok(await p.locator('.scratch-tool').count() === 4 && (await p.locator('.scratch-tool').allTextContents()).join() === 'Pen,Eraser,Clear,Close', `${tag}: tools Pen, Eraser, Clear, Close`);
   ok((await p.$$eval('.scratch-tool', bs => bs.every(b => b.getBoundingClientRect().height >= 36 && b.getBoundingClientRect().width >= 36))), `${tag}: tools are at least 36px (40 by design)`);
   if (w < 800) {
@@ -125,6 +126,23 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok((await inked(p)) > pen1, `${tag}: a touch a second after the pen draws again`);
   await p.click('.scratch-tool[data-tool=clear]');
 
+  // ---- v4.8.1: a palm that lands FIRST must not block the pen: the palm is let go, its blob is undone, the pen draws ----
+  await pointer(p, 'pointerdown', 'touch', 8, 0.2, 0.5);
+  for (let i = 1; i <= 5; i++) await pointer(p, 'pointermove', 'touch', 8, 0.2 + 0.08 * i, 0.5 + 0.05 * i);
+  const blob = await inked(p);
+  ok(blob > 200, `${tag}: a palm landing first draws a blob (${blob} px)`);
+  await pointer(p, 'pointerdown', 'pen', 9, 0.3, 0.2);
+  const afterPen = await inked(p);
+  ok(afterPen < blob / 4, `${tag}: the pen landing takes over and the palm's blob is undone (${blob} → ${afterPen} px)`);
+  for (let i = 1; i <= 6; i++) await pointer(p, 'pointermove', 'pen', 9, 0.3 + 0.08 * i, 0.2 + (i % 2 ? 0.04 : 0));
+  await pointer(p, 'pointerup', 'pen', 9, 0.8, 0.2);
+  const penInk = await inked(p);
+  ok(penInk > afterPen + 150, `${tag}: and the pen then draws (${penInk} px)`);
+  await pointer(p, 'pointermove', 'touch', 8, 0.5, 0.9);
+  await pointer(p, 'pointerup', 'touch', 8, 0.5, 0.9);
+  ok((await inked(p)) === penInk, `${tag}: the palm that was let go draws nothing more`);
+  await p.click('.scratch-tool[data-tool=clear]');
+
   // ---- hidden while the zoom viewer is open ----
   await p.evaluate(() => { const d = document.createElement('dialog'); d.className = 'occ-view'; document.body.append(d); });
   await p.waitForFunction(() => getComputedStyle(document.querySelector('canvas.scratch')).visibility === 'hidden');
@@ -163,6 +181,28 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.evaluate(() => { location.hash = '#/today'; });
   await p.waitForFunction(() => !location.hash.startsWith('#/review'));
   ok(await p.locator('canvas.scratch').count() === 0, `${tag}: leaving Review removes the canvas`);
+  await p.close(); await ctx.close();
+}
+
+// ---- v4.8.1: after a MOUSE click on the pen or a tool, Space still flips the card (the button never takes focus) ----
+{
+  const { p, ctx } = await open(1440, 900, 'light');
+  await p.click('#scratchBtn');                                        // a real mouse click
+  ok((await p.getAttribute('#scratchBtn', 'aria-pressed')) === 'true', 'mouse click on the pen turns it on');
+  ok(await p.evaluate(() => document.activeElement?.id !== 'scratchBtn'), 'the pen button did not take focus');
+  await p.keyboard.press('Space');
+  await p.waitForSelector('.rate');
+  ok(await p.$eval('#flash', e => e.classList.contains('flipped')), 'Space flips the card after a mouse click on the pen');
+  await p.close(); await ctx.close();
+}
+{
+  const { p, ctx } = await open(1440, 900, 'light');
+  await p.keyboard.press('d');
+  await p.click('.scratch-tool[data-tool=eraser]');                    // a real mouse click on a tool
+  ok(await p.evaluate(() => !document.activeElement?.closest('.scratch-tools')), 'a tool button did not take focus');
+  await p.keyboard.press('Space');
+  await p.waitForSelector('.rate');
+  ok(await p.$eval('#flash', e => e.classList.contains('flipped')), 'Space flips the card after a mouse click on a tool');
   await p.close(); await ctx.close();
 }
 

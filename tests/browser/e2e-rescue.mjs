@@ -162,10 +162,24 @@ ok(await p.locator('.rescue-line').count() === 0, '(plan removed)');
 await p.evaluate(async b => { const db = await import('./js/db.js'); await db.importAll(b); }, backup);
 await go(p, '#/today', '.rescue-line');
 ok(/day 1 of 3 · 150 left/.test(await lineText(p)) && await startCount(p) === 100, 'after Restore the same plan runs: Start ' + await startCount(p));
+// v4.8.1: the deck page says the plan pauses new cards
+await go(p, '#/deck/Main', '.deck-summary');
+ok(/New cards paused\s*\(catch-up plan\)/.test(await p.textContent('.deck-summary')), 'the deck summary says new cards are paused by the catch-up plan');
+await go(p, '#/today', '.rescue-line');
 // Show everything now
 await p.click('#rescueManage'); await p.waitForSelector('#rsAll');
 await p.click('#rsAll'); await p.waitForFunction(() => !document.querySelector('.rescue-line'));
 ok(await plan(p) === null, '"Show everything now" clears the plan');
+// v4.8.1: ... and the banner must not come straight back (150 are overdue again), now or after a reload the same day
+ok(await p.locator('.rescue-banner').count() === 0, '"Show everything now" does not bring the offer banner straight back');
+await go(p, '#/today');
+ok(await p.locator('.rescue-banner').count() === 0, 'it stays hidden after a reload the same day');
+ok(await p.evaluate(async () => localStorage.getItem('study-sprint-rescue-dismissed') === String((await import('./js/days.js')).dayStart())), 'it is remembered as dismissed for today');
+// v4.8.1: Reset this device forgets the dismissals
+await p.evaluate(() => localStorage.setItem('study-sprint-mix-dismissed', '{}'));
+await p.evaluate(async () => { const s = await import('./js/study-data.js'); s.clearDismissals(); });
+ok(await p.evaluate(() => localStorage.getItem('study-sprint-rescue-dismissed') === null && localStorage.getItem('study-sprint-mix-dismissed') === null), 'clearDismissals forgets both keys');
+await go(p, '#/today');
 const all = await startCount(p);
 ok(all === 150 + 10 + 40 + 20 && await sideCount(p) === all, 'Start shows everything again: ' + all);
 await ctx.close();
@@ -188,6 +202,22 @@ for (const [w, h, scheme] of [[375, 740, 'dark'], [375, 740, 'light'], [1440, 90
   await p.screenshot({ path: `${SP}/rescue-manage-${w}-${scheme}.png` });
   await ctx.close();
 }
+
+
+// ======================= v4.8.1: a finished plan is cleared with the plan's own time (two-device race) =======================
+({ ctx, p } = await open(1440, 900));
+await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
+const times = () => p.evaluate(() => new Promise(res => { const r = indexedDB.open('study-sprint'); r.onsuccess = () => { const g = r.result.transaction('settings').objectStore('settings').get('_times'); g.onsuccess = () => { r.result.close(); res(g.result || {}); }; }; }));
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('rescue', { start: 1, days: 3, backlog: 10, pauseNew: true, at: 4242 }); await db.setSetting('rescue', null, { at: 4242 }); });
+ok((await times()).rescue === 4242, 'clearing a plan with { at } records the plan\'s own time, not now');
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('rescue', null); });
+ok((await times()).rescue > 1_700_000_000_000, 'without { at } a setting is still stamped with now');
+// A finished plan on Today is cleared with its own time: another device's newer plan (a later time) would win
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('rescue', { start: new Date(2020, 0, 1).getTime(), days: 3, backlog: 10, pauseNew: true, at: 777 }); });
+await go(p, '#/today');
+await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).rescue === null);
+ok((await times()).rescue === 777, 'Today cleared the old plan stamped with the plan\'s own time (' + (await times()).rescue + ')');
+await ctx.close();
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors[0] : ''));
 await browser.close();

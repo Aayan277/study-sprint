@@ -26,7 +26,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
 import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -269,6 +269,7 @@ function renderSession(el, enter = false) {
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
   $('scratchBtn').addEventListener('click', toggleScratch);
+  keepFocusOnPress($('scratchBtn').parentElement, '#scratchBtn');      // a mouse click on the pen must leave Space free to flip the card
   $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
   wireRatebar(el);
@@ -379,12 +380,12 @@ function flip(el) {
 // ---------- step-by-step cards (B5) ----------
 // The back of a "Step 1: ... Step 2: ..." card is a list with every step hidden. After the flip the bar under the card
 // reveals one step at a time (Space, Enter, → or the button), A shows them all, and the rating buttons come once every step
-// is on screen (1–4 rate at any time). Each revealed step takes the focus and the list is a polite live region.
+// is on screen (1–4 rate at any time). Each revealed step takes the focus (no live region: the focus move is what is read out); the last one moves it to the final answer.
 function stepsHTML(sp) {
   const shown = R.stepShown, all = shown >= sp.steps.length;
   return `${sp.intro ? `<div class="steps-intro">${formatHTML(sp.intro)}</div>` : ''}
-    <ol class="steps" id="steps" aria-live="polite" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
-    ${sp.final ? `<div class="steps-final" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
+    <ol class="steps" id="steps" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
+    ${sp.final ? `<div class="steps-final" tabindex="-1" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
 }
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 function backBarHTML() {
@@ -407,7 +408,9 @@ function revealStep(el, all = false) {
   if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
-  items[from]?.focus();                         // the step just revealed (the first of them, for Show all)
+  const final = flash.querySelector('.steps-final');
+  if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
+  else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)
 }
 
 // ---------- scratchpad (B4) ----------

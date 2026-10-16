@@ -10,7 +10,7 @@ import { addSampleDeck } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
-import { takeLaunch } from './study-data.js';
+import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
@@ -19,7 +19,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.8';
+const APP_VERSION = '4.8.1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -685,6 +685,7 @@ function confirmDeleteServer() {
 async function wipeThisDevice() {
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion } = settings;
   await db.resetAll();
+  clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);
   await db.setSetting('compactDecks', compactDecks);

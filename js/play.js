@@ -21,7 +21,7 @@ import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
-import { checkTyped } from './match.js';
+import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { plainText, mathHTML, answerText, answerTargets } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
@@ -256,6 +256,7 @@ function start(el, opts) {
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
+  G.mixIndex = buildAnswerIndex(all, c => { const a = questionFor(c, 'typing')?.answer; return a ? answerTargets(a) : []; }, MIX_SCAN_MAX);
   setFocusMode(true);
   el.innerHTML = `
     <div class="hud mono">
@@ -460,16 +461,11 @@ function answer(choice) {
 
 // A wrong typed answer that is exactly (no typo forgiveness) the answer of another card of this round's pool: that card's
 // id. Siblings of the same note don't count (their answers are on this card's front). The look-through is capped.
+// The index is built once when the round starts (G.mixIndex), so a wrong answer is one lookup.
 const MIX_SCAN_MAX = 2000;
 function typedMixup(typed) {
   if (!String(typed).trim()) return undefined;          // a skip
-  const card = G.card;
-  for (const other of G.all.slice(0, MIX_SCAN_MAX)) {
-    if (other.id === card.id || (card.noteId && other.noteId === card.noteId)) continue;
-    const ans = questionFor(other, 'typing')?.answer;
-    if (ans && checkTyped(typed, answerTargets(ans), { forgiving: false }).correct) return other.id;
-  }
-  return undefined;
+  return indexedMixup(G.mixIndex, typed, G.card);
 }
 
 // Save one answer: always to the review log (for stats), and to the review schedule when the

@@ -69,3 +69,14 @@ export function joinSteps({ intro = '', steps = [], final = null } = {}) {
   if (final && String(final).trim()) out.push(`Answer: ${String(final).trim()}`);
   return out.join('\n');
 }
+
+// Will these parts read back as the same steps once saved? False when a line inside a step starts with "Step N:" or
+// "Answer:" (or the intro does), because the saved back then parses differently. Used by the editor before it saves.
+export function stepsRoundTrip(parts, opts) {
+  const steps = (parts.steps || []).map(s => String(s).trim()).filter(Boolean);
+  const intro = String(parts.intro ?? '').trim(), final = String(parts.final ?? '').trim();
+  const again = parseSteps(joinSteps({ intro, steps, final }), opts);
+  // Same number of steps is not enough ("Answer: x" at the end of the last step would turn into the final answer).
+  return !!again && again.steps.length === steps.length && again.steps.every((t, i) => t === steps[i])
+    && again.intro === intro && (again.final ?? '') === final;
+}

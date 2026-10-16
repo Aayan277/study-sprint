@@ -8,7 +8,7 @@
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { hasMath, wrapMath, maskMath } from './math.js';
-import { parseSteps, joinSteps } from './steps.js';
+import { parseSteps, joinSteps, stepsRoundTrip } from './steps.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
@@ -179,7 +179,8 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
       <label class="adv-row switch-row steps-switch"><span><b>Answer in steps</b><span>Review shows the answer one step at a time.</span></span>
         <input type="checkbox" class="switch" id="${p}StepsOn" data-steps-for="${p}" ${parsed ? 'checked' : ''}></label>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
-      <div class="steps-ed" id="${p}Steps" data-intro="${esc(parsed?.intro || '')}" ${parsed ? '' : 'hidden'}>
+      <div class="steps-ed" id="${p}Steps" ${parsed ? '' : 'hidden'}>
+        <label class="field"><span>Intro (optional)</span><textarea id="${p}Intro" rows="2" placeholder="Shown before the first step.">${esc(parsed?.intro || '')}</textarea></label>
         <ol class="step-list" id="${p}StepList" aria-label="Steps">${rows.map((t, i) => stepRowHTML(i, t, rows.length)).join('')}</ol>
         <button type="button" class="btn ghost small" data-step-add="${p}">+ Add step</button>
         <label class="field"><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(parsed?.final || '')}</textarea></label>
@@ -189,13 +190,16 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
 export const stepsOn = p => !!document.getElementById(p + 'StepsOn')?.checked;
 const stepRows = p => [...document.querySelectorAll(`#${p}StepList [data-step-row]`)];
 const stepValues = p => stepRows(p).map(r => r.querySelector('textarea').value.trim()).filter(Boolean);
+const stepParts = p => ({ intro: document.getElementById(p + 'Intro').value, steps: stepValues(p), final: document.getElementById(p + 'Final').value });
 export function stepsProblem(p) {
   if (!stepsOn(p)) return '';
-  return stepValues(p).length >= 2 ? '' : 'Add at least two steps, or switch off “Answer in steps”.';
+  if (stepValues(p).length < 2) return 'Add at least two steps, or switch off “Answer in steps”.';
+  // What is saved must read back as the same steps (a line inside a step that starts "Step 3:" or "Answer:" would not).
+  return stepsRoundTrip(stepParts(p), { mask: maskMath }) ? '' : "A line inside a step can't start with 'Step N:' or 'Answer:'.";
 }
 export function readBack(p) {
   if (!stepsOn(p)) return readCardText(p + 'Back');
-  return joinSteps({ intro: document.getElementById(p + 'Steps').dataset.intro || '', steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+  return joinSteps(stepParts(p));
 }
 // Number the rows again (after adding, moving or deleting) and keep the names the buttons speak.
 function renumberSteps(p) {
@@ -214,7 +218,7 @@ function renumberSteps(p) {
 function fillSteps(p, steps, final = '', intro = '') {
   document.getElementById(p + 'StepList').innerHTML = steps.map((t, i) => stepRowHTML(i, t, steps.length)).join('');
   document.getElementById(p + 'Final').value = final;
-  document.getElementById(p + 'Steps').dataset.intro = intro;
+  document.getElementById(p + 'Intro').value = intro;
   renumberSteps(p);
 }
 export function clearBasic(p) {
@@ -232,7 +236,7 @@ document.addEventListener('change', e => {
     else if (back) fillSteps(p, [back, ''], '', '');            // what was in Back becomes the first step
     else if (stepValues(p).length === 0) fillSteps(p, ['', ''], '', '');
   } else {
-    const joined = joinSteps({ intro: steps.dataset.intro || '', steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+    const joined = joinSteps(stepParts(p));
     if (joined) setCardText(p + 'Back', joined);
   }
   steps.hidden = !on; wrap.hidden = on;

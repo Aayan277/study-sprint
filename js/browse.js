@@ -248,7 +248,10 @@ async function showMixedWith(card) {
     box.hidden = false;
     box.addEventListener('click', async e => {
       const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;
-      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {} });
+      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {
+        box.querySelector(`[data-mix-with="${CSS.escape(id)}"]`)?.closest('.mixed-line')?.remove();         // no longer mixed up: drop its line
+        if (!box.querySelector('.mixed-line')) box.hidden = true;
+      } });
     });
   } catch (err) { console.warn('mixed up with:', err); }     // the panel is fine without it
 }
@@ -574,14 +577,15 @@ function wireLinkTool(cards, { scope, refresh }) {
 }
 
 // ---------- adding one card ----------
-export function openAddCard({ decks, deckId, refresh }) {
+// prefill (optional): { front, back, onAdded } opens a Basic card with that text; it saves only on Add, then closes and runs onAdded.
+export function openAddCard({ decks, deckId, refresh, prefill = null }) {
   if (!decks.length) { toast('Make a deck first'); return; }
   const target = deckId || decks[0].id;
   // A deck with subdecks asks which one (starting with the deck itself).
   const choices = deckChoices(decks, deckId ? subtreeIds(decks, deckId) : null);
-  const kind = lastKind();
+  const kind = prefill ? 'basic' : lastKind();
   openSheet(`
-    <h2 id="sheetTitle">Add a card</h2>
+    <h2 id="sheetTitle">${prefill ? 'Add a comparison card' : 'Add a card'}</h2>
     <form id="acForm" class="sheet-in ac-form" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
@@ -601,6 +605,7 @@ export function openAddCard({ decks, deckId, refresh }) {
       </div>
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
+  if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
   $('acDone').addEventListener('click', closeSheet);
   const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
@@ -640,6 +645,7 @@ export function openAddCard({ decks, deckId, refresh }) {
       showErr('acErr', "Couldn't save the cards. Try again.");
       return;
     } finally { adding = false; }
+    if (prefill) { closeSheet(); toast('Comparison card added'); refresh(); prefill.onAdded?.(); return; }
     // Stay open for the next card, like Anki.
     $('acErr').hidden = true;
     if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }

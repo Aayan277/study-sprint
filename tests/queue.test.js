@@ -316,8 +316,10 @@ test('rescue: day 1 of 5 allows a fifth, a done day allows none, a skipped day a
   assert.equal(todayQueue(cards, states, plan()).queue.length, 20);
   // 20 done today: they are no longer overdue (due in a few days), so 80 remain and none more are allowed
   for (let i = 0; i < 20; i++) states.get(`b${99 - i}`).due = NOW + 4 * DAY;
-  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW).allow, 0);
-  assert.equal(todayQueue(cards, states, plan()).queue.filter(q => q.kind === 'review').length, 0);
+  // v4.8.1 review fix 2: allow is never below an equal split of what is left (ceil(80 / 5 days) = 16), so a deck made
+  // exempt mid-plan cannot starve the rest. It used to be 0 here (a finished day allowed nothing more).
+  assert.equal(rescueToday(plan(), cards, states, new Set(), NOW).allow, 16);
+  assert.equal(todayQueue(cards, states, plan()).queue.filter(q => q.kind === 'review').length, 16);
   // nothing done on day 1, so on day 2 all 100 remain and floor(100*3/5)=60 may wait: 40 are allowed
   const fresh = rescueSetup();
   assert.equal(rescueToday(plan(), fresh.cards, fresh.states, new Set(), NOW + DAY).allow, 40);
@@ -414,4 +416,16 @@ test('rescueOffer: only for a big, unusual pile; N is capped at RESCUE_MAX_DAYS 
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) }), null);
   assert.ok(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, dismissedDay: dayStart(NOW) - DAY }));
   assert.equal(rescueOffer({ backlog: 120, typicalDaily: 20, now: NOW, lastStudyDay: NOW - 9 * DAY }).awayDays, 9);
+});
+
+test('rescue: an exam added mid-plan does not starve the other decks (review fix 2)', () => {
+  const x = rescueSetup(90, 'X', 'x'), y = rescueSetup(60, 'Y', 'y');
+  const cards = [...x.cards, ...y.cards], states = new Map([...x.states, ...y.states]);
+  const p = plan({ days: 3, backlog: 150 });
+  assert.equal(rescueToday(p, cards, states, new Set(), NOW).allow, 50);                          // day 1, no exam: 150 / 3
+  const r = rescueToday(p, cards, states, new Set(['X']), NOW);                                   // exam on X added on day 1
+  assert.equal(r.remaining, 60);
+  assert.equal(r.allow, 20);                                                                      // Y gets ~20 a day (it was 0)
+  assert.equal(buildQueue(cards, states, 0, NOW, Infinity, null, undefined, r).queue.filter(q => q.card.deckId === 'Y').length, 20);
+  assert.equal(rescueToday(p, cards, states, new Set(['X']), NOW + 2 * DAY).allow, 60);          // the last day still allows everything left
 });

@@ -107,7 +107,9 @@ export function rescueToday(rescue, cards, statesById, exemptDeckIds = new Set()
   const remaining = rescueBacklog(cards, statesById, exemptDeckIds, rescue.start);
   if (remaining === 0) return null;
   const backlog = Number.isFinite(rescue.backlog) ? rescue.backlog : remaining;
-  const allow = Math.max(0, remaining - Math.floor(backlog * (rescue.days - k) / rescue.days));
+  // The even-pace share, but never less than an equal split of what is left over the days that remain: when a deck
+  // becomes exempt mid-plan (an exam added) `remaining` drops while `backlog` stays fixed, which would starve the others.
+  const allow = Math.max(0, remaining - Math.floor(backlog * (rescue.days - k) / rescue.days), Math.ceil(remaining / (rescue.days - k + 1)));
   return { cutoff: rescue.start, allow, k, days: rescue.days, remaining, pauseNew: rescue.pauseNew !== false, exempt: exemptDeckIds };
 }
 

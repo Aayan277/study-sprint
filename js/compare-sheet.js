@@ -2,7 +2,8 @@
 // (lazily, from the finish screens and the card panel; it is in the service worker's CORE list).
 //   two columns side by side (stacked under 600px)
 //   Drill these            6 questions in Play on the pair and 4 look-alike neighbours; the partner is always an option
-//   Make a comparison card "A vs B: what's the difference?" in the first card's deck, opened for editing
+//   Make a comparison card the add-card form, prefilled "A vs B: what's the difference?" in the first card's deck (nothing is saved
+//                          until Add, so Cancel leaves nothing behind)
 //   Not confused           hides the pair until it has been mixed up twice more (this device only)
 
 import * as db from './db.js';
@@ -30,8 +31,8 @@ const side = card => `
     <div class="cmp-text cmp-back">${imgHTML(card.backImage, 'card-img cmp-img')}${mathHTML(card.back)}</div>
   </section>`;
 
-// a, b: the two cards (from the database). onDismiss(pair) runs after "Not confused".
-export async function openCompare(a, b, { onDismiss = () => {} } = {}) {
+// a, b: the two cards (from the database). onDismiss(pair) runs after "Not confused"; onDone() after a comparison card was added.
+export async function openCompare(a, b, { onDismiss = () => {}, onDone = () => {} } = {}) {
   if (!a || !b) return;
   const { pairs } = await loadPairs();
   const pair = pairs.find(p => p.key === pairKey(a.id, b.id));
@@ -51,11 +52,14 @@ export async function openCompare(a, b, { onDismiss = () => {} } = {}) {
     (await import('./play.js')).drillCards(ids, { mix: [[a.id, b.id], [b.id, a.id]], total: 6 });
   });
   $('cmpMake').addEventListener('click', async () => {
-    const card = { id: db.newId(), deckId: a.deckId, ...comparisonText(a, b), tags: [], created: Date.now() };
-    await db.saveCards([card]);
-    toast('Comparison card added. Fill in the differences.');
-    const decks = await db.getDecks();
-    (await import('./browse.js')).openCardPanel(card, { decks, statesById: new Map(), mode: 'edit' });
+    const btn = $('cmpMake');
+    if (btn.disabled) return;
+    btn.disabled = true;                                           // a double tap must not open the form twice
+    try {
+      const { front, back } = comparisonText(a, b);
+      const decks = await db.getDecks();
+      (await import('./browse.js')).openAddCard({ decks, deckId: a.deckId, refresh: () => {}, prefill: { front, back, onAdded: onDone } });
+    } catch (err) { console.error(err); btn.disabled = false; toast("Couldn't open the card form. Try again."); }
   });
   $('cmpNot')?.addEventListener('click', () => {
     saveDismissed(dismissPair(loadDismissed(), pair));

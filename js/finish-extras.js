@@ -56,7 +56,7 @@ export const drawFinishExtras = (slot, { source, cardIds = [], leechIds = [], en
     if (!slot.isConnected) return;
     slot.innerHTML = html;
     slot.hidden = !html;
-    if (html) (await import('./leech-coach.js')).wireCoach(slot);
+    if (html) await safe(async () => (await import('./leech-coach.js')).wireCoach(slot));       // a failed import must not skip the pairs panel
   }).then(() => pairsPanel({ source, cardIds, entries })).then(more => {
     if (!more || !slot.isConnected) return;
     slot.insertAdjacentHTML('beforeend', more);

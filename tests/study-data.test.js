@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rescueState, countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { rescueState, rescueClearAt, clearDismissals, RESCUE_DISMISS, countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 import { dayStart } from '../js/days.js';
@@ -284,4 +284,43 @@ test('rescueState: a plan that is over (days up, or nothing left) is finished, s
   assert.equal(rescueState(rescueData(0, { saved: fresh }), RNOW).finished, true);
   assert.equal(rescueState(rescueData(40, { saved: fresh, rescue: { k: 2 } }), RNOW).finished, false);
   assert.equal(rescueState(rescueData(40, { saved: { ...plan, start: dayStart(RNOW) + DAY } }), RNOW).finished, false);   // not started yet: kept
+});
+
+// ---------- review fixes (v4.8.1) ----------
+import { decide, rowFromSetting } from '../js/sync-merge.js';
+test('rescue auto-clear race: a stale device clearing a finished plan never beats a newer plan from another device', () => {
+  const old = { start: 1, days: 3, backlog: 100, pauseNew: true, at: 1_000 };
+  const newer = { start: 9, days: 3, backlog: 80, pauseNew: true, at: 5_000 };
+  assert.equal(rescueClearAt(old), 1_000);
+  assert.equal(rescueClearAt(null), 0);
+  assert.equal(rescueClearAt({ days: 3 }), 0);                       // a plan without a time still loses to anything newer
+  // The clear is stamped with the old plan's time, so device B (holding the newer plan) skips it ...
+  assert.equal(decide(rowFromSetting('rescue', null, rescueClearAt(old)), newer.at), 'skip');
+  // ... where a clear stamped "now" (the old behaviour) would have wiped it.
+  assert.equal(decide(rowFromSetting('rescue', null, 9_000), newer.at), 'put');
+  // And a device still holding the old plan does take the clear from a newer one.
+  assert.equal(decide(rowFromSetting('rescue', null, 7_000), old.at), 'put');
+});
+
+test('hasReviewLimit: a running catch-up plan counts (each deck row can show up to its allow)', () => {
+  assert.equal(hasReviewLimit({ settings: { reviewLimit: Infinity }, decks: [], rescue: null }), false);
+  assert.equal(hasReviewLimit({ settings: { reviewLimit: Infinity }, decks: [], rescue: { allow: 5 } }), true);
+});
+
+test('deckCounts: heldNewByRescue is the new cards the plan\'s pause holds back (0 when it does not pause)', () => {
+  const d = world();
+  d.cards.push({ id: 'n1', deckId: 'P', created: 99 }, { id: 'n2', deckId: 'P', created: 100 });
+  d.split = splitCards(d.cards, d.statesById, now, d.exam);
+  const rescue = { cutoff: now, allow: 9, k: 1, days: 5, remaining: 9, pauseNew: true, exempt: new Set() };
+  assert.equal(deckCounts({ ...d, rescue: null }, ['P']).heldNewByRescue, 0);
+  const paused = deckCounts({ ...d, rescue }, ['P']);
+  assert.deepEqual([paused.fresh, paused.heldNewByRescue], [0, 2]);
+  assert.equal(deckCounts({ ...d, rescue: { ...rescue, pauseNew: false } }, ['P']).heldNewByRescue, 0);
+});
+
+test('clearDismissals (Reset this device) forgets the mix-up and catch-up dismissals only', () => {
+  const kept = new Map([['study-sprint-mix-dismissed', '{}'], [RESCUE_DISMISS, '123'], ['study-sprint-scratch', '1']]);
+  clearDismissals({ removeItem: k => kept.delete(k) });
+  assert.deepEqual([...kept.keys()], ['study-sprint-scratch']);
+  assert.doesNotThrow(() => clearDismissals({ removeItem() { throw new Error('blocked'); } }));
 });

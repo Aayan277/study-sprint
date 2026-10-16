@@ -79,6 +79,22 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await p.fill('#acFront', 'One step only');
   await ta(0).fill('just this');
   ok(await p.getAttribute(addBtn, 'aria-disabled') === 'true' && /two steps/.test(await p.textContent('#acWhy')), `${tag}: one step cannot be added (${(await p.textContent('#acWhy')).trim()})`);
+  // v4.8.1: a line inside a step that starts "Answer:" or "Step N:" would not read back as the same steps: it is refused with a reason
+  ok(await p.locator('#acIntro').isVisible() && /Intro \(optional\)/.test(await p.textContent('#acSteps')), `${tag}: the intro is a visible "Intro (optional)" field`);
+  await ta(1).fill('then\nAnswer: x');
+  ok(await p.getAttribute(addBtn, 'aria-disabled') === 'true' && /can't start with 'Step N:' or 'Answer:'/.test(await p.textContent('#acWhy')), `${tag}: "Answer:" inside a step is refused (${(await p.textContent('#acWhy')).trim()})`);
+  await ta(1).fill('then');
+  await p.fill('#acFinal', 'so\nStep 3: more');
+  ok(await p.getAttribute(addBtn, 'aria-disabled') === 'true' && /can't start with/.test(await p.textContent('#acWhy')), `${tag}: "Step 3:" inside the final answer is refused`);
+  await p.fill('#acFinal', 'done');
+  await p.fill('#acIntro', 'Warm up first');
+  ok(await p.getAttribute(addBtn, 'aria-disabled') === 'false', `${tag}: fixed, it can be added`);
+  await p.click(addBtn);
+  await p.waitForFunction(() => document.getElementById('acFront').value === '' || document.getElementById('acFront').textContent === '');
+  ok((await stored(p, 'One step only'))?.back === 'Warm up first\nStep 1: just this\nStep 2: then\nAnswer: done', `${tag}: the intro field is saved above the steps`);
+  ok(await p.inputValue('#acIntro') === '', `${tag}: and cleared for the next card`);
+  await p.fill('#acFront', 'One step only 2');
+  await ta(0).fill('just this');
   // Switching off puts the steps into Back.
   await p.click('#acStepsOn');
   ok((await p.evaluate(() => { const b = document.getElementById('acBack'); return b.value ?? b.textContent; })).includes('Step 1: just this'), `${tag}: switching off writes the steps into Back`);
@@ -110,7 +126,8 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await p.keyboard.press('Space'); await p.waitForSelector('#stepBtn');
   ok(await visibleSteps(p) === 0 && await p.locator('.rate').count() === 0, `${tag}: after the flip no steps are visible and there are no rating buttons`);
   ok(/Reveal step 1 of 3/.test(await p.textContent('#stepBtn')) && /Try step 1 yourself, then reveal/.test(await p.textContent('#stepTry')), `${tag}: "Reveal step 1 of 3" and "Try step 1 yourself, then reveal"`);
-  ok((await p.getAttribute('#steps', 'aria-live')) === 'polite', `${tag}: the steps are a polite live region`);
+  // v4.8.1 review: no live region (the focus move is what is read out; both together read every step twice).
+  ok((await p.getAttribute('#steps', 'aria-live')) === null, `${tag}: the steps are not a live region (the focus move is announced instead)`);
   ok(/Work it out in three moves/.test(await p.textContent('.steps-intro')), `${tag}: the intro shows`);
   ok(await p.$eval('.rv-back:not([inert]) .flash-extra', e => e.hidden), `${tag}: the memory hook waits until the last step`);
   await p.screenshot({ path: `${SP}/steps-flipped-${w}-${scheme}.png` });
@@ -128,6 +145,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await p.keyboard.press('Enter');
   ok(await visibleSteps(p) === 3 && await p.locator('.rate').count() === 4 && await p.locator('#stepBtn').count() === 0, `${tag}: Enter reveals the last step and the four rating buttons appear`);
   ok(await p.$eval('.steps-final', e => !e.hidden && /x = 2/.test(e.textContent)) && await p.$eval('.rv-back:not([inert]) .flash-extra', e => !e.hidden), `${tag}: the final answer is shown with the last step, and the hook`);
+  ok(await p.evaluate(() => document.activeElement === document.querySelector('.steps-final')), `${tag}: the last step moves focus to the final answer`);
   await p.screenshot({ path: `${SP}/steps-done-${w}-${scheme}.png` });
   await sideways(p, w, tag + ' review');
   await p.keyboard.press('3');

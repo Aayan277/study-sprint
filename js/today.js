@@ -8,7 +8,8 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live, rescueState } from './study-data.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
+import { lastStatus } from './sync.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
@@ -45,7 +46,6 @@ export async function startStudy(spec = {}) {
   $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
 }
 const launch = startStudy;
-const RESCUE_DISMISS = 'study-sprint-rescue-dismissed';       // this device only: the study day the banner was dismissed
 const dismissedDay = () => { try { return Number(localStorage.getItem(RESCUE_DISMISS)) || null; } catch { return null; } };
 const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row offers; the rest are one tap away in Decks
 
@@ -55,7 +55,9 @@ export async function renderToday(el) {
   if (!el.isConnected) return;
   // "Back from a break": a finished plan is cleared here (loadAll never writes), then the banner or the plan line is worked out.
   let rescue = rescueState(data, Date.now(), dismissedDay());
-  if (rescue.finished) { data.settings.rescue = null; db.setSetting('rescue', null); rescue = rescueState(data, Date.now(), dismissedDay()); }
+  // Not while the first sync is running: a fresh sign-in has no cards yet and would see the plan as finished.
+  // The clear carries the plan's own time, so a newer plan from another device still wins.
+  if (rescue.finished && lastStatus().state !== 'syncing') { const at = rescueClearAt(data.settings.rescue); data.settings.rescue = null; db.setSetting('rescue', null, { at }); rescue = rescueState(data, Date.now(), dismissedDay()); }
   let rescueDays = rescue.offer?.n;
   const cardMs = typicalCardMs(data.history);
   const allIds = data.decks.map(d => d.id);
@@ -250,7 +252,7 @@ export async function renderToday(el) {
     $('rescueManage')?.addEventListener('click', () => openRescue({ focus: 'rescueManage' }));
     $('rescueGo')?.addEventListener('click', () => openRescue({ offer: { ...rescue.offer, n: rescueDays }, focus: 'rescueGo' }));
     $('rescueNo')?.addEventListener('click', () => {
-      try { localStorage.setItem(RESCUE_DISMISS, String(dayStart())); } catch { /* the banner just comes back on a reload */ }
+      dismissRescueToday();
       rescue = { ...rescue, offer: null };
       draw();
     });

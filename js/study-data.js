@@ -50,7 +50,7 @@ export async function loadAll({ history = false } = {}) {
 }
 
 // Is any review limit set (overall or on a deck)? Without one, subdecks' due counts can't add up to more than their parent's.
-export const hasReviewLimit = data => Number.isFinite(data.settings.reviewLimit) || data.decks.some(d => Number.isFinite(d.reviewPerDay));
+export const hasReviewLimit = data => Number.isFinite(data.settings.reviewLimit) || data.decks.some(d => Number.isFinite(d.reviewPerDay)) || !!data.rescue;      // (a catch-up plan gives every deck row up to `allow`)
 
 // A set of decks and everything inside them.
 export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
@@ -62,6 +62,7 @@ export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [..
 //   heldBySiblings scheduled cards that wait until tomorrow because a sibling of the same note is shown
 //   heldByLimit    cards that wait until tomorrow because of a daily review limit
 //   heldByRescue   cards the catch-up plan holds back (0 when data.rescue is empty)
+//   heldNewByRescue new cards the plan's "pause new cards" switch holds back
 // The cards were sorted into due / waiting / new once, in loadAll(), so counting a deck only looks at the short
 // lists (not every card), however many decks are counted. The two "held" numbers are worked out only when read.
 export function deckCounts(data, deckIds) {
@@ -99,7 +100,12 @@ export function deckCounts(data, deckIds) {
     due, fresh, total: due + fresh, scheduled,
     get heldByLimit() { return noLimit() - noRescue(); },
     get heldByRescue() { return noRescue() - due; },       // cards the catch-up plan (data.rescue) holds back for later days
-    get heldBySiblings() { return scheduled - noLimit(); }
+    get heldBySiblings() { return scheduled - noLimit(); },
+    get heldNewByRescue() {
+      if (!data.rescue?.pauseNew) return 0;
+      const q = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, null);
+      return q.queue.filter(x => x.kind === 'new').length - fresh;
+    }
   };
 }
 // deckCounts plus `cards` (every card in these decks), which is only worked out if someone asks for it.
@@ -147,6 +153,17 @@ export function customQueue(kind, data, cards, days = 3) {
 //   finished  a plan is saved but over (its days are up, or nothing overdue is left): Today clears it
 //   offer     null, or { n, backlog, typical, perDay, awayDays } to show the banner (rescueOffer)
 //   backlog   overdue cards right now (exam decks left out)      typical  your usual reviews a day
+// "Not today" for the catch-up banner: remembered on this device for the study day (localStorage).
+export const RESCUE_DISMISS = 'study-sprint-rescue-dismissed';
+export const dismissRescueToday = (now = Date.now()) => { try { localStorage.setItem(RESCUE_DISMISS, String(dayStart(now))); } catch { /* the banner just comes back on a reload */ } };
+// "Reset this device": forget what this device remembered being dismissed (mix-up pairs and the catch-up banner).
+// (The mix-up key is confusion.js DISMISS_KEY; it is repeated here so Today does not load Play's modules at start: a test checks they match.)
+export const MIX_DISMISS = 'study-sprint-mix-dismissed';
+export function clearDismissals(storage = globalThis.localStorage) {
+  for (const k of [MIX_DISMISS, RESCUE_DISMISS]) { try { storage.removeItem(k); } catch { /* no storage: nothing to clear */ } }
+}
+// The time a finished plan is cleared with: the plan's own, so a newer plan from another device always wins (sync keeps the newest).
+export const rescueClearAt = saved => (Number.isFinite(saved?.at) ? saved.at : 0);
 // `data` must come from loadAll({ history: true }). dismissedDay is the dayStart of a dismissal made today.
 export function rescueState(data, now = Date.now(), dismissedDay = null) {
   const saved = data.settings.rescue;

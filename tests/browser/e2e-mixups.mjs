@@ -193,9 +193,21 @@ await p.waitForSelector('.crow[data-id=bg0] .crow-btn');
 await p.click('.crow[data-id=bg0] .crow-btn'); await p.waitForSelector('#ceMixed:not([hidden])');
 await p.click('#ceMixed [data-mix-with]'); await p.waitForSelector('#cmpMake');
 await p.click('#cmpMake');
-await p.waitForSelector('#ceForm');
-const made = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).find(c => c.front.includes(' vs ')));
-ok(made && made.front === "Term 0 vs Term 1: what's the difference?" && made.back === '- Term 0: …\n- Term 1: …' && made.deckId === 'bg', 'a comparison card was made in the first card’s deck');
+// v4.8.1: "Make a comparison card" opens the add-card form prefilled; nothing is saved until Add (Cancel leaves no junk).
+await p.waitForSelector('#acForm');
+const findMade = () => p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.front.includes(' vs ')));
+const filled = await p.evaluate(async () => { const m = await import('./js/card-editor.js'); return [m.readCardText('acFront').trim(), m.readCardText('acBack').trim()]; });
+ok(filled[0] === "Term 0 vs Term 1: what's the difference?" && filled[1] === '- Term 0: …\n- Term 1: …', 'the add-card form is prefilled with the comparison text');
+ok((await findMade()).length === 0, 'nothing is saved before Add');
+await p.click('#acDone'); await p.waitForFunction(() => !document.getElementById('sheet').open);
+ok((await findMade()).length === 0, 'Cancel leaves no card behind');
+await p.click('.crow[data-id=bg0] .crow-btn'); await p.waitForSelector('#ceMixed:not([hidden])');
+await p.click('#ceMixed [data-mix-with]'); await p.waitForSelector('#cmpMake');
+await p.click('#cmpMake'); await p.waitForSelector('#acForm');
+await p.keyboard.press('Control+Enter');
+await p.waitForFunction(() => !document.getElementById('sheet').open);
+const made = (await findMade())[0];
+ok(made && made.front === "Term 0 vs Term 1: what's the difference?" && made.back === '- Term 0: …\n- Term 1: …' && made.deckId === 'bg' && (await findMade()).length === 1, 'Add saves one comparison card in the first card’s deck');
 await p.context().close();
 
 // ---------- 4. Looks: Compare and results at 375/1440, dark and light ----------

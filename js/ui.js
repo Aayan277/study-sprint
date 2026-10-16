@@ -11,12 +11,18 @@ export function esc(s) {
 
 // A short message that pops up above the tab bar for a few seconds.
 let toastTimer = 0;
-export function toast(msg) {
+// `link` ({ href, label }) adds a link after the message and keeps the toast up longer, so it can be tapped.
+export function toast(msg, { link = null } = {}) {
   const t = $('toast');
   t.textContent = msg;
+  if (link) {
+    const a = document.createElement('a');
+    a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
+    t.append(' ', a);
+  }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  toastTimer = setTimeout(() => { t.hidden = true; }, link ? 7000 : 2600);
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
@@ -256,3 +262,11 @@ export const onControl = (e, except) => {
   return !!control && control.id !== except;
 };
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// A mouse or finger press on these buttons must not move focus to them, so Space still flips the card afterwards.
+// (Keyboard use is untouched: Tab and Enter focus and press a button as usual.) `selector` picks the buttons inside `root`.
+export function keepFocusOnPress(root, selector = 'button') {
+  const stop = e => { if (e.target.closest?.(selector)) e.preventDefault(); };
+  root.addEventListener('pointerdown', stop);
+  root.addEventListener('mousedown', stop);
+}

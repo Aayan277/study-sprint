@@ -117,3 +117,29 @@ export function closestChoice(typed, back) {
   }
   return best;
 }
+
+// ---------- an index of exact answers (Play's "mixed up with" check) ----------
+// Built once per round instead of comparing a typed answer with up to 2000 cards on every wrong answer.
+// buildAnswerIndex(cards, targetsOf)   Map: normalized answer (spaces ignored) → the cards that accept it, in the order given.
+//   targetsOf(card) → the wordings the card accepts (format.js answerTargets of its answer), or [] when it has none.
+// indexedMixup(index, typed, card)     the id of another card whose answer was typed exactly, else undefined. Siblings of the
+//                                      same note (their answers sit on this card's front) and the card itself don't count.
+const squashed = s => normalizeAnswer(s).replace(/ /g, '');
+export function buildAnswerIndex(cards, targetsOf, max = 2000) {
+  const index = new Map();
+  for (const card of cards.slice(0, max)) {
+    const keys = new Set();
+    for (const target of targetsOf(card) || []) for (const a of acceptedAnswers(target)) { const k = a.replace(/ /g, ''); if (k) keys.add(k); }
+    for (const k of keys) { if (!index.has(k)) index.set(k, []); index.get(k).push(card); }
+  }
+  return index;
+}
+export function indexedMixup(index, typed, card) {
+  const key = squashed(String(typed ?? ''));
+  if (!key) return undefined;
+  for (const other of index.get(key) || []) {
+    if (other.id === card.id || (card.noteId && other.noteId === card.noteId)) continue;
+    return other.id;
+  }
+  return undefined;
+}

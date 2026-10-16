@@ -397,7 +397,8 @@ export async function getSettings() {
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
-export async function setSetting(key, value) {
+// `at` (optional) is the time to record for a synced setting instead of now: a clear that should lose to any newer copy passes the old copy's own time.
+export async function setSetting(key, value, { at: given } = {}) {
   const db = await openDB();
   const tx = db.transaction('settings', 'readwrite');
   const os = tx.objectStore('settings');
@@ -406,7 +407,7 @@ export async function setSetting(key, value) {
     // A merged setting must beat the version the server already holds even if another device's clock is ahead.
     os.get(SETTING_TIMES).onsuccess = e => {
       const times = e.target.result || {};
-      const at = MERGED_SETTINGS.includes(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
+      const at = Number.isFinite(given) ? given : MERGED_SETTINGS.includes(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
       os.put({ ...times, [key]: at }, SETTING_TIMES);
     };
   }
