@@ -28,3 +28,24 @@ Nothing blocking; the merges are verified correct. Fix all of these after 2D (le
 - **`.rv-card.scratching`:** add `-webkit-user-select:none; -webkit-touch-callout:none`.
 - **app.js:685 `wipeThisDevice`:** also clear the `study-sprint-mix-dismissed` and `study-sprint-rescue-dismissed` keys.
 - **Decision (Claude, delegated):** keep the 2-day chip. A shorter plan is closer to "no plan", which the simulation showed is memory-safe; 3 is the default.
+
+# Leech coach review (45ef7f0)
+## Blocking
+L1. **Double tap on Split creates duplicates** (leech-coach.js:142-160).
+- Add a `busy` guard to `go()` and disable the submit button and `cfYes`, re-enabling them if anything throws.
+- Give the hook save (:98) the same guard.
+L2. **Split loses data on non-Basic cards** (leech-logic.js:221-226).
+- Hide Split when `card.noteId || card.cloze || card.occlusion` (rowHTML :24).
+- Copy `backImage` (and `noteExtra`) onto the first new card.
+
+## Should fix
+L3. **Split default:** "Keep it, suspended" should be the default (decision, delegated).
+L4. **dropRow focus** (:47-51): focus the next/previous row's first button, or `#coachTitle` (`tabindex=-1`).
+L5. **Inline confirms** (:81, :161): focus Cancel when shown; Cancel returns focus to the opener.
+L6. **Edit on a cloze card** can tag siblings as leeches (leech-coach.js:194-204 + browse.js:322-325). Pass the card with `leech` already removed from its tags to `openCardPanel`.
+L7. **Comparison** never closes the row: pass `onDone` into `openCompare` (check it reports success) and call `done('Comparison card made.')`.
+
+## Nits
+- "Forgotten 3×" → "Forgotten 3 times".
+- finish-extras.js: wrap `wireCoach` in `safe()`, so a failed import doesn't skip the pairs panel.
+- Fix later toast → a link to `#/browse/leech`.
