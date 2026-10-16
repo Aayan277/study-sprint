@@ -1,7 +1,10 @@
 // Extra panels on the finish screens (Review and Play): leeches caught this session and pairs that got mixed up.
-// Loaded lazily by the finish screen. Both panels are stubs until their batches land (2D leech coach, 2C pairs).
+// Loaded lazily by the finish screen. The leech panel ("Cards you keep forgetting") is built in leech-coach.js.
 
-const leechPanel = (/* { leechIds } */) => '';
+async function leechPanel({ leechIds }) {
+  if (!leechIds?.length) return '';
+  return (await import('./leech-coach.js')).coachHTML(leechIds);
+}
 
 import { pairsFor } from './confusion.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -46,11 +49,15 @@ export const drawFinishExtras = (slot, { source, cardIds = [], leechIds = [], en
   if (!slot) return;
   // Cards can be deleted (or synced away) mid-session: panels must skip ids that no longer have a card, and a panel
   // that fails leaves the finish screen as it was.
-  const safe = fn => { try { return fn() || ''; } catch (err) { console.warn('finish extras:', err); return ''; } };
-  const html = safe(() => leechPanel({ source, leechIds }));
-  slot.innerHTML = html;
-  slot.hidden = !html;
-  return Promise.resolve().then(() => pairsPanel({ source, cardIds, entries })).then(more => {
+  const safe = async fn => { try { return (await fn()) || ''; } catch (err) { console.warn('finish extras:', err); return ''; } };
+  slot.innerHTML = '';
+  slot.hidden = true;
+  return safe(() => leechPanel({ source, leechIds })).then(async html => {
+    if (!slot.isConnected) return;
+    slot.innerHTML = html;
+    slot.hidden = !html;
+    if (html) (await import('./leech-coach.js')).wireCoach(slot);
+  }).then(() => pairsPanel({ source, cardIds, entries })).then(more => {
     if (!more || !slot.isConnected) return;
     slot.insertAdjacentHTML('beforeend', more);
     slot.hidden = false;

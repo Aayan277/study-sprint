@@ -2236,3 +2236,31 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .mixed-line{margin:0;font-size:var(--fs-sm);color:var(--text-2)}
 .mixed-line b{color:var(--text);font-weight:600}
 .mixed-line .link{padding:4px 6px;min-height:32px;color:var(--accent-text);text-decoration:underline}
+
+/* ---------- 34. Leech coach: "Cards you keep forgetting" on the finish screens (js/leech-coach.js) ---------- */
+.coach{margin-top:var(--s-6)}
+.coach > h2{margin:0 0 var(--s-1)}
+.coach-list{list-style:none;margin:var(--s-3) 0 0;padding:0;display:grid;gap:var(--s-3)}
+.coach-row{padding:var(--s-4);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md);display:grid;gap:var(--s-3);min-width:0}
+.coach-card{display:grid;gap:2px;min-width:0}
+.coach-f{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.coach-b{color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.coach-n{font-size:var(--fs-xs);color:var(--text-2);margin-top:2px}
+.coach-acts{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.coach-more{display:flex;flex-wrap:wrap;gap:var(--s-1) var(--s-4)}
+.coach-more .link{padding:6px 0;min-height:32px;color:var(--text-2);text-decoration:underline;font-size:var(--fs-sm)}
+.coach-more .link[data-act="delete"]{color:var(--again)}
+.coach-confirm:empty{display:none}
+.coach-confirm .confirm p{margin:0 0 var(--s-2);font-size:var(--fs-sm)}
+.coach-form{display:grid;gap:var(--s-3)}
+.coach-q{margin:0;padding:var(--s-3);background:var(--surface-2);border-radius:var(--r-md);overflow-wrap:anywhere}
+.split-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-3)}
+.split-row{display:grid;gap:var(--s-2);padding:var(--s-3);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md)}
+.split-orig{margin:0;display:grid;gap:var(--s-2)}
+.split-orig legend{font-size:var(--fs-xs);font-weight:500;color:var(--text-2);margin-bottom:var(--s-1)}
+.radio-row{display:flex;align-items:center;gap:var(--s-2);min-height:36px}
+.partner-list{list-style:none;margin:var(--s-3) 0 0;padding:0;display:grid;gap:var(--s-2)}
+.partner-pick{width:100%;text-align:left;display:grid;gap:2px;padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text);cursor:pointer;min-width:0}
+.partner-pick:hover{background:var(--surface-2)}
+.hard-fix{margin:var(--s-3) 0 0;font-size:var(--fs-sm)}
+.hard-fix .link{color:var(--accent-text);text-decoration:underline}

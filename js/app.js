@@ -19,7 +19,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.7';
+const APP_VERSION = '4.8';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -791,7 +791,7 @@ const ROUTES = {
   play: async el => (await import('./play.js')).renderPlay(el),
   decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
   deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
-  browse: async el => (await import('./browse.js')).renderBrowseAll(el),
+  browse: async (el, arg) => (await import('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
   stats: async el => (await import('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)

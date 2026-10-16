@@ -29,20 +29,22 @@ function filterOptions(current) {
 }
 
 // ---------- the "All cards" screen (#/browse) ----------
-export async function renderBrowseAll(el) {
+// `filter` (the route's argument, #/browse/leech) sets the list's starting filter.
+export async function renderBrowseAll(el, filter) {
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ Decks</button>
     <div class="screen-head"><div><h1>All cards</h1></div></div>
     <section id="browser"></section>`;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
-  await mountBrowser($('browser'), { deckId: null });
+  await mountBrowser($('browser'), { deckId: null, filter });
 }
 
 // ---------- the list ----------
 // Draws the card list into `box`. deckId = null means all decks; a deck's list includes its subdecks.
 // onChange runs after anything changes (the deck page uses it to refresh its counts).
-export async function mountBrowser(box, { deckId, onChange = () => {} }) {
+export async function mountBrowser(box, { deckId, onChange = () => {}, filter }) {
   const B = { deckId, selecting: false, selected: new Set(), shown: PAGE, ...memory };
+  if (filter && FILTERS.some(([k]) => k === filter)) B.filter = filter;      // a link to a filter (#/browse/leech) starts on it
   let decks, cards, statesById, inside;
 
   const load = async () => {

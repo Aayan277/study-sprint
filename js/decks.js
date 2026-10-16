@@ -117,6 +117,7 @@ const savedSort = () => { try { const v = localStorage.getItem(SORT_KEY); return
 export async function renderLibrary(el, showStarters = false) {
   const today = await loadAll(), list = loadDecks(today);
   const compact = today.settings.compactDecks !== false;
+  const leeches = today.allCards.filter(c => (c.tags || []).includes('leech')).length;      // cards you keep forgetting, waiting for a fix
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
   const todayAll = countFor(today, top.map(x => x.deck.id));      // today's numbers: daily limits applied
@@ -205,7 +206,7 @@ export async function renderLibrary(el, showStarters = false) {
     </div>`}
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
-    ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
+    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
     ${starters.length ? `
     <details class="starters" id="startersBox" ${showStarters ? 'open' : ''}>
       <summary>Starter decks</summary>
