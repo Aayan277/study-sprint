@@ -167,6 +167,7 @@ export async function renderStats(el) {
   const cardStates = cards.map(c => statesById.get(c.id));
   const forecast = dueForecast(cardStates, now);
   const hardest = hardestCards(cards, statesById, recent, now);
+  const leechCount = cards.filter(c => (c.tags || []).includes('leech')).length;
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
   const total30 = perDay.reduce((n, d) => n + d.total, 0);
@@ -283,6 +284,7 @@ export async function renderStats(el) {
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
         ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
       : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
+      ${leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(leechCount, 'card')} to fix</a> <span class="muted small">cards you keep forgetting</span></p>` : ''}
     </section>
 
     <section class="more-stats">
