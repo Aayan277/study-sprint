@@ -284,3 +284,13 @@ test('siblings: a hidden sibling does not use up a new-card slot, and ordinary c
   assert.deepEqual(q, ['n1', 'p1']);
   assert.deepEqual(limitSiblings([{ card: sibCard('x'), kind: 'review' }, { card: sibCard('y'), kind: 'review' }]).length, 2);
 });
+
+test('siblings: the boxes of one picture are one card a day, like cloze blanks', () => {
+  const occCard = (id, n) => ({ id, deckId: 'd', noteId: 'PIC', front: id, back: '', backImage: 'm', occlusion: { n, w: 10, h: 10, masks: [{ id: 'a', n: 1, shape: 'rect', x: 0, y: 0, w: 0.1, h: 0.1 }, { id: 'b', n: 2, shape: 'rect', x: 0.5, y: 0.5, w: 0.1, h: 0.1 }, { id: 'c', n: 3, shape: 'rect', x: 0.2, y: 0.5, w: 0.1, h: 0.1 }] } });
+  const cards = [occCard('o1', 1), occCard('o2', 2), occCard('o3', 3), sibCard('plain')];
+  const states = new Map([['o1', { state: REVIEW, due: NOW - DAY }], ['o2', { state: REVIEW, due: NOW - 3 * DAY }], ['o3', { state: REVIEW, due: NOW - 2 * DAY }], ['plain', { state: REVIEW, due: NOW - DAY }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW).queue.map(q => q.card.id).sort(), ['o2', 'plain']);          // the most overdue box
+  const answered = answeredNotes([{ cardId: 'o1', timestamp: NOW - HOUR, source: 'review' }], cards, NOW);
+  states.set('o1', { state: REVIEW, due: NOW + 5 * DAY });
+  assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.map(q => q.card.id), ['plain']);   // answered today: no other box
+});

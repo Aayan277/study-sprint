@@ -9,6 +9,7 @@ import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, badgeClass } from './exam.js';
+import { drawSidebar } from './sidebar.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
@@ -390,6 +391,7 @@ async function openExport(deck, decks, deckCards) {
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
     <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${cards.some(c => c.frontImage || c.backImage) ? ' Pictures go in the Anki deck (a spreadsheet can only hold text).' : ''}</p>
+    ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
       <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
@@ -585,7 +587,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       </div>`;
     $('delNo').focus();
     $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone); });
-    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); onDone('deleted'); };
+    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); drawSidebar(); onDone('deleted'); };
     $('delYes').addEventListener('click', async () => {
       for (const id of tree) await db.deleteDeck(id);
       done();

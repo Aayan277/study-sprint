@@ -88,7 +88,8 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   else if (filter === 'dupes') {
     // Cards whose front matches another card's (ignoring capitals, accents, punctuation and formatting),
     // listed next to each other.
-    const key = x => dupKey(x.card.front);
+    // (Image-occlusion cards are left out: their fronts differ only by number.)
+    const key = x => (x.card.occlusion ? '' : dupKey(x.card.front));
     const counts = new Map();
     for (const x of list) counts.set(key(x), (counts.get(key(x)) || 0) + 1);
     return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE.compare(key(a), key(b)) || a.card.created - b.card.created);
@@ -147,6 +148,7 @@ export function replaceInCards(cards, { find, replace = '', field = 'both', matc
   const fields = field === 'both' ? ['front', 'back'] : [field];
   const out = [];
   for (const c of cards) {
+    if (c.occlusion) continue;           // an image-occlusion card's front and back are made from its boxes
     const changes = {};
     for (const f of fields) {
       const now = String(c[f] ?? '').replace(re, () => replace);

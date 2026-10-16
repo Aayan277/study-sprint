@@ -196,3 +196,49 @@ test('play: two cards of one note are never back to back', async () => {
     assert.ok(!(more[0].noteId && more[0].noteId === q.at(-1).noteId));
   }
 });
+
+// ---------- image-occlusion cards in Play ----------
+const occMasks = [
+  { id: 'a', n: 1, shape: 'rect', x: 0.1, y: 0.1, w: 0.2, h: 0.2, label: 'Aorta' }, { id: 'b', n: 2, shape: 'rect', x: 0.5, y: 0.1, w: 0.2, h: 0.2, label: 'Vena cava' },
+  { id: 'c', n: 3, shape: 'rect', x: 0.1, y: 0.5, w: 0.2, h: 0.2, label: 'Left ventricle' }, { id: 'd', n: 4, shape: 'rect', x: 0.5, y: 0.5, w: 0.2, h: 0.2 },
+  { id: 'e', n: 5, shape: 'rect', x: 0.8, y: 0.5, w: 0.1, h: 0.2, label: 'Pulmonary vein' }];
+const occ = (n, note = 'P', header = 'Heart', masks = occMasks) => ({ id: 'o' + n + note, deckId: 'd', noteId: note, front: `${header}: hidden part ${n}`, back: '', backImage: 'img', occlusion: { n, w: 100, h: 100, header, masks } });
+
+test('occlusion cards: asked front → back with the picture; a label is needed; never back → front', async () => {
+  const { isFrontOnly } = await import('../js/game.js');
+  assert.deepEqual(questionFor(occ(1), 'front'), { prompt: 'Heart', answer: 'Aorta', occ: true });
+  assert.deepEqual(questionFor(occ(1), 'typing'), { prompt: 'Heart', answer: 'Aorta', occ: true });
+  assert.equal(questionFor(occ(1), 'back'), null);
+  assert.equal(questionFor(occ(4), 'front'), null);                      // no label: not playable
+  assert.equal(questionFor(occ(4), 'typing'), null);
+  assert.equal(questionFor(occ(1, 'P', ''), 'front').prompt, 'Name the highlighted part');
+  const longLabel = occ(1, 'P', 'Heart', [{ ...occMasks[0], label: 'x'.repeat(60) }]);
+  assert.equal(questionFor(longLabel, 'typing'), null);                  // too long to type, but fine to pick
+  assert.ok(questionFor(longLabel, 'front'));
+  assert.ok(isFrontOnly(occ(1)) && !isFrontOnly({ id: 'p', front: 'a', back: 'b' }));
+  const orphan = occ(9);                                                  // its group is gone: an ordinary card
+  assert.ok(!isFrontOnly(orphan) && questionFor(orphan, 'front').prompt === orphan.front);
+  assert.deepEqual(playableCards([occ(1), occ(4), { id: 'p', front: 'cell', back: 'unit' }], 'front').map(c => c.id), ['o1P', 'p']);
+  assert.deepEqual(playableCards([occ(1)], 'back'), []);
+});
+
+test('occlusion cards: the other boxes of the picture are the best wrong options', () => {
+  const pool = [1, 2, 3, 5].map(n => occ(n)).concat([
+    { id: 'x', deckId: 'd', front: 'Cell', back: 'The basic unit of life' }, { id: 'y', deckId: 'd', front: 'Atom', back: 'Smallest part' }, occ(1, 'Q', 'Brain', [{ ...occMasks[0], label: 'Cortex' }])]);
+  for (let i = 0; i < 20; i++) {
+    const opts = pickDistractors(pool[0], pool, 'front', { count: 3, rnd: seeded(i + 1) });
+    assert.deepEqual(opts.sort(), ['Left ventricle', 'Pulmonary vein', 'Vena cava']);        // siblings, not the other picture or the text cards
+    assert.ok(!opts.includes('Aorta'));
+  }
+  // a plain card still never gets a sibling (nothing changed for cloze)
+  const cl = [clz('a', 'N', 1, 'f', 'one'), clz('b', 'N', 2, 'f', 'two'), clz('c', 'M', 1, 'f', 'three')];
+  assert.ok(!pickDistractors(cl[0], cl, 'front', { count: 3 }).includes('two'));
+});
+
+test('occlusion cards: a picture with 4 labelled boxes can be played as multiple choice, and back → front is never the default', () => {
+  const pool = [1, 2, 3, 5].map(n => occ(n));
+  assert.equal(canMultipleChoice(pool, 'front'), true);
+  assert.equal(canMultipleChoice(pool, 'back'), false);
+  assert.equal(defaultQuestionType([...pool, { id: 'p', front: 'a', back: 'x'.repeat(50) }]), 'back');       // only the plain card counts
+  assert.equal(defaultQuestionType(pool), 'front');
+});

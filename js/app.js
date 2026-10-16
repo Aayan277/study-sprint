@@ -10,15 +10,15 @@ import { addSampleDeck } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
-import { formatInterval } from './queue.js';
 import { takeLaunch } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
+import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.7';
+const APP_VERSION = '3.9';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -403,6 +403,7 @@ async function confirmRestore(file) {
     fx.configure(settings);
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
+    drawSidebar();
     location.hash = '#/decks';
   });
 }
@@ -424,6 +425,7 @@ async function confirmReset() {
     await wipeThisDevice();
     closeSheet();
     toast('All data reset');
+    drawSidebar();
     location.hash = '#/decks';
   });
 }
@@ -452,6 +454,7 @@ function confirmResetSynced() {
     await sync.syncNow();
     closeSheet();
     toast('Everything deleted on all your devices');
+    drawSidebar();
     location.hash = '#/decks';
   });
   $('rsHere').addEventListener('click', async () => {
@@ -459,6 +462,7 @@ function confirmResetSynced() {
     await wipeThisDevice();
     closeSheet();
     toast('This device was reset and signed out');
+    drawSidebar();
     location.hash = '#/decks';
   });
 }
@@ -639,6 +643,7 @@ async function confirmSignOut() {
     await wipeThisDevice();
     closeSheet();
     toast('Signed out and removed from this device');
+    drawSidebar();
     location.hash = '#/decks';
   });
   // Send anything waiting first, so signing out loses nothing.
@@ -691,15 +696,10 @@ async function wipeThisDevice() {
 function showSyncStatus(lastSync) {
   const el = $('syncStatus');
   if (!el) return;
-  const st = sync.lastStatus();
-  const when = st.at || lastSync;
-  const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
-  const note = st.state === 'done' && st.note;          // e.g. pictures can't sync yet
-  el.className = st.state === 'error' || note ? 'warn' : 'muted';
-  el.textContent = st.state === 'syncing' ? (st.progress || 'Syncing…')
-    : st.state === 'error' ? `Couldn't sync: ${st.error}`
-    : (when ? `Synced ${ago}` : 'Not synced yet') + (note ? `. ${note}` : '');
-  if ($('syncNowBtn')) $('syncNowBtn').disabled = st.state === 'syncing';
+  const w = syncWording(lastSync);          // the same wording as the sidebar's sync line
+  el.className = w.warn ? 'warn' : 'muted';
+  el.textContent = w.text;
+  if ($('syncNowBtn')) $('syncNowBtn').disabled = w.syncing;
 }
 
 // Stats is slow to draw, so changes from other devices redraw it once after things settle (not once per sync),
@@ -718,6 +718,7 @@ let warnedStale = false;
 // After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
+  drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
   if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else showSyncStatus(); }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
@@ -729,6 +730,7 @@ addEventListener('sync', async e => {
   if (state !== 'done' || !applied) return;
   settings = { ...(await db.getSettings()), theme: settings.theme };     // study settings may have changed
   const busy = document.getElementById('sheet')?.open || document.activeElement?.matches?.('input, textarea, select');
+  if (currentRoute !== 'today' || busy) drawSidebar();          // (Today hands its own fresh data over when it redraws, unless a sheet or field keeps it from)
   if (busy) return;
   if (currentRoute === 'stats') redrawStatsSoon();
   else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
@@ -806,11 +808,12 @@ async function route() {
   // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
   if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
   if (name !== 'review') takeLaunch();     // a session handed over to Review that never got there (e.g. it failed to load) must not start later
+  const prevRoute = currentRoute;
   currentRoute = name;
   lastHash = location.hash;
   document.body.classList.toggle('welcome', name === 'welcome');       // the first-run start hides the tabs
-  // The gear doubles as a close button while Settings is open.
-  $('gearBtn').setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings');
+  // The gear (phones) and the sidebar's Settings link (desktop) double as a close button while Settings is open.
+  document.querySelectorAll('a[data-tab="settings"]').forEach(a => a.setAttribute('aria-label', name === 'settings' ? 'Close settings' : 'Settings'));
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
@@ -818,8 +821,14 @@ async function route() {
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
+  markCurrent();                // the deck page open now, in the sidebar's list
+  // After a Review or Play round, or an import, the sidebar's counts are out of date (Today hands over its own fresh data).
+  // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
+  const sidebarStale = name !== prevRoute && name !== 'today'
+    && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
   closeSheet();
   setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
+  if (sidebarStale) drawSidebar();
   // Each visit to a screen draws into a fresh box. If you switch screens while one is still loading,
   // the old one finishes into its own box, which is no longer on the page, so it can't draw over the new one.
   const el = document.createElement('div');
@@ -865,8 +874,10 @@ function announceScreen(el, name) {
 let lastHash = '#/today';
 
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
+// (The gear in the phone header and the Settings link in the desktop sidebar both count.)
 function wireGear() {
-  $('gearBtn').addEventListener('click', e => {
+  document.addEventListener('click', e => {
+    if (!e.target.closest('a[data-tab="settings"]') || e.defaultPrevented) return;
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
     e.preventDefault();
     if (beforeSettings) history.back();                 // came from another screen: step back to it
@@ -916,6 +927,16 @@ async function start() {
   initSheet();
   initTapGuard();
   wireGear();
+  initSidebar({ version: APP_VERSION });
+  // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
+  document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
+  // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.
+  addEventListener('themechange', e => {
+    settings.theme = e.detail;
+    const r = document.querySelector(`input[name="mode"][value="${e.detail.mode}"]`);
+    if (r) r.checked = true;
+    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new light/dark
+  });
   try {
     settings = await db.getSettings();
   } catch (err) {
@@ -937,6 +958,7 @@ async function start() {
   addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
+  if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
 

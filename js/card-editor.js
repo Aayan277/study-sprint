@@ -8,8 +8,9 @@
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { esc, toast } from './ui.js';
-import { addImage, imgHTML } from './media.js';
+import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt } from './cloze.js';
+import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
 
@@ -129,16 +130,16 @@ document.addEventListener('paste', e => {
   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
 });
 
-// ---------- Basic | Cloze ----------
+// ---------- Basic | Cloze | Image occlusion ----------
 // A cloze note is one text with hidden parts: "The {{c1::mitochondria}} makes {{c2::ATP}}". Each blank number is
 // one card (see cloze.js). In the add form a switch picks Basic or Cloze; the editor of a card that already is
 // a cloze card opens in Cloze (the same note, so its text has all the blanks).
-//   noteKinds(p, kind)    the Basic | Cloze switch, for the form whose ids start with p ('ac' → #acKind...)
+//   noteKinds(p, kind)    the Basic | Cloze | Image occlusion switch, for the form whose ids start with p ('ac' → #acKind...)
 //   clozeFields(p, ...)   the Cloze half of the form: the buttons, the text box, the live preview and Extra
-//   readKind(p)           'basic' or 'cloze'
+//   readKind(p)           'basic', 'cloze' or 'occlusion'
 export function noteKinds(p, kind = 'basic') {
   return `<div class="chips kind-switch" role="radiogroup" aria-label="Card type">
-      ${[['basic', 'Basic'], ['cloze', 'Cloze']].map(([k, l]) => `<label class="chip"><input type="radio" name="${p}Kind" value="${k}" data-kind-for="${p}" ${k === kind ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      ${[['basic', 'Basic'], ['cloze', 'Cloze'], ['occlusion', 'Image occlusion']].map(([k, l]) => `<label class="chip"><input type="radio" name="${p}Kind" value="${k}" data-kind-for="${p}" ${k === kind ? 'checked' : ''}><span>${l}</span></label>`).join('')}
     </div>`;
 }
 export const readKind = p => document.querySelector(`input[name="${p}Kind"]:checked`)?.value || 'basic';
@@ -219,14 +220,194 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   addBlank(t.id, which);
 });
-// Basic | Cloze: show one half of the form.
+// Basic | Cloze | Image occlusion: show one part of the form.
 document.addEventListener('change', e => {
   const p = e.target.dataset?.kindFor;
   if (!p) return;
-  const cloze = e.target.value === 'cloze';
-  document.getElementById(p + 'Basic').hidden = cloze;
-  document.getElementById(p + 'Cloze').hidden = !cloze;
-  try { localStorage.setItem('study-sprint-add-kind', e.target.value); } catch { /* fine */ }
-  (document.getElementById(p + (cloze ? 'Text' : 'Front')))?.focus();
+  const kind = e.target.value;
+  document.getElementById(p + 'Basic').hidden = kind !== 'basic';
+  document.getElementById(p + 'Cloze').hidden = kind !== 'cloze';
+  const occ = document.getElementById(p + 'Occ');
+  if (occ) occ.hidden = kind !== 'occlusion';
+  try { localStorage.setItem('study-sprint-add-kind', kind); } catch { /* fine */ }
+  (document.getElementById(kind === 'occlusion' ? (occForms.get(p)?.image ? p + 'OccEdit' : p + 'OccChoose') : p + (kind === 'cloze' ? 'Text' : 'Front')))?.focus();
 });
-export const lastKind = () => { try { return localStorage.getItem('study-sprint-add-kind') === 'cloze' ? 'cloze' : 'basic'; } catch { return 'basic'; } };
+export const lastKind = () => { try { const k = localStorage.getItem('study-sprint-add-kind'); return k === 'cloze' || k === 'occlusion' ? k : 'basic'; } catch { return 'basic'; } };
+
+// ---------- Image occlusion ----------
+// A picture with boxes over the parts to learn (see occlusion.js). Each numbered group of boxes is one card. This form
+// shows the picture with its boxes, an "Edit boxes" button (the drawing editor, occlusion-editor.js), the header, a
+// label for each group (typing the labels works without drawing, and is the way to label with a keyboard or a screen
+// reader) and the Extra text. A new note starts with "Choose a picture": a file, a dropped file, or a pasted screenshot.
+//   occlusionFields(p, card, extra, { hidden, maxN })   the form for the ids that start with p; card = the card being edited
+//                              (null for a new note); maxN = the highest part number any card of the note has (a floor)
+//   readOcclusion(p)           { masks, header, w, h, image, maxN }: the note as it stands, ready for planOcclusionSave
+//   setOcclusion(p, note)      replace the picture and boxes (note: { masks, image, w, h, header?, maxN? }) and redraw
+//   resetOcclusion(p)          back to an empty form (after a note was added)
+const occForms = new Map();       // p → { masks, image, w, h, maxN, n }: the form's state (n = the card being edited)
+const CAMERA = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg>';
+
+export function occlusionFields(p, card = null, extra = '', { hidden = false, maxN = 0 } = {}) {
+  const o = card?.occlusion;
+  const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, maxN, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
+  occForms.set(p, st);
+  const parts = occParts(p, st, o?.header || '');
+  const desk = RICH.matches;
+  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}" ${hidden ? 'hidden' : ''}>
+      <div class="occ-pick" id="${p}OccPick" data-occ-pick="${p}" ${st.image ? 'hidden' : ''}>
+        <button type="button" class="occ-pick-btn" id="${p}OccChoose" data-occ-choose="${p}">${CAMERA}<b>Choose a picture</b><span>${desk ? 'or drop one here, or paste a screenshot (Ctrl/⌘+V)' : 'A photo or screenshot of a diagram'}</span></button>
+        <input type="file" id="${p}OccFile" accept="image/*" hidden data-occ-file="${p}">
+      </div>
+      <div class="occ-body" id="${p}OccBody" ${st.image ? '' : 'hidden'}>
+        <div class="occ-form-prev" id="${p}OccPrev">${parts.preview}</div>
+        <div class="occ-form-row"><p class="cloze-makes" id="${p}OccMakes" aria-live="polite">${esc(parts.makes)}</p>
+          <button type="button" class="btn ghost" id="${p}OccEdit" data-occ-edit="${p}">Edit boxes</button></div>
+        <label class="field"><span>Header (optional)</span><input id="${p}OccHead" data-occ-head="${p}" maxlength="${MAX_HEADER}" autocomplete="off" placeholder="e.g. Heart anatomy" value="${esc(o?.header || '')}"></label>
+        <fieldset class="occ-labels" id="${p}OccLabels" data-sig="${groupsOf(st.masks).join()}"><legend>Labels (optional)</legend>${parts.labels}</fieldset>
+        ${cardTextField(p + 'OccExtra', 'Extra (optional)', extra || card?.noteExtra || '', { rows: 2, images: false, placeholder: 'Shown under the answer' })}
+      </div>
+    </div>`;
+}
+// The three parts of the form that come from its state, as HTML: the preview, the "Makes N cards" line and the label boxes.
+function occParts(p, st, header) {
+  const groups = groupsOf(st.masks);
+  return {
+    preview: st.image
+      ? occlusionHTML({ backImage: st.image, occlusion: { n: st.n, w: st.w, h: st.h, header, masks: st.masks } }, 'all', { zoom: false })
+      : '<p class="note">No picture or boxes yet.</p>',
+    makes: groups.length ? `Makes ${groups.length} card${groups.length === 1 ? '' : 's'}` : 'No boxes yet: draw at least one box over the part to hide.',
+    labels: groups.map((n, i) =>
+      `<label class="field occ-lbl"><span>Part ${i + 1}${n === st.n ? ' (this card)' : ''}</span><input id="${p}OccLbl${n}" data-occ-label="${n}" maxlength="${MAX_LABEL}" autocomplete="off" aria-label="Label for part ${i + 1}" placeholder="e.g. Left ventricle" value="${esc(occLabel(st.masks, n))}"></label>`).join('')
+  };
+}
+// Draw the parts of the form that come from its state again (after setOcclusion or a header change).
+export function drawOcclusion(p) {
+  const st = occForms.get(p), prev = document.getElementById(p + 'OccPrev');
+  if (!st || !prev) return;
+  const parts = occParts(p, st, document.getElementById(p + 'OccHead')?.value ?? '');
+  prev.innerHTML = parts.preview;
+  document.getElementById(p + 'OccPick').hidden = !!st.image;
+  document.getElementById(p + 'OccBody').hidden = !st.image;
+  const makes = document.getElementById(p + 'OccMakes');
+  if (makes.textContent !== parts.makes) makes.textContent = parts.makes;
+  // The label boxes keep what was typed in them unless the groups changed.
+  const labels = document.getElementById(p + 'OccLabels'), sig = groupsOf(st.masks).join();
+  if (labels.dataset.sig !== sig) { labels.dataset.sig = sig; labels.innerHTML = '<legend>Labels (optional)</legend>' + parts.labels; }
+}
+export function readOcclusion(p) {
+  const st = occForms.get(p);
+  if (!st) return null;
+  const masks = st.masks.map(m => ({ ...m }));
+  // A label typed for a group goes on all of its boxes (an untouched label box changes nothing).
+  for (const n of groupsOf(masks)) {
+    const input = document.getElementById(`${p}OccLbl${n}`);
+    if (!input) continue;
+    const typed = input.value.trim().slice(0, MAX_LABEL);
+    if (typed === occLabel(masks, n)) continue;
+    for (const m of masks) if (m.n === n) { if (typed) m.label = typed; else delete m.label; }
+  }
+  return { masks, header: (document.getElementById(p + 'OccHead')?.value ?? '').trim().slice(0, MAX_HEADER), w: st.w, h: st.h, image: st.image, maxN: st.maxN };
+}
+export function setOcclusion(p, note) {
+  const st = occForms.get(p);
+  if (!st) return;
+  Object.assign(st, { masks: note.masks.map(m => ({ ...m })), image: note.image, w: note.w, h: note.h, maxN: Math.max(st.maxN, note.maxN ?? 0, ...note.masks.map(m => m.n)) });
+  const head = document.getElementById(p + 'OccHead');
+  if (head && note.header !== undefined) head.value = note.header;
+  const labels = document.getElementById(p + 'OccLabels');
+  if (labels) delete labels.dataset.sig;           // new boxes: draw the label boxes again
+  drawOcclusion(p);
+}
+export function resetOcclusion(p) {
+  const st = occForms.get(p);
+  if (!st) return;
+  Object.assign(st, { masks: [], image: null, w: 0, h: 0, maxN: 0, n: null });
+  const head = document.getElementById(p + 'OccHead');
+  if (head) head.value = '';
+  if (document.getElementById(p + 'OccExtra')) setCardText(p + 'OccExtra', '');
+  const labels = document.getElementById(p + 'OccLabels');
+  if (labels) delete labels.dataset.sig;
+  drawOcclusion(p);
+}
+// The header changes the picture's description in the preview.
+document.addEventListener('input', e => { const p = e.target.dataset?.occHead; if (p) drawOcclusion(p); });
+
+// Open the box editor on the form's picture. The typed labels go in with the boxes and come back with them.
+const editing = new Set();
+async function editBoxes(p) {
+  const st = occForms.get(p), note = readOcclusion(p);
+  if (!st?.image || editing.has(p)) return;
+  editing.add(p);
+  try {
+    const { openOcclusionEditor } = await import('./occlusion-editor.js');
+    const res = await openOcclusionEditor({ image: st.image, w: st.w, h: st.h, masks: note.masks, focusN: st.n, maxN: st.maxN });
+    const occ = document.getElementById(p + 'Occ');
+    if (res && occ?.isConnected) setOcclusion(p, { masks: res.masks, image: st.image, w: st.w, h: st.h, maxN: res.maxN });
+    // The button that opened the editor may be disabled or hidden by now: keep the focus inside the form.
+    const form = occ?.closest('form');
+    if (form && !form.contains(document.activeElement)) {
+      const edit = document.getElementById(p + 'OccEdit');
+      (st.image && edit && !edit.closest('[hidden]') ? edit : document.getElementById(p + 'OccChoose'))?.focus({ preventScroll: true });
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't open the box editor");
+  } finally { editing.delete(p); }
+}
+// A picture was chosen, dropped or pasted: shrink and keep it (2048px, so small text stays readable), then draw boxes.
+async function pickPicture(p, file) {
+  const st = occForms.get(p), btn = document.getElementById(p + 'OccChoose');
+  if (!st || !btn || btn.disabled) return;
+  if (!file?.type?.startsWith('image/')) { toast('Please choose a picture (a photo or a screenshot).'); return; }
+  const label = btn.querySelector('b');
+  btn.disabled = true; btn.setAttribute('aria-busy', 'true'); label.textContent = 'Preparing picture…';
+  try {
+    const info = await addImageInfo(file, { maxSide: OCCLUSION_SIDE });
+    if (!document.getElementById(p + 'Occ')?.isConnected) return;          // the form was closed meanwhile
+    setOcclusion(p, { masks: [], image: info.id, w: info.width, h: info.height });
+    await editBoxes(p);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || "Couldn't add that picture");
+  } finally {
+    btn.disabled = false; btn.removeAttribute('aria-busy'); label.textContent = 'Choose a picture';
+  }
+}
+document.addEventListener('click', e => {
+  const choose = e.target.closest?.('[data-occ-choose]');
+  if (choose) document.getElementById(choose.dataset.occChoose + 'OccFile')?.click();
+  const edit = e.target.closest?.('[data-occ-edit]');
+  if (edit) editBoxes(edit.dataset.occEdit);
+});
+document.addEventListener('change', e => {
+  const p = e.target.dataset?.occFile;
+  if (!p) return;
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) pickPicture(p, file);
+});
+// Drag a picture onto the "Choose a picture" box (computers).
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+document.addEventListener('dragover', e => {
+  const zone = e.target.closest?.('[data-occ-pick]');
+  if (!zone || !hasFiles(e)) return;
+  e.preventDefault();
+  zone.classList.add('drag');
+});
+document.addEventListener('dragleave', e => e.target.closest?.('[data-occ-pick]')?.classList.remove('drag'));
+document.addEventListener('drop', e => {
+  const zone = e.target.closest?.('[data-occ-pick]');
+  if (!zone || !hasFiles(e)) return;
+  e.preventDefault();
+  zone.classList.remove('drag');
+  pickPicture(zone.dataset.occPick, e.dataTransfer.files[0]);
+});
+// Paste a screenshot (Ctrl/⌘+V) while the picture form is showing and has no picture yet.
+document.addEventListener('paste', e => {
+  const file = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith('image/'));
+  if (!file) return;
+  const p = [...occForms].find(([key, st]) => !st.image && document.getElementById(key + 'Occ')?.offsetParent)?.[0];
+  if (!p) return;
+  e.preventDefault();
+  pickPicture(p, file);
+});

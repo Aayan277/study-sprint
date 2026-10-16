@@ -113,6 +113,14 @@ test('duplicates filter: same front, listed together', () => {
   assert.deepEqual(browseCards(cs, new Map(), { filter: 'dupes', now: NOW }).map(x => x.card.id), ['Mitosis', '**mitosis**', 'Mitosis!']);
 });
 
+test('image-occlusion cards are left out of the Duplicates filter and of find and replace', () => {
+  const occCard = (id, front, extra = {}) => ({ id, front, back: 'Aorta', created: 1, tags: [], occlusion: { n: 1, w: 1, h: 1, masks: [] }, ...extra });
+  const cs = [occCard('o1', 'Heart: hidden part 1 of 2'), occCard('o2', 'Heart: hidden part 1 of 2'), card('Mitosis', { created: 3 }), card('Mitosis', { created: 4 })];
+  assert.deepEqual(browseCards(cs, new Map(), { filter: 'dupes', now: NOW }).map(x => x.card.id), ['Mitosis', 'Mitosis']);
+  assert.deepEqual(replaceInCards([occCard('o1', 'Heart: hidden part 1 of 2')], { find: 'Heart', replace: 'Brain' }), []);
+  assert.deepEqual(replaceInCards([occCard('o1', 'Heart'), { id: 'p', front: 'Heart', back: 'x' }], { find: 'Heart', replace: 'Brain' }).map(c => c.id), ['p']);
+});
+
 test('find and replace', () => {
   const cs = [{ id: 'a', front: 'Pavlov dog', back: 'pavlov ran tests' }, { id: 'b', front: 'Skinner', back: 'box (1.5)' }];
   assert.deepEqual(replaceInCards(cs, { find: 'pavlov', replace: 'Pavlov’s' }).map(c => [c.front, c.back]), [['Pavlov’s dog', 'Pavlov’s ran tests']]);

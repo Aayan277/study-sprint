@@ -7,6 +7,8 @@
 //         The page always gets a plain data-theme="light" or "dark" (auto is worked out here).
 //   oled  true = pure black page background in dark mode (<html data-oled="on">)
 
+import * as db from './db.js';
+
 export const SKINS = {
   violet: { name: 'Violet', note: 'Electric purple' },
   ocean:  { name: 'Ocean',  note: 'Cyan blue' },
@@ -24,6 +26,7 @@ const OLD_NAMES = {
   blossom: 'rose', sakura: 'rose'
 };
 const ALWAYS_DARK = ['neon', 'onyx', 'kuro'];
+export const isAlwaysDark = skin => ALWAYS_DARK.includes(skin);
 
 // Turn whatever was saved (maybe an old theme) into a valid { skin, mode, oled }.
 export function cleanTheme(theme) {
@@ -49,7 +52,19 @@ export function applyTheme(theme) {
   if (current.oled) root.setAttribute('data-oled', 'on'); else root.removeAttribute('data-oled');
   try { localStorage.setItem(QUICK_KEY, JSON.stringify(current)); } catch (e) { /* private mode: fine */ }
   syncBrowserBar();
+  dispatchEvent(new CustomEvent('themechange', { detail: { ...current } }));       // the sidebar's toggle and Settings follow
   return { ...current };
+}
+
+// The sidebar's light/dark button. "Auto" becomes the explicit mode that is showing now, flipped.
+// Saves like the Settings picker does (the device copy in localStorage and the settings store).
+export function toggleMode() {
+  if (!current) return null;                      // settings have not loaded yet
+  if (isAlwaysDark(current.skin)) return current;  // a skin that is always dark has nothing to toggle
+  const showing = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const next = applyTheme({ ...current, mode: showing === 'light' ? 'dark' : 'light' });
+  db.setSetting('theme', next);
+  return next;
 }
 
 // "Match my device" follows the device when it flips between light and dark (e.g. at sunset).

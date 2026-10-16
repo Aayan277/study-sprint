@@ -251,6 +251,19 @@ test('a side can be just a picture (Anki imports)', () => {
   assert.equal(isComplete({ front: '', back: 'Heart' }), false);
 });
 
+test('image-occlusion rows: buildCards passes the box data, isComplete accepts an empty label, duplicates are skipped', () => {
+  const occ = { noteKey: '5', n: 1, header: '', shapes: [], pixels: false, image: 'a.png' };
+  const result = { rows: [['Diagram: hidden part 1 of 2', ''], ['Diagram: hidden part 1 of 2', ''], ['Plain', 'Card']],
+    pictures: [{ front: null, back: 'a.png' }, { front: null, back: 'a.png' }, { front: null, back: null }],
+    occlusions: [occ, { ...occ, noteKey: '6' }, null] };
+  const built = buildCards(result);
+  assert.deepEqual(built[0].occlusion, occ);
+  assert.equal(built[2].occlusion, undefined);
+  assert.deepEqual(built.map(isComplete), [true, true, true]);
+  assert.equal(isComplete({ front: 'Diagram: hidden part 1 of 1', back: '', pictures: { front: null, back: null } }), false);
+  assert.deepEqual(findDuplicates(built, ['Diagram: hidden part 1 of 2']), [null, null, null]);
+});
+
 test('cloze fields and the Anki guid come through buildCards', () => {
   const result = { columns: ['a', 'b'], rows: [['A […]', 'x'], ['plain', 'y']], clozes: [{ noteKey: 'n', n: 1, text: 'A {{c1::x}}' }, null], noteExtras: ['more', ''], guids: ['g1', 'g2'] };
   assert.deepEqual(buildCards(result), [

@@ -6,6 +6,7 @@
 
 import { formatHTML, plainText } from './format.js';
 import { hasBlank } from './cloze.js';
+import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './occlusion.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
@@ -51,7 +52,49 @@ export function ankiGuid(cardId) {
 
 const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-exports reuse it in Anki)
 const CLOZE_ID = 1_600_000_000_002;   // the Cloze note type
+const IO_ID = 1_600_000_000_003;      // the Image Occlusion note type
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
+
+// Anki's own Image Occlusion note type (rslib/src/image_occlusion/notetype.rs, Anki 23.10+): a cloze type whose
+// Occlusion field holds the boxes. Its card template draws the picture and the boxes with Anki's own script, so these
+// texts are copied from Anki as they are (including the English names of the fields and the button).
+const IO_FIELDS = ['Occlusion', 'Image', 'Header', 'Back Extra', 'Comments'];
+const IO_QFMT = `{{#Header}}<div>{{Header}}</div>{{/Header}}
+<div style="display: none">{{cloze:Occlusion}}</div>
+<div id="err"></div>
+<div id="image-occlusion-container">
+    {{Image}}
+    <canvas id="image-occlusion-canvas"></canvas>
+</div>
+<script>
+try {
+    anki.imageOcclusion.setup();
+} catch (exc) {
+    document.getElementById("err").innerHTML = \`Error loading image occlusion. Is your Anki version up to date?<br><br>\${exc}\`;
+}
+</script>
+`;
+const IO_AFMT = `${IO_QFMT}
+<div><button id="toggle">Toggle Masks</button></div>
+{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}
+`;
+const IO_CSS = `#image-occlusion-canvas {
+    --inactive-shape-color: #ffeba2;
+    --active-shape-color: #ff8e8e;
+    --inactive-shape-border: 1px #212121;
+    --active-shape-border: 1px #212121;
+    --highlight-shape-color: #ff8e8e00;
+    --highlight-shape-border: 1px #ff8e8e;
+}
+
+.card {
+    font-family: arial;
+    font-size: 20px;
+    text-align: center;
+    color: black;
+    background-color: white;
+}
+`;
 
 // Everything that goes in the Anki database, as plain values (no database yet).
 //   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile?, deckName? }]    now  ms
@@ -76,6 +119,29 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     css: ANKI_CSS, latexPre: '\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n',
     latexPost: '\\end{document}', tags: [], vers: [], req: [[0, 'any', [0]]]
   };
+  // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
+  // rest are Basic notes, one each.
+  // Cards of one image-occlusion picture likewise go out as one Anki Image Occlusion note.
+  let groups = [];                       // [{ cloze: true, cards } | { occ: true, cards } | { cloze: false, card }]
+  const byNote = new Map();
+  for (const c of cards) {
+    const kind = hasBlank(c) ? 'cloze' : isOcclusion(c) && hasMasks(c) ? 'occ' : null;
+    if (kind) {
+      const key = kind + ':' + c.noteId;
+      if (!byNote.has(key)) { byNote.set(key, { cloze: kind === 'cloze', occ: kind === 'occ', cards: [] }); groups.push(byNote.get(key)); }
+      byNote.get(key).cards.push(c);
+    } else groups.push({ cloze: false, card: c });
+  }
+  // An occlusion note needs its picture file in the package (else it goes out as Basic cards, as does a card whose
+  // group isn't among the boxes of the note's first card).
+  for (const g of groups.filter(x => x.occ)) {
+    const ok = g.cards.some(c => c.backImageFile) ? groupsOf(g.cards[0].occlusion.masks) : [];
+    const lost = g.cards.filter(c => !ok.includes(c.occlusion.n));
+    if (!lost.length) continue;
+    g.cards = g.cards.filter(c => ok.includes(c.occlusion.n));
+    groups.push(...lost.map(card => ({ cloze: false, card })));
+  }
+  groups = groups.filter(g => !g.occ || g.cards.length);
   const usesCloze = cards.some(hasBlank);
   // Anki's own Cloze note type (type 1): the Text field has the blanks, "{{cloze:Text}}" shows one at a time.
   const clozeModel = {
@@ -83,6 +149,14 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     tmpls: [{ name: 'Cloze', ord: 0, qfmt: '{{cloze:Text}}', afmt: '{{cloze:Text}}<br>\n{{Back Extra}}', did: null, bqfmt: '', bafmt: '' }],
     flds: ['Text', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     css: `${ANKI_CSS}\n.cloze {\n  font-weight: bold;\n  color: blue;\n}\n.nightMode .cloze {\n  color: lightblue;\n}\n`, req: [[0, 'any', [0]]]
+  };
+  const usesOcc = groups.some(g => g.occ);
+  // Anki's Image Occlusion type (a cloze type, "original stock kind" 6). Sorted by Header, which is also what sfld holds.
+  const occModel = {
+    ...model, id: IO_ID, name: 'Study Sprint Image Occlusion', type: 1, originalStockKind: 6, sortf: 2,
+    tmpls: [{ name: 'Image Occlusion', ord: 0, qfmt: IO_QFMT, afmt: IO_AFMT, did: null, bqfmt: '', bafmt: '' }],
+    flds: IO_FIELDS.map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [], tag: ord, preventDeletion: ord < 4 })),
+    css: IO_CSS, req: [[0, 'any', [0]]]
   };
   const deckRow = (id, name) => ({ id, name, desc: '', mod: secs, usn: -1, collapsed: false, browserCollapsed: false, newToday: [0, 0], revToday: [0, 0], lrnToday: [0, 0], timeToday: [0, 0], dyn: 0, conf: 1, extendNew: 10, extendRev: 50 });
   const dconf = { 1: { id: 1, name: 'Default', mod: 0, usn: 0, maxTaken: 60, autoplay: true, timer: 0, replayq: true, dyn: false,
@@ -92,20 +166,10 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const conf = { activeDecks: [1], curDeck: 1, newSpread: 0, collapseTime: 1200, timeLim: 0, estTimes: true, dueCounts: true, curModel: String(BASIC_ID), nextPos: cards.length + 1, sortType: 'noteFld', sortBackwards: false };
   const col = {
     id: 1, crt: secs - (secs % 86400), mod: now, scm: now, ver: 11, dty: 0, usn: 0, ls: 0,
-    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}) }),
+    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}), ...(usesOcc ? { [IO_ID]: occModel } : {}) }),
     decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
-  // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
-  // rest are Basic notes, one each.
-  const groups = [];                       // [{ cloze: true, cards: [...] } | { cloze: false, card }]
-  const byNote = new Map();
-  for (const c of cards) {
-    if (hasBlank(c)) {
-      if (!byNote.has(c.noteId)) { byNote.set(c.noteId, { cloze: true, cards: [] }); groups.push(byNote.get(c.noteId)); }
-      byNote.get(c.noteId).cards.push(c);
-    } else groups.push({ cloze: false, card: c });
-  }
   // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
   const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
   const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');
@@ -113,9 +177,23 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   let cardCount = 0;
   for (const [i, g] of groups.entries()) {
     const noteId = now + i;
-    const first = g.cloze ? g.cards[0] : g.card;
+    const first = g.cards ? g.cards[0] : g.card;
     let note;
-    if (g.cloze) {
+    if (g.occ) {
+      // Occlusion = the boxes, Image = the picture (its file is in the package), Comments = the labels, numbered.
+      const { masks, header } = first.occlusion;
+      const labels = groupsOf(masks).map((n, k) => [k + 1, occLabel(masks, n)]).filter(([, l]) => l).map(([k, l]) => `${k}. ${toAnkiHTML(l)}`).join('<br>');
+      const file = g.cards.find(c => c.backImageFile)?.backImageFile;
+      const sort = String(header || '').trim() || 'Image occlusion';
+      note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: IO_ID, mod: secs, usn: -1, tags: tagsOf(first),
+        flds: [ankiOcclusionText(masks), file ? `<img src="${file}">` : '', toAnkiHTML(header || ''), toAnkiHTML(first.noteExtra || ''), labels].join('\x1f'),
+        sfld: sort, csum: await ankiChecksum(sort), flags: 0, data: '' };
+      // Group n is Anki card number n - 1.
+      for (const c of g.cards.slice().sort((a, b) => a.occlusion.n - b.occlusion.n)) {
+        ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: c.occlusion.n - 1, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
+          ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+      }
+    } else if (g.cloze) {
       const text = withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile);
       const extra = withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile);
       note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),

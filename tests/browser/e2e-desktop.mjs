@@ -14,8 +14,8 @@ const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect();
 // ---- computer ----
 let p = await open({ width: 1440, height: 900 });
 let nav = await box(p, '.tabs');
-ok(nav.x === 0 && nav.w === 232 && nav.h > 700, 'sidebar on the left');
-ok((await box(p, 'main')).x >= 232, 'page sits next to the sidebar');
+ok(nav.x === 0 && nav.w === 248 && nav.h > 700, 'sidebar on the left (248px from 1280px wide)');
+ok((await box(p, 'main')).x >= 248, 'page sits next to the sidebar');
 await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('.crow');
 await p.locator('.crow').nth(0).click(); await p.waitForSelector('#ceForm');
 const panel = await box(p, '#sheet');

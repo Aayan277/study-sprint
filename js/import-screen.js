@@ -5,6 +5,7 @@ import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
 import { clozeCard, parseCloze, hasClozeLines } from './cloze.js';
+import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
 import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
@@ -318,7 +319,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => c.cloze ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -360,8 +361,8 @@ function renderList() {
     <li class="prow" data-i="${i}">
       <span class="pnum mono">${i + 1}</span>
       <div class="pcells">
-        <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front" ${c.cloze ? 'readonly' : ''}>${esc(c.front)}</textarea>
-        <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back" ${c.cloze ? 'readonly' : ''}>${esc(c.back)}</textarea>
+        <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.front)}</textarea>
+        <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.back)}</textarea>
         <span class="badge" hidden></span>
       </div>
       <button class="icon-btn" type="button" data-del aria-label="Delete card ${i + 1}">
@@ -390,9 +391,10 @@ function refreshFlags() {
     const badge = row.querySelector('.badge');
     row.classList.toggle('incomplete', !isComplete(c));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(c) && !c.cloze;
+    badge.hidden = !flag && isComplete(c) && !c.cloze && !c.occlusion;
     badge.textContent = !isComplete(c) ? 'Missing a side, will be skipped'
-      : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card' : `Cloze card c${c.cloze?.n}: part of a note`;
+      : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
+      : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 
   const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
@@ -408,9 +410,12 @@ function refreshFlags() {
   const offerCloze = !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'cloze';
   $('clozeBtn').hidden = !offerCloze;
   if (offerCloze) parts.push('<b>Some lines have blanks like {{c1::answer}}.</b> Press “Make cloze notes” to turn each line into a note with one card per blank.');
-  $('swapBtn').hidden = S.cards.length > 0 && S.cards.every(c => c.cloze);          // nothing to swap in cloze cards
+  $('swapBtn').hidden = S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion);          // nothing to swap in cloze or occlusion cards
+  // Image-occlusion notes: how many notes the cards come from.
+  const occNotes = new Set(S.cards.filter(c => c.occlusion).map(c => c.occlusion.noteKey)).size;
+  if (occNotes) parts.push(`${plural(occNotes, 'image-occlusion note')} make${occNotes === 1 ? 's' : ''} these cards: one card per box. Every box is hidden and you name the highlighted one; Review shows one a day.`);
   const occluded = (S.result.occluded || []).filter(Boolean).length;
-  if (occluded) parts.push(`<span class="warn">${plural(occluded, 'image-occlusion note')} ${occluded === 1 ? 'comes' : 'come'} in as ${occluded === 1 ? 'a plain picture card' : 'plain picture cards'}: the heading on the front, the whole picture on the back. Hiding parts of a picture comes in a later update.</span>`);
+  if (occluded) parts.push(`<span class="warn">${plural(occluded, 'image-occlusion note')} ${occluded === 1 ? 'comes' : 'come'} in as ${occluded === 1 ? 'a plain picture card' : 'plain picture cards'}: the heading on the front, the whole picture on the back (this kind of occlusion note can't be read).</span>`);
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
@@ -430,7 +435,7 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  const toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, cloze: c.cloze, noteExtra: c.noteExtra }));
+  let toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -476,7 +481,7 @@ async function save() {
     // created + i keeps the cards in the order they were pasted.
     // A cloze note's cards share a noteId and the note's text; their front and back come from that text (cloze.js).
     const noteIds = new Map();
-    const cards = toAdd.map((c, i) => {
+    let cards = toAdd.map((c, i) => {
       const card = { id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i };
       if (c.ankiGuid) card.ankiGuid = c.ankiGuid;
       if (c.cloze) {
@@ -484,10 +489,24 @@ async function save() {
         Object.assign(card, clozeCard(c.cloze.text, c.cloze.n), { noteId: noteIds.get(c.cloze.noteKey), cloze: c.cloze.n, noteText: c.cloze.text });
         if (c.noteExtra) card.noteExtra = c.noteExtra;
       }
+      if (c.occlusion) {
+        // An image-occlusion note's cards share a noteId too. Their boxes and picture are added below.
+        const key = 'occlusion:' + c.occlusion.noteKey;
+        if (!noteIds.has(key)) noteIds.set(key, db.newId());
+        card.noteId = noteIds.get(key);
+        if (c.noteExtra) card.noteExtra = c.noteExtra;
+      }
       return card;
     });
+    // Image-occlusion cards: the picture is kept larger (2048px), the boxes are turned into fractions of it, and the
+    // front and back are made from them (occlusion.js). A note whose picture or boxes can't be used comes in as one
+    // plain picture card instead.
+    if (toAdd.some(c => c.occlusion)) {
+      const drop = await addOcclusion(toAdd, cards, saveBtn);
+      if (drop.size) { toAdd = toAdd.filter((_, i) => !drop.has(i)); cards = cards.filter((_, i) => !drop.has(i)); }
+    }
     // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
-    const withPics = toAdd.map((c, i) => [c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
+    const withPics = toAdd.map((c, i) => [c.occlusion ? null : c.pictures, cards[i]]).filter(([p]) => p && S.ankiMedia);
     if (withPics.length) {
       const { processImage, saveImage } = await import('./media.js');
       const done = new Map();          // a picture used on several cards is saved once
@@ -572,4 +591,55 @@ async function save() {
     saveBtn.disabled = false;
     if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
+}
+
+// The picture and boxes of the image-occlusion cards being added (cards[i] belongs to toAdd[i]). Returns the indexes of
+// cards to leave out: boxes whose group came to nothing, and the extra cards of a note that became a plain picture.
+async function addOcclusion(toAdd, cards, saveBtn) {
+  const { processImage, saveImage, OCCLUSION_SIDE } = await import('./media.js');
+  const pictures = new Map();          // 'name|2048' → the saved picture { id, width, height, srcWidth, srcHeight }, or null
+  const picture = name => {
+    const key = `${name}|${OCCLUSION_SIDE}`;
+    if (!pictures.has(key)) {
+      pictures.set(key, (async () => {
+        const got = await S.ankiMedia?.get(name);
+        if (!got) return null;
+        const out = await processImage(new Blob([got.data], { type: got.type }), { maxSide: OCCLUSION_SIDE });
+        return { ...out, id: await saveImage(out.type, out.data) };
+      })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+    }
+    return pictures.get(key);
+  };
+  const notes = new Map();             // noteKey → { pic, masks }: worked out once for all the cards of a note
+  const plain = new Set();             // notes that came in as one plain picture card
+  const drop = new Set();
+  let done = 0;
+  for (const [i, c] of toAdd.entries()) {
+    const o = c.occlusion;
+    if (!o) continue;
+    if (!notes.has(o.noteKey)) {
+      saveBtn.textContent = `Adding pictures: ${++done}…`;
+      const pic = o.image ? await picture(o.image) : null;
+      notes.set(o.noteKey, { pic, masks: pic ? toFractions(o.shapes, o.pixels, pic.srcWidth, pic.srcHeight) : [] });
+    }
+    const { pic, masks } = notes.get(o.noteKey);
+    const header = String(o.header || '').trim().slice(0, MAX_HEADER);
+    // Too many (or bad) boxes would make cards that fail validation, and with them every backup: use a plain picture.
+    const good = pic && masks.length && validOcclusion({ n: 1, w: pic.width, h: pic.height, masks });
+    if (good) {
+      if (!groupsOf(masks).includes(o.n)) { drop.add(i); continue; }      // every box of this group fell outside the picture
+      cards[i].backImage = pic.id;
+      cards[i].occlusion = { n: o.n, w: pic.width, h: pic.height, ...(header ? { header } : {}), masks };
+      Object.assign(cards[i], occFrontBack({ header, masks }, o.n));
+    } else {
+      if (plain.has(o.noteKey)) { drop.add(i); continue; }
+      plain.add(o.noteKey);
+      delete cards[i].noteId;
+      Object.assign(cards[i], { front: header || 'Diagram', back: c.noteExtra || '' });
+      delete cards[i].noteExtra;
+      toAdd[i].ankiId = null;          // the first card's Anki history isn't replayed onto the plain picture
+      if (pic) cards[i].backImage = pic.id;
+    }
+  }
+  return drop;
 }

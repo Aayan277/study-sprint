@@ -233,14 +233,16 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
     ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {}),
     ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
     ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
+    ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
     ...(result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {}),
     ...(result.guids?.[i] ? { ankiGuid: result.guids[i] } : {})
   }));
 }
 
 // A card only counts if both sides have something on them.
-// (A side can also be just a picture: Anki imports bring their pictures along.)
-export const isComplete = c => !!((c.front.trim() || c.pictures?.front) && (c.back.trim() || c.pictures?.back));
+// (A side can also be just a picture: Anki imports bring their pictures along. An image-occlusion card's back is its
+// label, which can be empty.)
+export const isComplete = c => !!c.occlusion || !!((c.front.trim() || c.pictures?.front) && (c.back.trim() || c.pictures?.back));
 
 // Two fronts that differ only in capitals, spaces or punctuation count as the same.
 export function dupKey(s) {
@@ -250,13 +252,13 @@ export function dupKey(s) {
 
 // For each card: 'deck' if the deck already has that front, 'import' if it appeared earlier in
 // this same import, or null if it's new. Image-occlusion cards are left out: without a heading they all
-// have the front "Diagram", and what tells them apart is the picture.
+// have the front "Diagram", and what tells them apart is the picture (and the box).
 export function findDuplicates(cards, existingFronts = []) {
   const inDeck = new Set(existingFronts.map(dupKey));
   const seen = new Set();
   return cards.map(c => {
     const k = dupKey(c.front);
-    if (!k || c.occluded) return null;
+    if (!k || c.occluded || c.occlusion) return null;
     if (inDeck.has(k)) return 'deck';
     if (seen.has(k)) return 'import';
     seen.add(k);
