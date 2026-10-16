@@ -4,7 +4,9 @@
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
-import { clozeCard, parseCloze, hasClozeLines } from './cloze.js';
+import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
+import { formatHTML } from './format.js';
+import { hasMath } from './math.js';
 import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
 import { deckChoices, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -17,6 +19,9 @@ import { $, esc, plural, toast, icon } from './ui.js';
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 const NEW_DECK = '__new';
 const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make phones sluggish
+const LAST_DECK = 'study-sprint-import-deck';     // the deck the last import went into (this device)
+const lastDeck = () => { try { return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
+const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
 
 // Everything the screen is working with.
 let S = null;
@@ -30,14 +35,16 @@ export async function renderImport(el, arg) {
     cards: [],             // [{ front, back }] as shown in the preview, including any edits
     flags: [],             // duplicate flag per card: 'deck', 'import' or null
     frontCol: 0, backCol: 1,
-    deckId: decks.some(d => d.id === deckId) ? deckId : NEW_DECK,
+    // The deck in the address, otherwise the one the last import went into (if it still exists), otherwise a new deck.
+    deckId: decks.some(d => d.id === deckId) ? deckId : decks.some(d => d.id === lastDeck()) ? lastDeck() : NEW_DECK,
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
-    suggestedName: ''      // a deck name taken from the file name
+    suggestedName: '',     // a deck name taken from the file name
+    noCloze: false         // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
   };
 
   el.innerHTML = `
-    <button class="back" type="button" id="back">‹ ${S.deckId === NEW_DECK ? 'Decks' : 'Deck'}</button>
-    <div class="screen-head"><div><span class="eyebrow mono">IMPORT</span><h1>Add cards</h1></div></div>
+    <button class="back" type="button" id="back">‹ ${decks.some(d => d.id === deckId) ? 'Deck' : 'Decks'}</button>
+    <div class="screen-head"><div><h1>Add cards</h1></div></div>
 
     <section class="section">
       <label class="field"><span>Add to deck</span>
@@ -45,8 +52,8 @@ export async function renderImport(el, arg) {
           ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === S.deckId ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
           <option value="${NEW_DECK}" ${S.deckId === NEW_DECK ? 'selected' : ''}>+ New deck…</option>
         </select></label>
-      <label class="field" id="newNameRow" style="margin-top:12px" ${S.deckId === NEW_DECK ? '' : 'hidden'}><span>New deck name</span>
-        <input id="newName" maxlength="80" placeholder="e.g. Cell Biology"></label>
+      <label class="field" id="newNameRow" ${S.deckId === NEW_DECK ? '' : 'hidden'}><span>Name for the new deck</span>
+        <input id="newName" maxlength="80" placeholder="e.g. Cell Biology" autocomplete="off"></label>
     </section>
 
     <div class="seg" role="tablist" aria-label="Where the cards come from">
@@ -99,15 +106,16 @@ export async function renderImport(el, arg) {
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
       <div class="pane-actions">
-        <button class="btn ghost small" type="button" id="clozeBtn" hidden>Make cloze notes</button>
         <button class="btn ghost small" type="button" id="swapBtn">${icon('swap')} Swap front and back</button>
         <button class="btn ghost small" type="button" id="dupBtn" hidden>Remove duplicates</button>
       </div>
+      <p class="note" id="clozeNote" hidden><button class="link" type="button" id="clozeToggle"></button></p>
       <ol class="plist" id="plist"></ol>
       <p class="note" id="moreNote" hidden></p>
     </section>
 
     <div class="savebar" id="savebar" hidden>
+      <p class="save-hint" id="saveHint" hidden>Name the new deck above</p>
       <button class="btn primary" type="button" id="saveBtn">Add cards</button>
     </div>`;
 
@@ -124,6 +132,7 @@ export async function renderImport(el, arg) {
 
 // ---------- choosing the deck ----------
 function wireDeckPicker() {
+  $('newName').addEventListener('input', refreshFlags);        // the save button names the deck
   $('deckSel').addEventListener('change', async e => {
     S.deckId = e.target.value;
     $('newNameRow').hidden = S.deckId !== NEW_DECK;
@@ -156,9 +165,11 @@ function wirePaste() {
   // Re-detect shortly after typing or pasting stops.
   $('pasteBox').addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => showResult(parseText($('pasteBox').value), false, $('pasteBox').value), 250);
+    S.noCloze = false;                 // new text: cloze lines count again
+    timer = setTimeout(() => showText($('pasteBox').value), 250);
   });
   $('clearBtn').addEventListener('click', () => {
+    clearTimeout(timer);
     $('pasteBox').value = '';
     showResult(null);
     $('pasteBox').focus();
@@ -168,6 +179,13 @@ function wirePaste() {
     if (ok) { $('claudeNote').hidden = false; toast('Prompt copied'); }
     else toast("Couldn't copy. Your browser blocked it.");
   });
+}
+
+// Pasted or loaded text: lines with blanks like {{c1::answer}} become cloze notes along with the other cards, unless the
+// "Keep … as plain cards" link was pressed.
+function showText(text) {
+  S.pasted = text;
+  showResult(S.noCloze ? parseText(text) : withClozeLines(text, parseText).result, false, text);
 }
 
 // Copy to the clipboard, with an older fallback for browsers that block the modern way.
@@ -200,7 +218,7 @@ function wireFile() {
         showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
           : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
       }
-      else showResult(parseText(await file.text()));
+      else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
       console.error(err);
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
@@ -263,7 +281,7 @@ function wireSheet() {
       const text = await res.text();
       // A private sheet sends back a Google sign-in page (HTML) instead of CSV.
       if (!res.ok || /^\s*</.test(text)) throw new Error('not shared');
-      showResult(parseText(text));
+      S.noCloze = false; showText(text);
     } catch (err) {
       showError(navigator.onLine
         ? "Couldn't load that sheet. Check it's shared as \"Anyone with the link\" or published to the web."
@@ -325,9 +343,10 @@ function wirePreview() {
     renderList();
   });
 
-  // Pasted lines with {{c1::…}}: turn them into cloze notes (one note per line).
-  $('clozeBtn').addEventListener('click', () => {
-    showResult(parseCloze(S.pasted).result, false, S.pasted);
+  // Lines with {{c1::…}} become cloze notes by themselves. This link turns that off (and back on) for the current text.
+  $('clozeToggle').addEventListener('click', () => {
+    S.noCloze = !S.noCloze;
+    showText(S.pasted);
   });
 
   $('dupBtn').addEventListener('click', () => {
@@ -364,6 +383,7 @@ function renderList() {
         <textarea rows="1" data-side="front" aria-label="Front of card ${i + 1}" placeholder="Front" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.front)}</textarea>
         <textarea rows="1" data-side="back" aria-label="Back of card ${i + 1}" placeholder="Back" ${c.cloze || c.occlusion ? 'readonly' : ''}>${esc(c.back)}</textarea>
         <span class="badge" hidden></span>
+        <div class="pv-math" hidden aria-label="Maths preview"></div>
       </div>
       <button class="icon-btn" type="button" data-del aria-label="Delete card ${i + 1}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -389,6 +409,13 @@ function refreshFlags() {
   $('plist').querySelectorAll('.prow').forEach(row => {
     const i = +row.dataset.i, c = S.cards[i], flag = S.flags[i];
     const badge = row.querySelector('.badge');
+    // A card with maths in it shows the drawn formulas under its boxes (only redrawn when its text changed).
+    const pv = row.querySelector('.pv-math'), mathSrc = hasMath(c.front) || hasMath(c.back) ? `${c.front}\u0000${c.back}` : '';
+    if (pv && pv.dataset.src !== mathSrc) {
+      pv.dataset.src = mathSrc;
+      pv.hidden = !mathSrc;
+      pv.innerHTML = mathSrc ? `<div class="pv-f">${formatHTML(c.front)}</div><div class="pv-b">${formatHTML(c.back)}</div>` : '';
+    }
     row.classList.toggle('incomplete', !isComplete(c));
     row.classList.toggle('dup', !!flag);
     badge.hidden = !flag && isComplete(c) && !c.cloze && !c.occlusion;
@@ -407,9 +434,11 @@ function refreshFlags() {
   const notesN = new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
   if (S.result.format.skipped) parts.push(`<span class="warn">${plural(S.result.format.skipped, 'line')} without a blank ${S.result.format.skipped === 1 ? 'was' : 'were'} left out.</span>`);
-  const offerCloze = !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'cloze';
-  $('clozeBtn').hidden = !offerCloze;
-  if (offerCloze) parts.push('<b>Some lines have blanks like {{c1::answer}}.</b> Press “Make cloze notes” to turn each line into a note with one card per blank.');
+  // Cloze lines are included automatically; the link keeps them as plain cards (or brings the notes back).
+  const hasBlanks = !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'table';
+  $('clozeNote').hidden = !hasBlanks;
+  if (hasBlanks) $('clozeToggle').textContent = S.noCloze ? 'Turn {{c1::…}} lines into cloze notes' : 'Keep {{c1::…}} lines as plain cards';
+  if (S.result.format.id !== 'anki' && S.result.tags?.some(t => t.length)) parts.push('Tags come along too.');
   $('swapBtn').hidden = S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion);          // nothing to swap in cloze or occlusion cards
   // Image-occlusion notes: how many notes the cards come from.
   const occNotes = new Set(S.cards.filter(c => c.occlusion).map(c => c.occlusion.noteKey)).size;
@@ -428,8 +457,11 @@ function refreshFlags() {
   $('found').innerHTML = parts.join(' ');
   $('dupBtn').hidden = !dups;
 
-  const deckName = S.deckId === NEW_DECK ? 'new deck' : $('deckSel').selectedOptions[0].textContent;
-  $('saveBtn').textContent = complete ? `Add ${plural(complete, 'card')} to ${deckName}` : 'No complete cards yet';
+  // The button says where the cards go: the deck's name once it has one. A new deck without a name asks for it above.
+  const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].textContent).replace(/\s+/g, ' ');
+  const shown = name.length > 32 ? name.slice(0, 31) + '…' : name;
+  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(complete, 'card')} to “${shown}”` : `Add ${plural(complete, 'card')}`;
+  $('saveHint').hidden = !complete || !!name;
   $('saveBtn').disabled = !complete;
 }
 
@@ -579,6 +611,7 @@ async function save() {
       });
     }
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
+    rememberDeck(deckId);
     toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.

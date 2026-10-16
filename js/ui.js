@@ -1,5 +1,7 @@
 // Small helpers shared by every screen.
 
+import { streakText } from './stats-calc.js';
+
 export const $ = id => document.getElementById(id);
 
 // Make user text safe to put inside HTML (so a deck called "<b>" shows as text, not as bold).
@@ -9,12 +11,18 @@ export function esc(s) {
 
 // A short message that pops up above the tab bar for a few seconds.
 let toastTimer = 0;
-export function toast(msg) {
+// `link` ({ href, label }) adds a link after the message and keeps the toast up longer, so it can be tapped.
+export function toast(msg, { link = null } = {}) {
   const t = $('toast');
   t.textContent = msg;
+  if (link) {
+    const a = document.createElement('a');
+    a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
+    t.append(' ', a);
+  }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  toastTimer = setTimeout(() => { t.hidden = true; }, link ? 7000 : 2600);
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
@@ -55,10 +63,41 @@ const ICON_PATHS = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  snow: '<path d="M12.0 3.0L12.0 21.0M4.2 7.5L19.8 16.5M4.2 16.5L19.8 7.5"/><path d="M12.0 5.6L10.5 7.4M12.0 5.6L13.5 7.4M6.5 8.8L7.3 11.1M6.5 8.8L8.8 8.4M6.5 15.2L8.8 15.6M6.5 15.2L7.3 12.9M12.0 18.4L13.5 16.6M12.0 18.4L10.5 16.6M17.5 15.2L16.7 12.9M17.5 15.2L15.2 15.6M17.5 8.8L15.2 8.4M17.5 8.8L16.7 11.1"/>',
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 export const icon = (name, cls = '') =>
   `<svg class="ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+
+// The streak line shared by Today and the end of a Review session: flame, the count, what to do about it, and
+// (when there is one) a freeze note. `button` makes it a button that opens the "Your streak" sheet (Today).
+// Keep both the same text: tests compare Today's streak with the one at the end of a session.
+export function streakHTML(streak, { button = false } = {}) {
+  const { line, sub } = streakText(streak);
+  const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}">${icon('snow')}${esc(sub)}</span>` : '';
+  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
+  const cls = `streak${streak.studiedToday ? ' kept' : ''}`;
+  return button
+    ? `<button type="button" class="${cls} streak-btn" id="streakBtn" aria-haspopup="dialog" title="Your streak, streak freeze and days off">${inner}${icon('chevron', 'sb-go')}</button>`
+    : `<p class="${cls}">${inner}</p>`;
+}
+
+// The last 7 days as little squares (Stats and the "Your streak" sheet): a check = studied, a snowflake = a streak
+// freeze covered the day, a moon = a planned day off. Each has a shape as well as a colour. `week` is streak.week.
+const DOT_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const DOT_NAME = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+// "Tue 13 Oct", in the reader's language but always weekday, day, month.
+const dotSaid = time => { const p = Object.fromEntries(DOT_DAY.formatToParts(time).map(x => [x.type, x.value])); return `${p.weekday} ${p.day} ${p.month}`; };
+export function weekDotsHTML(week, label = 'Last 7 days') {
+  // A list for screen readers: each day says what happened ("Tue 13 Oct: streak freeze used"); the squares are only pictures.
+  return `<div class="week" role="list" aria-label="${esc(label)}">${week.map(d => {
+    const kind = d.on ? 'on' : d.frozen ? 'frz' : d.rest ? 'rest' : '';
+    const note = d.on ? ', studied' : d.frozen ? ', streak freeze used' : d.rest ? ', day off' : '';
+    const said = `${dotSaid(d.time)}: ${(d.on ? 'studied' : d.frozen ? 'streak freeze used' : d.rest ? 'day off' : d.today ? 'not studied yet' : 'not studied')}${d.today && d.on ? ' (today)' : ''}`;
+    return `<div class="wd${kind ? ' ' + kind : ''}${d.today ? ' today' : ''}" role="listitem" title="${esc(DOT_DAY.format(d.time) + note)}"><span class="sr-only">${esc(said)}</span>
+      <i aria-hidden="true">${d.frozen && !d.on ? icon('snow') : d.rest && !d.on ? icon('moon') : ''}</i><span aria-hidden="true">${esc(DOT_NAME.format(d.time).slice(0, 2))}</span></div>`;
+  }).join('')}</div>`;
+}
 
 // A progress ring (SVG). frac is 0 to 1; `inner` is drawn in the middle. Colors come from .ring-bg / .ring-fg in styles.css.
 export function ring(frac, size, stroke, inner = '', cls = '') {
@@ -84,9 +123,11 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 //                     A submit button in it still submits its form (it gets a form="..." link, because it is
 //                     no longer inside the <form>). A sheet with no such row has no footer.
 // On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
+let opener = null;       // what had the focus when a side panel opened (the button that opened it)
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
   const asSide = side && WIDE.matches;
+  if (asSide && !d.open) opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
   d.classList.toggle('side', asSide);
   d.style.transform = d.style.transition = '';                          // undo a half-finished swipe
@@ -125,8 +166,12 @@ export function openSheet(html, { side = false } = {}) {
 }
 export function closeSheet() {
   const d = $('sheet');
+  // A pop-up gives the focus back to where it came from by itself; a side panel does not, so the focus goes to the card
+  // that was open (or the button that opened the panel) instead of being lost on the page.
+  const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) d.close();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
+  back?.focus({ preventScroll: true });
 }
 // The page gets its full width back, and the card list stops highlighting the card that was open.
 function afterClose() {
@@ -217,3 +262,11 @@ export const onControl = (e, except) => {
   return !!control && control.id !== except;
 };
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// A mouse or finger press on these buttons must not move focus to them, so Space still flips the card afterwards.
+// (Keyboard use is untouched: Tab and Enter focus and press a button as usual.) `selector` picks the buttons inside `root`.
+export function keepFocusOnPress(root, selector = 'button') {
+  const stop = e => { if (e.target.closest?.(selector)) e.preventDefault(); };
+  root.addEventListener('pointerdown', stop);
+  root.addEventListener('mousedown', stop);
+}

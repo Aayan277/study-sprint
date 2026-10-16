@@ -4,6 +4,8 @@
 import { canType, normalizeAnswer } from './match.js';
 import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
+import { isStepped, finalStep } from './steps.js';
+import { maskMath } from './math.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
 export const PENALTY_MS = 3000;      // Lightning: a wrong answer costs 3 seconds
@@ -29,7 +31,9 @@ export function shuffle(a, rnd = Math.random) {
 export const isCloze = card => !!card.noteId && card.cloze !== undefined;
 // An image-occlusion card (see occlusion.js) is front-only too: the picture with its highlighted box is the question, the
 // box's label the answer. Cards that can't be asked back → front.
-export const isFrontOnly = card => isCloze(card) || hasMasks(card);
+// A step-by-step card (its back is "Step 1: ... Step 2: ..."; see steps.js) asks for its final answer.
+const stepped = card => !isCloze(card) && !hasMasks(card) && isStepped(card.back, { mask: maskMath });
+export const isFrontOnly = card => isCloze(card) || hasMasks(card) || stepped(card);
 
 export function questionFor(card, qtype) {
   if (hasMasks(card)) {
@@ -37,6 +41,11 @@ export function questionFor(card, qtype) {
     const label = occLabel(card.occlusion.masks, card.occlusion.n);
     const ask = { prompt: String(card.occlusion.header ?? '').trim() || 'Name the highlighted part', answer: label, occ: true };
     return label && (qtype === 'front' || (qtype === 'typing' && canType(label))) ? ask : null;
+  }
+  if (stepped(card)) {
+    const answer = finalStep(card.back, { mask: maskMath });
+    const ask = card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer };
+    return qtype === 'front' || (qtype === 'typing' && canType(answer)) ? ask : null;
   }
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
@@ -109,12 +118,16 @@ function candidatesFor(card, pool, rnd) {
 // Pick wrong options for a card from the other cards' answers.
 //   Normal: prefer the same deck, a similar length (within ±50%), and shared tags or words, plus some randomness.
 //   Hard:   rank by how alike the text looks, so the traps are plausible.
-export function pickDistractors(card, pool, qtype, { hard = false, count = hard ? 5 : 3, rnd = Math.random } = {}) {
+// Returns the labels, or with { withIds: true } [{ label, id }] (id = the card the option is the answer of).
+// include: [label]: these options are always among the wrong ones (if a card in the pool has that answer), e.g. the
+// card a "You mix these up" pair is confused with.
+export function pickDistractors(card, pool, qtype, { hard = false, count = hard ? 5 : 3, rnd = Math.random, withIds = false, include = [] } = {}) {
   const answer = questionFor(card, qtype).answer;
   const seen = new Set([dupKey(answer)]);
   const words = contentWords(answer);
   const tags = new Set(card.tags || []);
   const scored = [];
+  const want = new Set(include.map(dupKey).filter(Boolean));
   const consider = other => {
     // Never a sibling: its answer is on this card's front. (For an image-occlusion card the other boxes' labels are the
     // best wrong options: the picture doesn't show them.)
@@ -133,13 +146,16 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
     score += Math.min(2, (other.tags || []).filter(t => tags.has(t)).length);
     score += Math.min(2, [...contentWords(label)].filter(w => words.has(w)).length);
     score = hard ? similarity(label, answer) * 10 + score * 0.5 + rnd() * 0.5 : score + rnd() * 2.5;
-    scored.push({ label, score });
+    if (want.has(key)) score += 1e6;        // forced in
+    scored.push({ label, id: other.id, score });
   };
   const sample = candidatesFor(card, pool, rnd);
   sample.forEach(consider);
   // A sample of a big pool can hold too few different answers (e.g. mostly Yes/No): look through the rest.
   if (scored.length < count && pool.length > sample.length) shuffle(pool.slice(), rnd).forEach(consider);
-  return scored.sort((a, b) => b.score - a.score).slice(0, count).map(s => s.label);
+  if (want.size && [...want].some(k => !seen.has(k))) pool.forEach(o => { if (want.has(dupKey(questionFor(o, qtype)?.answer))) consider(o); });
+  const top = scored.sort((a, b) => b.score - a.score).slice(0, count);
+  return withIds ? top.map(({ label, id }) => ({ label, id })) : top.map(s => s.label);
 }
 
 // ---------- the round ----------

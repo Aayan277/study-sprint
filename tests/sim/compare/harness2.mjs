@@ -8,6 +8,14 @@
 //   - breaks (B9): k days off, daily review limit, recovery metrics
 //   node harness2.mjs <copyDir> <scenario> <mem:speed> <seedFrom> <seedTo>
 // env: PLAY_MODE=mc|mchard|typing|mix  PLAY_LEN=20  PLAY_P=0.4  MC_LAMBDA=0.5  BREAK=0  SPEED_JSON={...}
+//      RESCUE=N   (B1) on the day the break ends, start a catch-up plan over N days when Q.rescueOffer() would offer one
+//                 (always for a deck with an exam, to show that exam decks are exempt). 0 / unset = no plan.
+//      PAUSE=0|1  pause new cards during the plan (default 1)
+//      AWAY=all|<n>  (B1) "I'm away until...": on the last study day before the break, also review ahead every card
+//                 that comes due during the break (all), or the n soonest. Unset = off.
+//      CARDS=n    override the number of cards (Gb has 1000, all introduced by day 40; 2000 keeps new cards coming).
+//      Extra metrics for break scenarios: Rret (mean true recall on the first day back, before studying), recPeak / recP90 (largest and 90th-percentile answers a day after the break),
+//      R30end (mean true recall 30 days after the break, non-exam decks), offered (did the offer fire).
 import { register } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -71,15 +79,18 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const T0 = Date.UTC(2026, 9, 12, 9);
 const ymd = d => new Date(T0 + d * DAY).toISOString().slice(0, 10);
 const BREAK = +(process.env.BREAK ?? 0);
+const rl = () => (process.env.RL === 'none' ? null : +(process.env.RL ?? 150));         // RL=none: no daily review limit
+const RESCUE = +(process.env.RESCUE ?? 0), PAUSE = (process.env.PAUSE ?? '1') !== '0', AWAY = process.env.AWAY || '';
 const SC = {
   // B6 / MC: exam deck (300 cards, exam day 30) and non-exam deck (500 cards, 120 days)
   A: { cards: 300, exam: 30, newPerDay: 20 },
   G: { cards: 500, days: 120, newPerDay: 20, noExam: true },
   // B9: non-exam 500 cards, learn 60 days, break, 30 recovery days; exam 300 cards, break from day 24, exam day 45
-  Gb: { cards: 1000, newPerDay: 25, noExam: true, reviewLimit: +(process.env.RL ?? 150), breakFrom: 60, recover: 30 },
-  Ab: { cards: 600, exam: 50, newPerDay: 25, reviewLimit: +(process.env.RL ?? 150), breakFrom: 26 }
+  Gb: { cards: 1000, newPerDay: 25, noExam: true, reviewLimit: rl(), breakFrom: 60, recover: 30 },
+  Ab: { cards: 600, exam: 50, newPerDay: 25, reviewLimit: rl(), breakFrom: 26 }
 };
 const cfg = SC[scenario];
+if (process.env.CARDS) cfg.cards = +process.env.CARDS;      // more cards, so new cards are still being introduced at the break (to test PAUSE)
 if (cfg.breakFrom !== undefined && cfg.noExam) cfg.days = cfg.breakFrom + BREAK + cfg.recover;
 const PLAY_P = +(process.env.PLAY_P ?? 0.4), PLAY_LEN = +(process.env.PLAY_LEN ?? 20), PACE = 8;
 const PLAY_MODE = process.env.PLAY_MODE || 'mix';
@@ -174,7 +185,7 @@ async function runSeed(seed) {
     const now0 = NOW;
     const ex = examM.examSchedule(data.decks, cards, data.statesById, now0, (card, s, es) =>
       srs.examGain(s, es, now0, SCH.deckSchedulerOptions(data.settings, DT.effectiveDeck(data.decks, card.deckId))), data.exam.caps);
-    const { queue, waiting } = Q.buildQueue(cards, data.statesById, data.newLeft, now0, data.reviewLeft, ex);
+    const { queue, waiting } = Q.buildQueue(cards, data.statesById, data.newLeft, now0, data.reviewLeft, ex, undefined, data.rescue);
     const balance = { load: BAL.loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };
     for (;;) {
       const item = Q.takeNext(queue, waiting, NOW);
@@ -257,12 +268,44 @@ async function runSeed(seed) {
     }
   }
 
+  // ---- B1: "I'm away until..." (Options → Custom study → Review ahead, customQueue('ahead') of study-data.js) ----
+  async function awaySession(day) {
+    const data = await SD.loadAll();
+    const cards = SD.countFor(data, ['d']).cards;
+    let list = Q.aheadQueue(cards, data.statesById, BREAK, NOW, data.exam.caps).queue;       // soonest first
+    if (AWAY !== 'all') list = list.slice(0, +AWAY);
+    for (const item of list) {
+      const id = item.card.id, prev = data.statesById.get(id);
+      const rating = reviewAnswer(id, NOW);
+      noteNext(id, prev, rating);
+      const next = srs.rate(id, prev, rating, optsFor(data.settings, data.decks, item.card, NOW, { load: BAL.loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays }), NOW);
+      await db.saveReview(next, { cardId: id, timestamp: NOW, source: 'review', mode: 'flip', correct: rating !== 1, ms: 8000, rating, state: prev ? prev.state : 0 });
+      L.get(id).lastSrc = 'review';
+      data.statesById.set(id, next);
+      day.answers++; day.reviews++; if (rating === 1) day.lapses++;
+      NOW += 10000;
+    }
+  }
+  // ---- B1: the catch-up plan, started on the day the break ends (Today's banner would offer it) ----
+  const plan = { offered: false, backlog: 0 };
+  async function startRescue() {
+    const data = await SD.loadAll();
+    const exempt = new Set(data.decks.filter(d => examM.examInfo(DT.effectiveDeck(data.decks, d.id), NOW)).map(d => d.id));
+    const start = DAYS.dayStart(NOW);
+    const backlog = Q.rescueBacklog(data.cards, data.statesById, exempt, start);
+    const answers = perDay.slice(0, bFrom).map(x => x.answers).filter(n => n > 0).slice(-14).sort((a, b) => a - b);
+    const typical = answers.length ? answers[answers.length >> 1] : 20;
+    const offer = Q.rescueOffer({ backlog, typicalDaily: typical, now: NOW });
+    plan.offered = !!offer; plan.backlog = backlog;
+    if (offer || exempt.size) db.S.settings.rescue = { start, days: RESCUE, backlog: exempt.size ? data.cards.filter(c => { const s = data.statesById.get(c.id); return s && s.state === 2 && s.due < start; }).length : backlog, pauseNew: PAUSE, at: NOW };
+  }
+
   const totalDays = cfg.noExam ? cfg.days : examDay;
   const bFrom = cfg.breakFrom, bTo = bFrom === undefined ? -1 : bFrom + BREAK;      // days [bFrom, bTo) skipped
   const ids = [...db.S.cards.keys()];
   const backlog = () => { const end = DAYS.dayEnd(NOW); let n = 0; for (const id of ids) { const s = db.S.states.get(id); if (s && s.state === 2 && s.due <= end && !db.S.cards.get(id).suspended) n++; } return n; };
   const snap = t => { let sum = 0, lost = 0, started = 0; for (const id of ids) { const tc = L.get(id).tc; if (tc.state === 0) continue; started++; const r = trueR(tc, t); sum += r; if (r < 0.5) lost++; } return { meanR: sum / ids.length, lost, started }; };
-  const rec = { cleared: null, lostDays: 0, rSum: 0, n: 0, backlogStart: null, maxBacklog: 0, reviews: 0, lapses: 0 };
+  const rec = { answers: [], cleared: null, lostDays: 0, rSum: 0, n: 0, backlogStart: null, maxBacklog: 0, reviews: 0, lapses: 0 };
   const daily = [];                                   // true-memory snapshot at 09:00 each day, before studying
   for (let d = 0; d < totalDays; d++) {
     NOW = T0 + d * DAY;
@@ -272,10 +315,13 @@ async function runSeed(seed) {
     if (d >= bFrom && d < bTo) continue;
     const inRec = bFrom !== undefined && d >= bTo;
     if (inRec) { const s = daily[d]; rec.lostDays += s.lost; rec.rSum += s.meanR; rec.n++; if (d === bTo) rec.backlogStart = backlog(); }
+    if (RESCUE > 0 && d === bTo) await startRescue();
     const play = dayRng() < PLAY_P;
     if (play) { await playRound(day); NOW += 10 * 60000; }      // Play first (e.g. on the bus), then Review
     await reviewSession(day);
+    if (AWAY && d === bFrom - 1 && BREAK > 0) await awaySession(day);
     if (inRec) {
+      rec.answers.push(day.answers);
       const b = backlog(); rec.maxBacklog = Math.max(rec.maxBacklog, b); rec.reviews += day.reviews; rec.lapses += day.lapses;
       if (rec.cleared === null && b === 0) rec.cleared = d - bTo + 1;
     }
@@ -302,6 +348,10 @@ async function runSeed(seed) {
     Object.assign(out, { recCleared: rec.cleared ?? (cfg.noExam ? cfg.recover + 1 : totalDays - bTo + 1), recClearedCensored: rec.cleared === null,
       recLostDays: rec.lostDays, recMeanR: rec.n ? rec.rSum / rec.n : null, recBacklog0: rec.backlogStart, recMaxBacklog: rec.maxBacklog,
       recReviews: rec.reviews, recLapses: rec.lapses, endLost: s.lost });
+    const sorted = [...rec.answers].sort((a, b) => a - b);
+    Object.assign(out, { recPeak: sorted.length ? sorted[sorted.length - 1] : null, recP90: sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(0.9 * sorted.length) - 1)] : null,
+      offered: plan.offered, planBacklog: plan.backlog, Rret: daily[bTo] ? daily[bTo].meanR : null });
+    if (cfg.noExam) out.R30end = s.meanR;
     if (cfg.noExam) { out.R7 = daily[bTo + 7].meanR; out.lost7 = daily[bTo + 7].lost; out.R14 = daily[bTo + 14].meanR; out.preBreakR = daily[bFrom].meanR; }
   }
   return out;

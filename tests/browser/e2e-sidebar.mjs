@@ -158,7 +158,7 @@ const ver = (await p.textContent('#sideVer')).trim();
 await go(p, '#/decks', '.deck');
 await p.click('#sideSet'); await p.waitForSelector('#skins');
 ok((await p.getAttribute('#sideSet', 'aria-current')) === 'page' && (await p.getAttribute('#sideSet', 'aria-label')) === 'Close settings', 'Settings link: highlighted, and "Close settings" while open');
-ok(ver === 'v' + (await p.textContent('.note.mono:has-text("Study Sprint")')).match(/(\d+\.\d+)/)[1], `the footer shows the app version (${ver})`);
+ok(ver === 'v' + (await p.textContent('.note.mono:has-text("Study Sprint")')).match(/(\d+(?:\.\d+)+)/)[1], `the footer shows the app version (${ver})`);
 await p.click('#sideSet'); await p.waitForSelector('.deck');
 ok(p.url().endsWith('#/decks') && (await p.getAttribute('#sideSet', 'aria-label')) === 'Settings', 'clicking it again closes Settings and goes back');
 
@@ -218,9 +218,12 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); for (let i
 await p.reload(); await p.waitForSelector('.side-deck[data-key=bio]');
 await p.screenshot({ path: `${SP}/desk/sidebar-1440.png` });
 
-// ---------- the deck page's own tree column stays ----------
-await go(p, '#/deck/bio', '.deck-tree');
-ok(await p.isVisible('.deck-tree') && Math.round((await box(p, '.deck-tree')).x) === 248, 'the deck page keeps its own deck-tree column, next to the sidebar');
+// ---------- the deck page's own tree column: hidden while the sidebar is open (Round 2 A4), a column beside the icon rail ----------
+await go(p, '#/deck/bio', '#deckMore');
+ok(!(await p.isVisible('.deck-tree')), 'sidebar open: the deck page has no tree column of its own');
+await p.click('#sideCollapse'); await p.waitForTimeout(150);
+ok(await p.isVisible('.deck-tree') && Math.round((await box(p, '.deck-tree')).x) === 72, 'icon rail: the deck page shows its deck-tree column, next to the rail');
+await p.click('#sideCollapse'); await p.waitForTimeout(150);
 
 // ---------- keyboard order follows the visual order ----------
 await go(p, '#/today', '#startBtn');
@@ -249,7 +252,7 @@ const mainFirst = await p.evaluate(() => { const a = document.activeElement; ret
 ok(mainFirst === 'main', 'the page follows the sidebar');
 
 // ---------- contrast (AA) in dark, light and OLED for every accent ----------
-await go(p, '#/deck/bio', '.deck-tree');
+await go(p, '#/deck/bio', '#deckMore');
 await p.evaluate(async iso2 => { const db = await import('./js/db.js'); const dk = (await db.getDecks()).find(x => x.id === 'org'); await db.saveDeck({ ...dk, examDate: iso2 }); }, iso(2));
 await redraw(p);
 const contrast = () => p.evaluate(() => {
@@ -277,7 +280,7 @@ const skins = ['violet', 'ocean', 'forest', 'ember', 'rose'];
 const modes = [['dark', false], ['light', false], ['dark', true]];
 let worst = 99, texts = 0; const fails = [];
 for (const route of ['#/deck/bio', '#/today', '#/settings']) for (const skin of skins) for (const [mode, oled] of modes) {
-  if (skin === 'violet' && mode === 'dark' && !oled) await go(p, route, route === '#/today' ? '#startBtn' : route === '#/settings' ? '#skins' : '.deck-tree');       // the current link differs per screen
+  if (skin === 'violet' && mode === 'dark' && !oled) await go(p, route, route === '#/today' ? '#startBtn' : route === '#/settings' ? '#skins' : '#deckMore');       // the current link differs per screen
   await p.evaluate(([s, m, o]) => { const r = document.documentElement; r.setAttribute('data-skin', s); r.setAttribute('data-theme', m); if (o) r.setAttribute('data-oled', 'on'); else r.removeAttribute('data-oled'); }, [skin, mode, oled]);
   const c = await contrast();
   texts = Math.max(texts, c.n); worst = Math.min(worst, c.ring);

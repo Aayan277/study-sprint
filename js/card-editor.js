@@ -7,9 +7,11 @@
 // setCardText(id, ''). The buttons and shortcuts are wired once, below, for every box.
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
+import { hasMath, wrapMath, maskMath } from './math.js';
+import { parseSteps, joinSteps, stepsRoundTrip } from './steps.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
-import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt } from './cloze.js';
+import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
 import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
@@ -25,15 +27,19 @@ export function cardTextField(id, label, value = '', { rows = 2, placeholder = '
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
       <button type="button" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
       <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
+      <button type="button" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
       ${!images ? '' : `<button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>`}</span>`;
+  // Said once, under the Back box: maths goes between $ signs.
+  const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
     return `<div class="field fmt-field"><span class="fmt-head"><span id="${id}Lbl">${esc(label)}</span>${tools}</span>
       <div class="rich" id="${id}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${id}Lbl"
-        data-rich="1" ${cloze ? 'data-cloze-box="1"' : ''} data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value)}</div>${pics}</div>`;
+        data-rich="1" ${cloze ? 'data-cloze-box="1"' : ''} data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value, { math: 'raw' })}</div>
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
   }
   return `<div class="field fmt-field"><span class="fmt-head"><label for="${id}">${esc(label)}</label>${tools}</span>
       <textarea id="${id}" rows="${rows}" placeholder="${esc(placeholder)}" ${cloze ? 'data-cloze-box="1"' : ''}>${esc(value)}</textarea>
-      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}</div>`;
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) || hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
 }
 
 const pictureHTML = (id, image) => (image
@@ -54,7 +60,7 @@ export function readCardText(id) {
 }
 export function setCardText(id, text) {
   const el = document.getElementById(id);
-  if (el.dataset.rich) el.innerHTML = formatHTML(text);
+  if (el.dataset.rich) { el.innerHTML = formatHTML(text, { math: 'raw' }); showMathPreview(el); }
   else { el.value = text; el.dispatchEvent(new Event('input', { bubbles: true })); }
   if (el.dataset.clozeBox) updateClozePreview(id);
 }
@@ -64,11 +70,20 @@ function applyFormat(id, kind) {
   if (!el) return;
   if (el.dataset.rich) {
     el.focus();
+    if (kind === 'math') {
+      // The selected words between $ signs (or, if they already are, without them); with nothing selected, an empty pair
+      // with the cursor inside.
+      const sel = getSelection(), picked = sel.toString();
+      document.execCommand('insertText', false, wrapMath(picked, 0, picked.length).value);
+      if (!picked) getSelection().modify?.('move', 'backward', 'character');
+      return;
+    }
     document.execCommand(kind === 'list' ? 'insertUnorderedList' : kind);
     return;
   }
   const r = kind === 'list'
     ? toggleBullets(el.value, el.selectionStart, el.selectionEnd)
+    : kind === 'math' ? wrapMath(el.value, el.selectionStart, el.selectionEnd)
     : toggleWrap(el.value, el.selectionStart, el.selectionEnd, kind === 'bold' ? '**' : '*');
   el.value = r.value;
   el.focus();
@@ -110,9 +125,19 @@ document.addEventListener('input', e => {
   if (e.target.dataset?.clozeBox) updateClozePreview(e.target.id);
   const prev = e.target.id && document.getElementById(e.target.id + 'Prev');
   if (!prev || !prev.classList.contains('fmt-preview')) return;
+  if (e.target.dataset.rich) { showMathPreview(e.target); return; }
   prev.innerHTML = formatHTML(e.target.value);
-  prev.hidden = !hasFormatting(e.target.value);
+  prev.hidden = !hasFormatting(e.target.value) && !hasMath(e.target.value);
 });
+// Under the Word-style box the formatting shows as you type, so the preview is only for maths.
+function showMathPreview(box) {
+  const prev = document.getElementById(box.id + 'Prev');
+  if (!prev || !prev.classList.contains('fmt-preview')) return;
+  const text = htmlToMarks(box.innerHTML);
+  const has = hasMath(text);
+  prev.hidden = !has;
+  if (has && prev.dataset.src !== text) { prev.dataset.src = text; prev.innerHTML = formatHTML(text); }
+}
 // Ctrl/⌘+B and Ctrl/⌘+I in either kind of box.
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
@@ -130,6 +155,120 @@ document.addEventListener('paste', e => {
   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
 });
 
+// ---------- Basic card: Front, Back (or steps) and a memory hook ----------
+// "Answer in steps" swaps the Back box for one box per step (+ Add step, move up / down, delete) and an optional Final answer.
+// Saving writes the steps into the back as "Step 1: ...", "Step 2: ..." lines (steps.js joinSteps), so the card needs nothing new
+// in the data. Editing a card whose back has those lines opens with the switch on. The memory hook is the card's noteExtra.
+//   basicFields(p, { front, back, frontImage, backImage, hook, frontPh, backPh })   the HTML for the form whose ids start with p
+//   readBack(p)       the back to save (from the steps when the switch is on)
+//   stepsOn(p)        is the switch on?      stepsProblem(p)   why the steps can't be saved ('' when they can)
+//   clearBasic(p)     empty the form after a card was added
+const stepRowHTML = (i, text = '', n = 3) => `<li class="step-row" data-step-row>
+      <span class="step-n" aria-hidden="true">${i + 1}</span>
+      <textarea class="step-in" rows="2" data-step-in aria-label="Step ${i + 1}" placeholder="${i ? 'Next step' : 'The first step'}">${esc(text)}</textarea>
+      <span class="step-tools" role="group" aria-label="Step ${i + 1} actions">
+        <button type="button" class="step-btn" data-step="up" ${i === 0 ? 'disabled' : ''} aria-label="Move step ${i + 1} up" title="Move up">↑</button>
+        <button type="button" class="step-btn" data-step="down" ${i === n - 1 ? 'disabled' : ''} aria-label="Move step ${i + 1} down" title="Move down">↓</button>
+        <button type="button" class="step-btn" data-step="del" ${n <= 2 ? 'disabled' : ''} aria-label="Delete step ${i + 1}" title="Delete step">×</button>
+      </span></li>`;
+
+export function basicFields(p, { front = '', back = '', frontImage = null, backImage = null, hook = '', frontPh = '', backPh = '' } = {}) {
+  const parsed = parseSteps(back, { mask: maskMath });
+  const rows = parsed ? parsed.steps : ['', ''];
+  return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
+      <label class="adv-row switch-row steps-switch"><span><b>Answer in steps</b><span>Review shows the answer one step at a time.</span></span>
+        <input type="checkbox" class="switch" id="${p}StepsOn" data-steps-for="${p}" ${parsed ? 'checked' : ''}></label>
+      <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
+      <div class="steps-ed" id="${p}Steps" ${parsed ? '' : 'hidden'}>
+        <label class="field"><span>Intro (optional)</span><textarea id="${p}Intro" rows="2" placeholder="Shown before the first step.">${esc(parsed?.intro || '')}</textarea></label>
+        <ol class="step-list" id="${p}StepList" aria-label="Steps">${rows.map((t, i) => stepRowHTML(i, t, rows.length)).join('')}</ol>
+        <button type="button" class="btn ghost small" data-step-add="${p}">+ Add step</button>
+        <label class="field"><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(parsed?.final || '')}</textarea></label>
+      </div>
+      ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'A trick to remember it. Shown under the answer.' })}`;
+}
+export const stepsOn = p => !!document.getElementById(p + 'StepsOn')?.checked;
+const stepRows = p => [...document.querySelectorAll(`#${p}StepList [data-step-row]`)];
+const stepValues = p => stepRows(p).map(r => r.querySelector('textarea').value.trim()).filter(Boolean);
+const stepParts = p => ({ intro: document.getElementById(p + 'Intro').value, steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+export function stepsProblem(p) {
+  if (!stepsOn(p)) return '';
+  if (stepValues(p).length < 2) return 'Add at least two steps, or switch off “Answer in steps”.';
+  // What is saved must read back as the same steps (a line inside a step that starts "Step 3:" or "Answer:" would not).
+  return stepsRoundTrip(stepParts(p), { mask: maskMath }) ? '' : "A line inside a step can't start with 'Step N:' or 'Answer:'.";
+}
+export function readBack(p) {
+  if (!stepsOn(p)) return readCardText(p + 'Back');
+  return joinSteps(stepParts(p));
+}
+// Number the rows again (after adding, moving or deleting) and keep the names the buttons speak.
+function renumberSteps(p) {
+  const rows = stepRows(p);
+  rows.forEach((r, i) => {
+    r.querySelector('.step-n').textContent = i + 1;
+    r.querySelector('textarea').setAttribute('aria-label', `Step ${i + 1}`);
+    r.querySelector('.step-tools').setAttribute('aria-label', `Step ${i + 1} actions`);
+    const names = { up: 'Move step N up', down: 'Move step N down', del: 'Delete step N' };
+    r.querySelectorAll('[data-step]').forEach(b => { b.setAttribute('aria-label', names[b.dataset.step].replace('N', i + 1)); });
+    r.querySelector('[data-step=up]').disabled = i === 0;
+    r.querySelector('[data-step=down]').disabled = i === rows.length - 1;
+    r.querySelector('[data-step=del]').disabled = rows.length <= 2;
+  });
+}
+function fillSteps(p, steps, final = '', intro = '') {
+  document.getElementById(p + 'StepList').innerHTML = steps.map((t, i) => stepRowHTML(i, t, steps.length)).join('');
+  document.getElementById(p + 'Final').value = final;
+  document.getElementById(p + 'Intro').value = intro;
+  renumberSteps(p);
+}
+export function clearBasic(p) {
+  setCardText(p + 'Front', ''); setCardText(p + 'Back', ''); setCardText(p + 'Hook', '');
+  setCardImage(p + 'Front', null); setCardImage(p + 'Back', null);
+  fillSteps(p, ['', '']);
+}
+document.addEventListener('change', e => {
+  const p = e.target.dataset?.stepsFor;
+  if (!p) return;
+  const on = e.target.checked, steps = document.getElementById(p + 'Steps'), wrap = document.getElementById(p + 'BackWrap');
+  if (on) {
+    const back = readCardText(p + 'Back').trim(), parsed = parseSteps(back, { mask: maskMath });
+    if (parsed) fillSteps(p, parsed.steps, parsed.final || '', parsed.intro);
+    else if (back) fillSteps(p, [back, ''], '', '');            // what was in Back becomes the first step
+    else if (stepValues(p).length === 0) fillSteps(p, ['', ''], '', '');
+  } else {
+    const joined = joinSteps(stepParts(p));
+    if (joined) setCardText(p + 'Back', joined);
+  }
+  steps.hidden = !on; wrap.hidden = on;
+  renumberSteps(p);
+  (on ? stepRows(p)[0]?.querySelector('textarea') : document.getElementById(p + 'Back'))?.focus();
+});
+document.addEventListener('click', e => {
+  const add = e.target.closest?.('[data-step-add]');
+  if (add) {
+    const p = add.dataset.stepAdd, list = document.getElementById(p + 'StepList');
+    list.insertAdjacentHTML('beforeend', stepRowHTML(stepRows(p).length));
+    renumberSteps(p);
+    list.lastElementChild.querySelector('textarea').focus();
+    return;
+  }
+  const b = e.target.closest?.('[data-step]');
+  if (!b || b.disabled) return;
+  const row = b.closest('[data-step-row]'), list = row.parentElement, p = list.id.replace(/StepList$/, '');
+  if (b.dataset.step === 'up' && row.previousElementSibling) row.previousElementSibling.before(row);
+  else if (b.dataset.step === 'down' && row.nextElementSibling) row.nextElementSibling.after(row);
+  else if (b.dataset.step === 'del') {
+    const next = row.nextElementSibling || row.previousElementSibling;
+    row.remove(); renumberSteps(p);
+    next?.querySelector('textarea').focus();
+    return;
+  }
+  renumberSteps(p);
+  // After a move the pressed button may be disabled (first / last row): keep the focus on a button that still works.
+  const keep = b.disabled ? row.querySelector(`[data-step=${b.dataset.step === 'up' ? 'down' : 'up'}]`) : b;
+  keep.focus();
+});
+
 // ---------- Basic | Cloze | Image occlusion ----------
 // A cloze note is one text with hidden parts: "The {{c1::mitochondria}} makes {{c2::ATP}}". Each blank number is
 // one card (see cloze.js). In the add form a switch picks Basic or Cloze; the editor of a card that already is
@@ -144,6 +283,50 @@ export function noteKinds(p, kind = 'basic') {
 }
 export const readKind = p => document.querySelector(`input[name="${p}Kind"]:checked`)?.value || 'basic';
 
+// Why the add form (ids starting with p) can't save yet, in a few plain words; '' when it can.
+export function whyNotAdd(p) {
+  const kind = readKind(p);
+  if (kind === 'occlusion') {
+    const note = readOcclusion(p);
+    if (!note?.image) return 'Choose a picture first.';
+    return groupsOf(note.masks).length ? '' : 'Draw at least one box over the part to hide.';
+  }
+  if (kind === 'cloze') {
+    const text = readCardText(p + 'Text').trim();
+    if (!text) return 'Type your text, then select a word to hide.';
+    if (!clozeNumbers(text).length) return 'Select a word and press New blank to hide it.';
+    return planNoteSave([], text).error || '';
+  }
+  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front');
+  const stepsWhy = stepsProblem(p);
+  if (stepsOn(p)) return !front ? 'Add a front to save the card.' : stepsWhy;
+  const back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back');
+  if (front && back) return '';
+  return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
+}
+// Keep the form's Add button and the reason line (#{p}Why) in step with the form: aria-disabled, with the reason, until it can save.
+// Typing, picking a type, a picture added or removed, boxes drawn: all of them change the form, so it watches the form itself.
+export function watchAdd(p) {
+  const form = document.getElementById(p + 'Form'), why = document.getElementById(p + 'Why');
+  const add = document.querySelector(`button[type=submit][form="${p}Form"]`);
+  if (!form || !why || !add) return () => {};
+  const update = () => {
+    const reason = whyNotAdd(p);
+    // aria-disabled, not disabled: the button stays focusable, so a keyboard or screen-reader user can reach it and hear
+    // the reason (aria-describedby). The submit handler checks the form again, so pressing it does nothing harmful.
+    add.setAttribute('aria-disabled', reason ? 'true' : 'false');
+    add.setAttribute('aria-describedby', why.id);
+    if (why.textContent !== reason) why.textContent = reason;
+    why.hidden = !reason;
+  };
+  const watcher = new MutationObserver(update);
+  watcher.observe(form, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-media-id', 'hidden'] });
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+  return update;
+}
+
 export function clozeFields(p, text = '', extra = '') {
   const id = p + 'Text';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -151,12 +334,12 @@ export function clozeFields(p, text = '', extra = '') {
   // The Ctrl/⌘ keys are Anki's, but browsers keep Ctrl/⌘+Shift+C for their developer tools, so Alt+Shift+C (new) and Alt+Shift+S (same) also work.
   return `<div class="cloze-tools" role="group" aria-label="Blanks">
       <button type="button" class="btn ghost small" data-cloze="new" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Shift+C' : 'Control+Shift+C'} Alt+Shift+C" title="Hide the selected words (${mod}+Shift+C or ${alt}+Shift+C)"><span aria-hidden="true">[…]</span> New blank</button>
-      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'} Alt+Shift+S" title="Hide the selected words in the same card (${mod}+${alt}+Shift+C or ${alt}+Shift+S)"><span aria-hidden="true">[…]=</span> Same blank</button>
+      <button type="button" class="btn ghost small" data-cloze="same" data-for="${id}" aria-keyshortcuts="${mac ? 'Meta+Alt+Shift+C' : 'Control+Alt+Shift+C'} Alt+Shift+S" title="Hide the selected words in the same card (${mod}+${alt}+Shift+C or ${alt}+Shift+S)"><span aria-hidden="true">[…]=</span> Same blank as the last one</button>
     </div>
-    ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The {{c1::mitochondria}} makes {{c2::ATP}}', images: false, cloze: true })}
+    ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The mitochondria makes ATP for the cell', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
     ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <p class="note cloze-help">A hint goes after the answer: {{c1::mitochondria::organelle}}.</p>`;
+    <p class="note cloze-help">Select a word and press New blank to hide it: each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p>`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
   ${text.trim() ? `<div class="cloze-render">${renderCloze(text, 0, 'all')}</div>` : ''}`;

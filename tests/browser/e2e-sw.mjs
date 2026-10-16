@@ -53,6 +53,14 @@ await settle(800);   // the background copy is fetched and saved
 await page.reload(); await page.waitForSelector('.tdeck, .empty');
 ok(await probeNow() === 'B', 'and the next visit has the update');
 
+// 2b. CDN libraries (v4.2.2): save a good copy, an opaque one (no-cors) and one of a version the app no longer pins.
+const JSD = 'https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/';
+const CSS = JSD + 'katex.min.css', FONT = JSD + 'fonts/KaTeX_Main-Regular.woff2', OLD = 'https://cdn.jsdelivr.net/npm/katex@0.15.0/dist/katex.min.css';
+await page.evaluate(async ([css, font, old]) => { await fetch(css); await fetch(font, { mode: 'no-cors' }); await fetch(old); }, [CSS, FONT, OLD]);
+await settle(800);
+const inCache = (cache, url) => page.evaluate(async ([c, u]) => { const r = await (await caches.open(c)).match(u); return r ? r.type : null; }, [cache, url]);
+ok(await inCache(first, CSS) === 'cors' && await inCache(first, FONT) === 'opaque' && await inCache(first, OLD) === 'cors', 'the worker saved a good, an opaque and an unpinned library copy');
+
 // 3. A new version of sw.js: a fresh copy of everything is installed, the old one removed, the app reloads once.
 setProbe('C');
 fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').replace(/study-sprint-v\d+/, 'study-sprint-v999'));
@@ -66,6 +74,11 @@ ok(loads === 1, 'the app reloaded once to pick up the update (' + loads + ')');
 await page.waitForSelector('.tdeck, .empty');
 ok(await probeNow() === 'C', 'after the reload the new files run straight away, not the old ones');
 
+// 3b. Only the good copy of a library that this release still pins came over to the new cache.
+ok(await inCache('study-sprint-v999', CSS) === 'cors', 'a pinned library copy is carried to the new cache');
+ok(await inCache('study-sprint-v999', FONT) === null, 'an opaque copy is left behind');
+ok(await inCache('study-sprint-v999', OLD) === null, 'a copy of a version that is no longer pinned is left behind');
+
 // 4. Offline: the app still opens.
 await ctx.setOffline(true);
 await page.reload(); await page.waitForSelector('.tdeck, .empty');
@@ -73,6 +86,7 @@ ok(await probeNow() === 'C', 'offline: the app opens from the saved files');
 ok((await page.locator('h1').first().textContent()) === 'Today', 'offline: Today shows');
 await page.evaluate(() => { location.hash = '#/stats'; }); await page.waitForSelector('.pgrid, .empty');
 ok((await page.locator('h1').first().textContent()) === 'Stats', 'offline: another screen (loaded on demand) opens too');
+ok(await page.evaluate(async css => { try { return (await fetch(css + '?again=2')).ok; } catch { return false; } }, CSS), 'offline: a jsdelivr address with a ?search is answered by the saved file');
 await ctx.setOffline(false);
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close(); server.close(); fs.rmSync(SITE, { recursive: true, force: true });

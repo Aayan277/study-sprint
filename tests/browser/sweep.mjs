@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const b = await chromium.launch();
 let bad = 0;
@@ -15,7 +15,7 @@ for (const width of [320, 375]) for (const mode of ['light', 'dark']) {
   const screens = [
     ['decks', async () => { await p.goto('http://localhost:8123/#/decks'); await p.reload(); await p.waitForSelector('.deck'); }],
     ['deck', async () => { await p.click('.deck-open'); await p.waitForSelector('.crow'); }],
-    ['deck-edit', async () => { await p.click('#editDeck'); await p.waitForSelector('#deckName'); await p.click('#deckDelete'); }],
+    ['deck-edit', async () => { await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckName'); await p.click('#deckDelete'); }],
     ['import', async () => { await p.goto('http://localhost:8123/#/import'); await p.waitForSelector('#pasteBox'); await p.fill('#pasteBox', 'A fairly long term name here - with a definition that goes on for a while, longer than the box\nB - c\nD - e'); await p.waitForSelector('.prow'); }],
     ['review-setup', async () => { await p.goto('http://localhost:8123/#/review'); await p.waitForSelector('#startBtn'); }],
     ['review-card', async () => { await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.click('#showBtn'); await p.waitForSelector('.rate'); }],

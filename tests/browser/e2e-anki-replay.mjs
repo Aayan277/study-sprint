@@ -46,7 +46,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   ok(/1 image-occlusion note makes these cards: one card per box/.test(found) && !/later update/.test(found) && !/plain picture card/.test(found), `${file}: the preview says one card per box`);
   ok(!(await page.innerText('#screen')).includes('image-occlusion:') && !(await page.innerText('#screen')).includes('[…]'), `${file}: no broken [...] or mask code in the preview`);
   ok((await page.textContent('#progInfo')).startsWith('10 reviews on 3 cards'), `${file}: progress counts 10 reviews (the cram miss is not one): ` + await page.textContent('#progInfo'));
-  await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+  await page.selectOption('#deckSel', '__new'); await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const d = await deckData(name);
 
   const cram = d['Cram card'];

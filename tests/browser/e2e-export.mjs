@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 import { readFileSync } from 'node:fs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -15,15 +15,14 @@ await page.evaluate(async () => {
     { id: 'x1', deckId: 'x', front: 'Café & <tea>', back: 'Line one\nLine two', tags: [], created: 2 },
     { id: 'x2', deckId: 'x', front: 'Osmosis', back: 'Water, across a membrane', tags: ['cells'], created: 3 }]);
 });
-await page.goto('http://localhost:8123/#/deck/x'); await page.waitForSelector('#exportDeck');
-await page.click('#exportDeck'); await page.waitForSelector('#exCsv');
+await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exCsv');
 await page.screenshot({ path: SP + '/export-sheet.png' });
 let [dl] = await Promise.all([page.waitForEvent('download'), page.click('#exCsv')]);
 ok(dl.suggestedFilename() === 'Bio - Unit 2.csv', 'CSV named after the deck: ' + dl.suggestedFilename());
 await dl.saveAs(SP + '/exports/deck.csv');
 const csv = readFileSync(SP + '/exports/deck.csv', 'utf8');
-ok(csv.startsWith('﻿Front,Back,Tags') && csv.includes('Mitochondria,"Makes ATP, ""the powerhouse""",cells exam 1'), 'CSV contents');
-await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+ok(csv.startsWith('﻿Front,Back,Tags') && csv.includes('Mitochondria,"Makes ATP, ""the powerhouse""","cells, exam 1"'), 'CSV contents');
+await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
 [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#exApkg')]);
 ok(dl.suggestedFilename() === 'Bio - Unit 2.apkg', 'Anki file named after the deck');
 await dl.saveAs(SP + '/exports/deck.apkg');

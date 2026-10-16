@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkBackup, BACKUP_FORMAT, BACKUP_VERSION } from '../js/db.js';
+import { checkBackup, BACKUP_FORMAT, BACKUP_VERSION, cleanMixedWith } from '../js/db.js';
 import { STARTER_DECKS, starterCards } from '../js/jlpt.js';
 import { checkAnswer, canType } from '../js/match.js';
 
@@ -77,4 +77,30 @@ test('starter cards: typing a meaning or a reading counts as right', () => {
   // Most backs are short enough to type (40 characters or less).
   const typeable = STARTER_DECKS.flatMap(d => starterCards(d.level)).filter(c => canType(c.back)).length;
   assert.ok(typeable > 270, `${typeable} of 282 typeable`);
+});
+
+test('the catch-up plan in a backup: a good one (or none) passes, a damaged one is refused', () => {
+  const plan = { start: 1_800_000_000_000, days: 3, backlog: 150, pauseNew: true, at: 1_800_000_000_000 };
+  const withPlan = rescue => ({ ...good, settings: { rescue } });
+  assert.equal(checkBackup(withPlan(plan)), null);
+  assert.equal(checkBackup(withPlan(null)), null);
+  assert.equal(checkBackup(good), null);
+  assert.equal(checkBackup(withPlan({ ...plan, pauseNew: undefined })), null);
+  const bad = /catch-up plan/;
+  for (const r of [{ ...plan, start: 'x' }, { ...plan, days: 0 }, { ...plan, days: 2.5 }, { ...plan, days: 99 }, { ...plan, backlog: -1 }, { ...plan, backlog: '5' },
+    { ...plan, pauseNew: 'yes' }, { ...plan, at: NaN }, '<img src=x>', 7, [plan]]) assert.match(checkBackup(withPlan(r)), bad);
+});
+
+test('mixedWith on a log row is accepted by the check, and cleaned to a string of 1 to 200 characters', () => {
+  const row = extra => ({ cardId: 'c', timestamp: 1, correct: false, ...extra });
+  assert.equal(checkBackup({ ...good, reviewLog: [row({ mixedWith: 'card-b' }), row({ mixedWith: 5 }), row({ mixedWith: '' }), row()] }), null);
+  assert.equal(cleanMixedWith(row({ mixedWith: 'card-b' })).mixedWith, 'card-b');
+  assert.equal(cleanMixedWith(row({ mixedWith: 'x'.repeat(200) })).mixedWith.length, 200);
+  for (const bad of ['', 'x'.repeat(201), 5, null, ['a'], { a: 1 }, true]) {
+    const cleaned = cleanMixedWith(row({ mixedWith: bad }));
+    assert.ok(!('mixedWith' in cleaned), String(bad).slice(0, 10));
+    assert.equal(cleaned.cardId, 'c');
+  }
+  const plain = row();
+  assert.equal(cleanMixedWith(plain), plain);
 });

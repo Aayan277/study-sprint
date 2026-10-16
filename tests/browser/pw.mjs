@@ -21,3 +21,10 @@ export const chromium = {
     return browser;
   }
 };
+
+// A deck page keeps Edit deck, Add subdeck and Export in its ⋯ menu (#deckMore). Opens it (safe to call when it is already open).
+export async function deckMenu(page) {
+  await page.waitForSelector('#deckMore');
+  if (!(await page.isVisible('#deckMenu'))) await page.click('#deckMore');
+  await page.waitForSelector('#deckMenu:not([hidden])');
+}

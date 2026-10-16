@@ -14,7 +14,7 @@ const cards = [
 test('CSV: quoted where needed, Excel-friendly, and imports back in', () => {
   const csv = toCSV(cards);
   assert.ok(csv.startsWith('﻿Front,Back,Tags\r\n'));
-  assert.ok(csv.includes('Classical conditioning,"Learning by association, e.g. ""Pavlov""",learning exam 1'));
+  assert.ok(csv.includes('Classical conditioning,"Learning by association, e.g. ""Pavlov""","learning, exam 1"'));
   assert.ok(csv.includes('Café,"Line one\nLine two",'));
   const back = parseText(csv.replace(/^﻿/, ''));          // round trip through the importer
   assert.equal(back.rows.length, 2);
@@ -209,4 +209,29 @@ test('image-occlusion export: a sibling whose group is not among the note\'s box
   assert.deepEqual(ac.filter(c => c.nid === notes[0].id).map(c => c.ord).sort(), [0, 1]);
   assert.equal(notes[1].mid, 1_600_000_000_001);
   assert.deepEqual(notes[1].flds.split('\x1f'), ['Stray', 'Card<br><img src="m1.jpg">']);
+});
+
+test('maths: Anki gets \\( \\) and \\[ \\], CSV keeps the text as typed', () => {
+  assert.equal(toAnkiHTML('Area $\\pi r^2$ and $$x<y$$'), 'Area \\(\\pi r^2\\) and \\[x&lt;y\\]');
+  assert.equal(toAnkiHTML('$5 and $10'), '$5 and $10');
+  assert.ok(toCSV([{ front: 'What is $x^2$?', back: '$$E=mc^2$$', tags: [] }]).includes('What is $x^2$?,$$E=mc^2$$'));
+});
+
+test('Anki export: a Basic card\'s memory hook (noteExtra) goes at the end of Back as an Extra line', async () => {
+  const NOW = 1_800_000_000_000;
+  const { notes } = await ankiContents({ id: 'd', name: 'P' }, [
+    { id: 'a', front: 'Mitosis', back: 'Cell division', noteExtra: 'My-TOE-sis: toes split', tags: [] },
+    { id: 'b', front: 'Meiosis', back: '', backImageFile: 'b.png', noteExtra: 'Think "halves"', tags: [] },
+    { id: 'c', front: 'Cell', back: 'Unit', noteExtra: '  ', tags: [] }], NOW);
+  assert.equal(notes[0].flds, 'Mitosis\x1fCell division<br><br>My-TOE-sis: toes split');
+  assert.equal(notes[1].flds, 'Meiosis\x1f<img src="b.png"><br><br>Think &quot;halves&quot;');
+  assert.equal(notes[2].flds, 'Cell\x1fUnit');                         // a blank hook adds nothing
+  // CSV stays Front, Back, Tags
+  assert.equal(toCSV([{ id: 'a', front: 'Mitosis', back: 'Cell division', noteExtra: 'hook', tags: [] }]).includes('hook'), false);
+});
+
+test('Anki export: a stepped back goes out as its Step lines, one per line', async () => {
+  const { notes } = await ankiContents({ id: 'd', name: 'P' }, [{ id: 'a', front: '2x+3=7', back: 'Step 1: subtract 3\nStep 2: divide by 2\nAnswer: x = 2', tags: [] }], 1_800_000_000_000);
+  assert.equal(notes[0].flds, '2x+3=7\x1fStep 1: subtract 3<br>Step 2: divide by 2<br>Answer: x = 2');
+  assert.ok(toCSV([{ id: 'a', front: 'q', back: 'Step 1: a\nStep 2: b', tags: [] }]).includes('Step 1: a\nStep 2: b'));
 });

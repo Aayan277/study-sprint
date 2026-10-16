@@ -1,7 +1,7 @@
 // Image occlusion (stage 1) in a real browser: the 2048px picture, saving a note, Review (front, zoom, flip, peek, typing),
 // Browse (badge, editing a label), Play, importing Anki's occlusion notes, export and back, backups and syncing.
 // Run with: node tests/browser/run.mjs occlusion
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -241,7 +241,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   ok(badges.filter(b => b.startsWith('Image occlusion: box')).join() === 'Image occlusion: box 1,Image occlusion: box 2', `${file}: the preview badges the occlusion rows "box 1" and "box 2"`);
   const roRows = await page.locator('.prow', { hasText: 'Image occlusion' }).locator('textarea').evaluateAll(t => t.every(x => x.readOnly));
   ok(roRows, `${file}: occlusion rows are read-only`);
-  await page.fill('#newName', 'IO ' + file.slice(12, 15)); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+  await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'IO ' + file.slice(12, 15)); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const io = await page.evaluate(async name => {
     const db = await import('./js/db.js');
     const d = (await db.getDecks()).find(x => x.name === name);
@@ -251,8 +251,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
 }
 
 // ---- 7. export as an Anki Image Occlusion note, and read it back ----
-await page.goto(URL + '#/deck/' + seed.deckId); await page.waitForSelector('#exportDeck');
-await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
+await page.goto(URL + '#/deck/' + seed.deckId); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
 ok((await page.textContent('#sheet')).includes('Image-occlusion cards need Anki 23.10+'), 'the export sheet warns that occlusion needs Anki 23.10+');
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#exApkg')]);
 await dl.saveAs(SP + '/exports/occlusion.apkg');
@@ -261,7 +260,7 @@ await page.goto(URL + '#/import'); await page.waitForSelector('#tab-file'); awai
 await page.setInputFiles('#fileIn', SP + '/exports/occlusion.apkg');
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok((await page.textContent('#found')).includes('Found 4 cards') && (await page.textContent('#found')).includes('1 image-occlusion note makes these cards'), 'the exported file reads back as 1 occlusion note with 4 cards');
-await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Round trip'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
 const rt = await page.evaluate(async seedDeck => {
   const db = await import('./js/db.js');
   const decks = await db.getDecks();

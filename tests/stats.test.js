@@ -1,8 +1,10 @@
 // Tests for js/stats-calc.js (numbers on the Stats tab). Run with: node tests/stats.test.js
 
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays, lazyStreak } from '../js/stats-calc.js';
+import { dayKey, daysAgoStart, dayStreak, retention, isDueReview, reviewsPerDay, dueForecast, hardestCards, niceMax, studyCalendar, buttonCounts, hourly, difficultyBands, answerDays, streakFromDays, calendarFromDays, lazyStreak, streakRuns, streakText, weekOf, restDaySet } from '../js/stats-calc.js';
 
 const NOW = new Date(2026, 9, 7, 15, 0).getTime();   // 7 Oct 2026, 3pm
 const HOUR = 3600000, DAY = 24 * HOUR;
@@ -18,8 +20,12 @@ test('day keys follow the 4am study day', () => {
 });
 
 test('streak counts back from today', () => {
-  const s = dayStreak([log(0), log(1), log(2), log(4)], NOW);
-  assert.equal(s.days, 3);
+  const logs = [log(0), log(1), log(2), log(4)];
+  // v4.1 (streak freeze): the missed Sunday (3 days ago) is covered by the week's freeze, so the run reaches Saturday
+  // and the streak is 4, not 3. Without freezes it is the old 3.
+  const s = dayStreak(logs, NOW);
+  assert.equal(s.days, 4);
+  assert.equal(dayStreak(logs, NOW, { freezes: false }).days, 3);
   assert.equal(s.studiedToday, true);
   assert.deepEqual(s.week.map(d => d.on), [false, false, true, false, true, true, true]);
   assert.equal(s.week[6].today, true);
@@ -28,7 +34,11 @@ test('streak counts back from today', () => {
 test('streak still counts if you have not studied yet today', () => {
   assert.equal(dayStreak([log(1), log(2)], NOW).days, 2);
   assert.equal(dayStreak([log(1), log(2)], NOW).studiedToday, false);
-  assert.equal(dayStreak([log(2)], NOW).days, 0);
+  // v4.1: with only Monday studied, yesterday (Tuesday) is covered by a streak freeze, so the streak is 1, not 0.
+  // Without freezes the old rule still gives 0. Nothing studied for two days is a real break.
+  assert.equal(dayStreak([log(2)], NOW).days, 1);
+  assert.equal(dayStreak([log(2)], NOW, { freezes: false }).days, 0);
+  assert.equal(dayStreak([log(3)], NOW).days, 0);
   assert.equal(dayStreak([], NOW).days, 0);
 });
 
@@ -179,4 +189,244 @@ test('lazy streak reads further back only while the streak does, and matches the
   asked.length = 0;
   assert.equal((await lazyStreak(read, NOW, all.filter(l => l.timestamp >= daysAgoStart(60, NOW)).slice(0, 0).concat([log(0)]))).days, 1);
   assert.equal(asked.length, 0);                          // a short streak in the logs already loaded needs no more reading
+});
+
+
+// ---------- streak freeze and days off (v4.1) ----------
+// NOW is Wed 7 Oct 2026; weeks run Monday to Sunday: days ago 0 = Wed, 1 = Tue, 2 = Mon (this week), 3 = Sun, 4 = Sat …
+const key = (n, now = NOW) => dayKey(daysAgoStart(n, now));
+const set = (...ns) => new Set(ns.map(n => key(n)));
+const walkOf = (studied, rest = [], now = NOW, opts = {}) => streakFromDays(set(...studied), now, { rest: set(...rest), ...opts });
+
+test('weekOf gives the Monday', () => {
+  assert.equal(weekOf('2026-10-07'), '2026-10-05');
+  assert.equal(weekOf('2026-10-05'), '2026-10-05');
+  assert.equal(weekOf('2026-10-11'), '2026-10-05');       // Sunday belongs to the week that began on Monday
+  assert.equal(weekOf('2026-10-04'), '2026-09-28');
+  assert.equal(weekOf('2026-03-29'), '2026-03-23');       // a daylight-saving Sunday in much of Europe
+});
+
+test('freeze: a missed yesterday is covered and does not add to the count', () => {
+  const s = walkOf([0, 2, 3, 4]);
+  assert.equal(s.days, 4);                                 // 4 studied days; the covered Tuesday is not counted
+  assert.deepEqual(s.frozen, [key(1)]);
+  assert.deepEqual(s.week.map(d => d.frozen), [false, false, false, false, false, true, false]);
+  assert.deepEqual(s.freeze, { ready: false, usedOn: key(1) });
+  // not studied yet today: the same run, waiting for today
+  const t = walkOf([2, 3, 4]);
+  assert.equal(t.days, 3);
+  assert.deepEqual(t.frozen, [key(1)]);
+  assert.equal(t.studiedToday, false);
+});
+
+test('freeze: two missed days in a row break the streak', () => {
+  const s = walkOf([0, 3, 4]);
+  assert.equal(s.days, 1);
+  assert.deepEqual(s.frozen, []);
+  assert.equal(s.freeze.ready, true);                      // the dropped freeze is not "used"
+});
+
+test('freeze: only one a week, and it stays on the EARLIEST missed day (owner decision 14 Oct)', () => {
+  const sat = new Date(2026, 9, 10, 12).getTime();         // Sat 10 Oct: this week is Mon 5 to Sun 11
+  // studied Sat, Thu, Tue: Wed and Fri are both missed. The freeze belongs to Wed (the earlier one), so Fri
+  // ends the streak. (Before v4.2.1 the freeze moved to the newest miss, Fri, and the streak was 2.)
+  const s = streakFromDays(new Set([0, 2, 4].map(n => key(n, sat))), sat);
+  assert.equal(s.days, 1);
+  assert.deepEqual(s.frozen, []);
+  assert.equal(s.span, 1);
+});
+
+test('freeze: misses in different weeks are both covered', () => {
+  const s = walkOf([0, 2, 3, 4, 6, 7]);                    // Tue 6 Oct and Fri 2 Oct missed (two different weeks)
+  assert.equal(s.days, 6);
+  assert.deepEqual(s.frozen, [key(1), key(5)]);
+});
+
+test('freeze: a Sunday and Monday gap is two missed days, so it breaks', () => {
+  const s = walkOf([0, 1, 4]);                             // Mon (2) and Sun (3) missed
+  assert.equal(s.days, 2);
+  assert.deepEqual(s.frozen, []);
+});
+
+test('freeze: with nothing studied before the miss, the streak is 0 and a freeze stays ready', () => {
+  assert.equal(walkOf([]).days, 0);
+  assert.deepEqual(walkOf([]).freeze, { ready: true, usedOn: null });
+  const s = walkOf([0]);                                   // only today: yesterday cannot be covered by anything
+  assert.equal(s.days, 1);
+  assert.deepEqual(s.frozen, []);
+});
+
+test('freeze: {freezes:false} keeps the old rules', () => {
+  assert.equal(walkOf([0, 2, 3, 4], [], NOW, { freezes: false }).days, 1);
+  assert.equal(walkOf([0, 1, 2, 4], [], NOW, { freezes: false }).days, 3);
+  assert.deepEqual(walkOf([0, 2], [], NOW, { freezes: false }).frozen, []);
+});
+
+test('freeze: the 4am rollover decides which day an answer is in', () => {
+  const before4 = new Date(2026, 9, 7, 3, 59).getTime();    // belongs to Tue 6 Oct
+  const after4 = new Date(2026, 9, 7, 4, 0).getTime();      // belongs to Wed 7 Oct
+  const now = new Date(2026, 9, 7, 15).getTime();
+  const a = dayStreak([{ timestamp: before4 }], now);
+  assert.deepEqual([a.days, a.studiedToday], [1, false]);
+  const b = dayStreak([{ timestamp: after4 }], now);
+  assert.deepEqual([b.days, b.studiedToday], [1, true]);
+  // at 2am on Thu the study day is still Wed: Wed's answer is "today", Tue is covered, Mon counts
+  const late = new Date(2026, 9, 8, 2).getTime();
+  const c = dayStreak([{ timestamp: before4 - 86400000 }, { timestamp: after4 }], late);   // Mon 5 and Wed 7
+  assert.deepEqual([c.days, c.studiedToday, c.frozen], [2, true, [key(1, late)]]);
+});
+
+test('freeze: a daylight-saving week gives the same answer (run under TZ=Europe/London)', () => {
+  // The check itself is in stats-dst.child.mjs. It runs in its own node with an explicit time zone, so this
+  // passes (and means something) on any machine, not just one that happens to be in a zone with a change on 29 Mar.
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('./stats-dst.child.mjs', import.meta.url))], { env: { ...process.env, TZ: 'Europe/London' }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /tz=Europe\/London/);
+});
+
+test('freeze: lazyStreak over 200 days matches the full walk, with a covered day inside', async () => {
+  const all = [];
+  for (let d = 0; d < 200; d++) if (d !== 100) all.push(log(d));     // day 100 is a covered miss
+  all.push(log(205));
+  const asked = [];
+  const read = async since => { asked.push(since); return all.filter(l => l.timestamp >= since); };
+  const s = await lazyStreak(read, NOW);
+  assert.equal(s.days, 199);
+  assert.deepEqual(s, dayStreak(all, NOW));
+  assert.equal(s.frozen.length, 1);
+  assert.equal(asked.length, 3);
+  // and with days off passed through
+  const withRest = await lazyStreak(read, NOW, null, 60, { rest: set(201, 202) });
+  assert.deepEqual(withRest, dayStreak(all, NOW, { rest: set(201, 202) }));
+});
+
+test('days off: they bridge a gap, add nothing, and never break the streak', () => {
+  // Today and yesterday studied, Mon and Sun off, Sat to Thu studied
+  const s = walkOf([0, 1, 4, 5, 6], [2, 3]);
+  assert.equal(s.days, 5);
+  assert.deepEqual(s.frozen, []);
+  assert.deepEqual(walkOf([0, 1], [2, 3, 4, 5, 6, 7]).days, 2);           // a long run of days off, nothing before it
+  assert.equal(walkOf([0, 2], [1]).days, 2);                               // a day off between two studied days
+  // not studied today but today is a day off: safe
+  const r = walkOf([1, 2], [0]);
+  assert.deepEqual([r.days, r.restToday, r.studiedToday], [2, true, false]);
+  assert.deepEqual(r.week.map(d => d.rest), [false, false, false, false, false, false, true]);
+  // a day off the person studied on counts as studied
+  assert.equal(walkOf([0, 1], [0]).restToday, false);
+});
+
+test('days off: a day off followed by a missed day, which the freeze can still cover', () => {
+  const s = walkOf([0, 1, 4], [2]);                        // Mon off, Sun missed, Sat studied
+  assert.equal(s.days, 3);
+  assert.deepEqual(s.frozen, [key(3)]);
+  assert.equal(walkOf([0, 1, 5], [2]).days, 2);            // Sun and Sat both missed: not both covered
+});
+
+test('restDaySet reads the setting and ignores junk', () => {
+  const found = restDaySet({ restDays: { '2026-10-08': { on: true, at: 1 }, '2026-10-09': { on: false, at: 2 }, nope: { on: true }, '2026-10-10': null, '2026-10-11': 'yes' } });
+  assert.deepEqual([...found], ['2026-10-08']);
+  for (const bad of [undefined, null, {}, { restDays: 5 }, { restDays: null }, { restDays: [] }]) assert.equal(restDaySet(bad).size, 0);
+});
+
+test('streakText: the line and the freeze note', () => {
+  const text = s => streakText(s, NOW);
+  assert.deepEqual(text(walkOf([0, 1, 2])), { line: 'Kept for today', sub: '1 freeze ready this week' });
+  assert.equal(text(walkOf([1, 2])).line, 'Study today to keep it');
+  assert.equal(text(walkOf([])).line, 'Study today to start one');
+  assert.equal(text(walkOf([])).sub, '');
+  assert.equal(text(walkOf([1, 2], [0])).line, 'Rest day · your streak is safe');
+  const used = text(walkOf([2, 3, 4]));
+  assert.equal(used.line, 'Freeze used yesterday · study today to keep it');
+  assert.match(used.sub, /^Freeze used \w+/);
+  assert.match(text(walkOf([0, 2, 3, 4])).sub, /^Freeze used /);
+  assert.equal(text(walkOf([0, 2, 3, 4])).line, 'Kept for today');
+});
+
+test('calendar: the best streak includes covered days, and covered and rest days are flagged', () => {
+  const perDay = new Map([...set(0, 2, 3, 4, 5, 12, 13)].map(k => [k, 1]));    // run of 5 (Tue covered), then a gap, then 2
+  const cal = calendarFromDays(perDay, NOW, 4, { rest: set(7) });
+  assert.equal(cal.longest, 5);
+  assert.equal(calendarFromDays(perDay, NOW, 4, { freezes: false }).longest, 4);
+  const cells = cal.weeks.flat();
+  const at = n => cells.find(c => dayKey(c.time) === key(n));
+  assert.equal(at(1).frozen, true);
+  assert.equal(at(1).count, 0);
+  assert.equal(at(7).rest, true);
+  assert.equal(at(7).frozen, false);
+  assert.equal(at(2).frozen, false);
+  assert.deepEqual([...streakRuns(perDay, NOW).frozen], [key(1)]);
+  // an older run counts too, with its own cover
+  const old = new Map([...set(0, 10, 11, 13, 14, 15)].map(k => [k, 1]));     // 12 is covered
+  assert.equal(streakRuns(old, NOW).longest, 5);
+  assert.equal(streakRuns(new Map(), NOW).longest, 0);
+});
+
+test('calendar: the best streak matches a walk from today when the run is current', () => {
+  const days = set(0, 1, 3, 4, 5, 6);                      // Wed 7 - Thu 1: Mon (2) is covered
+  const cur = streakFromDays(days, NOW);
+  const perDay = new Map([...days].map(k => [k, 1]));
+  assert.equal(cur.days, 6);
+  assert.equal(streakRuns(perDay, NOW).longest, cur.days);
+  assert.deepEqual([...streakRuns(perDay, NOW).frozen], cur.frozen);
+});
+
+
+// ---------- v4.2.1 review fixes ----------
+test('freeze stays on the EARLIEST missed day of the week (owner decision): a later miss ends the streak', () => {
+  const FRI = new Date(2026, 9, 9, 12).getTime();           // Fri 9 Oct; this week is Mon 5 to Sun 11
+  const run = [...Array(9).keys()].map(n => n + 1);          // 9 days back
+  const k = (n) => key(n, FRI);
+  // Tue 6 Oct (3 days back) missed and covered; Thu 8 (1 back) studied: the streak lives on
+  const kept = streakFromDays(new Set(run.filter(n => n !== 3).map(k)), FRI);
+  assert.deepEqual(kept.frozen, [k(3)]);
+  assert.equal(kept.days, 8);
+  // Thu missed as well: the freeze stays on Tue, so Thu (the newer miss) ends the streak
+  const broken = streakFromDays(new Set(run.filter(n => n !== 3 && n !== 1).map(k)), FRI);
+  assert.equal(broken.days, 0);
+  assert.deepEqual(broken.frozen, []);
+  assert.deepEqual(streakText(broken, FRI), { line: 'Study today to start one', sub: '' });
+  // the best streak still sees Tue covered inside the older run
+  const perDay = new Map(run.filter(n => n !== 3 && n !== 1).map(n => [k(n), 1]));
+  assert.ok(streakRuns(perDay, FRI).frozen.has(k(3)));
+  // an earlier miss that cannot be covered (nothing studied before it) does not take the freeze
+  const late = streakFromDays(new Set([0, 2, 3].map(n => key(n, FRI))), FRI);       // Fri, Wed, Tue studied; Thu, Mon, Sun missed
+  assert.equal(late.days, 3);                                                         // Mon can't be covered (nothing studied before it), so Thu takes the freeze
+  assert.deepEqual(late.frozen, [key(1, FRI)]);
+});
+
+test('streakText: no "freeze ready" note when yesterday used last week\'s freeze', () => {
+  const MON = new Date(2026, 9, 5, 12).getTime();           // Mon 5 Oct: yesterday (Sun 4) is in the previous week
+  const keyM = n => key(n, MON);
+  const s = streakFromDays(new Set([2, 3, 4].map(keyM)), MON);        // Sat, Fri, Thu studied; Sun covered
+  assert.deepEqual(s.frozen, [keyM(1)]);
+  const t = streakText(s, MON);
+  assert.equal(t.line, 'Freeze used yesterday · study today to keep it');
+  assert.equal(t.sub, '');                                             // missing today would break it, so no "1 freeze ready"
+});
+
+test('restDaySet ignores a day off decided on or after the day itself', () => {
+  const start = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d, 4).getTime(); };
+  const found = restDaySet({ restDays: {
+    '2026-10-08': { on: true, at: start('2026-10-08') - 1 },       // planned before the day: counts
+    '2026-10-09': { on: true, at: start('2026-10-09') },           // decided at the day's start: ignored
+    '2026-10-10': { on: true, at: start('2026-10-10') + 5 * 3600000 },
+    '2026-10-11': { on: true, at: 1 }
+  } });
+  assert.deepEqual([...found].sort(), ['2026-10-08', '2026-10-11']);
+});
+
+test('lazyStreak: timestamps work as well as rows, and match the full walk for random logs (with a freeze looking back)', async () => {
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let round = 0; round < 40; round++) {
+    const gap = 0.05 + rnd() * 0.15;
+    const all = [];
+    for (let d = 0; d < 160; d++) if (rnd() > gap) all.push(log(d));
+    const times = all.map(l => l.timestamp);
+    const readTimes = async since => times.filter(t => t >= since);
+    const readLogs = async since => all.filter(l => l.timestamp >= since);
+    const full = dayStreak(all, NOW);
+    assert.deepEqual(await lazyStreak(readTimes, NOW), full, 'timestamps, round ' + round);
+    assert.deepEqual(await lazyStreak(readLogs, NOW), full, 'rows, round ' + round);
+  }
 });

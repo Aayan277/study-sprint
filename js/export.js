@@ -11,14 +11,16 @@ import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
+// A cell that starts with = + - @ (or a tab or line break) would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
-  const s = String(v ?? '');
+  let s = String(v ?? '');
+  if (/^'*[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function toCSV(cards) {
   const several = new Set(cards.map(c => c.deckName)).size > 1;
   const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : [])],
-    ...cards.map(c => [c.front, c.back, (c.tags || []).join(' '), ...(several ? [c.deckName] : [])])];
+    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : [])])];
   // The invisible mark at the start (a "BOM") tells Excel the file is UTF-8, so accents and emoji survive.
   return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
@@ -28,8 +30,8 @@ export const fileName = (name, ext) => `${String(name || 'deck').replace(/[\\/:*
 
 // ---------- Anki ----------
 // Card text → Anki's HTML: special characters escaped, line breaks as <br>, and bold, italics and lists
-// as real formatting (format.js).
-export const toAnkiHTML = text => formatHTML(text);
+// as real formatting (format.js). Formulas become \( ... \) and \[ ... \], which Anki draws.
+export const toAnkiHTML = text => formatHTML(text, { math: 'anki' });
 
 // Anki's duplicate check: the first 8 hex digits of the SHA-1 of the first field (as plain text), as a number.
 export async function ankiChecksum(text) {
@@ -205,7 +207,10 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       }
     } else {
       const c = g.card;
-      const front = withPic(toAnkiHTML(c.front), c.frontImageFile), back = withPic(toAnkiHTML(c.back), c.backImageFile);
+      const front = withPic(toAnkiHTML(c.front), c.frontImageFile);
+      let back = withPic(toAnkiHTML(c.back), c.backImageFile);
+      // The memory hook (noteExtra) goes at the end of Back as an Extra line.
+      if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
       note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order.

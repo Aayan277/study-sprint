@@ -18,8 +18,8 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
-import { decide, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 
@@ -43,6 +43,8 @@ export const DEFAULT_SETTINGS = {
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
+  restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
+  rescue: null,      // catch-up plan after a break: { start, days, backlog, pauseNew, at } (queue.js rescueToday). Synced, newest wins; Today clears it when it is over
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
   seeded: false,     // true once the sample deck has been added on first open
   onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped (kept in backups)
@@ -286,6 +288,22 @@ export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
 }
 
+// One answer time for each study day that has any answer since a moment ([time, …], oldest first). Uses a key cursor on
+// the timestamp index and jumps to the next day each time, so no rows are read and the work follows the days studied
+// (not the 300k rows of a heavy user). The streak uses this.
+export async function getStudyDayTimes(timestamp) {
+  const index = (await store('reviewLog')).index('timestamp');
+  const out = [];
+  let t = timestamp;
+  for (;;) {    // only IndexedDB requests are awaited in this loop, so the transaction stays open
+    const next = await done(index.openKeyCursor(IDBKeyRange.lowerBound(t)));
+    if (!next) break;
+    out.push(next.key);
+    t = dayEnd(next.key);
+  }
+  return out;
+}
+
 // How many answers were logged on each study day, as [[start of the day, count], …] for days that have any.
 // Counts with the timestamp index, so none of the (many) rows are read. Stats uses it for the streak and calendar.
 // Every row in the log is an answer (review, play or anki: see isAnswerLog), so none are filtered out here:
@@ -379,13 +397,19 @@ export async function getSettings() {
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
-export async function setSetting(key, value) {
+// `at` (optional) is the time to record for a synced setting instead of now: a clear that should lose to any newer copy passes the old copy's own time.
+export async function setSetting(key, value, { at: given } = {}) {
   const db = await openDB();
   const tx = db.transaction('settings', 'readwrite');
   const os = tx.objectStore('settings');
   os.put(value, key);
   if (SYNCED_SETTINGS.includes(key)) {
-    os.get(SETTING_TIMES).onsuccess = e => os.put({ ...(e.target.result || {}), [key]: Date.now() }, SETTING_TIMES);
+    // A merged setting must beat the version the server already holds even if another device's clock is ahead.
+    os.get(SETTING_TIMES).onsuccess = e => {
+      const times = e.target.result || {};
+      const at = Number.isFinite(given) ? given : MERGED_SETTINGS.includes(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
+      os.put({ ...times, [key]: at }, SETTING_TIMES);
+    };
   }
   await finished(tx);
   if (SYNCED_SETTINGS.includes(key)) changed();
@@ -445,7 +469,21 @@ export function checkBackup(data) {
   if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {
     return 'This backup file is damaged (a picture is invalid or not a supported image type).';
   }
+  // The catch-up plan is read as numbers and a flag, so nothing else may sit in it.
+  if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
+}
+export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
+  && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
+// A log row's `mixedWith` (the card whose answer was given by mistake, see confusion.js) is kept only when it is a
+// string of 1 to 200 characters; anything else is dropped from the row.
+export const MIXED_WITH_MAX = 200;
+export function cleanMixedWith(row) {
+  if (!row || !Object.hasOwn(row, 'mixedWith')) return row;
+  const v = row.mixedWith;
+  if (typeof v === 'string' && v.length >= 1 && v.length <= MIXED_WITH_MAX) return row;
+  const { mixedWith, ...rest } = row;
+  return rest;
 }
 const validKey = v => (typeof v === 'string' && v !== '') || (typeof v === 'number' && Number.isFinite(v));
 const SAFE_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -482,6 +520,7 @@ export async function importAll(data, { everywhere = false } = {}) {
       kept[name] = new Set();
       for (const x of data[name]) {
         let rec = upgradeRecord(name, x, now);
+        if (name === 'reviewLog') rec = cleanMixedWith(rec);
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
         tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing
@@ -493,11 +532,13 @@ export async function importAll(data, { everywhere = false } = {}) {
         for (const id of before[name]) if (!kept[name].has(id)) markDeleted(tx, name, id, now);
       }
     }
-    // Settings are replaced too, except this device's sign-in and sync bookmarks.
+    // Settings are replaced too (on this device), except this device's sign-in and sync bookmarks.
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
     const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
     restored.forEach(([k, v]) => settings.put(v, k));
+    // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
+    // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
     if (everywhere) {
       // The backup's study settings win in the account too.
       settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
@@ -609,6 +650,20 @@ export async function applyRemote(rows) {
     const todo = new Map();
     for (const row of rows) {
       if (row.store === 'settings') {
+        if (MERGED_SETTINGS.includes(row.id)) {
+          // Merged, not replaced: keep this device's days off and add the server's (per day, the later decision wins).
+          const local = await done(settingsStore.get(row.id));
+          const remote = row.data?.value;
+          const merged = mergeDayFlags(local, remote);
+          const changed = !sameDayFlags(merged, local);
+          const sameAsRemote = sameDayFlags(merged, remote);
+          if (changed) { settingsStore.put(merged, row.id); applied++; }
+          if (changed || !sameAsRemote) {
+            // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.
+            times = { ...times, [row.id]: sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Math.max(Date.now(), row.updated_at + 1) };
+          }
+          continue;
+        }
         if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
         settingsStore.put(row.data?.value, row.id);
         times = { ...times, [row.id]: row.updated_at };

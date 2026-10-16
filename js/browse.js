@@ -7,10 +7,10 @@ import * as db from './db.js';
 import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { cardTextField, readCardText, setCardText, readCardImage, setCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion } from './card-editor.js';
+import { watchAdd, readCardText, setCardText, readCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, clearBasic } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
-import { plainText } from './format.js';
+import { plainText, mathHTML } from './format.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
 
@@ -29,20 +29,22 @@ function filterOptions(current) {
 }
 
 // ---------- the "All cards" screen (#/browse) ----------
-export async function renderBrowseAll(el) {
+// `filter` (the route's argument, #/browse/leech) sets the list's starting filter.
+export async function renderBrowseAll(el, filter) {
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ Decks</button>
-    <div class="screen-head"><div><span class="eyebrow mono">BROWSE</span><h1>All cards</h1></div></div>
+    <div class="screen-head"><div><h1>All cards</h1></div></div>
     <section id="browser"></section>`;
   $('back').addEventListener('click', () => { location.hash = '#/decks'; });
-  await mountBrowser($('browser'), { deckId: null });
+  await mountBrowser($('browser'), { deckId: null, filter });
 }
 
 // ---------- the list ----------
 // Draws the card list into `box`. deckId = null means all decks; a deck's list includes its subdecks.
 // onChange runs after anything changes (the deck page uses it to refresh its counts).
-export async function mountBrowser(box, { deckId, onChange = () => {} }) {
+export async function mountBrowser(box, { deckId, onChange = () => {}, filter }) {
   const B = { deckId, selecting: false, selected: new Set(), shown: PAGE, ...memory };
+  if (filter && FILTERS.some(([k]) => k === filter)) B.filter = filter;      // a link to a filter (#/browse/leech) starts on it
   let decks, cards, statesById, inside;
 
   const load = async () => {
@@ -105,7 +107,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {} }) {
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${esc(plainText(card.front))}</span><span class="b">${esc(plainText(card.back))}</span>
+          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -193,6 +195,8 @@ export async function openCardPanel(card, ctx) {
     <div class="field"><span>Move to deck</span>${moveRow(decks, card.deckId)}</div>
     <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review this card once first, then you can set its due date.</p>'}</div>
 
+    <div id="ceMixed" class="mixed-with" hidden></div>
+
     <details class="card-info" ${showInfo ? 'open' : ''}>
       <summary>Card info</summary>
       <dl class="info-grid">
@@ -225,7 +229,31 @@ export async function openCardPanel(card, ctx) {
   }));
   wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
   wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
+  showMixedWith(card);
   if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
+}
+
+// "Often mixed up with: X (3×) · Compare": the cards this one is confused with (see confusion.js), filled in a moment
+// after the panel opens because it reads the last 90 days of the log. Up to two partners.
+async function showMixedWith(card) {
+  try {
+    const { loadPairs, cardLabel } = await import('./compare-sheet.js');
+    const { cardsById, pairs } = await loadPairs();
+    const box = $('ceMixed');
+    if (!box?.isConnected) return;
+    const mine = pairs.filter(p => p.a === card.id || p.b === card.id).slice(0, 2);
+    if (!mine.length) return;
+    box.innerHTML = mine.map(p => { const other = cardsById.get(p.a === card.id ? p.b : p.a);
+      return `<p class="mixed-line">Often mixed up with: <b>${esc(cardLabel(other, 40))}</b> <span class="mono">(${p.count}×)</span> · <button type="button" class="link" data-mix-with="${esc(other.id)}">Compare</button></p>`; }).join('');
+    box.hidden = false;
+    box.addEventListener('click', async e => {
+      const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;
+      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {
+        box.querySelector(`[data-mix-with="${CSS.escape(id)}"]`)?.closest('.mixed-line')?.remove();         // no longer mixed up: drop its line
+        if (!box.querySelector('.mixed-line')) box.hidden = true;
+      } });
+    });
+  } catch (err) { console.warn('mixed up with:', err); }     // the panel is fine without it
 }
 
 // The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.
@@ -235,7 +263,7 @@ async function openCardActions(card, ctx) {
   const status = cardStatus(card, state, now);
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
-    <p class="act-front">${esc(plainText(card.front))}</p>
+    <p class="act-front">${mathHTML(plainText(card.front), { inline: true })}</p>
     <div class="act-list">
       <button type="button" class="act-row" data-go="edit" aria-keyshortcuts="E">${icon('edit')}<span>Edit card</span><kbd aria-hidden="true">E</kbd></button>
       <div class="act-row act-flags" role="group" aria-labelledby="flagLbl"><span class="act-fl" id="flagLbl">Flag</span>
@@ -299,7 +327,9 @@ function cardOps(card, ctx) {
     const wholeNote = card.noteId && ('deckId' in changes || 'tags' in changes);
     const sibs = wholeNote ? (await db.getAll('cards')).filter(c => c.noteId === card.noteId && c.id !== card.id) : [];
     const shared = { ...('deckId' in changes ? { deckId: changes.deckId } : {}), ...('tags' in changes ? { tags: changes.tags } : {}) };
-    await db.saveCards([{ ...card, ...changes }, ...sibs.map(c => ({ ...c, ...shared }))]);
+    const merged = { ...card, ...changes };
+    if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
+    await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
     return again(msg, act);
   };
   return { again, save };
@@ -319,8 +349,7 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
   : 0);
 const cardFieldsHTML = (card, maxN = 0) => `
       ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
-      ${cardTextField('ceFront', 'Front', card.front, { rows: 2, image: card.frontImage })}
-      ${cardTextField('ceBack', 'Back', card.back, { rows: 3, image: card.backImage })}`}
+      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
@@ -331,11 +360,13 @@ function wireCardForm(card, ctx, msg) {
     e.preventDefault();
     if (isClozeCard(card)) return saveClozeNote(card, ops, msg);
     if (hasMasks(card)) return saveOcclusionNote(card, ops, msg);
-    const front = readCardText('ceFront').trim(), back = readCardText('ceBack').trim();
+    const front = readCardText('ceFront').trim(), back = readBack('ce').trim();
     const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
     // Each side needs something on it: text, a picture, or both.
     if (!(front || frontImage) || !(back || backImage)) { showErr('ceErr', 'A card needs a front and a back (text or a picture).'); return; }
-    ops.save({ front, back, frontImage, backImage, tags: parseTags($('ceTags').value) }, msg, 'edit');
+    const why = stepsProblem('ce');
+    if (why) { showErr('ceErr', why); return; }
+    ops.save({ front, back, frontImage, backImage, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -546,75 +577,82 @@ function wireLinkTool(cards, { scope, refresh }) {
 }
 
 // ---------- adding one card ----------
-export function openAddCard({ decks, deckId, refresh }) {
+// prefill (optional): { front, back, onAdded } opens a Basic card with that text; it saves only on Add, then closes and runs onAdded.
+export function openAddCard({ decks, deckId, refresh, prefill = null }) {
   if (!decks.length) { toast('Make a deck first'); return; }
   const target = deckId || decks[0].id;
   // A deck with subdecks asks which one (starting with the deck itself).
   const choices = deckChoices(decks, deckId ? subtreeIds(decks, deckId) : null);
-  const kind = lastKind();
+  const kind = prefill ? 'basic' : lastKind();
   openSheet(`
-    <h2 id="sheetTitle">Add a card</h2>
-    <form id="acForm" class="sheet-in" style="padding:0">
+    <h2 id="sheetTitle">${prefill ? 'Add a comparison card' : 'Add a card'}</h2>
+    <form id="acForm" class="sheet-in ac-form" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
-      <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
-        ${cardTextField('acFront', 'Front', '', { rows: 2, placeholder: 'e.g. Mitosis' })}
-        ${cardTextField('acBack', 'Back', '', { rows: 3, placeholder: 'e.g. Division into two identical cells' })}
+      <div class="kind-body">
+        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
+          ${basicFields('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' })}
+        </div>
+        <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
+        ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
-      ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="acDone">Done</button>
-        <button class="btn primary" type="submit">Add card</button>
+        <p class="ac-why" id="acWhy" aria-live="polite"></p>
+        <button class="btn ghost" type="button" id="acDone">Close</button>
+        <button class="btn primary" type="submit" aria-disabled="true" aria-describedby="acWhy">Add card</button>
       </div>
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
+  if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
   $('acDone').addEventListener('click', closeSheet);
+  const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
     e.preventDefault();
+    if (adding) return;
     const deck = $('acDeck')?.value || target, tags = parseTags($('acTags').value);
-    if (readKind('ac') === 'occlusion') {
-      if (adding) return;
+    const kindNow = readKind('ac');
+    // What to save, or the message to show (Ctrl+Enter can submit a form whose button is disabled).
+    let save, count = 1;
+    if (kindNow === 'occlusion') {
       const note = readOcclusion('ac');
       const plan = note.image ? planOcclusionSave([], note) : { error: 'Choose a picture first.' };
       if (plan.error) { showErr('acErr', plan.error); return; }
-      adding = true;
-      try {
-        await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
-      } catch (err) {
-        console.error(err);
-        showErr('acErr', "Couldn't save the cards. Try again.");
-        return;
-      } finally { adding = false; }
-      resetOcclusion('ac'); $('acErr').hidden = true;
-      $('acOccChoose').focus();
-      toast(`Added ${plural(plan.add.length, 'card')}`);
-      refresh();
-      return;
-    }
-    if (readKind('ac') === 'cloze') {
+      count = plan.add.length;
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
+    } else if (kindNow === 'cloze') {
       const text = readCardText('acText').trim();
       const plan = planNoteSave([], text);
       if (plan.error) { showErr('acErr', plan.error); return; }
       if (!plan.add.length) { showErr('acErr', 'Add at least one blank: select a word, then press New blank.'); return; }
-      await db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
-      setCardText('acText', ''); setCardText('acExtra', ''); $('acErr').hidden = true;
-      $('acText').focus();
-      toast(`Added ${plural(plan.add.length, 'card')}`);
-      refresh();
-      return;
+      count = plan.add.length;
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
+    } else {
+      const front = readCardText('acFront').trim(), back = readBack('ac').trim(), hook = readCardText('acHook').trim();
+      const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
+      if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
+      const why = stepsProblem('ac');
+      if (why) { showErr('acErr', why); return; }
+      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, ...(hook ? { noteExtra: hook } : {}), tags, created: Date.now() }]);
     }
-    const front = readCardText('acFront').trim(), back = readCardText('acBack').trim();
-    const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
-    if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
-    await db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, tags, created: Date.now() }]);
+    adding = true;
+    try {
+      await save();
+    } catch (err) {
+      console.error(err);
+      showErr('acErr', "Couldn't save the cards. Try again.");
+      return;
+    } finally { adding = false; }
+    if (prefill) { closeSheet(); toast('Comparison card added'); refresh(); prefill.onAdded?.(); return; }
     // Stay open for the next card, like Anki.
-    setCardText('acFront', ''); setCardText('acBack', ''); setCardImage('acFront', null); setCardImage('acBack', null); $('acErr').hidden = true;
-    $('acFront').focus();
-    toast('Card added');
+    $('acErr').hidden = true;
+    if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }
+    else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
+    else { clearBasic('ac'); $('acFront').focus(); }
+    updateAdd();
+    toast(kindNow === 'basic' ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();
   });
   $('acForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('acForm').requestSubmit(); } });

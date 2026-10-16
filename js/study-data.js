@@ -3,11 +3,11 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { splitCards, queueFrom, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
-import { lazyStreak, daysAgoStart } from './stats-calc.js';
+import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
 const HISTORY_DAYS = 60;
@@ -42,29 +42,78 @@ export async function loadAll({ history = false } = {}) {
   const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
   // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
   const answered = answeredNotes(logs, cards, now);       // every card, so a buried or suspended sibling answered today still counts
-  return { settings, decks, answered, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
+  // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
+  const exempt = new Set(decks.filter(d => examInfo(effectiveDeck(decks, d.id), now)).map(d => d.id));
+  const rescue = rescueToday(settings.rescue, visible, statesById, exempt, now);
+  return { settings, decks, allCards: cards, answered, rescue, exempt, depth: new Map(tree.map(x => [x.deck.id, x.depth])), cards: visible, hiddenCount, logs, history: history ? recent : null, deckOf, extra, statesById, newLeft, reviewLeft,
     exam, split: splitCards(visible, statesById, now, exam), splitAt: now };
 }
+
+// Is any review limit set (overall or on a deck)? Without one, subdecks' due counts can't add up to more than their parent's.
+export const hasReviewLimit = data => Number.isFinite(data.settings.reviewLimit) || data.decks.some(d => Number.isFinite(d.reviewPerDay)) || !!data.rescue;      // (a catch-up plan gives every deck row up to `allow`)
 
 // A set of decks and everything inside them.
 export const withSubdecks = (data, deckIds) => new Set(deckIds.flatMap(id => [...subtreeIds(data.decks, id)]));
 
-// How many cards a set of decks (and their subdecks) has for today.
+// How many cards a set of decks (and their subdecks) has for today: what Review will show if you start them now.
+//   due     already-studied cards Review will show (daily limits, one card per cloze note a day and exam pull-ins applied)
+//   fresh   new cards it will introduce        total  due + fresh
+//   scheduled      the raw count: reviews and learning cards due today, before limits and the sibling rule
+//   heldBySiblings scheduled cards that wait until tomorrow because a sibling of the same note is shown
+//   heldByLimit    cards that wait until tomorrow because of a daily review limit
+//   heldByRescue   cards the catch-up plan holds back (0 when data.rescue is empty)
+//   heldNewByRescue new cards the plan's "pause new cards" switch holds back
 // The cards were sorted into due / waiting / new once, in loadAll(), so counting a deck only looks at the short
-// lists (not every card), however many decks are counted.
-export function countFor(data, deckIds) {
+// lists (not every card), however many decks are counted. The two "held" numbers are worked out only when read.
+export function deckCounts(data, deckIds) {
   const ids = withSubdecks(data, deckIds);
   if (Date.now() - data.splitAt > 60000) { data.split = splitCards(data.cards, data.statesById, Date.now(), data.exam); data.splitAt = Date.now(); }   // a minute old: learning cards may have come due
   const { split } = data;
-  const { queue, waiting } = queueFrom({
+  const lists = {
     reviews: split.reviews.filter(x => ids.has(x.card.deckId)),
     waiting: split.waiting.filter(x => ids.has(x.card.deckId)),
     fresh: split.fresh.filter(c => ids.has(c.deckId))
-  }, data.newLeft, data.reviewLeft, data.answered);
+  };
+  const { queue, waiting } = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, data.rescue);
   const fresh = queue.filter(q => q.kind === 'new').length;
   const due = queue.length - fresh + waiting.length;
-  // `cards` (every card in these decks) is only worked out if someone asks for it.
-  return { get cards() { return data.cards.filter(c => ids.has(c.deckId)); }, due, fresh, total: due + fresh };
+  const scheduled = lists.reviews.length + lists.waiting.length;
+  // What Review would show with no review limit (and no catch-up plan): the difference to `due` is the limit's doing.
+  let free = null, plain = null;
+  const noLimit = () => {
+    if (free === null) {
+      const q = queueFrom(lists, 0, { total: Infinity, byDeck: new Map() }, data.answered, null);
+      free = q.queue.length + q.waiting.length;
+    }
+    return free;
+  };
+  // What Review would show with the limits but without the catch-up plan: the difference to `due` is the plan's doing.
+  const noRescue = () => {
+    if (plain === null) {
+      if (!data.rescue) return (plain = due);
+      const q = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, null);
+      plain = q.queue.filter(x => x.kind !== 'new').length + q.waiting.length;
+    }
+    return plain;
+  };
+  return {
+    due, fresh, total: due + fresh, scheduled,
+    get heldByLimit() { return noLimit() - noRescue(); },
+    get heldByRescue() { return noRescue() - due; },       // cards the catch-up plan (data.rescue) holds back for later days
+    get heldBySiblings() { return scheduled - noLimit(); },
+    get heldNewByRescue() {
+      if (!data.rescue?.pauseNew) return 0;
+      const q = queueFrom(lists, data.newLeft, data.reviewLeft, data.answered, null);
+      return q.queue.filter(x => x.kind === 'new').length - fresh;
+    }
+  };
+}
+// deckCounts plus `cards` (every card in these decks), which is only worked out if someone asks for it.
+export function countFor(data, deckIds) {
+  const c = deckCounts(data, deckIds);
+  const ids = withSubdecks(data, deckIds);
+  Object.defineProperty(c, 'cards', { get: () => data.cards.filter(x => ids.has(x.deckId)), enumerable: true });
+  return c;
 }
 
 // Answers given today in a set of decks (all decks when none are chosen): what the daily goal counts as done.
@@ -96,6 +145,48 @@ export function customQueue(kind, data, cards, days = 3) {
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
   return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById), label: 'Exam prep' };
+}
+
+// ---------- the catch-up plan on Today ----------
+// What Today needs to know about "back from a break" (queue.js has the arithmetic):
+//   active    a plan is saved and still running (or not started yet)
+//   finished  a plan is saved but over (its days are up, or nothing overdue is left): Today clears it
+//   offer     null, or { n, backlog, typical, perDay, awayDays } to show the banner (rescueOffer)
+//   backlog   overdue cards right now (exam decks left out)      typical  your usual reviews a day
+// "Not today" for the catch-up banner: remembered on this device for the study day (localStorage).
+export const RESCUE_DISMISS = 'study-sprint-rescue-dismissed';
+export const dismissRescueToday = (now = Date.now()) => { try { localStorage.setItem(RESCUE_DISMISS, String(dayStart(now))); } catch { /* the banner just comes back on a reload */ } };
+// "Reset this device": forget what this device remembered being dismissed (mix-up pairs and the catch-up banner).
+// (The mix-up key is confusion.js DISMISS_KEY; it is repeated here so Today does not load Play's modules at start: a test checks they match.)
+export const MIX_DISMISS = 'study-sprint-mix-dismissed';
+export function clearDismissals(storage = globalThis.localStorage) {
+  for (const k of [MIX_DISMISS, RESCUE_DISMISS]) { try { storage.removeItem(k); } catch { /* no storage: nothing to clear */ } }
+}
+// The time a finished plan is cleared with: the plan's own, so a newer plan from another device always wins (sync keeps the newest).
+export const rescueClearAt = saved => (Number.isFinite(saved?.at) ? saved.at : 0);
+// `data` must come from loadAll({ history: true }). dismissedDay is the dayStart of a dismissal made today.
+export function rescueState(data, now = Date.now(), dismissedDay = null) {
+  const saved = data.settings.rescue;
+  const today = dayStart(now);
+  let finished = false;
+  if (saved) {
+    const k = Number.isFinite(saved.start) ? Math.round((today - dayStart(saved.start)) / 86400000) + 1 : Infinity;
+    finished = !(saved.days >= 1) || k > saved.days || (k >= 1 && !data.rescue);
+  }
+  const active = !!saved && !finished;
+  const backlog = rescueBacklog(data.cards, data.statesById, data.exempt, today);
+  const days = new Map();                            // study day → reviews that day (not today: it is only part done)
+  for (const l of data.history || []) {
+    if (l.source !== 'review' || l.timestamp >= today || !(l.timestamp > 0)) continue;
+    const d = dayStart(l.timestamp);
+    days.set(d, (days.get(d) || 0) + 1);
+  }
+  const recent = [...days.entries()].sort((a, b) => b[0] - a[0]).slice(0, 14);      // the last 14 study days
+  const counts = recent.map(x => x[1]).sort((a, b) => a - b);
+  const mid = counts.length >> 1;
+  const typical = counts.length < 3 ? null : (counts.length % 2 ? counts[mid] : (counts[mid - 1] + counts[mid]) / 2);
+  const offer = rescueOffer({ backlog, typicalDaily: typical, lastStudyDay: recent[0]?.[0], now, active, dismissedDay });
+  return { active, finished, offer, backlog, typical: offer?.typical ?? (typical || 20) };
 }
 
 // ---------- how long a session takes ----------
@@ -152,4 +243,5 @@ export const live = { resume: null };
 
 // The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
 // if it has them, and reads further back only while the streak does.
-export const loadStreak = (history = null) => lazyStreak(t => db.getLogsSince(t), Date.now(), history);
+// ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
+export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });

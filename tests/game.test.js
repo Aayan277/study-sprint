@@ -242,3 +242,61 @@ test('occlusion cards: a picture with 4 labelled boxes can be played as multiple
   assert.equal(defaultQuestionType([...pool, { id: 'p', front: 'a', back: 'x'.repeat(50) }]), 'back');       // only the plain card counts
   assert.equal(defaultQuestionType(pool), 'front');
 });
+
+// ---------- step-by-step cards in Play (B5) ----------
+test('stepped cards are asked front → final step, never back → front', async () => {
+  const { isFrontOnly, defaultQuestionType } = await import('../js/game.js');
+  const withAnswer = { id: 's1', front: 'Solve 2x + 3 = 7', back: 'Step 1: subtract 3\nStep 2: divide by 2\nAnswer: x = 2' };
+  const lastStep = { id: 's2', front: 'Solve 2x = 4', back: 'Step 1: halve both sides\nStep 2: x = 2' };
+  const plain = { id: 'p', front: 'cell', back: 'unit of life' };
+  assert.ok(isFrontOnly(withAnswer) && isFrontOnly(lastStep) && !isFrontOnly(plain));
+  assert.deepEqual(questionFor(withAnswer, 'front'), { prompt: 'Solve 2x + 3 = 7', answer: 'x = 2' });
+  assert.deepEqual(questionFor(withAnswer, 'typing'), { prompt: 'Solve 2x + 3 = 7', answer: 'x = 2' });
+  assert.equal(questionFor(lastStep, 'front').answer, 'x = 2');             // no Answer line: the last step
+  assert.equal(questionFor(withAnswer, 'back'), null);
+  // a long final step can be picked from a list but not typed
+  const long = { id: 's3', front: 'Why?', back: `Step 1: a\nStep 2: ${'long answer '.repeat(10)}` };
+  assert.ok(questionFor(long, 'front'));
+  assert.equal(questionFor(long, 'typing'), null);
+  assert.equal(questionFor({ ...withAnswer, frontImage: 'm1' }, 'front').image, 'm1');
+  assert.deepEqual(playableCards([withAnswer, plain], 'back').map(c => c.id), ['p']);
+  assert.equal(defaultQuestionType([withAnswer, lastStep]), 'front');
+  // one step only, or steps inside a formula, is an ordinary card
+  assert.ok(!isFrontOnly({ id: 'o', front: 'q', back: 'Step 1: only one' }));
+  assert.ok(!isFrontOnly({ id: 'm', front: 'q', back: 'Use $$\nStep 1: a\nStep 2: b\n$$ here' }));
+});
+
+test('distractors: withIds returns { label, id } of the card each option answers; the default stays labels', () => {
+  const pool = ['Mitosis', 'Meiosis', 'Osmosis', 'Diffusion', 'Respiration', 'Glycolysis'].map((f, i) => card(f, `def ${i}`));
+  const labels = pickDistractors(pool[0], pool, 'front', { rnd: seeded(5) });
+  assert.ok(labels.every(l => typeof l === 'string'));
+  const withIds = pickDistractors(pool[0], pool, 'front', { rnd: seeded(5), withIds: true });
+  assert.deepEqual(withIds.map(o => o.label), labels);
+  for (const o of withIds) {
+    const owner = pool.find(c => c.id === o.id);
+    assert.ok(owner && owner.id !== pool[0].id);
+    assert.equal(questionFor(owner, 'front').answer, o.label);
+  }
+});
+
+test('distractors: include forces an option in, for every seed, even from a big pool; the answer itself is never forced', () => {
+  const pool = Array.from({ length: 30 }, (_, i) => card(`Term ${i}`, `definition number ${i}`));
+  const want = pool[17].back;
+  for (let s = 1; s <= 25; s++) {
+    for (const hard of [false, true]) {
+      const got = pickDistractors(pool[0], pool, 'front', { hard, rnd: seeded(s), include: [want] });
+      assert.ok(got.includes(want), `seed ${s} hard ${hard}`);
+      assert.equal(got.length, hard ? 5 : 3);
+    }
+  }
+  const big = Array.from({ length: 700 }, (_, i) => card(`T${i}`, `unique answer ${i}`));
+  assert.ok(pickDistractors(big[0], big, 'front', { rnd: seeded(2), include: [big[650].back] }).includes(big[650].back));
+  assert.ok(!pickDistractors(pool[0], pool, 'front', { rnd: seeded(2), include: [pool[0].back] }).includes(pool[0].back));
+  assert.equal(pickDistractors(pool[0], pool, 'front', { rnd: seeded(2), include: ['no such answer'] }).length, 3);
+});
+
+test('distractors: include never brings in a sibling of the card', () => {
+  const a = card('{{c1::x}} and y', 'x', { noteId: 'N', cloze: 1 }), sib = card('x and {{c2::y}}', 'y', { noteId: 'N', cloze: 2 });
+  const rest = Array.from({ length: 6 }, (_, i) => card(`s${i}`, `ans${i}`, { noteId: `M${i}`, cloze: 1 }));
+  assert.ok(!pickDistractors(a, [a, sib, ...rest], 'front', { rnd: seeded(1), include: ['y'] }).includes('y'));
+});

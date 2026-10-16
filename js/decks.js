@@ -2,7 +2,7 @@
 
 import * as db from './db.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold } from './ui.js';
-import { loadAll, countFor } from './study-data.js';
+import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
@@ -10,6 +10,7 @@ import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, badgeClass } from './exam.js';
 import { drawSidebar } from './sidebar.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
@@ -49,10 +50,10 @@ function summarize(cards, statesById) {
 }
 
 // Load every deck with its counts, in tree order (each deck followed by its subdecks). A deck's counts
-// include its subdecks. Reads all cards once, which is fast even for a few thousand.
-async function loadDecks() {
-  const [decks, cards, states] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
-  const statesById = new Map(states.map(s => [s.cardId, s]));
+// include its subdecks. Uses the cards loadAll() read, so nothing is read twice.
+// Takes what loadAll() already read (its decks, every card and every state), so a page reads the database once.
+function loadDecks(data) {
+  const decks = [...data.decks], cards = data.allCards, statesById = data.statesById;
   const byDeck = new Map(decks.map(d => [d.id, []]));
   const chains = chainMap(decks);
   for (const c of cards) for (const id of chains.get(c.deckId) || []) byDeck.get(id).push(c);
@@ -114,8 +115,9 @@ const savedSort = () => { try { const v = localStorage.getItem(SORT_KEY); return
 
 // showStarters: open the Starter decks section (the Import screen's "Ready-made decks" link does this).
 export async function renderLibrary(el, showStarters = false) {
-  const [list, today] = await Promise.all([loadDecks(), loadAll()]);
+  const today = await loadAll(), list = loadDecks(today);
   const compact = today.settings.compactDecks !== false;
+  const leeches = today.allCards.filter(c => (c.tags || []).includes('leech')).length;      // cards you keep forgetting, waiting for a fix
   const top = list.filter(x => x.depth === 0);            // counts already include subdecks
   const sum = k => top.reduce((n, x) => n + x.stats[k], 0);
   const todayAll = countFor(today, top.map(x => x.deck.id));      // today's numbers: daily limits applied
@@ -138,15 +140,16 @@ export async function renderLibrary(el, showStarters = false) {
           <span class="deck-name">${esc(deck.name)}</span>
           ${examInfo(deck) ? `<span class="${badgeClass(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
-            <span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
+            ${stats.total ? `<span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span>
-            <span><b>${c.fresh}</b> new</span>
+            <span><b>${c.fresh}</b> new</span>` : '<span>No cards yet</span>'}
           </span>
         </button>
-        <span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 40, 4, `<small class="mono">${Math.round(mastered * 100)}</small>`)}<span class="sr-only">${Math.round(mastered * 100)}% mastered</span></span>
+        ${stats.total ? `<span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 44, 4, `<span class="mono">${Math.round(mastered * 100)}<small>%</small></span>`)}<span class="dr-cap">mastered</span></span>` : ''}
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
-          ${compact
+          ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
+          : compact
             ? (go ? `<button class="deck-go${first ? ' lead' : ''}" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}" title="Study ${plural(go, 'card')}">${icon('play')}</button>`
                   : `<span class="deck-go done" role="img" aria-label="Done for today" title="Done for today">${icon('check')}</span>`)
             : (go ? `<button class="btn primary small" type="button" data-study="${esc(deck.id)}" aria-label="Study ${esc(deck.name)}: ${plural(go, 'card')}">${icon('play')} Study ${go}</button>`
@@ -186,7 +189,7 @@ export async function renderLibrary(el, showStarters = false) {
 
   el.innerHTML = `
     <div class="screen-head">
-      <div><span class="eyebrow mono">LIBRARY</span><h1>Decks</h1></div>
+      <div><h1>Decks</h1></div>
       <div class="head-actions">
         <a class="btn ghost small" href="#/import">Import</a>
         <button class="btn primary small" type="button" id="newDeck">+ New deck</button>
@@ -202,8 +205,8 @@ export async function renderLibrary(el, showStarters = false) {
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
-    : `<div class="empty"><b>No decks yet.</b><br>Make one to start adding cards.<br><button class="btn primary" type="button" id="newDeck2">+ New deck</button></div>`}
-    ${list.length ? '<p class="browse-all"><a href="#/browse">Browse all cards →</a></p>' : ''}
+    : emptyStartHTML()}
+    ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
     ${starters.length ? `
     <details class="starters" id="startersBox" ${showStarters ? 'open' : ''}>
       <summary>Starter decks</summary>
@@ -250,7 +253,7 @@ export async function renderLibrary(el, showStarters = false) {
 
   const create = () => openDeckEditor(null, () => renderLibrary(el));
   $('newDeck').addEventListener('click', create);
-  $('newDeck2')?.addEventListener('click', create);
+  wireEmptyStart(el);
   if (showStarters) $('startersBox')?.scrollIntoView({ block: 'center' });
   el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
     const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
@@ -269,34 +272,44 @@ export async function renderLibrary(el, showStarters = false) {
 
 // ---------- one deck and its cards ----------
 export async function renderDeck(el, deckId) {
-  const list = await loadDecks();
+  const today = await loadAll(), list = loadDecks(today);
   const item = list.find(x => x.deck.id === deckId);
   if (!item) { location.hash = '#/decks'; return; }
   const { deck, cards, stats: s } = item;
+  const counts = countFor(today, [deckId]);              // what Review shows today: the same number as Today and the sidebar
   const decks = list.map(x => x.deck);
   const parents = ancestors(decks, deckId).slice(1).reverse();      // top level first
   const parent = parents.at(-1);
   const exam = examInfo(effectiveDeck(decks, deckId));
   const kids = inside(list, deckId);
+  // Exam within two weeks: Exam prep is the main button and Review steps back.
+  const soon = !!exam && exam.daysLeft <= 14;
+  const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ ${parent ? esc(parent.name) : 'Decks'}</button>
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then. <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button></p>`
+        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then.${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
-        <button class="btn ghost small" type="button" id="editDeck">Edit</button>
-        <button class="btn ghost small" type="button" id="addSub">+ Subdeck</button>
+        ${soon ? '<button class="btn primary small" type="button" id="prepBtn">Exam prep</button>' : ''}
+        ${s.total ? `<a class="btn ${soon ? 'ghost' : 'primary'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
-        ${cards.length ? '<button class="btn ghost small" type="button" id="exportDeck">Export</button>' : ''}
-        ${s.total ? `<a class="btn primary small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
+        <div class="more-wrap">
+          <button class="icon-btn more-btn" type="button" id="deckMore" aria-haspopup="menu" aria-expanded="false" aria-controls="deckMenu" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>
+          <div class="more-menu" id="deckMenu" role="menu" aria-label="${esc(deck.name)}" hidden>
+            <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
+            <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
+            ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
+          </div>
+        </div>
       </div>
     </div>
-    <div class="card section deck-summary" style="--deck:${esc(deck.color)}" ${cards.length ? '' : 'hidden'}>${summaryHTML(s)}</div>
-    ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth)}
-      <p class="note" style="margin:8px 0 0">Everything below includes the subdecks' cards too.</p></section>` : ''}
+    <div class="card section deck-summary" style="--deck:${esc(deck.color)}" ${cards.length ? '' : 'hidden'}>${summaryHTML(s, counts)}</div>
+    ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth, today)}
+      <p class="note" style="margin:8px 0 0">${shared ? `${esc(shared)} ` : ''}Card counts below include the subdecks' cards too.</p></section>` : ''}
     <section id="browser"></section>
     <aside class="deck-tree" aria-label="Decks">
       <div class="dt-head"><b>Decks</b><button class="btn primary small" type="button" id="dtNew">+ New</button></div>
@@ -304,9 +317,9 @@ export async function renderDeck(el, deckId) {
       <nav id="dtNav" aria-label="Deck tree"></nav>
       <a class="dt-all" href="#/decks">All decks ${icon('chevron')}</a>
     </aside>
-    <aside class="dock-empty" aria-label="Card editor"><p><b>Pick a card</b>Its editor opens here, beside the list.</p></aside>
   `;
-  drawDeckTree(list, deckId);
+  drawDeckTree(list, deckId, today);
+  wireDeckMenu(el);
   $('back').addEventListener('click', () => { location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; });
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }, { parentId: deckId }));
@@ -321,13 +334,58 @@ export async function renderDeck(el, deckId) {
   await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
 }
 
+// "Daily limits are shared, so the subdecks can add up to more than Course's 20 due." (or '' when they don't).
+// The subdecks are counted one by one, each against the same shared limits, so they can add up to more than the parent shows.
+// With no limits at all that can't happen, and if it does the numbers are wrong: say so in the console (dev builds).
+function sharedLimitNote(today, deck, kids, depth, counts) {
+  const direct = kids.filter(k => k.depth === depth + 1).map(k => countFor(today, [k.deck.id]));
+  if (!direct.length) return '';
+  const sumDue = direct.reduce((n, c) => n + c.due, 0), sumNew = direct.reduce((n, c) => n + c.fresh, 0);
+  // Only a review limit can make the subdecks' due add up to more than the deck (newPerDay is always set, so it says nothing).
+  if (!hasReviewLimit(today) && (sumDue > counts.due) && /^(localhost|127\.)/.test(location.hostname)) console.warn(`Deck counts: the subdecks of "${deck.name}" add up to more than the deck`, { sumDue, sumNew, counts });
+  const [n, word] = sumDue > counts.due ? [counts.due, 'due'] : sumNew > counts.fresh ? [counts.fresh, 'new'] : [0, ''];
+  return word ? `Daily limits are shared, so the subdecks can add up to more than ${deck.name}'s ${n} ${word}.` : '';
+}
+
+// The ⋯ menu in a deck page's header: Edit, Add subdeck and Export. Opens under the button; Esc, a click outside or
+// choosing an item closes it (Esc puts focus back on the button); the arrow keys move between the items.
+function wireDeckMenu(el) {
+  const btn = $('deckMore'), menu = $('deckMenu');
+  if (!btn || !menu) return;
+  const items = () => [...menu.querySelectorAll('[role=menuitem]')];
+  const close = (focus = false) => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); if (focus) btn.focus(); };
+  const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); items()[0]?.focus(); };
+  btn.addEventListener('click', () => (menu.hidden ? open() : close()));
+  // Capture: close (and put focus on the ⋯ button) before the item's own handler runs, so a sheet it opens remembers the button.
+  menu.addEventListener('click', () => close(true), true);
+  menu.addEventListener('keydown', e => {
+    const list = items(), i = list.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); list[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); list[list.length - 1].focus(); }
+    else if (e.key === 'Tab') close();
+  });
+  const outside = e => {
+    if (!menu.isConnected) { stopOutside?.(); return; }
+    if (!menu.hidden && !e.target.closest('.more-wrap')) close();
+  };
+  stopOutside?.();                                   // a re-render replaced the last menu: drop its listener
+  document.addEventListener('pointerdown', outside, true);
+  stopOutside = () => { document.removeEventListener('pointerdown', outside, true); stopOutside = null; };
+}
+let stopOutside = null;
+
 // On a wide screen (1200px and up) a deck's page has three columns: this tree of decks on the left, the deck in the
 // middle, and the card editor docked on the right (the card panel, see openSheet's `side`). Below 1200px the tree is
 // hidden by the CSS and nothing changes. The deck you are in is highlighted; its courses are open and the rest folded
 // (what you open is remembered on this device); typing in the search box shows only matching decks.
-function drawDeckTree(list, currentId) {
+function drawDeckTree(list, currentId, today) {
   const decks = list.map(x => x.deck);
   const size = new Map(list.map(x => [x.deck.id, x.stats.total]));
+  const dues = new Map();                                            // a search keystroke redraws every row: count each deck once
+  const dueOf = id => { let n = dues.get(id); if (n === undefined) dues.set(id, n = countFor(today, [id]).due); return n; };   // what Review shows today; the card count is in the tooltip
   const here = new Set(ancestors(decks, currentId).map(d => d.id));          // the deck and the decks it is inside
   const hasKids = new Set(decks.map(d => d.parentId).filter(Boolean));
   const isOpen = id => foldOpen('tree-' + id, here.has(id));
@@ -342,7 +400,7 @@ function drawDeckTree(list, currentId) {
       const deck = decks.find(d => d.id === r.id);
       return `<div class="dt-row${r.id === currentId ? ' cur' : ''}${r.context ? ' ctx' : ''}" style="--depth:${r.depth};--deck:${esc(deck.color)}">
         ${kids ? `<button type="button" class="dt-tw" data-tw="${esc(r.id)}" aria-expanded="${open}" aria-label="${open ? 'Fold' : 'Open'} ${esc(r.name)}">${icon('chevron')}</button>` : '<span class="dt-tw"></span>'}
-        <a class="dt-node" href="#/deck/${esc(r.id)}" ${r.id === currentId ? 'aria-current="page"' : ''}><i class="dot" aria-hidden="true"></i><span class="dt-name">${esc(r.name)}</span><span class="dt-n mono">${size.get(r.id) || 0}</span></a></div>`;
+        <a class="dt-node" href="#/deck/${esc(r.id)}" title="${esc(r.name)}: ${plural(size.get(r.id) || 0, 'card')}" ${r.id === currentId ? 'aria-current="page"' : ''}><i class="dot" aria-hidden="true"></i><span class="dt-name">${esc(r.name)}</span>${(due => due ? `<span class="dt-n mono" role="img" aria-label="${due} due">${due}</span>` : '')(dueOf(r.id))}</a></div>`;
     }).join('') || `<p class="note">No decks match.</p>`;
   };
   draw();
@@ -360,18 +418,24 @@ function drawDeckTree(list, currentId) {
 async function refreshCounts(el, deckId) {
   const box = el.querySelector('.deck-summary');
   if (!box) return;
-  const item = (await loadDecks()).find(x => x.deck.id === deckId);
-  if (item) { box.innerHTML = summaryHTML(item.stats); box.hidden = !item.stats.total; }
+  const today = await loadAll(), list = loadDecks(today);
+  const item = list.find(x => x.deck.id === deckId);
+  if (item && box.isConnected) { box.innerHTML = summaryHTML(item.stats, countFor(today, [deckId])); box.hidden = !item.stats.total; }
 }
 
-function summaryHTML(s) {
+// c = countFor() for the deck: "13 due today · 5 new today · 23 cards", and what waits until tomorrow, if anything.
+function summaryHTML(s, c) {
+  const held = c.heldByLimit + c.heldBySiblings + c.heldByRescue;
+  const why = [c.heldBySiblings ? 'one card per note a day' : '', c.heldByLimit ? 'daily limit' : '', c.heldByRescue ? 'catch-up plan' : ''].filter(Boolean).join(', ');
   return `
       <div class="deck-counts" style="margin-top:0">
+        <span class="due${c.due ? '' : ' zero'}"><b>${c.due}</b> due today</span>
+        <span><b>${c.fresh}</b> new today</span>
         <span><b>${s.total}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
-        <span class="due"><b>${s.due}</b> due today</span>
-        <span><b>${s.new}</b> new</span>
         ${s.hidden ? `<span><b>${s.hidden}</b> suspended or buried</span>` : ''}
       </div>
+      ${held > 0 ? `<p class="held-note">${held} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
+      ${c.heldNewByRescue > 0 ? '<p class="held-note">New cards paused <span>(catch-up plan)</span></p>' : ''}
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">
         <span><i class="sw lv-new"></i>New <b>${s.new}</b></span>
@@ -532,6 +596,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
   $('deckCancel').addEventListener('click', closeSheet);
   if (!isNew) wireStudyOptions(deck);
 
+  let saving = false;
   $('deckForm').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('deckName').value.trim();
@@ -554,13 +619,16 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       if (read.error) { $('deckErr').textContent = read.error; $('deckErr').hidden = false; $('deckOpts').open = true; return; }
       options = read;
     }
+    if (saving) return;                // a double-click or a second Enter: the first save is already running
+    saving = true;
     const saved = isNew
       ? { id: db.newId(), name, course, color, parentId, created: Date.now(), ...($('deckExam').value ? { examDate: $('deckExam').value } : {}) }
       : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
         examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto };
     // A new exam date (its own, or from the deck it's moved into) brings forward the cards scheduled after it: see
     // commitDeck in exam-sheet.js, which the short "Add exam date" sheet uses too. (A new deck has no cards to move yet.)
-    const { moved } = await commitDeck(saved, decks, { isNew });
+    let moved;
+    try { ({ moved } = await commitDeck(saved, decks, { isNew })); } catch (err) { saving = false; throw err; }
     closeSheet();
     toast(isNew ? `Created “${name}”` : moved ? `Deck saved. ${plural(moved, 'card')} brought forward to before the exam` : 'Deck saved');
     onDone(saved);

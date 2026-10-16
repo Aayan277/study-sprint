@@ -34,7 +34,7 @@ for (const [file, label] of [['anki-new.apkg', 'new format'], ['anki-legacy.apkg
   if (file === 'anki-new.apkg') await page.screenshot({ path: SP + '/anki-preview.png', fullPage: true });
 }
 // save the last one into a new deck, with tags
-await page.fill('#newName', 'From Anki');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'From Anki');
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const cards = await page.evaluate(async () => { const db = await import('./js/db.js'); const { subtreeIds } = await import('./js/deck-tree.js'); const ds = await db.getDecks(); const ids = subtreeIds(ds, ds.find(d => d.name === 'From Anki').id); return (await db.getAll('cards')).filter(c => ids.has(c.deckId)).filter(c => c.front === 'Classical conditioning' || c.front === 'Neuron'); });
 ok(cards.length === 2 && cards.find(c => c.front === 'Classical conditioning').tags.join() === 'exam1,learning', 'saved with Anki tags');

@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -19,7 +19,7 @@ await p.fill('#rpd', '4'); await p.dispatchEvent('#rpd', 'change');
 ok((await p.evaluate(async () => (await import('./js/db.js')).getSettings())).reviewLimit === 4, 'reviews per day saved');
 ok(await dueCount() === 4, 'overall limit: 4 due');
 // deck limit + own settings
-await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('#editDeck'); await p.click('#editDeck'); await p.waitForSelector('#deckOpts');
+await p.goto('http://localhost:8123/#/deck/sample'); await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckOpts');
 await p.click('#deckOpts summary');
 await p.fill('#deckRev', '2');
 await p.click('#deckOwnOff');

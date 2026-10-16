@@ -19,7 +19,7 @@ for (const [w, h, name, extra] of [[375, 740, 'phone', { isMobile: true, hasTouc
     atEnd: (() => { const b = document.querySelector('#calScroll'); return b.scrollLeft + b.clientWidth >= b.scrollWidth - 2; })(),
     pageScroll: document.documentElement.scrollWidth > innerWidth, months: [...document.querySelectorAll('.cal-m')].filter(m => m.textContent).length
   }));
-  ok(r.cells === 53 * 7 && r.studied > 50 && r.months >= 12, `${name}: a year of days, ${r.studied} studied, ${r.months} month labels`);
+  ok(r.cells % 7 === 0 && r.cells < 53 * 7 && r.cells >= 17 * 7 && r.studied > 50 && r.months >= 4, `${name}: the grid starts at the first month with answers (${r.cells / 7} weeks, ${r.studied} studied, ${r.months} month labels)`);
   ok(r.atEnd && !r.pageScroll, `${name}: scrolled to the newest week, no sideways page scroll`);
   ok(await p.evaluate(() => { const left = document.querySelector('#calScroll').getBoundingClientRect().left; return [...document.querySelectorAll('.cal-m')].filter(m => m.textContent && getComputedStyle(m).visibility !== 'hidden').every(m => m.getBoundingClientRect().left >= left - 0.5); }), `${name}: no month name is cut off at the left edge`);
   await p.locator('#calGrid i.today').click();

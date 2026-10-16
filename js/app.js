@@ -10,15 +10,16 @@ import { addSampleDeck } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
-import { takeLaunch } from './study-data.js';
+import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
+import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '3.9';
+const APP_VERSION = '4.8.1';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -28,43 +29,40 @@ async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   const { skin, mode, oled } = settings.theme;
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">SETTINGS</span><h1>Settings</h1></div></div>
+    <div class="screen-head"><div><h1>Settings</h1></div></div>
+    <nav class="set-nav" id="setNav" aria-label="Jump to a section">
+      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a>
+    </nav>
 
-    <section class="section" aria-labelledby="thTitle">
-      <h2 id="thTitle">Theme</h2>
+    <section class="section" aria-labelledby="appearTitle">
+      <h2 id="appearTitle">Appearance</h2>
+      <h3 class="set-sub" id="thTitle">Theme</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
-    </section>
-
-    <section class="section" aria-labelledby="apTitle">
-      <h2 id="apTitle">Light or dark</h2>
+      <h3 class="set-sub" id="apTitle">Light or dark</h3>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
         ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
       <label class="adv-row switch-row"><span><b>OLED black</b>
-        <span>Pure black page in dark mode, to save battery on OLED screens.</span></span>
+        <span>A pure black page in dark mode, to save battery on OLED screens.</span></span>
         <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
-    </section>
-
-    <section class="section" aria-labelledby="appearTitle">
-      <h2 id="appearTitle">Appearance</h2>
       <div class="set-row column">
-        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers, which are easier to read. This device only.</p></div>
+        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers. This device only.</p></div>
         <div class="chips" role="radiogroup" aria-labelledby="alignLbl" id="alignChips">
           ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
         </div>
       </div>
       <label class="adv-row switch-row"><span><b>Compact deck list</b>
-        <span>Decks gets a search box and a sort (due, exam or A–Z), folds subdecks under their course and uses small play buttons. Turn it off for the old list. This device only.</span></span>
+        <span>Search and sort your decks, with subdecks folded under their course. This device only.</span></span>
         <input id="compactDecks" type="checkbox" class="switch" ${settings.compactDecks !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Rating feedback</b>
-        <span>When you rate a card in Review, a coloured ring pulses on the button, the new interval floats up, and an outline of the old card drifts away in a direction that suits the rating. The next card appears at once either way. This device only.</span></span>
+        <span>A coloured pulse and the new interval appear when you rate a card. This device only.</span></span>
         <input id="ratingFeedback" type="checkbox" class="switch" ${settings.ratingFeedback !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Smooth transitions</b>
-        <span>Screens slide when you change tab, and pop-up sheets spring open and slide away. Turn it off for instant changes. This device only.</span></span>
+        <span>Screens slide and pop-up sheets spring open. Turn it off for instant changes. This device only.</span></span>
         <input id="smoothMotion" type="checkbox" class="switch" ${settings.smoothMotion !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
-        <span>Pick one course in Stats and see how much of it you are ready to remember on exam day (or today, with no exam), with an Exam prep button. Mastery moves to the top. This device only.</span></span>
+        <span>Pick a course in Stats to see how ready you are for its exam. This device only.</span></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
     </section>
 
@@ -79,12 +77,12 @@ async function renderSettings(el) {
         </div>
       </div>
       <div class="set-row">
-        <div><b>Reviews per day</b><p>Most reviews to show in a day, across all decks. Leave it blank for no limit, which works best with FSRS: held-back cards come back later than planned.</p></div>
+        <div><b>Reviews per day</b><p>The most reviews shown in a day, across all decks. Blank means no limit, which suits FSRS best.</p></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
-          <p>How likely you should be to remember a card when it comes back. Higher means you remember more but review more often. 90% suits most people.</p></div>
+          <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
       </div>
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
@@ -188,6 +186,12 @@ async function renderSettings(el) {
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
 
   wireSettingsRow($('installRow'));
+  // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
+  $('setNav').addEventListener('click', e => {
+    const a = e.target.closest('a[data-sec]'); if (!a) return;
+    e.preventDefault();
+    $(a.dataset.sec).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  });
   $('skins').addEventListener('click', e => {
     const b = e.target.closest('.skin'); if (!b) return;
     saveTheme({ ...settings.theme, skin: b.dataset.skin });
@@ -681,6 +685,7 @@ function confirmDeleteServer() {
 async function wipeThisDevice() {
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion } = settings;
   await db.resetAll();
+  clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);
   await db.setSetting('compactDecks', compactDecks);
@@ -787,7 +792,7 @@ const ROUTES = {
   play: async el => (await import('./play.js')).renderPlay(el),
   decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
   deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
-  browse: async el => (await import('./browse.js')).renderBrowseAll(el),
+  browse: async (el, arg) => (await import('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
   stats: async el => (await import('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)
@@ -876,6 +881,12 @@ let lastHash = '#/today';
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
 // (The gear in the phone header and the Settings link in the desktop sidebar both count.)
 function wireGear() {
+  // Tapping the Play tab on a Play screen that is already showing (e.g. the results) starts a fresh setup:
+  // the address does not change, so there is no hashchange to do it.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('a[data-tab="play"]') || e.defaultPrevented) return;
+    if (currentRoute === 'play' && location.hash === '#/play') { e.preventDefault(); route(); }
+  });
   document.addEventListener('click', e => {
     if (!e.target.closest('a[data-tab="settings"]') || e.defaultPrevented) return;
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
@@ -928,6 +939,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  watchMath();       // draws the maths on cards (js/math.js) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
   document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
   // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.

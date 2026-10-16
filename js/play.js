@@ -21,11 +21,13 @@ import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
-import { checkAnswer } from './match.js';
-import { plainText } from './format.js';
+import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
+import { plainText, mathHTML, answerText, answerTargets } from './format.js';
+import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
@@ -37,19 +39,23 @@ const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: fal
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
 let pendingDrill = null;   // card ids sent from another screen (Stats → "Drill these")
+let pendingDrillOpts = {}; // { mix: Map(cardId → partner id), drillTotal }: the "You mix these up" drill (see compare-sheet.js)
 // Has the deck been picked in this visit? Until it has, Play opens on the deck with the nearest exam (see defaultDeck).
 let deckChosen = false;
 let customOpen = null;     // is the "Customise" fold open? (read from this device's saved choice the first time)
 
 // Open Play and start a drill round on these cards straight away.
-export function drillCards(cardIds) {
+//   mix    pairs [[cardId, partnerCardId]]: the partner's answer is always one of that card's options
+//   total  how many questions (default: twice the cards, at least 6)
+export function drillCards(cardIds, { mix = [], total = 0 } = {}) {
   pendingDrill = cardIds;
+  pendingDrillOpts = { mix: new Map(mix), drillTotal: total };
   if (location.hash === '#/play') renderPlay(document.getElementById('screen'));
   else location.hash = '#/play';
 }
 
 const fmtClock = ms => { const s = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-const sizeClass = text => (text.length > 120 ? ' xlong' : text.length > 50 ? ' long' : '');
+const sizeClass = text => { const n = answerText(text).length; return n > 120 ? ' xlong' : n > 50 ? ' long' : ''; };      // measured as words, not as LaTeX
 
 // Stop timers when a round is abandoned (leaving the tab, or quitting).
 function stopRound() {
@@ -94,13 +100,14 @@ export async function renderPlay(el) {
   // Back → front (shows the definition, you pick the term), then Typing.
   if (pendingDrill) {
     const ids = new Set(pendingDrill);
-    pendingDrill = null;
+    const drillOpts = pendingDrillOpts;
+    pendingDrill = null; pendingDrillOpts = {};
     const drill = cards.filter(c => ids.has(c.id));
     const decksUsed = new Set(drill.map(c => c.deckId));
     const pool = cards.filter(c => decksUsed.has(c.deckId));   // wrong options come from the same decks
     const qtype = [prefs.qtype, 'back', 'typing'].find(q =>
       q === 'typing' ? playableCards(drill, q).length : canMultipleChoice(pool, q) && playableCards(drill, q).length);
-    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill });
+    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill, ...drillOpts });
   }
 
   const draw = () => {
@@ -134,9 +141,9 @@ export async function renderPlay(el) {
     const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
 
     el.innerHTML = `
-      <div class="screen-head"><div><span class="eyebrow mono">PLAY</span><h1>Play</h1></div></div>
+      <div class="screen-head"><div><h1>Play</h1></div></div>
 
-      ${!cards.length ? `<div class="empty"><b>No cards yet.</b><br>Add some to a deck first.<br><a class="btn primary" href="#/import">Import cards</a></div>` : `
+      ${!cards.length ? emptyStartHTML() : `
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
           <option value="all" ${prefs.deckId === 'all' ? 'selected' : ''}>All decks (${plural(cards.length, 'card')})</option>
@@ -202,9 +209,9 @@ export async function renderPlay(el) {
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
         <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
-      <p class="hint mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
+      <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
-    if (!cards.length) return;
+    if (!cards.length) { wireEmptyStart(el); return; }
     const save = () => db.setSetting('playPrefs', { ...prefs });
     $('customBtn').addEventListener('click', () => {
       customOpen = $('customBtn').getAttribute('aria-expanded') !== 'true';
@@ -239,16 +246,17 @@ function start(el, opts) {
   const all = playableCards(opts.pool, opts.qtype);         // every card that works for this question type
   const pool = opts.drill ? playableCards(opts.drill, opts.qtype) : all;
   const fmt = opts.drill ? 'classic' : opts.fmt;
-  const total = fmt === 'classic' ? (opts.drill ? Math.max(pool.length * 2, 6) : opts.len) : null;
+  const total = fmt === 'classic' ? (opts.drill ? opts.drillTotal || Math.max(pool.length * 2, 6) : opts.len) : null;
   // Cards you've forgotten before (lapses) come up more often.
   const weightOf = c => { const s = data.statesById.get(c.id); return 1 + 2 * Math.min(s?.lapses || 0, 5); };
   G = {
     ...opts, fmt, all, pool, total, weightOf, source: opts.pool,
     queue: weightedQueue(pool, total || 30, weightOf), i: 0,
-    score: 0, streak: 0, bestStreak: 0, log: [], lives: LIVES, clock: LIGHTNING_MS, over: false,
+    score: 0, streak: 0, bestStreak: 0, log: [], leeches: [], lives: LIVES, clock: LIGHTNING_MS, over: false,
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
+  G.mixIndex = buildAnswerIndex(all, c => { const a = questionFor(c, 'typing')?.answer; return a ? answerTargets(a) : []; }, MIX_SCAN_MAX);
   setFocusMode(true);
   el.innerHTML = `
     <div class="hud mono">
@@ -265,7 +273,7 @@ function start(el, opts) {
     <div class="timer" aria-hidden="true"><div class="timer-fill" id="pTimer"></div></div>
     <div class="options" id="options"></div>
     <form class="typeform" id="pType" hidden autocomplete="off">
-      <input id="pInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer" placeholder="Type the answer">
+      <input id="pInput" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer" placeholder="Type the answer">
       <button class="btn primary" type="submit">Check</button>
       <button class="btn ghost" type="button" id="skipBtn">Skip</button>
     </form>
@@ -307,24 +315,30 @@ function showQuestion() {
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
   // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
-  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + esc(q.prompt);
+  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt);
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
 
   const typing = G.qtype === 'typing';
   $('options').hidden = typing; $('pType').hidden = !typing;
+  G.optIds = [];
   if (typing) {
     const inp = $('pInput');
     inp.value = ''; inp.disabled = false;
     inp.focus();
   } else {
-    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard });
-    G.opts = shuffle([q.answer, ...wrong]);
+    // A drill from "You mix these up" always offers the partner's answer. Each option remembers which card it is the
+    // answer of, so picking another card's answer can be recorded as a mix-up (log.mixedWith).
+    const partner = G.mix?.get(card.id);
+    const include = partner ? G.all.filter(c => c.id === partner).map(c => questionFor(c, G.qtype).answer) : [];
+    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true, include });
+    const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
+    G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
     const long = G.opts.some(o => o.length > 28);
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
-      `<button type="button" class="opt" data-i="${i}"><span class="key">${i + 1}</span><span class="lbl">${esc(o)}</span></button>`).join('');
+      `<button type="button" class="opt" data-i="${i}"><span class="key">${i + 1}</span><span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
   }
   G.limit = timeLimit({ fmt: G.fmt, pace: G.pace, typing, i: G.i });
   G.qStart = performance.now();
@@ -380,12 +394,16 @@ function answer(choice) {
   const elapsed = performance.now() - G.qStart;
   const lightning = G.fmt === 'lightning';
   const seconds = (lightning ? elapsed : Math.min(elapsed, G.limit)) / 1000;
-  let ok = false, given = '';
+  let ok = false, given = '', exact = true, target = '', mixedWith;
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; ok = checkAnswer(choice, G.q.answer, { forgiving: !G.hard }).correct; }
+    if (choice !== null) { given = choice; const res = checkTyped(choice, answerTargets(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; if (!ok) mixedWith = typedMixup(choice); }
   } else {
-    if (choice !== null) { given = G.opts[choice]; ok = given === G.q.answer; }
+    if (choice !== null) {
+      given = G.opts[choice]; ok = given === G.q.answer;
+      const other = G.optIds[choice];
+      if (!ok && other && other !== G.card.id) mixedWith = other;       // the answer of another card
+    }
     document.querySelectorAll('#options .opt').forEach((b, j) => {
       b.disabled = true;
       if (G.opts[j] === G.q.answer) b.classList.add('correct');
@@ -409,8 +427,12 @@ function answer(choice) {
     if (G.lives <= 0) G.over = true;
   } else if (G.fmt === 'classic' && G.i >= G.total - 1) G.over = true;
 
-  const entry = { card: G.card, q: G.q, ok, seconds, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
-    chars: (G.q.prompt + (G.qtype === 'typing' ? '' : G.opts.join(''))).length + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
+  // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
+  let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
+  if (diff && ok && !hasMarks(diff)) diff = null;
+  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+    typed: diff ? given : undefined, target: diff ? target : undefined,
+    chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
   // Save in the background so the game never waits for the database.
   const round = G;
@@ -421,20 +443,29 @@ function answer(choice) {
   const head = ok
     ? `<div class="fb ok"><span class="fb-mark">${icon('check')} Correct</span><span class="fb-pts mono">+${pts}</span><span class="fb-detail mono">${seconds.toFixed(1)}s${mult > 1 ? ' · ×' + mult.toFixed(1) + ' streak' : ''}</span></div>`
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
-  const yours = !ok && given ? `<span class="given">You answered: ${esc(given)}</span>` : '';
-  const info = ok ? '' : `<p class="fb-info"><b>${esc(G.q.answer)}</b>${yours}</p>`;
-  $('feedback').innerHTML = `${head}${info}<div class="fb-btns">
+  const yours = !ok && given && !diff ? `<span class="given">You answered: ${esc(given)}</span>` : '';
+  const info = ok || diff ? '' : `<p class="fb-info"><b>${mathHTML(G.q.answer)}</b>${yours}</p>`;
+  $('feedback').innerHTML = `${head}${info}${diff ? diffHTML(diff) : ''}<div class="fb-btns">
     <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
     <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
   $('nextBtn').addEventListener('click', next);
   $('cardBtn').addEventListener('click', openCardMenu);
   if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
-  else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : 750);
+  else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : diff ? 1600 : 750);
   else {
     $('nextBtn').focus({ preventScroll: true });
     // Long answers can push the Next button below the screen, so bring it into view.
     $('nextBtn').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+}
+
+// A wrong typed answer that is exactly (no typo forgiveness) the answer of another card of this round's pool: that card's
+// id. Siblings of the same note don't count (their answers are on this card's front). The look-through is capped.
+// The index is built once when the round starts (G.mixIndex), so a wrong answer is one lookup.
+const MIX_SCAN_MAX = 2000;
+function typedMixup(typed) {
+  if (!String(typed).trim()) return undefined;          // a skip
+  return indexedMixup(G.mixIndex, typed, G.card);
 }
 
 // Save one answer: always to the review log (for stats), and to the review schedule when the
@@ -466,6 +497,7 @@ async function record(round, entry) {
     applied: false,                    // did it change the schedule?
     reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
   };
+  if (entry.mixedWith) log.mixedWith = entry.mixedWith;     // the card whose answer was given instead (confusion.js)
   if (applies(decision)) {
     let next = null;
     try {
@@ -504,6 +536,7 @@ async function checkLeech(round, card, prev, next, log) {
   if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
   const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
   await db.saveCards([leech]);
+  if (!round.leeches.includes(card.id)) round.leeches.push(card.id);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
   toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
 }
@@ -579,12 +612,12 @@ async function finish() {
   const { letter, label } = gradeFor(acc, avgSpeed);
   const avgTime = total ? round.log.reduce((a, l) => a + l.seconds, 0) / total : 0;
 
-  let isBest = false;
+  let isBest = false, firstScore = false;
   if (!round.drill && total) {
     const settings = await db.getSettings();
     const bests = { ...(settings.playBest || {}) };
     const k = bestKey(round);
-    if (round.score > (bests[k] || 0)) { bests[k] = round.score; isBest = true; await db.setSetting('playBest', bests); }
+    if (round.score > (bests[k] || 0)) { firstScore = !bests[k]; bests[k] = round.score; isBest = true; await db.setSetting('playBest', bests); }
   }
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
@@ -595,14 +628,25 @@ async function finish() {
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
     : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
 
+  const strong = 'SAB'.includes(letter);          // the big stamp is for S, A and B; a C or D gets a quiet one
+  const gradeText = isBest ? `Grade ${letter}` : label;
+  const missedRow = l => { const diff = l.typed ? diffAgainstBack(l.typed, l.target) : null; return `
+        <div class="miss">
+          <div class="m">${mathHTML(l.q.prompt)}</div>
+          ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
+          <div class="r">${mathHTML(l.q.answer)}</div>
+          ${hasMarks(diff) ? diffHTML(diff, { small: true })
+            : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
+        </div>`; };
+  const SHOWN = 3;
   el.innerHTML = `
     <div class="res-head">
-      <div class="stamp press" aria-label="Grade ${letter}"><span>${letter}</span></div>
+      <div class="stamp press${strong ? '' : ' quiet'}" aria-label="Grade ${letter}"><span>${letter}</span></div>
       <div style="min-width:0">
-        <p class="res-grade">${label} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
+        <p class="res-grade">${gradeText} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
         <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
         ${line ? `<p class="res-line">${line}</p>` : ''}
-        ${isBest ? '<p class="newbest">New best for this setup</p>' : ''}
+        ${isBest ? `<p class="newbest">${firstScore ? 'First score for this setup' : 'New best for this setup'}</p>` : ''}
       </div>
     </div>
     <div class="stats4">
@@ -611,25 +655,27 @@ async function finish() {
       <div><div class="v">${round.bestStreak}</div><div class="l">Best streak</div></div>
       <div><div class="v">${correct}/${total}</div><div class="l">Correct</div></div>
     </div>
-    ${schedule}
-    <section class="missed">
-      <h2>Missed</h2>
-      ${missed.length ? missed.map(l => `
-        <div class="miss">
-          <div class="m">${esc(l.q.prompt)}</div>
-          ${l.q.occ ? `<div class="occ-mini">${occlusionHTML(l.card, 'back', { zoom: false })}</div>` : ''}
-          <div class="r">${esc(l.q.answer)}</div>
-          <div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>
-        </div>`).join('')
-      : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
-    </section>
     <div class="res-actions">
       <button class="btn primary" id="againBtn" type="button">Play again</button>
       ${missed.length ? '<button class="btn ghost" id="drillBtn" type="button">Drill missed</button>' : ''}
       <button class="btn ghost" id="menuBtn" type="button">Change setup</button>
-    </div>`;
+    </div>
+    ${schedule}
+    <div id="resultsMore" class="finish-more" hidden></div>
+    <section class="missed">
+      <h2>Missed</h2>
+      ${missed.length ? missed.map((l, i) => i < SHOWN ? missedRow(l) : `<div class="miss-extra" hidden>${missedRow(l)}</div>`).join('')
+        + (missed.length > SHOWN ? `<button class="btn ghost" id="showAllMiss" type="button">Show all ${missed.length}</button>` : '')
+      : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
+    </section>`;
+  $('showAllMiss')?.addEventListener('click', e => {
+    el.querySelectorAll('.miss-extra').forEach(x => { x.hidden = false; });
+    e.currentTarget.remove();
+  });
+  const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
+  import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
-  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
+  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill, mix: round.mix, drillTotal: round.drillTotal } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   $('againBtn').focus({ preventScroll: true });

@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 320, height: 700 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -23,8 +23,7 @@ const ids = await page.evaluate(async () => {
 });
 
 // per-deck limit
-await page.goto('http://localhost:8123/#/deck/B'); await page.waitForSelector('#editDeck');
-await page.click('#editDeck'); await page.waitForSelector('#deckOpts'); await page.click('#deckOpts summary'); await page.waitForSelector('#deckNew');
+await page.goto('http://localhost:8123/#/deck/B'); await deckMenu(page); await page.click('#editDeck'); await page.waitForSelector('#deckOpts'); await page.click('#deckOpts summary'); await page.waitForSelector('#deckNew');
 ok(await page.inputValue('#deckNew') === '', 'deck limit blank by default');
 await page.screenshot({ path: SP + '/p3-deck.png', fullPage: true });
 await page.fill('#deckNew', '1'); await page.click('button[type=submit][form=deckForm]'); await page.waitForTimeout(300);

@@ -17,3 +17,18 @@ test('language from the writing system', () => {
 test('what gets read out', () => {
   assert.equal(speakableText('The **cell** has:\n- a *nucleus*\n- ribosomes'), 'The cell has: a nucleus ribosomes');
 });
+
+test('maths is read as words', () => {
+  assert.equal(speakableText('What is $x^2$?'), 'What is x squared ?');
+  assert.equal(speakableText('Half is $\\frac{1}{2}$ and **bold**'), 'Half is 1 over 2 and bold');
+  assert.equal(speakableText('Cost \\$5 and $5'), 'Cost $5 and $5');
+});
+
+test('a stepped card reads its intro and the steps shown so far', async () => {
+  const { stepsSpeech } = await import('../js/speech.js');
+  const p = { intro: 'Solve it', steps: ['subtract 3', 'divide by 2.'], final: 'x = 2' };
+  assert.equal(stepsSpeech(p, 0), 'Solve it.');
+  assert.equal(stepsSpeech(p, 1), 'Solve it.\nStep 1. subtract 3.');
+  assert.equal(stepsSpeech(p, 2), 'Solve it.\nStep 1. subtract 3.\nStep 2. divide by 2.\nAnswer. x = 2.');
+  assert.equal(stepsSpeech({ intro: '', steps: ['a', 'b'], final: null }, 2), 'Step 1. a.\nStep 2. b.');
+});

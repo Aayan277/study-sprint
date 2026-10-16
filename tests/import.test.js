@@ -270,3 +270,32 @@ test('cloze fields and the Anki guid come through buildCards', () => {
     { front: 'A […]', back: 'x', cloze: { noteKey: 'n', n: 1, text: 'A {{c1::x}}' }, noteExtra: 'more', ankiGuid: 'g1' },
     { front: 'plain', back: 'y', ankiGuid: 'g2' }]);
 });
+
+test('maths: a separator inside a formula does not split the line', () => {
+  assert.deepEqual(cards('Energy - $E = mc^2$'), [['Energy', '$E = mc^2$']]);
+  assert.deepEqual(cards('Gap - $a - b$\nSum - $a + b$'), [['Gap', '$a - b$'], ['Sum', '$a + b$']]);
+  assert.deepEqual(cards('$a - b$ - the gap'), [['$a - b$', 'the gap']]);
+});
+
+
+// ---------- v4.2.1: dupKey agrees with the typed-answer check ----------
+test('dupKey keeps kana and Devanagari marks, folds Latin accents, and keeps symbol-only text', () => {
+  assert.equal(new Set(['か', 'が', 'は', 'ば', 'ぱ'].map(dupKey)).size, 5);
+  assert.notEqual(dupKey('कि'), dupKey('की'));
+  assert.equal(dupKey('Café'), dupKey('CAFE'));
+  assert.equal(dupKey('λόγος'), dupKey('ΛΌΓΟΣ'));
+  for (const s of ['🧠', '+', '?!', '❤️']) assert.notEqual(dupKey(s), '', s);
+  assert.notEqual(dupKey('+'), dupKey('-'));
+  assert.equal(dupKey(' '), '');
+  assert.deepEqual(findDuplicates([{ front: 'か', back: '1' }, { front: 'が', back: '2' }, { front: 'は', back: '3' }, { front: 'ぱ', back: '4' }, { front: 'ば', back: '5' }]).map(x => x), [null, null, null, null, null]);
+});
+
+// ---------- v4.2.2: commas inside formulas (docs/design/katex-review.md, should-fix 4) ----------
+test('comma-separated lines: a comma inside a formula does not split', () => {
+  assert.deepEqual(cards('Point, $f(a,b)$\nLine, $g(x,y,z)$'), [['Point', '$f(a,b)$'], ['Line', '$g(x,y,z)$']]);
+  assert.equal(formatOf('Point, $f(a,b)$\nLine, $g(x,y,z)$').sep, ',');
+  // a quoted field and an adjacent pair of formulas keep working
+  assert.deepEqual(cards('"One, two", $a,b$\\(c,d\\)\nx, y'), [['One, two', '$a,b$\\(c,d\\)'], ['x', 'y']]);
+  // no formulas: as before
+  assert.deepEqual(cards('Paris, France\nRome, Italy'), [['Paris', 'France'], ['Rome', 'Italy']]);
+});

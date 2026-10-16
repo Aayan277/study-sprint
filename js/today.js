@@ -8,12 +8,13 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live } from './study-data.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
+import { lastStatus } from './sync.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring } from './ui.js';
-import { addSampleDeck } from './sample.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
+import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
@@ -45,29 +46,24 @@ export async function startStudy(spec = {}) {
   $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
 }
 const launch = startStudy;
+const dismissedDay = () => { try { return Number(localStorage.getItem(RESCUE_DISMISS)) || null; } catch { return null; } };
 const EXAM_CHIPS = 4;            // how many courses the "Add exam date" row offers; the rest are one tap away in Decks
 
 export async function renderToday(el) {
   const data = await loadAll({ history: true });        // with the last 60 days of the log, not all of it
-  const streak = await loadStreak(data.history);
+  const streak = await loadStreak(data.history, data);
   if (!el.isConnected) return;
+  // "Back from a break": a finished plan is cleared here (loadAll never writes), then the banner or the plan line is worked out.
+  let rescue = rescueState(data, Date.now(), dismissedDay());
+  // Not while the first sync is running: a fresh sign-in has no cards yet and would see the plan as finished.
+  // The clear carries the plan's own time, so a newer plan from another device still wins.
+  if (rescue.finished && lastStatus().state !== 'syncing') { const at = rescueClearAt(data.settings.rescue); data.settings.rescue = null; db.setSetting('rescue', null, { at }); rescue = rescueState(data, Date.now(), dismissedDay()); }
+  let rescueDays = rescue.offer?.n;
   const cardMs = typicalCardMs(data.history);
   const allIds = data.decks.map(d => d.id);
   let chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
   let typing = data.settings.reviewTyping;
   const top = data.decks.filter(d => !data.depth.get(d.id));       // courses: decks not inside another deck
-
-  // Nothing to study at all (after Skip in the first-run start, or after deleting everything): not a dead end.
-  // Paste notes (into the course, when there is just one), try the sample cards, or read how it works again.
-  const emptyToday = () => {
-    const courses = top.filter(d => d.id !== 'sample');
-    const art = '<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M58 30l-12 18h9l-2 14 12-18h-9z" fill="var(--accent)" style="filter:drop-shadow(0 0 6px var(--glow))"/><circle cx="96" cy="20" r="2.5" fill="var(--accent-text)"/><circle cx="104" cy="34" r="1.8" fill="var(--accent-text)"/><circle cx="14" cy="70" r="2" fill="var(--accent-text)"/></svg>';
-    return `<div class="empty empty-first">${art}<b>Nothing to study yet</b>
-      <p>Paste your lecture notes and Study Sprint turns them into cards. Or try 12 sample cards first.</p>
-      <div class="empty-btns"><a class="btn primary" href="#/import${courses.length === 1 ? '/' + encodeURIComponent(courses[0].id) : ''}">${icon('paste')} Paste notes</a>
-        <button class="btn ghost" type="button" id="trySample">Try sample cards</button></div>
-      <a class="fr-how" href="#/welcome/again">How it works ›</a></div>`;
-  };
 
   // ----- the screen -----
   const draw = () => {
@@ -85,7 +81,7 @@ export async function renderToday(el) {
         <div><span class="eyebrow mono">${esc(day.toUpperCase())}</span><h1>Today</h1></div>
         ${data.decks.length ? `<div class="head-actions"><button class="btn ghost small" type="button" id="optBtn">${icon('sliders')} Options</button></div>` : ''}
       </div>
-      ${!data.cards.length && !data.hiddenCount ? emptyToday()
+      ${!data.cards.length && !data.hiddenCount ? emptyStartHTML({ courseId: top.filter(d => d.id !== 'sample').length === 1 ? top.filter(d => d.id !== 'sample')[0].id : '' })
       : `
       ${resume ? `<div class="resume">
         <span>${icon('clock')} Session in progress · ${plural(resume.left, 'card')} left</span>
@@ -97,17 +93,16 @@ export async function renderToday(el) {
             <span class="th-label mono">DAILY GOAL</span>
             <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
             <span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
-            <span class="th-sub">${plural(answered, 'answer')} today</span>
           </div>
         </div>
-        <p class="streak ${streak.studiedToday ? 'kept' : ''}">${icon('flame')}<b class="mono">${streak.days}</b> day streak
-          <span>${streak.studiedToday ? 'Kept for today' : streak.days ? 'Study today to keep it' : 'Study today to start one'}</span></p>
+        ${streakHTML(streak, { button: true })}
         ${c.total
           ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs)}</button>`
           : `<div class="th-done"><b>All done for today</b>
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <a class="btn primary wide big" href="#/play">${icon('bolt')} Play a round</a></div>`}
       </section>
+      ${rescueHTML()}
       <div id="installSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
       ${exams.length ? `
@@ -133,6 +128,33 @@ export async function renderToday(el) {
     wire(c);
     fx.goalRing(el, answered, goal);
     drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
+  };
+
+  // "Back from a break": a banner offering to spread the overdue cards over a few days, or the line for the running plan.
+  const rescueHTML = () => {
+    const o = rescue.offer, r = data.rescue;
+    if (r && rescue.active) {
+      return `<div class="rescue-line" role="group" aria-label="Catch-up plan">
+        <span>${icon('clock')} <b>Catch-up plan:</b> day ${r.k} of ${r.days} · ${r.remaining} left</span>
+        <button class="btn ghost small" type="button" id="rescueManage">Details</button></div>`;
+    }
+    if (!o) return '';
+    const choices = [2, 3];
+    const per = Math.ceil(o.backlog / rescueDays);
+    return `<section class="rescue-banner" aria-labelledby="rbTitle">
+      <p class="rb-title" id="rbTitle"><b>${plural(o.backlog, 'overdue card')}</b> piled up. Spread them over
+        <span class="chips rb-chips" role="group" aria-label="Number of days">${choices.map(n => `<button type="button" class="tchip" data-rdays="${n}" aria-pressed="${n === rescueDays}">${n} days</button>`).join('')}</span>?</p>
+      <p class="rb-pre mono" id="rbPre">About ${per} overdue + ${o.typical} of your usual cards a day.</p>
+      <div class="rb-actions">
+        <button class="btn ghost small" type="button" id="rescueNo">Not today</button>
+        <button class="btn primary small" type="button" id="rescueGo">Spread them out</button>
+      </div></section>`;
+  };
+  const openRescue = async opts => {
+    try {
+      const { openRescueSheet } = await import('./rescue-sheet.js');
+      openRescueSheet({ data, state: rescue, onChange: () => renderToday(el), returnFocus: opts.focus, ...opts });
+    } catch { toast("Couldn't open the catch-up plan. Check your connection and try again."); }
   };
 
   // Courses (top-level decks with cards) that have no exam coming up, the biggest first. The sample deck is left out.
@@ -219,20 +241,30 @@ export async function renderToday(el) {
         <span class="td-counts"><span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span> <span><b>${c.fresh}</b> new</span>
           ${info ? `<span class="${badgeClass(info)}">${esc(countdown(info))}</span>` : ''}</span>
       </span>
-      <span class="td-go">${c.total ? `<span class="td-min">${minutesText(c.total, cardMs)}</span>${icon('play')}` : icon('check')}</span>`;
+      <span class="td-go">${c.total ? icon('play') : icon('check')}</span>`;
     return c.total
       ? `<button class="tdeck" type="button" data-start="${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="Study ${esc(deck.name)}: ${plural(c.total, 'card')}">${inner}</button>`
       : `<a class="tdeck done" href="#/deck/${esc(deck.id)}" style="--deck:${esc(deck.color)}" aria-label="${esc(deck.name)}: all done. Open deck">${inner}</a>`;
   };
 
   const wire = c => {
-    $('trySample')?.addEventListener('click', async e => {
-      e.currentTarget.disabled = true;
-      await addSampleDeck();
-      location.hash = '#/welcome/review/sample';          // three guided cards, then "Add your own cards"
+    wireEmptyStart(el);
+    $('rescueManage')?.addEventListener('click', () => openRescue({ focus: 'rescueManage' }));
+    $('rescueGo')?.addEventListener('click', () => openRescue({ offer: { ...rescue.offer, n: rescueDays }, focus: 'rescueGo' }));
+    $('rescueNo')?.addEventListener('click', () => {
+      dismissRescueToday();
+      rescue = { ...rescue, offer: null };
+      draw();
     });
+    el.querySelectorAll('[data-rdays]').forEach(b => b.addEventListener('click', () => {
+      rescueDays = +b.dataset.rdays;
+      el.querySelectorAll('[data-rdays]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      $('rbPre').textContent = `About ${Math.ceil(rescue.offer.backlog / rescueDays)} overdue + ${rescue.offer.typical} of your usual cards a day.`;
+    }));
     $('startBtn')?.addEventListener('click', () => launch({ deckIds: chosen }));
     $('optBtn')?.addEventListener('click', () => openOptions());
+    // The streak opens "Your streak": the freeze, the last 7 days and planned days off (loaded when first needed).
+    $('streakBtn')?.addEventListener('click', async () => (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderToday(el), returnFocus: 'streakBtn' }));
     $('allDecksBtn')?.addEventListener('click', () => { chosen = []; db.setSetting('reviewDecks', chosen); draw(); });
     el.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.start], deckId: b.dataset.start })));
     el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));

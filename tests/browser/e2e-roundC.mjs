@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, deckMenu } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -11,7 +11,7 @@ await go('#/decks', '.deck');
 const total = await DB(async () => (await (await import('./js/db.js')).getCardsInDeck('sample')).length);
 
 // + Subdeck from the deck page
-await go('#/deck/sample', '#addSub'); await p.click('#addSub'); await p.waitForSelector('#deckParent');
+await go('#/deck/sample', '#deckMore'); await deckMenu(p); await p.click('#addSub'); await p.waitForSelector('#deckParent');
 ok(await p.$eval('#deckParent', s => s.value) === 'sample', 'new subdeck starts inside the deck');
 await p.fill('#deckName', 'Unit 1'); await p.click('button[type=submit][form=deckForm]');
 await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Unit 1');
@@ -20,7 +20,7 @@ ok(u1.parentId === 'sample', 'saved with parentId');
 ok((await p.textContent('.crumbs')).includes('Psych') || (await p.textContent('.crumbs')).length > 0, 'breadcrumb: ' + await p.textContent('.crumbs'));
 ok((await p.textContent('#back')).trim() !== '‹ Decks', 'back goes to the parent: ' + (await p.textContent('#back')).trim());
 // a sub-subdeck
-await p.click('#addSub'); await p.waitForSelector('#deckName'); await p.fill('#deckName', 'Lecture 3'); await p.click('button[type=submit][form=deckForm]');
+await deckMenu(p); await p.click('#addSub'); await p.waitForSelector('#deckName'); await p.fill('#deckName', 'Lecture 3'); await p.click('button[type=submit][form=deckForm]');
 await p.waitForFunction(() => document.querySelector('h1')?.textContent === 'Lecture 3');
 const l3 = await DB(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Lecture 3'));
 // move cards: 0-3 → Unit 1, 4-5 → Lecture 3
@@ -60,10 +60,10 @@ ok(acOpts.length === 3 && acOpts[2].endsWith('Unit 1 › Lecture 3'), 'add card 
 await p.click('#acDone');
 
 // editor: can't go inside itself or its subdecks
-await p.click('#editDeck'); await p.waitForSelector('#deckParent', { state: 'attached' });
+await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckParent', { state: 'attached' });
 ok(await p.$eval('#deckParent', x => x.type) === 'hidden', 'the top deck has nowhere else to go, so no Inside choice');
 await p.click('#deckCancel');
-await go('#/deck/' + u1.id, '#editDeck'); await p.click('#editDeck'); await p.waitForSelector('#deckParent');
+await go('#/deck/' + u1.id, '#deckMore'); await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckParent');
 const places = await p.$$eval('#deckParent option', o => o.map(x => x.value));
 ok(places.includes('sample') && !places.includes(u1.id) && !places.includes(l3.id), 'Unit 1 can go top level or in the sample deck only');
 ok((await p.$eval('#deckTts option', o => o.textContent)).startsWith('Same as'), "read aloud: 'Same as the deck it's inside'");
@@ -103,13 +103,13 @@ const pOpts = await p.$$eval('#pDeck option', o => o.map(x => x.textContent));
 ok(pOpts.some(t => t.includes('Unit 1 › Lecture 3 (2)')) && pOpts.some(t => t.includes(`(${total})`) && !t.startsWith('All')), 'play deck list with paths and subtree counts: ' + pOpts.join('|'));
 
 // export: CSV has a Deck column
-await go('#/deck/sample', '#exportDeck'); await p.click('#exportDeck'); await p.waitForSelector('#exCsv');
+await go('#/deck/sample', '#deckMore'); await deckMenu(p); await p.click('#exportDeck'); await p.waitForSelector('#exCsv');
 const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#exCsv')]);
 const csv = (await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8'));
 ok(csv.split('\r\n')[0].endsWith(',Deck') && csv.includes('::Unit 1::Lecture 3'), 'CSV has a Deck column with the subdeck path');
 
 // delete the parent, keeping subdecks
-await go('#/deck/sample', '#editDeck'); await p.click('#editDeck'); await p.waitForSelector('#deckDelete'); await p.click('#deckDelete');
+await go('#/deck/sample', '#deckMore'); await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckDelete'); await p.click('#deckDelete');
 await p.waitForSelector('#delKeep');
 ok((await p.textContent('#delMsg')).includes('2 subdecks') && (await p.textContent('#delMsg')).includes('moves its subdeck to the top level'), 'delete explains the choice: ' + await p.textContent('#delMsg'));
 await p.click('#delKeep'); await p.waitForSelector('.deck');
@@ -117,7 +117,7 @@ const after = await DB(async () => { const db = await import('./js/db.js'); retu
 ok(after.decks.some(([n, pid]) => n === 'Unit 1' && pid === '') && after.cards === 6, 'Unit 1 moved to top level with its 6 cards: ' + JSON.stringify(after));
 // delete everything
 const u = (await DB(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Unit 1'))).id;
-await go('#/deck/' + u, '#editDeck'); await p.click('#editDeck'); await p.waitForSelector('#deckDelete'); await p.click('#deckDelete'); await p.click('#delYes');
+await go('#/deck/' + u, '#deckMore'); await deckMenu(p); await p.click('#editDeck'); await p.waitForSelector('#deckDelete'); await p.click('#deckDelete'); await p.click('#delYes');
 await p.waitForTimeout(400);
 const left = await DB(async () => { const db = await import('./js/db.js'); return [(await db.getDecks()).length, (await db.getAll('cards')).length]; });
 ok(left[0] === 0 && left[1] === 0, 'Delete everything removes the subdecks too: ' + left);
@@ -128,7 +128,7 @@ await p.setInputFiles('#fileIn', SP + '/files/anki-new.apkg');
 await p.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok(await p.isVisible('#subRow') && (await p.textContent('#subInfo')).includes('Unit 2'), 'offers to keep subdecks: ' + await p.textContent('#subInfo'));
 await p.screenshot({ path: SP + '/C-import.png', fullPage: true });
-await p.fill('#newName', 'Psych'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
+await p.selectOption('#deckSel', '__new'); await p.fill('#newName', 'Psych'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
 const imp = await DB(async () => { const db = await import('./js/db.js'); const ds = await db.getDecks(); const cs = await db.getAll('cards');
   return ds.map(d => `${d.name}<${ds.find(x => x.id === d.parentId)?.name || ''}>:${cs.filter(c => c.deckId === d.id).length}`).sort(); });
 ok(imp.join() === 'Psych<>:2,Unit 2<Psych>:5', 'imported into Psych with its Unit 2 subdeck: ' + imp.join());

@@ -2,7 +2,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
+import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
+import { splitMath } from '../js/math.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
 test('HTML becomes plain text', () => {
@@ -339,4 +340,16 @@ test('a cloze note: its cards share one note key, with the note text and Back Ex
   const picked = onlyDeck({ ...r, decks: ['A', 'A', 'B', 'B'] }, 'B');
   assert.deepEqual(picked.clozes.map(c => c && c.noteKey), ['102', null]);
   assert.deepEqual(picked.guids, ['g-two', 'g-three']);
+});
+
+test('maths: Anki [$] and [$$] become \\( \\) and \\[ \\], which are kept as they are', () => {
+  assert.equal(ankiMath('A [$]x^2[/$] and [$$]y[/$$]'), 'A \\(x^2\\) and \\[y\\]');       // v4.2.2: \( \) take spaces and line breaks
+  assert.equal(ankiMath('plain'), 'plain');
+  const r = notesToImport([{ mid: '1', fields: ['Area [$]\\pi r^2[/$]', 'Energy \\(E=mc^2\\) and [$$]a[/$$]'], tags: [], deck: 'D' }], models);
+  assert.deepEqual(r.rows, [['Area \\(\\pi r^2\\)', 'Energy \\(E=mc^2\\) and \\[a\\]']]);
+  // spaces and a line break inside still make maths (they would not between $ signs)
+  assert.equal(ankiMath('[$] x + 1 [/$]'), '\\( x + 1 \\)');
+  const br = notesToImport([{ mid: '1', fields: ['Sum [$]a +<br>b[/$] and [$$] c<br> d [/$$]', 'x'], tags: [], deck: 'D' }], models);
+  assert.equal(br.rows[0][0], 'Sum \\(a +\nb\\) and \\[ c\nd \\]');
+  assert.deepEqual(splitMath(br.rows[0][0]).filter(p => p.type === 'math').map(p => p.tex), ['a +\nb', 'c\nd']);
 });

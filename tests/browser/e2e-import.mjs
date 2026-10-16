@@ -53,7 +53,8 @@ await page.click('#clearBtn'); ok(await page.isHidden('#preview'), 'clear hides 
 // file: Quizlet txt into a new deck (opened from Decks, so Back has somewhere real to go)
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox');
-ok((await page.$eval('#deckSel', s => s.value)) === '__new', 'library import defaults to new deck');
+ok((await page.$eval('#deckSel', s => s.selectedOptions[0].textContent)).includes('Psychology'), 'library import starts on the deck the last import went into (Psychology)');
+await page.selectOption('#deckSel', '__new');
 await page.click('#tab-file');
 await page.setInputFiles('#fileIn', SP + '/files/quizlet.txt');
 await page.waitForSelector('#preview:not([hidden])');
@@ -72,7 +73,7 @@ await page.selectOption('#backCol', '1');
 await page.screenshot({ path: SP + '/i2-xlsx.png', fullPage: true });
 await page.selectOption('#sheetPick', 'Chapter 2');
 ok((await page.textContent('#found')).includes('Found 2 cards'), 'switch sheet');
-await page.fill('#newName', 'Chemistry');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Chemistry');
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 ok((await page.locator('h1').textContent()) === 'Chemistry' && (await page.locator('.crow').count()) === 2, 'new deck created with cards');
 await page.goBack(); await page.waitForSelector('.deck, #pasteBox');
@@ -91,12 +92,12 @@ await page.screenshot({ path: SP + '/i3-sheet.png' });
 
 // save is blocked without a new deck name
 await page.click('#tab-paste'); await page.fill('#pasteBox', 'a - b'); await page.waitForSelector('#preview:not([hidden])');
-await page.fill('#newName', ''); await page.click('#saveBtn');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', ''); await page.click('#saveBtn');
 ok(page.url().includes('#/import'), 'needs a deck name before saving');
 await noHScroll('import with preview');
 // a save that fails half way: toast, nothing saved (no empty deck), button usable again, and a retry works
 const decksBefore = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).length);
-await page.fill('#newName', 'Doomed');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Doomed');
 await page.evaluate(() => { window.__put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'cards') throw new Error('failing on purpose'); return window.__put.apply(this, a); }; });
 await page.click('#saveBtn');
 await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes("Couldn't add the cards"));

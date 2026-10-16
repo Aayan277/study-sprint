@@ -112,21 +112,23 @@ function drawName(el, api) {
       <div class="wl-top"><button class="back" type="button" id="wlBack">‹ Back</button><button class="link" type="button" id="wlSkip">Skip</button></div>
       ${stepBar(2)}
       <h1 tabindex="-1">Name your course</h1>
-      <p class="lede">Each course gets its own deck of cards. You can add more later.</p>
+      <p class="lede">Each course gets its own set of cards. You can add more courses later.</p>
       <form id="wlForm" novalidate>
         <label class="field"><span>Course name</span>
           <input id="wlName" maxlength="80" required placeholder="e.g. Cell Biology" autocomplete="off" value="${esc(flow.name)}"></label>
         <label class="field"><span>Course code (optional)</span>
           <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
         <label class="field"><span>Exam date (optional)</span>
-          <input id="wlExam" type="date" min="${todayISO()}" value="${esc(flow.exam)}">
+          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}">
           <small class="note" style="margin:4px 0 0">With a date, every card comes back before the exam and Exam prep goes over what you have not seen lately.</small></label>
         <p class="err" id="wlErr" role="alert" hidden></p>
-        <button class="btn primary wide cta" type="submit">Create deck</button>
+        <button class="btn primary wide cta" type="submit">Create course</button>
       </form>
     </div>`;
   $('wlBack').addEventListener('click', () => { flow.step = 'pitch'; draw(el, api); });
   $('wlSkip').addEventListener('click', () => leave(api));
+  // An empty date box shows the browser's "dd/mm/yyyy" in full text colour; muted, it reads as a placeholder.
+  $('wlExam').addEventListener('input', () => $('wlExam').classList.toggle('empty', !$('wlExam').value));
   $('wlForm').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('wlName').value.trim(), exam = $('wlExam').value;

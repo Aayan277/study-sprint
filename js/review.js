@@ -7,13 +7,17 @@ import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
-import { canType, checkAnswer } from './match.js';
-import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
+import { canType, checkTyped } from './match.js';
+import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
+import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
-import { speak, stopSpeaking, canSpeak } from './speech.js';
+import { speak, stopSpeaking, canSpeak, stepsSpeech } from './speech.js';
+import { parseSteps } from './steps.js';
+import { maskMath } from './math.js';
+import { mountScratch } from './scratchpad.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
@@ -22,7 +26,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, setFocusMode, icon, SPEAKER_ICON } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
 import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -65,9 +69,32 @@ export async function renderReview(el, deckId) {
   // From a deck's page (or a reload): straight into its cards (no setup screen).
   const c = countFor(data, [deckId]);
   if (c.total) return start(el, data, c.cards, typing, deckId, null, scopeKey([deckId]));
-  const name = data.decks.find(d => d.id === deckId)?.name || 'This deck';
+  const deck = data.decks.find(d => d.id === deckId);
+  if (!deck) {
+    el.innerHTML = `
+      <div class="screen-head"><div><h1>Deck not found</h1></div></div>
+      <div class="empty"><b>That deck isn’t here any more.</b><br>It may have been deleted, or the link is wrong.</div>
+      <div class="res-actions">
+        <a class="btn primary" href="#/decks">Open Decks</a>
+        <a class="btn ghost" href="#/today">Back to Today</a>
+      </div>`;
+    return;
+  }
+  // A deck with no cards at all (suspended and buried ones count) is not "caught up": it has nothing to study yet.
+  const inDeck = withSubdecks(data, [deckId]);
+  const anyCards = [...data.deckOf.values()].some(d => inDeck.has(d));
+  if (!anyCards) {
+    el.innerHTML = `
+      <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
+      <div class="empty"><b>No cards yet.</b><br>Add some cards to start studying this deck.</div>
+      <div class="res-actions">
+        <a class="btn primary" href="#/import/${encodeURIComponent(deckId)}">+ Add cards</a>
+        <a class="btn ghost" href="#/today">Back to Today</a>
+      </div>`;
+    return;
+  }
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">REVIEW</span><h1>${esc(name)}</h1></div></div>
+    <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
     <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}</div>
     <div class="res-actions">
       <a class="btn primary" href="#/today">Back to Today</a>
@@ -83,7 +110,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -101,6 +128,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     shownAt: 0, answerMs: 0, busy: false,
     stats: { reviewed: 0, again: 0, spent: 0, started: Date.now() },
     undo: [],
+    answered: new Set(), leeches: [],      // cards answered and leeches caught this session (for the finish screen), kept in step with Undo
     version: db.scheduleVersion()
   };
   nextCard(el);
@@ -114,26 +142,30 @@ const schedFor = (card, now = Date.now()) => {
 };
 
 const deckOf = card => R.effective.get(card.deckId);
+// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). → { intro, steps, final } or null.
+const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseSteps(card.back, { mask: maskMath }));
+const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.current.card); return sp ? sp.steps.length - R.stepShown : 0; };
 // Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
 // label to type (without one you flip, saying it in your head).
 const typesAnswer = card => {
-  if (!R.typing) return false;
+  if (!R.typing || stepsOf(card)) return false;
   const label = hasMasks(card) ? occLabel(card.occlusion.masks, card.occlusion.n) : null;
-  return label !== null ? !!label && canType(label) : canType(plainText(card.back));
+  return label !== null ? !!label && canType(answerText(label)) : canType(answerText(card.back));
 };
 // Read the side showing (the back once flipped) in the deck's language.
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
-  const text = hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  const sp = stepsOf(card);
+  const text = sp ? (R.flipped ? stepsSpeech(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
   stopSpeaking();
   R.current = takeNext(R.queue, R.waiting);
-  R.flipped = false; R.typed = null; R.suggest = null;
+  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
   renderSession(el, true);
@@ -162,10 +194,16 @@ function renderSession(el, enter = false) {
   R.el = el;
   if (!R.current) return finish(el);
   const { card } = R.current;
+  const sp = stepsOf(card);
+  R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
+  // The drawing stays when the same card is drawn again (an edit from the menu), and goes with the next card.
+  const kept = pad && padKey === R.shownAt ? pad.canvas : null;
+  destroyPad();
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = typesAnswer(card);
   const occ = hasMasks(card);
-  const size = occ ? '' : plainText(card.front).length > 120 ? ' xlong' : plainText(card.front).length > 50 ? ' long' : '';
+  const frontLen = occ ? 0 : answerText(card.front).length;          // measured as words, not as LaTeX
+  const size = frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
@@ -174,28 +212,31 @@ function renderSession(el, enter = false) {
   // An image-occlusion card shows its picture with every box hidden and the highlighted one to name; the back uncovers that
   // box, with its label, and a button shows the whole picture. (occlusion.js builds the HTML, escaping the text.)
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
-  const backSize = occ ? '' : answerSize(plainText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
+  const backSize = occ || sp ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
-    ? `${card.occlusion.header ? `<p class="occ-head">${esc(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
+    ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
     : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
   const answerHTML = occ
-    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>
+    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'No label'}</p>
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
     : cloze
       ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
-      : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
+      : sp
+        ? `${imgHTML(card.backImage)}${stepsHTML(sp)}`
+        : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   const head = `
     <div class="rv-head">
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
-      <button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer" ${R.undo.length ? '' : 'disabled'}>${icon('undo')}</button>
-      ${canSpeak() ? `<button class="link more" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
+      ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
+      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad (D)" title="Scratchpad (D)">${PEN_ICON}</button>
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+      ${canSpeak() ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
@@ -204,33 +245,37 @@ function renderSession(el, enter = false) {
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
-          ${cloze || occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
+          ${cloze || occ ? '' : `<div class="flash-recap${backSize || sp ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
-            <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${backSize}">${answerHTML}</div>
-            ${(cloze || occ) && card.noteExtra ? `<p class="flash-extra">${formatHTML(card.noteExtra)}</p>` : ''}
+            <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${sp ? ' steps-back' : ''}${backSize}">${answerHTML}</div>
+            ${card.noteExtra ? `<p class="flash-extra"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${formatHTML(card.noteExtra)}</p>` : ''}
           </div>
         </div>
       </div>
     </article>
     ${typeThis && !R.flipped ? `
       <form class="typeform" id="typeForm" autocomplete="off">
-        <input id="typeIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
+        <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? rateButtonsHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate</p>`;
+    ${R.typing && !typeThis && !sp && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
+    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
+    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad</p>`;
   drawSessionPage(el, head, body);
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
-  $('undoBtn').addEventListener('click', () => undo(el));
+  $('undoBtn')?.addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
-  $('speakBtn')?.addEventListener('click', () => readAloud());
+  $('scratchBtn').addEventListener('click', toggleScratch);
+  keepFocusOnPress($('scratchBtn').parentElement, '#scratchBtn');      // a mouse click on the pen must leave Space free to flip the card
+  $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
   wireRatebar(el);
+  mountPad(kept);
   $('flash').addEventListener('click', e => {
+    if (e.target.closest('.scratch, .scratch-tools')) return;      // drawing (or choosing a tool) is not a tap on the card
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
@@ -270,6 +315,8 @@ const showButtonHTML = typeThis =>
 // The buttons under the card: Show answer, or the four ratings.
 function wireRatebar(el) {
   $('showBtn')?.addEventListener('click', () => flip(el));
+  $('stepBtn')?.addEventListener('click', () => revealStep(el));
+  $('stepAllBtn')?.addEventListener('click', () => revealStep(el, true));
   $('ratebar').querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => answer(el, +b.dataset.rate)));
 }
 
@@ -294,9 +341,14 @@ function rateButtonsHTML() {
 }
 
 function typedResultHTML() {
-  const { value, result } = R.typed;
-  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact ? '' : `: <span class="given">${esc(value)}</span>`}</p>`;
-  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite. You typed <span class="given">${esc(value)}</span>` : 'No answer'}</p>`;
+  const { value, result, target } = R.typed;
+  // A wrong or inexact answer shows which letters differ (the diff has the "You typed" row, so the line doesn't repeat it).
+  let diff = !result.exact && value.trim() ? diffAgainstBack(value, target) : null;
+  if (diff && (diff.tooDifferent || (result.correct && !hasMarks(diff)))) diff = null;     // too different: just "You typed X"
+  // One corrected line (the card shows the answer itself); a "Closest answer" row only when the back has several answers.
+  const shown = diff ? diffHTML(diff, { answerRow: false, closest: !!diff.alternate }) : '';
+  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
+  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}`;
 }
 
 // Turn the card over. Only the parts that change are touched (the card stays in the page, so the CSS
@@ -316,14 +368,93 @@ function flip(el) {
   back.removeAttribute('aria-hidden'); back.inert = false;
   $('typeForm')?.remove();
   $('longNote')?.remove();
-  $('ratebar').innerHTML = rateButtonsHTML();
+  $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
   // The button that was pressed is gone, so move focus to the answer: screen readers read it out, and the
   // keyboard stays where it was (1–4 and Space still rate).
   back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
-  $('ratebar').querySelector('.rate')?.scrollIntoView({ block: 'nearest' });
+  ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
 }
+
+// ---------- step-by-step cards (B5) ----------
+// The back of a "Step 1: ... Step 2: ..." card is a list with every step hidden. After the flip the bar under the card
+// reveals one step at a time (Space, Enter, → or the button), A shows them all, and the rating buttons come once every step
+// is on screen (1–4 rate at any time). Each revealed step takes the focus (no live region: the focus move is what is read out); the last one moves it to the final answer.
+function stepsHTML(sp) {
+  const shown = R.stepShown, all = shown >= sp.steps.length;
+  return `${sp.intro ? `<div class="steps-intro">${formatHTML(sp.intro)}</div>` : ''}
+    <ol class="steps" id="steps" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
+    ${sp.final ? `<div class="steps-final" tabindex="-1" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
+}
+// What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
+function backBarHTML() {
+  const sp = stepsOf(R.current.card);
+  if (!sp || R.stepShown >= sp.steps.length) return rateButtonsHTML();
+  const n = R.stepShown + 1, m = sp.steps.length;
+  return `<p class="step-try" id="stepTry">Try step ${n} yourself, then reveal.</p>
+    <div class="step-actions">
+      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal step ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
+      <button class="btn ghost wide" type="button" id="stepAllBtn" aria-keyshortcuts="A">Show all <kbd class="key-hint" aria-hidden="true">A</kbd></button>
+    </div>`;
+}
+function revealStep(el, all = false) {
+  const sp = R?.flipped && R.current && stepsOf(R.current.card);
+  if (!sp || R.stepShown >= sp.steps.length) return;
+  const from = R.stepShown;
+  R.stepShown = all ? sp.steps.length : from + 1;
+  const flash = $('flash'), items = [...flash.querySelectorAll('#steps > li')];
+  items.forEach((li, i) => { li.hidden = i >= R.stepShown; });
+  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra').forEach(x => { x.hidden = false; });
+  $('ratebar').innerHTML = backBarHTML();
+  wireRatebar(el);
+  const final = flash.querySelector('.steps-final');
+  if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
+  else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)
+}
+
+// ---------- scratchpad (B4) ----------
+// A pen icon in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
+// on this device. The drawing is never saved: a new card starts clean, a flip keeps it, leaving Review throws it away.
+const SCRATCH_KEY = 'study-sprint-scratch';
+const PEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5l3.5 3.5L8 19.5l-4.5 1 1-4.5z"/><path d="M14.5 6l3.5 3.5"/></svg>';
+const scratchPref = () => { try { return localStorage.getItem(SCRATCH_KEY) === '1'; } catch { return false; } };
+const setScratchPref = on => { try { localStorage.setItem(SCRATCH_KEY, on ? '1' : '0'); } catch { /* fine: it just isn't remembered */ } };
+let pad = null, padKey = 0, zoomWatch = null;
+function destroyPad() {
+  pad?.destroy(); pad = null;
+  zoomWatch?.disconnect(); zoomWatch = null;
+}
+function mountPad(kept) {
+  const card = $('flash');
+  if (!card) return;
+  padKey = R.shownAt;
+  pad = mountScratch(card, {
+    onChange: on => {
+      setScratchPref(on);
+      $('scratchBtn')?.setAttribute('aria-pressed', String(on));
+      card.classList.toggle('scratching', on);
+    }
+  });
+  if (kept) {
+    const g = pad.canvas.getContext('2d');
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(kept, 0, 0); g.restore();
+  }
+  // Hidden while the zoom viewer is open (it is a dialog added to the page).
+  const mine = pad;
+  const hideForZoom = () => {
+    const v = document.querySelector('dialog.occ-view') ? 'hidden' : '';
+    mine.canvas.style.visibility = v; mine.tools.style.visibility = v;
+  };
+  zoomWatch = new MutationObserver(hideForZoom);
+  zoomWatch.observe(document.body, { childList: true });
+  if (scratchPref()) pad.on();
+}
+function toggleScratch() {
+  if (!pad) return;
+  if (pad.isOn()) pad.off(); else pad.on();
+}
+window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/review')) destroyPad(); });
 
 // "Show whole picture": uncovers every box of the picture on the back (the CSS does it, from the figure's .peek class).
 function togglePeek(button) {
@@ -335,8 +466,9 @@ function togglePeek(button) {
 function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
-  const result = checkAnswer(value, plainText(R.current.card.back));
-  R.typed = { value, result };
+  // Either the answer as words or the text as written is right (typing the LaTeX works, and so does the literal text).
+  const { target, ...result } = checkTyped(value, answerTargets(R.current.card.back));
+  R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();
   flip(el);
@@ -368,17 +500,20 @@ async function answer(el, rating) {
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
     // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
-    let cardBefore = null;
+    let cardBefore = null, leeched = false;
     if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
       await db.saveCards([leech]);
       R.version = db.scheduleVersion();
       if (leech.suspended) dropFromSession(id); else replaceInSession(leech);
-      toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+      leeched = true;
+      toast(leech.suspended ? 'Leech: suspended. You can fix it at the end of the session.' : 'Leech: tagged “leech”. You can fix it at the end of the session.');
     }
     const spent = Math.min(now - R.shownAt, MAX_CARD_MS);
-    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent, cardBefore });
+    R.undo.push({ item, prev, logId, requeued, again: rating === Rating.Again, spent, cardBefore, leeched });
+    R.answered.add(id);
+    if (leeched) R.leeches.push(id);
     R.stats.reviewed++; R.stats.spent += spent;
     if (rating === Rating.Again) R.stats.again++;
     nextCard(el);
@@ -389,8 +524,8 @@ async function answer(el, rating) {
 
 // Take back the last rating: restore the card's old schedule and show it again.
 async function undo(el) {
+  if (R.busy || !R.undo.length) return;      // (check busy first: a second tap while the first undo is saving must not drop an entry)
   const u = R.undo.pop();
-  if (!u || R.busy) return;
   R.busy = true;
   try {
     const id = u.item.card.id;
@@ -404,9 +539,11 @@ async function undo(el) {
     }
     if (R.current) R.queue.unshift(R.current);
     R.stats.reviewed--; R.stats.spent -= u.spent;
+    if (!R.undo.some(x => x.item.card.id === id)) R.answered.delete(id);      // (a card answered twice stays answered until both are undone)
+    if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
-    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null;
+    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
   } finally {
@@ -495,47 +632,68 @@ async function quick(act) {
 
 // ---------- 3. finish ----------
 async function finish(el) {
+  destroyPad();
   R.active = false;
   publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   if (el.isConnected) drawSidebar();            // the sidebar's counts and ring, now the round is done
   const { reviewed, again, spent } = R.stats;
-  // Reviews due by the end of tomorrow in the decks you just studied.
-  const decks = new Set(R.deckIds);
-  const cards = (await db.getAll('cards')).filter(c => decks.has(c.deckId));
-  const ids = new Set(cards.map(c => c.id));
-  const tomorrowEnd = dayEnd(Date.now(), 1);
-  const dueTomorrow = (await db.getAll('cardStates')).filter(s => ids.has(s.cardId) && s.state !== NEW && s.due <= tomorrowEnd).length;
-  const streak = await loadStreak();
+  const endedEarly = !!R.current;
+  // What "Keep going" would start: exactly Today's Start session (the decks chosen on Today, otherwise all of them).
+  const data = await loadAll();
+  const allIds = data.decks.map(d => d.id);
+  const chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
+  const scope = chosen.length ? chosen : allIds;
+  const rest = countFor(data, scope);
+  // Reviews due by the end of tomorrow (already studied, not suspended or buried), in the same decks.
+  const inScope = withSubdecks(data, scope), tomorrowEnd = dayEnd(Date.now(), 1);
+  const dueTomorrow = data.cards.filter(c => {
+    const st = data.statesById.get(c.id);
+    return inScope.has(c.deckId) && st && st.state !== NEW && st.due <= tomorrowEnd;
+  }).length;
+  const streak = await loadStreak(null, { settings: R.settings });
   // You may have switched to another screen while that loaded: don't draw over it.
-  if (!location.hash.startsWith('#/review')) return;
+  if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
   const mins = Math.floor(spent / 60000), secs = Math.round((spent % 60000) / 1000);
+  const title = endedEarly ? 'Session ended' : reviewed && !rest.total ? 'Nice work' : 'Session done';
 
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">${R.current ? 'SESSION ENDED' : 'DONE FOR NOW'}</span><h1>${reviewed ? 'Nice work' : 'Review'}</h1></div></div>
+    <div class="screen-head"><div><span class="eyebrow mono">${endedEarly ? 'ENDED EARLY' : 'DONE FOR NOW'}</span><h1>${title}</h1></div></div>
     <div class="stats4">
       <div><div class="v">${reviewed}</div><div class="l">Cards reviewed</div></div>
       <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
       <div><div class="v">${mins}:${String(secs).padStart(2, '0')}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
-    <p class="note">${R.current ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <div class="res-actions">
+      ${rest.total
+        ? `<button class="btn primary" type="button" id="keepBtn" aria-label="Keep going: ${plural(rest.total, 'card')}">Keep going · ${plural(rest.total, 'card')}</button>
+           <button class="btn ghost" type="button" id="againBtn">Back to Today</button>`
+        : '<button class="btn primary" type="button" id="againBtn">Back to Today</button>'}
+    </div>
+    <p class="fin-links"><a class="link" href="#/decks">Decks</a>${R.undo.length ? '<span aria-hidden="true">·</span><button class="link" type="button" id="undoLast">Undo last</button>' : ''}</p>
+    <div id="finishMore" class="finish-more" hidden></div>
     <section class="finish-next" aria-label="What's next">
-      <p class="streak ${streak.studiedToday ? 'kept' : ''}">${icon('flame')}<b class="mono">${streak.days}</b> day streak
-        <span>${streak.studiedToday ? 'Kept for today' : streak.days ? 'Study today to keep it' : 'Study today to start one'}</span></p>
-      <p class="fn-line">${icon('calendar')} <span>${dueTomorrow ? `<b>${plural(dueTomorrow, 'card')}</b> due tomorrow.` : 'Nothing due tomorrow.'}</span></p>
+      ${streakHTML(streak)}
       <p class="fn-line">${icon('bolt')} <span>Lock it in with a quick Play round. Right answers on due cards count toward your schedule.</span></p>
       <a class="btn ghost" href="#/play">Play a round</a>
-    </section>
-    <div class="res-actions">
-      <button class="btn primary" type="button" id="againBtn">Back to Today</button>
-      <a class="btn ghost" href="#/decks">Decks</a>
-      ${R.undo.length ? '<button class="btn ghost" type="button" id="undoLast">Undo last</button>' : ''}
-    </div>`;
+    </section>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
+  $('keepBtn')?.addEventListener('click', async () => {
+    R = null; publishLive();
+    const { startStudy } = await import('./today.js');
+    const before = location.hash;
+    await startStudy({ deckIds: chosen });
+    // Today's Start with one deck goes to #/review/<deck>: the address we are already on, so nothing would redraw. Do it here.
+    if (location.hash === before && el.isConnected) renderReview(el, chosen.length === 1 ? chosen[0] : undefined);
+  });
   $('undoLast')?.addEventListener('click', () => undo(el));
+  const slot = $('finishMore'), cardIds = [...R.answered], leechIds = [...R.leeches];
+  slot.dataset.answered = cardIds.length; slot.dataset.leeches = leechIds.length;
+  import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'review', cardIds, leechIds })).catch(err => console.error(err));
   fx.finished(el, { complete: !R.current, reviewed });
 }
 
@@ -553,6 +711,8 @@ document.addEventListener('keydown', e => {
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
+    if (k === 'd') { e.preventDefault(); toggleScratch(); return; }
+    if (k === 'a' && stepsLeft()) { e.preventDefault(); revealStep(R.el, true); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
     if (k === 'z' && face?.querySelector('.occ-zoom')) {
@@ -568,6 +728,7 @@ document.addEventListener('keydown', e => {
     if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
     return;
   }
+  if (stepsLeft() && !inInput && ((!onButton && (e.key === ' ' || e.key === 'Enter')) || e.key === 'ArrowRight')) { e.preventDefault(); revealStep(R.el); return; }
   if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
   else if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
 });
