@@ -335,8 +335,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .streak.kept .ico{color:var(--hard);filter:drop-shadow(0 0 6px var(--hard-line))}
 .btn.big{min-height:56px;font-size:var(--fs-md);font-weight:600;letter-spacing:-.01em;line-height:1.2}
 .btn.big .ico{width:18px;height:18px}
-.th-done b{display:block;font-size:var(--fs-md);margin-bottom:2px}
+.th-done > b{display:block;font-size:var(--fs-md);margin-bottom:2px}
 .th-done p{margin:0 0 var(--s-3);color:var(--text-2);font-size:var(--fs-sm)}
+.th-done p b{color:var(--text);font-weight:600}
 .resume{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);margin-bottom:var(--s-3);background:var(--accent-tint);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:var(--fs-sm)}
 .resume .ico{vertical-align:-3px;margin-right:4px}
 .filtered{margin:calc(var(--s-1) * -1) 0 var(--s-5)}
