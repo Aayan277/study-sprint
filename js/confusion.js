@@ -1,7 +1,9 @@
 // "You mix these up" (B2). Pure functions (no DOM), tested by tests/confusion.test.js.
 //
-// Play and typed Review record `mixedWith: '<cardId>'` on a log row when the wrong answer given was the answer of
-// another card. This file turns those rows into pairs of cards that keep being confused.
+// Typed Review, and Play when it counts as reviews (Settings), record `mixedWith: '<cardId>'` on a log row when the wrong
+// answer given was the answer of another card. This file turns those rows into pairs of cards that keep being confused.
+// A practice-only Play round saves no rows; its results panel adds that round's own entries (finish-extras.js), so
+// lasting pairs come only from Review or from counted Play.
 
 import { similarity } from './game.js';
 import { dupKey } from './import.js';

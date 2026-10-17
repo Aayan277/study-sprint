@@ -19,6 +19,7 @@ await page.evaluate(async exam => {
     ['a', 'b', 'c', 'd', 'e'].map((f, i) => ({ id: 'z' + i, deckId: 'zzz', front: 'Z ' + f, back: 'Zed ' + f + ' answer', tags: [], created: i })));
   await db.setSetting('playPrefs', { deckId: 'zzz', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} });
   await db.setSetting('newPerDay', 3);
+  await db.setSetting('playCountsAsReviews', true);       // v4.10: Play is practice only unless on; these checks are the "on" behaviour
   await db.saveDeck({ ...(await db.getDeck('sample')), examDate: exam });
 }, iso(9));
 

@@ -137,12 +137,13 @@ await page.click('.sheet-x'); await page.click('#optBtn'); await page.click('#de
 await page.click('.tdeck:has-text("Short answers")'); await page.waitForSelector('#flash');
 await page.click('#showBtn'); await page.click('[data-rate="3"]'); await page.waitForFunction(() => !document.querySelector('.rv-card.flipped'));
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
-const answeredAll = await run(async () => (await (await import('./js/db.js')).getLogsSince((await import('./js/days.js')).dayStart())).filter(l => l.source === 'review').length);
-// (Round 2 A6: the "N answers today" line is gone; the goal ring's own number is the answers done)
+// v4.10: the ring's number is the cards finished today, each card once. Hand-computed for this session: sample-0 was rated Good
+// twice (a review, state 2, due in 2 days: one finished card) and t1 once (a new card in its learning steps, due in 10 minutes:
+// still "to go", not finished). So the ring reads 1 with all decks chosen, and 0 for deck L, which nothing was answered in.
 const goalDone = () => page.evaluate(() => { const b = document.querySelector('.th-main .ring-in b'); return b ? +b.textContent : null; });
-ok(answeredAll > 1 && (await goalDone()) === answeredAll, `all decks: the goal counts all ${answeredAll} answers`);
+ok((await goalDone()) === 1, 'all decks: the ring counts the 1 finished card (the learning card is still to go)');
 await page.click('#optBtn'); await page.click('#deckChips [data-deck="L"]'); await page.click('#optDone');
-ok((await goalDone()) === 0, 'one other deck chosen: its goal does not count answers from elsewhere');
+ok((await goalDone()) === 0, 'one other deck chosen: its ring does not count cards finished elsewhere');
 await page.click('#allDecksBtn');
 
 // ---- A failed Review load keeps you on Today, and nothing starts later ----

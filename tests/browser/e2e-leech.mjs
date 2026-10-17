@@ -24,6 +24,7 @@ const cards = await page.evaluate(async DAY => {
   const miss = (c, d) => ({ cardId: c.id, timestamp: now - d * DAY, source: 'play', mode: 'front', format: 'classic', correct: false, ms: 3000, rating: 1, state: 2, applied: true, reason: 'again' });
   await db.putMany('cardStates', [st(cs[0], now - 2 * DAY), st(cs[1], now - 2 * DAY), st(cs[2], now + 10 * DAY)]);
   await db.putMany('reviewLog', [10, 9, 8].map(d => miss(cs[1], d)));
+  await db.setSetting('playCountsAsReviews', true);       // v4.10: Play is practice only unless on; this file is about the "on" behaviour
   return cs.map((c, i) => ({ id: c.id, front: c.front, back: c.back, role: ['control', 'mixed', 'notdue'][i] || 'other' }));
 }, DAY);
 const byFront = Object.fromEntries(cards.map(c => [c.front, c]));
