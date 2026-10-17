@@ -318,7 +318,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .ring-in{position:relative;display:flex;flex-direction:column;align-items:center;line-height:1;color:var(--text)}
 .ring-check{width:30px;height:30px;color:var(--good)}
 
-/* Today: goal ring, streak and one big Start button, then a row per course */
+/* Today: today ring, streak and one big Start button, then a row per course */
 .today-hero{background:var(--hero);border-radius:var(--r-lg);box-shadow:var(--e-2);padding:var(--s-5);margin-bottom:var(--s-4)}
 .th-main{display:flex;align-items:center;gap:var(--s-4)}
 .th-main .ring-in b{font-size:1.5rem;font-weight:600;letter-spacing:-.04em}
@@ -1212,7 +1212,7 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   main[data-route="decks"] .decks.compact{align-items:start}
   main[data-route="decks"] .decks.compact .deck{min-height:0}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
-  /* Today: the goal and streak on the left, the big Start button beside them */
+  /* Today: the ring and streak on the left, the big Start button beside them */
   .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-8);align-items:center;padding:var(--s-8)}
   .th-big{font-size:2.25rem}
   .th-sub{font-size:var(--fs-base)}
@@ -1409,7 +1409,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .fx-ghost{border-radius:var(--r-xl);background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--rc) 22%,transparent),transparent 70%),var(--surface-1);
   box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent),0 0 40px -12px var(--rc)}
 
-/* C2. Today: the goal ring fills from where it was; a finished goal is green, with a halo and a check that pops */
+/* C2. Today: the today ring fills from where it was; a finished day is green, with a halo and a check that pops */
 .ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
 .ring.is-full .ring-fg{stroke:var(--good);filter:drop-shadow(0 0 6px var(--good-line))}
 .ring.fx-win{isolation:isolate}
@@ -1757,7 +1757,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 
 /* ---------- 22. Desktop sidebar (v3.9) ----------
    From 1024px the tab bar is a sidebar: Add cards on top, the four sections with a Today count and an exam dot, a Decks
-   list, and a footer (goal ring and streak, sync, Settings, light/dark, collapse). Collapsed it is a 72px icon rail.
+   list, and a footer (today ring and streak, sync, Settings, light/dark, collapse). Collapsed it is a 72px icon rail.
    Phones show none of the extras. js/sidebar.js fills it in; <html data-rail="on"> is the collapsed state.
    Only the app's colour tokens are used, so every skin passes the same contrast in dark, light and OLED. */
 .side-add,.side-decks,.side-foot,.side-badge,.side-dot,.side-tip{display:none}

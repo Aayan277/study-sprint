@@ -126,21 +126,28 @@ export function countFor(data, deckIds) {
 //   state     'todo' (work left), 'done' (finished today's work) or 'nothing' (nothing was due at all today)
 //   frac      the ring's fill: done / total, and full (1) when there was nothing to do
 //   n, of     the numbers the ring shows (n of 1 for 'nothing', so the ring is never 0/0)
-//   allLearned true when none of these decks has an unseen new card left
+//   allLearned true when none of these decks (and subdecks) has an unseen new card left, suspended ones included
 export function todayRing(data, deckIds, counts, now = Date.now()) {
   const ids = deckIds.length ? withSubdecks(data, deckIds) : null;
   const end = dayEnd(now);
   const finished = new Set();
+  const all = data.allCards || data.cards;
+  const cardOf = new Map(all.map(c => [c.id, c]));
   for (const l of data.logs) {
     if (!(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
     if (ids && !ids.has(data.deckOf.get(l.cardId))) continue;
     const st = data.statesById.get(l.cardId);
-    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end) continue;      // still to come back today: part of `left`
+    // Still to come back today: part of `left`. But a card suspended or buried since is out of the queue (so not in
+    // `left`): it stays done, so the total does not shrink.
+    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end && !isHidden(cardOf.get(l.cardId) || {}, now)) continue;
     finished.add(l.cardId);
   }
   const done = finished.size, left = counts.total, total = done + left;
   const state = left > 0 ? 'todo' : done > 0 ? 'done' : 'nothing';
-  const allLearned = data.cards.length > 0 && !data.split.fresh.some(c => !ids || ids.has(c.deckId));
+  // "All cards learned": none of these decks (and their subdecks) has an unseen new card. Suspended or buried unseen cards
+  // count as not learned (they were never studied), which is why this reads every card, not the visible ones.
+  const inScope = all.filter(c => !ids || ids.has(c.deckId));
+  const allLearned = inScope.length > 0 && !inScope.some(c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; });
   return { done, left, total, state, allLearned, frac: total ? done / total : 1, n: total ? done : 1, of: total || 1 };
 }
 
