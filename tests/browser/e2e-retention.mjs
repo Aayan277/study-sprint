@@ -63,7 +63,6 @@ const settingsPage = async p => {
   await p.evaluate(() => { document.getElementById('advanced').open = true; });
   await p.waitForSelector('#healthOpen');
 };
-const setting = (p, key) => p.evaluate(async k => (await (await import('./js/db.js')).getSettings())[k], key);
 
 const LOOKS = [[375, 780, 'original', 'dark'], [1440, 900, 'original', 'light'], [375, 780, 'clinical', 'light'], [1440, 900, 'clinical', 'dark']];
 for (const [w, h, ui, mode] of LOOKS) {
@@ -81,6 +80,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   ok(await p.evaluate(() => document.getElementById('healthOpen').closest('#optRow') !== null), `${tag}: ...inside the Personal parameters row`);
   ok((await p.textContent('#ignoreHint')) === 'Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).', `${tag}: the Ignore reviews before hint`);
   ok((await p.getAttribute('#ignoreBefore', 'type')) === 'date' && await p.isHidden('#ignoreClear'), `${tag}: a date picker, and no Clear while it is empty`);
+  ok((await p.getAttribute('#ignoreBefore', 'max')) === await p.evaluate(async () => (await import('./js/sched-settings.js')).todayISO()), `${tag}: the date picker stops at today`);
   await p.fill('#ignoreBefore', '2020-02-03');
   await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).ignoreBefore === '2020-02-03');
   ok(await p.isVisible('#ignoreClear'), `${tag}: the date is saved (a synced setting) and Clear appears`);
@@ -105,7 +105,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   await p.click('#hcClose');
 
   // "Ignore reviews before" is respected: everything ignored → not enough to judge
-  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('ignoreBefore', new Date(Date.now() + 86400000).toISOString().slice(0, 10)); });
+  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('ignoreBefore', (await import('./js/sched-settings.js')).todayISO()); });
   await p.reload(); await p.waitForSelector('#advanced'); await p.evaluate(() => { document.getElementById('advanced').open = true; });
   await p.click('#healthOpen'); await p.waitForSelector('#sheet[open] .hc-sec', { timeout: 20000 });
   ok(/Not enough yet/.test(await p.textContent('#hcFit')), `${tag}: with every review ignored the fit says "Not enough yet"`);
@@ -137,15 +137,27 @@ for (const [w, h, ui, mode] of LOOKS) {
   const sheetText = await p.textContent('#sheet');
   ok(/estimate/i.test(sheetText) && /not a promise/.test(sheetText), `${tag}: it says it is an estimate`);
   ok(/Reviews a day/.test(sheetText) && /Target retention/.test(sheetText) && /Ready on exam day/.test(sheetText), `${tag}: the axes and the exam chart are labelled`);
-  ok(/Now 90%/.test(sheetText) && /Suggested \d\d%/.test(sheetText + ' Suggested 80%') , `${tag}: the current and suggested targets are marked`);
+  ok(/Now (=|90%)/.test(sheetText) && /Suggested \d\d%/.test(sheetText), `${tag}: the current and suggested targets are marked on the chart`);
+  ok(+(await p.getAttribute('svg.rc-svg', 'aria-valuenow')) === 90, `${tag}: the pick starts on your own target`);
+  ok(/Above about \d\d%, each extra point costs many more reviews/.test(sheetText), `${tag}: the knee is explained`);
+  ok(/\+1 point costs about [\d.]+ more reviews a day \(\+\d+%\)/.test(sheetText), `${tag}: the cost of one more point at your target is shown: ${(sheetText.match(/At your[^.]*\./) || ["none"])[0]}`);
+  ok(/Recall before last pass/.test(sheetText) && /before the final pass/.test(sheetText) && /last 3 days: about \d+ reviews a day/.test(sheetText), `${tag}: exam: recall before the final pass and the load of the last 3 days`);
+  ok(/Suggested: \d\d%, the lowest target that keeps your expected recall on exam day/.test(sheetText), `${tag}: the exam deck's suggestion is based on them`);
   ok(await p.evaluate(() => document.querySelector('.rc-table') !== null), `${tag}: the same numbers are in a table`);
   ok((await p.locator('.rc-table tbody tr').count()) === 23, `${tag}: ...23 rows`);
+  ok((await p.locator('.rc-table thead th').count()) === 7, `${tag}: ...with the final-pass columns for the exam deck`);
   await sheetFits(p, `${tag} helper`);
+  await p.locator('.rc-sugg').scrollIntoViewIfNeeded();
+  await p.screenshot({ path: `${SP}/retention-${look}-suggestion.png` });
+  await p.locator('svg.rc-svg').first().scrollIntoViewIfNeeded();
   // arrow keys move the pick; the readout follows
   await p.focus('svg.rc-svg');
+  await p.evaluate(() => { window.__svg = document.querySelector('svg.rc-svg'); });
   const v0 = +(await p.getAttribute('svg.rc-svg', 'aria-valuenow'));
   await p.keyboard.press('ArrowRight');
   ok(+(await p.getAttribute('svg.rc-svg', 'aria-valuenow')) === v0 + 1, `${tag}: the right arrow picks the next target`);
+  ok(await p.evaluate(() => window.__svg === document.querySelector('svg.rc-svg') && document.activeElement === window.__svg), `${tag}: ...updating the chart in place (same element, still focused)`);
+  ok((await p.getAttribute('svg.rc-svg', 'aria-valuetext')).startsWith(`${v0 + 1}%`), `${tag}: ...and its spoken value follows`);
   // a tap on the chart picks the nearest target
   const box = await p.locator('svg.rc-svg').first().boundingBox();
   await p.mouse.click(box.x + box.width * ((44 + (0.85 - 0.75) / 0.22 * (360 - 44 - 14)) / 360), box.y + box.height * 0.5);
@@ -161,6 +173,15 @@ for (const [w, h, ui, mode] of LOOKS) {
   ok(await p.isDisabled('[data-rc=use]'), `${tag}: ...and the button then says it is the target`);
   await p.click('#rcClose');
   ok(!(await p.isVisible('#sheet')), `${tag}: the sheet closes`);
+
+  // a review limit: the suggestion fits it and says so
+  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewLimit', 12); });
+  await p.reload(); await p.waitForSelector('#advanced');
+  await p.click('#retHelp'); await p.waitForSelector('#sheet[open] svg.rc-svg', { timeout: 15000 });
+  const limText = await p.textContent('#sheet');
+  ok(/your limit of 12/.test(limText), `${tag}: with a review limit the suggestion mentions it (${(limText.match(/[^.]*limit of 12[^.]*\./) || [''])[0].trim().slice(0, 90)})`);
+  await p.click('#rcClose');
+  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewLimit', null); });
 
   // ---------- the deck editor: the same helper, inline ----------
   await p.goto(URL + '#/deck/A'); await deckMenu(p); await p.click('#editDeck');

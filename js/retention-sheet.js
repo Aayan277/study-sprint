@@ -7,12 +7,13 @@
 //   mountRetentionHelper(root, { deckId, current, onPick })   the same, inside an element (the deck editor can't open a second sheet)
 //     current()  the target now, as a whole percent (Settings: the saved one; the deck editor: the slider)
 //     onPick(pct)  called with a whole percent when the person presses "Use N%"
+//   Both return/offer stop(): cancels the work (the sheet does it when it closes; the deck editor when it closes).
 
 import * as db from './db.js';
 import { runJob } from './worker-job.js';
-import { ratingProbs, HORIZONS, RETENTION_MIN, RETENTION_MAX, SIM_CAP, efficiency, suggestRetention, suggestFor, SUGGEST_FLOOR } from './retention-sim.js';
+import { ratingProbs, HORIZONS, RETENTION_MIN, RETENTION_MAX, SIM_CAP, suggestion, marginalCost, pickSelected, KNEE_MIN, EXAM_TOLERANCE, EXAM_LOAD_TOLERANCE } from './retention-sim.js';
 import { effectiveDeck, subtreeIds } from './deck-tree.js';
-import { examInfo } from './exam.js';
+import { examInfo, FINAL_DAYS } from './exam.js';
 import { deckSchedulerOptions, schedulerOptions } from './sched-settings.js';
 import { dayStart } from './days.js';
 import { niceMax } from './stats-calc.js';
@@ -24,8 +25,8 @@ const HORIZON_SHORT = { 30: '30 days', 90: '90 days', 365: '1 year' };
 
 // ---------- what to simulate ----------
 // Reads the cards in scope and builds the input for simulateAll(). Returns { input, info } or { empty: true }.
-//   info: { started, unseen, skipped, groups: [{ exam, names, date }], usingOwnWeights, ownProbs, scope }
-export async function gatherInput({ deckId = '', now = Date.now() } = {}) {
+//   info: { started, unseen, skipped, groups: [{ exam, names, date }], usingOwnWeights, ownProbs, reviewLimit }
+export async function gatherInput({ deckId = '', now = Date.now(), current = null } = {}) {
   const srs = await import('./srs.js');
   const [settings, decks, cards, states, rows] = await Promise.all([db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(now - 90 * DAY)]);
   const inside = deckId ? subtreeIds(decks, deckId) : null;
@@ -59,7 +60,8 @@ export async function gatherInput({ deckId = '', now = Date.now() } = {}) {
   }
   if (!existing.length && !unseen.length) return { empty: true };
   const params = settings.fsrsParams?.w;
-  const w = params ? params.slice() : srs.default_w.slice();
+  // The weights as the scheduler will use them (clipped for the number of relearning steps), like everywhere else the weights are used.
+  const w = srs.clipParameters(params ? params.slice() : srs.default_w.slice(), opts.relearningSteps.length, true);
   const probs = ratingProbs(rows);
   const deckRow = deckId ? decks.find(d => d.id === deckId) : null;
   const newPerDay = Number.isFinite(deckRow?.newPerDay) ? deckRow.newPerDay : settings.newPerDay;
@@ -67,70 +69,107 @@ export async function gatherInput({ deckId = '', now = Date.now() } = {}) {
     input: {
       w, existing, unseen: Int16Array.from(unseen), groups: groups.map(g => ({ exam: g.exam })),
       newPerDay: Math.max(0, newPerDay || 0), learnSteps: opts.learningSteps.length, relearnSteps: opts.relearningSteps.length,
-      maxInterval: opts.maxInterval, reviewProbs: probs.review, firstProbs: probs.first, seed: 1
+      maxInterval: opts.maxInterval, reviewProbs: probs.review, firstProbs: probs.first, seed: 1,
+      current: Number.isFinite(current) ? current / 100 : undefined          // worked out first, so it is always there
     },
-    info: { started: existing.length, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own, scope: deckId ? 'deck' : 'all' }
+    info: {
+      started: existing.length, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own,
+      reviewLimit: Number.isFinite(settings.reviewLimit) && settings.reviewLimit > 0 ? settings.reviewLimit : null
+    }
   };
 }
 
 // ---------- the chart ----------
-// One line (a single series, so no legend: the heading names it), drawn as inline SVG. Axes are labelled, the grid is faint,
-// the markers differ by shape as well as colour (ring = your target now, diamond = suggested, filled dot = the one picked).
-// The chart is a slider as far as the keyboard and screen readers are concerned (arrow keys move the pick), and the same
-// numbers are in a table under it.
-const W = 360, H = 232, M = { l: 44, r: 14, t: 26, b: 44 };
+// One line (a single series, so no legend: the caption names it), drawn as inline SVG. Axes are labelled, the grid is faint, the
+// markers differ by shape as well as by place (ring = your target now, diamond = suggested, filled dot = the one picked).
+// The chart is a slider as far as the keyboard and screen readers are concerned (arrow keys move the pick), and the same numbers
+// are in a table under it. Picking moves the pick marker and the aria text in place (movePick), the chart is not drawn again.
+const W = 360, H = 250, M = { l: 48, r: 14, t: 44, b: 48 };
+const pct = r => Math.round(r * 100);
 
-export function chartSVG({ points, value, format, yLabel, id, selected, current, suggested, yMax }) {
-  const xs = r => M.l + (r - RETENTION_MIN / 100) / ((RETENTION_MAX - RETENTION_MIN) / 100) * (W - M.l - M.r);
+// The vertical axis runs from yMin (0 unless given) to yMax (a round number above the largest value unless given).
+export function chartGeom(points, value, yMax, yMin = 0) {
   const top = yMax ?? niceMax(Math.max(...points.map(p => value(p)), 0.0001));
-  const ys = v => H - M.b - (Math.min(v, top) / top) * (H - M.t - M.b);
-  const ticks = [0, 1, 2, 3, 4].map(i => top * i / 4);
+  const xs = r => M.l + (r - RETENTION_MIN / 100) / ((RETENTION_MAX - RETENTION_MIN) / 100) * (W - M.l - M.r);
+  const ys = v => H - M.b - ((Math.min(Math.max(v, yMin), top) - yMin) / (top - yMin)) * (H - M.t - M.b);
+  return { top, xs, ys };
+}
+
+export function chartSVG({ points, value, format, yLabel, id, selected, current, suggested, yMax, yMin = 0 }) {
+  const { top, xs, ys } = chartGeom(points, value, yMax, yMin);
+  const ticks = [0, 1, 2, 3, 4].map(i => yMin + (top - yMin) * i / 4);
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${xs(p.retention).toFixed(1)} ${ys(value(p)).toFixed(1)}`).join('');
-  const at = r => points.find(p => Math.abs(p.retention - r) < 1e-9);
-  const pct = r => Math.round(r * 100);
-  const marker = (r, cls, label, dy) => {
+  const at = r => (r === null || r === undefined ? undefined : points.find(p => Math.abs(p.retention - r) < 1e-9));
+  const mid = (M.l + W - M.r) / 2;
+  // the labels sit on two rows above the plot, so "Now" and "Suggested" never run into each other
+  const marker = (r, cls, label, row) => {
     const p = at(r);
     if (!p) return '';
     const x = xs(r), y = ys(value(p));
-    return `<g class="rc-mark ${cls}"><line x1="${x}" x2="${x}" y1="${M.t - 6}" y2="${H - M.b}" class="rc-guide"/>` +
+    return `<g class="rc-mark ${cls}"><line x1="${x}" x2="${x}" y1="${M.t - 8}" y2="${H - M.b}" class="rc-guide"/>` +
       (cls === 'sug' ? `<path d="M${x} ${y - 7}L${x + 7} ${y}L${x} ${y + 7}L${x - 7} ${y}Z" class="rc-diamond"/>` : `<circle cx="${x}" cy="${y}" r="6.5" class="rc-ring"/>`) +
-      `<text x="${Math.min(Math.max(x, M.l + 28), W - M.r - 28)}" y="${M.t - 10 + dy}" text-anchor="middle" class="rc-lab">${esc(label)}</text></g>`;
+      `<text x="${Math.min(Math.max(x, M.l + 40), W - M.r - 40)}" y="${M.t - 26 + row * 15}" text-anchor="middle" class="rc-lab">${esc(label)}</text></g>`;
   };
   const sel = at(selected);
-  const sx = sel ? xs(sel.retention) : 0, sy = sel ? ys(value(sel)) : 0;
-  const same = suggested !== null && Math.abs(current - suggested) < 1e-9;
+  const same = suggested !== null && suggested !== undefined && Math.abs(current - suggested) < 1e-9;
   const xTicks = [75, 80, 85, 90, 95];
   return `<svg class="rc-svg" viewBox="0 0 ${W} ${H}" id="${id}" role="slider" tabindex="0" aria-valuemin="${RETENTION_MIN}" aria-valuemax="${RETENTION_MAX}" aria-valuenow="${pct(selected)}" aria-valuetext="${esc(sel ? `${pct(selected)}% target: ${format(value(sel))}` : '')}" aria-label="${esc(yLabel)} for each target retention. Use the left and right arrow keys, or tap the chart, to pick a target.">
     ${ticks.map(t => `<line x1="${M.l}" x2="${W - M.r}" y1="${ys(t)}" y2="${ys(t)}" class="rc-grid"/><text x="${M.l - 6}" y="${ys(t) + 4}" text-anchor="end" class="rc-tick">${esc(format(t, true))}</text>`).join('')}
-    ${xTicks.map(t => `<text x="${xs(t / 100)}" y="${H - M.b + 16}" text-anchor="middle" class="rc-tick">${t}%</text>`).join('')}
+    ${xTicks.map(t => `<text x="${xs(t / 100)}" y="${H - M.b + 17}" text-anchor="middle" class="rc-tick">${t}%</text>`).join('')}
     <line x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}" class="rc-axis"/>
-    <text x="${(M.l + W - M.r) / 2}" y="${H - 6}" text-anchor="middle" class="rc-axis-title">Target retention</text>
-    <text x="12" y="${(M.t + H - M.b) / 2}" text-anchor="middle" transform="rotate(-90 12 ${(M.t + H - M.b) / 2})" class="rc-axis-title">${esc(yLabel)}</text>
+    <text x="${mid}" y="${H - 6}" text-anchor="middle" class="rc-axis-title">Target retention</text>
+    <text x="13" y="${(M.t + H - M.b) / 2}" text-anchor="middle" transform="rotate(-90 13 ${(M.t + H - M.b) / 2})" class="rc-axis-title">${esc(yLabel)}</text>
     <path d="${line}" class="rc-line" fill="none"/>
     ${points.map(p => `<circle cx="${xs(p.retention)}" cy="${ys(value(p))}" r="2.2" class="rc-dot"/>`).join('')}
     ${marker(current, 'now', same ? `Now = suggested ${pct(current)}%` : `Now ${pct(current)}%`, 0)}
-    ${suggested !== null && !same ? marker(suggested, 'sug', `Suggested ${pct(suggested)}%`, 0) : same ? '' : ''}
-    ${sel ? `<line x1="${sx}" x2="${sx}" y1="${M.t}" y2="${H - M.b}" class="rc-pick-line"/><circle cx="${sx}" cy="${sy}" r="5" class="rc-pick"/>` : ''}
+    ${suggested !== null && suggested !== undefined && !same ? marker(suggested, 'sug', `Suggested ${pct(suggested)}%`, 1) : ''}
+    <line class="rc-pick-line" x1="${sel ? xs(sel.retention) : 0}" x2="${sel ? xs(sel.retention) : 0}" y1="${M.t - 8}" y2="${H - M.b}"/><circle class="rc-pick" cx="${sel ? xs(sel.retention) : 0}" cy="${sel ? ys(value(sel)) : 0}" r="5"/>
   </svg>`;
 }
 
+// Move the pick marker and the aria text of an already drawn chart.
+export function movePick(svg, { points, value, format, yMax, yMin }, selected) {
+  const sel = points.find(p => Math.abs(p.retention - selected) < 1e-9);
+  if (!sel) return;
+  const { xs, ys } = chartGeom(points, value, yMax, yMin);
+  const line = svg.querySelector('.rc-pick-line'), dot = svg.querySelector('.rc-pick');
+  line.setAttribute('x1', xs(selected)); line.setAttribute('x2', xs(selected));
+  dot.setAttribute('cx', xs(selected)); dot.setAttribute('cy', ys(value(sel)));
+  svg.setAttribute('aria-valuenow', String(pct(selected)));
+  svg.setAttribute('aria-valuetext', `${pct(selected)}% target: ${format(value(sel))}`);
+}
+
 const fmtReviews = (v, tick) => (tick ? String(Math.round(v)) : `${v < 10 ? v.toFixed(1) : Math.round(v)} reviews a day`);
-const fmtPct = (v, tick) => `${Math.round(v * 100)}${tick ? '%' : '% ready'}`;
+const fmtRecall = (v, tick) => `${Math.round(v * 100)}${tick ? '%' : '% expected recall'}`;
+const num1 = v => (v < 10 ? v.toFixed(1) : String(Math.round(v)));
 
 // ---------- the sheet content ----------
 const INTRO = 'This estimates how many reviews a day each target would give you, and how much you would remember, by replaying your own cards forward with your memory settings. It is an estimate, not a promise: real days vary, and it assumes you do every review that is due.';
 
-function describeSuggestion(horizon, exam) {
-  return exam
-    ? `Suggested: the lowest-workload target that keeps you within 2 points of the best readiness on exam day (never below ${Math.round(SUGGEST_FLOOR * 100)}%).`
-    : `Suggested: the lowest-workload target whose cards remembered per review is within 2% of the best, over ${HORIZON_NAMES[horizon]} (never below ${Math.round(SUGGEST_FLOOR * 100)}%).`;
+// The wording of the suggestion, from suggestion()'s result. Every sentence says what it is based on.
+export function suggestionText(s, { current, reviewLimit }) {
+  const lines = [];
+  const knee = s.knee !== null ? `${pct(s.knee)}%` : '';
+  if (s.kind === 'none' && reviewLimit && !s.limitFits && s.curve) {
+    lines.push(`Even ${pct(KNEE_MIN)}% needs about ${num1(s.curve.values[0])} reviews a day, more than your limit of ${reviewLimit}. With a limit that low, some reviews will wait.`);
+  } else if (s.target !== null) {
+    if (s.kind === 'limit') {
+      lines.push(`Suggested: ${pct(s.target)}%, the highest target whose reviews fit your limit of ${reviewLimit} a day.${s.examTarget !== null && s.examTarget > s.target ? ` For the exam alone ${pct(s.examTarget)}% would be better.` : ''}`);
+    } else if (s.kind === 'exam') {
+      lines.push(`Suggested: ${pct(s.target)}%, the lowest target that keeps your expected recall on exam day within ${Math.round(EXAM_TOLERANCE * 100)} points of the best before the final pass, with a final pass within ${Math.round(EXAM_LOAD_TOLERANCE * 100)}% of the lightest.`);
+    } else lines.push(`Suggested: ${pct(s.target)}%, where the workload curve bends.`);
+    if (s.exam) lines.push(`At ${pct(s.target)}%: about ${Math.round(s.exam.preRecall * 100)}% expected recall on exam day before the final pass; last ${FINAL_DAYS} days: about ${Math.round(s.exam.passLoad)} reviews a day.`);
+  }
+  if (knee && s.kind !== 'none') lines.push(`Above about ${knee}, each extra point costs many more reviews.`);
+  const m = s.curve ? marginalCost(s.curve, current) : null;
+  if (m) lines.push(`At your ${pct(current)}% now, +1 point costs about ${num1(m.perDay)} more reviews a day (+${Math.round(m.pct * 100)}%).`);
+  return lines;
 }
 
 export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
   let handle = null, closed = false;
-  let horizon = 90, selected = null, run = null, examIx = 0;
+  let horizon = 90, selected = null, run = null, examIx = 0, drawn = [];
   const uid = `rc${Math.random().toString(36).slice(2, 7)}`;
-
   const stop = () => { closed = true; handle?.cancel(); };
 
   const showError = msg => { root.innerHTML = `<div class="rc"><p class="opt-result bad">${esc(msg)}</p><div class="rc-actions"><button type="button" class="btn ghost small" data-rc="retry">Try again</button></div></div>`; root.querySelector('[data-rc=retry]').addEventListener('click', start); };
@@ -144,7 +183,7 @@ export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
     const bar = root.querySelector('[data-rc=bar]'), phase = root.querySelector('[data-rc=phase]');
     root.querySelector('[data-rc=cancel]').addEventListener('click', () => { handle?.cancel(); });
     let data;
-    try { data = await gatherInput({ deckId }); } catch (err) { console.error(err); showError("Couldn't read your cards."); return; }
+    try { data = await gatherInput({ deckId, current: current() }); } catch (err) { console.error(err); showError("Couldn't read your cards."); return; }
     if (closed) return;
     if (data.empty) { root.innerHTML = '<div class="rc"><p class="opt-result">There are no cards to look at yet. Add some cards and come back.</p></div>'; return; }
     phase.textContent = 'Trying each target…';
@@ -163,28 +202,51 @@ export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
     if (out.status !== 'done') { showError(out.status === 'timeout' ? 'That took too long on this device.' : "Couldn't work it out on this device."); return; }
     run = { result: out.result, info: data.info };
     examIx = 0;
-    selected = Math.round(current()) / 100;
+    selected = pickSelected(out.result.points, current() / 100);          // always starts on your own target
     draw();
   }
 
-  function examGroups() { return run.info.groups.map((g, i) => ({ ...g, i })).filter(g => g.exam !== null && run.result.points.some(p => p.exams.some(e => e.grp === g.i))); }
+  const examGroups = () => run.info.groups.map((g, i) => ({ ...g, i })).filter(g => g.exam !== null && run.result.points.some(p => p.exams.some(e => e.grp === g.i)));
+  const nowR = () => current() / 100;
+  const examOf = p => { const ex = examGroups()[examIx]; return ex ? p.exams.find(e => e.grp === ex.i) : null; };
+
+  // The parts that depend on which target is picked: the readout, the button and the table row.
+  function readoutHTML() {
+    const { info } = run;
+    const sel = run.result.points.find(p => Math.abs(p.retention - selected) < 1e-9);
+    const h = sel.horizons[horizon];
+    const cur = run.result.points.find(p => Math.abs(p.retention - nowR()) < 1e-9);
+    const diff = cur && cur !== sel ? h.reviewsPerDay - cur.horizons[horizon].reviewsPerDay : null;
+    const ex = examGroups()[examIx], e = examOf(sel);
+    const over = info.reviewLimit && h.reviewsPerDay > info.reviewLimit;
+    return `<p><b class="mono">${pct(selected)}%</b> target: about <b class="mono">${num1(h.reviewsPerDay)}</b> reviews a day. By the end of ${HORIZON_NAMES[horizon]} you would remember about <b class="mono">${Math.round(h.recall * 100)}%</b> of the cards you have started.${diff !== null && Math.abs(diff) >= 0.5 ? ` That is ${Math.abs(Math.round(diff))} ${diff > 0 ? 'more' : 'fewer'} a day than your ${pct(nowR())}% now.` : ''}</p>
+      ${over ? `<p>That is more than your limit of ${info.reviewLimit} reviews a day, so some reviews would wait for the next day.</p>` : ''}
+      ${e ? `<p>Exam day (${esc(ex.date)}), ${esc(ex.names.slice(0, 2).join(', ') + (ex.names.length > 2 ? ` and ${ex.names.length - 2} more` : ''))}: if you stopped reviewing ${FINAL_DAYS} days before, you would remember about <b class="mono">${Math.round(e.preRecall * 100)}%</b> of these cards on average, and <b class="mono">${Math.round(e.preShare * 100)}%</b> would be ready (90% or better). The exam’s final pass then makes the last ${FINAL_DAYS} days busy: about <b class="mono">${Math.round(e.passLoad)}</b> reviews a day. After it, about <b class="mono">${Math.round(e.share * 100)}%</b> are ready.</p>` : ''}`;
+  }
+  const useLabel = () => (Math.abs(selected - nowR()) < 1e-9 ? `${pct(selected)}% is your target` : `Use ${pct(selected)}%`);
 
   function draw() {
     const { result, info } = run;
     const pts = result.points;
-    const nowR = Math.round(current()) / 100;
     const exams = examGroups();
     const ex = exams[Math.min(examIx, exams.length - 1)];
-    const sugg = suggestFor(pts, horizon, ex ? ex.i : null);
-    if (!pts.some(p => Math.abs(p.retention - selected) < 1e-9)) selected = pts[pts.length - 1].retention;
-    const sel = pts.find(p => Math.abs(p.retention - selected) < 1e-9);
-    const h = sel.horizons[horizon];
-    const cur = pts.find(p => Math.abs(p.retention - nowR) < 1e-9);
+    const s = suggestion(pts, horizon, { reviewLimit: info.reviewLimit, examGroup: ex ? ex.i : null });
+    run.suggested = s;
+    const lines = suggestionText(s, { current: nowR(), reviewLimit: info.reviewLimit });
     const workload = p => p.horizons[horizon].reviewsPerDay;
-    const recall = p => p.horizons[horizon].recall;
-    const exSel = ex ? sel.exams.find(e => e.grp === ex.i) : null;
-    const diff = cur && cur !== sel ? workload(sel) - workload(cur) : null;
-    const rowHTML = p => `<tr${p === sel ? ' class="sel"' : ''}><th scope="row">${Math.round(p.retention * 100)}%</th><td>${Math.round(workload(p))}</td><td>${Math.round(recall(p) * 100)}%</td>${ex ? `<td>${Math.round((p.exams.find(e => e.grp === ex.i)?.share ?? 0) * 100)}%</td>` : ''}</tr>`;
+    const preRecall = p => (p.exams.find(e => e.grp === ex.i)?.preRecall ?? 0);
+    drawn = [{ id: `${uid}c1`, points: pts, value: workload, format: fmtReviews, yLabel: 'Reviews a day' }];
+    if (ex) {
+      // (the axis starts below the lowest value, not at 0, with a span that gives whole-percent ticks: 8, 12, 16, 20, 40, 60, 80 or 100 points)
+      const lowest = Math.min(...pts.map(preRecall));
+      const span = [0.08, 0.12, 0.16, 0.2, 0.4, 0.6, 0.8, 1].find(x => x >= 1 - lowest + 0.02) ?? 1;
+      drawn.push({ id: `${uid}c2`, points: pts, value: preRecall, format: fmtRecall, yLabel: 'Recall before pass', yMax: 1, yMin: Math.round((1 - span) * 100) / 100 });
+    }
+    const chart = d => chartSVG({ ...d, selected, current: nowR(), suggested: s.target });
+    const rowHTML = p => {
+      const e = ex ? p.exams.find(x => x.grp === ex.i) : null;
+      return `<tr data-r="${p.retention}"${Math.abs(p.retention - selected) < 1e-9 ? ' class="sel"' : ''}><th scope="row">${pct(p.retention)}%</th><td>${Math.round(workload(p))}</td><td>${Math.round(p.horizons[horizon].recall * 100)}%</td>${e ? `<td>${Math.round(e.preRecall * 100)}%</td><td>${Math.round(e.preShare * 100)}%</td><td>${Math.round(e.passLoad)}</td><td>${Math.round(e.share * 100)}%</td>` : ''}</tr>`;
+    };
     root.innerHTML = `<div class="rc">
       <p class="opt-intro">${esc(INTRO)}</p>
       <div class="chips rc-h" role="radiogroup" aria-label="Look ahead">
@@ -192,56 +254,67 @@ export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
       </div>
       <figure class="rc-fig">
         <figcaption class="rc-cap">Average reviews a day over the next ${HORIZON_NAMES[horizon]}</figcaption>
-        ${chartSVG({ points: pts, value: workload, format: fmtReviews, yLabel: 'Reviews a day', id: `${uid}c1`, selected, current: nowR, suggested: sugg })}
+        ${chart(drawn[0])}
       </figure>
-      <div class="rc-detail" aria-live="polite">
-        <p><b class="mono">${Math.round(selected * 100)}%</b> target: about <b class="mono">${h.reviewsPerDay < 10 ? h.reviewsPerDay.toFixed(1) : Math.round(h.reviewsPerDay)}</b> reviews a day. By the end of ${HORIZON_NAMES[horizon]} you would remember about <b class="mono">${Math.round(h.recall * 100)}%</b> of the cards you have started.${diff !== null && Math.abs(diff) >= 0.5 ? ` That is ${Math.abs(Math.round(diff))} ${diff > 0 ? 'more' : 'fewer'} a day than your ${Math.round(nowR * 100)}% now.` : ''}</p>
-        ${exSel ? `<p>On exam day (${esc(ex.date)}), about <b class="mono">${Math.round(exSel.share * 100)}%</b> of the cards in ${esc(ex.names.slice(0, 2).join(', ') + (ex.names.length > 2 ? ` and ${ex.names.length - 2} more` : ''))} would be ready (90% or better).</p>` : ''}
-      </div>
-      ${exams.length ? `<figure class="rc-fig">
+      <div class="rc-detail" data-rc="detail" aria-live="polite">${readoutHTML()}</div>
+      ${ex ? `<figure class="rc-fig">
         ${exams.length > 1 ? `<label class="rc-exam-pick">Exam <select class="select" data-rc="exam">${exams.map((g, k) => `<option value="${k}" ${k === examIx ? 'selected' : ''}>${esc(g.names[0])} · ${esc(g.date)}</option>`).join('')}</select></label>` : ''}
-        <figcaption class="rc-cap">Ready on exam day (${esc(ex.date)}): cards you would remember at 90% or better</figcaption>
-        ${chartSVG({ points: pts, value: p => p.exams.find(e => e.grp === ex.i)?.share ?? 0, format: fmtPct, yLabel: 'Ready on exam day', id: `${uid}c2`, selected, current: nowR, suggested: sugg, yMax: 1 })}
-        <p class="rc-note">The exam’s own rules are included: reviews are kept before exam day, the target rises over the last two weeks, and a last pass covers the weakest cards. That is why most targets end up close.</p>
+        <figcaption class="rc-cap">Recall on exam day (${esc(ex.date)}), before the final pass: the average chance of remembering a card if you stopped reviewing ${FINAL_DAYS} days before</figcaption>
+        ${chart(drawn[1])}
+        <p class="rc-note">The exam’s own rules are included: the target rises over the last two weeks, and cards you would remember at under 99% on exam day get one more review in the last ${FINAL_DAYS} days, spread over those days. That final pass lifts every target to about the same readiness, so the chart shows recall before it, and the numbers show how busy the last ${FINAL_DAYS} days get.</p>
       </figure>` : ''}
-      <p class="rc-note">${esc(describeSuggestion(horizon, !!ex))}${sugg === SUGGEST_FLOOR && !ex ? ' Lower targets need fewer reviews, so with typical settings the answer sits at that limit; weigh it against how much you want to remember.' : ''}</p>
+      <div class="rc-sugg">${lines.map(l => `<p class="rc-note">${esc(l)}</p>`).join('')}</div>
       <details class="opt-fold"><summary>See the numbers</summary>
         <div class="rc-table-wrap"><table class="rc-table"><caption class="sr-only">Estimate for each target over ${HORIZON_NAMES[horizon]}</caption>
-          <thead><tr><th scope="col">Target</th><th scope="col">Reviews a day</th><th scope="col">Remembered at the end</th>${ex ? '<th scope="col">Ready on exam day</th>' : ''}</tr></thead>
+          <thead><tr><th scope="col">Target</th><th scope="col">Reviews a day</th><th scope="col">Remembered at the end</th>${ex ? `<th scope="col">Recall before last pass</th><th scope="col">Ready (90%+) before last pass</th><th scope="col">Last ${FINAL_DAYS} days, reviews a day</th><th scope="col">Ready on exam day</th>` : ''}</tr></thead>
           <tbody>${pts.map(rowHTML).join('')}</tbody></table></div>
       </details>
-      <p class="rc-note">Based on ${plural(info.started, 'started card')}${info.unseen ? ` and ${plural(info.unseen, 'card')} not started yet (introduced at your new-cards limit)` : ''}, with ${info.usingOwnWeights ? 'your own FSRS settings' : 'the standard FSRS settings'}${info.ownProbs.review ? ' and your own Hard/Good/Easy habits' : ''}.${result.sampled ? ` Your collection is large, so a sample of about ${SIM_CAP.toLocaleString('en')} cards was replayed and scaled up.` : ''}${result.complete ? '' : ` Stopped early at ${Math.round(result.stoppedAt * 100)}% to keep this quick.`}${info.skipped ? ` ${plural(info.skipped, 'card')} in decks with their own settings ${info.skipped === 1 ? 'is' : 'are'} not included.` : ''} Not modelled: learning steps in detail, spreading due dates, daily limits.</p>
-      <div class="rc-actions">
-        <button type="button" class="btn primary small" data-rc="use" ${Math.abs(selected - nowR) < 1e-9 ? 'disabled' : ''}>${Math.abs(selected - nowR) < 1e-9 ? `${Math.round(selected * 100)}% is your target` : `Use ${Math.round(selected * 100)}%`}</button>
-        ${sugg !== null && Math.abs(sugg - selected) > 1e-9 ? `<button type="button" class="btn ghost small" data-rc="pickSug">Pick the suggested ${Math.round(sugg * 100)}%</button>` : ''}
+      <p class="rc-note">Based on ${plural(info.started, 'started card')}${info.unseen ? ` and ${plural(info.unseen, 'card')} not started yet (introduced at your new-cards limit)` : ''}, with ${info.usingOwnWeights ? 'your own FSRS settings' : 'the standard FSRS settings'}${info.ownProbs.review ? ' and your own Hard/Good/Easy habits' : ''}.${result.sampled ? ` Your collection is large, so a sample of about ${SIM_CAP.toLocaleString('en')} cards was replayed and scaled up.` : ''}${result.complete ? '' : ` To keep this quick, ${plural(result.missing, 'target')} between the ones shown ${result.missing === 1 ? 'was' : 'were'} skipped.`}${info.skipped ? ` ${plural(info.skipped, 'card')} in decks with their own settings ${info.skipped === 1 ? 'is' : 'are'} not included.` : ''} Not modelled: learning steps in detail, spreading due dates, daily limits.</p>
+      <div class="rc-actions" data-rc="actions">
+        <button type="button" class="btn primary small" data-rc="use" ${Math.abs(selected - nowR()) < 1e-9 ? 'disabled' : ''}>${useLabel()}</button>
+        ${s.target !== null && Math.abs(s.target - selected) > 1e-9 ? `<button type="button" class="btn ghost small" data-rc="pickSug">Pick the suggested ${pct(s.target)}%</button>` : ''}
       </div></div>`;
-    wire(pts);
+    wire();
   }
 
-  function wire(pts) {
+  // The picked target changed: move the markers, the readout, the button and the table row; nothing is drawn again.
+  function update() {
+    root.querySelectorAll('svg.rc-svg').forEach(svg => { const d = drawn.find(x => x.id === svg.id); if (d) movePick(svg, d, selected); });
+    root.querySelector('[data-rc=detail]').innerHTML = readoutHTML();
+    const use = root.querySelector('[data-rc=use]');
+    use.textContent = useLabel();
+    use.disabled = Math.abs(selected - nowR()) < 1e-9;
+    root.querySelectorAll('.rc-table tbody tr').forEach(tr => tr.classList.toggle('sel', Math.abs(+tr.dataset.r - selected) < 1e-9));
+    const sug = run.suggested.target;
+    let btn = root.querySelector('[data-rc=pickSug]');
+    const want = sug !== null && Math.abs(sug - selected) > 1e-9;
+    if (!want && btn) btn.remove();
+    if (want && !btn) {
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn ghost small'; btn.dataset.rc = 'pickSug';
+      btn.addEventListener('click', () => { selected = run.suggested.target; update(); });
+      root.querySelector('[data-rc=actions]').append(btn);
+    }
+    if (btn) btn.textContent = `Pick the suggested ${pct(sug)}%`;
+  }
+
+  function wire() {
     root.querySelectorAll(`input[name="${uid}h"]`).forEach(i => i.addEventListener('change', () => { horizon = +i.value; draw(); root.querySelector('.rc-h input:checked')?.focus(); }));
     root.querySelector('[data-rc=exam]')?.addEventListener('change', e => { examIx = +e.target.value; draw(); });
-    root.querySelector('[data-rc=use]').addEventListener('click', () => { onPick(Math.round(selected * 100)); draw(); });
-    root.querySelector('[data-rc=pickSug]')?.addEventListener('click', () => { selected = suggestFor(pts, horizon, examGroups()[examIx]?.i ?? null); draw(); });
+    root.querySelector('[data-rc=use]').addEventListener('click', () => { onPick(Math.round(selected * 100)); draw(); });          // (drawn again: the "Now" marker moves)
+    root.querySelector('[data-rc=pickSug]')?.addEventListener('click', () => { selected = run.suggested.target; update(); });
+    const choose = r => { selected = pickSelected(run.result.points, Math.min(RETENTION_MAX, Math.max(RETENTION_MIN, r)) / 100); update(); };
     root.querySelectorAll('svg.rc-svg').forEach(svg => {
-      const pick = ev => {
+      svg.addEventListener('click', ev => {
         const box = svg.getBoundingClientRect();
         const x = (ev.clientX - box.left) / box.width * W;
-        const r = Math.round(((x - M.l) / (W - M.l - M.r)) * (RETENTION_MAX - RETENTION_MIN) + RETENTION_MIN);
-        selected = Math.min(RETENTION_MAX, Math.max(RETENTION_MIN, r)) / 100;
-        const keep = svg.id;
-        draw();
-        $(keep)?.focus({ preventScroll: true });
-      };
-      svg.addEventListener('click', pick);
+        choose(Math.round(((x - M.l) / (W - M.l - M.r)) * (RETENTION_MAX - RETENTION_MIN) + RETENTION_MIN));
+      });
       svg.addEventListener('keydown', ev => {
         const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, Home: -99, End: 99 }[ev.key];
         if (!step) return;
         ev.preventDefault();
-        selected = Math.min(RETENTION_MAX, Math.max(RETENTION_MIN, Math.round(selected * 100) + step)) / 100;
-        const keep = svg.id;
-        draw();
-        $(keep)?.focus({ preventScroll: true });
+        choose(Math.round(selected * 100) + step);
       });
     });
   }
@@ -256,9 +329,7 @@ export function openRetentionSheet({ deckId = '', current, onPick }) {
     <h2 id="sheetTitle">Help me choose</h2>
     <div data-rc-root id="rcRoot"></div>
     <div class="sheet-actions"><button type="button" class="btn ghost" id="rcClose">Close</button></div>`);
-  const root = $('rcRoot');
-  const helper = mountRetentionHelper(root, { deckId, current, onPick: pct => { onPick(pct); } });
-  const d = $('sheet');
-  d.addEventListener('close', () => helper.stop(), { once: true });
+  const helper = mountRetentionHelper($('rcRoot'), { deckId, current, onPick });
+  $('sheet').addEventListener('close', () => helper.stop(), { once: true });
   $('rcClose').addEventListener('click', closeSheet);
 }
