@@ -378,6 +378,23 @@ for (const [w, h] of [[1024, 768], [1440, 900], [1920, 1080], [2560, 1440]]) for
     }
     if (w === 1440 && route === 'today') ok(r.foot[0] >= 0 && r.foot[1] <= r.foot[2], `${tag}: the sidebar footer is fully in the window (${r.foot[0]}-${r.foot[1]} of ${r.foot[2]})`);
   }
+  if (w === 1920) {
+    // Settings at a wide size: the in-page confirm's buttons are their own size, and switches sit beside their labels
+    await page.goto(URL + '#/settings'); await page.waitForSelector('#advanced');
+    await page.evaluate(() => { document.getElementById('advanced').open = true; document.getElementById('optConfirm').hidden = false; });
+    const st = await page.evaluate(() => { const v = document.querySelector('main > .view').getBoundingClientRect(); const sw = [...document.querySelectorAll('#advanced .switch')].map(e => e.getBoundingClientRect().right);
+      return { btns: ['optNo', 'optYes'].map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)), sw: Math.max(...sw), viewW: Math.round(v.width), viewR: Math.round(v.right) }; });
+    ok(st.btns.every(x => x <= 200), `${tag}: the in-page confirm's buttons are not stretched (${st.btns.join(', ')}px)`);
+    ok(st.viewW <= 980 && st.sw <= st.viewR + 1, `${tag}: Settings is a readable column (${st.viewW}px) and its switches sit inside it`);
+    // "Couldn't load this screen": the Reload button is an ordinary button, not the browser's grey face
+    const rl = await page.evaluate(() => { const el = document.querySelector('main > .view'); el.innerHTML = '<div class="empty"><b>Could not load this screen.</b><br><button class="btn" type="button" data-reload>Reload</button></div>';
+      const b = getComputedStyle(el.querySelector('[data-reload]')), probe = document.createElement('i'); probe.style.background = 'var(--surface-1)'; document.body.append(probe); const s1 = getComputedStyle(probe).backgroundColor; probe.remove(); return [b.backgroundColor, s1]; });
+    ok(rl[0] === rl[1], `${tag}: the Reload button on a failed screen has the card colour (${rl[0]})`);
+  }
+  // No exam dates at all: Today is one column, and Options still sits over its right edge
+  await page.evaluate(async () => { const db = await import('./js/db.js'); for (const d of await db.getAll('decks')) if (d.examDate) await db.saveDeck({ ...d, examDate: null }); });
+  await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck'); await page.waitForTimeout(150);
+  { const r = await layout(); ok(!await page.$('.exams') && r.opt && Math.abs(r.opt - r.right) <= 1 && Math.abs(r.gapL - r.gapR) <= 2, `${tag}: with no exams, Options lines up with the content (${r.opt} vs ${r.right}) and the page is centred`); }
   // A short window: the footer still shows whole (the deck list gives way, or the menu scrolls)
   if (w === 1440) {
     await page.setViewportSize({ width: 1440, height: 520 }); await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck');

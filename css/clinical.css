@@ -679,6 +679,13 @@
 :root[data-ui="clinical"] :is(.exams,.tdecks,.decks) :focus-visible{outline-offset:-2px}
 /* ---- Settings: Rating feedback is the pulse, ring and interval of js/fx.js, which are always off in Clinical ---- */
 :root[data-ui="clinical"] .adv-row:has(#ratingFeedback){display:none}
+/* ---- a .btn with no kind (e.g. "Reload" on "Couldn't load this screen") got the browser's grey button face, which reads as
+   disabled in dark mode: it is an ordinary outlined button here ---- */
+:root[data-ui="clinical"] .btn[class="btn"]{background:var(--surface-1);border-color:var(--line-strong);color:var(--text)}
+:root[data-ui="clinical"] .btn[class="btn"]:hover{background:var(--surface-2)}
+/* ---- the sheet's close button: square like everything else, not a circle ---- */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x{border-radius:var(--r-sm);background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong)}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x:hover{background:var(--surface-2)}
 
 /* ======================================================================
    6. Desktop page widths and wide screens (tier 2; the owner's desktop review after v4.14)
@@ -727,6 +734,12 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:16px;align-items:center}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > :not(.deck-counts){grid-column:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
+
+  /* --- Settings: form controls stay next to what they belong to --- */
+  /* in-page confirms (Reset to default, Delete…): buttons their own size at the right, not two 360px slabs */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .confirm .sheet-actions .btn{flex:0 0 auto;min-width:96px}
+  /* typed learning steps: a box sized for a few short gaps, the Reset button beside it */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .steps-input{max-width:420px}
 
   /* --- deck page and Browse: search, filter and sort on one line --- */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) .br-controls{grid-template-columns:minmax(0,1fr) 200px 200px}
