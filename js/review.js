@@ -8,6 +8,7 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkTyped } from './match.js';
+import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
@@ -55,7 +56,7 @@ export async function renderReview(el, deckId) {
     const allIds = data.decks.map(d => d.id);
     const chosen = launch.deckIds.filter(id => allIds.includes(id));
     const c = countFor(data, chosen.length ? chosen : allIds);
-    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds) : null;
+    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds, { includeSuspended: launch.includeSuspended, spread: launch.spread, label: launch.label }) : null;
     if (custom && !custom.queue.length) {      // e.g. exam prep when every card was seen in the last 3 days
       toast(launch.kind === 'prep' ? 'You have seen every card in this deck in the last 3 days' : 'Nothing to review there');
       location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
@@ -285,6 +286,7 @@ function renderSession(el, enter = false) {
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
+    if (e.target.closest('[data-accept-typed]')) { acceptTyped(el); return; }
     if (e.target.closest('.gl-term, .gl-pop')) return;      // a tap on an underlined term opens its definition; it never flips the card
     const tick = e.target.closest('[data-tick]');
     if (tick) { toggleMissed(el, +tick.dataset.tick); return; }
@@ -367,7 +369,27 @@ function typedResultHTML() {
   // One corrected line (the card shows the answer itself); a "Closest answer" row only when the back has several answers.
   const shown = diff ? diffHTML(diff, { answerRow: false, closest: !!diff.alternate }) : '';
   if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
-  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}`;
+  // "Accept my answer from now on" adds the typed text to the card's accepted answers (accept.js). You still pick the rating yourself.
+  const accept = canAccept(R.current.card, value) ? '<p class="typed-accept"><button type="button" class="link" data-accept-typed>Accept my answer from now on</button></p>' : '';
+  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}${accept}`;
+}
+
+// Accept the typed text from now on: the card keeps it, and this answer counts as right (Good is suggested; the rating stays yours).
+async function acceptTyped(el) {
+  if (!R?.typed || !R.flipped || R.busy) return;
+  const fresh = await db.get('cards', R.current.card.id);
+  if (!fresh) { toast('That card changed; nothing to fix.'); return; }
+  const saved = addAccepted(fresh, R.typed.value);
+  if (saved === fresh) { toast('That answer is already accepted.'); return; }
+  await db.saveCards([saved]);
+  R.current.card = { ...R.current.card, acceptAnswers: saved.acceptAnswers };
+  R.typed = { ...R.typed, result: { ...R.typed.result, correct: true, exact: true } };
+  R.suggest = Rating.Good;
+  $('flash').querySelector('.rv-typed').innerHTML = typedResultHTML();
+  $('ratebar').innerHTML = backBarHTML();
+  wireRatebar(el);
+  $('flash').querySelector('.rv-back')?.focus({ preventScroll: true });
+  toast('Accepted for this card');
 }
 
 // Turn the card over. Only the parts that change are touched (the card stays in the page, so the CSS
@@ -507,7 +529,7 @@ function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
   // Either the answer as words or the text as written is right (typing the LaTeX works, and so does the literal text).
-  const { target, ...result } = checkTyped(value, answerTargets(R.current.card.back));
+  const { target, ...result } = checkTyped(value, withAccepted(answerTargets(R.current.card.back), R.current.card));
   R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();

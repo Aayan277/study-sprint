@@ -438,3 +438,27 @@ test('pickedQueue: the given cards in the given order, skipping missing ones', a
   assert.deepEqual(queue.map(x => [x.card.id, x.kind]), [['c', 'new'], ['a', 'review'], ['b', 'learn']]);
   assert.deepEqual(waiting, []);
 });
+
+test('spreadSiblings: cards of one note are never next to each other when the list allows', async () => {
+  const { spreadSiblings } = await import('../js/queue.js');
+  const c = (id, noteId) => ({ id, noteId });
+  const items = [c('a1', 'A'), c('a2', 'A'), c('a3', 'A'), c('b1', 'B'), c('b2', 'B'), c('s', undefined), c('t', undefined)];
+  const out = spreadSiblings(items);
+  assert.equal(out.length, items.length);
+  assert.deepEqual(out.map(x => x.id).sort(), items.map(x => x.id).sort());
+  for (let i = 1; i < out.length; i++) assert.ok(!out[i].noteId || out[i].noteId !== out[i - 1].noteId, `${out[i - 1].id} then ${out[i].id}`);
+  assert.equal(out[0].id, 'a1');                                       // the order changes as little as it must
+  // nothing else to put between them: they stay together at the end
+  assert.deepEqual(spreadSiblings([c('x', 'N'), c('y', 'N')]).map(x => x.id), ['x', 'y']);
+  assert.deepEqual(spreadSiblings([]), []);
+  // an ordinary list is left alone
+  assert.deepEqual(spreadSiblings([c('p'), c('q'), c('r')]).map(x => x.id), ['p', 'q', 'r']);
+  assert.deepEqual(spreadSiblings([{ card: { noteId: 'A' }, i: 1 }, { card: { noteId: 'A' }, i: 2 }, { card: { noteId: 'B' }, i: 3 }], x => x.card.noteId).map(x => x.i), [1, 3, 2]);
+});
+
+test('pickedQueue: spread keeps the order of the ids apart from separating siblings', async () => {
+  const { pickedQueue } = await import('../js/queue.js');
+  const cards = [{ id: 'a', noteId: 'N' }, { id: 'b', noteId: 'N' }, { id: 'c' }, { id: 'd' }];
+  assert.deepEqual(pickedQueue(cards, new Map(), ['a', 'b', 'c', 'd']).queue.map(x => x.card.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(pickedQueue(cards, new Map(), ['a', 'b', 'c', 'd'], { spread: true }).queue.map(x => x.card.id), ['a', 'c', 'b', 'd']);
+});
