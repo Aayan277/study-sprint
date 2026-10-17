@@ -335,6 +335,58 @@ for (const [size, [w, h, scale]] of Object.entries(SIZES)) for (const mode of ['
   await ctx.close();
 }
 
+// ---------------------------------------------------------------- 4. wide desktop layout (owner's desktop review)
+// Pages are centred next to the sidebar, Today's Options button lines up with the content under it, the "Add exam date"
+// chips wrap instead of being cut off, and the sidebar footer is always fully on screen.
+for (const [w, h] of [[1024, 768], [1440, 900], [1920, 1080], [2560, 1440]]) for (const mode of ['light', 'dark']) {
+  if (wantSize && !wantSize.has('desk') || wantMode && !wantMode.has(mode) || wantScene && !wantScene.has('wide')) continue;
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block' });
+  await ctx.addInitScript(m => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode: m })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } }, mode);
+  const page = await ctx.newPage(); watch(page, `wide ${w} ${mode}`);
+  await page.goto(URL); await page.waitForSelector('.today-hero');
+  await seed(page, { ui: 'clinical', skin: 'ocean', mode, oled: false });
+  // courses with long names and no exam date, so the "Add exam date" row has more than fits on one line
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js'), now = Date.now();
+    for (const [id, name] of [['long1', 'Intro to Psychology (sample deck) with a long name'], ['long2', 'Microbiology and Infectious Diseases, Part Two'], ['long3', 'Upper & Lower Limb Anatomy — Muscles, Nerves and Blood Supply']])
+      await db.addDeckWithCards({ id, name, color: '#F76B15', created: now + 50 }, [{ id: id + 'c', deckId: id, front: 'Q', back: 'A', tags: [], created: 1 }]);
+  });
+  await page.reload(); await page.waitForSelector('.tdeck', { state: 'attached' });
+  const tag = `wide ${w}×${h} ${mode}`;
+  const layout = () => page.evaluate(() => {
+    const main = document.querySelector('main'), view = main.querySelector(':scope > .view'), mb = main.getBoundingClientRect(), vb = view.getBoundingClientRect(), cs = getComputedStyle(main);
+    const inner = [mb.left + parseFloat(cs.paddingLeft), mb.right - parseFloat(cs.paddingRight)];
+    const head = view.querySelector(':scope > .screen-head');
+    const right = Math.max(...[...view.children].filter(c => c !== head && c.getBoundingClientRect().width).map(c => c.getBoundingClientRect().right));
+    const opt = document.getElementById('optBtn')?.getBoundingClientRect();
+    const ea = document.querySelector('.exam-add');
+    const foot = document.querySelector('.side-foot').getBoundingClientRect();
+    const footLast = Math.max(...[...document.querySelectorAll('.side-foot *')].map(e => e.getBoundingClientRect().bottom));
+    return { gapL: Math.round(vb.left - inner[0]), gapR: Math.round(inner[1] - vb.right), right: Math.round(right), opt: opt && Math.round(opt.right), chips: ea && [ea.scrollWidth, ea.clientWidth],
+      chipsCut: ea ? [...ea.querySelectorAll('.exam-chip')].some(c => c.getBoundingClientRect().right > ea.getBoundingClientRect().right + 1) : false,
+      foot: [Math.round(foot.top), Math.round(Math.max(foot.bottom, footLast)), innerHeight], hscroll: document.documentElement.scrollWidth - innerWidth };
+  });
+  for (const [route, sel] of [['today', '.tdeck'], ['decks', '.deck'], ['deck/pharm', '.crow'], ['stats', 'main h1'], ['settings', '#skins'], ['play', '#startBtn']]) {
+    await page.goto(URL + '#/' + route); await page.waitForSelector(sel); await page.waitForTimeout(150);
+    const r = await layout();
+    ok(Math.abs(r.gapL - r.gapR) <= 2, `${tag} ${route}: the page is centred next to the sidebar (${r.gapL}px left, ${r.gapR}px right)`);
+    ok(r.hscroll <= 0, `${tag} ${route}: no sideways scroll`);
+    if (route === 'today') {
+      ok(r.opt && Math.abs(r.opt - r.right) <= 1, `${tag}: Options lines up with the right edge of the content under it (${r.opt} vs ${r.right})`);
+      ok(r.chips && r.chips[0] <= r.chips[1] && !r.chipsCut, `${tag}: the "Add exam date" chips are not cut off (scrollWidth ${r.chips?.[0]} ≤ clientWidth ${r.chips?.[1]})`);
+      if (w === 1440) await page.screenshot({ path: `${SP}/clinical-wide-today-${w}-${mode}.png` });
+    }
+    if (w === 1440 && route === 'today') ok(r.foot[0] >= 0 && r.foot[1] <= r.foot[2], `${tag}: the sidebar footer is fully in the window (${r.foot[0]}-${r.foot[1]} of ${r.foot[2]})`);
+  }
+  // A short window: the footer still shows whole (the deck list gives way, or the menu scrolls)
+  if (w === 1440) {
+    await page.setViewportSize({ width: 1440, height: 520 }); await page.goto(URL + '#/today'); await page.waitForSelector('.tdeck');
+    const r = await layout();
+    ok(r.foot[0] >= 0 && r.foot[1] <= r.foot[2], `${tag}: at 1440×520 the sidebar footer is still fully in the window (${r.foot[0]}-${r.foot[1]} of ${r.foot[2]})`);
+  }
+  await ctx.close();
+}
+
 console.log(`info: the contrast audit left out ${skippedText} text nodes that are hidden from users (aria-hidden, disabled, KaTeX); all other visible text was measured, faded text included`);
 ok(!errors.length, 'no console errors on any screen' + (errors.length ? ': ' + [...new Set(errors)].slice(0, 5).join(' | ') : ''));
 await browser.close();

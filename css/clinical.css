@@ -562,13 +562,8 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-set{padding:0;border-radius:var(--r-sm)}
 
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main{padding:32px 40px 56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0}
-  /* Today: main column and an exams column */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{display:grid;grid-template-columns:minmax(0,1fr) 320px;column-gap:32px;align-items:start;max-width:1160px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > *{grid-column:1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .screen-head{grid-column:1 / -1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .section:has(.exams){grid-column:2;grid-row:2 / span 4}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .exam-add{grid-column:1;grid-row:20;margin-top:var(--s-4)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0 auto}
+  /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row{grid-template-columns:minmax(0,1fr) auto}
@@ -684,3 +679,74 @@
 :root[data-ui="clinical"] :is(.exams,.tdecks,.decks) :focus-visible{outline-offset:-2px}
 /* ---- Settings: Rating feedback is the pulse, ring and interval of js/fx.js, which are always off in Clinical ---- */
 :root[data-ui="clinical"] .adv-row:has(#ratingFeedback){display:none}
+
+/* ======================================================================
+   6. Desktop page widths and wide screens (tier 2; the owner's desktop review after v4.14)
+   Every page sits in a column centred in the space next to the sidebar, with a width that suits it, so nothing is
+   stranded on the left of a wide monitor and the header buttons (Options, Import, Tools) line up with the content
+   under them. Decks and Stats 1200px, the card list 1280px, Settings 976px (its section menu on the left),
+   Play, Import and Review one 760-780px column. Today is two columns from 1280px (the day's work, then exams and
+   "Add exam date" in a 320px column on the right) when it has exams to show, one 880px column when it does not.
+   ====================================================================== */
+@media (min-width:1024px){
+  /* --- the sidebar: its footer is always fully on screen --- */
+  /* the logo bar is as tall as the gap styles.css leaves above the menu (no 4px notch in the sidebar's edge) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .top-in{min-height:62px;box-sizing:border-box}
+  /* the deck list gives up its height first; on a very short window the whole menu scrolls instead of cutting the footer off */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tabs{overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--surface-3) transparent}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-decks{min-height:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-decks:not(.folded) .side-list{min-height:64px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-head{min-height:28px}
+
+  /* --- page widths, centred --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{margin-inline:auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="decks"],[data-route="stats"]) > .view{max-width:1200px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) > .view{max-width:1280px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"],[data-route="settings"]) > .view{max-width:760px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{max-width:780px}
+  /* first run: its own wide two-part page, centred like Original */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] body.welcome main > .view{max-width:1160px}
+
+  /* --- Today --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view{display:block;max-width:880px}
+  /* the goal bar runs the width of its column instead of stopping short of the Start button */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .goal{max-width:none}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .btn.big{align-self:end}
+  /* below 1280px the exams sit in the page's one column, after the day's work */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side{display:block;margin-bottom:var(--s-5)}
+  /* "Add exam date": the chips wrap onto more lines instead of running off the edge; a long deck name is cut with "…" */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-add{flex-wrap:wrap;overflow:visible;row-gap:8px;margin-bottom:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-add > *{min-width:0;max-width:100%}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-add > span:first-child{flex-basis:100%}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip{display:block;overflow:hidden;text-overflow:ellipsis;line-height:34px;text-align:left}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip i{display:inline-block;margin-right:6px;vertical-align:1px}
+  /* the exam's name is a link: at least 28px tall to click */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-link{min-height:28px}
+
+  /* --- Decks: the counts get their own column, so the row reads across instead of leaving a gap in the middle --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:16px;align-items:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > :not(.deck-counts){grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
+
+  /* --- deck page and Browse: search, filter and sort on one line --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) .br-controls{grid-template-columns:minmax(0,1fr) 200px 200px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) .br-controls input{grid-column:auto}
+}
+@media (min-width:1280px){
+  /* Today: two columns when there are exams (or courses to give one): the day's work, and a 320px column on the right */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:repeat(12,auto) 1fr;column-gap:32px;align-items:start;max-width:1200px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > *{grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > .screen-head{grid-column:1 / -1}
+  /* the column runs down beside everything (the last, flexible row takes any extra height, so the left side never gets gaps) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .today-side{grid-column:2;grid-row:2 / -1;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-5);align-content:start;min-width:0;margin:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side > .section{margin:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side .exam-chip{flex:1 1 100%}
+
+  /* Settings: the section menu becomes a list on the left that stays in view, the settings in a 760px column beside it */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view{display:grid;grid-template-columns:168px minmax(0,760px);grid-template-rows:auto repeat(30,auto) 1fr;column-gap:48px;max-width:976px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > *{grid-column:2}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .screen-head{grid-column:1 / -1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / -1;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
+}

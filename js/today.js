@@ -106,7 +106,7 @@ export async function renderToday(el) {
       ${rescueHTML()}
       <div id="installSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
-      ${exams.length ? `
+      ${exams.length || noExam.length ? '<div class="today-side">' : ''}${exams.length ? `
       <section class="section" aria-labelledby="exTitle">
         <h2 id="exTitle">Upcoming exams</h2>
         <div class="exams">${exams.map(({ deck, info }) => `
@@ -121,7 +121,7 @@ export async function renderToday(el) {
         <span>Add exam date</span>
         ${noExam.slice(0, EXAM_CHIPS).map(d => `<button type="button" class="exam-chip" data-addexam="${esc(d.id)}" aria-label="Add exam date for ${esc(d.name)}"><i style="background:${esc(d.color)}"></i>${esc(d.name)} ${icon('plus')}</button>`).join('')}
         ${noExam.length > EXAM_CHIPS ? `<a class="link" href="#/decks">${noExam.length - EXAM_CHIPS} more in Decks</a>` : ''}
-      </div>` : ''}
+      </div>` : ''}${exams.length || noExam.length ? '</div>' : ''}
       <section class="section" aria-labelledby="tdTitle">
         <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks</a></div>
         <div class="tdecks">${top.map(deckRow).join('')}</div>
