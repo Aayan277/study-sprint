@@ -81,6 +81,8 @@ const MOCKS = {
   common(screen) {
     const x = document.getElementById('customLink');
     if (x) { x.textContent = 'Extra study'; x.className = 'btn ghost th-extra'; }
+    // the done headline reads "All done for today" (one string in js/today.js); the repeated <b> under it is hidden by CSS
+    if (document.querySelector('.th-done')) { const b = document.querySelector('.th-big'); if (b) b.textContent = 'All done for today'; }
     if (screen === 'settings') {
       const th = document.getElementById('thTitle');
       if (th && !document.querySelector('.ui-seg')) {
@@ -167,11 +169,34 @@ for (const ui of uis) for (const size of sizes) for (const mode of modes) {
     await page.waitForTimeout(450);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     if (overflow > 0) report.push(`OVERFLOW ${ui} ${size} ${mode} ${s}: ${overflow}px`);
+    // rendered-text AA check: every visible text node's colour against the first solid background behind it
+    const low = await page.evaluate(() => {
+      const parse = c => { const m = c.match(/^rgba?\(([^)]+)\)/); if (m) { const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; }
+        const n = c.match(/^color\(srgb ([^)]+)\)/); if (n) { const v = n[1].split(/[ /]+/).filter(Boolean).map(Number); return [v[0] * 255, v[1] * 255, v[2] * 255, v[3] ?? 1]; } return null; };
+      const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(r) + .7152 * f(g) + .0722 * f(b); };
+      const bgOf = el => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } } let out = parse(getComputedStyle(document.body).backgroundColor) || [255, 255, 255, 1]; for (const l of layers.reverse()) out = out.map((v, i) => i < 3 ? v * (1 - l[3]) + l[i] * l[3] : 1); return out; };
+      const bad = new Set();
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = walker.nextNode());) {
+        const el = n.parentElement; if (!n.textContent.trim() || !el) continue;
+        const r = el.getBoundingClientRect(); if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue;
+        const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('[hidden],[aria-hidden="true"]:not(.tbl-head),.sr-only,:disabled,[aria-disabled="true"]')) continue;
+        if (el.matches('.cap')) continue; // chart peak label: absolutely placed above its bar, on the card (text-2 on surface-1, checked in contrast.mjs)
+        let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; if (op < .99) continue;
+        const fg = parse(cs.color); if (!fg) continue; const bg = bgOf(el);
+        const f = fg.map((v, i) => i < 3 ? v * fg[3] + bg[i] * (1 - fg[3]) : 1);
+        const [a, b] = [lum(f), lum(bg)].sort((x, y) => y - x); const ratio = (a + .05) / (b + .05);
+        const big = parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && +cs.fontWeight >= 700);
+        if (ratio < (big ? 3 : 4.5)) bad.add(`${ratio.toFixed(2)} "${n.textContent.trim().slice(0, 30)}" <${el.tagName.toLowerCase()}.${[...el.classList].join('.')}>`);
+      }
+      return [...bad];
+    });
+    for (const l of low) report.push(`LOW-CONTRAST ${ui} ${size} ${mode} ${s}: ${l}`);
     await page.screenshot({ path: path.join(OUT, `${ui}-${s}-${size}-${mode}.png`), fullPage: FULL });
     if (s === 'front' || s === 'back') { await page.keyboard.press('Escape').catch(() => {}); await page.waitForTimeout(150); }
   }
   await ctx.close();
   console.log('done', ui, size, mode);
 }
-console.log(report.join('\n') || 'no horizontal overflow');
+console.log(report.join('\n') || 'no horizontal overflow, no low-contrast text');
 await browser.close(); server.close();

@@ -159,3 +159,6 @@
   :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .flash-back{font-size:1.4375rem;line-height:1.6}
   :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .rate{min-height:68px}
 }
+
+/* fix: the freeze note is plain text in the streak line (no leftover pill outline) */
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak .frz-pill{box-shadow:none;margin-left:0}

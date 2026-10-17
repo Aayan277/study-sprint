@@ -75,7 +75,7 @@
   :root[data-ui="clinical"][data-var="a"] main[data-route="today"] > .view{max-width:960px;margin:0}
   :root[data-ui="clinical"][data-var="a"] main:is([data-route="decks"],[data-route="stats"],[data-route="deck"]) > .view{margin:0}
   /* Today: ring + figures on the left, the Start button (normal width) on the right, streak as a footer line */
-  :root[data-ui="clinical"][data-var="a"] .today-hero{grid-template-columns:minmax(0,1fr) 300px;column-gap:var(--s-6);padding:var(--s-5) var(--s-6)}
+  :root[data-ui="clinical"][data-var="a"] .today-hero{grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-6);padding:var(--s-5) var(--s-6)}
   :root[data-ui="clinical"][data-var="a"] .today-hero .ring{width:88px!important;height:88px!important}
   :root[data-ui="clinical"][data-var="a"] .today-hero .th-main .ring-in b{font-size:1.5rem}
   :root[data-ui="clinical"][data-var="a"] .th-big{font-size:1.75rem}

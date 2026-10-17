@@ -88,12 +88,12 @@
 :root[data-ui="clinical"][data-var="b"] .deck-open > .deck-name{grid-column:1;grid-row:1;font-size:var(--fs-sm);font-weight:600;margin:0}
 :root[data-ui="clinical"][data-var="b"] .deck-open > .deck-code{grid-column:1;grid-row:2;font-size:var(--fs-xs);padding-left:16px}
 :root[data-ui="clinical"][data-var="b"] .deck-open > [class*="exam-badge"]{grid-column:1;grid-row:3;justify-self:start;margin:2px 0 0 16px;font-size:var(--fs-2xs)}
-:root[data-ui="clinical"][data-var="b"] .deck-counts{display:contents}
-:root[data-ui="clinical"][data-var="b"] .deck-counts > span{grid-row:1 / span 3;font-size:0;text-align:right;padding:0!important;order:0}
-:root[data-ui="clinical"][data-var="b"] .deck-counts > span b{font-size:var(--fs-sm)}
-:root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(1){display:none}
-:root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(2){grid-column:2}
-:root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(3){grid-column:3}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts{display:contents}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span{grid-row:1 / span 3;font-size:0;text-align:right;padding:0!important;order:0}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span b{font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(1){display:none}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(2){grid-column:2}
+:root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(3){grid-column:3}
 :root[data-ui="clinical"][data-var="b"] .deck-ring{display:none}
 :root[data-ui="clinical"][data-var="b"] .deck-act{grid-column:4;grid-row:1 / span 3;margin:0;align-self:center;justify-self:end}
 :root[data-ui="clinical"][data-var="b"] .deck > .icon-btn{grid-column:5;grid-row:1 / span 3;width:32px;height:32px;justify-self:end}
@@ -225,10 +225,10 @@
   :root[data-ui="clinical"][data-var="b"] .deck-open > .deck-name{grid-row:1}
   :root[data-ui="clinical"][data-var="b"] .deck-open > .deck-code{grid-row:2}
   :root[data-ui="clinical"][data-var="b"] .deck-open > [class*="exam-badge"]{grid-row:1 / span 2;grid-column:1;justify-self:end;align-self:center;margin:0}
-  :root[data-ui="clinical"][data-var="b"] .deck-counts > span{grid-row:1 / span 2}
-  :root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(1){display:block;grid-column:2}
-  :root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(2){grid-column:3}
-  :root[data-ui="clinical"][data-var="b"] .deck-counts > span:nth-child(3){grid-column:4}
+  :root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span{grid-row:1 / span 2}
+  :root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(1){display:block;grid-column:2}
+  :root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(2){grid-column:3}
+  :root[data-ui="clinical"][data-var="b"] .deck .deck-counts > span:nth-child(3){grid-column:4}
   :root[data-ui="clinical"][data-var="b"] .deck-ring{display:block;grid-column:5;grid-row:1 / span 2;margin:0;justify-self:end;text-align:right}
   :root[data-ui="clinical"][data-var="b"] .deck-ring .ring{width:auto!important;height:auto!important;display:inline}
   :root[data-ui="clinical"][data-var="b"] .deck-ring .ring > svg,:root[data-ui="clinical"][data-var="b"] .deck-ring .dr-cap{display:none}
@@ -256,3 +256,30 @@
 
 /* names that wrap hang under the first word, not under the colour dot */
 :root[data-ui="clinical"][data-var="b"] :is(.td-name,.deck-name){padding-left:16px;text-indent:-16px}
+
+/* ---------- B fixes (round 3 review) ---------- */
+/* the exam badge in Today's table keeps its padding (the counts rule zeroes padding on every span) */
+:root[data-ui="clinical"][data-var="b"] .td-counts > span[class*="exam-badge"]{padding:1px 6px!important;line-height:1.5;border-radius:var(--r-xs)}
+/* phone: exam rows on two tight lines (name + countdown, then the plan), smaller Exam prep button */
+@media (max-width:1023px){
+  :root[data-ui="clinical"][data-var="b"] .exam-row{padding:8px 8px 8px 12px;gap:2px 8px}
+  :root[data-ui="clinical"][data-var="b"] .exam-link{gap:2px 8px}
+  :root[data-ui="clinical"][data-var="b"] .exam-link [class*="exam-badge"]{font-size:var(--fs-2xs);padding:0 5px}
+  :root[data-ui="clinical"][data-var="b"] .exam-row > [data-prep]{min-height:32px;padding:4px 10px;font-size:var(--fs-xs)}
+  :root[data-ui="clinical"][data-var="b"] .exam-new{font-size:var(--fs-xs);line-height:1.4}
+  :root[data-ui="clinical"][data-var="b"] .on-track{margin-left:4px}
+  /* deck tables: narrower number columns so names wrap less */
+  :root[data-ui="clinical"][data-var="b"] main[data-route="today"]{--cols:minmax(0,1fr) 34px 34px 32px}
+  :root[data-ui="clinical"][data-var="b"] main[data-route="decks"]{--cols:minmax(0,1fr) 30px 30px 32px 28px}
+  :root[data-ui="clinical"][data-var="b"] :is(.tdeck,.deck,.tbl-head){column-gap:8px}
+  :root[data-ui="clinical"][data-var="b"] .deck > .icon-btn{width:28px}
+  /* the hero: figures and Start closer together */
+  :root[data-ui="clinical"][data-var="b"] .today-hero .streak{padding-top:var(--s-2);border-top:1px solid var(--line)}
+}
+/* done state: the summary strip and Start make way for one calm line and the secondary button */
+:root[data-ui="clinical"][data-var="b"] .today-hero:has(.th-done) .sum3{display:none}
+@media (min-width:1024px){
+  :root[data-ui="clinical"][data-var="b"] .today-hero:has(.th-done){grid-template-columns:300px minmax(0,1fr)}
+  :root[data-ui="clinical"][data-var="b"] .today-hero:has(.th-done) .th-done{grid-column:2;display:flex;align-items:center;gap:var(--s-4);justify-content:flex-end}
+  :root[data-ui="clinical"][data-var="b"] .today-hero:has(.th-done) .th-done p{margin:0}
+}
