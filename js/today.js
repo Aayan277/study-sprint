@@ -382,7 +382,7 @@ export async function renderToday(el) {
       </div>` : ''}
       <div class="cs-opt">
         <b>Cards I forgot today</b>
-        <p>Go over every card you pressed Again on, or got wrong in Play, today.</p>
+        <p>Go over every card you pressed Again on${data.settings.playCountsAsReviews === true ? ', or got wrong in Play,' : ''} today.</p>
         <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
       </div>
       `);

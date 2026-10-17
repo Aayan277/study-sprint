@@ -61,6 +61,17 @@ export function restDaySet(settings) {
   return out;
 }
 
+// "Nothing due" days: days when nothing was due and nothing was left from earlier, so there was nothing to study. They never
+// break the streak or use a freeze (they act like days off, but nobody planned them). The app notes them on this device as it
+// finds them (study-data.js idleDaysToMark) in the setting `idleDays: { 'YYYY-MM-DD': true }`. Ignores junk.
+export function idleDaySet(settings) {
+  const out = new Set();
+  const flags = settings && settings.idleDays;
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
+  for (const [k, v] of Object.entries(flags)) if (v === true && /^\d{4}-\d{2}-\d{2}$/.test(k)) out.add(k);
+  return out;
+}
+
 // The key of the Monday of a day's week, e.g. weekOf('2026-10-14') is '2026-10-12'.
 // Built at noon so a daylight-saving change can't move it to another date.
 export function weekOf(key) {
@@ -134,11 +145,13 @@ export function dayStreak(logs, now = Date.now(), opts) {
 }
 // The same, from days already worked out: anything with .has(dayKey), e.g. a Set or the Map from answerDays().
 //   rest     a Set of day keys that are days off      freezes  false = no streak freeze (the old rules)
-// Returns { days, studiedToday, restToday, week: [{ time, on, today, frozen, rest }], frozen: [keys, newest first],
+//   idle     a Set of day keys when nothing was due (they never break the streak)
+// Returns { days, studiedToday, restToday, idleToday, week: [{ time, on, today, frozen, rest }], frozen: [keys, newest first],
 //   freeze: { ready (no freeze used this week), usedOn (key of the one used this week, or null) }, span }.
-export function streakFromDays(days, now = Date.now(), { rest = EMPTY_SET, freezes = true } = {}) {
+export function streakFromDays(days, now = Date.now(), { rest: planned = EMPTY_SET, freezes = true, idle = EMPTY_SET } = {}) {
   const todayKey = dayKey(now);
   const studiedToday = days.has(todayKey);
+  const rest = idle.size ? new Set([...planned, ...idle]) : planned;          // a nothing-due day is as safe as a day off
   const w = walk(days, rest, now, freezes, MAX_DAYS, false);
   const frozen = new Set(w.frozen);
   const thisWeek = weekOf(todayKey);
@@ -147,9 +160,9 @@ export function streakFromDays(days, now = Date.now(), { rest = EMPTY_SET, freez
   const week = [];
   for (let i = 6; i >= 0; i--) {
     const t = daysAgoStart(i, now), k = dayKey(t);
-    week.push({ time: t, on: days.has(k), today: i === 0, frozen: frozen.has(k), rest: rest.has(k) && !days.has(k) });
+    week.push({ time: t, on: days.has(k), today: i === 0, frozen: frozen.has(k), rest: rest.has(k) && !days.has(k), idle: idle.has(k) && !days.has(k) && !planned.has(k) });
   }
-  return { days: w.first, studiedToday, restToday: rest.has(todayKey) && !studiedToday, week, frozen: w.frozen,
+  return { days: w.first, studiedToday, restToday: planned.has(todayKey) && !studiedToday, idleToday: idle.has(todayKey) && !studiedToday && !planned.has(todayKey), week, frozen: w.frozen,
     freeze: { ready: !usedOn, usedOn }, span: w.span };
 }
 
@@ -161,6 +174,7 @@ export function streakText(streak, now = Date.now()) {
   let line;
   if (streak.studiedToday) line = 'Kept for today';
   else if (streak.days && streak.restToday) line = 'Rest day · your streak is safe';
+  else if (streak.days && streak.idleToday) line = 'Nothing due today: your streak is safe';
   else if (streak.days && streak.frozen[0] === yesterday) line = 'Freeze used yesterday · study today to keep it';
   else if (streak.days) line = 'Study today to keep it';
   else line = 'Study today to start one';

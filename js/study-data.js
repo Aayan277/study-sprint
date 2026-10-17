@@ -8,7 +8,7 @@ import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { personalW20 } from './sched-settings.js';
-import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
+import { lazyStreak, daysAgoStart, restDaySet, idleDaySet, isAnswerLog, dayKey } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
 const HISTORY_DAYS = 60;
@@ -281,4 +281,52 @@ export const live = { resume: null };
 // The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
 // if it has them, and reads further back only while the streak does.
 // ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
-export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });
+// With the whole of loadAll()'s data (Today and the sidebar), days when nothing was due are noted too (idleDaysToMark) and never break the streak.
+export async function loadStreak(history = null, ctx = null) {
+  const settings = ctx?.settings;
+  let idle = idleDaySet(settings);
+  if (settings && ctx.split && ctx.statesById) {
+    const fresh = idleDaysToMark(ctx, history || ctx.history);
+    if (fresh.length) {
+      idle = new Set([...idle, ...fresh]);
+      const keep = dayKey(daysAgoStart(200));
+      const flags = Object.fromEntries(Object.keys(settings.idleDays || {}).filter(k => k >= keep).map(k => [k, true]));
+      for (const k of fresh) flags[k] = true;
+      settings.idleDays = flags;
+      db.setSetting('idleDays', flags).catch(err => console.warn('idle days not saved:', err));      // (only on this device: it is not a synced setting)
+    }
+  }
+  return lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(settings), idle });
+}
+
+// The study days since your last answer (up to today, at most two weeks back) when nothing was due and nothing was left from earlier, and
+// that are not noted yet: they must not break the streak or use a freeze. Today counts when the ring says "Nothing due today". An
+// earlier day counts when no card was waiting for it (nothing has been answered since, so the cards still stand as they were: none
+// came due by that day's end) and no new cards are on offer. `history`: the log rows (or times) of the last 60 days.
+// Returns day keys, oldest first.
+export function idleDaysToMark(data, history, now = Date.now()) {
+  const all = data.allCards || data.cards || [];
+  if (!all.length || !history?.length) return [];
+  let latest = -Infinity;
+  for (const l of history) { const t = typeof l === 'number' ? l : isAnswerLog(l) ? l.timestamp : NaN; if (t > latest) latest = t; }
+  if (latest === -Infinity) return [];
+  const last = dayKey(latest), today = dayKey(now);
+  if (last >= today) return [];
+  const known = idleDaySet(data.settings);
+  const counts = countFor(data, data.decks.map(d => d.id));
+  const nothingToday = todayRing(data, [], counts, now).state === 'nothing';
+  const cardOf = new Map(all.map(c => [c.id, c]));
+  const waiting = [...data.statesById.values()]
+    .filter(st => st.state !== NEW && !isHidden(cardOf.get(st.cardId) || {}, now))
+    .map(st => Math.min(st.due, data.exam?.caps?.get(st.cardId) ?? Infinity));
+  const soonest = waiting.length ? Math.min(...waiting) : Infinity;
+  const out = [];
+  for (let i = 14; i >= 0; i--) {
+    const start = daysAgoStart(i, now), key = dayKey(start);
+    if (key <= last) continue;
+    const idle = i === 0 ? nothingToday : counts.fresh === 0 && soonest > dayEnd(start);
+    if (idle) { if (!known.has(key)) out.push(key); }
+    else if (i > 0) out.length = 0;          // a day with work was missed: quiet days before it don't matter (the streak broke there)
+  }
+  return out;
+}

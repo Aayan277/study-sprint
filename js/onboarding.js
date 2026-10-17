@@ -87,7 +87,7 @@ function drawPitch(el, api) {
           <ul class="lp-points">
             <li>${icon('clock')}<span><b>A few minutes a day.</b> The app picks what to review.</span></li>
             <li>${icon('calendar')}<span><b>Set your exam date.</b> Everything comes back in time.</span></li>
-            <li>${icon('bolt')}<span><b>Cram with games.</b> Timed rounds that still count.</span></li>
+            <li>${icon('bolt')}<span><b>Cram with games.</b> Timed rounds to drill any deck.</span></li>
           </ul>
           <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Try it: 30 seconds</button></div>
           <p class="lp-free">Free · no account · works offline</p>
@@ -246,7 +246,7 @@ function drawGuide() {
           <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
             ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
             <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ
-              ? `${occlusionHTML(card, 'back', { shortcut: false })}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'No label'}</p>`
+              ? `${occlusionHTML(card, 'back', { shortcut: false })}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'Hidden area'}</p>`
               : `${imgHTML(card.backImage)}${formatHTML(card.back)}`}</div></div></div>
         </div>
       </article>
