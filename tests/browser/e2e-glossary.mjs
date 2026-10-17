@@ -169,13 +169,13 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
     // the account holds terms 'old1' (not in the backup) and the backup has 2,001 terms, one of them broken, one deleted
     await db.setSetting('gloss:old1', { term: 'Old', aliases: [], def: '', at: 1 });
     const settings = { ...before.settings };
-    for (let i = 0; i < 2001; i++) settings['gloss:b' + i] = { term: 'Back' + i, aliases: [], def: '', at: i };
+    for (let i = 0; i < 2001; i++) settings['gloss:bk-' + i] = { term: 'Back' + i, aliases: [], def: '', at: i };
     settings['gloss:broken'] = { nonsense: 1 };
     settings['gloss:gone'] = null;
     await db.importAll({ ...before, settings }, { everywhere: true });
     const after = await db.getSettings();
     const times = after._times || {};
-    const kept = Object.entries(after).filter(([k, v]) => k.startsWith('gloss:b') && v).length;
+    const kept = Object.entries(after).filter(([k, v]) => k.startsWith('gloss:bk-') && v).length;
     return { kept, old: after['gloss:old1'], oldTime: times['gloss:old1'] > 0, broken: 'gloss:broken' in after, brokenNull: after['gloss:broken'] === null, goneNull: after['gloss:gone'] === null, goneTimed: times['gloss:gone'] > 0 };
   });
   ok(rest.kept === 2001, `${tag}: a restore keeps all ${rest.kept} terms of the backup (no 2,000 cap)`);
