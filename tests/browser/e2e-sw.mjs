@@ -68,6 +68,10 @@ fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.j
 let loads = 0;
 page.on('load', () => { loads++; });
 await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.update()));
+// The update reloads the page by itself: wait for that reload in node (an evaluate running across it would fail with
+// "Execution context was destroyed"), then for the new cache, then let things settle.
+for (let t = Date.now(); loads < 1 && Date.now() - t < 15000; ) await new Promise(r => setTimeout(r, 100));
+await page.waitForLoadState('load');
 await page.waitForFunction(() => caches.keys().then(k => k.length === 1 && k[0] === 'study-sprint-v999'), null, { timeout: 15000 }).catch(() => {});
 for (let i = 0; i < 150 && !loads; i++) await settle(100);      // wait for the reload itself (how long the install takes depends on how busy the computer is)
 await settle(300);
