@@ -407,7 +407,7 @@ async function partnerOf(card) {
 // The "Both directions" switch hides, with a note, while "Answer in steps" is on.
 function wireRevSwitch(p, form) {
   form.addEventListener('change', e => {
-    if (e.target.dataset?.stepsFor !== p) return;
+    if (e.target.dataset?.modeFor !== p) return;      // the Answer: Text | Steps | Elements choice
     const blocked = stepsOn(p);
     $(p + 'RevRow').hidden = blocked; $(p + 'RevNote').hidden = !blocked;
   });
