@@ -68,10 +68,12 @@ fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.j
 let loads = 0;
 page.on('load', () => { loads++; });
 await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.update()));
-// The new worker installs (it fetches every app file and the scheduler library), takes over, and the app reloads once. How long that takes
-// depends on the network, so wait for the reload itself instead of a fixed time.
-await page.waitForEvent('load', { timeout: 20000 }).catch(() => {});
-await settle(500);
+// The update reloads the page by itself: wait for that reload in node (an evaluate running across it would fail with
+// "Execution context was destroyed"), then for the new cache, then let things settle.
+for (let t = Date.now(); loads < 1 && Date.now() - t < 15000; ) await new Promise(r => setTimeout(r, 100));
+await page.waitForLoadState('load');
+await page.waitForFunction(() => caches.keys().then(k => k.length === 1 && k[0] === 'study-sprint-v999'), null, { timeout: 15000 }).catch(() => {});
+await settle(1500);
 ok(JSON.stringify(await cacheNames()) === '["study-sprint-v999"]', 'new worker: only the new cache is left ' + (await cacheNames()));
 ok(loads === 1, 'the app reloaded once to pick up the update (' + loads + ')');
 await page.waitForSelector('.tdeck, .empty');
