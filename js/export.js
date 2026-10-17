@@ -7,20 +7,33 @@
 import { formatHTML, plainText } from './format.js';
 import { hasBlank } from './cloze.js';
 import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './occlusion.js';
+import { isPair } from './reverse.js';
+import { toDetails } from './note-fields.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
+// A card with its reverse card (see reverse.js) is one row, the forward card, and a "Both directions" column says "yes" for it:
+// import makes the reverse card again. (Only added when some card has one.)
 // A cell that starts with = + - @ (or a tab or line break) would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
   let s = String(v ?? '');
   if (/^'*[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
+// The notes whose cards are a full pair here: noteId → true. (A reverse card whose forward card isn't in the list goes out as an ordinary card.)
+const fullPairs = cards => {
+  const f = new Set(cards.filter(c => isPair(c) && !c.reverse).map(c => c.noteId));
+  return new Set(cards.filter(c => isPair(c) && c.reverse && f.has(c.noteId)).map(c => c.noteId));
+};
 export function toCSV(cards) {
+  const pairs = fullPairs(cards);
+  cards = cards.filter(c => !(isPair(c) && c.reverse && pairs.has(c.noteId)));
   const several = new Set(cards.map(c => c.deckName)).size > 1;
-  const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : [])],
-    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : [])])];
+  const both = c => isPair(c) && !c.reverse && pairs.has(c.noteId);
+  const anyBoth = cards.some(both);
+  const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : []), ...(anyBoth ? ['Both directions'] : [])],
+    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : []), ...(anyBoth ? [both(c) ? 'yes' : ''] : [])])];
   // The invisible mark at the start (a "BOM") tells Excel the file is UTF-8, so accents and emoji survive.
   return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
@@ -55,6 +68,7 @@ export function ankiGuid(cardId) {
 const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-exports reuse it in Anki)
 const CLOZE_ID = 1_600_000_000_002;   // the Cloze note type
 const IO_ID = 1_600_000_000_003;      // the Image Occlusion note type
+const BASIC_REV_ID = 1_600_000_000_004;   // Basic (and reversed card): a card with its reverse card is one note with two cards
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
 
 // Anki's own Image Occlusion note type (rslib/src/image_occlusion/notetype.rs, Anki 23.10+): a cloze type whose
@@ -124,13 +138,15 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   // Cards that are blanks of one cloze note go out as one Anki Cloze note (a card for each blank number); the
   // rest are Basic notes, one each.
   // Cards of one image-occlusion picture likewise go out as one Anki Image Occlusion note.
-  let groups = [];                       // [{ cloze: true, cards } | { occ: true, cards } | { cloze: false, card }]
+  // A card and its reverse card (reverse.js) go out as one "Basic (and reversed card)" note with two cards.
+  let groups = [];                       // [{ cloze: true, cards } | { occ: true, cards } | { pair: true, cards } | { cloze: false, card }]
   const byNote = new Map();
+  const pairs = fullPairs(cards);
   for (const c of cards) {
-    const kind = hasBlank(c) ? 'cloze' : isOcclusion(c) && hasMasks(c) ? 'occ' : null;
+    const kind = hasBlank(c) ? 'cloze' : isOcclusion(c) && hasMasks(c) ? 'occ' : isPair(c) && pairs.has(c.noteId) ? 'pair' : null;
     if (kind) {
       const key = kind + ':' + c.noteId;
-      if (!byNote.has(key)) { byNote.set(key, { cloze: kind === 'cloze', occ: kind === 'occ', cards: [] }); groups.push(byNote.get(key)); }
+      if (!byNote.has(key)) { byNote.set(key, { cloze: kind === 'cloze', occ: kind === 'occ', pair: kind === 'pair', cards: [] }); groups.push(byNote.get(key)); }
       byNote.get(key).cards.push(c);
     } else groups.push({ cloze: false, card: c });
   }
@@ -152,6 +168,13 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     flds: ['Text', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     css: `${ANKI_CSS}\n.cloze {\n  font-weight: bold;\n  color: blue;\n}\n.nightMode .cloze {\n  color: lightblue;\n}\n`, req: [[0, 'any', [0]]]
   };
+  // "Basic (and reversed card)": card 1 asks Front, card 2 asks Back (the same two fields).
+  const revModel = {
+    ...model, id: BASIC_REV_ID, name: 'Study Sprint Basic (and reversed card)',
+    tmpls: [model.tmpls[0], { name: 'Card 2', ord: 1, qfmt: '{{Back}}', afmt: '{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}', did: null, bqfmt: '', bafmt: '' }],
+    req: [[0, 'any', [0]], [1, 'any', [1]]]
+  };
+  const usesRev = groups.some(g => g.pair);
   const usesOcc = groups.some(g => g.occ);
   // Anki's Image Occlusion type (a cloze type, "original stock kind" 6). Sorted by Header, which is also what sfld holds.
   const occModel = {
@@ -168,7 +191,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const conf = { activeDecks: [1], curDeck: 1, newSpread: 0, collapseTime: 1200, timeLim: 0, estTimes: true, dueCounts: true, curModel: String(BASIC_ID), nextPos: cards.length + 1, sortType: 'noteFld', sortBackwards: false };
   const col = {
     id: 1, crt: secs - (secs % 86400), mod: now, scm: now, ver: 11, dty: 0, usn: 0, ls: 0,
-    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}), ...(usesOcc ? { [IO_ID]: occModel } : {}) }),
+    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesRev ? { [BASIC_REV_ID]: revModel } : {}), ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}), ...(usesOcc ? { [IO_ID]: occModel } : {}) }),
     decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
@@ -176,6 +199,8 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
   // Its sounds go last in the field, as [sound:file name] (Anki's own way; importing the file here gives them back).
   const withSounds = (html, files) => `${html}${(files || []).map(f => `[sound:${f}]`).join('')}`;
+  // The note's other fields (item A) go last, as folded sections Anki shows closed.
+  const fieldsHTML = c => toDetails(c.noteFields, toAnkiHTML);
   const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');
   const notes = [], ankiCards = [];
   let cardCount = 0;
@@ -199,7 +224,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       }
     } else if (g.cloze) {
       const text = withSounds(withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile), g.cards.find(c => c.frontSoundFiles?.length)?.frontSoundFiles);
-      const extra = withSounds(withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile), g.cards.find(c => c.backSoundFiles?.length)?.backSoundFiles);
+      const extra = withSounds(withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile) + fieldsHTML(first), g.cards.find(c => c.backSoundFiles?.length)?.backSoundFiles);
       note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
         flds: `${text}\x1f${extra}`, sfld: plainText(first.noteText), csum: await ankiChecksum(plainText(first.noteText)), flags: 0, data: '' };
       // Blank number n is Anki card number n - 1.
@@ -208,17 +233,20 @@ export async function ankiContents(deck, cards, now = Date.now()) {
           ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
       }
     } else {
-      const c = g.card;
+      // A card with its reverse card is one note with two cards (the forward card's sides are the note's two fields).
+      const c = g.pair ? g.cards.find(x => !x.reverse) : g.card;
       const front = withSounds(withPic(toAnkiHTML(c.front), c.frontImageFile), c.frontSoundFiles);
       let back = withPic(toAnkiHTML(c.back), c.backImageFile);
-      // The memory hook (noteExtra) goes at the end of Back as an Extra line.
+      // The memory hook (noteExtra) goes at the end of Back as an Extra line, then the other fields.
       if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
-      back = withSounds(back, c.backSoundFiles);
-      note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
+      back = withSounds(back + fieldsHTML(c), c.backSoundFiles);
+      note = { id: noteId, guid: c.ankiGuid || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? BASIC_REV_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
-      // New cards, in the deck's order.
-      ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(c.deckName || deck.name), ord: 0, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
-        ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+      // New cards, in the deck's order. Card 1 is the forward card, card 2 the reverse one.
+      for (const [ord, x] of (g.pair ? [c, g.cards.find(y => y.reverse)] : [c]).entries()) {
+        ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(x.deckName || deck.name), ord, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,
+          ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
+      }
     }
     notes.push(note);
   }

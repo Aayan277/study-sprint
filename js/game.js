@@ -6,6 +6,7 @@ import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
 import { isStepped, finalStep } from './steps.js';
 import { maskMath } from './math.js';
+import { playRole } from './reverse.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
 export const PENALTY_MS = 3000;      // Lightning: a wrong answer costs 3 seconds
@@ -39,6 +40,11 @@ export const isFrontOnly = card => isCloze(card) || hasMasks(card) || stepped(ca
 const soundsOf = ids => (Array.isArray(ids) && ids.length ? { sounds: ids } : {});
 
 export function questionFor(card, qtype) {
+  // A card with a reverse card (reverse.js): the forward card asks front → back and typing, the reverse card asks for the forward
+  // card's front when the round is Back → front, so each direction grades its own schedule. The other one sits out.
+  const role = playRole(card, qtype);
+  if (role === null) return null;
+  qtype = role;
   if (hasMasks(card)) {
     // Needs a label to be an answer. The picture is drawn by Play (q.occ), not here.
     const label = occLabel(card.occlusion.masks, card.occlusion.n);

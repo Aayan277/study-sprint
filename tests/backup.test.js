@@ -147,3 +147,24 @@ test('fsrsParams in a backup: a good value, a reset or none passes; a restore ke
   assert.deepEqual(restore({ syncAuth: { a: 1 }, syncState: { b: 2 }, theme: 'x' }), { theme: 'x' });
   assert.deepEqual(restore(undefined), {});
 });
+
+// ---- round 3, batch 1b: note fields and reverse cards ----
+test('note fields: a short list of { name, text }', () => {
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  const bad = /invalid note fields/;
+  assert.equal(checkBackup({ ...good, cards: [card({ noteFields: [{ name: 'First Aid', text: 'p. 12' }] }), card({ id: 'd', noteFields: [] })] }), null);
+  for (const noteFields of ['x', {}, [null], [{ name: 'a' }], [{ name: 5, text: 'a' }], [{ name: 'a', text: 5 }], [{ name: 'a'.repeat(61), text: 'x' }], [{ name: 'a', text: 'x'.repeat(20001) }],
+    Array.from({ length: 25 }, () => ({ name: 'a', text: 'b' })), ['text']]) {
+    assert.match(checkBackup({ ...good, cards: [card({ noteFields })] }), bad, JSON.stringify(noteFields).slice(0, 40));
+  }
+  assert.equal(checkBackup({ ...good, cards: [card({ noteFields: [{ name: 'a'.repeat(60), text: 'x'.repeat(20000) }, ...Array.from({ length: 23 }, () => ({ name: 'b', text: 'c' }))] })] }), null, 'the limits themselves are fine');
+});
+
+test('reverse cards: reverse is true and comes with a noteId', () => {
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  const bad = /invalid reverse card link/;
+  assert.equal(checkBackup({ ...good, cards: [card({ noteId: 'N', reverse: true }), card({ id: 'd', noteId: 'N' })] }), null);
+  for (const reverse of [false, 1, 'yes', null, {}]) assert.match(checkBackup({ ...good, cards: [card({ noteId: 'N', reverse })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ reverse: true })] }), bad, 'no noteId');
+  assert.match(checkBackup({ ...good, cards: [card({ noteId: '', reverse: true })] }), bad);
+});

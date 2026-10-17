@@ -1168,6 +1168,19 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
 .snd-name{font-size:var(--fs-sm);color:var(--text-2);margin-right:auto}
 .snd-mark{margin-left:2px}
 
+/* Reverse cards and a note's other fields (round 3, batch 1b: js/reverse.js, js/note-fields.js) */
+.rev-pill{display:inline-block;padding:0 6px;border-radius:var(--r-pill);background:var(--surface-2);color:var(--text-2);box-shadow:inset 0 0 0 1px var(--line-strong);font-size:var(--fs-xs);font-weight:600;vertical-align:1px}
+.rev-line{margin:var(--s-2) 0 0}
+.flash-fields{margin:var(--s-3) 0 0;text-align:left;display:grid;gap:var(--s-2)}
+.flash-fields[hidden]{display:none}
+.note-field{border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.note-field>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;padding:0 var(--s-3);font-size:var(--fs-sm);font-weight:600;color:var(--text-2);list-style-position:inside}
+.note-field[open]>summary{color:var(--text)}
+.note-field-body{padding:0 var(--s-3) var(--s-3);font-size:var(--fs-sm);color:var(--text-2);line-height:1.5;overflow-wrap:anywhere}
+.nf-ed .nf-row{margin-top:var(--s-3)}
+.nf-ed .nf-row textarea{width:100%}
+.nf-ed .nf-row .btn{justify-self:start}
+
 /* Card list tools: tags and find and replace */
 .tag-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .tag-list li{display:flex;align-items:center;gap:var(--s-2);padding:8px 10px;border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);flex-wrap:wrap}
@@ -2227,7 +2240,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}
 @media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
 /* The Basic form grew (steps switch, memory hook): the fixed body height grows with it so switching card types does not jump */
-.ac-form .kind-body{min-height:31rem}
+.ac-form .kind-body{min-height:38.5rem}
 
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}
