@@ -9,6 +9,7 @@
 import { dayEnd } from './days.js';
 import { formatInterval } from './queue.js';
 import { dupKey } from './import.js';
+import { normTag, SEP } from './tag-tree.js';
 
 export const FLAGS = [
   { id: 1, name: 'Red', color: '#E5484D' },
@@ -90,10 +91,13 @@ export function searchMatcher(query) {
 //   statesById Map of cardId → schedule
 //   opts       { query, filter, sort, now }
 // Search matches the front, back and tags, ignoring capitals and accents.
+// `tag:<path>` (for example tag:#uworld::step) keeps the cards with that tag or any tag below it; it combines with other words.
 export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now() } = {}) {
-  const match = searchMatcher(query);
+  const { text, tags: tagTerms } = parseTagSearch(query);
+  const match = searchMatcher(text);
   let list = cards.map(card => ({ card, state: statesById.get(card.id), status: null }));
   for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
+  for (const path of tagTerms) list = list.filter(({ card }) => hasTagUnder(card, path));
   if (match) list = list.filter(({ card }) => match(`${card.front} ${card.back} ${(card.tags || []).join(' ')}`));
   if (filter === 'flagged') list = list.filter(x => x.card.flag);
   else if (/^flag\d$/.test(filter)) list = list.filter(x => x.card.flag === +filter.slice(4));
@@ -120,6 +124,19 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   }[sort] || ((a, b) => b.card.created - a.card.created);
   return list.sort(by);
 }
+
+// "tag:#uworld::step lung" → { text: 'lung', tags: ['#uworld::step'] }. A path with spaces goes in quotes: tag:"my tag".
+export function parseTagSearch(query) {
+  const tags = [];
+  const text = String(query ?? '').replace(/(^|\s)tag:(?:"([^"]*)"|(\S*))/gi, (all, lead, quoted, bare) => {
+    const path = normTag(quoted ?? bare ?? '');
+    if (path) tags.push(path);
+    return lead;
+  });
+  return { text, tags };
+}
+// Does the card have the tag `path`, or a tag below it? (Ignores capitals; `path` as normTag gives it.)
+const hasTagUnder = (card, path) => (card.tags || []).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
 
 // "a, b , c" → ['a', 'b', 'c'] (no blanks, no repeats)
 export function parseTags(text) {
@@ -183,4 +200,25 @@ export function renameTag(cards, from, to) {
   const [clean] = parseTags(to);
   return cards.filter(c => (c.tags || []).includes(from))
     .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (t === from ? clean : t)).filter(Boolean))] }));
+}
+
+// Rename a folder of "::" tags: the tag `from` and every tag below it move to `to` (to = '' removes them). A tag that
+// already exists at the new place is merged with. Returns only the cards that changed.
+export function renameTagPrefix(cards, from, to) {
+  const f = normTag(from);
+  const [clean] = parseTags(to);
+  const target = clean ? normTag(clean) : '';
+  if (!f) return [];
+  const out = [];
+  for (const c of cards) {
+    let hit = false;
+    const moved = (c.tags || []).map(t => {
+      const n = normTag(t);
+      if (n === f) { hit = true; return target; }
+      if (n.startsWith(f + SEP)) { hit = true; return target ? target + n.slice(f.length) : ''; }
+      return t;
+    }).filter(Boolean);
+    if (hit) out.push({ ...c, tags: [...new Set(moved)] });
+  }
+  return out;
 }

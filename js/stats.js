@@ -15,7 +15,7 @@ import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { isOcclusion, occLabel } from './occlusion.js';
 import { imgHTML } from './media.js';
 import { isHidden } from './browse-logic.js';
-import { streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
+import { readyEstimateText, streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
@@ -209,6 +209,7 @@ export async function renderStats(el) {
         <p class="ready-line"><b>${seen}</b>/${cards.length} seen · <b>${counts.mature}</b> mature</p>
         <div class="mbar" aria-hidden="true"><span class="lv-mature" style="width:${share('mature')}"></span><span class="lv-young" style="width:${share('young')}"></span><span class="lv-learning" style="width:${share('learning')}"></span></div>
         <p class="note ready-note">${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better). Add an exam date to see it for exam day.'}</p>
+        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${esc(readyEstimateText(settings.fsrsParams))}</p></details>
         <div class="ready-acts">
           ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
           <a class="btn ghost small" href="#/deck/${esc(course.id)}">Open deck</a>

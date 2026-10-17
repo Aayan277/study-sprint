@@ -430,3 +430,16 @@ test('lazyStreak: timestamps work as well as rows, and match the full walk for r
     assert.deepEqual(await lazyStreak(readLogs, NOW), full, 'rows, round ' + round);
   }
 });
+
+test('readiness note: an estimate with the standard model, then with your own', async () => {
+  const { readyEstimateText } = await import('../js/stats-calc.js');
+  const standard = readyEstimateText(undefined);
+  assert.match(standard, /^It’s an estimate\. It uses the standard FSRS memory model, not one tuned to you yet, and assumes you stop reviewing now\. Treat it as a guide, not a promise\.$/);
+  assert.equal(readyEstimateText(null), standard);
+  assert.equal(readyEstimateText({}), standard);
+  assert.equal(readyEstimateText({ w: 'nope' }), standard);
+  const fittedAt = new Date(2026, 9, 12, 12).getTime();
+  const tuned = readyEstimateText({ w: [1, 2, 3], fittedAt, reviews: 4812 }, 'en-GB');
+  assert.equal(tuned, 'It’s an estimate from your own memory model (tuned on 12 Oct from 4,812 reviews), assuming you stop reviewing now.');
+  assert.equal(readyEstimateText({ w: [1] }), 'It’s an estimate from your own memory model, assuming you stop reviewing now.');
+});

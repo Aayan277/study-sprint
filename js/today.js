@@ -344,6 +344,11 @@ export async function renderToday(el) {
       <h2 id="sheetTitle">Custom study</h2>
       <p class="note" style="margin-top:0">For the decks chosen in Options.</p>
       <div class="cs-opt">
+        <b>By tag or question ID</b>
+        <p>Find the cards for the questions you missed in a question bank, or for one tag. Looks in all decks.</p>
+        <button class="btn primary small" type="button" id="csTagBtn">Choose…</button>
+      </div>
+      <div class="cs-opt">
         <b>More new cards today</b>
         <p>Raises today's new card limit (each deck's own limit too). It goes back to normal tomorrow. ${plural(newAvail, 'new card')} available.</p>
         <div class="cs-row">
@@ -363,6 +368,11 @@ export async function renderToday(el) {
             `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
         </div>
         <button class="btn primary small" type="button" id="csAheadBtn"></button>
+      </div>
+      <div class="cs-opt">
+        <b>Postpone reviews</b>
+        <p>Busy few days? Push back the reviews you'll still remember best.</p>
+        <button class="btn primary small" type="button" id="csPostBtn">Choose…</button>
       </div>
       ${exams.length ? `<div class="cs-opt">
         <b>Exam prep</b>
@@ -398,6 +408,15 @@ export async function renderToday(el) {
       closeSheet();
       toast(`${plural(extra, 'extra new card')} for today`);
       renderToday(el);
+    });
+    // Two sheets of their own, loaded when first needed.
+    $('csTagBtn').addEventListener('click', async () => {
+      try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: () => renderToday(el) }); }
+      catch { toast("Couldn't open this. Check your connection and try again."); }
+    });
+    $('csPostBtn').addEventListener('click', async () => {
+      try { (await import('./postpone-sheet.js')).openPostponeSheet({ data, cards, onChange: () => renderToday(el) }); }
+      catch { toast("Couldn't open this. Check your connection and try again."); }
     });
     const go = (kind) => { closeSheet(); launch({ deckIds: chosen, kind, days }); };
     $('csAheadBtn').addEventListener('click', () => go('ahead'));

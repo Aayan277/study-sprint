@@ -22,6 +22,7 @@ import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
+import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -285,6 +286,20 @@ export async function undoReview(cardId, prevState, logId) {
   changed();
 }
 
+// Delete one review-log row and nothing else (Play's "I was right" on an answer that was only logged).
+export async function deleteLogRow(logId) {
+  const db = await openDB();
+  const tx = db.transaction(['reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  const logs = tx.objectStore('reviewLog');
+  logs.get(logId).onsuccess = e => {
+    if (e.target.result?.uid) markDeleted(tx, 'reviewLog', e.target.result.uid, now);
+    logs.delete(logId);
+  };
+  await finished(tx);
+  changed();
+}
+
 // Every review-log row since a moment in time (e.g. since the start of today).
 export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
@@ -525,6 +540,7 @@ export async function importAll(data, { everywhere = false } = {}) {
       for (const x of data[name]) {
         let rec = upgradeRecord(name, x, now);
         if (name === 'reviewLog') rec = cleanMixedWith(rec);
+        if (name === 'cards') rec = cleanAccept(rec);
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
         tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing
