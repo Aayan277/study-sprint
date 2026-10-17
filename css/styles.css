@@ -558,6 +558,21 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sheet-actions .btn{flex:1 1 auto}
 .confirm .sheet-actions{justify-content:flex-end}
+/* The Optimize parameters sheet (js/optimize-sheet.js) */
+.opt-run{display:grid;gap:var(--s-3);min-width:0}
+.opt-run p{margin:0}
+.opt-intro,.opt-note,.opt-detail{font-size:var(--fs-sm);color:var(--text-2);line-height:1.55}
+.opt-bar{height:8px;border-radius:var(--r-pill);background:var(--surface-3);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.opt-bar i{display:block;height:100%;width:0;border-radius:var(--r-pill);background:var(--accent);box-shadow:0 0 10px var(--glow);transition:width 200ms var(--ease)}
+.opt-phase{font-size:var(--fs-base);font-weight:600;display:flex;flex-wrap:wrap;gap:0 var(--s-2)}
+.opt-phase .mono{color:var(--text-2);font-variant-numeric:tabular-nums}
+.opt-result{font-size:var(--fs-base);line-height:1.55}
+.opt-result.good{padding:12px 14px;border-radius:var(--r-md);background:var(--good-tint);border:1px solid var(--good-line)}
+.opt-result.bad{padding:12px 14px;border-radius:var(--r-md);background:var(--again-tint);border:1px solid var(--again-line)}
+.opt-detail b{color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.opt-fold{border-top:1px solid var(--line);padding-top:6px}
+.opt-fold summary{cursor:pointer;font-weight:600;font-size:var(--fs-sm);min-height:40px;display:flex;align-items:center}
+.opt-w{display:block;margin-top:6px;padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-sunken);font:500 var(--fs-xs)/1.7 var(--f-num);overflow-wrap:anywhere;user-select:all;color:var(--text)}
 .sheet-danger,.card-info{border-top:1px solid var(--line)}
 .sheet-danger{padding-top:14px}
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
@@ -1068,6 +1083,8 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .switch:checked::after{transform:translateX(20px);background:var(--on-accent)}
 .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .advanced #schedReset{margin-top:12px}
+.opt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2) var(--s-3)}
+.opt-row .confirm{margin-top:4px}
 /* steps: text box + reset, and a plain-words explanation underneath */
 .steps-input{display:flex;gap:var(--s-2)}
 .steps-input input{flex:1}

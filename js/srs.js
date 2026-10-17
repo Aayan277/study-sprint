@@ -6,12 +6,14 @@
 // Each rating updates them, and the card is scheduled for the day your chance of remembering
 // it drops to your target retention (90% by default).
 
-import { fsrs, generatorParameters, createEmptyCard, Rating } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
+import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
 import { examGainFrom, examClamp } from './exam.js';
 
 export { Rating };
+// What the optimizer needs from the library (js/optimize-sheet.js): the standard weights, their allowed ranges, and the per-deck clipping.
+export { default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters };
 
 // The four buttons, in order. key = keyboard shortcut.
 export const RATINGS = [

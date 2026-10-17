@@ -95,10 +95,15 @@ export function nextState(w, s, d, t, g, round = true, r) {
 //   logLoss  mean binary cross-entropy
 //   rmse     the 20 equal bins of predicted R: sqrt of the count-weighted mean of (mean predicted − observed recall)²  ("RMSE (bins)")
 //   n        how many predictions
-export function evaluate(cards, w, { round = true } = {}) {
+export function evaluate(cards, w, opts) { return evaluateMany([{ cards, w }], opts); }
+
+// The same, over several groups of cards that each use their own weights (the scheduler clips w17 and w18 differently
+// for decks with different relearning steps): one log loss and one set of bins over everything.
+//   parts  [{ cards, w }, …]
+export function evaluateMany(parts, { round = true } = {}) {
   let n = 0, loss = 0;
   const cnt = new Float64Array(BINS), pred = new Float64Array(BINS), obs = new Float64Array(BINS);
-  for (const c of cards) {
+  for (const { cards, w } of parts) for (const c of cards) {
     const { deltas, ratings, scored } = c;
     let s = 0, d = 0;
     for (let i = 0; i < ratings.length; i++) {
@@ -122,6 +127,20 @@ export function evaluate(cards, w, { round = true } = {}) {
 
 // The decision rule (owner decision Q2): keep the new weights only if the log loss is lower AND the RMSE is no higher.
 export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse;
+
+// ---------- judging (the page and the simulator both use this) ----------
+// Weights as the scheduler will use them: generatorParameters clips w17 and w18 to a ceiling that depends on the deck's number
+// of relearning steps, so each group of cards is scored with the weights clipped for its own step count.
+//   cards      histories (fsrs-data.js)       steps  relearning-step count of each card's deck (same order)
+//   clip(w, n) ts-fsrs clipParameters(w, n, true)
+// Returns { before, after, better } where before/after = { logLoss, rmse, n } for `current` and `fitted`.
+export function judge(cards, steps, current, fitted, clip) {
+  const groups = new Map();
+  cards.forEach((c, i) => { const n = steps[i] ?? 1; if (!groups.has(n)) groups.set(n, []); groups.get(n).push(c); });
+  const part = w => [...groups].map(([n, list]) => ({ cards: list, w: clip(w, n) }));
+  const before = evaluateMany(part(current)), after = evaluateMany(part(fitted));
+  return { before, after, better: isBetter(before, after) };
+}
 
 // ---------- gradients (dual numbers) ----------
 // A dual number is { v: value, o: offset }: the value, and where its 17 derivatives (with respect to w4 to w20) sit in one big

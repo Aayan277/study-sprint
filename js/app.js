@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -27,6 +27,8 @@ initInstall();       // listens for the browser saying the app can be installed 
 // ---------- settings ----------
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
+  const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   const { skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
@@ -127,6 +129,18 @@ async function renderSettings(el) {
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
           <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
+          <span id="optStatus">${esc(personal.status)}</span>
+          <div class="opt-actions">
+            <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
+            ${personal.using ? '<button class="link" type="button" id="optReset">Reset to default</button>' : ''}
+          </div>
+          ${personal.canOptimize ? '' : `<span class="steps-hint" id="optWhy">${esc(personal.why)}</span>`}
+          <div class="confirm" id="optConfirm" role="group" aria-labelledby="optConfirmQ" hidden>
+            <p id="optConfirmQ">Go back to the standard settings? Your cards keep their dates.</p>
+            <div class="sheet-actions"><button class="btn ghost small" type="button" id="optNo">Cancel</button><button class="btn danger solid small" type="button" id="optYes">Reset</button></div>
+          </div>
+        </div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
           <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
           <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
@@ -345,6 +359,28 @@ function wireAdvanced(el) {
   el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
   $('maxDays').addEventListener('change', e => setMax(e.target.value));
   $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
+  // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
+  const redrawAdvanced = async () => {
+    if (currentRoute !== 'settings') return;
+    await renderSettings($('screen'));
+    $('advanced').open = true;
+  };
+  $('optOpen').addEventListener('click', async () => {
+    try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
+    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('optReset')?.addEventListener('click', () => {
+    $('optConfirm').hidden = false;
+    $('optReset').hidden = true;
+    $('optNo').focus();
+  });
+  $('optNo').addEventListener('click', () => { $('optConfirm').hidden = true; $('optReset') && ($('optReset').hidden = false); $('optReset')?.focus(); });
+  $('optYes').addEventListener('click', async () => {
+    // Saved as { w: null }, not deleted: a stamped value syncs to your other devices, a missing one does not.
+    await db.setSetting('fsrsParams', { w: null, at: Date.now(), version: FSRS_VERSION });
+    await redrawAdvanced();
+    toast('Back to the standard settings');
+  });
   $('schedReset').addEventListener('click', async () => {
     for (const [k, v] of Object.entries(SCHED_DEFAULTS)) { settings[k] = v; await db.setSetting(k, v); }
     await renderSettings($('screen'));

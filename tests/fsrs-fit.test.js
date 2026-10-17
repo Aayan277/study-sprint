@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fit, runFit, evaluate, evaluateSplit, lossAndGrad, isBetter, pretrainStarts, mulberry32,
-  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending
+  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending, evaluateMany, judge
 } from '../js/fsrs-fit.js';
 
 // ts-fsrs 5.4.2: default_w and CLAMP_PARAMETERS(W17_W18_Ceiling = 2, enable_short_term = true)
@@ -274,4 +274,23 @@ test('w0 <= w1 <= w2 <= w3 after the whole fit, also when the data says otherwis
     for (const w of [r.fitted, r.w]) for (let g = 1; g < 4; g++) assert.ok(w[g] >= w[g - 1], `w${g - 1} ${w[g - 1]} > w${g} ${w[g]}`);
     for (let g = 0; g < 4; g++) assert.ok(r.fitted[g] >= BOUNDS[g][0] && r.fitted[g] <= BOUNDS[g][1]);
   }
+});
+
+test('evaluateMany: one group is evaluate(); groups with their own weights are pooled', () => {
+  const cards = synth(FORGETFUL, 60, 11);
+  const half = [cards.slice(0, 30), cards.slice(30)];
+  const whole = evaluate(cards, DEFAULT_W);
+  assert.deepEqual(evaluateMany([{ cards, w: DEFAULT_W }]), whole);
+  const pooled = evaluateMany(half.map(c => ({ cards: c, w: DEFAULT_W })));
+  assert.equal(pooled.n, whole.n);
+  assert.ok(Math.abs(pooled.logLoss - whole.logLoss) < 1e-12 && Math.abs(pooled.rmse - whole.rmse) < 1e-12);
+  const mixed = evaluateMany([{ cards: half[0], w: DEFAULT_W }, { cards: half[1], w: FORGETFUL }]);       // each group scored with its own weights
+  assert.notEqual(mixed.logLoss, whole.logLoss);
+});
+
+test('judge: the same weights are never better; the true weights beat the defaults', () => {
+  const cards = synth(FORGETFUL, 120, 12);
+  const id = w => w;
+  assert.equal(judge(cards, cards.map(() => 1), DEFAULT_W, DEFAULT_W, id).better, false);
+  assert.equal(judge(cards, cards.map(() => 1), DEFAULT_W, FORGETFUL, id).better, true);
 });
