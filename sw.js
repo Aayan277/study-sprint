@@ -9,7 +9,7 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v80';
+const CACHE = 'study-sprint-v81';
 // files-hash: 12425c1e2f074b3b
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
@@ -83,7 +83,7 @@ self.addEventListener('fetch', e => {
   };
 
   if (url.origin === location.origin) {
-    e.respondWith(savedThenUpdate(e, req));
+    e.respondWith(savedFirst(req));
   } else if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
     // jsdelivr addresses carry the version, so a query string (an old "?again=2" retry) never means a different file.
     // A saved "opaque" copy can't answer a cors request (the module and stylesheet loads ask with cors), so that one is fetched again.
@@ -92,20 +92,19 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// Our own files: answer from the saved copy at once, and fetch a fresh copy in the background for next time.
-// cache: 'no-cache' makes the browser ask GitHub whether the file changed instead of reusing its own copy.
-// With nothing saved yet (or no saved copy of a page), wait for the network, and when offline show the app.
-async function savedThenUpdate(e, req) {
+// Our own files: answer from the saved copy of THIS version only. Every file of a release is saved together when the
+// worker installs (a new CACHE name for each release), so the files in use always belong to the same version. An
+// earlier version refreshed each file on its own in the background, which could mix a new file with an old one
+// after a big update ("Importing binding name ... is not found"). Updates now arrive only as a whole new worker.
+// A file that isn't saved yet (or a page with nothing saved) comes from the network; offline, the app shell is shown.
+async function savedFirst(req) {
   const saved = await caches.match(req, { ignoreSearch: true });
-  const fresh = fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })).then(async res => {
-    if (res.ok) await (await caches.open(CACHE)).put(req, res.clone());
+  if (saved) return saved;
+  try {
+    const res = await fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }));
+    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
-  });
-  if (saved) {
-    e.waitUntil(fresh.catch(() => {}));      // keep the worker alive until the background copy is saved
-    return saved;
-  }
-  try { return await fresh; } catch (err) {
+  } catch (err) {
     if (req.mode === 'navigate') return (await caches.match('index.html')) || Response.error();
     throw err;
   }
