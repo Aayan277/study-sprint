@@ -6,14 +6,15 @@
 // The pieces here:
 //   runFit      runs a fit in a module Worker (or on the main thread in small slices if workers are not available),
 //               with a time limit and a way to cancel. Nothing is saved by it.
-//   judge       (in fsrs-fit.js) compares the weights in use with the fitted ones on what the scheduler will really use: each deck's
-//               weights are clipped for that deck's number of relearning steps (clipParameters), as the scheduler does.
-//   startRun    reads the log, runs the fit, judges, re-reads the setting (a sync may have changed it) and saves.
+//   fitChecked  (in fsrs-fit.js, run by the worker) fits on the first 80% of your days, judges the new weights against the ones in use
+//               on the last 20% (each deck's weights clipped for its relearning steps, as the scheduler does), and only if they win
+//               fits again on everything.
+//   startRun    reads the log, runs that, re-reads the setting (a sync may have changed it) and saves.
 //   openOptimizeSheet   the sheet. A run goes on if the sheet is closed.
 
 import * as db from './db.js';
 import { buildHistories, MIN_REVIEWS } from './fsrs-data.js';
-import { fit, judge } from './fsrs-fit.js';
+import { fitChecked, judge, splitHistories, HOLDOUT_SHARE } from './fsrs-fit.js';
 import { deckSchedulerOptions, FSRS_VERSION } from './sched-settings.js';
 import { effectiveDeck } from './deck-tree.js';
 import { $, esc, openSheet, closeSheet, toast } from './ui.js';
@@ -27,7 +28,7 @@ const word = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
 // ---------- running a fit ----------
 // runFit(input, { onProgress, onFallback, timeoutMs, useWorker }) → { promise, cancel }.
 // The promise always resolves (never rejects) with one of:
-//   { status: 'done', result, inWorker }   result is what fit() returned
+//   { status: 'done', result, inWorker }   result is what fitChecked() returned
 //   { status: 'cancelled' }   { status: 'timeout' }   { status: 'error', message }
 // Typed arrays are copied into the worker (not moved), because the page needs the histories again to judge the result.
 export function runFit(input, { onProgress = () => {}, onFallback = () => {}, timeoutMs = TIME_LIMIT_MS, useWorker = true } = {}) {
@@ -48,7 +49,7 @@ export function runFit(input, { onProgress = () => {}, onFallback = () => {}, ti
   const runOnPage = () => {
     onFallback();
     let it;
-    try { it = fit(input); } catch (err) { finish({ status: 'error', message: String(err?.message || err) }); return; }
+    try { it = fitChecked(input); } catch (err) { finish({ status: 'error', message: String(err?.message || err) }); return; }
     const step = () => {
       if (stopped) return;
       const end = performance.now() + SLICE_MS;
@@ -123,7 +124,7 @@ async function startRun() {
     if (hist.reviews < MIN_REVIEWS) { setRun({ status: 'result', result: { kind: 'not-enough', reviews: hist.reviews } }); return; }
     run.counts = { reviews: hist.reviews, cards: hist.cardsUsed };
     paintLive();
-    const input = { cards: hist.cards, current, defaults: srs.default_w.slice(), bounds: srs.CLAMP_PARAMETERS(srs.W17_W18_Ceiling, true) };
+    const input = { cards: hist.cards, steps, current, defaults: srs.default_w.slice(), bounds: srs.CLAMP_PARAMETERS(srs.W17_W18_Ceiling, true) };
     let lastKey = '';
     handle = runFit(input, {
       onFallback: () => { if (mine === token && run) { run.note = 'This may make the app slower until it\'s done.'; draw(); } },
@@ -145,23 +146,22 @@ async function startRun() {
     if (out.status === 'error') { console.error(out.message); setRun({ status: 'result', result: { kind: 'failed' } }); return; }
     const res = out.result;
     if (res.status === 'not-enough') { setRun({ status: 'result', result: { kind: 'not-enough', reviews: res.reviews } }); return; }
-    // Judge on what the scheduler will really use (clipped per deck), not on the raw numbers.
-    run.phase = 'check'; run.progress = 0.97; paintProgress();
-    await new Promise(r => setTimeout(r, 0));
-    let verdict = judge(hist.cards, steps, current, res.fitted, clip);
-    // A sync may have changed the setting while we worked (section 7): score the new current weights against the fitted ones.
+    // (The new weights were judged on your latest reviews, which the fit never saw, with each deck's weights clipped for its steps.)
+    if (res.status === 'same') { setRun({ status: 'result', result: { kind: 'same' } }); return; }
+    let { before, after } = res;
+    // A sync may have changed the setting while we worked (section 7): score the new current weights against the weights the check used.
     const latest = (await db.getSettings()).fsrsParams;
-    const moved = JSON.stringify(latest) !== JSON.stringify(started);
-    if (moved) verdict = judge(hist.cards, steps, latest?.w || srs.default_w.slice(), res.fitted, clip);
-    if (!verdict.better) {
-      setRun({ status: 'result', result: { kind: moved ? 'other-device' : 'same' } });
-      return;
+    if (JSON.stringify(latest) !== JSON.stringify(started)) {
+      const { test } = splitHistories(hist.cards, HOLDOUT_SHARE);
+      const v = judge(test, steps, latest?.w || srs.default_w.slice(), res.headFitted, clip);
+      if (v.before.n < 20 || !v.better) { setRun({ status: 'result', result: { kind: 'other-device' } }); return; }
+      ({ before, after } = v);
     }
     const saved = {
-      w: clip(res.fitted, 0),                                   // plain limits; each deck's own step count is applied again when it schedules
+      w: clip(res.w, 0),                                        // plain limits; each deck's own step count is applied again when it schedules
       at: Date.now(), reviews: hist.reviews, cards: hist.cardsUsed,
-      logLoss: { before: verdict.before.logLoss, after: verdict.after.logLoss },
-      rmse: { before: verdict.before.rmse, after: verdict.after.rmse },
+      logLoss: { before: before.logLoss, after: after.logLoss },
+      rmse: { before: before.rmse, after: after.rmse },
       version: FSRS_VERSION
     };
     await db.setSetting('fsrsParams', saved);
@@ -224,7 +224,7 @@ function resultHTML(r) {
         <p class="opt-detail">Prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
         <p class="opt-note">Run this again every month or so as you review more.</p>
         <details class="opt-fold"><summary>Details</summary>
-          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. The 21 numbers, in the same format as Anki's:</p>
+          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. The two error numbers above come from your latest reviews, which were left out of the fit as a test. The 21 numbers, in the same format as Anki's:</p>
           <code class="opt-w" id="optW">${esc(s.w.map(x => +x.toFixed(4)).join(', '))}</code></details>`;
     }
     case 'same':

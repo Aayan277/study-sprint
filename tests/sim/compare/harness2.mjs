@@ -15,10 +15,10 @@
 //                 that comes due during the break (all), or the n soonest. Unset = off.
 //      CARDS=n    override the number of cards (Gb has 1000, all introduced by day 40; 2000 keeps new cards coming).
 //      OPT=1      (FSRS optimizer, PR 2) once 400 reviews count, and then every OPT_EVERY (30) days, fit the learner's own weights with the
-//                 app's real fsrs-data.js + fsrs-fit.js (history from the simulated review log, judged with judge() as the sheet does)
-//                 and keep them in settings.fsrsParams only if they predict better. Needs a copy that has js/fsrs-fit.js. Extra metrics:
+//                 app's real fsrs-data.js + fsrs-fit.js (history from the simulated review log; fitChecked: fit on the first 80%, judged on the last 20%, refit on all)
+//                 and keep them in settings.fsrsParams only if they predict better there. Needs a copy that has js/fsrs-fit.js. OPT_CONFIG='{...}' overrides FIT_DEFAULTS. Extra metrics:
 //                 revR (mean true recall at the moment of a Review answer on a graduated card), optRuns / optKept, and oos (log loss of
-//                 the standard weights vs weights fitted on the first 80% of the history, both scored on the last 20%).
+//                 what the app would use vs the standard weights, both scored on the last 20% after deciding on the first 80%).
 //      Extra metrics for break scenarios: Rret (mean true recall on the first day back, before studying), recPeak / recP90 (largest and 90th-percentile answers a day after the break),
 //      R30end (mean true recall 30 days after the break, non-exam decks), offered (did the offer fire).
 import { register } from 'node:module';
@@ -198,16 +198,14 @@ async function runSeed(seed) {
     const hist = FD.buildHistories(db.S.logs);
     if (hist.reviews < FD.MIN_REVIEWS) return;
     lastOpt = d;
-    const input = optInput(hist);
-    const res = run(FIT.fit(input));
+    const input = { ...optInput(hist), steps: hist.cards.map(() => 1) };       // one deck, one relearning step
+    const res = run(FIT.fitChecked(input));                                   // fit on the first 80%, judge on the last 20%, refit only if it wins
     if (res.status === 'not-enough') return;
     optStat.runs++;
-    const clip = (w, n) => TF.clipParameters(w, n, true);
-    const v = FIT.judge(hist.cards, hist.cards.map(() => 1), input.current, res.fitted, clip);       // one deck, one relearning step
-    if (!v.better) return;
+    if (res.status !== 'better') return;
     optStat.kept++;
-    db.S.settings.fsrsParams = { w: clip(res.fitted, 0), at: NOW, reviews: hist.reviews, cards: hist.cardsUsed,
-      logLoss: { before: v.before.logLoss, after: v.after.logLoss }, rmse: { before: v.before.rmse, after: v.after.rmse }, version: SCH.FSRS_VERSION };
+    db.S.settings.fsrsParams = { w: TF.clipParameters(res.w, 0, true), at: NOW, reviews: hist.reviews, cards: hist.cardsUsed,
+      logLoss: { before: res.before.logLoss, after: res.after.logLoss }, rmse: { before: res.before.rmse, after: res.after.rmse }, version: SCH.FSRS_VERSION };
   }
 
   // ---- Review session (review.js start()/answer() of v3.4) ----
@@ -378,10 +376,17 @@ async function runSeed(seed) {
   };
   if (OPT) {
     Object.assign(out, { optRuns: optStat.runs, optKept: optStat.kept, wFinal: db.S.settings.fsrsParams?.w ?? null });
-    // an honest out-of-sample score: fit on the first 80% of the days, score the standard weights and the fitted ones on the last 20%
+    // an out-of-sample score of what the app does: use only the first 80% of the days, run the whole decision on it (fitChecked), and score the
+    // weights it would use (the fitted ones if it keeps them, else the standard ones) against the standard weights on the last 20%.
+    // rawAfter: the same without the decision (always take the fit), for comparison.
     const hist = FD.buildHistories(db.S.logs);
-    const split = run(FIT.evaluateSplit({ ...optInput(hist), current: [...TF.default_w] }));
-    out.oos = split.status === 'split' ? { before: split.before.logLoss, after: split.after.logLoss, n: split.before.n, kept: split.trainResult.status === 'better' } : null;      // kept: would the app have kept this fit (its in-sample rule, on the first 80%)?
+    const { head, test } = FIT.splitHistories(hist.cards);
+    const base = { ...optInput(hist), current: [...TF.default_w] };
+    const r = run(FIT.fitChecked({ ...base, cards: head, steps: head.map(() => 1) }));
+    const raw = run(FIT.fit({ ...base, cards: head, config: { ...base.config, minReviews: 1 } }));
+    const use = r.status === 'better' ? r.w : base.current;
+    const before = FIT.evaluate(test, base.current);
+    out.oos = r.status === 'not-enough' || raw.status === 'not-enough' ? null : { before: before.logLoss, after: FIT.evaluate(test, use).logLoss, rawAfter: FIT.evaluate(test, raw.fitted).logLoss, n: before.n, kept: r.status === 'better' };
     out.reviewsCounted = hist.reviews;
   }
   if (cfg.breakFrom !== undefined) {

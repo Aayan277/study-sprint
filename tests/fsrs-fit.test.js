@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fit, runFit, evaluate, evaluateSplit, lossAndGrad, isBetter, pretrainStarts, mulberry32,
-  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending, evaluateMany, judge
+  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending, evaluateMany, judge, fitChecked
 } from '../js/fsrs-fit.js';
 
 // ts-fsrs 5.4.2: default_w and CLAMP_PARAMETERS(W17_W18_Ceiling = 2, enable_short_term = true)
@@ -293,4 +293,45 @@ test('judge: the same weights are never better; the true weights beat the defaul
   const id = w => w;
   assert.equal(judge(cards, cards.map(() => 1), DEFAULT_W, DEFAULT_W, id).better, false);
   assert.equal(judge(cards, cards.map(() => 1), DEFAULT_W, FORGETFUL, id).better, true);
+});
+
+// run a generator to the end
+function drain(gen, inp, onProgress) {
+  const it = gen(inp);
+  for (;;) { const r = it.next(); if (r.done) return r.value; onProgress?.(r.value); }
+}
+
+test('fitChecked: judged on held-out reviews. A learner who matches the defaults keeps the current weights in most seeds', () => {
+  let kept = 0;
+  const seeds = [21, 22, 23, 24, 25, 26, 27, 28];
+  for (const seed of seeds) {
+    const r = drain(fitChecked, input(synth(DEFAULT_W, 300, seed, 10)));
+    assert.ok(['same', 'better'].includes(r.status));
+    if (r.status === 'same') kept++;
+  }
+  assert.ok(kept >= 5, `kept the current weights in ${kept} of ${seeds.length} seeds`);
+});
+
+test('fitChecked: a forgetful learner gets new weights that win on the held-out part', () => {
+  let better = 0;
+  for (const seed of [31, 32, 33, 34]) {
+    const r = drain(fitChecked, input(synth(FORGETFUL, 300, seed, 10)));
+    if (r.status === 'better') {
+      better++;
+      assert.equal(r.w.length, 21);
+      assert.ok(r.after.logLoss < r.before.logLoss && r.after.rmse <= r.before.rmse);
+      assert.ok(r.tested >= 20);
+      for (let i = 0; i < 21; i++) assert.ok(r.w[i] >= BOUNDS[i][0] && r.w[i] <= BOUNDS[i][1]);
+    }
+  }
+  assert.ok(better >= 3, `better in ${better} of 4 seeds`);
+});
+
+test('fitChecked: too few reviews, progress that only goes up, and the same answer twice', () => {
+  assert.equal(drain(fitChecked, input(synth(FORGETFUL, 20, 5, 6))).status, 'not-enough');
+  const cards = synth(FORGETFUL, 200, 6, 10), seen = [];
+  const a = drain(fitChecked, input(cards), p => seen.push(p));
+  assert.ok(seen.length > 5 && seen.every((p, i) => i === 0 || p.progress >= seen[i - 1].progress) && seen.at(-1).progress <= 1);
+  assert.ok(seen.some(p => p.phase === 'check') && seen.some(p => p.phase === 'finding'));
+  assert.deepEqual(drain(fitChecked, input(cards)), a);
 });

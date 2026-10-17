@@ -123,7 +123,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await sideways(p, `${tag} settings (few)`);
 
   // ---------- enough reviews: the sheet ----------
-  await seed(p, [['B', 70, null], ['C', 60, { relearningSteps: '10m 1h' }]], 80);
+  await seed(p, [['B', 250, null], ['C', 200, { relearningSteps: '10m 1h' }]], 80);
   const counted = await p.evaluate(async () => { const db = await import('./js/db.js'); const { buildHistories } = await import('./js/fsrs-data.js'); return buildHistories(await db.getAll('reviewLog')).reviews; });
   ok(counted >= 400, `${tag}: enough reviews count (${counted})`);
   await heartbeat(p);
@@ -233,7 +233,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   p.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
   ok(await p.evaluate(() => typeof Worker === 'undefined'), 'no-worker: Worker is gone in this window');
-  await seed(p, [['B', 70, null]], 0);
+  await seed(p, [['B', 250, null], ['C', 200, { relearningSteps: '10m 1h' }]], 0);
   await settingsPage(p); await openSheet(p);
   await watchSheet(p);
   await p.click('#optGo');
