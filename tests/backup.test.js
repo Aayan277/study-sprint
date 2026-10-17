@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkBackup, BACKUP_FORMAT, BACKUP_VERSION, cleanMixedWith } from '../js/db.js';
+import { checkBackup, BACKUP_FORMAT, BACKUP_VERSION, cleanMixedWith, restoredSettings } from '../js/db.js';
 import { STARTER_DECKS, starterCards } from '../js/jlpt.js';
 import { checkAnswer, canType } from '../js/match.js';
 
@@ -109,4 +109,21 @@ test('dailyGoal in a backup: a whole number from 1 to 500 (or none) passes, anyt
   const withGoal = dailyGoal => ({ ...good, settings: { dailyGoal } });
   for (const g of [1, 20, 500, null, undefined]) assert.equal(checkBackup(withGoal(g)), null);        // null or missing means the default
   for (const g of [0, -5, 501, 2.5, '20', NaN, [20], {}, true]) assert.match(checkBackup(withGoal(g)), /daily goal/);
+});
+
+test('fsrsParams in a backup: a good value, a reset or none passes; a restore keeps the good one and turns junk into the standard settings', () => {
+  const mine = { w: Array(21).fill(0.5), at: 1, reviews: 450, cards: 90, version: 'fsrs-6' };
+  const withParams = fsrsParams => ({ ...good, settings: { fsrsParams } });
+  for (const v of [mine, { w: null, at: 2, version: 'fsrs-6' }, null, undefined]) assert.equal(checkBackup(withParams(v)), null);
+  assert.equal(checkBackup({ ...good, settings: { fsrsParams: { w: [1], version: 'fsrs-9' } } }), null);       // not fatal: the weights are derived data
+  const restore = settings => Object.fromEntries(restoredSettings(settings));
+  assert.deepEqual(restore({ fsrsParams: mine, dailyGoal: 30 }), { fsrsParams: mine, dailyGoal: 30 });
+  assert.equal(restore({ fsrsParams: null }).fsrsParams, null);
+  for (const bad of [{ ...mine, version: 'fsrs-7' }, { ...mine, w: mine.w.slice(1) }, { ...mine, w: Array(21).fill(Infinity) }, 'x', 7, []]) {
+    assert.equal(restore({ fsrsParams: bad, dailyGoal: 30 }).fsrsParams, null);
+    assert.equal(restore({ fsrsParams: bad, dailyGoal: 30 }).dailyGoal, 30);                                   // the rest of the settings still come back
+  }
+  // this device's sign-in and sync bookmarks are never restored
+  assert.deepEqual(restore({ syncAuth: { a: 1 }, syncState: { b: 2 }, theme: 'x' }), { theme: 'x' });
+  assert.deepEqual(restore(undefined), {});
 });

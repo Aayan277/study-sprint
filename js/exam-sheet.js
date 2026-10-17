@@ -10,6 +10,7 @@ import { dayStart } from './days.js';
 import { $, esc, toast, closeSheet, openSheet, plural } from './ui.js';
 import { effectiveDeck, subtreeIds } from './deck-tree.js';
 import { examInfo, examStart, countdown, pullIn } from './exam.js';
+import { personalW20 } from './sched-settings.js';
 
 // What is wrong with an exam date typed in a box ('' when it is fine). Blank is fine: it clears the date.
 export function examDateError(value, now = Date.now()) {
@@ -31,7 +32,8 @@ export async function commitDeck(saved, decks, { isNew = false } = {}) {
   if (!isNew && exam && exam !== effectiveDeck(decks, saved.id).examDate) {
     const dIds = [...subtreeIds(after, saved.id)].filter(id => effectiveDeck(after, id).examDate === exam);
     const ids = new Set((await db.getAll('cards')).filter(c => dIds.includes(c.deckId)).map(c => c.id));
-    const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam }, Date.now(), (await db.getSettings()).easyDays);
+    const settings = await db.getSettings();
+    const changed = pullIn((await db.getAll('cardStates')).filter(st => ids.has(st.cardId)), { examDate: exam }, Date.now(), settings.easyDays, personalW20(settings));
     if (changed.length) await db.putStates(changed);
     moved = changed.length;
   }
