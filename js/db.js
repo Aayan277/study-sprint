@@ -571,6 +571,7 @@ export function restoredSettings(settings) {
   return Object.entries(settings || {})
     .filter(([k]) => !isLocalOnly(k))
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
+    .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
     .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
 }
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10

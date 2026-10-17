@@ -75,15 +75,18 @@ export function cleanFsrsParams(v) {
 }
 
 // ---------- "Ignore reviews before" ----------
-// The synced setting `ignoreBefore`: a date 'YYYY-MM-DD' (or null = none). The optimizer and the health check leave out every
+// The synced setting `ignoreBefore`: a date 'YYYY-MM-DD', today or earlier (or null = none). The optimizer and the health check leave out every
 // review before the start of that day, for a messy early history (e.g. an old Anki import). Cards whose history then no longer
 // starts at "new" are skipped by the optimizer as usual (fsrs-data.js rule 4), so it is really "cards first studied from then on".
-export function cleanIgnoreBefore(v) {
+export function cleanIgnoreBefore(v, now = Date.now()) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof v === 'string' ? v : '');
   if (!m) return null;
   const d = new Date(+m[1], +m[2] - 1, +m[3]);
-  return d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3] ? v : null;
+  if (!(d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3])) return null;
+  const t = new Date(now);
+  return d.getTime() > new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() ? null : v;      // a date after today would ignore everything
 }
+export const todayISO = (now = Date.now()) => { const t = new Date(now); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
 // The start of that day (local time) in ms, or 0 for none: reviews with an earlier timestamp are ignored.
 export function ignoreBeforeTime(v) {
   const ok = cleanIgnoreBefore(v);

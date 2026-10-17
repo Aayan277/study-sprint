@@ -10,13 +10,19 @@
 //     how often you press Hard / Good / Easy (or the usual shares); the card's memory then moves exactly as the scheduler moves
 //     it (nextState in fsrs-fit.js, the same maths as ts-fsrs 5.4.2) and its next gap is the one that targets that retention.
 //   - It counts the reviews per day and, at 30 / 90 / 365 days, how likely you are to remember a card you have started.
-//   - For a deck with an exam date it also keeps the exam rules (js/exam.js): no card is left for after the exam, the target
-//     rises to 95% over the last 14 days, and cards below 99% on exam day get a last review the day before. Readiness is then
-//     the share of the deck's cards that you would remember at 90% or better on exam day (readiness() in exam.js).
+//   - For cards in a deck with an exam date it keeps the exam's rules exactly as js/exam.js applies them:
+//       * a card is never held back for a review before the exam just because of the exam: only a card whose next review would
+//         fall on or after exam day is touched (examClamp);
+//       * of those, only the ones we expect you to remember at less than FINAL_R (99%) on exam day get a review, put on the
+//         least busy of the last FINAL_DAYS (3) days before the exam, later days winning a tie (examClamp, planFinalPass);
+//       * the target rises to 95% over the last RAMP_DAYS (14) days (examOptions).
+//     It then reports, for each target: how ready you would be on exam day BEFORE that final pass (cards you would remember at 90%
+//     or better, and the average chance), what the final pass costs ("the last 3 days: about N reviews a day"), and readiness on
+//     exam day after it (readiness() in exam.js).
 //
 // What it leaves out (so treat the numbers as a guide that compares targets, not a forecast):
 //   - learning and relearning steps are not played step by step: a new card costs as many answers as you have learning steps
-//     (at least 1) on its first day, a forgotten card costs one extra answer per relearning step;
+//     (at least 1, one more when it is rated Again) on its first day, a forgotten card costs one extra answer per relearning step;
 //   - no due-date spreading (fuzz, easy days), no daily review limit (you do every review that is due), no leeches, no Play;
 //   - your future self answers like your recent self. FSRS itself is the model of memory, so if it misjudges you, so does this.
 //
@@ -27,13 +33,13 @@
 // counts scaled back up.
 
 import { forgettingCurve, nextState, initState, mulberry32 } from './fsrs-fit.js';
-import { FINAL_R, READY_R, RAMP_DAYS, EXAM_RETENTION } from './exam.js';
+import { FINAL_R, FINAL_DAYS, READY_R, RAMP_DAYS, EXAM_RETENTION } from './exam.js';
 
 export const HORIZONS = [30, 90, 365];
 export const RETENTION_MIN = 75, RETENTION_MAX = 97;
 export const RETENTIONS = Array.from({ length: RETENTION_MAX - RETENTION_MIN + 1 }, (_, i) => (RETENTION_MIN + i) / 100);
 export const SIM_CAP = 1500;                       // cards simulated at most (the rest is a sample, scaled up)
-export const TIME_BUDGET_MS = 3000;                // stop and show what is done when it has taken this long
+export const TIME_BUDGET_MS = 3000;                // stop filling in the gaps when it has taken this long
 export const DEFAULT_REVIEW_PROBS = [0.224, 0.632, 0.144];        // Hard, Good, Easy among remembered reviews (the shares fsrs-rs's simulator starts from)
 export const DEFAULT_FIRST_PROBS = [0.24, 0.094, 0.495, 0.171];   // Again, Hard, Good, Easy on a card's first answer (same source)
 export const MIN_OWN_PROBS = 100, MIN_OWN_FIRST = 30;             // how many of your own answers before they replace the standard shares
@@ -66,18 +72,8 @@ export function intervalFor(w, s, retention, maxInterval) {
   return Math.min(Math.max(days, 1), maxInterval);
 }
 
-// ---------- one run: one target retention ----------
-// input:
-//   w                 21 weights (yours or the standard ones)
-//   existing          [{ s, d, last, due, grp }]  started cards: stability, difficulty, last review day and next due day
-//                     (days from today; last <= 0; due >= 0, an overdue card is due on day 0), grp = index into `groups`
-//   unseen            Int16Array/array of grp, one entry per card not started, in the order they would be introduced
-//   groups            [{ exam: day or null }]   one per exam date (or null for no exam); `exam` = days from today to exam day (0 = today)
-//   newPerDay, learnSteps, relearnSteps (how many), maxInterval
-//   reviewProbs [hard, good, easy], firstProbs [again, hard, good, easy]
-//   seed
-// plan (from planSample): { f, existingIdx: indexes of the sampled started cards, unseenIdx: sampled unseen, days }
-// Returns { horizons: { 30: {...}, 90: {...}, 365: {...} }, exams: [{ grp, day, ready, total }] } with counts already scaled by 1/f.
+// ---------- sampling ----------
+// plan: { f, days, existingIdx, unseenIdx }: f = the share of cards simulated (1 = all), and which ones.
 export function planSample(input, days = Math.max(...HORIZONS)) {
   const ex = input.existing.length, un = input.unseen.length;
   const intro = Math.min(un, Math.ceil(input.newPerDay * days));
@@ -95,6 +91,19 @@ export function planSample(input, days = Math.max(...HORIZONS)) {
   return { f, days, existingIdx: pick(ex, f), unseenIdx: pick(un, f) };
 }
 
+// ---------- one run: one target retention ----------
+// input:
+//   w                 21 weights (yours or the standard ones, clipped as the scheduler clips them)
+//   existing          [{ s, d, last, due, grp }]  started cards: stability, difficulty, last review day and next due day
+//                     (days from today; last <= 0; due >= 0, an overdue card is due on day 0), grp = index into `groups`
+//   unseen            Int16Array/array of grp, one entry per card not started, in the order they would be introduced
+//   groups            [{ exam: day or null }]   one per exam date (or null for no exam); `exam` = days from today to exam day (1 or more)
+//   newPerDay, learnSteps, relearnSteps (how many), maxInterval
+//   reviewProbs [hard, good, easy], firstProbs [again, hard, good, easy]
+//   seed
+// Returns { horizons: { 30: {...}, 90: {...}, 365: {...} }, exams: [...] } with counts already scaled by 1/f. Each exam:
+//   { grp, day, total, ready, share (ready on exam day, after the last pass), preShare / preRecall (ready share and average chance on
+//     exam day if nothing more were reviewed from the day the last pass starts), passLoad (reviews a day over the last FINAL_DAYS days) }
 export function simulateOne(input, retention, plan = planSample(input)) {
   const { w, newPerDay, learnSteps = 2, relearnSteps = 1, maxInterval = 36500, reviewProbs, firstProbs, seed = 1, groups } = input;
   const H = plan.days, f = plan.f;
@@ -114,12 +123,22 @@ export function simulateOne(input, retention, plan = planSample(input)) {
   };
   const cardSeed = key => (Math.imul((seed >>> 0) + 1, 2654435761) ^ Math.imul(key + 1, 40503)) >>> 0;
   const schedule = (i, due) => { if (due < H) buckets[due].push(i); };
-  const limitDue = (i, day, due) => {                  // an exam moves the last review to before exam day
+  const load = d => (d >= 0 && d < H && buckets[d] ? buckets[d].length : 0);
+  // examClamp (exam.js): after a review on `day` that would put the next one on or after exam day, a card we do not expect you to remember
+  // at 99% on exam day goes on the least busy of the last FINAL_DAYS days (tomorrow at the earliest; later days win a tie).
+  const placeDue = (i, day, due) => {
     const g = grp[i];
-    if (hasExam[g] && day < examDay(g) - 1) return Math.min(due, examDay(g) - 1);
-    return due;
+    if (!hasExam[g]) return due;
+    const daysLeft = examDay(g) - day;
+    if (daysLeft <= 0 || due < examDay(g)) return due;
+    if (forgettingCurve(w, daysLeft, S[i]) >= FINAL_R) return due;
+    const first = Math.max(1, daysLeft - Math.min(FINAL_DAYS, daysLeft)), lastD = daysLeft - 1;
+    if (first > lastD) return due;
+    let best = lastD;
+    for (let d = lastD - 1; d >= first; d--) if (load(day + d) < load(day + best)) best = d;
+    return day + best;
   };
-  const targetFor = (i, day) => {                      // the target rises to 95% over the last two weeks before an exam
+  const targetFor = (i, day) => {                      // examOptions: the target rises to 95% over the last two weeks before an exam
     const g = grp[i];
     if (!hasExam[g]) return retention;
     const left = examDay(g) - day;
@@ -128,13 +147,26 @@ export function simulateOne(input, retention, plan = planSample(input)) {
     return Math.round((retention + (EXAM_RETENTION - retention) * t) * 1000) / 1000;
   };
 
+  const recallAtDay = (i, day) => forgettingCurve(w, Math.max(0, day - last[i]), S[i]);
   let n = 0;
+  const late = [];                                      // started cards whose next review is on or after exam day (planFinalPass)
   for (const k of ex) {
     const c = input.existing[k], i = n++;
     S[i] = c.s; D[i] = c.d; last[i] = c.last; grp[i] = c.grp; rs[i] = cardSeed(k); started[i] = 1;
-    let due = Math.max(0, c.due);
-    if (hasExam[c.grp] && examDay(c.grp) >= 1) due = Math.min(due, Math.max(0, examDay(c.grp) - 1));
-    schedule(i, due);
+    const due = Math.max(0, c.due);
+    const g = c.grp;
+    if (hasExam[g] && due >= examDay(g) && forgettingCurve(w, examDay(g) - c.last, c.s) < FINAL_R) late.push(i);
+    else schedule(i, due);
+  }
+  // planFinalPass: the strongest of those go on the earliest of the last days, the weakest nearest the exam, keeping the days level
+  late.sort((a, b) => recallAt(b, examDay(grp[b])) - recallAt(a, examDay(grp[a])) || a - b);
+  function recallAt(i, d) { return forgettingCurve(w, d - last[i], S[i]); }
+  for (const i of late) {
+    const e = examDay(grp[i]);
+    const first = Math.max(0, e - FINAL_DAYS), lastD = e - 1;
+    let best = first;
+    for (let d = first + 1; d <= lastD; d++) if (load(d) < load(best)) best = d;
+    schedule(i, best);
   }
   const firstUnseen = n;
   const exTotals = groups.map(() => 0);                 // sampled cards per exam group: started + all that would still be new
@@ -142,11 +174,12 @@ export function simulateOne(input, retention, plan = planSample(input)) {
   for (const k of un) exTotals[input.unseen[k]] += 1;
   for (let j = 0; j < un.length; j++) { const i = firstUnseen + j; grp[i] = input.unseen[un[j]]; rs[i] = cardSeed(1e6 + un[j]); }
 
-  const recallNow = (i, day) => forgettingCurve(w, Math.max(0, day - last[i]), S[i]);
   const result = { horizons: {}, exams: [] };
+  const grpReviews = groups.map(() => 0);
+  const pre = groups.map(() => null);                   // { share, recall, reviews } on the day the last pass starts
   let reviews = 0, nextNew = firstUnseen, carry = 0, startedCount = ex.length;
   const learnCost = Math.max(1, learnSteps);
-  const answer = (i, day, forced) => {                  // one review of a started card on `day`
+  const answer = (i, day) => {                          // one review of a started card on `day`
     const t = Math.max(0, day - last[i]);
     const r = forgettingCurve(w, t, S[i]);
     let g = 1;
@@ -156,12 +189,13 @@ export function simulateOne(input, retention, plan = planSample(input)) {
     } else rnd(i);                                      // (a forgotten card still uses its second draw, so streams stay aligned)
     const nx = nextState(w, S[i], D[i], t, g, true, r);
     S[i] = nx.s; D[i] = nx.d; last[i] = day;
-    reviews += g === 1 ? 1 + relearnSteps : 1;
+    const cost = g === 1 ? 1 + relearnSteps : 1;
+    reviews += cost; grpReviews[grp[i]] += cost;
     return g;
   };
   const snapshot = day => {
     let known = 0;
-    for (let i = 0; i < N; i++) if (started[i]) known += recallNow(i, day);
+    for (let i = 0; i < N; i++) if (started[i]) known += recallAtDay(i, day);
     const total = reviews / f;
     result.horizons[day] = {
       days: day, reviews: total, reviewsPerDay: total / day,
@@ -170,12 +204,25 @@ export function simulateOne(input, retention, plan = planSample(input)) {
   };
 
   for (let day = 0; day < H; day++) {
-    // exam day: how ready is each exam group, if you did no more reviews (before today's reviews, as readiness() does)
     for (let g = 0; g < groups.length; g++) {
-      if (!hasExam[g] || examDay(g) !== day) continue;
-      let ready = 0;
-      for (let i = 0; i < N; i++) if (grp[i] === g && started[i] && recallNow(i, day) >= READY_R) ready++;
-      result.exams.push({ grp: g, day, ready, total: exTotals[g], share: exTotals[g] ? ready / exTotals[g] : 0 });
+      if (!hasExam[g]) continue;
+      const e = examDay(g);
+      // the day the last pass starts: how ready would you be on exam day if nothing more were reviewed?
+      if (day === Math.max(0, e - FINAL_DAYS)) {
+        let ready = 0, sum = 0, cnt = 0;
+        for (let i = 0; i < N; i++) if (grp[i] === g && started[i]) { const r = forgettingCurve(w, e - last[i], S[i]); sum += r; cnt++; if (r >= READY_R) ready++; }
+        pre[g] = { share: exTotals[g] ? ready / exTotals[g] : 0, recall: cnt ? sum / cnt : 0, reviews: grpReviews[g], ready, day };
+      }
+      // exam day: how ready is the group (before any review that day, as readiness() has it)
+      if (day === e) {
+        let ready = 0;
+        for (let i = 0; i < N; i++) if (grp[i] === g && started[i] && recallAtDay(i, day) >= READY_R) ready++;
+        const p = pre[g];
+        result.exams.push({
+          grp: g, day, ready, total: exTotals[g], share: exTotals[g] ? ready / exTotals[g] : 0,
+          preShare: p.share, preRecall: p.recall, passLoad: (grpReviews[g] - p.reviews) / (e - p.day) / f
+        });
+      }
     }
     // new cards for today (a fraction of a card carries over when only a sample is simulated)
     carry += newPerDay * f;
@@ -187,24 +234,17 @@ export function simulateOne(input, retention, plan = planSample(input)) {
       const g = u < firstProbs[0] ? 1 : u < firstProbs[0] + firstProbs[1] ? 2 : u < firstProbs[0] + firstProbs[1] + firstProbs[2] ? 3 : 4;
       const st = initState(w, g);
       S[i] = st.s; D[i] = st.d; last[i] = day; started[i] = 1; startedCount++;
-      reviews += g === 1 ? learnCost + 1 : g === 4 ? 1 : learnCost;
+      const cost = g === 1 ? learnCost + 1 : g === 4 ? 1 : learnCost;
+      reviews += cost; grpReviews[grp[i]] += cost;
       const gap = g === 1 ? 1 : intervalFor(w, S[i], targetFor(i, day), maxInterval);
-      schedule(i, limitDue(i, day, day + gap));
+      schedule(i, placeDue(i, day, day + gap));
     }
     // reviews due today
     const due = buckets[day];
     for (let b = 0; b < due.length; b++) {
       const i = due[b];
       answer(i, day);
-      schedule(i, limitDue(i, day, day + intervalFor(w, S[i], targetFor(i, day), maxInterval)));
-    }
-    // the exam's last pass: on the day before, every card still below FINAL_R for exam day is reviewed once more
-    for (let g = 0; g < groups.length; g++) {
-      if (!hasExam[g] || examDay(g) - 1 !== day) continue;
-      for (let i = 0; i < N; i++) {
-        if (grp[i] !== g || !started[i] || last[i] === day) continue;
-        if (forgettingCurve(w, examDay(g) - last[i], S[i]) < FINAL_R) answer(i, day);
-      }
+      schedule(i, placeDue(i, day, day + intervalFor(w, S[i], targetFor(i, day), maxInterval)));
     }
     buckets[day] = null;
     if (HORIZONS.includes(day + 1)) snapshot(day + 1);
@@ -213,52 +253,143 @@ export function simulateOne(input, retention, plan = planSample(input)) {
 }
 
 // ---------- all targets: a generator (the worker, Node and the page's fallback all step it the same way) ----------
-// Yields { phase: 'sim', done, total, progress }. Returns { points, complete, f, sampled, stoppedAt, seed } where points = one entry
-// per target: { retention, horizons, exams }.
-export function* simulateAll(input, { retentions = RETENTIONS, now = () => Date.now(), budgetMs = TIME_BUDGET_MS } = {}) {
+// Order of work: your current target first, then every 5% (75, 80, ... 95 and 97), then the gaps, until the time budget is used up.
+// The first two groups always finish; only the gap filling stops early. Yields { phase: 'sim', done, total, progress }.
+// Returns { points, complete, missing, f, sampled } where points = one entry per target simulated, in order of retention:
+// { retention, horizons, exams }.
+export function priorityOrder(retentions, current) {
+  const key = r => Math.round(r * 100);
+  const order = [];
+  const add = r => { if (!order.some(x => key(x) === key(r))) order.push(r); };
+  const cur = Number.isFinite(current) ? retentions.find(r => key(r) === key(current)) : undefined;
+  if (cur !== undefined) add(cur);
+  for (const r of retentions) if (key(r) % 5 === 0 || r === retentions[retentions.length - 1]) add(r);
+  const core = order.length;
+  for (const r of retentions) add(r);
+  return { order, core };
+}
+
+export function* simulateAll(input, { retentions = RETENTIONS, now = () => Date.now(), budgetMs = TIME_BUDGET_MS, current = input.current } = {}) {
   const plan = planSample(input);
   const started = now();
+  const { order, core } = priorityOrder(retentions, current);
   const points = [];
   let complete = true;
-  for (let k = 0; k < retentions.length; k++) {
-    yield { phase: 'sim', done: k, total: retentions.length, progress: k / retentions.length };
-    if (k >= 2 && now() - started > budgetMs) { complete = false; break; }
-    const r = simulateOne(input, retentions[k], plan);
-    points.push({ retention: retentions[k], horizons: r.horizons, exams: r.exams });
+  for (let k = 0; k < order.length; k++) {
+    yield { phase: 'sim', done: k, total: order.length, progress: k / order.length };
+    if (k >= core && now() - started > budgetMs) { complete = false; break; }
+    const r = simulateOne(input, order[k], plan);
+    points.push({ retention: order[k], horizons: r.horizons, exams: r.exams });
   }
-  yield { phase: 'sim', done: points.length, total: retentions.length, progress: 1 };
-  return { points, complete, f: plan.f, sampled: plan.f < 1, stoppedAt: complete ? null : points[points.length - 1].retention };
+  yield { phase: 'sim', done: points.length, total: order.length, progress: 1 };
+  points.sort((a, b) => a.retention - b.retention);
+  return { points, complete, missing: order.length - points.length, f: plan.f, sampled: plan.f < 1 };
 }
 
-// ---------- reading the results ----------
-// Knowledge per review at a horizon: how many of your cards you would remember at the end, for each review it takes.
-export const efficiency = (pt, horizon) => {
-  const h = pt.horizons[horizon];
-  return h && h.reviews > 0 ? h.known / h.reviews : 0;
-};
-
-export const SUGGEST_TOLERANCE = 0.02;      // "within 2% of the best knowledge per review"
-export const SUGGEST_FLOOR = 0.80;          // never suggest a target below 80% (the lowest the app has always offered; below it, forgetting is frequent)
-
-// The suggested target: among targets whose knowledge per review is within SUGGEST_TOLERANCE of the best, the one with the fewest
-// reviews (the lowest retention). Looks only at targets from SUGGEST_FLOOR up. Returns a retention (0.8 … 0.97) or null.
-export function suggestRetention(points, horizon, { tolerance = SUGGEST_TOLERANCE, floor = SUGGEST_FLOOR } = {}) {
-  const pool = points.filter(p => p.retention >= floor - 1e-9 && p.horizons[horizon]);
-  if (!pool.length) return null;
-  const best = Math.max(...pool.map(p => efficiency(p, horizon)));
-  const ok = pool.filter(p => efficiency(p, horizon) >= best * (1 - tolerance));
-  ok.sort((a, b) => a.horizons[horizon].reviews - b.horizons[horizon].reviews || a.retention - b.retention);
-  return ok[0].retention;
+// The simulated target nearest to `wanted` (a retention 0 to 1), so a pick is always one that was worked out. null with no points.
+export function pickSelected(points, wanted) {
+  let best = null;
+  for (const p of points) if (best === null || Math.abs(p.retention - wanted) < Math.abs(best.retention - wanted) - 1e-12) best = p;
+  return best ? best.retention : null;
 }
 
-// The suggestion for a horizon. With an exam, readiness decides (the exam's own final pass makes most targets close).
-export function suggestFor(points, horizon, examGroup) {
-  if (examGroup === undefined || examGroup === null) return suggestRetention(points, horizon);
-  const pool = points.filter(p => p.retention >= SUGGEST_FLOOR - 1e-9 && p.exams.some(e => e.grp === examGroup));
-  if (!pool.length) return suggestRetention(points, horizon);
-  const share = p => p.exams.find(e => e.grp === examGroup).share;
-  const best = Math.max(...pool.map(share));
-  const ok = pool.filter(p => share(p) >= best - 0.02);
-  ok.sort((a, b) => a.horizons[horizon].reviews - b.horizons[horizon].reviews);
-  return ok[0].retention;
+// ---------- reading the results: the suggested target ----------
+// The workload curve (reviews a day at a horizon against the target) is noisy, because it comes from one random draw per card.
+// So it is smoothed before it is used: first made non-decreasing (pool adjacent violators), then replaced by its greatest convex
+// minorant (the lower convex hull), which is what a workload that grows faster and faster with the target looks like without the noise.
+// Both are computed over a FIXED range, KNEE_MIN to KNEE_MAX, so the answer does not move with the targets that were simulated.
+export const KNEE_MIN = 0.80, KNEE_MAX = 0.97;
+export const EXAM_TOLERANCE = 0.03;         // exam decks: the lowest target within 3 points of the best readiness before the last pass
+
+// → { retentions: [0.80 … 0.97], values: [reviews a day …] } or null when fewer than 3 targets in range were simulated.
+export function smoothWorkload(points, horizon) {
+  const raw = points.filter(p => p.retention >= KNEE_MIN - 1e-9 && p.retention <= KNEE_MAX + 1e-9 && p.horizons[horizon])
+    .sort((a, b) => a.retention - b.retention).map(p => [p.retention, p.horizons[horizon].reviewsPerDay]);
+  if (raw.length < 3) return null;
+  // non-decreasing (pool adjacent violators)
+  const blocks = [];
+  for (const [x, y] of raw) {
+    blocks.push({ x: [x], sum: y, n: 1 });
+    while (blocks.length > 1 && blocks[blocks.length - 2].sum / blocks[blocks.length - 2].n > blocks[blocks.length - 1].sum / blocks[blocks.length - 1].n) {
+      const b = blocks.pop(), a = blocks.pop();
+      blocks.push({ x: a.x.concat(b.x), sum: a.sum + b.sum, n: a.n + b.n });
+    }
+  }
+  const mono = [];
+  for (const b of blocks) for (const x of b.x) mono.push([x, b.sum / b.n]);
+  // lower convex hull
+  const hull = [];
+  for (const p of mono) {
+    while (hull.length >= 2) {
+      const [x1, y1] = hull[hull.length - 2], [x2, y2] = hull[hull.length - 1];
+      if ((y2 - y1) * (p[0] - x1) >= (p[1] - y1) * (x2 - x1)) hull.pop(); else break;      // the middle point lies on or above the chord: not convex
+    }
+    hull.push(p);
+  }
+  const at = x => {
+    if (x <= hull[0][0]) return hull[0][1];
+    for (let i = 1; i < hull.length; i++) if (x <= hull[i][0] + 1e-12) { const [x0, y0] = hull[i - 1], [x1, y1] = hull[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
+    return hull[hull.length - 1][1];
+  };
+  const retentions = [], values = [];
+  for (let pct = Math.round(KNEE_MIN * 100); pct <= Math.round(KNEE_MAX * 100); pct++) { retentions.push(pct / 100); values.push(at(pct / 100)); }
+  return { retentions, values };
+}
+
+// The knee of a smoothed curve: where it is farthest below the straight line from its first to its last point, on axes scaled 0 to 1
+// (the "kneedle" idea). Above it, each extra point of target costs much more reviews than below it. Returns a retention.
+export function kneeOf(curve) {
+  const { retentions: xs, values: ys } = curve;
+  const n = xs.length - 1, y0 = ys[0], span = ys[n] - y0;
+  if (!(span > 1e-9)) return xs[0];                                   // a flat curve has no knee
+  let best = 0, bestGap = -Infinity;
+  for (let i = 0; i <= n; i++) {
+    const gap = i / n - (ys[i] - y0) / span;
+    if (gap > bestGap + 1e-12) { bestGap = gap; best = i; }
+  }
+  return xs[best];
+}
+
+// What one more point of target costs at a given target: { perDay (reviews a day), pct (as a share of the workload there) } or null.
+export function marginalCost(curve, retention) {
+  const i = Math.round(retention * 100) - Math.round(KNEE_MIN * 100);
+  if (!curve || i < 0 || i >= curve.values.length - 1) return null;
+  const here = curve.values[i], next = curve.values[i + 1];
+  return { perDay: next - here, pct: here > 0 ? (next - here) / here : 0 };
+}
+
+// The highest target whose (smoothed) reviews a day fit within a limit. null when even KNEE_MIN does not fit.
+export function highestWithin(curve, limit) {
+  let best = null;
+  curve.values.forEach((v, i) => { if (v <= limit + 1e-9) best = curve.retentions[i]; });
+  return best;
+}
+
+// The suggestion for a horizon. Returns { target, kind, knee, curve, limit, limitFits, examGroup } where kind is
+//   'knee'    the knee of the smoothed workload curve (the default)
+//   'exam'    a deck with an exam: the lowest target (from KNEE_MIN) within EXAM_TOLERANCE of the best readiness before the last pass
+//   'limit'   your daily review limit is lower than what the knee (or exam) target needs: the highest target that fits the limit
+//   'none'    not enough targets were worked out, or even KNEE_MIN does not fit your limit (target = null)
+export function suggestion(points, horizon, { reviewLimit = null, examGroup = null } = {}) {
+  const curve = smoothWorkload(points, horizon);
+  if (!curve) return { target: null, kind: 'none', knee: null, curve: null, limit: reviewLimit, limitFits: false, examGroup };
+  const knee = kneeOf(curve);
+  let target = knee, kind = 'knee';
+  if (examGroup !== null && examGroup !== undefined) {
+    const pool = points.filter(p => p.retention >= KNEE_MIN - 1e-9 && p.exams.some(e => e.grp === examGroup));
+    if (pool.length) {
+      const pre = p => p.exams.find(e => e.grp === examGroup).preShare;
+      const best = Math.max(...pool.map(pre));
+      target = pool.filter(p => pre(p) >= best - EXAM_TOLERANCE).reduce((m, p) => Math.min(m, p.retention), 1);
+      kind = 'exam';
+    }
+  }
+  const limit = Number.isFinite(reviewLimit) && reviewLimit > 0 ? reviewLimit : null;
+  let limitFits = true;
+  if (limit !== null) {
+    const fit = highestWithin(curve, limit);
+    if (fit === null) { limitFits = false; target = null; kind = 'none'; }
+    else if (fit < target - 1e-9) { target = fit; kind = 'limit'; }
+  }
+  return { target, kind, knee, curve, limit, limitFits, examGroup };
 }

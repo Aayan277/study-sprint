@@ -7,13 +7,12 @@
 // "Ignore reviews before" (Advanced scheduling) is respected.
 
 import * as db from './db.js';
-import { buildHistories } from './fsrs-data.js';
-import { healthFit, classifyFit, fitAdvice, GRADE_WORDS, retentionVerdict, retentionAdvice, hardUse, hardAdvice, HEALTH_MIN_N } from './fit-health.js';
+import { buildHistories, MIN_REVIEWS } from './fsrs-data.js';
+import { healthFit, classifyFit, fitAdvice, biasLine, GRADE_WORDS, retentionVerdict, retentionAdvice, hardUse, hardAdvice, HEALTH_MIN_N } from './fit-health.js';
 import { runJob } from './worker-job.js';
 import { retentionByAge, YOUNG_DAYS } from './stats-calc.js';
 import { rowsFrom, deckSchedulerOptions, cleanFsrsParams } from './sched-settings.js';
 import { effectiveDeck } from './deck-tree.js';
-import { MIN_REVIEWS } from './fsrs-data.js';
 import { $, esc, openSheet, closeSheet, plural } from './ui.js';
 
 const DAY = 86400000;
@@ -37,7 +36,9 @@ export async function runHealthCheck({ now = Date.now(), onProgress = () => {} }
     if (!retOf.has(deckId)) retOf.set(deckId, deckSchedulerOptions(settings, effectiveDeck(decks, deckId)).retention);
     return retOf.get(deckId);
   };
-  const ret = retentionByAge(rows, now, [30], { targetOf })[30];
+  // The young/mature split needs each answer's previous answer, so it uses ALL rows: with "Ignore reviews before" the previous answer of
+  // a card's first answer after the date may be before it, and would otherwise be missing (and the card counted as mature).
+  const ret = retentionByAge(allRows, now, [30], { targetOf })[30];
   const hard = hardUse(rows, now);
   let fit = { status: 'not-enough', n: 0 };
   if (hist.reviews >= 1) {
@@ -67,9 +68,10 @@ function fitSection(r) {
   return `<section class="hc-sec" aria-labelledby="hcFit"><h3 id="hcFit">Fit quality ${badge(c.grade, GRADE_WORDS[c.grade])}</h3>
     <p>${r.own ? 'Your own settings' : 'The standard settings'} predicted your last ${plural(f.n, 'review')} (since ${esc(dateText(f.sinceDay))}) with a prediction error (log loss) of <b class="mono">${f.logLoss.toFixed(3)}</b> and RMSE <b class="mono">${pctText(f.rmse)}</b>. Lower is better.</p>
     ${c.rough ? '<p class="hc-rough">Only a few reviews, so treat this as rough.</p>' : ''}
-    <p class="hc-sug">${esc(fitAdvice(c, { usingOwn: r.own, canOptimize: r.canOptimize }))}</p>
+    ${biasLine(c) ? `<p>${esc(biasLine(c))}</p>` : ''}
+    <p class="hc-sug">${esc(fitAdvice(c, { usingOwn: r.own, canOptimize: r.canOptimize, retention: retentionVerdict(r.ret.all, r.ret.target).verdict }))}</p>
     <details class="opt-fold"><summary>How this is judged</summary>
-      <p class="opt-note">Good: RMSE 7% or less, about what tuned FSRS scores on thousands of Anki users (6 to 6.5%). OK: up to 10%, about what untuned defaults score (9%). Poor: above 10%. The log loss is compared with just guessing your own average recall every time (here ${whole(f.recall)}); it is Good if within 0.01 of that, OK within 0.04. The verdict is the worse of the two.</p></details></section>`;
+      <p class="opt-note">Three checks, and the verdict is the worst of them. (1) Do the average predicted and the actual chance of remembering match? Poor if they differ by more than 3 points beyond chance. (2) How far off are the predictions in each band of confidence, with the part that is just luck on a small sample removed? Good up to 2 points, OK up to 4. (3) Do the predictions beat just guessing your own average (${whole(f.recall)}) every time? A model that is no better than that cannot be Good.</p></details></section>`;
 }
 
 function bucketLine(name, b, target) {

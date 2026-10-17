@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  simulateOne, simulateAll, planSample, intervalFor, ratingProbs, efficiency, suggestRetention, RETENTIONS, HORIZONS, SIM_CAP,
-  DEFAULT_REVIEW_PROBS, DEFAULT_FIRST_PROBS, SUGGEST_FLOOR, suggestFor
+  simulateOne, simulateAll, planSample, intervalFor, ratingProbs, RETENTIONS, HORIZONS, SIM_CAP,
+  DEFAULT_REVIEW_PROBS, DEFAULT_FIRST_PROBS, priorityOrder, pickSelected, smoothWorkload, kneeOf, marginalCost, highestWithin, suggestion, KNEE_MIN, KNEE_MAX
 } from '../js/retention-sim.js';
 import { retentionByAge, retention, YOUNG_DAYS } from '../js/stats-calc.js';
 
@@ -84,45 +84,186 @@ test('a big collection is sampled, seeded, and scaled back up', () => {
   assert.ok(Math.abs(a.horizons[365].started - 9650) < 100);
 });
 
-test('an exam: the last pass and the rising target make readiness high, and it is recorded on exam day', () => {
-  const input = makeInput({ groups: [{ exam: null }, { exam: 40 }] });
-  input.existing = input.existing.map((c, i) => ({ ...c, grp: i % 2 }));
-  input.unseen = Int16Array.from({ length: 150 }, (_, i) => (i % 2 ? 1 : 0));
+// Exam decks: cards in group 1, an exam `exam` days away.
+function examInput(extra = {}, exam = 40) {
+  const input = makeInput({ groups: [{ exam: null }, { exam }] });
+  input.existing = input.existing.map(c => ({ ...c, grp: 1 }));
+  input.unseen = new Int16Array(150).fill(1);
+  return Object.assign(input, extra);
+}
+
+test('an exam is modelled as examClamp/planFinalPass do: the last pass is the weak cards only, over the last 3 days', () => {
+  const input = examInput();
   const lo = simulateOne(input, 0.75), hi = simulateOne(input, 0.97);
   for (const r of [lo, hi]) {
     assert.equal(r.exams.length, 1);
-    assert.equal(r.exams[0].day, 40);
-    assert.ok(r.exams[0].share > 0.8 && r.exams[0].share <= 1, String(r.exams[0].share));
-    assert.equal(r.exams[0].total, 100 + 75);
+    const e = r.exams[0];
+    assert.equal(e.day, 40);
+    assert.equal(e.total, 200 + 150);
+    assert.ok(e.share > 0.85 && e.share <= 1, String(e.share));            // after the final pass most cards are ready
+    assert.ok(e.preShare <= e.share + 1e-9);
+    assert.ok(e.preRecall > 0.5 && e.preRecall <= 1);
+    assert.ok(e.passLoad > 0 && Number.isFinite(e.passLoad));
   }
+  // what differs between targets is how much of the work the final pass has to do: a higher target is better prepared before it
+  assert.ok(hi.exams[0].preShare > lo.exams[0].preShare + 0.1, `${lo.exams[0].preShare} vs ${hi.exams[0].preShare}`);
+  assert.ok(hi.exams[0].preRecall > lo.exams[0].preRecall);
+  assert.ok(lo.exams[0].passLoad > hi.exams[0].passLoad, `${lo.exams[0].passLoad} vs ${hi.exams[0].passLoad}`);
+  // ...while exam-day readiness after it is high for both, so it is not the number that separates the targets
+  assert.ok(lo.exams[0].share > 0.9 && hi.exams[0].share > 0.9);
   // a different exam day moves the record
-  const later = simulateOne({ ...input, groups: [{ exam: null }, { exam: 60 }] }, 0.9);
-  assert.equal(later.exams[0].day, 60);
-  // suggestFor with an exam looks at readiness, not knowledge per review
-  const all = run(simulateAll(input));
-  const s = suggestFor(all.points, 90, 1);
-  assert.ok(s >= SUGGEST_FLOOR && s <= 0.97);
+  assert.equal(simulateOne(examInput({}, 60), 0.9).exams[0].day, 60);
+  // an exam in 2 days: the last pass already started today
+  const soon = simulateOne(examInput({}, 2), 0.9).exams[0];
+  assert.equal(soon.day, 2);
+  assert.ok(soon.passLoad > 0);
+  // cards in no-exam groups are not touched: their numbers are the same with or without another group having an exam
+  const plain = makeInput();
+  const mixed = makeInput({ groups: [{ exam: null }, { exam: 40 }] });
+  const a = simulateOne(plain, 0.9), b = simulateOne(mixed, 0.9);
+  assert.deepEqual(a.horizons, b.horizons);
 });
 
-test('the time budget stops early and says so', () => {
+test('cards you will surely remember on exam day (99% or better) get no final-pass review', () => {
+  // very stable cards, due long after the exam: nothing is brought forward, so the last 3 days hold no reviews at all
+  const input = examInput({ newPerDay: 0, unseen: new Int16Array(0) });
+  input.existing = Array.from({ length: 100 }, (_, i) => ({ s: 4000 + i, d: 3, last: -5, due: 800, grp: 1 }));
+  const e = simulateOne(input, 0.9).exams[0];
+  assert.equal(e.passLoad, 0);
+  assert.equal(e.share, 1);
+  assert.equal(e.preShare, 1);
+  // weaker cards due after the exam are put on the last 3 days (and only there): load is spread, not all on one day
+  const weak = examInput({ newPerDay: 0, unseen: new Int16Array(0) });
+  weak.existing = Array.from({ length: 90 }, (_, i) => ({ s: 30 + (i % 10), d: 5, last: -5, due: 100, grp: 1 }));
+  const w = simulateOne(weak, 0.9).exams[0];
+  assert.ok(w.passLoad > 20 && w.passLoad <= 60, String(w.passLoad));      // about 90 cards over 3 days
+  assert.ok(w.share > 0.8);
+  // a card due BEFORE the exam is left alone until it is due (the exam does not pull it earlier)
+  const early = examInput({ newPerDay: 0, unseen: new Int16Array(0) });
+  early.existing = Array.from({ length: 50 }, () => ({ s: 6, d: 5, last: -2, due: 3, grp: 1 }));
+  const noExam = { ...early, groups: [{ exam: null }, { exam: null }] };
+  assert.equal(simulateOne(early, 0.9).horizons[30].reviews > 0, true);
+  assert.ok(Math.abs(simulateOne(early, 0.9).horizons[30].reviewsPerDay - simulateOne(noExam, 0.9).horizons[30].reviewsPerDay) < 0.6 * simulateOne(noExam, 0.9).horizons[30].reviewsPerDay);
+});
+
+test('the order of work: your target first, then every 5%, then the gaps; only the gaps are cut by the time budget', () => {
+  const { order, core } = priorityOrder(RETENTIONS, 0.88);
+  assert.equal(order[0], 0.88);
+  assert.deepEqual(order.slice(1, core), [0.75, 0.8, 0.85, 0.9, 0.95, 0.97]);
+  assert.equal(order.length, RETENTIONS.length);
+  assert.equal(new Set(order).size, RETENTIONS.length);
+  assert.equal(priorityOrder(RETENTIONS, 0.9).core, 6);                    // 90 is one of the 5% steps already
+  assert.equal(priorityOrder(RETENTIONS, undefined).order[0], 0.75);
   let t = 0;
-  const r = run(simulateAll(makeInput(), { now: () => (t += 1000), budgetMs: 2500 }));
+  const r = run(simulateAll(makeInput(), { current: 0.88, now: () => (t += 1000), budgetMs: 500 }));
   assert.equal(r.complete, false);
-  assert.ok(r.points.length >= 2 && r.points.length < RETENTIONS.length);
-  assert.equal(r.stoppedAt, r.points[r.points.length - 1].retention);
+  assert.equal(r.points.length, core);
+  assert.equal(r.missing, RETENTIONS.length - core);
+  assert.deepEqual(r.points.map(p => Math.round(p.retention * 100)), [75, 80, 85, 88, 90, 95, 97]);
+  // "selected" is always one that was worked out: your target when it is there, else the nearest
+  assert.equal(pickSelected(r.points, 0.88), 0.88);
+  assert.equal(pickSelected(r.points, 0.86), 0.85);
+  assert.equal(pickSelected(r.points, 0.96), 0.95);
+  assert.equal(pickSelected(r.points, 0.7), 0.75);
+  assert.equal(pickSelected([], 0.9), null);
+  // the whole run (no cut) with a target outside the range: still every target
+  const full = run(simulateAll(makeInput(), { current: 0.99 }));
+  assert.equal(full.complete, true);
+  assert.equal(full.points.length, RETENTIONS.length);
 });
 
-test('suggestRetention: the fewest reviews within 2% of the best knowledge per review, never below 80%', () => {
-  const pt = (retention, reviews, known) => ({ retention, horizons: { 90: { reviews, known } }, exams: [] });
-  // efficiency falls steadily with the target: the best is at the floor
-  const falling = [0.75, 0.8, 0.85, 0.9, 0.95].map((r, i) => pt(r, 100 + i * 60, 90 + i));
-  assert.equal(suggestRetention(falling, 90), 0.8);
-  // an interior best (a lower target costs many lapses): 0.88 is best; 0.86 is within 2% and has fewer reviews
-  const eff = { 0.8: 0.40, 0.84: 0.449, 0.86: 0.4515, 0.88: 0.46, 0.92: 0.40, 0.96: 0.30 };
-  const interior = Object.entries(eff).map(([r, e]) => pt(+r, 100 * (1 + (+r - 0.8) * 5), e * 100 * (1 + (+r - 0.8) * 5)));
-  assert.equal(efficiency(interior[3], 90).toFixed(2), '0.46');
-  assert.equal(suggestRetention(interior, 90), 0.86);        // 0.4515 >= 0.46 * 0.98, and it has fewer reviews than 0.88; 0.84 (0.449) is not within 2%
-  assert.equal(suggestRetention([], 90), null);
+// Workload curves made by hand: reviews a day against the target at the 90-day horizon.
+const curvePoints = (f, noise = () => 0) => RETENTIONS.map((r, i) => ({ retention: r, horizons: { 90: { reviewsPerDay: f(r) + noise(i), reviews: 90 * f(r) } }, exams: [] }));
+const convex = r => 20 * Math.exp(30 * (r - 0.8) ** 2 * 3.5) ;
+
+test('smoothed workload: non-decreasing, convex, over the fixed 80 to 97 range, whatever else was simulated', () => {
+  const rng = mulberry32Test(4);
+  const noisy = curvePoints(r => 20 + 600 * (r - 0.75) ** 3, () => (rng() - 0.5) * 6);
+  const c = smoothWorkload(noisy, 90);
+  assert.equal(c.retentions[0], KNEE_MIN);
+  assert.equal(c.retentions[c.retentions.length - 1], KNEE_MAX);
+  assert.equal(c.values.length, 18);
+  for (let i = 1; i < c.values.length; i++) assert.ok(c.values[i] >= c.values[i - 1] - 1e-9, 'non-decreasing');
+  for (let i = 1; i < c.values.length - 1; i++) assert.ok(c.values[i + 1] - 2 * c.values[i] + c.values[i - 1] >= -1e-6, 'convex');
+  // points outside 80 to 97 change nothing
+  const tweaked = noisy.map(p => (p.retention < 0.8 ? { ...p, horizons: { 90: { reviewsPerDay: 999, reviews: 999 } } } : p));
+  assert.deepEqual(smoothWorkload(tweaked, 90), c);
+  // too few targets in range: no curve
+  assert.equal(smoothWorkload(noisy.filter(p => p.retention < 0.81 || p.retention > 0.96), 90), null);
+  assert.equal(suggestion(noisy.filter(p => p.retention < 0.81 || p.retention > 0.96), 90).kind, 'none');
+});
+
+function mulberry32Test(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+test('the knee: where a convex workload curve is farthest below its chord; a straight one has none', () => {
+  // flat until 90 then steeply up: the knee is at the bend
+  const bend = curvePoints(r => 20 + (r > 0.9 ? 400 * (r - 0.9) : 0));
+  const c = smoothWorkload(bend, 90);
+  assert.ok(Math.abs(kneeOf(c) - 0.9) <= 0.02, String(kneeOf(c)));
+  const s = suggestion(bend, 90);
+  assert.equal(s.kind, 'knee');
+  assert.equal(s.target, s.knee);
+  // a straight line has no knee: the first target
+  assert.equal(kneeOf(smoothWorkload(curvePoints(r => 30 + 100 * (r - 0.8)), 90)), 0.8);
+  assert.equal(kneeOf(smoothWorkload(curvePoints(() => 30), 90)), 0.8);
+  // noise does not move it much
+  const rng = mulberry32Test(9);
+  const noisy = smoothWorkload(curvePoints(r => 20 + (r > 0.9 ? 400 * (r - 0.9) : 0), () => (rng() - 0.5) * 4), 90);
+  assert.ok(Math.abs(kneeOf(noisy) - 0.9) <= 0.03, String(kneeOf(noisy)));
+});
+
+test('marginal cost of one more point, and a review limit', () => {
+  const pts = curvePoints(r => 20 + (r > 0.9 ? 400 * (r - 0.9) : 0));
+  const c = smoothWorkload(pts, 90);
+  const m = marginalCost(c, 0.95);                                          // about 4 more a day per point there, on about 40 a day
+  assert.ok(Math.abs(m.perDay - 4) < 0.5, JSON.stringify(m));
+  assert.ok(Math.abs(m.pct - 4 / 40) < 0.03);
+  assert.ok(marginalCost(c, 0.85).perDay < 0.5);
+  assert.equal(marginalCost(c, 0.97), null);                                // nothing above the range
+  assert.equal(marginalCost(c, 0.78), null);                                // nothing below it
+  // a limit: the highest target whose reviews fit; the suggestion never goes above the knee
+  assert.equal(highestWithin(c, 100), 0.97);
+  assert.ok(Math.abs(highestWithin(c, 40) - 0.95) <= 0.011);
+  assert.equal(highestWithin(c, 10), null);
+  const bowl = curvePoints(r => 20 + 800 * (r - 0.8) ** 2);                // reviews a day rise faster and faster all the way
+  const free = suggestion(bowl, 90);
+  const limit = Math.round((20 + 800 * (free.target - 0.04 - 0.8) ** 2) * 10) / 10 + 0.05;
+  const lim = suggestion(bowl, 90, { reviewLimit: limit });
+  assert.equal(lim.kind, 'limit');
+  assert.ok(lim.target < free.target);
+  assert.ok(lim.curve.values[Math.round((lim.target - 0.8) * 100)] <= limit + 1e-9);
+  assert.ok(lim.curve.values[Math.round((lim.target - 0.8) * 100) + 1] > limit);       // ...and one point higher does not fit
+  assert.equal(suggestion(bowl, 90, { reviewLimit: 500 }).kind, 'knee');          // a roomy limit changes nothing
+  const none = suggestion(bowl, 90, { reviewLimit: 5 });
+  assert.equal(none.kind, 'none');
+  assert.equal(none.target, null);
+  assert.equal(none.limitFits, false);
+});
+
+test('an exam deck: the suggestion looks at readiness before the last pass', () => {
+  const pts = RETENTIONS.map(r => ({
+    retention: r, horizons: { 90: { reviewsPerDay: 20 + 300 * (r - 0.75) ** 2, reviews: 100 } },
+    exams: [{ grp: 1, day: 40, total: 100, ready: 0, share: 0.99, preShare: Math.min(1, 0.3 + (r - 0.75) * 4), preRecall: 0.9, passLoad: 100 }]
+  }));
+  const s = suggestion(pts, 90, { examGroup: 1 });
+  assert.equal(s.kind, 'exam');
+  assert.ok(s.target >= KNEE_MIN && s.target <= 0.97);
+  const best = Math.max(...pts.map(p => p.exams[0].preShare));
+  const chosen = pts.find(p => Math.abs(p.retention - s.target) < 1e-9).exams[0].preShare;
+  assert.ok(chosen >= best - 0.03 - 1e-9);
+  const lower = pts.find(p => Math.abs(p.retention - (s.target - 0.01)) < 1e-9);
+  if (lower && lower.retention >= KNEE_MIN) assert.ok(lower.exams[0].preShare < best - 0.03);
+});
+
+test('real simulation: a suggestion in range, and the smoothed curve is convex', () => {
+  const r = run(simulateAll(makeInput(), { current: 0.9 }));
+  for (const h of HORIZONS) {
+    const s = suggestion(r.points, h);
+    assert.ok(s.target >= KNEE_MIN && s.target <= KNEE_MAX);
+    const v = s.curve.values;
+    for (let i = 1; i < v.length - 1; i++) assert.ok(v[i + 1] - 2 * v[i] + v[i - 1] >= -1e-6);
+    assert.ok(marginalCost(s.curve, 0.9).perDay > 0);
+  }
 });
 
 test('ratingProbs: your own Hard/Good/Easy shares once there are enough answers, else the usual ones', () => {

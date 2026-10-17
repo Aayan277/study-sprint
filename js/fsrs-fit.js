@@ -139,6 +139,7 @@ export function nextState(w, s, d, t, g, round = true, r) {
 //   logLoss  mean binary cross-entropy
 //   rmse     the 20 equal bins of predicted R: sqrt of the count-weighted mean of (mean predicted − observed recall)²  ("RMSE (bins)")
 //   n        how many predictions     recalled  how many of them were remembered (the share is the base rate for judging the log loss)
+//   meanPred  the average predicted R     noise  the RMSE (bins) that luck alone would give (see the health check)
 // (weighted: true uses the recency weights `wt` of the histories for the log loss; the sheet, the keep rule and the health check never do.)
 export function evaluate(cards, w, opts) { return evaluateMany([{ cards, w }], opts); }
 
@@ -168,9 +169,16 @@ export function evaluateMany(parts, { round = true, weighted = false } = {}) {
       ({ s, d } = nextState(w, s, d, t, g, round, r));
     }
   }
-  let sq = 0;
-  for (let b = 0; b < BINS; b++) if (cnt[b]) sq += cnt[b] * (pred[b] / cnt[b] - obs[b] / cnt[b]) ** 2;
-  return { logLoss: n ? loss / wn : 0, rmse: n ? Math.sqrt(sq / n) : 0, n, wn, recalled: yes };
+  let sq = 0, noise = 0, sumPred = 0;
+  for (let b = 0; b < BINS; b++) {
+    if (!cnt[b]) continue;
+    const pm = pred[b] / cnt[b];
+    sq += cnt[b] * (pm - obs[b] / cnt[b]) ** 2;
+    noise += pm * (1 - pm);                      // what chance alone adds to (observed − predicted)² in this bin, times its count: p(1−p)
+    sumPred += pred[b];
+  }
+  // noise: the RMSE that pure luck would give even for perfect predictions, sqrt(Σ over bins of p(1−p) / n). The health check subtracts it.
+  return { logLoss: n ? loss / wn : 0, rmse: n ? Math.sqrt(sq / n) : 0, n, wn, recalled: yes, meanPred: n ? sumPred / n : 0, noise: n ? Math.sqrt(noise / n) : 0 };
 }
 
 // The decision rule (owner decision Q2, softened after review): keep the new weights only if the log loss is lower AND the RMSE is not
