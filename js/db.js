@@ -25,7 +25,7 @@ import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 
 export const DEFAULT_SETTINGS = {
-  theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
+  theme: { ui: 'original', skin: 'violet', mode: 'dark', oled: false }, // ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
   compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
   ratingFeedback: true,  // Review: a ring on the pressed button, the interval floating up and an outline of the old card leaving. This device only
