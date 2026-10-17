@@ -14,7 +14,7 @@
 
 import * as db from './db.js';
 import { buildHistories, MIN_REVIEWS } from './fsrs-data.js';
-import { fitChecked, judge, splitHistories, HOLDOUT_SHARE } from './fsrs-fit.js';
+import { fitChecked, judge, splitHistories, HOLDOUT_SHARE, HOLDOUT_MIN } from './fsrs-fit.js';
 import { deckSchedulerOptions, FSRS_VERSION } from './sched-settings.js';
 import { effectiveDeck } from './deck-tree.js';
 import { $, esc, openSheet, closeSheet, toast } from './ui.js';
@@ -96,6 +96,7 @@ export function runFit(input, { onProgress = () => {}, onFallback = () => {}, ti
 //   result: { kind: 'better' | 'same' | 'other-device' | 'not-enough' | 'cancelled' | 'failed', ... }
 let run = null;
 let token = 0;                       // each run has its own; a cancelled one stops touching the page
+let cancelledToken = 0;              // the run whose Cancel was pressed (checked again right before saving)
 let onChange = () => {};
 
 const pctText = x => `${(x * 100).toFixed(1)}%`;
@@ -108,6 +109,7 @@ function setRun(patch) {
 async function startRun() {
   if (run?.status === 'reading' || run?.status === 'running') return;
   const mine = ++token;
+  const startedAt = Date.now();
   run = { status: 'reading', progress: 0, phase: 'reading', note: '' };
   draw();
   let handle = null;
@@ -151,10 +153,14 @@ async function startRun() {
     let { before, after } = res;
     // A sync may have changed the setting while we worked (section 7): score the new current weights against the weights the check used.
     const latest = (await db.getSettings()).fsrsParams;
+    // Reset to default pressed while this was running (a reset is saved as { w: null } with a newer time): don't undo it.
+    if (latest && latest.w === null && latest.at >= startedAt && JSON.stringify(latest) !== JSON.stringify(started)) {
+      setRun({ status: 'result', result: { kind: 'reset' } }); return;
+    }
     if (JSON.stringify(latest) !== JSON.stringify(started)) {
       const { test } = splitHistories(hist.cards, HOLDOUT_SHARE);
       const v = judge(test, steps, latest?.w || srs.default_w.slice(), res.headFitted, clip);
-      if (v.before.n < 20 || !v.better) { setRun({ status: 'result', result: { kind: 'other-device' } }); return; }
+      if (v.before.n < HOLDOUT_MIN || !v.better) { setRun({ status: 'result', result: { kind: 'other-device' } }); return; }
       ({ before, after } = v);
     }
     const saved = {
@@ -164,6 +170,7 @@ async function startRun() {
       rmse: { before: before.rmse, after: after.rmse },
       version: FSRS_VERSION
     };
+    if (cancelledToken === mine || mine !== token) { setRun({ status: 'result', result: { kind: 'cancelled' } }); return; }     // Cancel pressed during the last checks
     await db.setSetting('fsrsParams', saved);
     setRun({ status: 'result', result: { kind: 'better', saved } });
     onChange();
@@ -176,6 +183,7 @@ async function startRun() {
 
 function cancelRun() {
   if (!run) return;
+  cancelledToken = token;
   if (run.status === 'running') run.cancel?.();
   else if (run.status === 'reading') { token++; setRun({ status: 'result', result: { kind: 'cancelled' } }); }
 }
@@ -221,14 +229,16 @@ function resultHTML(r) {
     case 'better': {
       const s = r.saved;
       return `<p class="opt-result good"><b>Done.</b> Your new settings predict your answers better, so they're now in use.</p>
-        <p class="opt-detail">Prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
+        <p class="opt-detail">Checked on your newest 20% of reviews, which the fit did not see: prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
         <p class="opt-note">Run this again every month or so as you review more.</p>
         <details class="opt-fold"><summary>Details</summary>
-          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. The two error numbers above come from your latest reviews, which were left out of the fit as a test. The 21 numbers, in the same format as Anki's:</p>
+          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. The error numbers above are for that check. The 21 numbers, in the same format as Anki's:</p>
           <code class="opt-w" id="optW">${esc(s.w.map(x => +x.toFixed(4)).join(', '))}</code></details>`;
     }
     case 'same':
       return `<p class="opt-result"><b>Done.</b> Your current settings already predict your answers as well as the new ones, so nothing changed.</p>`;
+    case 'reset':
+      return `<p class="opt-result">You reset your parameters while this was running, so nothing changed.</p>`;
     case 'other-device':
       return `<p class="opt-result">Your other device already updated your parameters; they predict as well, so nothing changed.</p>`;
     case 'not-enough':
@@ -262,7 +272,7 @@ function draw(force = false) {
       </div>`);
     $('optCancel').addEventListener('click', cancelRun);
   } else {
-    const retry = !['better', 'same', 'other-device'].includes(run.result.kind);
+    const retry = !['better', 'same', 'other-device', 'reset'].includes(run.result.kind);
     openSheet(`
       <h2 id="sheetTitle">Optimize parameters</h2>
       <div data-opt class="opt-run" id="optDone">

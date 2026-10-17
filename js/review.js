@@ -490,11 +490,12 @@ async function answer(el, rating) {
     state: prev ? prev.state : NEW          // the card's state before this review (useful for stats and FSRS tuning later)
   };
   try {
+    const inStep = R.version === db.scheduleVersion();       // (a change that landed earlier, e.g. new weights from sync, must not be absorbed below)
     const saving = db.saveReview(next, log);
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
-    R.version = db.scheduleVersion();
+    if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
@@ -504,8 +505,9 @@ async function answer(el, rating) {
     if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
+      const inStep2 = R.version === db.scheduleVersion();
       await db.saveCards([leech]);
-      R.version = db.scheduleVersion();
+      if (inStep2) R.version = db.scheduleVersion();
       if (leech.suspended) dropFromSession(id); else replaceInSession(leech);
       leeched = true;
       toast(leech.suspended ? 'Leech: suspended. You can fix it at the end of the session.' : 'Leech: tagged “leech”. You can fix it at the end of the session.');
@@ -529,9 +531,10 @@ async function undo(el) {
   R.busy = true;
   try {
     const id = u.item.card.id;
+    const inStep = R.version === db.scheduleVersion();
     await db.undoReview(id, u.prev, u.logId);
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
-    R.version = db.scheduleVersion();
+    if (inStep) R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
     if (u.requeued) {
       const i = R.waiting.findIndex(w => w.card.id === id);
@@ -594,10 +597,11 @@ async function openCardMenu(mode = 'actions') {
   const id = R.current.card.id;
   const card = (await db.get('cards', id)) || R.current.card;
   if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
+  const inStep = R.version === db.scheduleVersion();     // if something else already changed the schedule, the panel's own change must not hide that
   openCardPanel(card, {
     decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
     onAction: async (act, fresh) => {
-      R.version = db.scheduleVersion();
+      if (inStep) R.version = db.scheduleVersion();
       // Editing a cloze note changes all its cards (and may delete some): bring the session in line first.
       if (act === 'edit' && card.noteId) await refreshNoteInSession(card.noteId);
       if (!R?.current) return;
@@ -623,8 +627,9 @@ document.getElementById('sheet')?.addEventListener('close', () => {
 async function quick(act) {
   if (!R?.current || R.busy) return;
   const { card } = R.current;
+  const inStep = R.version === db.scheduleVersion();
   await db.saveCards([act === 'bury' ? { ...card, buriedUntil: buryUntil() } : { ...card, suspended: true }]);
-  R.version = db.scheduleVersion();
+  if (inStep) R.version = db.scheduleVersion();
   toast(act === 'bury' ? 'Buried until tomorrow' : 'Suspended');
   dropFromSession(card.id);
   nextCard(R.el);

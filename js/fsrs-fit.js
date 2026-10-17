@@ -125,8 +125,11 @@ export function evaluateMany(parts, { round = true } = {}) {
   return { logLoss: n ? loss / n : 0, rmse: n ? Math.sqrt(sq / n) : 0, n };
 }
 
-// The decision rule (owner decision Q2): keep the new weights only if the log loss is lower AND the RMSE is no higher.
-export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse;
+// The decision rule (owner decision Q2, softened after review): keep the new weights only if the log loss is lower AND the RMSE is not
+// more than RMSE_SLACK (absolute, 1 percentage point) higher. The binned RMSE is noisy on a small held-out slice: with a few hundred
+// predictions a strict "no higher" refused real gains about as often as it accepted them (see report-optimizer.md).
+export const RMSE_SLACK = 0.01;
+export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse + RMSE_SLACK;
 
 // ---------- judging (the page and the simulator both use this) ----------
 // Weights as the scheduler will use them: generatorParameters clips w17 and w18 to a ceiling that depends on the deck's number
@@ -381,7 +384,7 @@ export function* fit(input) {
         for (let k = 0; k < P; k++) {
           const i = k + FIRST_TRAINED;
           const range = Math.max(bounds[i][1] - bounds[i][0], 1e-9);          // (a pinned weight has no range)
-          // mean log loss + gamma/N · Σ ((w − default) / range)²: a weak pull towards the defaults
+          // mean log loss + gamma/N · Σ ((w − default) / range)²: a pull towards the defaults (gamma is the strength)
           const gk = grad[k] / count + cfg.gamma / total * 2 * (w[i] - defaults[i]) / (range * range);
           m[k] = 0.9 * m[k] + 0.1 * gk;
           v[k] = 0.999 * v[k] + 0.001 * gk * gk;
@@ -414,6 +417,7 @@ export function* fit(input) {
     let lo = Math.log(bounds[g][0]), hi = Math.log(bounds[g][1]);
     let a = hi - gr * (hi - lo), b = lo + gr * (hi - lo), fa = cost(a), fb = cost(b);
     for (let it = 0; it < 40; it++) {
+      yield { phase: 'refine', done: g, total: 4, progress: at('refine', (g + it / 40) / 4) };       // each step scores a whole history: yield often
       if (fa < fb) { hi = b; b = a; fb = fa; a = hi - gr * (hi - lo); fa = cost(a); }
       else { lo = a; a = b; fa = fb; b = lo + gr * (hi - lo); fb = cost(b); }
     }
@@ -425,6 +429,8 @@ export function* fit(input) {
   yield { phase: 'refine', done: 4, total: 4, progress: at('refine', 1) };
 
   // 4. Check: do the new weights predict the same history better than the ones in use?
+  // (config.skipCheck: the caller judges them itself, on reviews this fit never saw, so this in-sample check is left out.)
+  if (cfg.skipCheck) return { status: 'trained', w: fitted, fitted, current, reviews, cards: usable, longTerm };
   yield { phase: 'check', done: 0, total: 2, progress: at('check', 0) };
   const before = evaluate(cards, current);
   yield { phase: 'check', done: 1, total: 2, progress: at('check', 0.5) };
@@ -447,12 +453,13 @@ export function runFit(input, onProgress) {
 // Split the histories by time: `head` = every answer up to the day by which `trainShare` of the real reviews have happened
 // (cards with nothing in that part are left out), `test` = ALL the cards in their original order, with only the later reviews
 // scored (the memory state is still replayed from the whole history, so a card keeps its place in `steps` arrays).
-// Needs `day0` on each history. Returns { head, test, cutoff }.
+// Needs `day0` on each history. Only reviews that get a prediction (scored, not a card's first answer, on a later day than the one
+// before) are counted to find the cutoff, so the held-out part really holds about 20% of the predictions. Returns { head, test, cutoff }.
 export function splitHistories(cards, trainShare = 0.8) {
   const days = [];
   for (const c of cards) {
     let day = c.day0 || 0;
-    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i]) days.push(day); }
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i] && i > 0 && c.deltas[i] > 0) days.push(day); }     // only reviews that get a prediction
   }
   days.sort((a, b) => a - b);
   const cutoff = days.length ? days[Math.min(days.length - 1, Math.floor(days.length * trainShare))] : 0;
@@ -494,7 +501,7 @@ export function clipWeights(w, numRelearningSteps, bounds) {
 }
 
 export const HOLDOUT_SHARE = 0.8;       // fit on the first 80% of the days, judge on the last 20%
-export const HOLDOUT_MIN = 20;          // fewer than this many held-out predictions: no verdict, keep the current weights
+export const HOLDOUT_MIN = 50;          // fewer than this many held-out predictions: no verdict, keep the current weights
 
 // The whole decision, as the Optimize sheet makes it (a generator like fit(): runs in the worker, in Node, or in slices):
 //   1. fit on the first 80% of the days
@@ -530,7 +537,7 @@ export function* fitChecked(input) {
     }
   };
   const { head, test } = splitHistories(cards, HOLDOUT_SHARE);
-  const first = yield* inner(head, 0, 0.45, { ...input.config, minReviews: 1 });
+  const first = yield* inner(head, 0, 0.45, { ...input.config, minReviews: 1, skipCheck: true });
   yield { phase: 'check', done: 0, total: 1, progress: 0.47 };
   if (first.status === 'not-enough') return { status: 'same', reason: 'little', ...totals };
   const clip = (w, n) => clipWeights(w, n, bounds);
@@ -538,6 +545,6 @@ export function* fitChecked(input) {
   yield { phase: 'check', done: 1, total: 1, progress: 0.5 };
   if (verdict.before.n < HOLDOUT_MIN) return { status: 'same', reason: 'little', before: verdict.before, after: verdict.after, ...totals };
   if (!verdict.better) return { status: 'same', reason: 'no-better', before: verdict.before, after: verdict.after, ...totals };
-  const second = yield* inner(cards, 0.5, 1, input.config);
+  const second = yield* inner(cards, 0.5, 1, { ...input.config, skipCheck: true });
   return { status: 'better', w: second.fitted, fitted: second.fitted, headFitted: first.fitted, current, before: verdict.before, after: verdict.after, tested: verdict.before.n, ...totals };
 }

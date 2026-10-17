@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fit, runFit, evaluate, evaluateSplit, lossAndGrad, isBetter, pretrainStarts, mulberry32,
-  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending, evaluateMany, judge, fitChecked
+  forgettingCurve, initState, nextState, FIT_DEFAULTS, poolAscending, evaluateMany, judge, fitChecked, splitHistories, RMSE_SLACK, HOLDOUT_MIN
 } from '../js/fsrs-fit.js';
 
 // ts-fsrs 5.4.2: default_w and CLAMP_PARAMETERS(W17_W18_Ceiling = 2, enable_short_term = true)
@@ -162,14 +162,16 @@ test('fit: progress only goes forwards and ends at 1; stopping early gives nothi
   assert.deepEqual(it.next(), { value: undefined, done: true });
 });
 
-test('decision: keep the new weights only if log loss is lower AND rmse is no higher', () => {
+test('decision: keep the new weights only if log loss is lower AND rmse is not more than 0.01 higher', () => {
   const m = (logLoss, rmse) => ({ logLoss, rmse });
   assert.equal(isBetter(m(0.4, 0.05), m(0.39, 0.04)), true);
   assert.equal(isBetter(m(0.4, 0.05), m(0.39, 0.05)), true);       // rmse equal is fine
-  assert.equal(isBetter(m(0.4, 0.05), m(0.39, 0.051)), false);     // lower log loss but a higher rmse: keep the current ones
+  assert.equal(isBetter(m(0.4, 0.05), m(0.39, 0.059)), true);      // a little higher (binned RMSE is noisy) is fine too
+  assert.equal(isBetter(m(0.4, 0.05), m(0.39, 0.061)), false);     // lower log loss but an rmse more than 0.01 higher: keep the current ones
   assert.equal(isBetter(m(0.4, 0.05), m(0.4, 0.04)), false);       // equal log loss is not better
   assert.equal(isBetter(m(0.4, 0.05), m(0.41, 0.03)), false);
   assert.equal(isBetter(m(0.4, 0.05), m(0.41, 0.06)), false);
+  assert.equal(RMSE_SLACK, 0.01);
 });
 
 test('decision: weights that cannot be improved are kept; clearly wrong ones are replaced', () => {
@@ -334,4 +336,73 @@ test('fitChecked: too few reviews, progress that only goes up, and the same answ
   assert.ok(seen.length > 5 && seen.every((p, i) => i === 0 || p.progress >= seen[i - 1].progress) && seen.at(-1).progress <= 1);
   assert.ok(seen.some(p => p.phase === 'check') && seen.some(p => p.phase === 'finding'));
   assert.deepEqual(drain(fitChecked, input(cards)), a);
+});
+
+test('splitHistories: the cutoff counts only reviews that get a prediction, and nothing after it reaches the fit', () => {
+  const cards = synth(FORGETFUL, 120, 41, 8);
+  const { head, test: held, cutoff } = splitHistories(cards, 0.8);
+  // every held-out card is there, in the original order, and only reviews after the cutoff are scored in it
+  assert.equal(held.length, cards.length);
+  let predictions = 0, heldPredictions = 0;
+  cards.forEach((c, k) => {
+    let day = c.day0;
+    for (let i = 0; i < c.ratings.length; i++) {
+      day += c.deltas[i];
+      const predicted = c.scored[i] && i > 0 && c.deltas[i] > 0;
+      if (predicted) predictions++;
+      if (held[k].scored[i]) { assert.ok(day > cutoff, 'a held-out score is after the cutoff'); if (predicted) heldPredictions++; }
+      assert.equal(held[k].ratings[i], c.ratings[i]);                  // the history itself is whole (the memory state is replayed)
+    }
+  });
+  // no leakage: the head holds nothing after the cutoff, and no card in it is longer than its original
+  for (const c of head) {
+    let day = c.day0;
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; assert.ok(day <= cutoff, 'the head ends at the cutoff'); }
+  }
+  // about 20% of the predictions are held out (same-day cutoff ties can add a few)
+  assert.ok(heldPredictions >= predictions * 0.15 && heldPredictions <= predictions * 0.3, `${heldPredictions} of ${predictions}`);
+  // a different share moves the cutoff; none of the data is lost between head and test for the first answers
+  assert.ok(splitHistories(cards, 0.5).cutoff < cutoff);
+  assert.equal(splitHistories([], 0.8).cutoff, 0);
+  // same-day answers and first answers do not move the cutoff: a history of nothing but those has no predictions to split
+  const flat = [{ day0: 5, deltas: Int32Array.of(0, 0, 0), ratings: Uint8Array.of(3, 3, 3), scored: Uint8Array.of(1, 1, 1) }];
+  assert.equal(splitHistories(flat, 0.8).cutoff, 0);
+});
+
+test('fitChecked: a "better" result is the refit on all the data, not the weights from the 80% fit', () => {
+  for (const seed of [31, 32, 33, 34, 35]) {
+    const inp = input(synth(FORGETFUL, 300, seed, 10));
+    const r = drain(fitChecked, inp);
+    if (r.status !== 'better') continue;
+    const all = drain(fit, { ...inp, config: { skipCheck: true } });
+    assert.deepEqual(r.w, all.fitted);                                  // what the sheet saves
+    assert.notDeepEqual(r.w, r.headFitted);
+    assert.ok(r.tested >= HOLDOUT_MIN);
+    return;
+  }
+  assert.fail('no seed gave a better result to check');
+});
+
+test('fitChecked: the held-out check needs at least HOLDOUT_MIN predictions', () => {
+  assert.equal(HOLDOUT_MIN, 50);
+  // 410 reviews: about 20% of the predictions held out is under 50, so the current weights stay whatever the fit looks like
+  const cards = synth(FORGETFUL, 70, 51, 6);
+  const total = count(cards);
+  const r = drain(fitChecked, input(cards, { config: { minReviews: 1 } }));
+  if (r.status === 'same') assert.ok(r.reason === 'little' || r.reason === 'no-better');
+  assert.ok(total > 0);
+});
+
+test('the acceptance rate at about 800 reviews: slack on the RMSE accepts clearly more real gains than a strict rule, and a default-like learner still keeps its weights', () => {
+  let relaxed = 0, strict = 0, neutralKept = 0;
+  const seeds = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112];
+  for (const seed of seeds) {
+    const r = drain(fitChecked, input(synth(FORGETFUL, 110, seed, 8)));
+    if (r.status === 'better') { relaxed++; if (r.after.rmse <= r.before.rmse) strict++; }
+    const n = drain(fitChecked, input(synth(DEFAULT_W, 110, seed + 500, 8)));
+    if (n.status === 'same') neutralKept++;
+  }
+  assert.ok(relaxed > strict, `relaxed ${relaxed}, strict ${strict}`);
+  assert.ok(relaxed >= 8, `forgetful learners accepted in ${relaxed} of ${seeds.length}`);
+  assert.ok(neutralKept >= 7, `default-like learners kept their weights in ${neutralKept} of ${seeds.length}`);
 });

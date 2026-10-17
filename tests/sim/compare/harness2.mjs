@@ -383,7 +383,7 @@ async function runSeed(seed) {
     const { head, test } = FIT.splitHistories(hist.cards);
     const base = { ...optInput(hist), current: [...TF.default_w] };
     const r = run(FIT.fitChecked({ ...base, cards: head, steps: head.map(() => 1) }));
-    const raw = run(FIT.fit({ ...base, cards: head, config: { ...base.config, minReviews: 1 } }));
+    const raw = run(FIT.fit({ ...base, cards: head, config: { ...base.config, minReviews: 1, skipCheck: true } }));
     const use = r.status === 'better' ? r.w : base.current;
     const before = FIT.evaluate(test, base.current);
     out.oos = r.status === 'not-enough' || raw.status === 'not-enough' ? null : { before: before.logLoss, after: FIT.evaluate(test, use).logLoss, rawAfter: FIT.evaluate(test, raw.fitted).logLoss, n: before.n, kept: r.status === 'better' };

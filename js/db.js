@@ -701,6 +701,7 @@ export async function applyRemote(rows) {
         settingsStore.put(accepted.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
+        if (row.id === 'fsrsParams') schedules = true;       // another device's weights: an open Review session was planned with the old ones
       } else if (row.store in SYNC_ID) {
         const key = `${row.store}:${row.id}`;
         if (!todo.has(key) || row.updated_at >= todo.get(key).updated_at) todo.set(key, row);

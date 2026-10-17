@@ -80,6 +80,7 @@ const heartbeat = p => p.evaluate(() => {
 const beatReset = p => p.evaluate(() => { window.__hb.max = 0; window.__hb.last = performance.now(); });
 const beatRead = p => p.evaluate(() => ({ max: window.__hb.max, frames: window.__hb.frames }));
 const goodButton = async p => {
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');                // (leave first, so the session is looked at again)
   await p.goto(URL + '#/review/PV'); await p.waitForSelector('#showBtn, .rate[data-rate="3"]');
   if (await p.locator('#showBtn').count()) await p.click('#showBtn');         // (a session left open shows the answer already)
   await p.waitForSelector('.rate[data-rate="3"]');
@@ -126,6 +127,11 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await seed(p, [['B', 250, null], ['C', 200, { relearningSteps: '10m 1h' }]], 80);
   const counted = await p.evaluate(async () => { const db = await import('./js/db.js'); const { buildHistories } = await import('./js/fsrs-data.js'); return buildHistories(await db.getAll('reviewLog')).reviews; });
   ok(counted >= 400, `${tag}: enough reviews count (${counted})`);
+  ok(await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const a = await db.getAll('reviewLog'), b = await db.getAllInPieces('reviewLog', 7);          // many small pieces
+    return a.length > 400 && JSON.stringify(a) === JSON.stringify(b);
+  }), `${tag}: reading the log in small pieces gives the same rows as reading it whole`);
   await heartbeat(p);
   const goodBefore = await goodButton(p);
   await settingsPage(p);
@@ -147,9 +153,21 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok(beat.frames > 3 && beat.max < 200, `${tag}: the page stayed responsive (longest gap between frames ${Math.round(beat.max)} ms over ${beat.frames} frames)`);
   const done = await p.textContent('#optDone');
   ok(done.includes("Done. Your new settings predict your answers better, so they're now in use."), `${tag}: the "better" wording`);
-  ok(/Prediction error \(log loss\) \d\.\d{3} → \d\.\d{3} · RMSE \d+\.\d% → \d+\.\d%/.test(done), `${tag}: the details line: ` + (done.match(/Prediction error.*?%\s*→\s*[\d.]+%/s) || [''])[0]);
+  ok(/rediction error \(log loss\) \d\.\d{3} → \d\.\d{3} · RMSE \d+\.\d% → \d+\.\d%/.test(done), `${tag}: the details line: ` + (done.match(/Checked on.*?%\s*→\s*[\d.]+%/s) || [''])[0]);
+  ok(done.includes('Checked on your newest 20% of reviews'), `${tag}: the numbers say what they were checked on`);
   ok(done.includes('Run this again every month or so as you review more.'), `${tag}: the "run it again" line`);
   const first = await saved(p);
+  const refit = await p.evaluate(async () => {
+    // what the sheet should have saved: the refit on all the data (fitChecked's `w`), clipped with no extra relearning steps
+    const db = await import('./js/db.js'), srs = await import('./js/srs.js');
+    const { buildHistories } = await import('./js/fsrs-data.js'), { fitChecked } = await import('./js/fsrs-fit.js');
+    const hist = buildHistories(await db.getAll('reviewLog'));
+    const steps = hist.cards.map(h => (h.cardId.startsWith('C-') ? 2 : 1));
+    const it = fitChecked({ cards: hist.cards, steps, current: srs.default_w.slice(), defaults: srs.default_w.slice(), bounds: srs.CLAMP_PARAMETERS(srs.W17_W18_Ceiling, true) });
+    let r; do { r = it.next(); } while (!r.done);
+    return r.value.status === 'better' ? srs.clipParameters(r.value.w, 0, true) : null;
+  });
+  ok(refit && refit.every((x, i) => Math.abs(x - first.w[i]) < 1e-9), `${tag}: what was saved is the refit on all the data`);
   ok(first && first.w.length === 21 && first.w.every(Number.isFinite) && first.version === 'fsrs-6', `${tag}: 21 numbers are saved`);
   ok(first.logLoss.after < first.logLoss.before && first.reviews === counted && first.cards > 0, `${tag}: with its metrics (${first.logLoss.before.toFixed(3)} → ${first.logLoss.after.toFixed(3)}) and ${first.reviews} reviews`);
   await p.click('.opt-fold summary');
@@ -176,7 +194,36 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok(reset.w === null && reset.version === 'fsrs-6', `${tag}: Reset saves w: null`);
   ok((await goodButton(p)) === goodBefore, `${tag}: the Review button is back to ${goodBefore}`);
 
+  // ---------- weights from another device (sync): an open Review session starts again with them ----------
+  const open0 = await goodButton(p);                                                // a session is open, answer showing
+  const bumped = await p.evaluate(async first => {
+    const db = await import('./js/db.js'), v = db.scheduleVersion();
+    await db.applyRemote([{ store: 'settings', id: 'fsrsParams', updated_at: Date.now() + 5000, data: { value: first } }]);
+    return db.scheduleVersion() > v;
+  }, first);
+  ok(bumped, `${tag}: weights applied from the server bump the schedule version`);
+  const open1 = await goodButton(p);
+  ok(open1 !== open0 && open1 === goodAfter, `${tag}: the open Review session was planned again with them (${open0} → ${open1})`);
+  await settingsPage(p); await p.click('#optReset'); await p.click('#optYes');
+  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === 'Using the standard FSRS settings.');
+
+  // ---------- Reset to default pressed while a run is going: the run does not undo it ----------
+  await openSheet(p);
+  await p.evaluate(() => {
+    new MutationObserver((_, o) => {
+      if (!/^Finding your settings/.test(document.getElementById('optLive')?.textContent || '')) return;
+      o.disconnect();
+      import('./js/db.js').then(db => db.setSetting('fsrsParams', { w: null, at: Date.now(), version: 'fsrs-6' }));
+    }).observe(document.getElementById('sheet'), { subtree: true, childList: true, characterData: true });
+  });
+  await p.click('#optGo'); await finished(p);
+  ok((await p.textContent('#optDone')).includes('You reset your parameters while this was running, so nothing changed.'), `${tag}: a reset during the run is noticed`);
+  ok((await saved(p)).w === null, `${tag}: and the reset stands`);
+  await p.click('#optClose');
+
   // ---------- another device saves its own result during a run ----------
+  // (weights that are clearly good: the ones the history was made with, so a fresh fit cannot beat them on the held-out reviews)
+  const rival = { w: [0.12, 0.7, 1.4, 5.5, 6.8, 0.9, 3.0, 0.002, 1.35, 0.35, 0.7, 1.9, 0.07, 0.3, 1.3, 0.55, 1.9, 0.6, 0.12, 0.08, 0.3], at: Date.now(), reviews: 1, cards: 1, version: 'fsrs-6' };
   await settingsPage(p); await openSheet(p);
   await p.evaluate(first => {
     new MutationObserver((_, o) => {
@@ -184,10 +231,10 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
       o.disconnect();
       import('./js/db.js').then(db => db.setSetting('fsrsParams', first));
     }).observe(document.getElementById('sheet'), { subtree: true, childList: true, characterData: true });
-  }, first);
+  }, rival);
   await p.click('#optGo'); await finished(p);
-  ok((await p.textContent('#optDone')).includes('Your other device already updated your parameters; they predict as well, so nothing changed.'), `${tag}: a sync during the run is noticed`);
-  ok(JSON.stringify((await saved(p)).w) === JSON.stringify(first.w), `${tag}: the other device's weights are kept`);
+  ok((await p.textContent('#optDone')).includes('Your other device already updated your parameters; they predict as well, so nothing changed.'), `${tag}: a sync during the run is noticed: ` + (await p.textContent('#optDone')).slice(0, 200));
+  ok(JSON.stringify((await saved(p)).w) === JSON.stringify(rival.w), `${tag}: the other device's weights are kept`);
   await p.click('#optClose');
   await settingsPage(p); await p.click('#optReset'); await p.click('#optYes');
   await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === 'Using the standard FSRS settings.');
