@@ -12,6 +12,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   const recoveries = [];
   const files = new Map();      // storage: `${uid}/${id}` → { type, data }
   let bucket = true;            // false = media.sql not run yet
+  let audio = true;             // false = the bucket's file types are the old list (media.sql from before sounds): audio uploads are turned away
+  const uploads = [];           // every upload that was accepted, in order: { path, type }
   const session = uid => {
     const a = `acc-${uid}-${++n}`, r = `ref-${uid}-${n}`;
     tokens.set(a, uid); refreshTokens.set(r, uid);
@@ -72,6 +74,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       let m;
       if (req.method() === 'POST' && (m = /^object\/media\/([^/]+)\/(.+)$/.exec(p))) {
         if (m[1] !== uid) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
+        if (!audio && String(h['content-type']).startsWith('audio/')) return json(route, 415, { statusCode: '415', error: 'invalid_mime_type', message: `mime type ${h['content-type']} is not supported` });
+        uploads.push({ path: `${m[1]}/${m[2]}`, type: h['content-type'] });
         files.set(`${m[1]}/${m[2]}`, { type: h['content-type'], data: req.postDataBuffer() });
         return json(route, 200, { Key: `media/${m[1]}/${m[2]}` });
       }
@@ -118,8 +122,9 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     return json(route, 404, { message: 'not found ' + url.pathname });
   }
   return {
-    handle, rows, users, log, recoveries, files,
+    handle, rows, users, log, recoveries, files, uploads,
     setBucket(v) { bucket = v; },
+    setAudio(v) { audio = v; },
     // The link in a reset email: a fresh sign-in for that account, after the #.
     recoveryLink(email, base) { const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=recovery`; },
     setDown(v) { down = v; },
