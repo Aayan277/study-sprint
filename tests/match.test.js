@@ -173,3 +173,51 @@ test('checkTyped: an exact wording wins, then one right with typos, else the fir
   assert.deepEqual([none.correct, none.target], [false, 'alpha']);
   assert.equal(checkTyped('x', []).correct, false);
 });
+
+// ---------- "Accept this answer from now on" (js/accept.js) ----------
+test('accepted answers count as right, and the diff target is the accepted answer', async () => {
+  const { withAccepted, addAccepted } = await import('../js/accept.js');
+  const { checkTyped } = await import('../js/match.js');
+  const card = { id: 'a', front: 'Heart attack', back: 'Myocardial infarction' };
+  const targets = ['Myocardial infarction'];
+  assert.equal(checkTyped('MI', withAccepted(targets, card)).correct, false);
+  const saved = addAccepted(card, ' MI ');
+  assert.deepEqual(saved.acceptAnswers, ['MI']);
+  const res = checkTyped('mi', withAccepted(targets, saved));
+  assert.deepEqual([res.correct, res.exact, res.target], [true, true, 'MI']);
+  const typo = checkTyped('myocardial infarctoin', withAccepted(targets, saved));         // the back's own wording still forgives a typo
+  assert.deepEqual([typo.correct, typo.target], [true, 'Myocardial infarction']);
+  assert.equal(checkTyped('mx', withAccepted(targets, saved)).correct, false);
+});
+
+test('accept: limits, repeats and the editor text', async () => {
+  const { canAccept, addAccepted, parseAccepted, acceptedOf, ACCEPT_MAX, ACCEPT_LEN } = await import('../js/accept.js');
+  const card = { id: 'a', back: 'x' };
+  assert.equal(canAccept(card, ''), false);
+  assert.equal(canAccept(card, '   '), false);
+  assert.equal(canAccept(card, 'y'.repeat(ACCEPT_LEN)), true);
+  assert.equal(canAccept(card, 'y'.repeat(ACCEPT_LEN + 1)), false);
+  const one = addAccepted(card, 'The MI!');
+  assert.equal(canAccept(one, 'the mi'), false);                      // the same once capitals and punctuation are ignored
+  assert.equal(addAccepted(one, 'mi'), one);                          // unchanged card back
+  let full = card;
+  for (let i = 0; i < ACCEPT_MAX; i++) full = addAccepted(full, 'ans' + i);
+  assert.equal(acceptedOf(full).length, ACCEPT_MAX);
+  assert.equal(canAccept(full, 'one more'), false);
+  assert.deepEqual(parseAccepted(' MI, heart attack ,, mi\nstemi'), ['MI', 'heart attack', 'stemi']);
+  assert.deepEqual(parseAccepted(''), []);
+  assert.equal(parseAccepted(Array.from({ length: 30 }, (_, i) => 'a' + i).join(',')).length, ACCEPT_MAX);
+  assert.deepEqual(acceptedOf({ acceptAnswers: 'nope' }), []);
+  const big = acceptedOf({ acceptAnswers: Array.from({ length: 30 }, () => 'z'.repeat(100)) });
+  assert.deepEqual([big.length, big[0].length], [ACCEPT_MAX, ACCEPT_LEN]);          // however it was saved, at most 10 of 60
+});
+
+test('accept: a backup or another device cannot bring bad data in', async () => {
+  const { cleanAccept } = await import('../js/accept.js');
+  assert.deepEqual(cleanAccept({ id: 'a', acceptAnswers: ['ok', 5, '', '  x  '] }), { id: 'a', acceptAnswers: ['ok', 'x'] });
+  assert.deepEqual(cleanAccept({ id: 'a', acceptAnswers: 'no' }), { id: 'a' });
+  assert.deepEqual(cleanAccept({ id: 'a', acceptAnswers: [] }), { id: 'a' });
+  assert.equal(cleanAccept({ id: 'a', acceptAnswers: ['y'.repeat(100)] }).acceptAnswers[0].length, 60);
+  const plain = { id: 'a', front: 'f' };
+  assert.equal(cleanAccept(plain), plain);
+});

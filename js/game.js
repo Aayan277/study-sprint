@@ -221,6 +221,32 @@ export function scoreAnswer({ ok, seconds, limitMs, fmt, streak, hard, flash, sc
   return { pts, speed, mult };
 }
 
+// ---------- "I was right" ----------
+// A typed answer the check marked wrong can be corrected by the person. Only typed answers can: not multiple choice, not
+// "out of time" and not a skip.
+export const canOverride = (round, entry) => round.qtype === 'typing' && !entry.ok && !entry.overridden && typeof entry.given === 'string' && !!entry.given.trim();
+
+// The log entry as a right answer. The entry's accuracy, speed and place in the Missed list follow; the round's score, streak,
+// lives and Lightning clock are NOT touched (the points were scored as they were, so the game can't be won by overriding).
+// Returns a new entry; the caller puts it in round.log in place of the old one.
+export function overrideEntry(round, entry) {
+  if (!canOverride(round, entry)) return entry;
+  const speed = round.fmt === 'lightning' ? Math.max(0, 1 - entry.seconds / 3) : Math.max(0, 1 - entry.seconds / (entry.limitMs / 1000));
+  const { mixedWith, typed, target, ...rest } = entry;        // right now: no mix-up, no letters to point out
+  return { ...rest, ok: true, overridden: true, speed: Number.isFinite(speed) ? speed : 0 };
+}
+
+// What the results screen reports from a round's log: answers, right ones, accuracy (0 to 1), the average speed of the right
+// ones (0 to 1) and the average answer time in seconds.
+export function roundStats(log) {
+  const total = log.length, right = log.filter(l => l.ok);
+  return {
+    total, correct: right.length, accuracy: total ? right.length / total : 0,
+    avgSpeed: right.length ? right.reduce((a, l) => a + l.speed, 0) / right.length : 0,
+    avgTime: total ? log.reduce((a, l) => a + l.seconds, 0) / total : 0
+  };
+}
+
 export function gradeFor(accuracy, avgSpeed) {
   const rating = accuracy * 0.75 + avgSpeed * 0.25;
   const [, letter, label] = GRADES.find(g => rating >= g[0]);

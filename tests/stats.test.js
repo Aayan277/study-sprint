@@ -430,3 +430,21 @@ test('lazyStreak: timestamps work as well as rows, and match the full walk for r
     assert.deepEqual(await lazyStreak(readLogs, NOW), full, 'rows, round ' + round);
   }
 });
+
+test('readiness note: an estimate with the standard model, then with your own', async () => {
+  const { readyEstimateText } = await import('../js/stats-calc.js');
+  const standard = readyEstimateText(undefined);
+  assert.match(standard, /^It’s an estimate\. It uses the standard FSRS memory model, not one tuned to you yet, and assumes you stop reviewing now\. Treat it as a guide, not a promise\.$/);
+  assert.equal(readyEstimateText(null), standard);
+  assert.equal(readyEstimateText({}), standard);
+  assert.equal(readyEstimateText({ w: 'nope' }), standard);
+  const { cleanFsrsParams, FSRS_VERSION, FSRS_W_COUNT } = await import('../js/sched-settings.js');
+  const at = new Date(2026, 9, 12, 12).getTime();
+  const w = Array.from({ length: FSRS_W_COUNT }, (_, i) => 0.5 + i / 10);
+  const tuned = readyEstimateText(cleanFsrsParams({ w, at, reviews: 4812, cards: 900, version: FSRS_VERSION }), 'en-GB');
+  assert.equal(tuned, 'It’s an estimate from your own memory model (tuned on 12 Oct from 4,812 reviews), assuming you stop reviewing now.');
+  assert.equal(readyEstimateText(cleanFsrsParams({ w, version: FSRS_VERSION })), 'It’s an estimate from your own memory model, assuming you stop reviewing now.');
+  // reset to the standard weights (w: null) and junk both read as the standard model
+  assert.equal(readyEstimateText(cleanFsrsParams({ w: null, at, version: FSRS_VERSION })), standard);
+  assert.equal(readyEstimateText(cleanFsrsParams({ w: [1, 2], version: FSRS_VERSION })), standard);
+});

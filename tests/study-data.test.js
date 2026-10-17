@@ -416,6 +416,31 @@ test("customQueue('ids') drops suspended and buried cards", async () => {
   assert.equal(out.label, 'Review these');
 });
 
+test("customQueue('ids') with includeSuspended studies suspended and buried cards of every deck, with a label and spread", async () => {
+  const { customQueue } = await import('../js/study-data.js');
+  const all = [{ id: 'a', noteId: 'N' }, { id: 'b', suspended: true, noteId: 'N' }, { id: 'c', buriedUntil: Date.now() + 3600000 }, { id: 'd' }, { id: 'e', deckId: 'other' }];
+  const data = { statesById: new Map(), allCards: all };
+  const chosen = all.slice(0, 2);                                 // Today's decks: only some of the cards
+  const out = customQueue('ids', data, chosen, 3, ['a', 'b', 'c', 'e', 'd'], { includeSuspended: true, label: 'Question IDs' });
+  assert.deepEqual(out.queue.map(x => x.card.id), ['a', 'b', 'c', 'e', 'd']);
+  assert.equal(out.label, 'Question IDs');
+  const spread = customQueue('ids', data, chosen, 3, ['a', 'b', 'c', 'd'], { includeSuspended: true, spread: true });
+  assert.deepEqual(spread.queue.map(x => x.card.id), ['a', 'c', 'b', 'd']);       // a and b are one note
+  // without the option nothing changes: hidden cards are left out
+  assert.deepEqual(customQueue('ids', data, all, 3, ['a', 'b', 'c', 'd']).queue.map(x => x.card.id), ['a', 'd']);
+});
+
+test('launchStudy hands over the options for an ids session, and the scope names the cards', async () => {
+  const { launchStudy, takeLaunch } = await import('../js/study-data.js');
+  globalThis.location = { hash: '' };
+  launchStudy({ kind: 'ids', cardIds: ['a', 'b'], includeSuspended: true, spread: true, label: 'Tag: step' });
+  assert.equal(globalThis.location.hash, '#/review');
+  assert.deepEqual(takeLaunch(), { deckIds: [], deckId: undefined, kind: 'ids', days: 3, cardIds: ['a', 'b'], includeSuspended: true, spread: true, label: 'Tag: step' });
+  assert.equal(takeLaunch(), null);
+  assert.notEqual(scopeKey([], 'ids', 3, ['a', 'b']), scopeKey([], 'ids', 3, ['a', 'c']));
+  delete globalThis.location;
+});
+
 test('ring: a card answered today that is now suspended still counts as done, even in its learning steps', () => {
   const logs = [{ cardId: 'L', source: 'review', timestamp: now, state: 0 }];
   const d = ringWorld({ logs, newCards: 0, learn: [['L', now + 600000]] });
