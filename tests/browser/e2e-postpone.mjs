@@ -68,7 +68,7 @@ const after = await states(p);
 const moved = Object.keys(after).filter(id => after[id] !== before[id]).sort();
 ok(moved.join() === 'pp7,pp8,pp9', 'the three most stable reviews moved: ' + moved.join());
 const due = new Date(after.pp9);
-ok(due.getDay() === 5 && due.getHours() === 4 && due.getMinutes() === 0, 'they are due at 4am on Friday: ' + due.toString().slice(0, 24));
+ok(due.getDay() === 5 && due.getHours() === 6 && due.getMinutes() === 0, 'they are due at 6am on Friday, after the day starts: ' + due.toString().slice(0, 24));
 ok(await logCount(p) === 0, 'no review-log rows were written');
 await p.waitForFunction(() => document.querySelector('[data-count=due]')?.textContent.trim() === '7');
 ok(true, 'Today now counts 7 due');

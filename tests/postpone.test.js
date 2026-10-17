@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { postponeCandidates, postponeStates, defaultCount, averages, KEEP_R } from '../js/postpone.js';
+import { postponeCandidates, postponeStates, postponeDue, defaultCount, averages, KEEP_R } from '../js/postpone.js';
+import { splitCards } from '../js/queue.js';
 import { recallAt } from '../js/exam.js';
 import { dayEnd, dayStart } from '../js/days.js';
 
@@ -61,26 +62,39 @@ test('averages: recall before and after for the first N', () => {
   assert.equal(averages([], 5), null);
 });
 
-test('postponeStates: due at 4am, N days ahead; scheduledDays worked out again; nothing else changes', () => {
-  const cards = [card('a')];
+// What Review would show: the cards splitCards puts in today's queue at a given moment.
+const dueAt = (state, when) => splitCards([card('a')], byId([state]), when).reviews.length === 1;
+// Noon on the study day `k` days after `now`'s (calendar days, so a clock change doesn't shift it).
+const noonOf = (now, k) => { const d = new Date(dayStart(now)); d.setDate(d.getDate() + k); d.setHours(12, 0, 0, 0); return d.getTime(); };
+
+test('postponeStates: the card is not due until day N (1, 2, 3 and 7 days), then it is', () => {
+  for (const days of [1, 2, 3, 7]) {
+    const st = state('a', 100, { ago: 30, dueIn: -1 });
+    assert.equal(dueAt(st, NOW), true, 'overdue before');
+    const [next] = postponeStates(postponeCandidates([card('a')], byId([st]), { days, now: NOW, recallAt }), days, NOW);
+    for (let k = 0; k < days; k++) assert.equal(dueAt(next, noonOf(NOW, k)), false, `${days} day(s): not due on day ${k}`);
+    assert.equal(dueAt(next, noonOf(NOW, days)), true, `${days} day(s): due on day ${days}`);
+    assert.equal(dueAt(next, noonOf(NOW, days + 1)), true, 'and still due after');
+  }
+});
+
+test('postponeStates: due 2 hours past the 4am rollover; scheduledDays worked out again; nothing else changes', () => {
   const st = state('a', 30, { ago: 25, dueIn: -1 });
-  const list = postponeCandidates(cards, byId([st]), { days: 3, now: NOW, recallAt });
+  const list = postponeCandidates([card('a')], byId([st]), { days: 3, now: NOW, recallAt });
   const [next] = postponeStates(list, 3, NOW);
   const due = new Date(next.due);
-  assert.equal(due.getHours(), 4);
+  assert.equal(due.getHours(), 6);
   assert.equal(due.getMinutes(), 0);
-  assert.equal(next.due, dayEnd(NOW, 2));
-  assert.equal(next.due, dayStart(NOW) + 3 * DAY);                     // (no clock change in October)
+  assert.equal(next.due, postponeDue(3, NOW));
+  assert.equal(next.due, dayEnd(NOW, 2) + 2 * 3600000);
   assert.equal(next.scheduledDays, Math.round((next.due - st.lastReview) / DAY));
   assert.equal(next.stability, st.stability);
   assert.equal(next.lastReview, st.lastReview);
   assert.equal(next.state, 2);
-  assert.notEqual(next, st);                                           // a copy, not the same object
-  assert.equal(postponeStates(list, 1, NOW)[0].due, dayEnd(NOW));
-  assert.equal(postponeStates(list, 7, NOW)[0].due, dayEnd(NOW, 6));
+  assert.notEqual(next, st);
 });
 
-test('postponeStates: 4am holds across a daylight-saving change', () => {
+test('postponeStates: the day count holds across a daylight-saving change', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('./postpone-dst.child.mjs', import.meta.url))], { env: { ...process.env, TZ: 'Europe/London' }, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });

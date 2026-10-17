@@ -712,7 +712,8 @@ export async function applyRemote(rows) {
         if (local) os.delete(row.store === 'reviewLog' ? local.id : row.id);
         deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
       } else {
-        const record = recordFromRow(row);
+        let record = recordFromRow(row);
+        if (row.store === 'cards') record = cleanAccept(record);      // a bad accepted-answers list from another device is dropped
         if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
         os.put(record);
         if (tomb) deleted.delete(tomb.key);

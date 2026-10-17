@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagPrefix } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
 import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -533,8 +533,8 @@ function openTools(cards, { scope, refresh }) {
     try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: refresh }); }
     catch { toast("Couldn't open this. Check your connection and try again."); }
   });
-  const apply = async (from, to, { folder = false, name = from } = {}) => {
-    const changed = folder ? renameTagPrefix(cards, from, to) : renameTag(cards, from, to);
+  const apply = async (from, to, { folder = false, name = from, exact = false } = {}) => {
+    const changed = folder ? renameTagPrefix(cards, from, to) : exact ? renameTagExact(cards, from, to) : renameTag(cards, from, to);
     await db.saveCards(changed);
     const what = folder ? `the folder “${name}”` : `“${from}”`;
     toast(to ? `Renamed ${what} on ${plural(changed.length, 'card')}` : `Removed ${what} from ${plural(changed.length, 'card')}`);
@@ -566,12 +566,12 @@ function openTools(cards, { scope, refresh }) {
       rename: (path, node, li) => {
         const own = li.hasAttribute('data-own'), isFolder = node.children.length && !own;
         renameForm(isFolder ? `Rename the folder “${esc(node.name)}” to` : `Rename “${esc(own ? path : node.name)}” to`, path,
-          to => (isFolder ? apply(path, to, { folder: true, name: node.name }) : apply(path, to)));
+          to => (isFolder ? apply(path, to, { folder: true, name: node.name }) : apply(path, to, { exact: true })));
       },
       remove: (path, node, li) => {
         const own = li.hasAttribute('data-own'), isFolder = node.children.length && !own;
         if (isFolder) confirmIn('tagEdit', `Remove the folder “${node.name}” and its ${tagsIn(node).toLocaleString('en')} ${tagsIn(node) === 1 ? 'tag' : 'tags'} from every card in ${scope}? The cards stay.`, 'Remove folder', () => apply(path, "", { folder: true, name: node.name }));
-        else confirmIn('tagEdit', `Remove the tag “${path}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(path, ''));
+        else confirmIn('tagEdit', `Remove the tag “${path}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(path, '', { exact: true }));
       }
     } });
   }

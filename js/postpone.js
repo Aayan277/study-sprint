@@ -34,13 +34,16 @@ export function postponeCandidates(cards, statesById, { days = 1, now = Date.now
   return out.sort((a, b) => tier(a) - tier(b) || a.damage - b.damage || b.after - a.after);
 }
 
+// When a card postponed by `days` is next due: 6am on that day (2h past the rollover, like exam.js), so it is not due until then.
+export const postponeDue = (days, now = Date.now()) => dayEnd(now, days - 1) + 2 * 3600000;
+
 // How many to postpone by default: every candidate that stays at 80% or better after the delay.
 export const defaultCount = list => list.filter(x => x.after >= KEEP_R).length;
 
-// The new schedules for the first `count` of the list: due at the start (4am) of the day `days` ahead, with
+// The new schedules for the first `count` of the list: due at 6am (2 hours past the 4am rollover, as exam.js puts its cards) of the day `days` ahead. Exactly 4am would still count as the day before (splitCards counts due <= dayEnd as today). With
 // scheduledDays worked out again (the same sum Review ahead's pull-in uses).
 export function postponeStates(list, days, now = Date.now()) {
-  const due = dayEnd(now, days - 1);
+  const due = postponeDue(days, now);
   return list.map(({ state }) => ({ ...state, due, scheduledDays: Math.max(1, Math.round((due - (state.lastReview || now)) / DAY)) }));
 }
 

@@ -51,10 +51,10 @@ ok((await p.getAttribute('#tsText', 'placeholder')).startsWith('For example 1234
 ok(await p.isDisabled('#tsStudy') && await p.isDisabled('#tsUnsus'), 'buttons are off before anything is found');
 
 // paste IDs: 789 (leading zeros in the tag), 12345 (in two question banks), 23456, one missing
-await p.fill('#tsText', '789, 12345\n23456 99999 99999');
+await p.fill('#tsText', 'Step 789, 12345\n23456 99999 99999');
 await p.waitForFunction(() => document.querySelector('#tsResult')?.textContent.includes('Found'));
 let res = (await p.textContent('#tsResult')).replace(/\s+/g, ' ').trim();
-ok(res === 'Found 3 of 4 IDs · 4 cards (3 suspended, 1 is a leech)', 'result line: ' + res);
+ok(res.startsWith('Found 3 of 4 IDs · 4 cards (3 suspended, 1 is a leech)') && res.endsWith('Ignored: Step'), 'result line, with the plain word listed as ignored: ' + res);
 ok(await p.isVisible('#tsLookWrap'), 'a "Look in" choice appears when two banks share an ID');
 const looks = await p.$$eval('#tsLook option', o => o.map(x => x.textContent));
 ok(looks[0] === '#ak_step1_v12 › #uworld › step (3 IDs)' && looks[1] === '#ak_step1_v12 › #amboss (1 ID)', 'Look in lists the folders, most IDs first: ' + looks.join(' | '));
@@ -66,7 +66,7 @@ await p.screenshot({ path: SP + '/ts-ids-375-dark.png' });
 // choosing the other bank changes the cards
 await p.selectOption('#tsLook', '#ak_step1_v12::#amboss');
 res = (await p.textContent('#tsResult')).replace(/\s+/g, ' ').trim();
-ok(res === 'Found 1 of 4 IDs · 1 card', 'AMBOSS only: ' + res);
+ok(res.startsWith('Found 1 of 4 IDs · 1 card'), 'AMBOSS only: ' + res);
 await p.selectOption('#tsLook', UW);
 
 // Unsuspend only

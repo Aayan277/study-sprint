@@ -438,8 +438,8 @@ test('readiness note: an estimate with the standard model, then with your own', 
   assert.equal(readyEstimateText(null), standard);
   assert.equal(readyEstimateText({}), standard);
   assert.equal(readyEstimateText({ w: 'nope' }), standard);
-  const fittedAt = new Date(2026, 9, 12, 12).getTime();
-  const tuned = readyEstimateText({ w: [1, 2, 3], fittedAt, reviews: 4812 }, 'en-GB');
+  const at = new Date(2026, 9, 12, 12).getTime();      // (the shape cleanFsrsParams on main gives: { w, at, reviews, ... }; mirrored here until it is merged)
+  const tuned = readyEstimateText({ w: [1, 2, 3], at, reviews: 4812 }, 'en-GB');
   assert.equal(tuned, 'It’s an estimate from your own memory model (tuned on 12 Oct from 4,812 reviews), assuming you stop reviewing now.');
   assert.equal(readyEstimateText({ w: [1] }), 'It’s an estimate from your own memory model, assuming you stop reviewing now.');
 });

@@ -386,12 +386,12 @@ export function difficultyBands(states) {
 }
 
 // The "How sure is this?" note under the readiness number. It is an estimate either way; once the personal FSRS fit
-// (settings.fsrsParams, with w and optionally fittedAt and reviews) exists, it says the memory model is yours.
+// (settings.fsrsParams, with w, at (when it was fitted) and reviews, as the optimizer saves it) exists, it says the memory model is yours.
 export function readyEstimateText(fsrsParams, locale) {
   if (!Array.isArray(fsrsParams?.w)) {
     return 'It’s an estimate. It uses the standard FSRS memory model, not one tuned to you yet, and assumes you stop reviewing now. Treat it as a guide, not a promise.';
   }
-  const when = Number.isFinite(fsrsParams.fittedAt) ? new Date(fsrsParams.fittedAt).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : '';
+  const when = Number.isFinite(fsrsParams.at) ? new Date(fsrsParams.at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : '';
   const n = Number.isFinite(fsrsParams.reviews) ? fsrsParams.reviews.toLocaleString(locale || 'en') : '';
   const tuned = when && n ? ` (tuned on ${when} from ${n} reviews)` : when ? ` (tuned on ${when})` : n ? ` (tuned on ${n} reviews)` : '';
   return `It’s an estimate from your own memory model${tuned}, assuming you stop reviewing now.`;

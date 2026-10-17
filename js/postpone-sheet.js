@@ -3,10 +3,9 @@
 //   openPostponeSheet({ data, cards, onChange })   data from loadAll, cards = the cards of the decks chosen in Options
 
 import * as db from './db.js';
-import { dayEnd } from './days.js';
 import { recallAt, examInfo, FINAL_DAYS } from './exam.js';
 import { effectiveDeck } from './deck-tree.js';
-import { postponeCandidates, postponeStates, defaultCount, averages, pct } from './postpone.js';
+import { postponeCandidates, postponeStates, postponeDue, defaultCount, averages, pct } from './postpone.js';
 import { openSheet, closeSheet, plural, toast, $ } from './ui.js';
 
 const CHOICES = [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '1 week']];
@@ -14,7 +13,7 @@ const CHOICES = [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '1 week']];
 // "tomorrow", "Sunday", or "Sun 25 Oct" for a week or more.
 export function dayName(days, now = Date.now()) {
   if (days === 1) return 'tomorrow';
-  const d = new Date(dayEnd(now, days - 1));
+  const d = new Date(postponeDue(days, now));
   return days >= 7 ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : d.toLocaleDateString(undefined, { weekday: 'long' });
 }
 
@@ -77,9 +76,12 @@ export function openPostponeSheet({ data, cards, onChange = () => {} }) {
   $('ppPlus').addEventListener('click', () => { count = Math.min(list.length, count + (count >= 20 ? 10 : 1)); draw(); });
   $('ppCancel').addEventListener('click', closeSheet);
   $('ppGo').addEventListener('click', async () => {
-    const chosen = list.slice(0, count);
-    if (!chosen.length) return;
     $('ppGo').disabled = true;
+    // The schedules are read again now: a card reviewed (or moved) since the sheet opened is left alone.
+    const fresh = new Map((await db.getAll('cardStates')).map(s => [s.cardId, s]));
+    const chosen = list.slice(0, count).map(x => ({ ...x, state: fresh.get(x.card.id) }))
+      .filter((x, i) => x.state && x.state.state === 2 && x.state.due === list[i].state.due);
+    if (!chosen.length) { toast('Those reviews changed; nothing to postpone.'); closeSheet(); onChange(); return; }
     const now = Date.now();
     const next = postponeStates(chosen, days, now);
     const olds = chosen.map(x => x.state);

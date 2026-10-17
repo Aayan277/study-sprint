@@ -208,6 +208,8 @@ test('accept: limits, repeats and the editor text', async () => {
   assert.deepEqual(parseAccepted(''), []);
   assert.equal(parseAccepted(Array.from({ length: 30 }, (_, i) => 'a' + i).join(',')).length, ACCEPT_MAX);
   assert.deepEqual(acceptedOf({ acceptAnswers: 'nope' }), []);
+  const big = acceptedOf({ acceptAnswers: Array.from({ length: 30 }, () => 'z'.repeat(100)) });
+  assert.deepEqual([big.length, big[0].length], [ACCEPT_MAX, ACCEPT_LEN]);          // however it was saved, at most 10 of 60
 });
 
 test('accept: a backup or another device cannot bring bad data in', async () => {

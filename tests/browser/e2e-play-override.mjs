@@ -103,6 +103,25 @@ ok(st.lapses === 0 && st.state === 2 && st.stability > 10 && st.reps === 4, `the
 ok(rows.length === 1 && rows[0].correct === true && rows[0].overridden === true && rows[0].applied === true && rows[0].rating >= 2, 'one log row, right, marked overridden: ' + JSON.stringify(rows.map(r => [r.correct, r.overridden, r.rating, r.reason])));
 await p.keyboard.press('Escape');
 
+// ----- the wrong answer made the card a leech: "I was right" takes that back too -----
+for (const [id, action] of [['pl', 'tag'], ['pm', 'suspend']]) {
+  await seed(p, id, [['Leech question ' + id, 'Hemoglobin ' + id]], { due: true, counts: true });
+  await p.evaluate(async a => { const db = await import('./js/db.js'); await db.setSetting('leechThreshold', 1); await db.setSetting('leechAction', a); const c = await db.get('cards', a === 'tag' ? 'pl0' : 'pm0'); await db.saveCards([{ ...c, tags: ['keep'] }]); }, action);
+  await setup(p, id);
+  await typeAnswer(p, 'qqqqqq');
+  await p.waitForFunction(async cid => { const c = await (await import('./js/db.js')).get('cards', cid); return (c.tags || []).includes('leech'); }, id + '0');
+  const made = await cardOf(p, id + '0');
+  ok(made.tags.includes('leech') && !!made.suspended === (action === 'suspend'), `${action}: the wrong answer made it a leech: ${JSON.stringify([made.tags, made.suspended])}`);
+  await p.click('#rightBtn');
+  await p.waitForFunction(() => document.querySelector('#feedback .fb.ok')?.textContent.includes('Counted as right'));
+  const back = await cardOf(p, id + '0');
+  ok(JSON.stringify(back.tags) === '["keep"]' && !back.suspended, `${action}: I was right took the leech back: ${JSON.stringify([back.tags, back.suspended])}`);
+  const st2 = await p.evaluate(async cid => (await import('./js/db.js')).get('cardStates', cid), id + '0');
+  ok(st2.lapses === 0, `${action}: and the schedule has no lapse: ${st2.lapses}`);
+  await p.keyboard.press('Escape');
+}
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('leechThreshold', 8); await db.setSetting('leechAction', 'suspend'); await db.setSetting('playCountsAsReviews', false); });
+
 // ----- Survival: the results' Missed rows have the buttons -----
 await seed(p, 'ps', [['Q one', 'Alpha one'], ['Q two', 'Beta two'], ['Q three', 'Gamma three']]);
 await setup(p, 'ps', { fmt: 'survival' });

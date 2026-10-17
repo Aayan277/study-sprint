@@ -515,7 +515,7 @@ async function record(round, entry) {
       entry.applied = true;
       data.statesById.set(id, next);
       data.playedToday.add(id);
-      await checkLeech(round, entry.card, prev, next, log);
+      entry.leeched = await checkLeech(round, entry.card, prev, next, log);       // what it changed, so "I was right" can undo a leech
     }
   } else {
     entry.logId = await db.addLog(log);
@@ -562,7 +562,22 @@ async function rerecord(round, old, fixed) {
       await db.deleteLogRow(old.logId);                      // it was only logged
     }
   }
+  if (old.leeched) await undoLeech(round, old);
   await record(round, fixed);
+}
+
+// The wrong answer made the card a leech: put its tags and suspended flag back as they were, and take it off the round's leech list.
+async function undoLeech(round, old) {
+  const was = old.leeched, cur = await db.get('cards', old.card.id);
+  if (cur && (cur.tags || []).includes('leech')) {
+    const { suspended, ...rest } = cur;
+    const back = { ...rest, tags: was.tags || [], ...(was.suspended ? { suspended: true } : {}) };
+    if (!was.tags) delete back.tags;
+    await db.saveCards([back]);
+    replaceInRound(round, playCopy(back));
+    if (!round.all.some(c => c.id === back.id)) { round.all.push(playCopy(back)); round.pool.push(playCopy(back)); }      // a suspended leech had been dropped from the round
+  }
+  if (!was.wasListed) round.leeches = round.leeches.filter(id => id !== old.card.id);
 }
 
 // Can "Accept “…” from now on" be offered for this entry? The typed text must fit, not be accepted yet, and the question must
@@ -585,13 +600,16 @@ async function acceptTyped(round, entry) {
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
 async function checkLeech(round, card, prev, next, log) {
   // A miss on a card that wasn't due still brings it back, but doesn't count toward the leech limit.
-  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return;
-  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
-  const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
+  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return null;
+  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return null;
+  const before = (await db.get('cards', card.id)) || card;
+  const leech = markLeech(before, data.settings.leechAction);
   await db.saveCards([leech]);
-  if (!round.leeches.includes(card.id)) round.leeches.push(card.id);
+  const wasListed = round.leeches.includes(card.id);
+  if (!wasListed) round.leeches.push(card.id);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
   toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+  return { tags: before.tags, suspended: before.suspended, wasListed };      // the card as it was before it became a leech
 }
 
 // Take a card out of the rest of the round (suspended, buried or deleted), or swap in its edited version.

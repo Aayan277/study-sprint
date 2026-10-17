@@ -8,7 +8,8 @@ export const ACCEPT_MAX = 10;
 export const ACCEPT_LEN = 60;
 
 // The accepted answers a card has (a list of strings, however the card was saved).
-export const acceptedOf = card => (Array.isArray(card?.acceptAnswers) ? card.acceptAnswers.filter(a => typeof a === 'string' && a.trim()) : []);
+export const acceptedOf = card => (Array.isArray(card?.acceptAnswers)
+  ? card.acceptAnswers.filter(a => typeof a === 'string' && a.trim()).slice(0, ACCEPT_MAX).map(a => a.slice(0, ACCEPT_LEN)) : []);
 
 // Every wording a typed answer to the card's back is checked against: the back's own wordings (given as `targets`) and then
 // the accepted answers.

@@ -75,20 +75,24 @@ export function cardsUnder(cards, path) {
 // What compares an ID: lower case, and a number without its leading zeros ("00123" = "123").
 export const idKey = s => { const t = String(s ?? '').trim().toLowerCase(); return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, '') : t; };
 
-// Pasted text → the IDs in it, in the order written, with no repeats (ignoring capitals and leading zeros). Words are split
-// on spaces, line breaks, commas and semicolons; brackets, dots and the like around a word are trimmed. At most 5,000.
-export function parseIds(text) {
-  const seen = new Set(), out = [];
-  for (const raw of String(text ?? '').split(/[\s,;]+/)) {
+// Pasted text → { ids, ignored }. Words are split on spaces, line breaks, commas and semicolons; brackets, dots and the like
+// around a word are trimmed. An ID is a word with a digit in it (12345, 00789, Q-12, A12B); plain words ("Step", "the") from a
+// pasted table are `ignored`, so they can be shown. IDs keep the order written, with no repeats (ignoring capitals and leading
+// zeros); at most 5,000 IDs.
+export function parseIdsDetailed(text) {
+  const seen = new Set(), ids = [], ignored = [], skipped = new Set();
+  for (const raw of String(text ?? '').split(/[,;\s]+/)) {
     const token = raw.replace(/^[^\p{L}\p{N}#_]+|[^\p{L}\p{N}_]+$/gu, '');
     if (!token) continue;
+    if (!/\d/.test(token)) { if (!skipped.has(token.toLowerCase())) { skipped.add(token.toLowerCase()); ignored.push(token); } continue; }
     const k = idKey(token);
     if (seen.has(k)) continue;
-    seen.add(k); out.push(token);
-    if (out.length >= MAX_IDS) break;
+    seen.add(k); ids.push(token);
+    if (ids.length >= MAX_IDS) break;
   }
-  return out;
+  return { ids, ignored };
 }
+export const parseIds = text => parseIdsDetailed(text).ids;
 
 // Which cards belong to these IDs? An ID matches a tag whose last piece equals it ("...::step::12345" is 12345).
 //   under   only tags below this folder count (the folder chosen in "Look in")

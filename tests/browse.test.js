@@ -233,3 +233,12 @@ test('renameTagPrefix: an empty target removes the folder and its tags', async (
   const out = renameTagPrefix([card('a', { tags: ['f::1', 'f', 'other'] }), card('b', { tags: ['other'] })], 'f', '');
   assert.deepEqual(out.map(c => [c.id, c.tags]), [['a', ['other']]]);
 });
+
+test('renameTagExact: one tag, matched ignoring capitals and empty pieces; tags below it stay', async () => {
+  const { renameTagExact } = await import('../js/browse-logic.js');
+  const cs = [card('a', { tags: ['A::B', 'a::b::c'] }), card('b', { tags: ['a::::b'] }), card('c', { tags: ['a::bc'] })];
+  const out = renameTagExact(cs, 'a::b', 'x');
+  assert.deepEqual(out.map(c => [c.id, c.tags]), [['a', ['x', 'a::b::c']], ['b', ['x']]]);
+  assert.deepEqual(renameTagExact(cs, 'a::b', '').map(c => c.tags), [['a::b::c'], []]);
+  assert.deepEqual(renameTagExact(cs, '', 'x'), []);
+});

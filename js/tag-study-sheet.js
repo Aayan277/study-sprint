@@ -7,7 +7,7 @@
 
 import * as db from './db.js';
 import { isSuspended } from './browse-logic.js';
-import { tagTree, tagTreeHTML, wireTagTree, parseIds, matchIds, cardsUnder, crumbs, pieces } from './tag-tree.js';
+import { tagTree, tagTreeHTML, wireTagTree, parseIdsDetailed, matchIds, cardsUnder, crumbs, pieces } from './tag-tree.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
 
 const MISSING_SHOWN = 20;
@@ -79,10 +79,11 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
 
   // ----- Question IDs -----
   const drawIds = () => {
-    const ids = parseIds($('tsText').value);
+    const { ids, ignored } = parseIdsDetailed($('tsText').value);
     const res = $('tsResult');
+    const skip = ignored.length ? `<span class="ts-ignored">Ignored: ${esc(ignored.slice(0, MISSING_SHOWN).join(', '))}${ignored.length > MISSING_SHOWN ? ` + ${ignored.length - MISSING_SHOWN} more` : ''}</span>` : '';
     if (!ids.length) {
-      res.textContent = '';
+      res.innerHTML = skip;
       $('tsLookWrap').hidden = true; $('tsMissing').hidden = true;
       setSel([], '');
       return;
@@ -95,7 +96,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
     if (all.sources.length > 1) {
       $('tsLook').innerHTML = all.sources.map(s => `<option value="${esc(s.path)}" ${s.path === look ? 'selected' : ''}>${esc(crumbs(s.path) || '(no folder)')} (${plural(s.ids.length, 'ID')})</option>`).join('');
     }
-    res.innerHTML = `<b>Found ${n0(m.found.length)} of ${n0(ids.length)} IDs</b>${m.cards.length ? ` · ${esc(countsText(m.cards))}` : ''}`;
+    res.innerHTML = `<b>Found ${n0(m.found.length)} of ${n0(ids.length)} IDs</b>${m.cards.length ? ` · ${esc(countsText(m.cards))}` : ''}${skip ? `<br>${skip}` : ''}`;
     const miss = m.missing;
     $('tsMissing').hidden = !miss.length;
     if (miss.length) {
@@ -148,7 +149,10 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
 
   // ----- the buttons -----
   const unsuspend = async () => {
-    const hidden = sel.cards.filter(isSuspended);
+    // The cards are read again, so an edit made since the sheet opened is kept (and one deleted meanwhile is skipped).
+    const ids = new Set(sel.cards.filter(isSuspended).map(c => c.id));
+    if (!ids.size) return 0;
+    const hidden = (await db.getAll('cards')).filter(c => ids.has(c.id) && isSuspended(c));
     if (!hidden.length) return 0;
     await db.saveCards(hidden.map(c => ({ ...c, suspended: false })));
     const done = new Set(hidden.map(c => c.id));

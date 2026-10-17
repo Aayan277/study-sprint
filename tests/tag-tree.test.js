@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tagTree, findNode, cardsUnder, parseIds, matchIds, idKey, normTag, hasFolders, crumbs, tagTreeHTML } from '../js/tag-tree.js';
+import { parseIdsDetailed, tagTree, findNode, cardsUnder, parseIds, matchIds, idKey, normTag, hasFolders, crumbs, tagTreeHTML } from '../js/tag-tree.js';
 
 const card = (id, tags) => ({ id, deckId: 'd', front: id, back: id, tags, created: 0 });
 const AK = '#ak_step1_v12::#uworld::step';
@@ -64,10 +64,18 @@ test('cardsUnder: the tag itself and everything below it, not a longer name', ()
 test('parseIds: splits on spaces, commas, semicolons and lines; trims punctuation; no repeats', () => {
   assert.deepEqual(parseIds('12345, 23456 34567;45678\n56789'), ['12345', '23456', '34567', '45678', '56789']);
   assert.deepEqual(parseIds('(123), "456". [789]'), ['123', '456', '789']);
-  assert.deepEqual(parseIds('123 123 0123 ABC abc'), ['123', 'ABC']);        // 0123 is 123; ABC is abc
+  assert.deepEqual(parseIds('123 123 0123 Q-9 q-9 A12B'), ['123', 'Q-9', 'A12B']);        // 0123 is 123; Q-9 is q-9
   assert.deepEqual(parseIds(''), []);
   assert.deepEqual(parseIds(null), []);
   assert.deepEqual(parseIds(' , ; '), []);
+});
+
+test('parseIds: only words with a digit are IDs; plain words are ignored and listed', () => {
+  const r = parseIdsDetailed('Step 12345 the Step 2 CK step, 99');
+  assert.deepEqual(r.ids, ['12345', '2', '99']);
+  assert.deepEqual(r.ignored, ['Step', 'the', 'CK']);          // each once, ignoring capitals
+  assert.deepEqual(parseIdsDetailed('hello world').ids, []);
+  assert.deepEqual(parseIdsDetailed('').ignored, []);
 });
 
 test('parseIds: at most 5000 IDs', () => {

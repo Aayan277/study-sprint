@@ -202,6 +202,15 @@ export function renameTag(cards, from, to) {
     .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (t === from ? clean : t)).filter(Boolean))] }));
 }
 
+// Rename (or, with to = '', remove) exactly one tag, matching it the way folders do: ignoring capitals and empty pieces
+// ("a::::b" is "a::b"). Tags below it are left alone. Returns only the cards that changed.
+export function renameTagExact(cards, from, to) {
+  const f = normTag(from), [clean] = parseTags(to);
+  if (!f) return [];
+  return cards.filter(c => (c.tags || []).some(t => normTag(t) === f))
+    .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (normTag(t) === f ? clean : t)).filter(Boolean))] }));
+}
+
 // Rename a folder of "::" tags: the tag `from` and every tag below it move to `to` (to = '' removes them). A tag that
 // already exists at the new place is merged with. Returns only the cards that changed.
 export function renameTagPrefix(cards, from, to) {
