@@ -14,7 +14,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -22,6 +22,7 @@ const PAGE = 1000;                    // rows per request when pulling
 const BATCH = 500;                    // rows per request when pushing
 
 let running = null, again = false, timer = 0, started = false;
+let retrySounds = true;       // sounds the server turned away are tried again once each time the app opens, and on Sync now
 let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
 
 function emit(detail) {
@@ -166,7 +167,8 @@ export async function healNotes() {
 
 // ---------- syncing ----------
 // Sync now. If a sync is already running, one more runs straight after it (so nothing is missed).
-export function syncNow() {
+export function syncNow({ retry = false } = {}) {
+  if (retry) retrySounds = true;
   if (running) { again = true; return running; }
   running = run()
     .catch(err => {
@@ -208,7 +210,7 @@ async function run() {
   //    devices use (so they work offline). A picture problem (e.g. storage not set up yet) doesn't stop the
   //    rest of the sync; it's reported as a note.
   let mediaNote = null;
-  try { await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
+  try { mediaNote = await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
 
   // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
@@ -230,25 +232,36 @@ async function run() {
   emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null, note: mediaNote });
 }
 
-// ---------- pictures ----------
+// ---------- pictures and sounds ----------
+// Both are files in the same bucket. Pictures go first, so a problem with sounds can never hold them up.
+// Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
-  const pending = await db.mediaToUpload();
-  for (const [i, m] of pending.entries()) {
-    if (pending.length > 3) emit({ progress: `Sending pictures: ${i + 1} of ${pending.length}…` });
-    await supa.uploadMedia(token, uid, m.id, m.type, m.data);
-    await db.markUploaded([m.id]);
-  }
-  // Pictures that cards here use but this device doesn't have yet.
+  const rows = await db.mediaToUpload();
+  // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
+  const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
+  const upload = await uploadMediaFiles(pending, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
+    onSent: m => db.markUploaded([m.id]),
+    onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
+  });
+  if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
+  retrySounds = false;
+  const typeBlocked = upload.blocked.length > 0 || rows.some(m => m.blocked === 'type' && isSoundRow(m));
+  upload.failed.forEach(f => console.error('Could not send a file', f.id, f.message));
+
+  // Pictures and sounds that cards here use but this device doesn't have yet. Four at a time.
   const have = new Set((await db.getAll('media')).map(m => m.id));
-  const want = [...new Set((await db.getAll('cards')).flatMap(c => [c.frontImage, c.backImage]).filter(id => id && !have.has(id)))];
-  for (const [i, id] of want.entries()) {
-    if (want.length > 3) emit({ progress: `Downloading pictures: ${i + 1} of ${want.length}…` });
-    await fetchMedia(token, uid, id);
+  const cards = await db.getAll('cards');
+  const wantOf = fields => [...new Set(cards.flatMap(c => fields.flatMap(f => (Array.isArray(c[f]) ? c[f] : [c[f]]))).filter(id => id && !have.has(id)))];
+  for (const [kind, ids] of [['pictures', wantOf(['frontImage', 'backImage'])], ['sounds', wantOf(['frontSounds', 'backSounds'])]]) {
+    await runPool(ids, id => fetchMedia(token, uid, id), {
+      onProgress: (n, total) => { if (total > 3) emit({ progress: `Downloading ${kind}: ${n} of ${total}…` }); }
+    });
   }
-  // Pictures no card uses any more: remove them here and from the account.
+  // Pictures and sounds no card uses any more: remove them here and from the account.
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
+  return typeBlocked ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);

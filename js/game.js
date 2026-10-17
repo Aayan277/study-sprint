@@ -35,6 +35,9 @@ export const isCloze = card => !!card.noteId && card.cloze !== undefined;
 const stepped = card => !isCloze(card) && !hasMasks(card) && isStepped(card.back, { mask: maskMath });
 export const isFrontOnly = card => isCloze(card) || hasMasks(card) || stepped(card);
 
+// The prompt side's sounds (Play shows a ▶ for them; they never play by themselves).
+const soundsOf = ids => (Array.isArray(ids) && ids.length ? { sounds: ids } : {});
+
 export function questionFor(card, qtype) {
   if (hasMasks(card)) {
     // Needs a label to be an answer. The picture is drawn by Play (q.occ), not here.
@@ -44,12 +47,12 @@ export function questionFor(card, qtype) {
   }
   if (stepped(card)) {
     const answer = finalStep(card.back, { mask: maskMath });
-    const ask = card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer };
+    const ask = { prompt: card.front, answer, ...(card.frontImage ? { image: card.frontImage } : {}), ...soundsOf(card.frontSounds) };
     return qtype === 'front' || (qtype === 'typing' && canType(answer)) ? ask : null;
   }
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
-    return image ? { prompt, answer, image } : { prompt, answer };
+    return { prompt, answer, ...(image ? { image } : {}), ...soundsOf(front ? card.frontSounds : card.backSounds) };
   };
   if (qtype === 'front') return q(true, card.frontImage);
   if (qtype === 'back') return isCloze(card) ? null : q(false, card.backImage);

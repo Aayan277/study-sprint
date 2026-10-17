@@ -10,7 +10,8 @@ import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkTyped } from './match.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
-import { imgHTML } from './media.js';
+import { cardMediaHTML } from './media.js';
+import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
@@ -153,17 +154,27 @@ const typesAnswer = card => {
   return label !== null ? !!label && canType(answerText(label)) : canType(answerText(card.back));
 };
 // Read the side showing (the back once flipped) in the deck's language.
+// A side with sounds plays them (one after another) instead of reading the text out; any other side is read out.
 function readAloud() {
   if (!R?.current) return;
   const { card } = R.current;
+  const side = R.flipped ? 'back' : 'front';
+  if (hasSounds(card, side)) { playSide(card, side); return; }
+  stopSound();
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
   const sp = stepsOf(card);
   const text = sp ? (R.flipped ? stepsSpeech(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
+function playSide(card, side) {
+  stopSpeaking();
+  playSounds(card[side + 'Sounds'], { onBlocked: () => autoplayBlocked($('flash')?.querySelector('.rv-face:not([inert])') || document) });
+}
+
 function nextCard(el) {
   stopSpeaking();
+  stopSound();
   R.current = takeNext(R.queue, R.waiting);
   R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
   R.shownAt = Date.now(); R.answerMs = 0;
@@ -215,15 +226,15 @@ function renderSession(el, enter = false) {
   const backSize = occ || sp ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
     ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
-    : `${imgHTML(card.frontImage)}${cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front)}`;
+    : cardMediaHTML(card, 'front', cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front));
   const answerHTML = occ
     ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'No label'}</p>
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
     : cloze
-      ? `${imgHTML(card.backImage)}${renderCloze(card.noteText, card.cloze, 'back')}`
+      ? cardMediaHTML(card, 'back', renderCloze(card.noteText, card.cloze, 'back'))
       : sp
-        ? `${imgHTML(card.backImage)}${stepsHTML(sp)}`
-        : `${imgHTML(card.backImage)}${formatHTML(card.back)}`;
+        ? cardMediaHTML(card, 'back', stepsHTML(sp))
+        : cardMediaHTML(card, 'back', formatHTML(card.back));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   const head = `
@@ -236,7 +247,8 @@ function renderSession(el, enter = false) {
     </div>`;
   const body = `
     <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
-      ${canSpeak() ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="Read aloud" title="Read aloud (R)" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
+      ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
+        ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
@@ -321,9 +333,16 @@ function wireRatebar(el) {
 }
 
 // Decks set to read aloud: the front when a card appears, the back when it's flipped (once each).
+// A side with sounds plays them instead (unless the deck has "Play sounds automatically" off, which also leaves that side quiet).
 function autoSpeak(card) {
   const key = `${card.id}:${R.flipped}`;
-  if (deckOf(card)?.ttsAuto && R.spoken !== key) { R.spoken = key; readAloud(); }
+  if (R.spoken === key) return;
+  const side = R.flipped ? 'back' : 'front';
+  if (hasSounds(card, side)) {
+    if (deckOf(card)?.soundAuto !== false) { R.spoken = key; playSide(card, side); }
+    return;
+  }
+  if (deckOf(card)?.ttsAuto) { R.spoken = key; readAloud(); }
 }
 
 // Tell Today whether a session is in progress, so it can offer to resume it.
@@ -543,6 +562,7 @@ async function undo(el) {
     if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
+    stopSound();
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
@@ -633,6 +653,7 @@ async function quick(act) {
 // ---------- 3. finish ----------
 async function finish(el) {
   destroyPad();
+  stopSound();
   R.active = false;
   publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)

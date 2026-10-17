@@ -110,3 +110,22 @@ test('dailyGoal in a backup: a whole number from 1 to 500 (or none) passes, anyt
   for (const g of [1, 20, 500, null, undefined]) assert.equal(checkBackup(withGoal(g)), null);        // null or missing means the default
   for (const g of [0, -5, 501, 2.5, '20', NaN, [20], {}, true]) assert.match(checkBackup(withGoal(g)), /daily goal/);
 });
+
+test('backups with sounds: audio types are accepted, version 2 is the newest, and sound fields are checked', () => {
+  assert.equal(BACKUP_VERSION, 2);
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  for (const type of ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/flac']) {
+    assert.equal(checkBackup({ ...good, version: 2, media: [{ id: 'm', type, data: '', name: 'a.' + type.slice(6) }] }), null, type);
+  }
+  assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'audio/x-ms-wma', data: '' }] }), /not a supported image or sound/);
+  assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'text/html', data: '' }] }), /not a supported/);
+  assert.match(checkBackup({ ...good, version: 3 }), /newer version/);
+  assert.equal(checkBackup({ ...good, version: 1 }), null);                               // older backups still restore
+  const bad = /invalid sound fields/;
+  assert.equal(checkBackup({ ...good, cards: [card({ frontSounds: ['a'], backSounds: ['a', 'b', 'c', 'd'] }), card({ id: 'd' })] }), null);
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: ['a', 'b', 'c', 'd', 'e'] })] }), bad);       // at most 4
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: [] })] }), bad);                                // absent, not empty
+  assert.match(checkBackup({ ...good, cards: [card({ backSounds: 'a' })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ backSounds: [{ id: 'a' }] })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: [null] })] }), bad);
+});

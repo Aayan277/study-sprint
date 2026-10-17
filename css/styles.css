@@ -1149,6 +1149,25 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
 .img-thumb{max-width:120px;max-height:90px;border-radius:var(--r-sm);border:1px solid var(--line-strong);object-fit:cover}
 .pic-mark{color:var(--accent-text);font-size:.85em}
 
+/* Sounds on cards (audio.js plays them; card-editor.js adds them): a row of ▶ buttons under a side's text */
+.snd-row{display:flex;align-items:center;justify-content:center;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 0}
+.snd-btn{display:inline-grid;place-items:center;min-width:44px;height:44px;padding:0 var(--s-3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--surface-2);color:var(--accent-text);font:inherit;font-size:var(--fs-base);line-height:1;cursor:pointer}
+.snd-btn:hover{background:var(--accent-tint);border-color:var(--accent-line)}
+.snd-btn.playing{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.snd-btn.missing,.snd-btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+.snd-btn.pulse{animation:snd-pulse 900ms ease-out 1}
+.snd-hint{font-size:var(--fs-sm);color:var(--text-2)}
+@keyframes snd-pulse{0%{box-shadow:0 0 0 0 var(--accent-line)}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.flash-recap .snd-row{margin-top:var(--s-2)}
+.flash-recap .snd-btn{height:36px;min-width:36px}
+.play-card .snd-row{margin:var(--s-2) 0 0}
+.snd-edit{display:grid;gap:var(--s-2)}
+.snd-edit:empty{display:none}
+.snd-item{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.snd-item .snd-btn{height:36px;min-width:36px}
+.snd-name{font-size:var(--fs-sm);color:var(--text-2);margin-right:auto}
+.snd-mark{margin-left:2px}
+
 /* Card list tools: tags and find and replace */
 .tag-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .tag-list li{display:flex;align-items:center;gap:var(--s-2);padding:8px 10px;border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);flex-wrap:wrap}

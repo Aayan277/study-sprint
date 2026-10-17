@@ -25,6 +25,7 @@ import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { plainText, mathHTML, answerText, answerTargets } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
+import { soundsHTML, stopSound } from './audio.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
@@ -291,7 +292,8 @@ function showQuestion() {
   const p = $('pPrompt');
   p.className = `flash-front${sizeClass(q.prompt)}`;
   // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
-  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt);
+  stopSound();
+  p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt) + soundsHTML(q.sounds);
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);

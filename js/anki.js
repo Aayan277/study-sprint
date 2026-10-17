@@ -22,6 +22,19 @@ export const ankiMath = text => String(text ?? '').replace(/\[\$\$\]([\s\S]+?)\[
 
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
+// The sound file names in a field, in order: 'dog [sound:dog.mp3]' → ['dog.mp3']. Names may be URL-encoded ("my%20sound.mp3").
+// Call it on the field's HTML before htmlToMarks, which removes the [sound:...] tags.
+export function soundNames(html) {
+  return [...String(html ?? '').matchAll(/\[sound:([^\]]+)\]/g)]
+    .map(m => htmlToMarks(m[1], { marks: false }))
+    .map(n => { try { return decodeURIComponent(n); } catch { return n; } })
+    .map(n => n.trim())
+    .filter(Boolean);
+}
+export const MAX_SOUND_BYTES = 1024 * 1024;        // the cap for one sound (the same number as media.js; this file stays free of page code)
+export const MAX_SOUNDS = 4;                        // per side of a card
+const SOUND_EXT = /\.(mp3|m4a|mp4|aac|ogg|oga|opus|webm|wav|flac)$/i;
+
 // The picture file names in a field, in order: <img src="brain.png"> → ['brain.png'].
 export function imageNames(html) {
   return [...String(html ?? '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)]
@@ -33,7 +46,7 @@ export function imageNames(html) {
 // The list of pictures in a newer Anki file (after unzipping and decompressing its "media" file). It's a
 // small "protobuf" record: a list of entries, each with the picture's name (field 1) and, sometimes, the
 // zip file it's stored in (field 255); otherwise entry number i is in zip file "i".
-// Returns [{ name, zipName }].
+// Returns [{ name, zipName, size? }] (size = bytes when unpacked, when the list says).
 export function mediaList(bytes) {
   const read = (buf, fields) => {
     let i = 0;
@@ -53,6 +66,7 @@ export function mediaList(bytes) {
     const entry = { name: '', zipName: undefined };
     read(value, (f, v) => {
       if (f === 1) entry.name = new TextDecoder().decode(v);
+      if (f === 2 && typeof v === 'number') entry.size = v;
       if (f === 255 && typeof v === 'number') entry.zipName = String(v);
     });
     out.push(entry);
@@ -80,6 +94,10 @@ export { clozeNumbers, clozeCard };
 //             row hides, and a key shared by the rows of one note (so the import makes them siblings: see cloze.js)
 //   noteExtras  for each row, the note's Back Extra text ('' when none); for a cloze note it is shown under the answer
 //   guids     each row's Anki note guid, saved on the card (ankiGuid)
+//   sounds    for each row, null or { note, front: [names], back: [names], lost: [{ name, reason }] }: the sound files named on the
+//             front (first field) and back (the other fields; for a cloze note, the Text field is the front), the ones that can
+//             be kept, and the ones that can't with why: 'missing' (not in the package), 'tooBig' (over 1 MB), 'format' (not a
+//             type the app keeps) or 'extra' (more than 4 on a side). See soundReport() for the counts the import shows.
 //   progress  { cards, reviews }: how many rows have history, and how many reviews in all
 // Rows are [front, back, any other fields]. Cloze notes give one row per cloze number: just [front, back], with
 // their other fields (like Back Extra) kept as the note's extra (noteExtras).
@@ -117,8 +135,35 @@ export const isEnhancedNote = (model = {}) => {
   const names = (model.fields || []).map(f => String(f).trim().toLowerCase());
   return /image occlusion enhanced/i.test(model.name || '') || (names.includes('question mask') && names.includes('original mask'));
 };
-export function notesToImport(notes, models, reviews = new Map()) {
-  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [], clozes = [], noteExtras = [], guids = [], occlusions = [];
+// media: the package's files { info(name) → { size, type } | null } (anki-read.js); without it every sound with a known ending is taken as present.
+export function notesToImport(notes, models, reviews = new Map(), media = null) {
+  const rows = [], tags = [], decks = [], ankiIds = [], pictures = [], occluded = [], clozes = [], noteExtras = [], guids = [], occlusions = [], sounds = [];
+  const soundFiles = new Map();          // name → { size, type } of every sound that can be kept
+  const verdicts = new Map();
+  const judge = name => {
+    if (!verdicts.has(name)) {
+      const info = media ? media.info(name) : { size: 0, type: SOUND_EXT.test(name) ? 'audio/*' : '' };
+      verdicts.set(name, !info ? 'missing' : !String(info.type).startsWith('audio/') ? 'format' : info.size > MAX_SOUND_BYTES ? 'tooBig' : 'ok');
+      if (verdicts.get(name) === 'ok') soundFiles.set(name, { size: info.size, type: info.type });
+    }
+    return verdicts.get(name);
+  };
+  // The sounds of a note's fields: front from the given fields, back from the rest. null when it names none.
+  const soundsOf = (note, frontFields) => {
+    const names = { front: [], back: [] };
+    note.fields.forEach((f, i) => { for (const n of soundNames(f)) { const side = frontFields.includes(i) ? names.front : names.back; if (!side.includes(n)) side.push(n); } });
+    if (!names.front.length && !names.back.length) return null;
+    const out = { note: String(note.id ?? ''), front: [], back: [], lost: [] };
+    for (const side of ['front', 'back']) {
+      for (const n of names[side]) {
+        const v = judge(n);
+        if (v !== 'ok') out.lost.push({ name: n, reason: v });
+        else if (out[side].length >= MAX_SOUNDS) out.lost.push({ name: n, reason: 'extra' });
+        else out[side].push(n);
+      }
+    }
+    return out;
+  };
   let images = 0, extraImages = 0;
   const usedTypes = new Set();
   const enhancedSeen = new Set();
@@ -137,7 +182,7 @@ export function notesToImport(notes, models, reviews = new Map()) {
       const extra = text[fieldIndex(model, 'remarks', 5)]?.trim();
       rows.push([header || 'Diagram', extra || '']); tags.push((note.tags || []).map(t => t.toLowerCase())); decks.push(note.deck || '');
       pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true); occlusions.push(null);
-      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      clozes.push(null); noteExtras.push(''); guids.push(note.guid || null); sounds.push(null);
       usedTypes.add('occlusion');
       continue;
     }
@@ -165,14 +210,14 @@ export function notesToImport(notes, models, reviews = new Map()) {
           rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || '');
           pictures.push({ front: null, back: image }); occluded.push(false); clozes.push(null);
           occlusions.push({ noteKey, n, header, shapes, pixels, image });
-          noteExtras.push(extra); guids.push(note.guid || null);
+          noteExtras.push(extra); guids.push(note.guid || null); sounds.push(null);
           ankiIds.push(note.cards?.[n - 1] ?? null);      // box number n is Anki card number n - 1
         }
       } else {
         // Nothing to hide (or no picture): a plain picture card, as before.
         rows.push([header || 'Diagram', extra]); tags.push(noteTags); decks.push(note.deck || '');
         pictures.push({ front: null, back: image }); ankiIds.push(null); occluded.push(true); occlusions.push(null);
-        clozes.push(null); noteExtras.push(''); guids.push(note.guid || null);
+        clozes.push(null); noteExtras.push(''); guids.push(note.guid || null); sounds.push(null);
       }
       continue;
     }
@@ -181,16 +226,17 @@ export function notesToImport(notes, models, reviews = new Map()) {
       // Cloze text is in the first field. Turn it to text first so hidden answers lose their formatting too.
       const extra = text.slice(1).map(t => t.trim()).filter(Boolean).join('\n');
       const noteKey = String(note.id ?? index);
+      const noteSounds = soundsOf(note, [0]);          // the Text field's sounds are on the front, the rest on the back (every card of the note shares them)
       for (const n of nums) {
         const { front, back } = clozeCard(text[0], n);
         rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
-        clozes.push({ noteKey, n, text: text[0] }); occlusions.push(null); noteExtras.push(extra); guids.push(note.guid || null);
+        clozes.push({ noteKey, n, text: text[0] }); occlusions.push(null); noteExtras.push(extra); guids.push(note.guid || null); sounds.push(noteSounds);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
       }
       usedTypes.add('cloze');
     } else {
       rows.push(text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
-      clozes.push(null); occlusions.push(null); noteExtras.push(''); guids.push(note.guid || null);
+      clozes.push(null); occlusions.push(null); noteExtras.push(''); guids.push(note.guid || null); sounds.push(soundsOf(note, [0]));
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card (a reverse card's history isn't used)
       usedTypes.add(String(note.mid));
     }
@@ -202,8 +248,26 @@ export function notesToImport(notes, models, reviews = new Map()) {
   const columns = Array.from({ length: width }, (_, i) =>
     (only && only.fields[i]) || (i === 0 ? 'Front (field 1)' : i === 1 ? 'Back (field 2)' : `Field ${i + 1}`));
   const used = new Map(ankiIds.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
-  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, occlusions, noteExtras, guids, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
+  return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, occlusions, noteExtras, guids, sounds, soundFiles, ankiIds, reviews: used, progress: progressOf(ankiIds, used),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
+}
+
+// What the import says about sounds (item B), counted over the rows now in the result (so it follows the deck picker):
+//   notes   how many notes have sounds that can come along     files  the distinct sounds that can be kept     bytes  their total size
+//   missing / tooBig / format / extra   how many distinct sound files can't be kept, by reason (a file named on 50 cards counts once)
+//   dropped the number of sounds left out in all (the sum of those four)
+export function soundReport(result) {
+  const notes = new Set(), files = new Map(), lost = { missing: new Map(), tooBig: new Map(), format: new Map(), extra: new Map() };
+  for (const s of result.sounds || []) {
+    if (!s) continue;
+    if (s.front.length || s.back.length) notes.add(s.note);
+    for (const n of [...s.front, ...s.back]) files.set(n, result.soundFiles?.get(n)?.size || 0);
+    for (const { name, reason } of s.lost) lost[reason]?.set(name, true);
+  }
+  const count = k => lost[k].size;
+  return { notes: notes.size, files: [...files.keys()], bytes: [...files.values()].reduce((a, b) => a + b, 0),
+    missing: count('missing'), tooBig: count('tooBig'), format: count('format'), extra: count('extra'),
+    dropped: count('missing') + count('tooBig') + count('format') + count('extra') };
 }
 
 // How many rows have review history, and how many reviews that is.
@@ -297,7 +361,7 @@ export function onlyDeck(result, deck) {
   const keep = result.decks.map(d => d === deck || d.startsWith(deck + '::'));
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
-  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), occlusions: pick(result.occlusions || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), ankiIds,
+  return { ...result, rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), occlusions: pick(result.occlusions || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), sounds: pick(result.sounds || []), ankiIds,
     progress: progressOf(ankiIds, result.reviews || new Map()) };
 }
 

@@ -9,7 +9,8 @@
 //   settings    simple key → value pairs    e.g. 'theme' → { skin: 'violet', mode: 'dark', oled: false }
 //   deleted     what was deleted, and when  { key, store, id, deletedAt }
 //   media       pictures on cards           { id, type, data (the file's bytes), size, created, uploaded }
-//               (a card points to its pictures with frontImage / backImage = a media id: see media.js)
+//               (a card points to its pictures with frontImage / backImage = a media id, and to its sounds with
+//               frontSounds / backSounds = lists of media ids: see media.js)
 // updatedAt, uid and the deleted store are there for syncing between devices: see sync-data.js.
 // Every save below stamps them, so other files never need to.
 //
@@ -426,12 +427,13 @@ export async function resetAll() {
 }
 
 // ---------- backup ----------
-// A backup is one JSON file with everything: decks, cards, schedules, review history, settings and pictures
-// (as text: base64).
+// A backup is one JSON file with everything: decks, cards, schedules, review history, settings, pictures and sounds
+// (as text: base64). A backup with sounds in it is version 2, so an older app says "made by a newer version" instead of
+// calling it damaged; without sounds it stays version 1.
 export const BACKUP_FORMAT = 'study-sprint-backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
-export async function exportAll() {
+export async function exportAll({ sounds = true } = {}) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'media'], 'readonly');
   const all = name => done(tx.objectStore(name).getAll());
@@ -439,10 +441,30 @@ export async function exportAll() {
     all('decks'), all('cards'), all('cardStates'), all('reviewLog'),
     done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll()), all('media')
   ]);
-  const media = mediaRows.map(m => ({ id: m.id, type: m.type, data: toBase64(m.data) }));
+  const kept = mediaRows.filter(m => sounds || !isSoundType(m.type));
+  const media = kept.map(m => ({ id: m.id, type: m.type, data: toBase64(m.data), ...(m.name ? { name: m.name } : {}) }));
   // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
   const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !LOCAL_ONLY.includes(k)));
-  return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
+  return { format: BACKUP_FORMAT, version: kept.some(m => isSoundType(m.type)) ? 2 : 1, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
+}
+
+// How much room pictures and sounds take on this device: { pictures, sounds } in bytes (adds up each file's saved size).
+export async function mediaTotals() {
+  const db = await openDB();
+  const tx = db.transaction('media', 'readonly');
+  const out = { pictures: 0, sounds: 0 };
+  await new Promise((resolve, reject) => {
+    const req = tx.objectStore('media').openCursor();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return resolve();
+      const m = c.value;
+      out[isSoundType(m.type) ? 'sounds' : 'pictures'] += m.size || m.data?.byteLength || 0;
+      c.continue();
+    };
+  });
+  return out;
 }
 
 // Check a backup before using it. Returns an error message, or null if it looks right.
@@ -459,6 +481,10 @@ export function checkBackup(data) {
   if (!data.cards.every(c => (c.cloze === undefined || (Number.isInteger(c.cloze) && c.cloze > 0)) && [c.noteId, c.noteText].every(v => v === undefined || typeof v === 'string'))) {
     return 'This backup file is damaged (a card has invalid cloze fields).';
   }
+  // Sounds are lists of up to 4 media ids on a card side.
+  if (!data.cards.every(c => ['frontSounds', 'backSounds'].every(k => c[k] === undefined || (Array.isArray(c[k]) && c[k].length >= 1 && c[k].length <= MAX_SOUNDS_PER_SIDE && c[k].every(validKey))))) {
+    return 'This backup file is damaged (a card has invalid sound fields).';
+  }
   // Image-occlusion fields end up in style attributes, so the boxes must be plain numbers in range.
   if (!data.cards.every(c => c.occlusion === undefined || (validOcclusion(c.occlusion) && typeof c.noteId === 'string'))) {
     return 'This backup file is damaged (a card has invalid image-occlusion fields).';
@@ -467,8 +493,8 @@ export function checkBackup(data) {
   if (!data.reviewLog.every(r => r && typeof r === 'object' && (r.id === undefined || Number.isFinite(r.id)))) return 'This backup file is damaged (a record in reviewLog is broken).';
   // Deck colors go into style attributes, so only plain hex colors are allowed.
   if (!data.decks.every(d => d.color === undefined || SAFE_COLOR.test(d.color))) return 'This backup file is damaged (a deck has an invalid color).';
-  if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {
-    return 'This backup file is damaged (a picture is invalid or not a supported image type).';
+  if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_MEDIA_TYPES.includes(m.type)))) {
+    return 'This backup file is damaged (a picture or sound is invalid or not a supported image or sound type).';
   }
   if (data.settings?.dailyGoal != null && !validDailyGoal(data.settings.dailyGoal)) return 'This backup file is damaged (the daily goal must be a whole number from 1 to 500).';
   // The catch-up plan is read as numbers and a flag, so nothing else may sit in it.
@@ -491,22 +517,27 @@ export function cleanMixedWith(row) {
 const validKey = v => (typeof v === 'string' && v !== '') || (typeof v === 'number' && Number.isFinite(v));
 const SAFE_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];   // no SVG: it can contain scripts
+export const ALLOWED_SOUND_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/flac'];     // (audio/x-wav is kept as audio/wav)
+export const ALLOWED_MEDIA_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_SOUND_TYPES];
+export const MAX_SOUNDS_PER_SIDE = 4;
+export const isSoundType = type => String(type || '').startsWith('audio/');
 
 // Replace everything on this device with a backup. All in one transaction: if anything fails,
 // nothing changes.
 //   everywhere: also replace what's in your sync account. The backup's records count as changed now (so
 //               they're sent and win), and everything that was here but isn't in the backup gets a deleted
 //               marker (so other devices delete it too).
+export const NO_SPACE = 'Not enough space on this device to restore this backup.';
 export async function importAll(data, { everywhere = false } = {}) {
   const db = await openDB();
   const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted', 'media'];
   const tx = db.transaction(names, 'readwrite');
-  await inTx(tx, async () => {
+  try { await inTx(tx, async () => {
     const now = Date.now();
-    // Pictures from the backup (older backups have none). Ones already here are kept.
+    // Pictures and sounds from the backup (older backups have none). Ones already here are kept.
     for (const m of data.media || []) {
       const bytes = fromBase64(m.data);
-      tx.objectStore('media').put({ id: m.id, type: m.type, data: bytes, size: bytes.byteLength, created: now, uploaded: false });
+      tx.objectStore('media').put({ id: m.id, type: m.type, data: bytes, size: bytes.byteLength, ...(typeof m.name === 'string' ? { name: m.name.slice(0, 120) } : {}), created: now, uploaded: false });
     }
     // What's here now, to mark as deleted if the backup doesn't have it.
     const before = {};
@@ -546,7 +577,11 @@ export async function importAll(data, { everywhere = false } = {}) {
       // The backup's study settings win in the account too.
       settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
     }
-  });
+  }); } catch (e) {
+    // A big backup (with sounds) on a nearly full device: it fails as one piece and everything stays as it was.
+    if (e?.name === 'QuotaExceededError' || e?.target?.error?.name === 'QuotaExceededError') throw Object.assign(new Error(NO_SPACE), { noSpace: true });
+    throw e;
+  }
   scheduleChanges++;
   changed();
 }
@@ -725,18 +760,35 @@ export async function markUploaded(ids) {
   const db = await openDB();
   const tx = db.transaction('media', 'readwrite');
   const os = tx.objectStore('media');
-  for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) os.put({ ...e.target.result, uploaded: true }); };
+  for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) { const { blocked, ...rest } = e.target.result; os.put({ ...rest, uploaded: true }); } };
   return finished(tx);
 }
-// Remove pictures no card uses any more (replaced, removed, or their card deleted). Pictures added in the
+// Files the server turned away for their type (not reported as a change). They stay not-uploaded; sync tries them again later.
+export async function markBlocked(ids, reason) {
+  const db = await openDB();
+  const tx = db.transaction('media', 'readwrite');
+  const os = tx.objectStore('media');
+  for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) os.put({ ...e.target.result, blocked: reason }); };
+  return finished(tx);
+}
+// The ids of every picture and sound that some card uses.
+export function usedMediaIds(cards) {
+  const used = new Set();
+  for (const c of cards) {
+    if (c.frontImage) used.add(c.frontImage);
+    if (c.backImage) used.add(c.backImage);
+    for (const id of [...(Array.isArray(c.frontSounds) ? c.frontSounds : []), ...(Array.isArray(c.backSounds) ? c.backSounds : [])]) used.add(id);
+  }
+  return used;
+}
+// Remove pictures and sounds no card uses any more (replaced, removed, or their card deleted). Ones added in the
 // last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.
 export async function cleanMedia(now = Date.now()) {
   const db = await openDB();
   const tx = db.transaction(['cards', 'media'], 'readwrite');
   const removed = [];
   await inTx(tx, async () => {
-    const used = new Set();
-    for (const c of await done(tx.objectStore('cards').getAll())) { if (c.frontImage) used.add(c.frontImage); if (c.backImage) used.add(c.backImage); }
+    const used = usedMediaIds(await done(tx.objectStore('cards').getAll()));
     for (const m of await done(tx.objectStore('media').getAll())) {
       if (used.has(m.id) || now - (m.created || 0) < 3600000) continue;
       tx.objectStore('media').delete(m.id);

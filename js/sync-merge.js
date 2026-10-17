@@ -125,3 +125,58 @@ export function sameDayFlags(a, b, now = Date.now()) {
   const keys = Object.keys(x);
   return keys.length === Object.keys(y).length && keys.every(k => y[k] && y[k].on === x[k].on && y[k].at === x[k].at);
 }
+
+// ---------- pictures and sounds (files in Supabase Storage) ----------
+export const isSoundRow = m => String(m?.type || '').startsWith('audio/');
+// Problems with the whole storage setup (not one file): sending more files would only fail the same way.
+const WHOLE_STORAGE_ERRORS = ['bucket_missing', 'media_policy', 'network'];
+export const isWholeStorageError = err => WHOLE_STORAGE_ERRORS.includes(err?.code) || err?.status === 401;
+
+// Send files one at a time, pictures first and then sounds. A file that fails on its own never stops the others.
+//   upload(m)    sends one file; throws SupaError (code 'media_type' = the server doesn't accept this kind of file yet)
+//   onSent(m)    called after each file that went
+// A type rejection stops only that kind (the rest of the sounds, say), so pictures always get their turn first and are never
+// held up by sounds. A problem with the whole storage setup (not set up yet, offline, signed out) is thrown.
+// Returns { sent: [ids], blocked: [ids] (type rejected), failed: [{ id, message }] }.
+export async function uploadMediaFiles(rows, upload, { onSent, onProgress } = {}) {
+  const sent = [], blocked = [], failed = [];
+  const rejected = new Set();
+  const ordered = [...rows.filter(m => !isSoundRow(m)), ...rows.filter(isSoundRow)];
+  for (const [i, m] of ordered.entries()) {
+    const kind = isSoundRow(m) ? 'sound' : 'picture';
+    if (rejected.has(kind)) { blocked.push(m.id); continue; }
+    onProgress?.(i, ordered.length, kind);
+    try {
+      await upload(m);
+      sent.push(m.id);
+      await onSent?.(m);
+    } catch (err) {
+      if (err?.code === 'media_type') { rejected.add(kind); blocked.push(m.id); continue; }
+      if (isWholeStorageError(err)) throw err;
+      failed.push({ id: m.id, message: err?.message || String(err) });
+    }
+  }
+  return { sent, blocked, failed };
+}
+
+// Run work(item) for every item, a few at a time. A file that fails on its own is counted and skipped; a problem with the
+// whole storage setup stops the rest and is thrown. Returns { done, failed } counts.
+export async function runPool(items, work, { size = 4, onProgress } = {}) {
+  let next = 0, done = 0, failed = 0, fatal = null;
+  const worker = async () => {
+    while (!fatal && next < items.length) {
+      const item = items[next++];
+      try { await work(item); done++; } catch (err) {
+        if (isWholeStorageError(err)) { fatal = err; return; }
+        failed++;
+      }
+      onProgress?.(done + failed, items.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
+  if (fatal) throw fatal;
+  return { done, failed };
+}
+
+// The note under Settings → Sync when the server turns sounds away (the owner hasn't re-run supabase/media.sql yet).
+export const SOUNDS_BLOCKED_NOTE = 'Sounds can’t sync yet: run the new supabase/media.sql in your Supabase project (see docs/sync-setup.md). Pictures and everything else are syncing.';

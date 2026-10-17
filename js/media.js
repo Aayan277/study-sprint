@@ -1,12 +1,16 @@
-// Pictures on cards: one on the front (card.frontImage) and one on the back (card.backImage), each the id
-// of a picture in the database's media store (db.js). Pictures sync through Supabase Storage (sync.js).
+// Pictures and sounds on cards. A picture: one on the front (card.frontImage) and one on the back (card.backImage), each the
+// id of a picture in the database's media store (db.js). A sound: up to 4 on each side (card.frontSounds / card.backSounds,
+// arrays of ids in the same store). Both sync through Supabase Storage (sync.js).
 //
 //   addImage(file)   shrink a picked photo (longest side 1280px, JPEG) and save it; returns its id
 //   addImageInfo(file, opts)  the same, but returns { id, width, height } (image occlusion needs the size)
+//   saveSound(file)  keep a picked or imported sound as it is (never converted); returns { id, size, type }
+//   cardMediaHTML(card, side, textHTML)   one side of a card: its picture, the text, then its sound buttons (audio.js)
 //   imgHTML(id)      an <img> for a picture; it fills itself in (see the watcher at the bottom), downloading
 //                    the picture from your account first if this device doesn't have it yet
 
 import * as db from './db.js';
+import { soundsHTML } from './audio.js';
 
 const MAX_SIDE = 1280;     // pixels: plenty for a phone or laptop screen, and keeps files ~100–250 KB
 export const OCCLUSION_SIDE = 2048;     // image-occlusion pictures are kept larger, so small diagram text stays readable
@@ -59,9 +63,50 @@ export async function saveImage(type, data) {
   return id;
 }
 
+// ---------- sounds ----------
+export const MAX_SOUND_BYTES = 1024 * 1024;       // 1 MB per sound: longer ones are skipped (and reported), so a deck can't fill a phone
+export const MAX_SOUNDS = 4;                       // per side of a card
+const SOUND_EXT = { mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', webm: 'audio/webm', wav: 'audio/wav', flac: 'audio/flac' };
+const SOUND_TYPES = { 'audio/mpeg': 'audio/mpeg', 'audio/mp3': 'audio/mpeg', 'audio/mp4': 'audio/mp4', 'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4', 'audio/aac': 'audio/aac', 'audio/ogg': 'audio/ogg', 'application/ogg': 'audio/ogg',
+  'audio/webm': 'audio/webm', 'audio/wav': 'audio/wav', 'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'audio/vnd.wave': 'audio/wav', 'audio/flac': 'audio/flac', 'audio/x-flac': 'audio/flac' };
+// The sound type to keep for a file (its own type, else what its extension says), or null when it isn't one the app keeps.
+export function soundType(type, name = '') {
+  const t = SOUND_TYPES[String(type || '').toLowerCase().split(';')[0].trim()];
+  return t || SOUND_EXT[String(name).split('.').pop().toLowerCase()] || null;
+}
+// The file extension used when a sound goes into an Anki deck.
+export const soundExt = type => ({ 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/flac': 'flac' })[type] || 'mp3';
+// "3.4 MB", "24 KB".
+export const sizeText = n => (n >= 1048576 ? `${(n / 1048576).toFixed(n >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+// Save a sound's bytes as they are. file: a File/Blob (with a name) or { name, type, data }.
+// Throws an Error with a plain message when it is too big or not a sound the app keeps.
+export async function saveSound(file) {
+  const name = file.name || '';
+  const type = soundType(file.type, name);
+  if (!type) throw new Error("That isn't a sound file the app can keep (use .mp3, .m4a, .ogg, .wav or .flac).");
+  const data = file.data || await file.arrayBuffer();
+  if (data.byteLength > MAX_SOUND_BYTES) throw new Error(`That sound is ${sizeText(data.byteLength)}. Sounds can be up to 1 MB: shorten it or save it at a lower quality.`);
+  const id = db.newId();
+  await db.putMedia({ id, type, data, size: data.byteLength, name: name.slice(0, 120), created: Date.now(), uploaded: false });
+  persistOnce();
+  return { id, size: data.byteLength, type, name };
+}
+// Ask the browser to keep this site's data (it shows no prompt in Chrome or Safari). Done once, after the first sound.
+let asked = false;
+function persistOnce() {
+  if (asked) return;
+  asked = true;
+  try { navigator.storage?.persist?.().catch(() => {}); } catch { /* fine */ }
+}
+
 // ---------- showing pictures ----------
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const imgHTML = (id, cls = 'card-img') => (id ? `<img class="${cls}" data-media="${esc(id)}" alt="Picture">` : '');
+
+// One side of a card: its picture, the text (already HTML), then a row of play buttons when it has sounds.
+export const cardMediaHTML = (card, side, textHTML) =>
+  `${imgHTML(card[side + 'Image'])}${textHTML}${soundsHTML(card[side + 'Sounds'])}`;
 
 const urls = new Map();      // media id → a blob: address for <img>, made once per picture
 export async function mediaURL(id) {
