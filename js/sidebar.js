@@ -10,7 +10,7 @@
 // Changing screens only moves aria-current (markCurrent), called from route() in app.js.
 // Collapsed, the sidebar is a 72px icon rail; the choice is kept per device and applied from index.html's head script.
 
-import { loadAll, countFor, answeredToday, loadStreak } from './study-data.js';
+import { loadAll, countFor, answeredToday, loadStreak, goalFor } from './study-data.js';
 import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
@@ -77,7 +77,7 @@ async function paint(loaded) {
   const chosen = loaded?.chosen || data.settings.reviewDecks.filter(id => allIds.includes(id));
   const total = countFor(data, chosen.length ? chosen : allIds).total;
   const answered = answeredToday(data, chosen);          // the same decks as Today's ring
-  const goal = answered + total;
+  const goal = goalFor(data.settings, answered, total);
 
   // Today badge
   const badge = $('sideBadge');

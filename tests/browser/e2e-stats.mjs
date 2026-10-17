@@ -109,9 +109,18 @@ await page.goto('http://localhost:8123/#/stats'); await page.reload(); await pag
 // full page in dark mode
 await page.evaluate(async () => { const t = await import('./js/themes.js'); t.applyTheme({ skin: 'ink', mode: 'dark' }); });
 await page.screenshot({ path: SP + '/s-dark.png', fullPage: true });
-// drill these -> Play round of the hardest cards
-await page.click('#drillBtn'); await page.waitForSelector('#pCard');
-const hud = await page.textContent('#hudA');
-ok(page.url().endsWith('#/play') && /Q 1\/\d+/.test(hud), 'Drill these starts a Play round: ' + hud.trim());
+// v4.9: Hardest "Review these" opens a Review session of those cards (the game is only on the Play page)
+const hardN = await page.locator('#hardList li').count();
+ok((await page.textContent('#drillBtn')).trim() === 'Review these', 'Hardest button reads "Review these"');
+await page.click('#drillBtn'); await page.waitForSelector('#flash');
+ok(page.url().includes('#/review') && !(await page.locator('#pCard').count()), 'Review these starts a Review session, not Play');
+let reviewed = 0;
+while (!(await page.$('.finish-next'))) {
+  await page.waitForSelector('#showBtn, .finish-next');
+  if (await page.$('.finish-next')) break;
+  await page.click('#showBtn'); await page.click('.rate.r4'); reviewed++;   // Easy: seen once
+  await page.waitForFunction(() => !document.querySelector('.rate'));
+}
+ok(reviewed === hardN, `the session covers the ${hardN} hardest cards (${reviewed})`);
 ok(errors.length === 0, 'no console errors ' + errors.join(' | '));
 await browser.close();

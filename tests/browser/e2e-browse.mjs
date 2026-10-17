@@ -65,7 +65,7 @@ await page.click('.sheet-x');
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
 ok((await page.textContent('#startBtn')).includes('9 cards'), 'Review leaves out the suspended and buried cards (12 − 2 hidden − 1 not due): ' + await page.textContent('#startBtn'));
 await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
-ok((await page.textContent('#pDeck option')).includes('10 cards'), 'Play leaves them out too');
+ok((await page.textContent('#pDeck option:checked')).includes('(10)'), 'Play leaves them out too (v4.9: the deck option shows its own count, the "All decks (10 cards)" row is gone)');
 
 // select several + bulk actions + add card + delete
 await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('.crow');

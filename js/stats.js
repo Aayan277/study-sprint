@@ -278,12 +278,12 @@ export async function renderStats(el) {
 
     <section class="card section stats-hardest" aria-labelledby="hardTitle">
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
-        ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Drill these</button>' : ''}</div>
+        ${hardest.length ? '<button class="btn ghost small" type="button" id="drillBtn">Review these</button>' : ''}</div>
       ${hardest.length ? `<ol class="hard-list" id="hardList">${hardest.map((h, i) => `
         <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}>${hardRow(h.card)}
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
         ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
-      : '<p class="muted">Cards you forget or miss show up here, so you can drill them in Play.</p>'}
+      : '<p class="muted">Cards you forget or miss show up here, so you can go over them again.</p>'}
       ${leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(leechCount, 'card')} to fix</a> <span class="muted small">cards you keep forgetting</span></p>` : ''}
     </section>
 
@@ -365,7 +365,7 @@ export async function renderStats(el) {
     e.currentTarget.setAttribute('aria-expanded', String(open));
     e.currentTarget.textContent = open ? 'Show fewer' : `Show all ${hardest.length}`;
   });
-  q('drillBtn')?.addEventListener('click', async () => (await import('./play.js')).drillCards(hardest.map(h => h.card.id)));
+  q('drillBtn')?.addEventListener('click', async () => (await import('./today.js')).startStudy({ kind: 'ids', cardIds: hardest.map(h => h.card.id) }));
 
   // Mastery grid: tap a card to see its details and recent answers.
   const showDetail = async () => {

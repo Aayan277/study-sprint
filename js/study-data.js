@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, formatInterval, NEW } from './queue.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -122,6 +122,15 @@ export function answeredToday(data, deckIds) {
   return data.logs.filter(l => (l.source === 'review' || l.source === 'play') && (!ids || ids.has(data.deckOf.get(l.cardId)))).length;
 }
 
+// The goal ring's denominator (Today and the sidebar share it): your daily goal from Settings, or more when today
+// already has more to do (answers so far plus what is still due), so extra study never reads 25/20 and it is never 0/0.
+export const GOAL_DEFAULT = 20, GOAL_MAX = 500;
+export function goalFor(settings, answered, left) {
+  const g = Number(settings?.dailyGoal);
+  const base = Number.isFinite(g) ? Math.max(1, Math.min(GOAL_MAX, Math.round(g))) : GOAL_DEFAULT;
+  return Math.max(base, answered + left);
+}
+
 // "The next card is due in 3h." (or '' when there's nothing scheduled), for cards that are all done today.
 export function nextDueText(data, cards) {
   const ids = new Set(cards.map(x => x.id));
@@ -132,7 +141,7 @@ export function nextDueText(data, cards) {
 // ---------- Custom study sessions ----------
 // kind: 'ahead' (cards due in the next `days` days), 'prep' (exam prep) or 'forgot' (cards forgotten today).
 // Returns { queue, waiting, label } like a normal session, from the cards of the chosen decks.
-export function customQueue(kind, data, cards, days = 3) {
+export function customQueue(kind, data, cards, days = 3, ids = []) {
   if (kind === 'ahead') {
     const ahead = aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps);
     // A sibling that is still due today (it will be in today's Review) holds the others back, like one answered today.
@@ -140,6 +149,7 @@ export function customQueue(kind, data, cards, days = 3) {
     for (const x of [...data.split.reviews, ...data.split.waiting]) if (x.card.noteId && !held.has(x.card.noteId)) held.set(x.card.noteId, new Set());
     return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, held), label: 'Review ahead' };       // follows the one-sibling-a-day rule
   }
+  if (kind === 'ids') return { ...pickedQueue(cards, data.statesById, ids), label: 'Review these' };
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
   // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
@@ -227,14 +237,14 @@ export const setLaunch = l => { launch = l; };
 //   deckIds  the decks to study (empty = all)      deckId  set when it's one deck's own session
 //   kind     a Custom study kind, or none            days    for 'ahead'
 // One deck's own session (and Start with a single deck chosen) goes to #/review/<deck>, so reloading keeps the deck.
-export function launchStudy({ deckIds = [], deckId, kind = null, days = 3 } = {}) {
+export function launchStudy({ deckIds = [], deckId, kind = null, days = 3, cardIds = [] } = {}) {
   if (!deckId && !kind && deckIds.length === 1) deckId = deckIds[0];
-  setLaunch({ deckIds, deckId, kind, days });
+  setLaunch({ deckIds, deckId, kind, days, cardIds });
   location.hash = deckId ? `#/review/${encodeURIComponent(deckId)}` : '#/review';
 }
 // A short name for what a session covers (its decks and kind), to tell whether starting again means the same session.
 // No decks means all of them. `days` is how far ahead a "review ahead" or exam-prep session looks.
-export const scopeKey = (deckIds = [], kind = null, days = 3) => `${kind || 'today'}:${[...deckIds].sort().join(',')}:${days}`;
+export const scopeKey = (deckIds = [], kind = null, days = 3, cardIds = []) => `${kind || 'today'}:${[...deckIds].sort().join(',')}:${kind === 'ids' ? [...cardIds].join(',') : days}`;
 export function takeLaunch() { const l = launch; launch = null; return l; }
 
 // Review tells Today when a session is in progress (so Today can offer "Resume").

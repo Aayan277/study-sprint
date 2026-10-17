@@ -1,6 +1,6 @@
 // "You mix these up" (Round 2, B2): Play records mixedWith when a wrong pick/typed answer is another card's answer;
-// the results panel shows the pair; Compare opens (two columns, stacked on a phone); Drill these always offers the
-// partner; the card panel says "Often mixed up with"; the log row and the backup carry the field; importAll cleans it.
+// the results panel shows the pair; Compare opens (two columns, stacked on a phone); Review these opens a Review session of the
+// pair (v4.9: the game is only on the Play page, so the Play drill is gone); the card panel says "Often mixed up with"; the log row and the backup carry the field; importAll cleans it.
 import { chromium } from './pw.mjs';
 const SP = process.argv[2] || '/tmp';
 const browser = await chromium.launch();
@@ -81,27 +81,23 @@ await p.waitForSelector('#sheet .cmp');
 const cols = await p.evaluate(() => [...document.querySelectorAll('#sheet .cmp-col')].map(c => { const r = c.getBoundingClientRect(); return { t: Math.round(r.top), l: Math.round(r.left), w: Math.round(r.width), text: c.textContent.replace(/\s+/g, ' ') }; }));
 ok(cols.length === 2 && cols[0].text.includes('Alpha') && cols[0].text.includes('Apple') && cols[1].text.includes('Beta') && cols[1].text.includes('Banana'), 'two columns with front and back of each card');
 ok(cols[1].t > cols[0].t && Math.abs(cols[0].l - cols[1].l) < 4, 'stacked under 600px');
-ok((await p.locator('#sheet button').allTextContents()).map(t => t.trim()).filter(t => ['Drill these', 'Make a comparison card', 'Not confused'].includes(t)).length === 3, 'Drill these, Make a comparison card and Not confused');
+ok((await p.locator('#sheet button').allTextContents()).map(t => t.trim()).filter(t => ['Review these', 'Make a comparison card', 'Not confused'].includes(t)).length === 3, 'Review these, Make a comparison card and Not confused');
 await noHScroll(p, 375, 'compare 375'); await p.screenshot({ path: SP + '/mx-compare-375-dark.png' });
 
-// Drill these: six questions, the partner's answer is always an option for Alpha and Beta
+// v4.9: Review these (was "Drill these", a Play round): a Review session of exactly the two cards, no Play round
 await p.click('#cmpDrill');
-await p.waitForSelector('#pCard');
-let qn = 0;
-for (let i = 0; i < 6; i++) {
-  await nextQuestion(p);
-  const hud = await p.textContent('#hudA');
-  if (i === 0) ok(/\/6/.test(hud), 'the drill is 6 questions: ' + hud.trim());
-  const prompt = (await p.textContent('#pPrompt')).trim();
-  const labels = await p.$$eval('#options .lbl', b => b.map(x => x.textContent));
-  qn++;
-  if (prompt === 'Alpha') ok(labels.includes('Banana'), 'Alpha question offers Banana');
-  if (prompt === 'Beta') ok(labels.includes('Apple'), 'Beta question offers Apple');
-  await p.keyboard.press(String(labels.indexOf(BACKS[FRONTS.indexOf(prompt)]) + 1));
-  await p.waitForSelector('.fb'); await p.keyboard.press('Enter');
+await p.waitForSelector('#flash');
+ok(p.url().includes('#/review') && !(await p.locator('#pCard').count()), 'Review these opens Review, not Play');
+const seenFronts = [];
+while (!(await p.$('.finish-next'))) {
+  await p.waitForSelector('#showBtn, .finish-next');
+  if (await p.$('.finish-next')) break;
+  seenFronts.push((await p.textContent('#flash .flash-front')).trim());
+  await p.click('#showBtn'); await p.click('.rate.r4');   // Easy: a new card graduates, so it is seen once
+  await p.waitForFunction(() => !document.querySelector('.rate'));
 }
-await p.waitForSelector('.res-head');
-ok(qn === 6, 'six questions were asked');
+ok(seenFronts.length === 2 && seenFronts.some(t => t.includes('Alpha')) && seenFronts.some(t => t.includes('Beta')), 'the session is exactly Alpha and Beta: ' + seenFronts.map(t => t.slice(0, 12)).join(' | '));
+ok(await p.locator('#screen a[href="#/play"]').count() === 0, 'the finish screen has no Play link');
 await p.context().close();
 
 // ---------- 2. Typed answers: only an exact answer of another card counts ----------
@@ -142,20 +138,16 @@ await noHScroll(p, 375, 'card panel 375'); await p.screenshot({ path: SP + '/mx-
 await p.click('#ceMixed [data-mix-with]');
 await p.waitForSelector('#sheet .cmp');
 await p.click('#cmpDrill');
-await p.waitForSelector('#pCard');
-let asked = 0;
-for (let i = 0; i < 6; i++) {
-  await nextQuestion(p);
-  const prompt = (await p.textContent('#pPrompt')).trim();
-  const labels = await p.$$eval('#options .lbl', b => b.map(x => x.textContent));
-  const n = +prompt.replace('Term ', '');
-  if (n === 0) { ok(labels.includes('Meaning 1'), 'Term 0 offers Meaning 1 (forced in among 12 cards)'); asked++; }
-  if (n === 1) { ok(labels.includes('Meaning 0'), 'Term 1 offers Meaning 0 (forced in among 12 cards)'); asked++; }
-  await p.keyboard.press(String(labels.indexOf(`Meaning ${n}`) + 1));
-  await p.waitForSelector('.fb'); await p.keyboard.press('Enter');
+await p.waitForSelector('#flash');
+const pair = [];
+while (!(await p.$('.finish-next'))) {
+  await p.waitForSelector('#showBtn, .finish-next');
+  if (await p.$('.finish-next')) break;
+  pair.push((await p.textContent('#flash .flash-front')).trim());
+  await p.click('#showBtn'); await p.click('.rate.r4');
+  await p.waitForFunction(() => !document.querySelector('.rate'));
 }
-await p.waitForSelector('.res-head');
-ok(asked >= 2, 'Term 0 and Term 1 both came up in the drill (' + asked + ')');
+ok(pair.length === 2 && pair.some(t => t.includes('Term 0')) && pair.some(t => t.includes('Term 1')), 'Review these from the card panel: Term 0 and Term 1 (' + pair.length + ')');
 
 // Backup and restore keep the field; a bad value is dropped
 const backup = await p.evaluate(async () => (await import('./js/db.js')).exportAll());

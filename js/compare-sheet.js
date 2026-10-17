@@ -1,13 +1,13 @@
 // "Compare" sheet for two cards that keep getting mixed up (B2, see confusion.js). Loaded when first opened
 // (lazily, from the finish screens and the card panel; it is in the service worker's CORE list).
 //   two columns side by side (stacked under 600px)
-//   Drill these            6 questions in Play on the pair and 4 look-alike neighbours; the partner is always an option
+//   Review these           the two cards in a Review session (the game lives on the Play page only)
 //   Make a comparison card the add-card form, prefilled "A vs B: what's the difference?" in the first card's deck (nothing is saved
 //                          until Add, so Cancel leaves nothing behind)
 //   Not confused           hides the pair until it has been mixed up twice more (this device only)
 
 import * as db from './db.js';
-import { mixPairs, pairKey, dismissPair, loadDismissed, saveDismissed, MIX_WINDOW_DAYS, cardLabel, neighbours, comparisonText } from './confusion.js';
+import { mixPairs, pairKey, dismissPair, loadDismissed, saveDismissed, MIX_WINDOW_DAYS, cardLabel, comparisonText } from './confusion.js';
 import { daysAgoStart } from './stats-calc.js';
 import { mathHTML } from './format.js';
 import { imgHTML } from './media.js';
@@ -41,15 +41,13 @@ export async function openCompare(a, b, { onDismiss = () => {}, onDone = () => {
     <p class="note cmp-note">${pair ? `You’ve mixed these two up ${plural(pair.count, 'time')} in the last ${MIX_WINDOW_DAYS} days.` : 'Side by side, so the difference is easy to see.'}</p>
     <div class="cmp">${side(a)}${side(b)}</div>
     <div class="sheet-actions stack">
-      <button class="btn primary" type="button" id="cmpDrill">Drill these</button>
+      <button class="btn primary" type="button" id="cmpDrill">Review these</button>
       <button class="btn ghost" type="button" id="cmpMake">Make a comparison card</button>
       ${pair ? '<button class="btn ghost" type="button" id="cmpNot">Not confused</button>' : ''}
     </div>`);
   $('cmpDrill').addEventListener('click', async () => {
-    const cards = await db.getAll('cards');
-    const ids = [a, b, ...neighbours(a, b, cards)].map(c => c.id);
     closeSheet();
-    (await import('./play.js')).drillCards(ids, { mix: [[a.id, b.id], [b.id, a.id]], total: 6 });
+    (await import('./today.js')).startStudy({ kind: 'ids', cardIds: [a.id, b.id] });
   });
   $('cmpMake').addEventListener('click', async () => {
     const btn = $('cmpMake');

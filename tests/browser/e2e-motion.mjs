@@ -134,6 +134,7 @@ await p.evaluate(async () => {
   const db = await import('./js/db.js'); const now = Date.now();
   const cs = await db.getAll('cards'); await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now + 5 * 86400000, stability: 20, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now, scheduledDays: 5, elapsedDays: 1, learningSteps: 0 })));
   localStorage.setItem('study-sprint-fx-ring', JSON.stringify({ day: new Date().toDateString(), frac: 0.5, n: 4 }));
+  await db.setSetting('dailyGoal', 4);       // v4.9: the ring counts to the daily goal (was: answers + cards left), so a goal of 4 is met by the 4 answers
 });
 await p.evaluate(() => { location.hash = '#/decks'; }); await p.waitForSelector('.deck'); await today(p); await p.waitForSelector('.today-hero .ring');
 await p.waitForSelector('.ring.fx-win', { timeout: 1000 });
@@ -145,6 +146,7 @@ await p.context().close();
 p = await open({ reduced: true });
 await deck(p, 'r', 4);
 await p.evaluate(async () => { const db = await import('./js/db.js'); const now = Date.now(); const cs = await db.getAll('cards'); await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now + 5 * 86400000, stability: 20, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now, scheduledDays: 5, elapsedDays: 1, learningSteps: 0 })));
+  await db.setSetting('dailyGoal', 1);       // v4.9: the ring counts to the daily goal; the one answer meets a goal of 1
   await db.putMany('reviewLog', [{ cardId: 'r0', timestamp: now - 1000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true }]); });
 await today(p); await p.waitForSelector('.today-hero .ring'); await p.waitForTimeout(100);
 ok(await p.evaluate(() => { const r = document.querySelector('.today-hero .ring'); return r.classList.contains('is-full') && !r.classList.contains('fx-win') && !r.querySelector('.fx-fill') && !document.querySelector('[data-n]'); }), 'reduced motion: the ring is drawn finished and green at once');

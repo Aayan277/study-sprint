@@ -55,13 +55,13 @@ export async function renderReview(el, deckId) {
     const allIds = data.decks.map(d => d.id);
     const chosen = launch.deckIds.filter(id => allIds.includes(id));
     const c = countFor(data, chosen.length ? chosen : allIds);
-    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days) : null;
+    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds) : null;
     if (custom && !custom.queue.length) {      // e.g. exam prep when every card was seen in the last 3 days
       toast(launch.kind === 'prep' ? 'You have seen every card in this deck in the last 3 days' : 'Nothing to review there');
       location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
       return;
     }
-    return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind, launch.days));
+    return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind, launch.days, launch.cardIds));
   }
   // No deck and nothing started: the home screen is Today.
   if (!deckId) { location.replace('#/today'); return; }
@@ -678,8 +678,6 @@ async function finish(el) {
     <div id="finishMore" class="finish-more" hidden></div>
     <section class="finish-next" aria-label="What's next">
       ${streakHTML(streak)}
-      <p class="fn-line">${icon('bolt')} <span>Lock it in with a quick Play round. Right answers on due cards count toward your schedule.</span></p>
-      <a class="btn ghost" href="#/play">Play a round</a>
     </section>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
   $('keepBtn')?.addEventListener('click', async () => {

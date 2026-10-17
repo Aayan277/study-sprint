@@ -311,6 +311,17 @@ export function forgottenQueue(cards, statesById, logs, now = Date.now()) {
   return { queue, waiting: [] };
 }
 
+// A hand-picked list of cards (Stats' "Review these", the Compare sheet), in the order given: cards that no longer
+// exist are skipped. The session runs through Review like any Custom study.
+export function pickedQueue(cards, statesById, ids) {
+  const byId = new Map(cards.map(c => [c.id, c]));
+  const queue = [...new Set(ids)].filter(id => byId.has(id)).map(id => {
+    const st = statesById.get(id);
+    return { card: byId.get(id), kind: st && isLearning(st.state) ? 'learn' : st && st.state !== NEW ? 'review' : 'new' };
+  });
+  return { queue, waiting: [] };
+}
+
 // Spread new cards evenly through the reviews, so a session isn't all hard reviews then all new cards.
 export function interleave(reviews, news) {
   if (!reviews.length || !news.length) return [...reviews, ...news];

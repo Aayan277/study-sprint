@@ -251,6 +251,19 @@ export function nearestExamDeck(decks, cards, now = Date.now()) {
   return best?.id ?? null;
 }
 
+// The deck Play opens on (one deck per game, never "all"): the nearest exam, else the saved deck if it still exists,
+// else the first deck in tree order that has cards, else the first deck. `chosen`: the person already picked one this visit,
+// so a valid saved deck wins over the exam. Returns '' when there are no decks.
+export function pickPlayDeck(decks, cards, saved, { chosen = false, now = Date.now() } = {}) {
+  const valid = !!saved && decks.some(d => d.id === saved);
+  if (chosen && valid) return saved;
+  const exam = nearestExamDeck(decks, cards, now);
+  if (exam) return exam;
+  if (valid) return saved;
+  const first = treeOrder(decks).find(({ deck }) => { const inside = subtreeIds(decks, deck.id); return cards.some(c => inside.has(c.deckId)); });
+  return first?.deck.id ?? treeOrder(decks)[0]?.deck.id ?? '';
+}
+
 // How ready a set of cards is: the share you are predicted to remember (READY_R or better) at a given time (the exam
 // day, or now), if you did no more reviews before then. A card never studied counts as not ready.
 // `when` is a time in ms. Returns { ready, total, share } (share 0 to 1).
