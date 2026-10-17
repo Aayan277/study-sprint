@@ -30,8 +30,13 @@
     turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ssCaptchaReady',
     hcaptcha: 'https://js.hcaptcha.com/1/api.js?render=explicit&onload=ssCaptchaReady'
   };
+  // This page is sandboxed (its own origin is opaque), but it was loaded from the app's address, so that is where
+  // the app is. It only talks to a parent at that address, and does nothing at all if it was embedded anywhere else.
+  var APP = new URL(location.href).origin;
+  var from = location.ancestorOrigins && location.ancestorOrigins[0];
+  if (from && from !== APP) return;
   var tell = function (type, extra) {
-    parent.postMessage(Object.assign({ from: 'study-sprint-captcha', type: type }, extra || {}), '*');
+    parent.postMessage(Object.assign({ from: 'study-sprint-captcha', type: type }, extra || {}), APP);
   };
   if (!SCRIPTS[provider] || !/^[A-Za-z0-9_-]{6,80}$/.test(key)) { tell('error'); return; }
   window.ssCaptchaReady = function () {

@@ -14,11 +14,12 @@ import { CAPTCHA } from './sync-config.js';
 const PROVIDERS = ['turnstile', 'hcaptcha'];
 export const captchaOn = () => PROVIDERS.includes(CAPTCHA.provider) && /^[A-Za-z0-9_-]{6,80}$/.test(CAPTCHA.siteKey || '');
 
-const WAIT = 2 * 60 * 1000;      // give up if the box is never answered
+const WAIT = 20 * 1000;           // the box should answer within seconds: after this it is called failed, never a silent hang
+export const CAPTCHA_FAILED = 'The bot check didn’t load. Try again, or contact the site owner.';
 
 // Show the check inside `container` and give back its token (a string, good for one request).
 // Rejects with an Error whose message is ready to show.
-export function askCaptcha(container, { wait = WAIT } = {}) {
+export function askCaptcha(container, { wait = CAPTCHA.waitMs || WAIT } = {}) {
   return new Promise((resolve, reject) => {
     container.replaceChildren();
     container.hidden = false;
@@ -41,9 +42,9 @@ export function askCaptcha(container, { wait = WAIT } = {}) {
     const onMessage = e => {
       if (e.source !== frame.contentWindow || e.data?.from !== 'study-sprint-captcha') return;
       if (e.data.type === 'token' && typeof e.data.token === 'string' && e.data.token) finish(resolve, e.data.token);
-      else if (e.data.type === 'error') finish(reject, new Error('Couldn’t load the “are you a person?” check. Check your connection and try again.'));
+      else if (e.data.type === 'error') finish(reject, new Error(CAPTCHA_FAILED));
     };
-    const timer = setTimeout(() => finish(reject, new Error('The “are you a person?” check didn’t finish. Try again.')), wait);
+    const timer = setTimeout(() => finish(reject, new Error(CAPTCHA_FAILED)), wait);
     addEventListener('message', onMessage);
     container.append(frame);
   });
