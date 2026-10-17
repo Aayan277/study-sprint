@@ -14,8 +14,9 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { planMedia, refusedAsFull, fetchUsage } from './sync-quota.js';
-import { fullMessage } from './quota.js';
+import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
+import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
+import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
@@ -242,21 +243,32 @@ async function run() {
   // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
   const changes = await db.localChangesSince(st.pushedUntil);
-  const rows = newestOnly([
+  // A clock that's ahead counts as at most a day ahead (the server does the same). A record over the server's size
+  // limit is left out and remembered (named in the note), so it can't block everything else.
+  const { ok: rows, big } = splitOversized(capTimes(newestOnly([
     ...Object.entries(changes.records).flatMap(([name, list]) => list.map(r => rowFromRecord(name, r))),
     ...changes.tombstones.map(rowFromTombstone),
     ...changes.settings.map(s => rowFromSetting(s.key, s.value, s.time))
-  ]);
-  let sent = 0;
-  for (const part of chunks(rows, BATCH)) {
-    if (rows.length > BATCH) emit({ progress: `Sending ${sent.toLocaleString()} of ${rows.length.toLocaleString()} changes…` });
-    await supa.putRows(token, part);
-    sent += part.length;
+  ])));
+  const pushed = await pushSafely(part => supa.putRows(token, part), rows, {
+    onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
+  });
+  // Records too big to send, kept until they are shortened (editing one makes it a new change, which is tried again)
+  // or deleted. Anything that went through now is no longer a problem.
+  const wentKeys = new Set(pushed.sent.map(r => `${r.store}|${r.id}`));
+  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row) }))];
+  const stillBig = [...new Map(tooBig.map(r => [`${r.store}|${r.id}`, r])).values()].filter(r => !wentKeys.has(`${r.store}|${r.id}`));
+  // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
+  // (What did go is sent again too; the server ignores a copy it already has.)
+  let spaceNote = null;
+  if (pushed.held.length) {
+    spaceNote = pushed.full === 'server' ? SERVER_FULL_MESSAGE : dataFullMessage(await fetchUsage(token));
   }
 
-  st = { ...st, pushedUntil: pushStart - 1, lastSync: Date.now() };
+  st = { ...st, pushedUntil: pushed.held.length ? st.pushedUntil : pushStart - 1, lastSync: Date.now(), tooBig: stillBig };
   await db.setSetting('syncState', st);
-  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null, note: mediaNote });
+  const note = [spaceNote, bigRowsNote(stillBig), mediaNote].filter(Boolean).join(' ') || null;
+  emit({ state: 'done', at: st.lastSync, applied, sent: pushed.sent.length, error: null, progress: null, note });
 }
 
 // ---------- pictures and sounds ----------
@@ -276,9 +288,9 @@ async function syncMedia(auth) {
       onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
     });
   } catch (err) {
-    const full = await refusedAsFull(auth, err);      // the server itself said the account is full
-    if (!full) throw err;
-    gate.full = full;
+    const refused = await explainRefusal(auth, err);      // the server itself turned a file away: full account, full server...
+    if (!refused) throw err;
+    gate.note = refused;
     upload = { sent: [], blocked: [], failed: [] };
   }
   if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
@@ -302,6 +314,7 @@ async function syncMedia(auth) {
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
   if (gate.full) return fullMessage(gate.full);
+  if (gate.note) return gate.note;
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function fetchMedia(token, uid, id) {

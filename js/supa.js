@@ -38,7 +38,8 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
-    const code = json?.error_code || json?.code || json?.error || '';
+    // (The server's own refusals, supabase/limits.sql: a person's synced data is full, or the whole project is.)
+    const code = (/sync_data_full|sync_server_full/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
     throw new SupaError(explain(res.status, code, json?.msg || json?.message || json?.error_description || text), { status: res.status, code });
   }
   return json;
@@ -54,6 +55,8 @@ function explain(status, code, raw) {
     signup_disabled: 'New accounts are turned off for this project. Sign in with your existing account.',
     captcha_failed: 'Couldn’t confirm you’re not a robot. Try again.',
     sync_items_data_size: 'One of your cards is too big to sync (over 64 KB). Shorten its text and try again.',
+    sync_data_full: 'Your account’s synced data is full. New changes are kept on this device and will sync when there’s room.',
+    sync_server_full: 'The sync server is full right now. Everything is safe on this device and will sync when there’s room.',
     PGRST202: 'This part isn’t set up on the server yet. The owner needs to run supabase/limits.sql (see docs/sync-setup.md).',
     weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',

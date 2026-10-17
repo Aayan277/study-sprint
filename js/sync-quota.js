@@ -4,7 +4,7 @@
 // Only pictures and sounds wait when the account is full. Cards, reviews and settings keep syncing.
 
 import * as supa from './supa.js';
-import { planUploads, level } from './quota.js';
+import { planUploads, level, fullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { isSoundRow } from './sync-merge.js';
 
 
@@ -29,10 +29,13 @@ export async function planMedia(auth, pending) {
   return { send: plan.send, full: plan.held.length ? plan.usage : null };
 }
 
-// An upload the server refused with its own "row-level security" answer: if that is because the account is full
-// (another device filled it meanwhile), the usage numbers; anything else null (a real problem, to be thrown).
-export async function refusedAsFull(auth, err) {
+// An upload the server refused with its own "row-level security" answer (supabase/limits.sql): say why, in words.
+// The account is full (another device filled it meanwhile), the whole server is full, or we can't tell. null when
+// it was some other kind of error (to be thrown as before).
+export async function explainRefusal(auth, err) {
   if (err?.code !== 'media_policy') return null;
   const usage = await fetchUsage(auth.access_token);
-  return usage && level(usage) === 'full' ? usage : null;
+  if (usage && level(usage) === 'full') return fullMessage(usage);
+  if (usage) return SERVER_FULL_MESSAGE;           // room in the account, so it's the project-wide ceiling
+  return 'Some pictures and sounds couldn’t be sent just now. They are kept on this device and will be tried again.';
 }

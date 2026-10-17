@@ -31,7 +31,8 @@ export function readUsage(raw) {
   if (!u || typeof u !== 'object') return null;
   const data = Number(u.data_bytes), media = Number(u.media_bytes), limit = Number(u.media_limit);
   if (![data, media, limit].every(Number.isFinite) || limit < 0) return null;
-  return { data, media, limit };
+  const dataLimit = u.data_limit == null ? null : Number(u.data_limit);       // older servers don't say
+  return { data, media, limit, dataLimit: Number.isFinite(dataLimit) ? dataLimit : null };
 }
 
 // 'ok', 'warn' (from 80%) or 'full' (at or over the limit).
@@ -41,6 +42,17 @@ export function level(usage) {
   return usage.media >= usage.limit * WARN_AT ? 'warn' : 'ok';
 }
 
+// The same for the synced data (cards, reviews, settings): 'ok', 'warn' or 'full'.
+export function dataLevel(usage) {
+  if (!usage || usage.dataLimit == null) return 'ok';
+  if (usage.data >= usage.dataLimit) return 'full';
+  return usage.data >= usage.dataLimit * WARN_AT ? 'warn' : 'ok';
+}
+
+export const SERVER_FULL_MESSAGE = "The sync server is full right now. Everything is safe on this device and will sync when there's room.";
+export const dataFullMessage = usage =>
+  `Your account's synced data is full${usage?.dataLimit != null ? ` (${fmtSize(usage.data)} of ${fmtSize(usage.dataLimit)})` : ''}. New changes are saved on this device and will sync when there's room. Delete some cards or old decks, or ask the account owner for more space.`;
+
 export const fullMessage = usage =>
   `Your account is full: pictures and sounds use ${fmtSize(usage.media)} of ${fmtSize(usage.limit)}. New ones are saved on this device and will sync when there's room. Remove some, or ask the account owner for more space.`;
 export const warnMessage = usage => `Pictures and sounds: ${fmtSize(usage.media)} of ${fmtSize(usage.limit)}.`;
@@ -48,25 +60,32 @@ export const warnMessage = usage => `Pictures and sounds: ${fmtSize(usage.media)
 // The line under Settings → Your data: { text, level }.
 export function usageLine(usage) {
   if (!usage) return null;
-  const lv = level(usage);
+  const mediaLv = level(usage), dataLv = dataLevel(usage);
+  const lv = mediaLv === 'full' || dataLv === 'full' ? 'full' : mediaLv === 'warn' || dataLv === 'warn' ? 'warn' : 'ok';
+  const details = [];
+  if (dataLv === 'full') details.push(dataFullMessage(usage));
+  else if (dataLv === 'warn') details.push(`Synced data: ${fmtSize(usage.data)} of ${fmtSize(usage.dataLimit)}.`);
+  if (mediaLv === 'full') details.push(fullMessage(usage));
+  else if (mediaLv === 'warn') details.push(warnMessage(usage));
   return {
     level: lv,
-    text: `In your account: data ${fmtSize(usage.data)} · pictures and sounds ${fmtSize(usage.media)} of ${fmtSize(usage.limit)}`,
-    detail: lv === 'full' ? fullMessage(usage) : lv === 'warn' ? `Getting full. ${warnMessage(usage)}` : ''
+    text: `In your account: data ${fmtSize(usage.data)}${usage.dataLimit != null ? ` of ${fmtSize(usage.dataLimit)}` : ''} · pictures and sounds ${fmtSize(usage.media)} of ${fmtSize(usage.limit)}`,
+    detail: lv === 'warn' && mediaLv === 'warn' && dataLv === 'ok' ? `Getting full. ${details.join(' ')}` : details.join(' ')
   };
 }
 
 // Which waiting pictures and sounds to send now, and which to keep on the device. Like the server, a file is
-// sent while the account is still under its limit, so the last one may take it a little over.
+// sent only if it fits: what the account uses plus the file is at most the limit. A smaller one later in the list may still fit.
 // pending: [{ data: ArrayBuffer, size? }, …]. usage null (unknown) sends everything: the server still decides.
 export function planUploads(pending, usage) {
   if (!usage) return { send: [...pending], held: [], usage: null };
   const send = [], held = [];
   let used = usage.media;
   for (const m of pending) {
-    if (used >= usage.limit) { held.push(m); continue; }
+    const size = m.data?.byteLength ?? m.size ?? 0;
+    if (used >= usage.limit || used + size > usage.limit) { held.push(m); continue; }
     send.push(m);
-    used += m.data?.byteLength ?? m.size ?? 0;
+    used += size;
   }
   return { send, held, usage: { ...usage, media: used } };
 }
@@ -93,3 +112,51 @@ export function importWarnings({ mediaBytes = 0, reviews = 0 } = {}) {
   }
   return out;
 }
+
+// ---------- records too big for the server, and what to do when a push is refused ----------
+export const MAX_ROW_BYTES = 60000;                 // the server's own limit is 64 KB (supabase/limits.sql); this leaves room for how it counts
+export const DAY_MS = 86400000;
+
+// How big a row is on the server, about: its data as JSON text.
+export const rowBytes = row => new TextEncoder().encode(JSON.stringify(row?.data ?? null)).length;
+
+// A short name for a row, to point at it: a card's front, a deck's name.
+export function rowLabel(row) {
+  const raw = row?.data?.front ?? row?.data?.name ?? '';
+  const text = String(raw).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return text.length > 40 ? text.slice(0, 40).trimEnd() + '…' : text;
+}
+
+// Rows that fit, and rows that are too big to send (each as { store, id, label, bytes }).
+export function splitOversized(rows, max = MAX_ROW_BYTES) {
+  const ok = [], big = [];
+  for (const r of rows) {
+    const bytes = r.deleted ? 0 : rowBytes(r);
+    if (bytes > max) big.push({ store: r.store, id: r.id, label: rowLabel(r), bytes }); else ok.push(r);
+  }
+  return { ok, big };
+}
+
+// "1 card is too large to sync: “Cell…”. Shorten it to sync."
+export function bigRowsNote(list) {
+  if (!list?.length) return '';
+  const kinds = new Set(list.map(r => r.store));
+  const one = kinds.size === 1 && kinds.has('cards') ? 'card' : kinds.size === 1 && kinds.has('decks') ? 'deck' : 'item';
+  const label = list[0].label ? `“${list[0].label}”` : `a ${one}`;
+  return list.length === 1
+    ? `1 ${one} is too large to sync: ${label}. Shorten it to sync.`
+    : `${list.length} ${one}s are too large to sync, for example ${label}. Shorten them to sync.`;
+}
+
+// Why a push failed, if it's one we can work around: 'size' (a record over the server's size limit), 'data' (the
+// account's synced-data limit), 'server' (the whole project is full). null = any other error.
+export function pushErrorKind(err) {
+  const text = `${err?.code || ''} ${err?.message || ''}`;
+  if (/sync_data_full/.test(text)) return 'data';
+  if (/sync_server_full/.test(text)) return 'server';
+  if (/\b23514\b|sync_items_data_size/.test(text)) return 'size';
+  return null;
+}
+
+// Rows with a time from a clock that is ahead are sent as at most a day ahead, like the server will keep them.
+export const capTimes = (rows, now = Date.now()) => rows.map(r => (r.updated_at > now + DAY_MS ? { ...r, updated_at: now + DAY_MS } : r));

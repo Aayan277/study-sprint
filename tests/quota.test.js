@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, fullMessage, warnMessage, usageLine, planUploads, pictureTooBig, importWarnings } from '../js/quota.js';
+import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES } from '../js/quota.js';
+import { pushSafely } from '../js/sync-push.js';
 
 const usage = (media, limit = 180 * MB, data = 3 * MB) => ({ data, media, limit });
 const file = n => ({ id: 'm' + n, data: { byteLength: n * MB } });
@@ -25,8 +26,8 @@ test('the default is 180 MB, five accounts fit in the free 1 GB', () => {
 });
 
 test('my_usage() answers are read safely', () => {
-  assert.deepEqual(readUsage({ data_bytes: 5, media_bytes: 6, media_limit: 7 }), { data: 5, media: 6, limit: 7 });
-  assert.deepEqual(readUsage([{ data_bytes: '5', media_bytes: '6', media_limit: '7' }]), { data: 5, media: 6, limit: 7 });   // a one-row list
+  assert.deepEqual(readUsage({ data_bytes: 5, media_bytes: 6, media_limit: 7 }), { data: 5, media: 6, limit: 7, dataLimit: null });
+  assert.deepEqual(readUsage([{ data_bytes: '5', media_bytes: '6', media_limit: '7', data_limit: '9' }]), { data: 5, media: 6, limit: 7, dataLimit: 9 });   // a one-row list
   assert.equal(readUsage(null), null);
   assert.equal(readUsage({ data_bytes: 5 }), null);
   assert.equal(readUsage('nope'), null);
@@ -53,6 +54,7 @@ test('the account-full message', () => {
 test('the usage line under Settings → Your data', () => {
   assert.deepEqual(usageLine(usage(34 * MB, 180 * MB, 1.2 * MB)),
     { level: 'ok', text: 'In your account: data 1.2 MB · pictures and sounds 34 MB of 180 MB', detail: '' });
+  assert.equal(usageLine({ ...usage(34 * MB, 180 * MB, 1.2 * MB), dataLimit: 80 * MB }).text, 'In your account: data 1.2 MB of 80 MB · pictures and sounds 34 MB of 180 MB');
   const warn = usageLine(usage(150 * MB));
   assert.equal(warn.level, 'warn');
   assert.equal(warn.detail, 'Getting full. Pictures and sounds: 150 MB of 180 MB.');
@@ -63,21 +65,37 @@ test('the usage line under Settings → Your data', () => {
   assert.equal(usageLine(null), null);
 });
 
-test('uploads go until the account is at its limit, and may go over by one file', () => {
+test('uploads go while they fit in the account, and a smaller one later may still fit', () => {
   const pending = [file(1), file(1), file(1), file(1)];
   let plan = planUploads(pending, usage(100 * MB));
   assert.equal(plan.send.length, 4);
   assert.equal(plan.held.length, 0);
-  plan = planUploads(pending, usage(178.5 * MB));       // room for 2: after the second it is 180.5, so the rest wait
-  assert.deepEqual(plan.send.map(m => m.id), ['m1', 'm1']);
-  assert.equal(plan.held.length, 2);
-  assert.equal(level(plan.usage), 'full');
+  plan = planUploads(pending, usage(178.5 * MB));       // room for 1.5: one goes (to 179.5), the rest wait
+  assert.deepEqual(plan.send.map(m => m.id), ['m1']);
+  assert.equal(plan.held.length, 3);
   plan = planUploads(pending, usage(180 * MB));         // already full: nothing goes
   assert.equal(plan.send.length, 0);
   assert.equal(plan.held.length, 4);
-  plan = planUploads([file(5), file(1)], usage(179.9 * MB));   // one big file may take it over, then the next waits
-  assert.deepEqual(plan.send.map(m => m.id), ['m5']);
-  assert.deepEqual(plan.held.map(m => m.id), ['m1']);
+  assert.equal(level(plan.usage), 'full');
+  plan = planUploads([file(5), file(1)], usage(176 * MB));   // the big one doesn't fit, the small one does
+  assert.deepEqual(plan.send.map(m => m.id), ['m1']);
+  assert.deepEqual(plan.held.map(m => m.id), ['m5']);
+  plan = planUploads([file(2)], usage(178 * MB));       // exactly the limit is fine
+  assert.equal(plan.send.length, 1);
+});
+
+test('synced data limit: levels and the message', () => {
+  const u = (data, dataLimit = 80 * MB) => ({ ...usage(0), data, dataLimit });
+  assert.equal(dataLevel(u(10 * MB)), 'ok');
+  assert.equal(dataLevel(u(64 * MB)), 'warn');
+  assert.equal(dataLevel(u(80 * MB)), 'full');
+  assert.equal(dataLevel({ ...usage(0), dataLimit: null }), 'ok');         // an older server doesn't say
+  assert.equal(dataFullMessage(u(80 * MB)), "Your account's synced data is full (80 MB of 80 MB). New changes are saved on this device and will sync when there's room. Delete some cards or old decks, or ask the account owner for more space.");
+  assert.match(dataFullMessage(null), /^Your account's synced data is full\. New changes/);
+  assert.equal(SERVER_FULL_MESSAGE, "The sync server is full right now. Everything is safe on this device and will sync when there's room.");
+  const line = usageLine(u(80 * MB));
+  assert.equal(line.level, 'full');
+  assert.ok(line.detail.startsWith("Your account's synced data is full"));
 });
 
 test('when the server cannot say how much is used, everything is tried (the server still decides)', () => {
@@ -119,6 +137,14 @@ test('the SQL files say the same numbers as the app', () => {
   assert.match(media, /3145728/);
   assert.match(limits, /octet_length\(data::text\) < 65536/);
   assert.match(limits, /create or replace function public\.my_usage\(\)/);
+  assert.match(limits, /data_bytes_limit bigint not null default 83886080/);
+  assert.match(limits, /\('media', 943718400\), \('sync', 440401920\)/);           // 900 MB and 420 MB
+  assert.equal(900 * MB, 943718400); assert.equal(420 * MB, 440401920); assert.equal(80 * MB, 83886080);
+  assert.match(limits, /revoke all on public\.quotas from anon, authenticated;\s*grant select on public\.quotas to authenticated/);
+  assert.match(limits, /growth > 0 and new\.data is not null/);                    // a "deleted" row that still carries data is counted
+  assert.match(limits, /pg_advisory_xact_lock/);
+  assert.match(limits, /create policy "media: change own"/);
+  assert.match(limits, /collate "C" like/);
   assert.match(limits, /create or replace function public\.delete_my_account\(\)/);
   // setup.sql: row rules use (select auth.uid()); equal timestamps are ignored; updated_at is capped at now + 1 day
   const policies = setup.match(/create policy[^;]+;/g);
@@ -126,4 +152,72 @@ test('the SQL files say the same numbers as the app', () => {
   for (const p of policies) assert.ok(!/(?<!select )auth\.uid\(\)/.test(p), 'bare auth.uid() in: ' + p);
   assert.match(setup, /new\.updated_at <= old\.updated_at/);
   assert.match(setup, /least\(new\.updated_at, \(extract\(epoch from now\(\)\) \* 1000\)::bigint \+ 86400000\)/);
+});
+
+test('rows too big for the server are left out and named', () => {
+  const card = (id, front, size) => ({ store: 'cards', id, data: { front, back: 'x'.repeat(size) }, deleted: false, updated_at: 1 });
+  const rows = [card('a', 'Small', 100), card('b', '<b>The   big</b> card with a very long title that goes on and on', 70000), { store: 'cards', id: 'c', data: null, deleted: true, updated_at: 2 }];
+  assert.ok(rowBytes(rows[0]) < 200 && rowBytes(rows[1]) > MAX_ROW_BYTES);
+  const { ok, big } = splitOversized(rows);
+  assert.deepEqual(ok.map(r => r.id), ['a', 'c']);                           // a deleted marker is never "too big"
+  assert.equal(big.length, 1);
+  assert.equal(big[0].label, 'The big card with a very long title that…');
+  assert.equal(bigRowsNote(big), '1 card is too large to sync: “The big card with a very long title that…”. Shorten it to sync.');
+  assert.equal(bigRowsNote([...big, { store: 'cards', id: 'z', label: 'Other' }]), '2 cards are too large to sync, for example “The big card with a very long title that…”. Shorten them to sync.');
+  assert.equal(bigRowsNote([{ store: 'decks', id: 'd', label: '' }]), '1 deck is too large to sync: a deck. Shorten it to sync.');
+  assert.equal(bigRowsNote([]), '');
+  assert.equal(rowLabel({ data: { name: 'Biology' } }), 'Biology');
+  assert.equal(rowBytes({ data: { v: 'é' } }), JSON.stringify({ v: 'é' }).length + 1);       // bytes, not characters
+});
+
+test('which push errors can be worked around', () => {
+  assert.equal(pushErrorKind({ code: '23514', message: 'x' }), 'size');
+  assert.equal(pushErrorKind({ code: '400', message: 'violates check constraint "sync_items_data_size"' }), 'size');
+  assert.equal(pushErrorKind({ code: 'sync_data_full', message: 'Your account’s synced data is full.' }), 'data');
+  assert.equal(pushErrorKind({ code: 'sync_server_full' }), 'server');
+  assert.equal(pushErrorKind({ code: 'network', message: 'offline' }), null);
+  assert.equal(pushErrorKind(null), null);
+});
+
+test('a time far ahead is sent as at most a day ahead', () => {
+  const now = 1_000_000_000_000;
+  const out = capTimes([{ updated_at: now + 5 * 86400000 }, { updated_at: now - 5 }, { updated_at: now + 86400000 }], now);
+  assert.deepEqual(out.map(r => r.updated_at), [now + 86400000, now - 5, now + 86400000]);
+});
+
+// A fake put: refuses a batch containing a row id from `bad` (kind 'size') or `capped` (kind 'data').
+const fakePut = ({ bad = [], capped = [], onCall } = {}) => async rows => {
+  onCall?.(rows);
+  const err = (code, message) => Object.assign(new Error(message), { code });
+  if (rows.some(r => bad.includes(r.id))) throw err('23514', 'check');
+  if (rows.some(r => capped.includes(r.id))) throw err('sync_data_full', 'sync_data_full');
+};
+const ids = n => Array.from({ length: n }, (_, i) => ({ id: 'r' + i }));
+
+test('pushSafely: one refused row does not block the batch', async () => {
+  const calls = [];
+  const out = await pushSafely(fakePut({ bad: ['r7'], onCall: r => calls.push(r.length) }), ids(20));
+  assert.equal(out.sent.length, 19);
+  assert.deepEqual(out.bad.map(b => b.row.id), ['r7']);
+  assert.equal(out.held.length, 0);
+  assert.ok(calls.length < 20, 'found it by halving, not one request per row: ' + calls.length);
+});
+
+test('pushSafely: rows over the data limit are held, the rest go', async () => {
+  const out = await pushSafely(fakePut({ capped: ['r3', 'r15'] }), ids(40));
+  assert.equal(out.sent.length, 38);
+  assert.deepEqual(out.held.map(r => r.id).sort(), ['r15', 'r3']);
+  assert.equal(out.full, 'data');
+  assert.equal(out.bad.length, 0);
+});
+
+test('pushSafely: other errors are thrown, big pushes go in batches, and the splitting is limited', async () => {
+  await assert.rejects(pushSafely(async () => { throw Object.assign(new Error('offline'), { code: 'network' }); }, ids(5)), /offline/);
+  const sizes = [];
+  const out = await pushSafely(fakePut({ onCall: r => sizes.push(r.length) }), ids(1200));
+  assert.deepEqual(sizes, [500, 500, 200]);
+  assert.equal(out.sent.length, 1200);
+  const all = await pushSafely(fakePut({ capped: ids(1000).map(r => r.id) }), ids(1000), { budget: 10 });
+  assert.equal(all.held.length + all.sent.length, 1000);                      // nothing lost: what couldn't be tried is held
+  assert.ok(all.held.length >= 900);
 });
