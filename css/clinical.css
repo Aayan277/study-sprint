@@ -727,25 +727,53 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-add > span:first-child{flex-basis:100%}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip{display:block;overflow:hidden;text-overflow:ellipsis;line-height:34px;text-align:left}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip i{display:inline-block;margin-right:6px;vertical-align:1px}
+  /* the "+" stays visible when a long name is cut short: it sits in the chip's right padding, not after the text */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip{position:relative;padding-right:26px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-chip::after{position:absolute;right:10px;top:0;margin:0}
   /* the exam's name is a link: at least 28px tall to click */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-link{min-height:28px}
 
-  /* --- Decks: the counts get their own column, so the row reads across instead of leaving a gap in the middle --- */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:16px;align-items:center}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > :not(.deck-counts){grid-column:1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
-
-  /* --- Settings: form controls stay next to what they belong to --- */
+  /* --- Settings: every control sits next to its label, in a column you can read across ---
+     Switches come first on their line, like a checkbox, with the name and the explanation beside them; steppers, number
+     boxes and buttons go under their label instead of out at the far edge of the row. */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row{grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:start}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > .switch{grid-column:1;grid-row:1;margin-top:1px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .switch-row > span{grid-column:2;grid-row:1;font-size:var(--fs-base);color:var(--text)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column){display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;row-gap:10px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column) > :first-child{justify-self:stretch}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row input[type="range"]{max-width:480px}
   /* in-page confirms (Reset to default, Delete…): buttons their own size at the right, not two 360px slabs */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .confirm .sheet-actions .btn{flex:0 0 auto;min-width:96px}
+  /* …and in Settings the confirm is as wide as its question, with the buttons right under it, not 600px away */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .confirm{justify-self:start;max-width:560px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .confirm .sheet-actions{justify-content:flex-start}
   /* typed learning steps: a box sized for a few short gaps, the Reset button beside it */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .steps-input{max-width:420px}
+  /* Sync's sign-in form: fields as wide as an address needs, buttons their own size */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] #syncForm{max-width:440px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] #syncForm .sheet-actions{justify-content:flex-start}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] #syncForm .sheet-actions .btn{flex:0 0 auto;min-width:120px}
 
   /* --- deck page and Browse: search, filter and sort on one line --- */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) .br-controls{grid-template-columns:minmax(0,1fr) 200px 200px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="deck"],[data-route="browse"]) .br-controls input{grid-column:auto}
 }
+@media (min-width:1024px) and (max-width:1439px){
+  /* Today's deck table in a narrow column: name and course on the left, counts, then Study (the course no longer takes a
+     180px column of its own, which squeezed long names onto three or four lines) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck{grid-template-columns:minmax(0,1fr) 150px 56px;row-gap:2px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-name{grid-column:1;grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck .deck-code{grid-column:1;grid-row:2}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck .deck-code:empty{display:none}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-counts{grid-column:2;grid-row:1 / span 2}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-go{grid-column:3;grid-row:1 / span 2}
+}
 @media (min-width:1280px){
+  /* --- Decks: the counts get their own column, so the row reads across instead of leaving a gap in the middle --- */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:16px;align-items:center}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > :not(.deck-counts){grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
+
   /* Today: two columns when there are exams (or courses to give one): the day's work, and a 320px column on the right */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:repeat(12,auto) 1fr;column-gap:32px;align-items:start;max-width:1200px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > *{grid-column:1}
@@ -760,6 +788,22 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > *{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .screen-head{grid-column:1 / -1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / -1;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;margin-left:-12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
+}
+@media (min-width:1440px){
+  /* Stats: the streak and retention figures and the study calendar share the first row (the calendar filled a quarter of a
+     full-width card) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .pgrid{grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .cal-card{grid-column:2}
+}
+@media (min-width:1600px){
+  /* the deck page on a wide screen: the deck's name, buttons and counts in a column on the left that stays in view, its
+     cards on the right (one 1280px list left a long empty gap in every row) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:40px;align-items:start;max-width:1440px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > *{grid-column:2}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > :is(.back,.screen-head,.deck-summary){grid-column:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .screen-head{grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .deck-summary{grid-row:2;position:sticky;top:24px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > #browser{grid-row:1 / -1}
 }

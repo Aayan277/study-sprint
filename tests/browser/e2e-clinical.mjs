@@ -338,7 +338,7 @@ for (const [size, [w, h, scale]] of Object.entries(SIZES)) for (const mode of ['
 // ---------------------------------------------------------------- 4. wide desktop layout (owner's desktop review)
 // Pages are centred next to the sidebar, Today's Options button lines up with the content under it, the "Add exam date"
 // chips wrap instead of being cut off, and the sidebar footer is always fully on screen.
-for (const [w, h] of [[1024, 768], [1440, 900], [1920, 1080], [2560, 1440]]) for (const mode of ['light', 'dark']) {
+for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560, 1440]]) for (const mode of ['light', 'dark']) {
   if (wantSize && !wantSize.has('desk') || wantMode && !wantMode.has(mode) || wantScene && !wantScene.has('wide')) continue;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block' });
   await ctx.addInitScript(m => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode: m })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } }, mode);
@@ -386,6 +386,31 @@ for (const [w, h] of [[1024, 768], [1440, 900], [1920, 1080], [2560, 1440]]) for
       return { btns: ['optNo', 'optYes'].map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)), sw: Math.max(...sw), viewW: Math.round(v.width), viewR: Math.round(v.right) }; });
     ok(st.btns.every(x => x <= 200), `${tag}: the in-page confirm's buttons are not stretched (${st.btns.join(', ')}px)`);
     ok(st.viewW <= 980 && st.sw <= st.viewR + 1, `${tag}: Settings is a readable column (${st.viewW}px) and its switches sit inside it`);
+    // Every control in a Settings row is within about 120px of its label: the gap between the control's box and the box of
+    // the nearest label text in the same row (the row's name, or a select's own day name). Text boxes come from a Range,
+    // so a description that wraps across the row does not count as "next to" a switch at the far edge.
+    await page.evaluate(() => { for (const d of document.querySelectorAll('main details')) d.open = true; });
+    const far = await page.evaluate(() => {
+      const textBox = el => { const r = document.createRange(); r.selectNodeContents(el); const rs = [...r.getClientRects()].filter(x => x.width && x.height);
+        return rs.length ? { left: Math.min(...rs.map(x => x.left)), right: Math.max(...rs.map(x => x.right)), top: Math.min(...rs.map(x => x.top)), bottom: Math.max(...rs.map(x => x.bottom)) } : null; };
+      const gap = (a, b) => Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
+      const out = [];
+      for (const row of document.querySelectorAll('main .set-row, main .adv-row')) {
+        if (!row.getClientRects().length || row.closest('[hidden]')) continue;
+        const labels = [...row.querySelectorAll('b, label > span:first-child, .easy-day > span, .confirm > p')].map(textBox).filter(Boolean);
+        for (const c of row.querySelectorAll('input.switch, .stepper, .num-box, select, .steps-input input, button.btn, label.btn')) {
+          const b = c.getBoundingClientRect(); if (!b.width || c.closest('[hidden]')) continue;
+          const d = Math.min(...labels.map(l => gap(b, l)));
+          if (!(d <= 120)) out.push(`${(row.querySelector('b')?.textContent || '?').trim().slice(0, 24)}: ${c.id || c.className} ${Math.round(d)}px`);
+        }
+      }
+      return out;
+    });
+    ok(!far.length, `${tag}: every Settings control is within 120px of its label${far.length ? ': ' + far.slice(0, 6).join(' | ') : ''}`);
+    // the in-page confirm sits under its question, not at the far edge of a full-width box
+    await page.evaluate(() => { document.getElementById('optConfirm').hidden = false; });
+    const cf = await page.evaluate(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('optConfirmQ')); const q = r.getBoundingClientRect(), y = document.getElementById('optYes').getBoundingClientRect(); return Math.round(y.left - q.right); });
+    ok(cf <= 120, `${tag}: the confirm's buttons are next to its question (${cf}px past the end of the question)`);
     // "Couldn't load this screen": the Reload button is an ordinary button, not the browser's grey face
     const rl = await page.evaluate(() => { const el = document.querySelector('main > .view'); el.innerHTML = '<div class="empty"><b>Could not load this screen.</b><br><button class="btn" type="button" data-reload>Reload</button></div>';
       const b = getComputedStyle(el.querySelector('[data-reload]')), probe = document.createElement('i'); probe.style.background = 'var(--surface-1)'; document.body.append(probe); const s1 = getComputedStyle(probe).backgroundColor; probe.remove(); return [b.backgroundColor, s1]; });
