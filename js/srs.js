@@ -27,6 +27,7 @@ export const RATINGS = [
 //   relearningSteps  e.g. ['10m']: short gaps after forgetting
 //   maxInterval      longest gap in days
 //   fuzz             spread long gaps a little so cards added together don't all come due together
+//   w                optional: your own 21 FSRS weights (the standard ones when missing)
 // Rebuilt only when the options change.
 let cached = null;
 function scheduler(opts) {
@@ -41,7 +42,8 @@ function scheduler(opts) {
         relearning_steps: lib.relearningSteps,
         maximum_interval: lib.maxInterval,
         enable_fuzz: lib.fuzz,
-        enable_short_term: true
+        enable_short_term: true,
+        w: lib.w                       // undefined = the library's default weights
       }))
     };
   }
@@ -131,5 +133,5 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
 // opts: the card's scheduler options. Used to put the cards that gain most first.
 export function examGain(state, examStart, now, opts) {
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
-  return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now);
+  return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now, opts.w?.[20]);
 }

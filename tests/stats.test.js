@@ -438,8 +438,13 @@ test('readiness note: an estimate with the standard model, then with your own', 
   assert.equal(readyEstimateText(null), standard);
   assert.equal(readyEstimateText({}), standard);
   assert.equal(readyEstimateText({ w: 'nope' }), standard);
-  const at = new Date(2026, 9, 12, 12).getTime();      // (the shape cleanFsrsParams on main gives: { w, at, reviews, ... }; mirrored here until it is merged)
-  const tuned = readyEstimateText({ w: [1, 2, 3], at, reviews: 4812 }, 'en-GB');
+  const { cleanFsrsParams, FSRS_VERSION, FSRS_W_COUNT } = await import('../js/sched-settings.js');
+  const at = new Date(2026, 9, 12, 12).getTime();
+  const w = Array.from({ length: FSRS_W_COUNT }, (_, i) => 0.5 + i / 10);
+  const tuned = readyEstimateText(cleanFsrsParams({ w, at, reviews: 4812, cards: 900, version: FSRS_VERSION }), 'en-GB');
   assert.equal(tuned, 'It’s an estimate from your own memory model (tuned on 12 Oct from 4,812 reviews), assuming you stop reviewing now.');
-  assert.equal(readyEstimateText({ w: [1] }), 'It’s an estimate from your own memory model, assuming you stop reviewing now.');
+  assert.equal(readyEstimateText(cleanFsrsParams({ w, version: FSRS_VERSION })), 'It’s an estimate from your own memory model, assuming you stop reviewing now.');
+  // reset to the standard weights (w: null) and junk both read as the standard model
+  assert.equal(readyEstimateText(cleanFsrsParams({ w: null, at, version: FSRS_VERSION })), standard);
+  assert.equal(readyEstimateText(cleanFsrsParams({ w: [1, 2], version: FSRS_VERSION })), standard);
 });
