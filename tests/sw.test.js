@@ -129,3 +129,14 @@ test('every versioned CDN address the app loads is one the worker keeps (PINNED)
     }
   }
 });
+
+// ---------- a branch that changes app files must not reuse the CACHE name that main already shipped ----------
+import { execFileSync } from 'node:child_process';
+test("CACHE differs from origin/main's when the app files differ from it", t => {
+  let main;
+  try { main = execFileSync('git', ['show', 'origin/main:sw.js'], { cwd: new URL('..', import.meta.url), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { t.skip('git or origin/main is not available'); return; }
+  const mainCache = main.match(/const CACHE = '([^']+)'/)?.[1], mainHash = main.match(/files-hash: (\w+)/)?.[1];
+  if (!mainCache || !mainHash) { t.skip("could not read origin/main's sw.js"); return; }
+  if (computeHash() === mainHash) return;                       // the app files are the same as main's: nothing to bump
+  assert.notEqual(CACHE_NAME, mainCache, `app files differ from origin/main but CACHE is still ${mainCache}: bump it in sw.js`);
+});
