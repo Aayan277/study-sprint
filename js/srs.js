@@ -6,12 +6,14 @@
 // Each rating updates them, and the card is scheduled for the day your chance of remembering
 // it drops to your target retention (90% by default).
 
-import { fsrs, generatorParameters, createEmptyCard, Rating } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
+import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
 import { examGainFrom, examClamp } from './exam.js';
 
 export { Rating };
+// What the optimizer needs from the library (js/optimize-sheet.js): the standard weights, their allowed ranges, and the per-deck clipping.
+export { default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters };
 
 // The four buttons, in order. key = keyboard shortcut.
 export const RATINGS = [
@@ -27,6 +29,7 @@ export const RATINGS = [
 //   relearningSteps  e.g. ['10m']: short gaps after forgetting
 //   maxInterval      longest gap in days
 //   fuzz             spread long gaps a little so cards added together don't all come due together
+//   w                optional: your own 21 FSRS weights (the standard ones when missing)
 // Rebuilt only when the options change.
 let cached = null;
 function scheduler(opts) {
@@ -41,7 +44,8 @@ function scheduler(opts) {
         relearning_steps: lib.relearningSteps,
         maximum_interval: lib.maxInterval,
         enable_fuzz: lib.fuzz,
-        enable_short_term: true
+        enable_short_term: true,
+        w: lib.w                       // undefined = the library's default weights
       }))
     };
   }
@@ -131,5 +135,5 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
 // opts: the card's scheduler options. Used to put the cards that gain most first.
 export function examGain(state, examStart, now, opts) {
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
-  return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now);
+  return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now, opts.w?.[20]);
 }

@@ -2,11 +2,12 @@
 // (Kept apart from review.js so Today can open at once, without waiting for the FSRS library review.js loads.)
 
 import * as db from './db.js';
-import { dayStart } from './days.js';
-import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW } from './queue.js';
+import { dayStart, dayEnd } from './days.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
+import { personalW20 } from './sched-settings.js';
 import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
@@ -39,7 +40,7 @@ export async function loadAll({ history = false } = {}) {
   const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
   const statesById = new Map(states.map(s => [s.cardId, s]));
   // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
-  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
+  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays, personalW20(settings));
   // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
   const answered = answeredNotes(logs, cards, now);       // every card, so a buried or suspended sibling answered today still counts
   // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
@@ -116,20 +117,39 @@ export function countFor(data, deckIds) {
   return c;
 }
 
-// Answers given today in a set of decks (all decks when none are chosen): what the daily goal counts as done.
-export function answeredToday(data, deckIds) {
+// Today's work, for the ring on Today and in the sidebar (they share this): what is done out of what today holds,
+// i.e. reviews due today plus today's new cards up to the new-cards-per-day limit (`left` is what deckCounts says
+// Review would show now, learning steps included, so the total follows the queue).
+//   done      cards finished today in these decks (all decks when none are chosen): a Review answer, or a Play answer
+//             that changed the schedule (Play with "Count Play answers as reviews" on). A card still in its learning
+//             steps for today is in `left`, so it is not also counted as done.
+//   left      cards still to go           total  done + left (0 = nothing was due today)
+//   state     'todo' (work left), 'done' (finished today's work) or 'nothing' (nothing was due at all today)
+//   frac      the ring's fill: done / total, and full (1) when there was nothing to do
+//   n, of     the numbers the ring shows (n of 1 for 'nothing', so the ring is never 0/0)
+//   allLearned true when none of these decks (and subdecks) has an unseen new card left, suspended ones included
+export function todayRing(data, deckIds, counts, now = Date.now()) {
   const ids = deckIds.length ? withSubdecks(data, deckIds) : null;
-  return data.logs.filter(l => (l.source === 'review' || l.source === 'play') && (!ids || ids.has(data.deckOf.get(l.cardId)))).length;
-}
-
-// The goal ring's denominator (Today and the sidebar share it): your daily goal from Settings, or more when today
-// already has more to do (answers so far plus what is still due), so extra study never reads 25/20 and it is never 0/0.
-export const GOAL_DEFAULT = 20, GOAL_MAX = 500;
-export function goalFor(settings, answered, left) {
-  const raw = settings?.dailyGoal;
-  const g = raw == null ? NaN : Number(raw);               // null or missing: the default, not 0
-  const base = Number.isFinite(g) ? Math.max(1, Math.min(GOAL_MAX, Math.round(g))) : GOAL_DEFAULT;
-  return Math.max(base, answered + left);
+  const end = dayEnd(now);
+  const finished = new Set();
+  const all = data.allCards || data.cards;
+  const cardOf = new Map(all.map(c => [c.id, c]));
+  for (const l of data.logs) {
+    if (!(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    if (ids && !ids.has(data.deckOf.get(l.cardId))) continue;
+    const st = data.statesById.get(l.cardId);
+    // Still to come back today: part of `left`. But a card suspended or buried since is out of the queue (so not in
+    // `left`): it stays done, so the total does not shrink.
+    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end && !isHidden(cardOf.get(l.cardId) || {}, now)) continue;
+    finished.add(l.cardId);
+  }
+  const done = finished.size, left = counts.total, total = done + left;
+  const state = left > 0 ? 'todo' : done > 0 ? 'done' : 'nothing';
+  // "All cards learned": none of these decks (and their subdecks) has an unseen new card. Suspended or buried unseen cards
+  // count as not learned (they were never studied), which is why this reads every card, not the visible ones.
+  const inScope = all.filter(c => !ids || ids.has(c.deckId));
+  const allLearned = inScope.length > 0 && !inScope.some(c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; });
+  return { done, left, total, state, allLearned, frac: total ? done / total : 1, n: total ? done : 1, of: total || 1 };
 }
 
 // "The next card is due in 3h." (or '' when there's nothing scheduled), for cards that are all done today.
@@ -142,7 +162,9 @@ export function nextDueText(data, cards) {
 // ---------- Custom study sessions ----------
 // kind: 'ahead' (cards due in the next `days` days), 'prep' (exam prep) or 'forgot' (cards forgotten today).
 // Returns { queue, waiting, label } like a normal session, from the cards of the chosen decks.
-export function customQueue(kind, data, cards, days = 3, ids = []) {
+//   opts (for 'ids')  includeSuspended: also cards that are suspended or buried (looked up in every deck, whatever the Options
+//                     deck choice); spread: keep a note's cards apart; label: the session's name
+export function customQueue(kind, data, cards, days = 3, ids = [], opts = {}) {
   if (kind === 'ahead') {
     const ahead = aheadQueue(cards, data.statesById, days, Date.now(), data.exam.caps);
     // A sibling that is still due today (it will be in today's Review) holds the others back, like one answered today.
@@ -151,12 +173,13 @@ export function customQueue(kind, data, cards, days = 3, ids = []) {
     return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, held), label: 'Review ahead' };       // follows the one-sibling-a-day rule
   }
   // Suspended and buried cards are left out, so "Review these" never starts an empty or surprising session.
-  if (kind === 'ids') return { ...pickedQueue(cards.filter(c => !isHidden(c)), data.statesById, ids), label: 'Review these' };
+  // (Study by tag or question ID asks for them: those cards come from every deck and are studied now, buried ones too.)
+  if (kind === 'ids') return { ...pickedQueue(opts.includeSuspended ? data.allCards : cards.filter(c => !isHidden(c)), data.statesById, ids, { spread: !!opts.spread }), label: opts.label || 'Review these' };
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
   // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
-  return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById), label: 'Exam prep' };
+  return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById, undefined, undefined, personalW20(data.settings)), label: 'Exam prep' };
 }
 
 // ---------- the catch-up plan on Today ----------
@@ -239,9 +262,11 @@ export const setLaunch = l => { launch = l; };
 //   deckIds  the decks to study (empty = all)      deckId  set when it's one deck's own session
 //   kind     a Custom study kind, or none            days    for 'ahead'
 // One deck's own session (and Start with a single deck chosen) goes to #/review/<deck>, so reloading keeps the deck.
-export function launchStudy({ deckIds = [], deckId, kind = null, days = 3, cardIds = [] } = {}) {
+//   cardIds  for kind 'ids': the cards, in the order to study them
+//   includeSuspended, spread, label  for kind 'ids' (see customQueue): Study by tag or question ID uses all three
+export function launchStudy({ deckIds = [], deckId, kind = null, days = 3, cardIds = [], includeSuspended = false, spread = false, label = '' } = {}) {
   if (!deckId && !kind && deckIds.length === 1) deckId = deckIds[0];
-  setLaunch({ deckIds, deckId, kind, days, cardIds });
+  setLaunch({ deckIds, deckId, kind, days, cardIds, includeSuspended, spread, label });
   location.hash = deckId ? `#/review/${encodeURIComponent(deckId)}` : '#/review';
 }
 // A short name for what a session covers (its decks and kind), to tell whether starting again means the same session.

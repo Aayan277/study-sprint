@@ -8,17 +8,18 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
 import { canType, checkTyped } from './match.js';
+import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
-import { speak, stopSpeaking, canSpeak, stepsSpeech } from './speech.js';
-import { parseSteps } from './steps.js';
+import { speak, stopSpeaking, canSpeak, stepsSpeech, elementsSpeech } from './speech.js';
+import { parseStructured, suggestRating } from './steps.js';
 import { maskMath } from './math.js';
 import { mountScratch } from './scratchpad.js';
-import { deckSchedulerOptions } from './sched-settings.js';
+import { deckSchedulerOptions, personalW20 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
@@ -55,7 +56,7 @@ export async function renderReview(el, deckId) {
     const allIds = data.decks.map(d => d.id);
     const chosen = launch.deckIds.filter(id => allIds.includes(id));
     const c = countFor(data, chosen.length ? chosen : allIds);
-    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds) : null;
+    const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds, { includeSuspended: launch.includeSuspended, spread: launch.spread, label: launch.label }) : null;
     if (custom && !custom.queue.length) {      // e.g. exam prep when every card was seen in the last 3 days
       toast(launch.kind === 'prep' ? 'You have seen every card in this deck in the last 3 days' : 'Nothing to review there');
       location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
@@ -109,7 +110,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   const now = Date.now();
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
-    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
+    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
@@ -125,6 +126,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     statesById: data.statesById,
     queue, waiting,
     current: null, flipped: false, typed: null, suggest: null,
+    gloss: hasTerms(data.settings),             // does the glossary have terms to underline? (glossary-view.js is only loaded then)
     shownAt: 0, answerMs: 0, busy: false,
     stats: { reviewed: 0, again: 0, spent: 0, started: Date.now() },
     undo: [],
@@ -142,8 +144,9 @@ const schedFor = (card, now = Date.now()) => {
 };
 
 const deckOf = card => R.effective.get(card.deckId);
-// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). → { intro, steps, final } or null.
-const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseSteps(card.back, { mask: maskMath }));
+// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). An elements card has "Element 1: ..." lines and
+// is shown the same way (its steps are the elements, kind 'elements', no final answer). → { kind, intro, steps, final } or null.
+const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseStructured(card.back, { mask: maskMath }));
 const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.current.card); return sp ? sp.steps.length - R.stepShown : 0; };
 // Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
 // label to type (without one you flip, saying it in your head).
@@ -158,14 +161,14 @@ function readAloud() {
   const { card } = R.current;
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
   const sp = stepsOf(card);
-  const text = sp ? (R.flipped ? stepsSpeech(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  const text = sp ? (R.flipped ? (sp.kind === 'elements' ? elementsSpeech : stepsSpeech)(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
   stopSpeaking();
   R.current = takeNext(R.queue, R.waiting);
-  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
+  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
   renderSession(el, true);
@@ -196,6 +199,7 @@ function renderSession(el, enter = false) {
   const { card } = R.current;
   const sp = stepsOf(card);
   R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
+  R.elMissed = new Set([...(R.elMissed || [])].filter(i => sp && i < R.stepShown));
   // The drawing stays when the same card is drawn again (an edit from the menu), and goes with the next card.
   const kept = pad && padKey === R.shownAt ? pad.canvas : null;
   destroyPad();
@@ -241,6 +245,7 @@ function renderSession(el, enter = false) {
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
           <div class="flash-front${size}">${front}</div>
+          ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
@@ -259,16 +264,18 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !sp && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
+    ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad</p>`;
+    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad${sp?.kind === 'elements' ? ' · X marks a miss' : ''}</p>`;
   drawSessionPage(el, head, body);
+  glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn')?.addEventListener('click', () => undo(el));
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
   $('scratchBtn').addEventListener('click', toggleScratch);
+  keepFocusOnPress($('flash'), '.el-tick');      // a tap on Got it / Missed must leave Space free to reveal and rate
   keepFocusOnPress($('scratchBtn').parentElement, '#scratchBtn');      // a mouse click on the pen must leave Space free to flip the card
   $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
@@ -279,6 +286,10 @@ function renderSession(el, enter = false) {
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
+    if (e.target.closest('[data-accept-typed]')) { acceptTyped(el); return; }
+    if (e.target.closest('.gl-term, .gl-pop')) return;      // a tap on an underlined term opens its definition; it never flips the card
+    const tick = e.target.closest('[data-tick]');
+    if (tick) { toggleMissed(el, +tick.dataset.tick); return; }
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
@@ -289,6 +300,16 @@ function renderSession(el, enter = false) {
   else $('flash').focus({ preventScroll: true });
   publishLive();
 }
+
+// Your own glossary (item 12): the terms on the card get a dotted underline and a definition popover. The module is only loaded
+// when the glossary has terms (the module itself checks Settings → Appearance → "Glossary underlines", this device, each time).
+const hasTerms = settings => Object.keys(settings || {}).some(k => k.startsWith('gloss:') && settings[k]);
+function glossHook() {
+  if (!R?.gloss || !R.current) return;
+  const id = R.current.card.id;
+  import('./glossary-view.js').then(v => (R?.current?.card.id === id ? v.underlineCard($('flash'), R.current.card) : null)).catch(err => console.error(err));
+}
+addEventListener('glossary-changed', () => { if (R) R.gloss = true; });      // the first term, added mid-session, counts from the next card
 
 // Draws the header and the card, around the progress bar. The bar is NOT redrawn with them: it stays in the page
 // from card to card, so its fill slides to the new value instead of starting again from empty.
@@ -337,7 +358,7 @@ function rateButtonsHTML() {
   const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card));
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
-      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span><kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
+      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
 }
 
 function typedResultHTML() {
@@ -348,7 +369,27 @@ function typedResultHTML() {
   // One corrected line (the card shows the answer itself); a "Closest answer" row only when the back has several answers.
   const shown = diff ? diffHTML(diff, { answerRow: false, closest: !!diff.alternate }) : '';
   if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
-  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}`;
+  // "Accept my answer from now on" adds the typed text to the card's accepted answers (accept.js). You still pick the rating yourself.
+  const accept = canAccept(R.current.card, value) ? '<p class="typed-accept"><button type="button" class="link" data-accept-typed>Accept my answer from now on</button></p>' : '';
+  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}${accept}`;
+}
+
+// Accept the typed text from now on: the card keeps it, and this answer counts as right (Good is suggested; the rating stays yours).
+async function acceptTyped(el) {
+  if (!R?.typed || !R.flipped || R.busy) return;
+  const fresh = await db.get('cards', R.current.card.id);
+  if (!fresh) { toast('That card changed; nothing to fix.'); return; }
+  const saved = addAccepted(fresh, R.typed.value);
+  if (saved === fresh) { toast('That answer is already accepted.'); return; }
+  await db.saveCards([saved]);
+  R.current.card = { ...R.current.card, acceptAnswers: saved.acceptAnswers };
+  R.typed = { ...R.typed, result: { ...R.typed.result, correct: true, exact: true } };
+  R.suggest = Rating.Good;
+  $('flash').querySelector('.rv-typed').innerHTML = typedResultHTML();
+  $('ratebar').innerHTML = backBarHTML();
+  wireRatebar(el);
+  $('flash').querySelector('.rv-back')?.focus({ preventScroll: true });
+  toast('Accepted for this card');
 }
 
 // Turn the card over. Only the parts that change are touched (the card stays in the page, so the CSS
@@ -382,21 +423,42 @@ function flip(el) {
 // reveals one step at a time (Space, Enter, → or the button), A shows them all, and the rating buttons come once every step
 // is on screen (1–4 rate at any time). Each revealed step takes the focus (no live region: the focus move is what is read out); the last one moves it to the final answer.
 function stepsHTML(sp) {
-  const shown = R.stepShown, all = shown >= sp.steps.length;
+  const shown = R.stepShown, all = shown >= sp.steps.length, el = sp.kind === 'elements';
+  // An elements card adds a "Got it / Missed" toggle to each element (the rating is suggested from them, see backBarHTML).
   return `${sp.intro ? `<div class="steps-intro">${formatHTML(sp.intro)}</div>` : ''}
-    <ol class="steps" id="steps" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
+    <ol class="steps${el ? ' elements' : ''}" id="steps" aria-label="${el ? 'Elements' : 'Steps'}">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div>${el ? tickHTML(i) : ''}</li>`).join('')}</ol>
     ${sp.final ? `<div class="steps-final" tabindex="-1" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
 }
+const tickHTML = i => {
+  const missed = R.elMissed.has(i);
+  return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
+};
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
+// Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() {
   const sp = stepsOf(R.current.card);
+  if (sp?.kind === 'elements' && R.stepShown >= sp.steps.length) {
+    const n = sp.steps.length, missed = R.elMissed.size, rating = suggestRating(n, missed);
+    R.suggest = rating;
+    const word = RATINGS.find(r => r.rating === rating)?.label || '';
+    return `<p class="step-try el-sum" id="elSum">You got ${n - missed} of ${n}. Suggested: ${word}.</p>${rateButtonsHTML()}`;
+  }
   if (!sp || R.stepShown >= sp.steps.length) return rateButtonsHTML();
-  const n = R.stepShown + 1, m = sp.steps.length;
-  return `<p class="step-try" id="stepTry">Try step ${n} yourself, then reveal.</p>
+  const n = R.stepShown + 1, m = sp.steps.length, noun = sp.kind === 'elements' ? 'element' : 'step';
+  return `<p class="step-try" id="stepTry">${noun === 'element' ? `Recall element ${n} of ${m}, then reveal.` : `Try step ${n} yourself, then reveal.`}</p>
     <div class="step-actions">
-      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal step ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
+      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal ${noun} ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
       <button class="btn ghost wide" type="button" id="stepAllBtn" aria-keyshortcuts="A">Show all <kbd class="key-hint" aria-hidden="true">A</kbd></button>
     </div>`;
+}
+// An element's "Got it / Missed" toggle (a tap on it, or X for the latest revealed element).
+function toggleMissed(el, i) {
+  const sp = R?.flipped && R.current && stepsOf(R.current.card);
+  if (!sp || sp.kind !== 'elements' || !(i >= 0 && i < R.stepShown)) return;
+  if (R.elMissed.has(i)) R.elMissed.delete(i); else R.elMissed.add(i);
+  const b = $('flash').querySelector(`[data-tick="${i}"]`);
+  if (b) { const had = document.activeElement === b; b.outerHTML = tickHTML(i); if (had) $('flash').querySelector(`[data-tick="${i}"]`)?.focus(); }
+  if (R.stepShown >= sp.steps.length) { $('ratebar').innerHTML = backBarHTML(); wireRatebar(el); }
 }
 function revealStep(el, all = false) {
   const sp = R?.flipped && R.current && stepsOf(R.current.card);
@@ -467,7 +529,7 @@ function submitTyped(el) {
   const value = $('typeIn').value;
   if (!value.trim()) { $('typeIn').focus(); return; }
   // Either the answer as words or the text as written is right (typing the LaTeX works, and so does the literal text).
-  const { target, ...result } = checkTyped(value, answerTargets(R.current.card.back));
+  const { target, ...result } = checkTyped(value, withAccepted(answerTargets(R.current.card.back), R.current.card));
   R.typed = { value, result, target };
   R.suggest = result.correct ? Rating.Good : Rating.Again;
   $('typeIn').blur();
@@ -490,11 +552,12 @@ async function answer(el, rating) {
     state: prev ? prev.state : NEW          // the card's state before this review (useful for stats and FSRS tuning later)
   };
   try {
+    const inStep = R.version === db.scheduleVersion();       // (a change that landed earlier, e.g. new weights from sync, must not be absorbed below)
     const saving = db.saveReview(next, log);
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
-    R.version = db.scheduleVersion();
+    if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
@@ -504,8 +567,9 @@ async function answer(el, rating) {
     if (next.lapses > (prev?.lapses || 0) && isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(id), R.leech.threshold)) {
       cardBefore = item.card;
       const leech = markLeech(item.card, R.leech.action);
+      const inStep2 = R.version === db.scheduleVersion();
       await db.saveCards([leech]);
-      R.version = db.scheduleVersion();
+      if (inStep2) R.version = db.scheduleVersion();
       if (leech.suspended) dropFromSession(id); else replaceInSession(leech);
       leeched = true;
       toast(leech.suspended ? 'Leech: suspended. You can fix it at the end of the session.' : 'Leech: tagged “leech”. You can fix it at the end of the session.');
@@ -529,9 +593,10 @@ async function undo(el) {
   R.busy = true;
   try {
     const id = u.item.card.id;
+    const inStep = R.version === db.scheduleVersion();
     await db.undoReview(id, u.prev, u.logId);
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
-    R.version = db.scheduleVersion();
+    if (inStep) R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
     if (u.requeued) {
       const i = R.waiting.findIndex(w => w.card.id === id);
@@ -543,7 +608,7 @@ async function undo(el) {
     if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
-    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
+    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
   } finally {
@@ -594,10 +659,11 @@ async function openCardMenu(mode = 'actions') {
   const id = R.current.card.id;
   const card = (await db.get('cards', id)) || R.current.card;
   if (R.current?.card.id !== id) return;                 // the card moved on while that loaded
+  const inStep = R.version === db.scheduleVersion();     // if something else already changed the schedule, the panel's own change must not hide that
   openCardPanel(card, {
     decks: R.decks, statesById: R.statesById, mode: mode === 'info' ? 'full' : mode, showInfo: mode === 'info', closeAfter: BACK_TO_CARD,
     onAction: async (act, fresh) => {
-      R.version = db.scheduleVersion();
+      if (inStep) R.version = db.scheduleVersion();
       // Editing a cloze note changes all its cards (and may delete some): bring the session in line first.
       if (act === 'edit' && card.noteId) await refreshNoteInSession(card.noteId);
       if (!R?.current) return;
@@ -623,8 +689,9 @@ document.getElementById('sheet')?.addEventListener('close', () => {
 async function quick(act) {
   if (!R?.current || R.busy) return;
   const { card } = R.current;
+  const inStep = R.version === db.scheduleVersion();
   await db.saveCards([act === 'bury' ? { ...card, buriedUntil: buryUntil() } : { ...card, suspended: true }]);
-  R.version = db.scheduleVersion();
+  if (inStep) R.version = db.scheduleVersion();
   toast(act === 'bury' ? 'Buried until tomorrow' : 'Suspended');
   dropFromSession(card.id);
   nextCard(R.el);
@@ -702,6 +769,7 @@ document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the zoom viewer and the box editor have their own keys
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('.gl-pop')) return;      // a glossary popover has its own keys (Escape, Space and Enter close it)
   const inInput = e.target.matches('input, textarea, select');
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {
@@ -711,6 +779,7 @@ document.addEventListener('keydown', e => {
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
     if (k === 'd') { e.preventDefault(); toggleScratch(); return; }
     if (k === 'a' && stepsLeft()) { e.preventDefault(); revealStep(R.el, true); return; }
+    if (k === 'x' && R.flipped && R.stepShown && stepsOf(R.current.card)?.kind === 'elements') { e.preventDefault(); toggleMissed(R.el, R.stepShown - 1); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
     if (k === 'z' && face?.querySelector('.occ-zoom')) {

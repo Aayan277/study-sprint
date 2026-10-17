@@ -1,6 +1,6 @@
 // Motion: the small animations in Study Sprint, all in one place.
 //   C1  rating feedback in Review (a ring on the button, the interval floating up, an outline of the old card leaving)
-//   C2  the daily goal ring on Today (fills from where it was, counts along, turns green when the goal is done)
+//   C2  the today ring on Today (fills from where it was, counts along, turns green when today is done)
 //   C3  the Review finish screen (count-up, streak flame, milestone pills, a small confetti burst)
 //   C4  Play (combo flame, score count-up, the grade stamp and its numbers)
 //   C5  screen changes between tabs (View Transitions)
@@ -15,7 +15,9 @@
 //   - A failure in here must never break studying, so every entry point catches its own errors.
 
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
-export const reduced = () => RM.matches;
+// The Clinical style is plain and calm: it has no pulses, pops, count-ups, confetti or sliding screens, so every effect
+// here treats it like "reduce motion" (the final values simply show). Nothing else in this file needs to know.
+export const reduced = () => RM.matches || document.documentElement.dataset.ui === 'clinical';
 
 // The two switches in Settings → Appearance (this device only). app.js calls configure() whenever they change.
 export const flags = { rating: true, smooth: true };
@@ -26,7 +28,7 @@ export function configure(settings = {}) {
   document.documentElement.dataset.smooth = flags.smooth ? 'on' : 'off';
 }
 
-// Small things remembered on this device (the last goal ring, the milestones seen, the day confetti last played).
+// Small things remembered on this device (the last today ring, the milestones seen, the day confetti last played).
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem('study-sprint-fx-' + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem('study-sprint-fx-' + key, JSON.stringify(value)); } catch { /* fine without */ } }
@@ -119,9 +121,9 @@ export function countUp(el, ms = 650, delay = 0, from = 0) {
   requestAnimationFrame(step);
 }
 
-// ---------- C2. Today: the goal ring ----------
+// ---------- C2. Today: the today ring ----------
 // Fills from the value last shown today to the value now (not from empty on every visit), counts the number along,
-// and when the goal is reached turns green with a halo and a check that pops.
+// and when today is done turns green with a halo and a check that pops.
 export const goalRing = safe('goalRing', (view, answered, goal) => {
   const ring = view.querySelector('.today-hero .ring');
   if (!ring) return;

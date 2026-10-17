@@ -300,3 +300,64 @@ test('distractors: include never brings in a sibling of the card', () => {
   const rest = Array.from({ length: 6 }, (_, i) => card(`s${i}`, `ans${i}`, { noteId: `M${i}`, cloze: 1 }));
   assert.ok(!pickDistractors(a, [a, sib, ...rest], 'front', { rnd: seeded(1), include: ['y'] }).includes('y'));
 });
+
+// ---------- "I was right" ----------
+test('overrideEntry: accuracy and grade change, score, streak and lives do not', async () => {
+  const { overrideEntry, canOverride, roundStats, gradeFor } = await import('../js/game.js');
+  const wrong = { card: { id: 'a' }, ok: false, given: 'mi', seconds: 3, limitMs: 10000, speed: 0, mixedWith: 'b', typed: 'mi', target: 'x' };
+  const rightOne = { card: { id: 'c' }, ok: true, given: 'z', seconds: 2, limitMs: 10000, speed: 0.8 };
+  const round = { qtype: 'typing', fmt: 'classic', score: 480, streak: 0, bestStreak: 2, lives: 2, clock: 41000, log: [wrong, rightOne] };
+  assert.equal(canOverride(round, wrong), true);
+  const before = roundStats(round.log);
+  assert.equal(before.accuracy, 0.5);
+  const fixed = overrideEntry(round, wrong);
+  assert.notEqual(fixed, wrong);                           // a new entry
+  assert.equal(wrong.ok, false);                           // the old one is untouched
+  assert.equal(fixed.ok, true);
+  assert.equal(fixed.overridden, true);
+  assert.equal(fixed.mixedWith, undefined);
+  assert.equal(fixed.typed, undefined);
+  assert.equal(fixed.given, 'mi');
+  assert.ok(Math.abs(fixed.speed - 0.7) < 1e-9);           // 1 - 3s / 10s
+  const after = roundStats([fixed, rightOne]);
+  assert.equal(after.accuracy, 1);
+  assert.equal(after.correct, 2);
+  assert.ok(Math.abs(after.avgSpeed - 0.75) < 1e-9);          // the corrected answer's speed joins the right ones
+  assert.notEqual(gradeFor(before.accuracy, before.avgSpeed).letter, gradeFor(after.accuracy, after.avgSpeed).letter);
+  assert.deepEqual([round.score, round.streak, round.bestStreak, round.lives, round.clock], [480, 0, 2, 2, 41000]);
+  assert.equal(canOverride(round, fixed), false);          // only once
+  assert.equal(overrideEntry(round, fixed), fixed);
+});
+
+test('overrideEntry: only a typed, wrong answer that was really given', async () => {
+  const { overrideEntry, canOverride } = await import('../js/game.js');
+  const e = over => ({ card: { id: 'a' }, ok: false, given: 'x', seconds: 1, limitMs: 5000, speed: 0, ...over });
+  assert.equal(canOverride({ qtype: 'front' }, e()), false);                         // multiple choice
+  assert.equal(canOverride({ qtype: 'typing' }, e({ given: null })), false);        // out of time
+  assert.equal(canOverride({ qtype: 'typing' }, e({ given: '' })), false);          // skipped
+  assert.equal(canOverride({ qtype: 'typing' }, e({ given: '  ' })), false);
+  assert.equal(canOverride({ qtype: 'typing' }, e({ ok: true })), false);
+  assert.equal(canOverride({ qtype: 'typing' }, e()), true);
+  const skip = e({ given: '' });
+  assert.equal(overrideEntry({ qtype: 'typing' }, skip), skip);
+  // Lightning has no per-question timer: speed is measured against 3 seconds
+  const l = overrideEntry({ qtype: 'typing', fmt: 'lightning' }, e({ seconds: 1.5, limitMs: Infinity }));
+  assert.ok(Math.abs(l.speed - 0.5) < 1e-9);
+});
+
+// ---------- elements cards in Play (item 4) ----------
+test('elements cards are front-only; multiple choice answers with the elements joined by " · "; never typed', async () => {
+  const { isFrontOnly } = await import('../js/game.js');
+  const el = { id: 'e1', front: 'Negligence', back: 'Element 1: Duty\nElement 2: Breach\nElement 3: Causation\nElement 4: Damages' };
+  const plain = { id: 'p', front: 'cell', back: 'unit of life' };
+  assert.ok(isFrontOnly(el) && !isFrontOnly(plain));
+  assert.deepEqual(questionFor(el, 'front'), { prompt: 'Negligence', answer: 'Duty · Breach · Causation · Damages' });
+  assert.equal(questionFor(el, 'back'), null);
+  assert.equal(questionFor(el, 'typing'), null);
+  assert.equal(questionFor({ ...el, frontImage: 'm1' }, 'front').image, 'm1');
+  assert.deepEqual(playableCards([el, plain], 'back').map(c => c.id), ['p']);
+  assert.deepEqual(playableCards([el, plain], 'typing').map(c => c.id), ['p']);
+  // one element, or "Elements: H, O", is an ordinary card
+  assert.ok(!isFrontOnly({ id: 'o', front: 'q', back: 'Element 1: only one' }));
+  assert.ok(!isFrontOnly({ id: 'c', front: 'Water', back: 'Elements: H, O' }));
+});

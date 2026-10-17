@@ -10,18 +10,32 @@
 //                                          delete their copy too instead of sending it back
 //   settings '_times'          { setting: when it last changed } for the settings that sync
 
+import { cleanFsrsParams } from './sched-settings.js';
+
 // The stores that sync, and which field is each record's id across devices.
 export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewLog: 'uid' };
 
 // Settings that follow you between devices. Theme, light/dark and screen choices stay per device.
 export const SYNCED_SETTINGS = [
   'targetRetention', 'newPerDay', 'learningSteps', 'relearningSteps', 'maxInterval', 'fuzz',
-  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal'
+  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
+  'fsrsParams'          // your own FSRS weights from the optimizer (null = the standard ones); newest wins
 ];
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off
 // keep both. restDays is { 'YYYY-MM-DD': { on, at } }, merged per day (mergeDayFlags in sync-merge.js).
 export const MERGED_SETTINGS = ['restDays'];
+// The glossary (js/glossary.js): each term is its own synced setting, "gloss:<id>", so the newest copy of each term wins.
+export const isSyncedSetting = key => SYNCED_SETTINGS.includes(key) || (typeof key === 'string' && key.startsWith('gloss:'));
 export const SETTING_TIMES = '_times';
+
+// A synced setting that came in from outside (the server or a backup): { ok: true, value } with the value cleaned, or
+// { ok: false } when it is junk and must be ignored. fsrsParams is checked; null is a real value (the standard settings).
+export function acceptSetting(key, value) {
+  if (key !== 'fsrsParams') return { ok: true, value };
+  if (value === null || value === undefined) return { ok: true, value: null };
+  const clean = cleanFsrsParams(value);
+  return clean ? { ok: true, value: clean } : { ok: false };
+}
 
 export function randomId() {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();

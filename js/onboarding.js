@@ -205,7 +205,7 @@ async function renderGuide(el, deckId, api) {
   // would stamp them with "now" and could overwrite that progress when syncing.
   if (deckId === 'sample' && (settings.syncAuth || settings.syncState)) { location.replace('#/today'); return; }
   if (!cards.length) { location.hash = '#/today'; return; }
-  G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, seen: [], srs: null, deckId };
+  G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, seen: [], srs: null, deckId, priorStates: new Map(states.map(s => [s.cardId, s])) };
   // The scheduler library comes from the internet the first time; if that fails the walk-through still works, it just can't save.
   try { G.srs = await import('./srs.js'); } catch (err) { console.error(err); }
   if (!el.isConnected) return;
@@ -291,8 +291,11 @@ async function rateGuide(rating) {
   const card = G.cards[G.i], now = Date.now();
   if (G.srs) {
     try {
-      const next = G.srs.rate(card.id, null, rating, optsFor(card, now), now);
-      await db.saveReview(next, { cardId: card.id, timestamp: now, source: 'review', mode: 'flip', correct: rating !== 1, ms: G.answerMs || now - G.shownAt, rating, state: 0 });
+      // The card's real state before this answer (new for a fresh card), so a repeated answer on one card is not logged as a reset.
+      const prev = G.priorStates.get(card.id) || null;
+      const next = G.srs.rate(card.id, prev, rating, optsFor(card, now), now);
+      await db.saveReview(next, { cardId: card.id, timestamp: now, source: 'review', mode: 'flip', correct: rating !== 1, ms: G.answerMs || now - G.shownAt, rating, state: prev ? prev.state : 0 });
+      G.priorStates.set(card.id, next);
       G.saved++;
       G.seen.push({ card, due: next.due });        // for the done screen: when each card comes back
     } catch (err) { console.error(err); }

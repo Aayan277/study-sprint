@@ -3,15 +3,16 @@
 //   Questions: Front → pick the back, Back → pick the front, Typing
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
-// Every answer is saved to the review log, and feeds the review schedule following the
-// auto-grading rules in autograde.js.
+// Play is practice only by default: nothing is saved to the review log or the schedule. With the synced setting
+// "Count Play answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
+// schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
-  gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
+  gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
-import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
+import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
@@ -22,6 +23,7 @@ import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
+import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { plainText, mathHTML, answerText, answerTargets } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML } from './media.js';
@@ -184,7 +186,7 @@ export async function renderPlay(el) {
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
-        <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
+        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
       <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
@@ -371,7 +373,9 @@ function answer(choice) {
   let ok = false, given = '', exact = true, target = '', mixedWith;
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
-    if (choice !== null) { given = choice; const res = checkTyped(choice, answerTargets(G.q.answer), { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; if (!ok) mixedWith = typedMixup(choice); }
+    // Answers the person asked to accept ("Accept this answer from now on") count too, when the question asks for the card's back.
+    const targets = answerTargets(G.q.answer);
+    if (choice !== null) { given = choice; const res = checkTyped(choice, G.q.answer === G.card.back ? withAccepted(targets, G.card) : targets, { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; if (!ok) mixedWith = typedMixup(choice); }
   } else {
     if (choice !== null) {
       given = G.opts[choice]; ok = given === G.q.answer;
@@ -404,7 +408,7 @@ function answer(choice) {
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
   let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
-  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, at: Date.now(), ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
     typed: diff ? given : undefined, target: diff ? target : undefined,
     chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
@@ -419,11 +423,27 @@ function answer(choice) {
     : `<div class="fb no"><span class="fb-mark">${choice === null ? 'Out of time' : choice === '' ? 'Skipped' : 'Not quite'}${lightning ? ' · −3s' : ''}${extra}</span>${pts < 0 ? `<span class="fb-minus mono">${pts}</span>` : ''}</div>`;
   const yours = !ok && given && !diff ? `<span class="given">You answered: ${esc(given)}</span>` : '';
   const info = ok || diff ? '' : `<p class="fb-info"><b>${mathHTML(G.q.answer)}</b>${yours}</p>`;
+  // A wrong typed answer can be corrected: "I was right" (Lightning moves on by itself, so it has these on the results instead).
+  const fixable = !lightning && canOverride(round, entry);
   $('feedback').innerHTML = `${head}${info}${diff ? diffHTML(diff) : ''}<div class="fb-btns">
     <button type="button" class="btn ${ok ? 'ghost' : 'primary'}" id="nextBtn">${G.over ? 'See results' : 'Next'} <span class="mono">${icon('enter')}</span></button>
+    ${fixable ? '<button type="button" class="btn ghost" id="rightBtn">I was right</button>' : ''}
     <button type="button" class="btn ghost" id="cardBtn" aria-label="Card actions: edit, flag, suspend, bury and more">Card ${icon('more')}</button></div>`;
   $('nextBtn').addEventListener('click', next);
   $('cardBtn').addEventListener('click', openCardMenu);
+  $('rightBtn')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const fixed = await markRight(round, entry);
+    if (!fixed) { btn.disabled = false; return; }
+    if (G !== round || !$('rightBtn')) return;                     // moved on while it saved
+    const fb = $('feedback').querySelector('.fb');
+    fb.className = 'fb ok'; fb.innerHTML = `<span class="fb-mark">${icon('check')} Counted as right</span>`;
+    $('pCard').classList.replace('no', 'ok');
+    const acc = canAcceptTyped(fixed) ? `<button type="button" class="btn ghost" id="acceptBtn">Accept “${esc(fixed.given.trim())}” from now on</button>` : '';
+    btn.outerHTML = acc;
+    $('acceptBtn')?.addEventListener('click', async e2 => { e2.currentTarget.disabled = true; if (await acceptTyped(round, fixed)) $('acceptBtn')?.remove(); else $('acceptBtn') && ($('acceptBtn').disabled = false); });
+  });
   if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
   else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : diff ? 1600 : 750);
   else {
@@ -442,9 +462,16 @@ function typedMixup(typed) {
   return indexedMixup(G.mixIndex, typed, G.card);
 }
 
-// Save one answer: always to the review log (for stats), and to the review schedule when the
-// auto-grading rules allow it (see autograde.js).
+// Does Play count as reviews? (Settings, synced; off by default: Play is practice only.)
+const countsAsReviews = () => playCountsAsReviews(data?.settings);
+
+// Save one answer (only when Play counts as reviews, see above): always to the review log (source 'play', so stats and a
+// future FSRS optimizer can tell it from a Review), and to the review schedule when the auto-grading rules allow it (see autograde.js).
 async function record(round, entry) {
+  // Practice only (the default, Settings > "Count Play answers as reviews" off): nothing is saved. No schedule or FSRS
+  // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
+  // The round's own score, bests and results come from the round itself, not from the log.
+  if (!countsAsReviews()) { entry.decision = 'practice'; return; }
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
@@ -463,15 +490,9 @@ async function record(round, entry) {
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
   rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing' });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
-  const log = {
-    cardId: id, timestamp: now, source: 'play',
-    mode: round.qtype, format: round.fmt,
-    correct: entry.ok, ms: entry.ms, rating, chars, hard: !!round.hard,
-    state: prev ? prev.state : 0,      // the card's state before this answer
-    applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
-  };
-  if (entry.mixedWith) log.mixedWith = entry.mixedWith;     // the card whose answer was given instead (confusion.js)
+  const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
+    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden });
+  entry.prev = prev;                      // kept with the log row's id, so "I was right" can take this answer back (see rerecord)
   if (applies(decision)) {
     let next = null;
     try {
@@ -486,33 +507,110 @@ async function record(round, entry) {
       if (decision === 'first') { giveBackNewFor(data.newLeft, entry.card.deckId); decision = 'new'; }    // not started: slot back
       else decision = 'not-due';
       log.reason = decision;
-      await db.addLog(log);
+      entry.logId = await db.addLog(log);
     }
     // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
     if (next) {
       log.applied = true;
-      await db.saveReview(next, log);
+      entry.logId = await db.saveReview(next, log);
+      entry.applied = true;
       data.statesById.set(id, next);
       data.playedToday.add(id);
-      await checkLeech(round, entry.card, prev, next, log);
+      entry.leeched = await checkLeech(round, entry.card, prev, next, log);       // what it changed, so "I was right" can undo a leech
     }
   } else {
-    await db.addLog(log);
+    entry.logId = await db.addLog(log);
   }
   entry.rating = rating;
   entry.decision = decision;
 }
 
+// ---------- "I was right" and "Accept this answer from now on" ----------
+// Is the card as it was when the question was asked? (Edited or deleted from Card ⋯ meanwhile: then nothing is fixed.)
+async function sameCard(entry) {
+  const card = await db.get('cards', entry.card.id);
+  if (!card || plainText(card.front) !== entry.card.front || plainText(card.back) !== entry.card.back) { toast('That card changed; nothing to fix.'); return null; }
+  return card;
+}
+
+// A typed answer the check marked wrong was right: count it right in the round (accuracy, grade, Missed list). The score,
+// streak, lives and clock stay as they were. With "Count Play answers as reviews" on, the schedule and the stats are fixed too.
+// Returns the corrected entry, or null when nothing changed.
+async function markRight(round, entry) {
+  if (!canOverride(round, entry) || !(await sameCard(entry))) return null;
+  const i = round.log.indexOf(entry);
+  if (i < 0) return null;
+  const fixed = overrideEntry(round, entry);
+  round.log[i] = fixed;
+  round.saving = round.saving.then(() => rerecord(round, entry, fixed)).catch(err => console.error('Could not fix the answer', err));
+  await round.saving;
+  return fixed;
+}
+
+// Take the saved wrong answer back and save it again as a right one (with overridden: true on its log row). Runs after the
+// answer was saved (round.saving is a queue). In practice mode (the default) nothing was saved, so there is nothing to do.
+async function rerecord(round, old, fixed) {
+  for (const k of ['logId', 'prev', 'applied', 'decision', 'rating']) delete fixed[k];       // (the copy still carries the old save)
+  if (old.decision === 'practice' || old.decision === undefined) { if (old.decision) fixed.decision = old.decision; return; }
+  const id = old.card.id;
+  if (old.logId !== undefined) {
+    if (old.applied) {
+      await db.undoReview(id, old.prev, old.logId);          // the old schedule back, and the log row gone
+      if (old.prev) data.statesById.set(id, old.prev); else data.statesById.delete(id);
+      data.playedToday.delete(id);
+      if (old.decision === 'first') giveBackNewFor(data.newLeft, old.card.deckId);
+    } else {
+      await db.deleteLogRow(old.logId);                      // it was only logged
+    }
+  }
+  if (old.leeched) await undoLeech(round, old);
+  await record(round, fixed);
+}
+
+// The wrong answer made the card a leech: put its tags and suspended flag back as they were, and take it off the round's leech list.
+async function undoLeech(round, old) {
+  const was = old.leeched, cur = await db.get('cards', old.card.id);
+  if (cur && (cur.tags || []).includes('leech')) {
+    const { suspended, ...rest } = cur;
+    const back = { ...rest, tags: was.tags || [], ...(was.suspended ? { suspended: true } : {}) };
+    if (!was.tags) delete back.tags;
+    await db.saveCards([back]);
+    replaceInRound(round, playCopy(back));
+    if (!round.all.some(c => c.id === back.id)) { round.all.push(playCopy(back)); round.pool.push(playCopy(back)); }      // a suspended leech had been dropped from the round
+  }
+  if (!was.wasListed) round.leeches = round.leeches.filter(id => id !== old.card.id);
+}
+
+// Can "Accept “…” from now on" be offered for this entry? The typed text must fit, not be accepted yet, and the question must
+// ask for the card's back (an answer to the front of a reverse card, or to a step card's last step, is not the back).
+const canAcceptTyped = entry => typeof entry.given === 'string' && entry.q.answer === entry.card.back && canAccept(entry.card, entry.given);
+
+// Save the typed text on the card as an accepted answer. Returns true when it was saved.
+async function acceptTyped(round, entry) {
+  const card = await sameCard(entry);
+  if (!card) return false;
+  if (!canAccept(card, entry.given)) { toast('That answer is already accepted.'); return true; }
+  const saved = addAccepted(card, entry.given);
+  await db.saveCards([saved]);
+  replaceInRound(round, playCopy(saved));              // the rest of the round (and "Play again") accepts it
+  entry.card = round.card?.id === saved.id ? round.card : playCopy(saved);
+  toast('Accepted for this card');
+  return true;
+}
+
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
 async function checkLeech(round, card, prev, next, log) {
   // A miss on a card that wasn't due still brings it back, but doesn't count toward the leech limit.
-  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return;
-  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return;
-  const leech = markLeech((await db.get('cards', card.id)) || card, data.settings.leechAction);
+  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return null;
+  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return null;
+  const before = (await db.get('cards', card.id)) || card;
+  const leech = markLeech(before, data.settings.leechAction);
   await db.saveCards([leech]);
-  if (!round.leeches.includes(card.id)) round.leeches.push(card.id);
+  const wasListed = round.leeches.includes(card.id);
+  if (!wasListed) round.leeches.push(card.id);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
   toast(leech.suspended ? 'Leech: you keep forgetting this card, so it’s been suspended' : 'Leech: you keep forgetting this card (tagged “leech”)');
+  return { tags: before.tags, suspended: before.suspended, wasListed };      // the card as it was before it became a leech
 }
 
 // Take a card out of the rest of the round (suspended, buried or deleted), or swap in its edited version.
@@ -525,6 +623,7 @@ function dropFromRound(round, id) {
 function replaceInRound(round, card) {
   const swap = c => (c.id === card.id ? card : c);
   round.queue = round.queue.map(swap); round.pool = round.pool.map(swap); round.all = round.all.map(swap);
+  if (round.source) round.source = round.source.map(swap);        // (what "Play again" starts from)
   if (round.card?.id === card.id) round.card = card;
 }
 
@@ -559,6 +658,7 @@ async function scheduleSummary(round) {
   const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
   const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
+  if (!countsAsReviews()) return '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>';
   const parts = [];
   if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
   if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back`);
@@ -579,22 +679,25 @@ async function finish() {
   G = null;
   setFocusMode(false);
   drawSidebar();          // the sidebar's counts and ring, now the round is done
-  const total = round.log.length, correct = round.log.filter(l => l.ok).length;
-  const acc = total ? correct / total : 0;
-  const oks = round.log.filter(l => l.ok);
-  const avgSpeed = oks.length ? oks.reduce((a, l) => a + l.speed, 0) / oks.length : 0;
-  const { letter, label } = gradeFor(acc, avgSpeed);
-  const avgTime = total ? round.log.reduce((a, l) => a + l.seconds, 0) / total : 0;
-
   let isBest = false, firstScore = false;
-  if (!round.drill && total) {
+  if (!round.drill && round.log.length) {
     const settings = await db.getSettings();
     const bests = { ...(settings.playBest || {}) };
     const k = bestKey(round);
     if (round.score > (bests[k] || 0)) { firstScore = !bests[k]; bests[k] = round.score; isBest = true; await db.setSetting('playBest', bests); }
   }
+  await drawResults(el, round, { isBest, firstScore, fixed: new Set(), all: false });
+}
+
+// The results screen. ctx: { isBest, firstScore, fixed (answers corrected with "I was right" on this screen, which stay in
+// the Missed list so they can be accepted), all (the whole Missed list is open) }. Drawn again after each correction.
+async function drawResults(el, round, ctx, { again = false } = {}) {
+  const { total, correct, accuracy: acc, avgSpeed, avgTime } = roundStats(round.log);
+  const { letter, label } = gradeFor(acc, avgSpeed);
+  const { isBest, firstScore } = ctx;
   const seen = new Set();
-  const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
+  const listed = round.log.filter(l => (!l.ok || ctx.fixed.has(l)) && !seen.has(l.card.id) && seen.add(l.card.id));
+  const missed = listed.filter(l => !l.ok);
   const deckName = deckPath(data.decks, round.deckId);
   const schedule = await scheduleSummary(round);
   // You may have switched to another screen while that saved: don't draw over it.
@@ -604,6 +707,13 @@ async function finish() {
 
   const strong = 'SAB'.includes(letter);          // the big stamp is for S, A and B; a C or D gets a quiet one
   const gradeText = isBest ? `Grade ${letter}` : label;
+  // Under a wrong typed answer: "I was right"; after it, "Counted as right" and Accept (shown when the typed text can be added).
+  const fixRow = l => {
+    const i = round.log.indexOf(l);
+    if (canOverride(round, l)) return `<div class="miss-fix"><button class="btn ghost small" type="button" data-right="${i}">I was right</button></div>`;
+    if (!ctx.fixed.has(l)) return '';
+    return `<div class="miss-fix"><span class="miss-ok">${icon('check')} Counted as right</span>${canAcceptTyped(l) ? `<button class="btn ghost small" type="button" data-accept="${i}">Accept “${esc(l.given.trim())}” from now on</button>` : ''}</div>`;
+  };
   const missedRow = l => { const diff = l.typed ? diffAgainstBack(l.typed, l.target) : null; return `
         <div class="miss">
           <div class="m">${mathHTML(l.q.prompt)}</div>
@@ -611,11 +721,13 @@ async function finish() {
           <div class="r">${mathHTML(l.q.answer)}</div>
           ${hasMarks(diff) ? diffHTML(diff, { small: true })
             : `<div class="y">${l.given === null ? 'Out of time' : l.given === '' ? 'Skipped' : `You answered: ${esc(l.given)}`}</div>`}
+          ${fixRow(l)}
         </div>`; };
   const SHOWN = 3;
+  const open = ctx.all ? Infinity : SHOWN;
   el.innerHTML = `
     <div class="res-head">
-      <div class="stamp press${strong ? '' : ' quiet'}" aria-label="Grade ${letter}"><span>${letter}</span></div>
+      <div class="stamp${again ? '' : ' press'}${strong ? '' : ' quiet'}" aria-label="Grade ${letter}"><span>${letter}</span></div>
       <div style="min-width:0">
         <p class="res-grade">${gradeText} · ${round.drill ? 'Drill' : FORMATS[round.fmt]}${round.hard ? ' (Hard)' : ''}${round.flash ? ` · Flash ${round.flash / 1000}s` : ''} · ${esc(deckName)}</p>
         <p class="res-score mono"><span class="res-n">${round.score.toLocaleString()}</span> <small>pts</small></p>
@@ -638,22 +750,40 @@ async function finish() {
     <div id="resultsMore" class="finish-more" hidden></div>
     <section class="missed">
       <h2>Missed</h2>
-      ${missed.length ? missed.map((l, i) => i < SHOWN ? missedRow(l) : `<div class="miss-extra" hidden>${missedRow(l)}</div>`).join('')
-        + (missed.length > SHOWN ? `<button class="btn ghost" id="showAllMiss" type="button">Show all ${missed.length}</button>` : '')
+      ${listed.length ? listed.map((l, i) => i < open ? missedRow(l) : `<div class="miss-extra" hidden>${missedRow(l)}</div>`).join('')
+        + (listed.length > open ? `<button class="btn ghost" id="showAllMiss" type="button">Show all ${listed.length}</button>` : '')
       : `<p class="muted">${total ? 'Clean round. Nothing to review.' : 'No answers this round.'}</p>`}
     </section>`;
   $('showAllMiss')?.addEventListener('click', e => {
+    ctx.all = true;
     el.querySelectorAll('.miss-extra').forEach(x => { x.hidden = false; });
     e.currentTarget.remove();
   });
+  // Corrections: draw the screen again with the new numbers, staying where the page was.
+  const redraw = async focusSel => {
+    const y = scrollY;
+    await drawResults(el, round, ctx, { again: true });
+    scrollTo(0, y);
+    if (focusSel) el.querySelector(focusSel)?.focus({ preventScroll: true });
+  };
+  el.querySelectorAll('[data-right]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const fixed = await markRight(round, round.log[+b.dataset.right]);
+    if (!fixed) { b.disabled = false; return; }
+    ctx.fixed.add(fixed);
+    redraw(`[data-accept="${b.dataset.right}"]`);
+  }));
+  el.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    if (await acceptTyped(round, round.log[+b.dataset.accept])) redraw(); else b.disabled = false;
+  }));
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
-  import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
+  if (!again) import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
   $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
-  $('againBtn').focus({ preventScroll: true });
-  fx.result(el);
+  if (!again) { $('againBtn').focus({ preventScroll: true }); fx.result(el); }
 }
 
 // ---------- keyboard ----------

@@ -4,7 +4,7 @@
 import { canType, normalizeAnswer } from './match.js';
 import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
-import { isStepped, finalStep } from './steps.js';
+import { isStepped, finalStep, parseElements } from './steps.js';
 import { maskMath } from './math.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
@@ -31,9 +31,12 @@ export function shuffle(a, rnd = Math.random) {
 export const isCloze = card => !!card.noteId && card.cloze !== undefined;
 // An image-occlusion card (see occlusion.js) is front-only too: the picture with its highlighted box is the question, the
 // box's label the answer. Cards that can't be asked back → front.
-// A step-by-step card (its back is "Step 1: ... Step 2: ..."; see steps.js) asks for its final answer.
+// A step-by-step card (its back is "Step 1: ... Step 2: ..."; see steps.js) asks for its final answer. An elements card
+// ("Element 1: ...") asks for the whole list, joined with " · ": multiple choice only, never typed.
 const stepped = card => !isCloze(card) && !hasMasks(card) && isStepped(card.back, { mask: maskMath });
-export const isFrontOnly = card => isCloze(card) || hasMasks(card) || stepped(card);
+const elemental = card => !isCloze(card) && !hasMasks(card) && !!parseElements(card.back, { mask: maskMath });
+const structured = card => stepped(card) || elemental(card);
+export const isFrontOnly = card => isCloze(card) || hasMasks(card) || structured(card);
 
 export function questionFor(card, qtype) {
   if (hasMasks(card)) {
@@ -46,6 +49,10 @@ export function questionFor(card, qtype) {
     const answer = finalStep(card.back, { mask: maskMath });
     const ask = card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer };
     return qtype === 'front' || (qtype === 'typing' && canType(answer)) ? ask : null;
+  }
+  if (elemental(card)) {
+    const answer = parseElements(card.back, { mask: maskMath }).items.join(' · ');
+    return qtype === 'front' ? (card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer }) : null;
   }
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];
@@ -209,6 +216,32 @@ export function scoreAnswer({ ok, seconds, limitMs, fmt, streak, hard, flash, sc
   const mult = 1 + 0.1 * Math.min(streak, 5);
   const pts = Math.round((100 + Math.round(100 * speed)) * mult * (hard ? 1.25 : 1) * (flash ? 1.2 : 1));
   return { pts, speed, mult };
+}
+
+// ---------- "I was right" ----------
+// A typed answer the check marked wrong can be corrected by the person. Only typed answers can: not multiple choice, not
+// "out of time" and not a skip.
+export const canOverride = (round, entry) => round.qtype === 'typing' && !entry.ok && !entry.overridden && typeof entry.given === 'string' && !!entry.given.trim();
+
+// The log entry as a right answer. The entry's accuracy, speed and place in the Missed list follow; the round's score, streak,
+// lives and Lightning clock are NOT touched (the points were scored as they were, so the game can't be won by overriding).
+// Returns a new entry; the caller puts it in round.log in place of the old one.
+export function overrideEntry(round, entry) {
+  if (!canOverride(round, entry)) return entry;
+  const speed = round.fmt === 'lightning' ? Math.max(0, 1 - entry.seconds / 3) : Math.max(0, 1 - entry.seconds / (entry.limitMs / 1000));
+  const { mixedWith, typed, target, ...rest } = entry;        // right now: no mix-up, no letters to point out
+  return { ...rest, ok: true, overridden: true, speed: Number.isFinite(speed) ? speed : 0 };
+}
+
+// What the results screen reports from a round's log: answers, right ones, accuracy (0 to 1), the average speed of the right
+// ones (0 to 1) and the average answer time in seconds.
+export function roundStats(log) {
+  const total = log.length, right = log.filter(l => l.ok);
+  return {
+    total, correct: right.length, accuracy: total ? right.length / total : 0,
+    avgSpeed: right.length ? right.reduce((a, l) => a + l.speed, 0) / right.length : 0,
+    avgTime: total ? log.reduce((a, l) => a + l.seconds, 0) / total : 0
+  };
 }
 
 export function gradeFor(accuracy, avgSpeed) {

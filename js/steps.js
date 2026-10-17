@@ -16,12 +16,16 @@
 // It is only used to find the markers; the pieces are cut from the real text. (js/math.js will provide maskMath.)
 
 const STEP = /^[ \t]*step[ \t]*(\d+)[ \t]*[:.)][ \t]*/i;
-const ANSWER = /^[ \t]*answer[ \t]*:[ \t]*/i;
+const ELEMENT = /^[ \t]*element[ \t]*(\d+)[ \t]*[:.)][ \t]*/i;     // elements cards: "Element 1: Duty" (see parseElements)
+const ANSWER =/^[ \t]*answer[ \t]*:[ \t]*/i;
 
 // → null (not a stepped back) or { intro, steps: [string], final: string | null }
-export function parseSteps(back, { mask } = {}) {
+export const parseSteps = (back, opts) => parseMarked(back, STEP, /step/i, true, opts);
+
+// The shared parser. `marker` finds "Step N:" or "Element N:" lines; `withAnswer` allows the "Answer:" line (steps only).
+function parseMarked(back, marker, hint, withAnswer, { mask } = {}) {
   const text = String(back ?? '').replace(/\r\n?/g, '\n');
-  if (!/step/i.test(text)) return null;
+  if (!hint.test(text)) return null;
   let seen = text;
   if (mask) {
     const m = mask(text);
@@ -38,9 +42,9 @@ export function parseSteps(back, { mask } = {}) {
   const marks = [];                               // { line, n, skip } for each "Step N:" line
   let answer = null;                              // { line, skip } for the "Answer:" line after the steps
   for (let i = 0; i < lines.length; i++) {
-    const s = STEP.exec(lines[i].seen);
+    const s = marker.exec(lines[i].seen);
     if (s) { if (answer) return null; marks.push({ line: i, n: +s[1], skip: s[0].length }); continue; }
-    const a = marks.length && !answer ? ANSWER.exec(lines[i].seen) : null;
+    const a = withAnswer && marks.length && !answer ? ANSWER.exec(lines[i].seen) : null;
     if (a) answer = { line: i, skip: a[0].length };
   }
   if (marks.length < 2 || marks.some((m, i) => m.n !== i + 1)) return null;
@@ -79,4 +83,48 @@ export function stepsRoundTrip(parts, opts) {
   // Same number of steps is not enough ("Answer: x" at the end of the last step would turn into the final answer).
   return !!again && again.steps.length === steps.length && again.steps.every((t, i) => t === steps[i])
     && again.intro === intro && (again.final ?? '') === final;
+}
+
+// ---------- elements cards ----------
+// A list to recall, written as text the same way: an optional intro, then two or more "Element 1: ...", "Element 2: ..." lines
+// (numbered one after the other). Nothing about it is stored except the text, so Anki, CSV and older versions show a readable list.
+// There is no "Answer:" line. If the back also reads as steps, it is a steps card (steps win).
+// → null or { intro, items: [string] }
+export function parseElements(back, opts) {
+  if (parseSteps(back, opts)) return null;
+  const p = parseMarked(back, ELEMENT, /element/i, false, opts);
+  return p ? { intro: p.intro, items: p.steps } : null;
+}
+
+// A card's structured back for Review, steps or elements, in one shape { kind, intro, steps, final } (elements have no final).
+export function parseStructured(back, opts) {
+  const s = parseSteps(back, opts);
+  if (s) return { kind: 'steps', ...s };
+  const e = parseElements(back, opts);
+  return e ? { kind: 'elements', intro: e.intro, steps: e.items, final: null } : null;
+}
+
+export const isElements = (back, opts) => parseElements(back, opts) !== null;
+
+export function joinElements({ intro = '', items = [] } = {}) {
+  const out = [];
+  if (intro && intro.trim()) out.push(intro.trim());
+  items.forEach((s, i) => out.push(`Element ${i + 1}: ${String(s).trim()}`));
+  return out.join('\n');
+}
+
+// Will these parts read back as the same elements once saved? False when a line inside an element starts "Element N:"
+// (or the saved text would count as steps).
+export function elementsRoundTrip(parts, opts) {
+  const items = (parts.items || []).map(s => String(s).trim()).filter(Boolean);
+  const intro = String(parts.intro ?? '').trim();
+  const again = parseElements(joinElements({ intro, items }), opts);
+  return !!again && again.items.length === items.length && again.items.every((t, i) => t === items[i]) && again.intro === intro;
+}
+
+// The rating Review suggests after recalling n elements with `missed` of them wrong. The numbers are ts-fsrs's Rating
+// (Again 1, Hard 2, Good 3, Easy 4). None missed → Good; a quarter or fewer → Hard; more → Again. Easy is never suggested.
+export function suggestRating(n, missed) {
+  if (!(missed > 0)) return 3;
+  return missed / Math.max(1, n) <= 0.25 ? 2 : 1;
 }

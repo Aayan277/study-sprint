@@ -43,6 +43,15 @@ export function stepsSpeech(p, shown) {
   return out.join('\n');
 }
 
+// An elements card: its intro and the elements revealed so far ("Element 1. ...").
+export function elementsSpeech(p, shown) {
+  const stop = t => String(t).trim().replace(/([^.!?:;,…。！？])$/, '$1.');
+  const out = [];
+  if (p.intro) out.push(stop(p.intro));
+  (p.items || p.steps).slice(0, shown).forEach((t, i) => out.push(`Element ${i + 1}. ${stop(t)}`));
+  return out.join('\n');
+}
+
 export const canSpeak = () => typeof speechSynthesis !== 'undefined';
 
 // Read some text aloud (stopping anything already being read). lang: a code from SPEECH_LANGS, or ''.

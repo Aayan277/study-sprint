@@ -313,13 +313,29 @@ export function forgottenQueue(cards, statesById, logs, now = Date.now()) {
 
 // A hand-picked list of cards (Stats' "Review these", the Compare sheet), in the order given: cards that no longer
 // exist are skipped. The session runs through Review like any Custom study.
-export function pickedQueue(cards, statesById, ids) {
+//   spread  keep the cards of one note apart (never next to each other), as far as the list allows
+export function pickedQueue(cards, statesById, ids, { spread = false } = {}) {
   const byId = new Map(cards.map(c => [c.id, c]));
-  const queue = [...new Set(ids)].filter(id => byId.has(id)).map(id => {
+  let queue = [...new Set(ids)].filter(id => byId.has(id)).map(id => {
     const st = statesById.get(id);
     return { card: byId.get(id), kind: st && isLearning(st.state) ? 'learn' : st && st.state !== NEW ? 'review' : 'new' };
   });
+  if (spread) queue = spreadSiblings(queue, x => x.card.noteId);
   return { queue, waiting: [] };
+}
+
+// Reorder a list so two items with the same note (noteOf) are never next to each other, changing the order as little as
+// possible: an item that would follow its sibling waits for the next one that doesn't. Siblings that can't be
+// separated (nothing else is left) stay together at the end.
+export function spreadSiblings(items, noteOf = x => x.noteId) {
+  const rest = items.slice(), out = [];
+  while (rest.length) {
+    const prev = out.length ? noteOf(out[out.length - 1]) : undefined;
+    let i = 0;
+    if (prev !== undefined && prev !== null && prev !== '') { i = rest.findIndex(x => noteOf(x) !== prev); if (i < 0) i = 0; }
+    out.push(rest.splice(i, 1)[0]);
+  }
+  return out;
 }
 
 // Spread new cards evenly through the reviews, so a session isn't all hard reviews then all new cards.

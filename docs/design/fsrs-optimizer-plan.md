@@ -99,7 +99,7 @@ The game's answers will soon not write to FSRS or the log by default. The optimi
    - Example: an Anki import whose earlier history was not brought over.
    - Anki and fsrs-rs skip incomplete histories the same way.
 6. **Undo** already deletes the log row (`undoReview`), and deleting a card deletes its rows, so neither needs anything special.
-7. **Day gaps:** `deltaDays = Math.round((dayStart(t2) - dayStart(t1)) / 86400000)`, using the 4am rollover from `js/days.js`. `round` handles the DST changes. Same-day rows give 0 and go through the short-term formula (w17–w19), as with `enable_short_term: true`.
+7. **Day gaps:** the same rule the live scheduler uses: ts-fsrs's `dateDiffInDays`, i.e. `floor((UTC date of t2 - UTC date of t1) / 86400000)` on the review times (see `toLibrary` in `srs.js`). It ignores the time zone, DST and the 4am rollover on purpose, so the weights are trained on the same t they are applied with. Same-date rows give 0 and go through the short-term formula (w17–w19), as with `enable_short_term: true`.
 8. **Unlock count** = the number of scored training rows with deltaDays > 0 (long-term reviews) on eligible cards, plus same-day ones, i.e. all kind-1 rows that survive rule 5. It needs at least 400. The UI explains the gap between "answers" and "reviews that count".
 
 The game change itself (Play stops writing to FSRS and the log by default) is a separate task. This module needs no change when it lands: new Play rows will simply be absent or have `applied: false`.
@@ -129,9 +129,9 @@ The main thread gets all of these from ts-fsrs, so the worker never imports from
 6. **Metrics** for `current` and `fitted` on the same eligible history:
    - `logLoss`
    - `rmse`: predictions binned into 20 R bins, then the count-weighted RMSE of mean predicted against observed recall. It is labelled "RMSE (bins)" in the UI but is not numerically identical to Anki's binning, which is fine because only the comparison matters.
-7. **Decision: keep the fitted weights only if `logLoss` is lower AND `rmse` is not higher** (strictly better on log loss, no worse on RMSE). Otherwise keep the current weights.
+7. **Decision: keep the fitted weights only if `logLoss` is lower AND `rmse` is not more than 0.01 (absolute) higher** (see §14, PR 2: the check is on held-out reviews and the RMSE has a slack). Otherwise keep the current weights.
    - "Current" means the saved personal weights, or `default_w` if there are none.
-   - Like Anki, this is judged on the full history (owner-approved "on the user's history"). An optional `evaluateSplit` (train on the first 80% by time, score on the last 20%) is exposed for the simulator only, to report honest out-of-sample gains.
+   - (Superseded in PR 2, see §14: the decision is made on the newest 20% of the history, which the fit does not see.) Like Anki, this was first planned as judged on the full history (owner-approved "on the user's history"). An optional `evaluateSplit` (train on the first 80% by time, score on the last 20%) is exposed for the simulator only, to report honest out-of-sample gains.
 
 `fit` is a generator, `function* fit(input) { ... yield { phase, done, total } ... return result }`, so the same code:
 - runs to completion in Node tests
@@ -210,7 +210,7 @@ The main thread gets all of these from ts-fsrs, so the worker never imports from
     3. "Checking they predict better…"
   - a **Cancel** button
   - the rest of the app stays usable; the sheet can be closed and the run continues in the worker until it finishes or the page closes
-- **Better:** "Done. Your new settings predict your answers better, so they're now in use." Details: "Prediction error (log loss) 0.312 → 0.298 · RMSE 4.1% → 3.2%". Then: "Run this again every month or so as you review more."
+- **Better:** "Done. Your new settings predict your answers better, so they're now in use." Details: "Checked on your newest 20% of reviews, which the fit did not see: prediction error (log loss) 0.312 → 0.298 · RMSE 4.1% → 3.2%". If a run is reset from Settings while it works: "You reset your parameters while this was running, so nothing changed." Then: "Run this again every month or so as you review more."
 - **Not better:** "Done. Your current settings already predict your answers as well as the new ones, so nothing changed."
 - **Cancelled:** "Stopped. Nothing changed."
 - **Timed out or error:** "Couldn't finish on this device. Nothing changed."
@@ -225,7 +225,7 @@ Add styles to an existing sheet section of `css/styles.css`. Check 375px with no
   - review and anki rows are kept; applied Play rows are replayed but not scored; other Play rows are ignored
   - unknown sources are ignored
   - a card whose first row has `state !== 0` is skipped
-  - the 4am rollover and a DST night via a TZ child process (as in `tests/stats-dst.child.mjs`)
+  - the UTC-date rule, and a DST night in a non-UTC time zone via a TZ child process (as in `tests/stats-dst.child.mjs`)
   - the unlock count
   - the `truncate` policy switch
 - **`tests/fsrs-fit.test.js`**:
@@ -308,3 +308,29 @@ Add styles to an existing sheet section of `css/styles.css`. Check 375px with no
 - **Existing cards are not rescheduled.** The new weights apply from each card's next review, which avoids mass `cardStates` rewrites and sync overwrites.
 - **Fix `js/exam.js`'s hard-coded decay** so exam features and readiness follow the personal w20.
 - **Tests:** unit tests on a seeded synthetic log (gradient, recovery, decision, bounds), a ts-fsrs parity test, one e2e that also checks the UI stays responsive, and a simulator run before shipping.
+
+## 14. As built in PR 1 (steps 1, 2 and 4)
+
+Owner decisions: Q1 replay, Q2 lower log loss AND RMSE no higher, Q3 no recalculation now. What differs from the plan above:
+
+- **Refine step.** After Adam, `fit` re-searches w0 to w3 (golden section on log S, over the whole history of the cards that began with that rating, with the same pull towards the defaults) and puts them back in order. Pretraining only sees each card's first long-term review and uses the curve we started from, so on its own it is biased. Progress phases are `pretrain` 5%, `train` 80%, `refine` 7%, `check` 8%.
+- **The decision is in-sample, so it is generous.** On a history made from the default weights, judged against those same weights, the fit still wins about half the time by a hair (noise it has fitted). That is the owner-approved rule (same as Anki); the test only requires that the answer follows the rule and that such a gain is tiny. Judging out of sample is `evaluateSplit`, for the simulator.
+- **Some weights cannot be recovered from a log.** w7 and w12 to w19 act through rare or same-day answers (same-day answers are never scored), so the test checks recovery on w0 to w6, w8 to w10 and w20 only.
+- **Decay follows w20 in every exam function, not only the three named in section 6.** `recall`, `recallAt`, `planFinalPass`, `examSchedule`, `examGainFrom`, `pullIn`, `examPrepQueue` and `readiness` take a trailing `w20`; `examClamp` reads `opts.w[20]`. `personalW20(settings)` (sched-settings.js) gives the number; it is kept in 0.1 to 0.8, the range the scheduler allows.
+- **`fsrsParams` cleaning.** `cleanFsrsParams` returns a clean copy with only the known fields. Settings reads, server rows (`acceptSetting` in sync-data.js: `null` is a real value, junk is skipped) and backups (`restoredSettings` in db.js: junk is left out of the restore, not stored as `null`, so it cannot be stamped as a reset and wipe weights synced from another device) all use it. `checkBackup` does not refuse a backup for a bad `fsrsParams`: the weights are derived data and the rest of the backup is still good.
+- **`schedulerOptions` leaves `w` out** when no personal weights are in use, so existing option objects and the scheduler's cache key do not change.
+- **`sw.js`.** The new modules are listed in `CORE` and CACHE is bumped to v83, because `tests/preload.test.js` and `tests/sw.test.js` require both for any change under `js/`.
+- **Resets.** A kept row with state 0 after earlier kept rows is a reset (Browse "Reset to new", Anki Forget); only the part after the last reset is used (rule 3a, as Anki does).
+- **Day gaps are UTC dates, not study days (supersedes 3.7).** `deltaDays` mirrors ts-fsrs's `dateDiffInDays`, which the live scheduler applies to the review times, so training and use see the same t. The 4am rollover still decides when a card is *due* in the app; it does not enter the fit.
+- **For PR 2 (per-deck relearning steps).** `generatorParameters` clips w17 and w18 to a ceiling that depends on the deck's relearning-step count. Before PR 2 evaluates "current" and "fitted" weights (and before the final save), it must run `clipParameters(w, numRelearningSteps, true)` for each deck's step count, and compare the metrics on what the scheduler will really use.
+- **Ordering and speed.** After the refine step w0 to w3 are put in order with the same pool-adjacent-violators code as pretraining (`poolAscending`). The dual numbers keep their derivatives in one shared arena buffer instead of a new array per operation: same results bit for bit, about 12 times faster (49,851 answers: 14.8 s to 1.2 s).
+
+## 14b. As built in PR 2, and what changed after the simulator and review
+
+- **Held-out keep rule (supersedes §4.7's in-sample check).** The first simulator run failed its pre-registered rule (report-optimizer.md): judged in-sample, weights fitted on the first 80% of a default-like student's history predicted the last 20% worse than the standard ones. So `fitChecked` (fsrs-fit.js, run by the worker) fits on the first 80% of the days, judges those weights against the current ones on the last 20% (`judge`, each deck's weights clipped for its relearning steps by `clipWeights`, which a parity test checks against ts-fsrs `clipParameters`), and refits on everything only if they win. Fewer than `HOLDOUT_MIN` (50) held-out predictions: the current weights stay. The cutoff day counts only reviews that get a prediction (scored, not a card's first answer, on a later day), so the held-out part really is about 20% of the predictions.
+- **RMSE slack (decision made after review).** "RMSE no higher" became "not more than 0.01 higher" (`RMSE_SLACK`). The binned RMSE is noisy on a small held-out slice; the code reviewer measured the strict rule accepting 22 of 40 simulated gains at about 800 reviews, and 29 of 40 with the slack. Log loss must still be strictly lower.
+- **Gamma 8 to 1000**, tuned on simulator seeds 31 to 60 and reported on seeds 1 to 30.
+- **Weights are judged per deck** and saved with plain bounds; each deck clips again for its own steps when it schedules.
+- **Sync and reset during a run.** The setting is re-read before saving. A reset saved from Settings while the run works (`{ w: null }` with a newer time) is not overwritten; any other change makes the sheet score the new current weights against the weights the check used (on the same held-out slice). Cancel is checked once more right before saving.
+- **An open Review session starts again** when `fsrsParams` changes, here or from the server (`scheduleVersion` is bumped in `setSetting` and `applyRemote`). review.js no longer absorbs a bump that landed before its own save.
+- **Main-thread fallback:** fit() skips its own in-sample check when `fitChecked` calls it, and the refine step yields every search step, so the longest gap between yields is about 60 ms on 50,000 reviews in Node.

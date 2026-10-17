@@ -29,6 +29,27 @@ import { TYPING_TIME } from './game.js';
 export const AGAIN = 1, HARD = 2, GOOD = 3, EASY = 4;   // same numbers as ts-fsrs's Rating
 const NEW = 0;
 
+// Does Play count as reviews? Off unless the synced setting `playCountsAsReviews` is exactly true (Settings). Off = practice
+// only: Play writes no schedule change and no review-log row at all, so stats, heatmap, streak, readiness and Today's
+// ring cannot see it. On: the rules above, and every row Play writes has source 'play' (a future FSRS optimizer can skip them).
+export const playCountsAsReviews = settings => settings?.playCountsAsReviews === true;
+
+// The review-log row for one Play answer (only written when Play counts as reviews). Always source 'play'; `applied` starts
+// false and the caller sets it once the schedule really changed. `decision` is scheduleDecision()'s verdict, saved as `reason`.
+export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, chars = 0, prevState = 0, decision, mixedWith, overridden = false }) {
+  const log = {
+    cardId, timestamp: now, source: 'play',
+    mode: qtype, format: fmt,
+    correct: ok, ms, rating, chars, hard: !!hard,
+    state: prevState,      // the card's state before this answer
+    applied: false,        // did it change the schedule?
+    reason: decision       // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
+  };
+  if (mixedWith) log.mixedWith = mixedWith;     // the card whose answer was given instead (confusion.js)
+  if (overridden) log.overridden = true;        // "I was right": the answer was wrong as typed and the person corrected it (play.js)
+  return log;
+}
+
 // Lightning has no per-question timer, so speed is measured against this many seconds instead.
 export const LIGHTNING_REF_MS = 6000;
 

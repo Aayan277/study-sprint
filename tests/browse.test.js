@@ -175,3 +175,70 @@ test('search finds symbols and does not match everything for a symbol-only query
   assert.deepEqual(find('  '), cards.map(c => c.id).sort());       // blank: everything
   assert.deepEqual(find('basics'), ['a', 'b']);
 });
+
+// ---------- tags as folders ----------
+const tagged = [
+  card('a', { tags: ['#ak::#uworld::step::123', 'leech'], front: 'lung', back: 'x' }),
+  card('b', { tags: ['#ak::#uworld::step::456'], front: 'heart', back: 'y' }),
+  card('c', { tags: ['#ak::#amboss::123'], front: 'lung two', back: 'z' }),
+  card('d', { tags: ['#uworld'], front: 'plain', back: 'w' }),
+  card('e', { tags: [], front: 'none', back: 'v' })
+];
+const tagFind = query => browseCards(tagged, new Map(), { query, now: NOW }).map(x => x.card.id).sort();
+
+test('search: tag:<path> finds the tag and everything under it, ignoring capitals', () => {
+  assert.deepEqual(tagFind('tag:#ak'), ['a', 'b', 'c']);
+  assert.deepEqual(tagFind('tag:#AK::#UWorld'), ['a', 'b']);
+  assert.deepEqual(tagFind('tag:#ak::#uworld::step::123'), ['a']);
+  assert.deepEqual(tagFind('tag:#uworld'), ['d']);                       // the lone tag, not the one inside #ak
+  assert.deepEqual(tagFind('tag:#ak::#u'), []);                          // a path, not a prefix of a name
+  assert.deepEqual(tagFind('tag:nothing'), []);
+});
+
+test('search: tag: combines with words and with other tag: terms', () => {
+  assert.deepEqual(tagFind('lung tag:#ak'), ['a', 'c']);
+  assert.deepEqual(tagFind('tag:#ak::#amboss lung'), ['c']);
+  assert.deepEqual(tagFind('tag:#ak heart tag:#ak::#uworld'), ['b']);
+  assert.deepEqual(tagFind('tag:"#ak::#uworld"'), ['a', 'b']);
+  assert.deepEqual(tagFind('tag:'), tagged.map(c => c.id).sort());       // an empty term is no term
+  assert.deepEqual(tagFind('TAG:#ak::#amboss'), ['c']);
+});
+
+test('parseTagSearch splits the words from the tag terms', async () => {
+  const { parseTagSearch } = await import('../js/browse-logic.js');
+  const p = parseTagSearch('lung tag:#Ak::X  heart');
+  assert.deepEqual([p.text.replace(/\s+/g, ' '), p.tags], ['lung heart', ['#ak::x']]);
+  assert.deepEqual(parseTagSearch('xtag:a'), { text: 'xtag:a', tags: [] });        // only a whole word
+});
+
+test('renameTagPrefix: moves a folder and everything in it, merging with what exists', async () => {
+  const { renameTagPrefix } = await import('../js/browse-logic.js');
+  const cs = [card('a', { tags: ['a::b::1', 'a::b::2'] }), card('b', { tags: ['a::b', 'keep'] }), card('c', { tags: ['a::bc'] }), card('d', { tags: ['x::b::1'] }), card('e', { tags: ['z::y::1'] })];
+  const out = renameTagPrefix(cs, 'a::b', 'z::y');
+  assert.deepEqual(out.map(c => c.id), ['a', 'b']);                       // c (a::bc) and d are not in the folder
+  assert.deepEqual(out[0].tags, ['z::y::1', 'z::y::2']);
+  assert.deepEqual(out[1].tags, ['z::y', 'keep']);
+  // merging: a card that already has the target keeps it once
+  const merged = renameTagPrefix([card('m', { tags: ['a::b::1', 'z::y::1'] })], 'a::b', 'z::y');
+  assert.deepEqual(merged[0].tags, ['z::y::1']);
+  // the target is lower case; the source ignores capitals
+  assert.deepEqual(renameTagPrefix([card('n', { tags: ['a::B::1'] })], 'A::b', 'New::Place')[0].tags, ['new::place::1']);
+  // a plain tag works too
+  assert.deepEqual(renameTagPrefix([card('o', { tags: ['solo'] })], 'solo', 'one')[0].tags, ['one']);
+  assert.deepEqual(renameTagPrefix(cs, '', 'x'), []);
+});
+
+test('renameTagPrefix: an empty target removes the folder and its tags', async () => {
+  const { renameTagPrefix } = await import('../js/browse-logic.js');
+  const out = renameTagPrefix([card('a', { tags: ['f::1', 'f', 'other'] }), card('b', { tags: ['other'] })], 'f', '');
+  assert.deepEqual(out.map(c => [c.id, c.tags]), [['a', ['other']]]);
+});
+
+test('renameTagExact: one tag, matched ignoring capitals and empty pieces; tags below it stay', async () => {
+  const { renameTagExact } = await import('../js/browse-logic.js');
+  const cs = [card('a', { tags: ['A::B', 'a::b::c'] }), card('b', { tags: ['a::::b'] }), card('c', { tags: ['a::bc'] })];
+  const out = renameTagExact(cs, 'a::b', 'x');
+  assert.deepEqual(out.map(c => [c.id, c.tags]), [['a', ['x', 'a::b::c']], ['b', ['x']]]);
+  assert.deepEqual(renameTagExact(cs, 'a::b', '').map(c => c.tags), [['a::b::c'], []]);
+  assert.deepEqual(renameTagExact(cs, '', 'x'), []);
+});

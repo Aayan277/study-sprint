@@ -24,11 +24,12 @@ const open = async ({ w = 375, h = 800, scheme = 'dark' } = {}) => {
 const noHScroll = async (p, w, what) => ok(await p.evaluate(x => document.documentElement.scrollWidth <= x, w), 'no sideways scroll: ' + what);
 const FRONTS = ['Alpha', 'Beta', 'Gamma', 'Delta'], BACKS = ['Apple', 'Banana', 'Cherry', 'Durian'];
 // Four cards: every question shows all four answers, so the wrong pick can always be the partner's answer.
-const seed4 = p => p.evaluate(async ({ FRONTS, BACKS }) => {
+const seed4 = (p, on = true) => p.evaluate(async ({ FRONTS, BACKS, on }) => {
   const db = await import('./js/db.js');
   await db.addDeckWithCards({ id: 'mx', name: 'Fruit', color: '#46A758', created: Date.now() },
     FRONTS.map((f, i) => ({ id: 'mx' + i, deckId: 'mx', front: f, back: BACKS[i], tags: [], created: i })));
-}, { FRONTS, BACKS });
+  if (on) await db.setSetting('playCountsAsReviews', true);       // v4.10: lasting mix-ups are read from Play log rows, which are only written when Play counts as reviews
+}, { FRONTS, BACKS, on });
 // Twelve cards where card 0 and card 1 are confused in the log, so the drill's `include` is what puts the partner's answer in the options.
 const seed12 = p => p.evaluate(async () => {
   const db = await import('./js/db.js'); const now = Date.now();
@@ -200,6 +201,19 @@ await p.keyboard.press('Control+Enter');
 await p.waitForFunction(() => !document.getElementById('sheet').open);
 const made = (await findMade())[0];
 ok(made && made.front === "Term 0 vs Term 1: what's the difference?" && made.back === '- Term 0: …\n- Term 1: …' && made.deckId === 'bg' && (await findMade()).length === 1, 'Add saves one comparison card in the first card’s deck');
+await p.context().close();
+
+// ---------- 3b. Play is practice only (the default): nothing saved, but the results show this round's own mix-ups ----------
+p = await open();
+await seed4(p, false);
+await setup(p, 'mx', 'front');
+await p.click('#startBtn'); await p.waitForSelector('#pCard');
+await mcRound(p);
+ok((await logs(p)).length === 0, 'practice only: no review-log rows are saved');
+await p.waitForSelector('.mixups .mix-row');
+const offText = await p.textContent('.mix-row');
+ok(/Alpha/.test(offText) && /Beta/.test(offText) && /2×/.test(offText), 'practice only: the results panel still shows this round\'s pair, 2×: ' + offText.replace(/\s+/g, ' ').trim());
+ok(await p.evaluate(async () => (await (await import('./js/compare-sheet.js')).loadPairs()).pairs.length) === 0, 'practice only: no lasting pair is saved (the card panel and later rounds see none)');
 await p.context().close();
 
 // ---------- 4. Looks: Compare and results at 375/1440, dark and light ----------
