@@ -235,3 +235,34 @@ test('Anki export: a stepped back goes out as its Step lines, one per line', asy
   assert.equal(notes[0].flds, '2x+3=7\x1fStep 1: subtract 3<br>Step 2: divide by 2<br>Answer: x = 2');
   assert.ok(toCSV([{ id: 'a', front: 'q', back: 'Step 1: a\nStep 2: b', tags: [] }]).includes('Step 1: a\nStep 2: b'));
 });
+
+// ---------- sounds ----------
+test('sounds go at the end of the side as [sound:file], and importing the deck again gives them back', async () => {
+  const { notesToImport, soundReport } = await import('../js/anki.js');
+  const { clozeCard } = await import('../js/cloze.js');
+  const text = 'The {{c1::heart}} pumps {{c2::blood}}';
+  const plain = { id: 'p', front: 'dog', back: 'inu', tags: [], frontImageFile: 'f1.jpg', frontSoundFiles: ['s1.mp3'], backSoundFiles: ['s2.wav', 's3.ogg'], noteExtra: 'Hook' };
+  const textOnly = { id: 'q', front: 'cat', back: 'neko', tags: [], backSoundFiles: ['s4.mp3'] };
+  const sib = n => ({ id: 'k' + n, ...clozeCard(text, n), tags: [], noteId: 'N', cloze: n, noteText: text, noteExtra: 'Latin', frontSoundFiles: ['c1.mp3'], backSoundFiles: ['c2.mp3'] });
+  const { col, notes } = await ankiContents({ id: 'd', name: 'Words' }, [plain, textOnly, sib(1), sib(2)], 1_800_000_000_000);
+  const basic = notes.find(n => n.flds.startsWith('dog'));
+  const [front, back] = basic.flds.split('\x1f');
+  assert.equal(front, 'dog<br><img src="f1.jpg">[sound:s1.mp3]');                // after the text and the picture
+  assert.equal(back, 'inu<br><br>Hook[sound:s2.wav][sound:s3.ogg]');              // last in the field, after the memory hook too
+  assert.equal(notes.find(n => n.flds.startsWith('cat')).flds.split('\x1f')[1], 'neko[sound:s4.mp3]');
+  const cloze = notes.find(n => n.flds.startsWith('The'));
+  assert.ok(cloze.flds.split('\x1f')[0].endsWith('{{c2::blood}}[sound:c1.mp3]') && cloze.flds.split('\x1f')[1] === 'Latin[sound:c2.mp3]');
+  // the importer reads them back, on the same side
+  const models = new Map(Object.entries(JSON.parse(col.models)).map(([id, m]) => [id, { name: m.name, fields: m.flds.map(f => f.name), cloze: m.type === 1 }]));
+  const back2 = notesToImport(notes.map(n => ({ id: String(n.id), guid: n.guid, mid: String(n.mid), fields: n.flds.split('\x1f'), tags: [], deck: 'Words' })), models);
+  const byFront = f => back2.sounds[back2.rows.findIndex(r => r[0].startsWith(f))];
+  assert.deepEqual([byFront('dog').front, byFront('dog').back], [['s1.mp3'], ['s2.wav', 's3.ogg']]);
+  assert.deepEqual([byFront('cat').front, byFront('cat').back], [[], ['s4.mp3']]);
+  assert.deepEqual([byFront('The').front, byFront('The').back], [['c1.mp3'], ['c2.mp3']]);
+  assert.equal(soundReport(back2).files.length, 6);
+});
+
+test('CSV leaves sounds out', () => {
+  const csv = toCSV([{ id: 'p', front: 'dog', back: 'inu', tags: [], frontSounds: ['a'], backSounds: ['b'] }]);
+  assert.ok(csv.includes('dog,inu,') && !/sound|\[/.test(csv));
+});
