@@ -152,7 +152,7 @@ const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'];
 function unlock() {
   if (isUnlocked || unlocked || finishCurrent) return;
   const a = player();
-  a.muted = true;
+  a.muted = false; // not muted: some browsers allow muted play without a tap, which would look like an unlock but not be one
   a.src = SILENCE;
   let started;
   try { started = Promise.resolve(a.play()); } catch (err) { started = Promise.reject(err); }
