@@ -8,7 +8,22 @@ try { pw = await import('playwright'); } catch {
 // so tests keep their http://localhost:8123 addresses and parallel runs never clash. Run alone, it is 8123 as before.
 const PORT_MAP = process.env.APP_PORT ? [`--host-resolver-rules=MAP localhost:8123 127.0.0.1:${process.env.APP_PORT}`] : [];
 const withPortMap = (opts = {}) => ({ ...opts, args: [...(opts.args || []), ...PORT_MAP] });
-export const realChromium = { launch: (opts, ...rest) => pw.chromium.launch(withPortMap(opts), ...rest) };
+// Requests made from Node (page.request / context.request) don't go through the browser's address map, so they are
+// pointed at the run's port here.
+const toPort = url => (process.env.APP_PORT && typeof url === 'string') ? url.replace(/^http:\/\/localhost:8123\b/, `http://127.0.0.1:${process.env.APP_PORT}`) : url;
+function mapRequests(ctx) {
+  const r = ctx.request;
+  for (const m of ['fetch', 'get', 'post', 'put', 'patch', 'delete', 'head']) { const f = r[m].bind(r); r[m] = (url, ...a) => f(toPort(url), ...a); }
+  return ctx;
+}
+async function launchMapped(opts, ...rest) {
+  const browser = await pw.chromium.launch(withPortMap(opts), ...rest);
+  const newContext = browser.newContext.bind(browser), newPage = browser.newPage.bind(browser);
+  browser.newContext = async (...a) => mapRequests(await newContext(...a));
+  browser.newPage = async (...a) => { const page = await newPage(...a); mapRequests(page.context()); return page; };
+  return browser;
+}
+export const realChromium = { launch: launchMapped };
 
 // A brand-new install opens on the first-run start (js/onboarding.js) instead of the sample deck.
 // Almost every test wants the old behaviour (the sample deck is there on first load), so `chromium` here
