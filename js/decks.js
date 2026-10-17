@@ -523,6 +523,7 @@ function wireStudyOptions(deck) {
   $('deckRet').addEventListener('input', e => { $('deckRetOut').textContent = `${e.target.value}%`; });
   // "Help me choose": the estimate opens inside the editor (a second sheet would replace it and lose what you typed).
   let helper = null;
+  $('sheet').addEventListener('close', () => helper?.stop(), { once: true });          // the work stops when the editor closes
   $('deckRetHelp').addEventListener('click', async () => {
     const panel = $('deckRetPanel'), btn = $('deckRetHelp');
     if (!panel.hidden) { helper?.stop(); panel.hidden = true; panel.replaceChildren(); btn.setAttribute('aria-expanded', 'false'); return; }

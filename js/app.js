@@ -9,7 +9,7 @@ import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -154,7 +154,7 @@ async function renderSettings(el) {
         <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
           <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
           <div class="steps-input">
-            <input id="ignoreBefore" type="date" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
+            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
             <button class="btn ghost small" type="button" id="ignoreClear" ${settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
           </div>
           <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>

@@ -16,7 +16,7 @@ import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { isOcclusion, occLabel } from './occlusion.js';
 import { imgHTML } from './media.js';
 import { isHidden } from './browse-logic.js';
-import { readyEstimateText, streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, YOUNG_DAYS } from './stats-calc.js';
+import { readyEstimateText, streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, retentionVerdict, YOUNG_DAYS } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
@@ -84,11 +84,10 @@ function retSplitHTML(res, hasLogs) {
   const rowHTML = (label, b, target) => {
     if (!b.n) return `<div class="rs-row"><span class="rs-name">${label}</span><span class="rs-track" aria-hidden="true"></span><span class="rs-val muted">No reviews</span></div>`;
     const rate = b.ok / b.n;
-    const gap = Number.isFinite(target) ? rate - target : 0;
-    const enough = b.n >= 20 && Number.isFinite(target);
-    const kind = !enough || Math.abs(gap) < 0.02 ? 'on' : gap < 0 ? 'under' : 'over';
-    const pts = Math.round(Math.abs(gap) * 100);
-    const word = !enough ? '' : kind === 'on' ? 'on target' : `${pts} ${pts === 1 ? 'point' : 'points'} ${kind}`;
+    const v = retentionVerdict(b, target);            // the same verdict as the health check
+    const kind = v.verdict === 'few' ? 'on' : v.verdict;
+    const pts = v.gap === null ? 0 : Math.round(Math.abs(v.gap) * 100);
+    const word = v.verdict === 'few' ? '' : kind === 'on' ? 'on target' : `${pts} ${pts === 1 ? 'point' : 'points'} ${kind === 'under' ? 'under' : 'above'}`;
     return `<div class="rs-row"><span class="rs-name">${label}</span>
       <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="left:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="left:${rsPos(target)}"></i>` : ''}</span>
       <span class="rs-val"><b class="mono">${Math.round(rate * 100)}%</b> <small>of ${b.n}</small>${word ? ` <span class="rs-gap ${kind}"><span aria-hidden="true">${RS_MARK[kind]}</span> ${word}</span>` : ''}</span></div>`;
@@ -298,7 +297,7 @@ export async function renderStats(el) {
 
     <section class="card section" aria-labelledby="rsTitle">
       <div class="mhead"><h2 id="rsTitle">Retention vs target</h2><span class="muted small">Young and mature cards</span></div>
-      <div id="retSplit" aria-live="polite"><p class="muted">Working it out…</p></div>
+      <div id="retSplit"><p class="muted">Working it out…</p></div>
     </section>
 
     ${calendarHTML(cal, now)}
