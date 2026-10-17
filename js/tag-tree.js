@@ -107,7 +107,8 @@ export function matchIds(cards, ids, { under = '' } = {}) {
   const hits = new Map();                        // key → [{ card, folder }]
   const folders = new Map();                     // folder → { path, ids: Set, cards: Set }
   for (const card of cards) {
-    for (const tag of card.tags || []) {
+    // (Tags saved with a space in them, before spaces split tags, are read as the separate tags they were meant to be.)
+    for (const tag of (card.tags || []).flatMap(t => String(t).split(/\s+/))) {
       const parts = pieces(tag);
       if (!parts.length) continue;
       const k = idKey(parts[parts.length - 1]);

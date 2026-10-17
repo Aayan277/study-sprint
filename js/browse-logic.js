@@ -138,10 +138,18 @@ export function parseTagSearch(query) {
 // Does the card have the tag `path`, or a tag below it? (Ignores capitals; `path` as normTag gives it.)
 const hasTagUnder = (card, path) => (card.tags || []).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
 
-// "a, b , c" → ['a', 'b', 'c'] (no blanks, no repeats)
-export function parseTags(text) {
-  return [...new Set(String(text ?? '').split(/[,\n]/).map(t => t.trim().toLowerCase()).filter(Boolean))];
+// "a b, c" → ['a', 'b', 'c'] (lower case, no blanks, no repeats). Tags are separated by spaces, commas or line breaks (like Anki,
+// whose tags can't contain spaces). `keep`: the card's tags as saved. One saved with a space in it ("exam 1") stays whole if it is still there.
+export function parseTags(text, keep = []) {
+  let s = String(text ?? '').toLowerCase();
+  const whole = [...new Set((keep || []).map(t => String(t).trim().toLowerCase()).filter(t => /\s/.test(t)))].sort((x, y) => y.length - x.length);
+  whole.forEach((t, i) => { s = s.split(t).join(`\u0000${i}\u0000`); });
+  return [...new Set(s.split(/[\s,]+/).map(t => t.replace(/\u0000(\d+)\u0000/g, (_, i) => whole[+i]).trim()).filter(Boolean))];
 }
+
+// The one tag a rename gives: as typed (spaces stay), up to the first comma or line break.
+const renamedTo = text => parseTagsOld(text)[0];
+const parseTagsOld = text => [...new Set(String(text ?? '').split(/[,\n]/).map(t => t.trim().toLowerCase()).filter(Boolean))];
 
 // ---------- leeches ----------
 // A leech is a card you keep forgetting. Like Anki: it's flagged when its forgotten count ("lapses")
@@ -197,7 +205,7 @@ export function tagCounts(cards) {
 }
 // Rename a tag on every card that has it (to = '' removes it). Returns only the cards that changed.
 export function renameTag(cards, from, to) {
-  const [clean] = parseTags(to);
+  const clean = renamedTo(to);
   return cards.filter(c => (c.tags || []).includes(from))
     .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (t === from ? clean : t)).filter(Boolean))] }));
 }
@@ -205,7 +213,7 @@ export function renameTag(cards, from, to) {
 // Rename (or, with to = '', remove) exactly one tag, matching it the way folders do: ignoring capitals and empty pieces
 // ("a::::b" is "a::b"). Tags below it are left alone. Returns only the cards that changed.
 export function renameTagExact(cards, from, to) {
-  const f = normTag(from), [clean] = parseTags(to);
+  const f = normTag(from), clean = renamedTo(to);
   if (!f) return [];
   return cards.filter(c => (c.tags || []).some(t => normTag(t) === f))
     .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (normTag(t) === f ? clean : t)).filter(Boolean))] }));
@@ -215,7 +223,7 @@ export function renameTagExact(cards, from, to) {
 // already exists at the new place is merged with. Returns only the cards that changed.
 export function renameTagPrefix(cards, from, to) {
   const f = normTag(from);
-  const [clean] = parseTags(to);
+  const clean = renamedTo(to);
   const target = clean ? normTag(clean) : '';
   if (!f) return [];
   const out = [];

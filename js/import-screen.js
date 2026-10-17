@@ -20,9 +20,6 @@ import { $, esc, plural, toast, icon } from './ui.js';
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 const NEW_DECK = '__new';
 const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make phones sluggish
-const LAST_DECK = 'study-sprint-import-deck';     // the deck the last import went into (this device)
-const lastDeck = () => { try { return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
-const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
 
 // Everything the screen is working with.
 let S = null;
@@ -36,8 +33,9 @@ export async function renderImport(el, arg) {
     cards: [],             // [{ front, back }] as shown in the preview, including any edits
     flags: [],             // duplicate flag per card: 'deck', 'import' or null
     frontCol: 0, backCol: 1,
-    // The deck in the address, otherwise the one the last import went into (if it still exists), otherwise a new deck.
-    deckId: decks.some(d => d.id === deckId) ? deckId : decks.some(d => d.id === lastDeck()) ? lastDeck() : NEW_DECK,
+    // The deck in the address (the import started from that deck's page), otherwise a new deck named after the file. Not the deck
+    // the last import used: a second subject's file would quietly merge into the first one.
+    deckId: decks.some(d => d.id === deckId) ? deckId : NEW_DECK,
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
     suggestedName: '',     // a deck name taken from the file name
     noCloze: false,        // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
@@ -227,6 +225,7 @@ function wireFile() {
       else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
       console.error(err);
+      $('fileName').textContent = file.name;          // (clears "reading…")
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
       showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
@@ -683,7 +682,6 @@ async function save() {
       });
     }
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
-    rememberDeck(deckId);
     toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.

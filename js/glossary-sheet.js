@@ -139,13 +139,15 @@ export async function openPasteList() {
   let plan = null;
   const update = () => {
     plan = parseGlossaryList($('glPasteIn').value, entries);
-    const { items, already, skipped, over } = plan;
+    const { items, already, repeated, noDef, tooLong, over } = plan;
     const bits = [];
-    if (!$('glPasteIn').value.trim()) bits.push('Paste your list above.');
+    if (!$('glPasteIn').value.trim()) bits.push('Paste your list above, one term per line.');
     else {
       bits.push(`Adds ${plural(items.length, 'term')}.`);
       if (already) bits.push(`${already} ${already === 1 ? 'is' : 'are'} already in your glossary and ${already === 1 ? 'stays' : 'stay'} as ${already === 1 ? 'it is' : 'they are'}.`);
-      if (skipped) bits.push(`${plural(skipped, 'line')} without a definition ${skipped === 1 ? 'is' : 'are'} left out.`);
+      if (repeated) bits.push(`${repeated} ${repeated === 1 ? 'repeats' : 'repeat'} an earlier line.`);
+      if (noDef) bits.push(`${plural(noDef, 'line')} without a definition ${noDef === 1 ? 'is' : 'are'} left out.`);
+      if (tooLong) bits.push(`${plural(tooLong, 'term')} longer than ${LIMITS.term} characters ${tooLong === 1 ? 'is' : 'are'} left out.`);
       if (over) bits.push(`${over} don’t fit: a glossary holds ${LIMITS.terms.toLocaleString('en')} terms.`);
     }
     $('glPasteInfo').textContent = bits.join(' ');

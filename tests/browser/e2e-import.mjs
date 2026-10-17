@@ -53,8 +53,7 @@ await page.click('#clearBtn'); ok(await page.isHidden('#preview'), 'clear hides 
 // file: Quizlet txt into a new deck (opened from Decks, so Back has somewhere real to go)
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox');
-ok((await page.$eval('#deckSel', s => s.selectedOptions[0].textContent)).includes('Psychology'), 'library import starts on the deck the last import went into (Psychology)');
-await page.selectOption('#deckSel', '__new');
+ok((await page.inputValue('#deckSel')) === '__new', 'library import (not from a deck page) starts on a new deck, not the deck the last import went into');
 await page.click('#tab-file');
 await page.setInputFiles('#fileIn', SP + '/files/quizlet.txt');
 await page.waitForSelector('#preview:not([hidden])');

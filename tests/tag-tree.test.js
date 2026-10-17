@@ -144,3 +144,12 @@ test('crumbs and the tree HTML', () => {
   assert.doesNotMatch(html, /#ak_step1_v12::#uworld/);          // folders are drawn when opened
   assert.match(tagTreeHTML(tagTree([card('a', ['<b>'])]), { mode: 'pick' }), /&lt;b&gt;/);          // text is escaped
 });
+
+test('matchIds: tags saved with spaces in them (before spaces split tags) still match their IDs', () => {
+  const old = [card('o1', ['#ak_step1_v12::#uworld::23456 #ak_step1_v12::#subject::pulm']), card('o2', ['#ak::#uworld::999'])];
+  const m = matchIds(old, ['23456', '999', '1']);
+  assert.deepEqual(m.cards.map(c => c.id), ['o1', 'o2']);
+  assert.deepEqual(m.missing, ['1']);
+  assert.equal(matchIds(old, ['pulm']).cards.length, 1);
+  assert.deepEqual(matchIds(old, ['23456'], { under: '#ak_step1_v12::#uworld' }).cards.map(c => c.id), ['o1']);
+});

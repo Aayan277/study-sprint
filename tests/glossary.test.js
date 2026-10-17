@@ -134,8 +134,29 @@ test('paste a list: new terms, ones already there, lines without a definition', 
   const have = [E('1', 'ATP')];
   const r = parseGlossaryList('ATP - energy\nOsmosis - water moving\nDiffusion - spreading out\nOsmosis - again\nLonely', have);
   assert.deepEqual(r.items.map(i => i.term), ['Osmosis', 'Diffusion']);
-  assert.equal(r.already, 2);
+  assert.equal(r.already, 1);
+  assert.equal(r.repeated, 1);
   assert.equal(r.skipped, 1);
   assert.equal(r.items[0].def, 'water moving');
   assert.deepEqual(parseGlossaryList('', []).items, []);
+});
+
+test('paste a list: every line picks its own separator (tab, " - ", " – ", ": ", "=")', () => {
+  const r = parseGlossaryList('beta-agonist - stimulates beta receptors\nMallory-Weiss tear - mucosal tear at the GE junction\nAnti-HBs: antibody showing immunity\nOsmosis\twater moving\nPaO2 – oxygen pressure\nx = unknown\nNo definition here\n\nA - \n', []);
+  assert.deepEqual(r.items.map(i => [i.term, i.def]), [
+    ['beta-agonist', 'stimulates beta receptors'], ['Mallory-Weiss tear', 'mucosal tear at the GE junction'], ['Anti-HBs', 'antibody showing immunity'],
+    ['Osmosis', 'water moving'], ['PaO2', 'oxygen pressure'], ['x', 'unknown']]);
+  assert.equal(r.noDef, 2);
+  assert.equal(r.skipped, 2);
+  // A dash inside the definition, or a colon after a dash, does not move the split.
+  assert.deepEqual(parseGlossaryList('ACE inhibitor - blocks ACE: lowers BP\nHb:Hemoglobin: the protein', []).items.map(i => [i.term, i.def]), [['ACE inhibitor', 'blocks ACE: lowers BP'], ['Hb:Hemoglobin', 'the protein']]);
+});
+
+test('paste a list: the counts add up (new, in the glossary, repeated, no definition, too long)', () => {
+  const have = [E('1', 'ATP')];
+  const long = 'x'.repeat(LIMITS.term + 1);
+  const r = parseGlossaryList(`atp - again\nA - 1\na - 2\nB: 3\nC\n${long} - 4\n  \nD = 5`, have);
+  assert.deepEqual([r.items.length, r.already, r.repeated, r.noDef, r.tooLong, r.over], [3, 1, 1, 1, 1, 0]);
+  // 5 lines of mixed separators (the QA case): none are dropped.
+  assert.equal(parseGlossaryList('a - 1\nb - 2\nc - 3\nd: 4\ne\t5', []).items.length, 5);
 });

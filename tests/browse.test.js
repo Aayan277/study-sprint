@@ -77,8 +77,21 @@ test('sorting', () => {
 });
 
 test('tags', () => {
-  assert.deepEqual(parseTags(' Biology, cells,,biology , Exam 1 '), ['biology', 'cells', 'exam 1']);
+  assert.deepEqual(parseTags(' Biology, cells,,biology , Exam 1 '), ['biology', 'cells', 'exam', '1']);
   assert.deepEqual(parseTags(''), []);
+});
+
+test('tags are separated by spaces, commas or line breaks, like Anki (they are kept lower case)', () => {
+  assert.deepEqual(parseTags('#AK_Step1_v12::#UWorld::23456 #AK_Step1_v12::#Subject::Pulm'), ['#ak_step1_v12::#uworld::23456', '#ak_step1_v12::#subject::pulm']);
+  assert.deepEqual(parseTags('a\tb\nc,  d ,e'), ['a', 'b', 'c', 'd', 'e']);
+  assert.deepEqual(parseTags('x  X x'), ['x']);
+});
+
+test('a tag saved earlier with a space in it stays whole while it is still in the field', () => {
+  assert.deepEqual(parseTags('exam 1, new', ['Exam 1']), ['exam 1', 'new']);
+  assert.deepEqual(parseTags('new exam 1', ['exam 1']), ['new', 'exam 1']);
+  assert.deepEqual(parseTags('exam 1 exam 2', ['exam 1', 'exam']), ['exam 1', 'exam', '2']);
+  assert.deepEqual(parseTags('exam, 1', ['exam 1']), ['exam', '1']);          // edited apart: now two tags
 });
 
 test('every filter and sort has a label', () => {

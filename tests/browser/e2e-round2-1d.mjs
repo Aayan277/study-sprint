@@ -115,15 +115,18 @@ await noHScroll(p, 'import with preview');
 await p.click('#saveBtn'); await p.waitForSelector('.crow');
 let cs = await deckCards(p, 'Cells');
 ok(cs.length === 4 && cs.filter(c => c.noteId).length === 2 && new Set(cs.filter(c => c.noteId).map(c => c.noteId)).size === 1, 'saved: 2 plain cards and a cloze note with 2 cards');
-// the last deck is preselected next time
+// opened from the library the next import starts on a new deck (not the one used last); from a deck page it is that deck
 await go(p, '#/import', '#pasteBox');
-ok((await p.$eval('#deckSel', s => s.selectedOptions[0].textContent)) === 'Cells' && await p.isHidden('#newName'), 'the deck of the last import is preselected');
+ok(await p.$eval('#deckSel', s => s.value) === '__new' && await p.isVisible('#newName'), 'an import opened from the library starts on a new deck, not the deck of the last import');
+const cellsId = await p.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Cells').id);
+await go(p, '#/import/' + cellsId, '#pasteBox');
+ok((await p.$eval('#deckSel', s => s.selectedOptions[0].textContent)) === 'Cells' && await p.isHidden('#newName'), 'opened from the deck page, that deck is chosen');
 await paste(p, 'a - b', 'Found 1 card');
 ok((await p.textContent('#saveBtn')) === 'Add 1 card to “Cells”' && await p.isHidden('#saveHint'), 'existing deck: Add 1 card to “Cells”');
 // a deck that no longer exists is not preselected
 await p.evaluate(async () => { const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.name === 'Cells'); await db.deleteDeck(d.id); });
-await go(p, '#/import', '#pasteBox');
-ok(await p.$eval('#deckSel', s => s.value) === '__new', 'a deleted last deck falls back to a new deck');
+await go(p, '#/import/' + cellsId, '#pasteBox');
+ok(await p.$eval('#deckSel', s => s.value) === '__new', 'a deleted deck in the address falls back to a new deck');
 // all cloze lines
 await paste(p, 'Water is {{c1::H2O}}\nSalt is {{c1::NaCl}}', 'Found 2 cards');
 ok((await p.textContent('#found')).includes('Found 2 cards, as cloze notes') && !(await p.textContent('#found')).includes('Missing'), 'only cloze lines: "as cloze notes"');

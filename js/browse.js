@@ -363,7 +363,7 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
 const cardFieldsHTML = (card, maxN = 0) => `
       ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
       ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}`}
-      <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
@@ -382,7 +382,7 @@ function wireCardForm(card, ctx, msg) {
     if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
-    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value), ...($('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {}) }, msg, 'edit');
+    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value, card.tags), ...($('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {}) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -416,7 +416,7 @@ async function saveClozeNote(card, ops, msg) {
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), frontSounds: card.frontSounds, backSounds: card.backSounds });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value, card.tags), noteExtra: readCardText('ceExtra').trim(), frontSounds: card.frontSounds, backSounds: card.backSounds });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -443,7 +443,7 @@ async function saveOcclusionNote(card, ops, msg) {
     if (plan.error) { showErr('ceErr', plan.error); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value, card.tags), noteExtra: readCardText('ceOccExtra').trim() });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', occRemovalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -652,7 +652,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
+      <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>
