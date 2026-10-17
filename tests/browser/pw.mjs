@@ -23,6 +23,15 @@ async function launchMapped(opts, ...rest) {
   browser.newPage = async (...a) => { const page = await newPage(...a); mapRequests(page.context()); return page; };
   return browser;
 }
+// CPU_THROTTLE=4 slows every page's main thread 4x (CDP Emulation.setCPUThrottlingRate) to reproduce a loaded machine.
+// Workers are not slowed by it, which is also how a real busy main thread looks.
+const THROTTLE = Number(process.env.CPU_THROTTLE) || 1;
+function cpuThrottle(ctx) {
+  if (THROTTLE <= 1) return;
+  ctx.on('page', async page => {
+    try { await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: THROTTLE }); } catch { /* page already closed */ }
+  });
+}
 export const realChromium = { launch: launchMapped };
 
 // A brand-new install opens on the first-run start (js/onboarding.js) instead of the sample deck.
@@ -36,7 +45,12 @@ export const chromium = {
     const newContext = browser.newContext.bind(browser);
     // Reduced motion is on by default in the tests (the motion code skips its effects, so screens, sheets and counts settle at
     // once and the checks are deterministic). e2e-motion.mjs asks for 'no-preference' to test the effects themselves.
-    browser.newContext = async (opts = {}, ...rest) => { const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest); await ctx.addInitScript(SKIP); return ctx; };
+    browser.newContext = async (opts = {}, ...rest) => {
+      const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest);
+      await ctx.addInitScript(SKIP);
+      cpuThrottle(ctx);
+      return ctx;
+    };
     return browser;
   }
 };

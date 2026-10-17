@@ -91,9 +91,14 @@ await p.click(`[data-rm="${d2}"]`); await p.waitForFunction(() => document.query
 const stored = await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).restDays);
 ok(stored[d1].on === true && stored[d2].on === false && stored[d2].at >= stored[d1].at, 'the setting keeps the removal as on:false with a newer time (so it syncs)');
 // at most 14 days ahead
+// Each add saves, then redraws the whole sheet (the form and its date box are replaced). The next fill and click must wait for that
+// redraw, or they hit the old form (value lost) or race the previous save. So: wait for the list to show the new day, then go on.
+// The one past the limit adds nothing, so there the reason itself is what is waited for.
 for (let n = 3; n <= 16; n++) {
+  const before = await p.locator('.ys-list li').count();
   await p.fill('#ysDate', await tomorrowPlus(p, n)); await p.click('#ysForm button[type=submit]');
-  await p.waitForTimeout(40);
+  if (before < 14) await p.waitForFunction(c => document.querySelectorAll('.ys-list li').length === c, before + 1);
+  else await p.waitForFunction(() => { const e = document.getElementById('ysErr'); return e && !e.hidden && e.textContent.includes('up to 14'); });
 }
 ok(await p.locator('.ys-list li').count() === 14, 'at most 14 days off can be planned: ' + await p.locator('.ys-list li').count());
 ok((await errText()).includes('up to 14'), 'the 15th is refused with a reason: ' + await errText());
