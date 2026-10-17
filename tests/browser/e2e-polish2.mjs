@@ -256,7 +256,7 @@ const before = await p.$$eval('.rv-counts span', s => s.map(x => x.textContent).
 const frontBefore = await p.textContent('.rv-front .flash-front');
 await p.click('#moreBtn'); await p.waitForSelector('.act-list');
 const rows = await p.$$eval('.act-list .act-row', r => r.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
-ok(rows.length === 5 && /^Edit card/.test(rows[0]) && /^Flag/.test(rows[1]) && /^Bury until tomorrow/.test(rows[2]) && /^Suspend/.test(rows[3]) && /^More/.test(rows[4]), 'the ⋯ sheet is short: Edit, Flag, Bury, Suspend, More: ' + rows.join(' / '));
+ok(rows.length === 6 && /^Edit card/.test(rows[0]) && /^Flag/.test(rows[1]) && /^Bury until tomorrow/.test(rows[2]) && /^Suspend/.test(rows[3]) && /^Add to glossary/.test(rows[4]) && /^More/.test(rows[5]), 'the ⋯ sheet is short: Edit, Flag, Bury, Suspend, Add to glossary, More: ' + rows.join(' / '));
 ok((await box(p, '#sheet')).h < 480, 'and it is small (not the old 1,100px panel): ' + Math.round((await box(p, '#sheet')).h));
 await p.click('[data-go=edit]'); await p.waitForSelector('#ceForm'); await p.waitForTimeout(300);
 ok(await p.isVisible('#ceFront') && await p.isVisible('#ceBack') && await p.isVisible('#ceTags') && await p.isVisible('[data-fmt=bold]') && await p.isVisible('[data-img-add="ceFront"]'), 'Edit has Front, Back, Tags, the formatting buttons and pictures');

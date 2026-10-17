@@ -7,6 +7,8 @@ import * as db from './db.js';
 import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS, UIS, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
+import { entriesFrom } from './glossary.js';
+const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
@@ -19,7 +21,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.11';
+const APP_VERSION = '4.12';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -68,6 +70,9 @@ async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
         <span>Pick a course in Stats to see how ready you are for its exam. This device only.</span></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Glossary underlines</b>
+        <span>Terms from your glossary are underlined on Review cards. This device only.</span></span>
+        <input id="glossaryUnderline" type="checkbox" class="switch" ${settings.glossaryUnderline !== false ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -91,6 +96,10 @@ async function renderSettings(el) {
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+      </div>
+      <div class="set-row">
+        <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
+        <button class="btn ghost small" type="button" id="glossBtn">Open</button>
       </div>
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
         <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
@@ -223,6 +232,10 @@ async function renderSettings(el) {
   for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion']) {
     $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); });
   }
+  $('glossaryUnderline').addEventListener('change', e => { settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
+  $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
+  const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'; };
+  addEventListener('glossary-changed', glossCount);
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
     redrawSkins();
@@ -391,12 +404,15 @@ async function confirmRestore(file) {
   try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
   const problem = db.checkBackup(data);
   if (problem) { toast(problem); return; }
+  // Glossary terms on this device that the backup does not have would be removed too: say so.
+  const lostTerms = entriesFrom(await db.getSettings()).filter(t => !Object.hasOwn(data.settings || {}, `gloss:${t.id}`)).length;
   const when = data.exported ? new Date(data.exported).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'an unknown date';
   openSheet(`
     <h2 id="sheetTitle">Restore this backup?</h2>
     <p style="margin:0">Backup from <b>${esc(when)}</b>: ${plural(data.decks.length, 'deck')}, ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}.</p>
     <div class="confirm">
       <p>Everything on this device now is <b>replaced</b> by the backup${synced ? ', <b>and in your sync account too</b>: your other devices change to match when they sync' : ''}. Export a backup first if you want to keep it.</p>
+      ${lostTerms ? `<p>This also removes ${plural(lostTerms, 'glossary term')} that ${lostTerms === 1 ? 'is' : 'are'} not in the backup.</p>` : ''}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="rbNo">Cancel</button>
         <button class="btn danger solid" type="button" id="rbYes">Replace and restore</button>

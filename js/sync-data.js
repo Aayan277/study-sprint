@@ -24,6 +24,8 @@ export const SYNCED_SETTINGS = [
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off
 // keep both. restDays is { 'YYYY-MM-DD': { on, at } }, merged per day (mergeDayFlags in sync-merge.js).
 export const MERGED_SETTINGS = ['restDays'];
+// The glossary (js/glossary.js): each term is its own synced setting, "gloss:<id>", so the newest copy of each term wins.
+export const isSyncedSetting = key => SYNCED_SETTINGS.includes(key) || (typeof key === 'string' && key.startsWith('gloss:'));
 export const SETTING_TIMES = '_times';
 
 // A synced setting that came in from outside (the server or a backup): { ok: true, value } with the value cleaned, or

@@ -35,11 +35,11 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   // ---------- the editor: Answer in steps, Memory hook ----------
   await p.goto('about:blank'); await p.goto(URL + '#/deck/T'); await p.waitForSelector('#brAdd');
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
-  ok(await p.locator('#acStepsOn').count() === 1 && /Answer in steps/.test(await p.textContent('.steps-switch')), `${tag}: Basic has an "Answer in steps" switch`);
+  ok(await p.locator('#acModeSteps').count() === 1 && /Answer:\s*Text\s*Steps\s*Elements/.test(await p.textContent('.answer-mode')), `${tag}: Basic has an "Answer: Text | Steps | Elements" choice`);
   ok(await p.locator('#acSteps').isHidden() && await p.locator('#acBackWrap').isVisible(), `${tag}: off = the normal Back box`);
   ok(/Memory hook \(optional\)/.test(await p.textContent('#acForm')), `${tag}: Basic has a "Memory hook (optional)" field`);
   await p.fill('#acFront', 'Solve 2x + 3 = 7');
-  await p.click('#acStepsOn');
+  await p.click('.answer-mode .chip:has(#acModeSteps)');
   ok(await p.locator('#acSteps').isVisible() && await p.locator('#acBackWrap').isHidden(), `${tag}: on = step fields instead of Back`);
   ok(await p.locator('#acStepList .step-row').count() === 2, `${tag}: it starts with two step fields`);
   ok(await p.$$eval('#acStepList [data-step=del]', b => b.length === 2 && b.every(x => x.disabled)), `${tag}: with two steps the delete buttons are off`);
@@ -74,7 +74,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   ok(made?.back === 'Step 1: subtract 3 from both sides\nStep 2: check\nStep 3: divide by 2 to get x\nAnswer: x = 2', `${tag}: saved back is the Step lines (${JSON.stringify(made?.back)})`);
   ok(made?.noteExtra === 'Undo the plus, then the times', `${tag}: the hook is saved as noteExtra`);
   ok(await p.locator('#acStepList .step-row').count() === 2 && (await rows()).every(v => v === ''), `${tag}: after adding, the step fields are empty again`);
-  ok(await p.locator('#acStepsOn').isChecked(), `${tag}: the switch stays on for the next card`);
+  ok(await p.locator('#acModeSteps').isChecked(), `${tag}: Steps stays chosen for the next card`);
   // Fewer than two steps is refused.
   await p.fill('#acFront', 'One step only');
   await ta(0).fill('just this');
@@ -96,7 +96,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await p.fill('#acFront', 'One step only 2');
   await ta(0).fill('just this');
   // Switching off puts the steps into Back.
-  await p.click('#acStepsOn');
+  await p.click('.answer-mode .chip:has(#acModeText)');
   ok((await p.evaluate(() => { const b = document.getElementById('acBack'); return b.value ?? b.textContent; })).includes('Step 1: just this'), `${tag}: switching off writes the steps into Back`);
   await p.click('#acDone');
   // Tidy the second stepped card for the review below: replace the first with a clear 3-step card with an intro and no Answer.

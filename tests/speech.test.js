@@ -32,3 +32,12 @@ test('a stepped card reads its intro and the steps shown so far', async () => {
   assert.equal(stepsSpeech(p, 2), 'Solve it.\nStep 1. subtract 3.\nStep 2. divide by 2.\nAnswer. x = 2.');
   assert.equal(stepsSpeech({ intro: '', steps: ['a', 'b'], final: null }, 2), 'Step 1. a.\nStep 2. b.');
 });
+
+test('an elements card reads its intro and the elements shown so far', async () => {
+  const { elementsSpeech } = await import('../js/speech.js');
+  const p = { intro: 'Negligence', steps: ['Duty', 'Breach.'], final: null };
+  assert.equal(elementsSpeech(p, 0), 'Negligence.');
+  assert.equal(elementsSpeech(p, 1), 'Negligence.\nElement 1. Duty.');
+  assert.equal(elementsSpeech(p, 2), 'Negligence.\nElement 1. Duty.\nElement 2. Breach.');
+  assert.equal(elementsSpeech({ intro: '', items: ['a', 'b'] }, 2), 'Element 1. a.\nElement 2. b.');
+});

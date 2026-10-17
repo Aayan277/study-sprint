@@ -300,3 +300,20 @@ test('distractors: include never brings in a sibling of the card', () => {
   const rest = Array.from({ length: 6 }, (_, i) => card(`s${i}`, `ans${i}`, { noteId: `M${i}`, cloze: 1 }));
   assert.ok(!pickDistractors(a, [a, sib, ...rest], 'front', { rnd: seeded(1), include: ['y'] }).includes('y'));
 });
+
+// ---------- elements cards in Play (item 4) ----------
+test('elements cards are front-only; multiple choice answers with the elements joined by " · "; never typed', async () => {
+  const { isFrontOnly } = await import('../js/game.js');
+  const el = { id: 'e1', front: 'Negligence', back: 'Element 1: Duty\nElement 2: Breach\nElement 3: Causation\nElement 4: Damages' };
+  const plain = { id: 'p', front: 'cell', back: 'unit of life' };
+  assert.ok(isFrontOnly(el) && !isFrontOnly(plain));
+  assert.deepEqual(questionFor(el, 'front'), { prompt: 'Negligence', answer: 'Duty · Breach · Causation · Damages' });
+  assert.equal(questionFor(el, 'back'), null);
+  assert.equal(questionFor(el, 'typing'), null);
+  assert.equal(questionFor({ ...el, frontImage: 'm1' }, 'front').image, 'm1');
+  assert.deepEqual(playableCards([el, plain], 'back').map(c => c.id), ['p']);
+  assert.deepEqual(playableCards([el, plain], 'typing').map(c => c.id), ['p']);
+  // one element, or "Elements: H, O", is an ordinary card
+  assert.ok(!isFrontOnly({ id: 'o', front: 'q', back: 'Element 1: only one' }));
+  assert.ok(!isFrontOnly({ id: 'c', front: 'Water', back: 'Elements: H, O' }));
+});
