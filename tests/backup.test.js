@@ -111,7 +111,7 @@ test('dailyGoal in a backup: a whole number from 1 to 500 (or none) passes, anyt
   for (const g of [0, -5, 501, 2.5, '20', NaN, [20], {}, true]) assert.match(checkBackup(withGoal(g)), /daily goal/);
 });
 
-test('fsrsParams in a backup: a good value, a reset or none passes; a restore keeps the good one and turns junk into the standard settings', () => {
+test('fsrsParams in a backup: a good value, a reset or none passes; a restore keeps the good one and leaves junk out', () => {
   const mine = { w: Array(21).fill(0.5), at: 1, reviews: 450, cards: 90, version: 'fsrs-6' };
   const withParams = fsrsParams => ({ ...good, settings: { fsrsParams } });
   for (const v of [mine, { w: null, at: 2, version: 'fsrs-6' }, null, undefined]) assert.equal(checkBackup(withParams(v)), null);
@@ -120,8 +120,9 @@ test('fsrsParams in a backup: a good value, a reset or none passes; a restore ke
   assert.deepEqual(restore({ fsrsParams: mine, dailyGoal: 30 }), { fsrsParams: mine, dailyGoal: 30 });
   assert.equal(restore({ fsrsParams: null }).fsrsParams, null);
   for (const bad of [{ ...mine, version: 'fsrs-7' }, { ...mine, w: mine.w.slice(1) }, { ...mine, w: Array(21).fill(Infinity) }, 'x', 7, []]) {
-    assert.equal(restore({ fsrsParams: bad, dailyGoal: 30 }).fsrsParams, null);
-    assert.equal(restore({ fsrsParams: bad, dailyGoal: 30 }).dailyGoal, 30);                                   // the rest of the settings still come back
+    const out = restore({ fsrsParams: bad, dailyGoal: 30 });
+    assert.ok(!('fsrsParams' in out), 'a value that does not clean is left out, not stored as null (that could wipe synced weights)');
+    assert.equal(out.dailyGoal, 30);                                                                            // the rest of the settings still come back
   }
   // this device's sign-in and sync bookmarks are never restored
   assert.deepEqual(restore({ syncAuth: { a: 1 }, syncState: { b: 2 }, theme: 'x' }), { theme: 'x' });

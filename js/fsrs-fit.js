@@ -124,17 +124,25 @@ export function evaluate(cards, w, { round = true } = {}) {
 export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse;
 
 // ---------- gradients (dual numbers) ----------
-// A dual number is { v: value, g: Float64Array(17) | null }: the value, and its derivative with respect to each of w4 to w20
-// (null = a constant: all zeros). Only the few operations the model needs are here.
-const K = v => ({ v, g: null });
-const D = x => (typeof x === 'number' ? { v: x, g: null } : x);
+// A dual number is { v: value, o: offset }: the value, and where its 17 derivatives (with respect to w4 to w20) sit in one big
+// shared buffer G (o = -1: a constant, all zeros). Only the few operations the model needs are here.
+// The buffer is a small arena: the weights sit at the start, then the memory state (s, d) carried from one answer to the next,
+// then scratch space for one answer's arithmetic, which is handed back after each answer. So no array is made per operation.
+const SLOT_S = 0, SLOT_D = P, SLOT_W = 2 * P;                 // the carried state, then the 17 trained weights
+const ARENA = SLOT_W + P * P;                                  // scratch starts here
+const G = new Float64Array(ARENA + 600 * P);
+let top = ARENA;
+const K = v => ({ v, o: -1 });
+const D = x => (typeof x === 'number' ? { v: x, o: -1 } : x);
 function lin(v, a, ca, b, cb) {                   // a number whose derivative is ca·a' + cb·b'
-  const ag = a && a.g, bg = b && b.g;
-  if (!ag && !bg) return { v, g: null };
-  const g = new Float64Array(P);
-  if (ag) for (let k = 0; k < P; k++) g[k] = ca * ag[k];
-  if (bg) for (let k = 0; k < P; k++) g[k] += cb * bg[k];
-  return { v, g };
+  const ao = a ? a.o : -1, bo = b ? b.o : -1;
+  if (ao < 0 && bo < 0) return { v, o: -1 };
+  const o = top;
+  top += P;
+  if (ao >= 0) for (let k = 0; k < P; k++) G[o + k] = ca * G[ao + k];
+  else for (let k = 0; k < P; k++) G[o + k] = 0;
+  if (bo >= 0) for (let k = 0; k < P; k++) G[o + k] += cb * G[bo + k];
+  return { v, o };
 }
 const dadd = (a, b) => { a = D(a); b = D(b); return lin(a.v + b.v, a, 1, b, 1); };
 const dsub = (a, b) => { a = D(a); b = D(b); return lin(a.v - b.v, a, 1, b, -1); };
@@ -142,17 +150,24 @@ const dmul = (a, b) => { a = D(a); b = D(b); return lin(a.v * b.v, a, b.v, b, a.
 const ddiv = (a, b) => { a = D(a); b = D(b); return lin(a.v / b.v, a, 1 / b.v, b, -a.v / (b.v * b.v)); };
 const dneg = a => lin(-a.v, a, -1, null, 0);
 const dexp = a => { const v = Math.exp(a.v); return lin(v, a, v, null, 0); };
-const dpow = (a, b) => { a = D(a); b = D(b); const v = Math.pow(a.v, b.v); return lin(v, a, a.g ? b.v * Math.pow(a.v, b.v - 1) : 0, b, b.g ? Math.log(a.v) * v : 0); };
+const dpow = (a, b) => { a = D(a); b = D(b); const v = Math.pow(a.v, b.v); return lin(v, a, a.o >= 0 ? b.v * Math.pow(a.v, b.v - 1) : 0, b, b.o >= 0 ? Math.log(a.v) * v : 0); };
 const dclamp = (a, lo, hi) => (a.v < lo ? K(lo) : a.v > hi ? K(hi) : a);
 const dmin = (a, b) => (a.v > b.v ? b : a);     // the smaller of two (a tie keeps a)
+// Keep a number past the end of the answer: copy its derivatives into a carried slot.
+function keep(a, slot) {
+  if (a.o < 0) return { v: a.v, o: -1 };
+  G.copyWithin(slot, a.o, a.o + P);
+  return { v: a.v, o: slot };
+}
 
 // Weights as dual numbers: w0 to w3 are constants, w4 to w20 each carry a derivative of 1 for themselves.
 function dualWeights(w) {
+  G.fill(0, SLOT_W, SLOT_W + P * P);
   return w.map((v, i) => {
     if (i < FIRST_TRAINED) return K(v);
-    const g = new Float64Array(P);
-    g[i - FIRST_TRAINED] = 1;
-    return { v, g };
+    const o = SLOT_W + (i - FIRST_TRAINED) * P;
+    G[o + i - FIRST_TRAINED] = 1;
+    return { v, o };
   });
 }
 
@@ -203,24 +218,43 @@ export function lossAndGrad(cards, w) {
       if (i === 0) {
         const o = initState(w, g, false);
         s = K(o.s);
-        const d0 = dclamp(dadd(dsub(W[4], dexp(dmul(W[5], g - 1))), 1), 1, 10);
-        d = d0;
+        top = ARENA;
+        d = keep(dclamp(dadd(dsub(W[4], dexp(dmul(W[5], g - 1))), 1), 1, 10), SLOT_D);
         continue;
       }
       const t = deltas[i];
+      top = ARENA;                                  // hand back the scratch space of the answer before
       const r = dCurve(W, t, s);
       if (scored[i] && t > 0) {
         const p = r.v, y = g > 1;
         if (p > EPS && p < 1 - EPS) {
           loss -= Math.log(y ? p : 1 - p);
-          if (r.g) { const dl = y ? -1 / p : 1 / (1 - p); for (let k = 0; k < P; k++) grad[k] += dl * r.g[k]; }
+          if (r.o >= 0) { const dl = y ? -1 / p : 1 / (1 - p); for (let k = 0; k < P; k++) grad[k] += dl * G[r.o + k]; }
         } else loss -= Math.log(clamp(y ? p : 1 - p, EPS, 1));
         count++;
       }
-      ({ s, d } = dNext(W, s, d, t, g, r));
+      const nx = dNext(W, s, d, t, g, r);
+      if (top > G.length) throw new Error('fsrs-fit: the derivative buffer is too small');
+      s = keep(nx.s, SLOT_S); d = keep(nx.d, SLOT_D);       // (both are copied out before either slot is read again)
     }
   }
   return { loss, count, grad };
+}
+
+// Put values in non-decreasing order by pooling neighbours that are the wrong way round (pool adjacent violators):
+// a pooled block gets the weighted mean of its members. Works on log stabilities. Returns a new array.
+export function poolAscending(values, weights = values.map(() => 1)) {
+  const blocks = [];
+  for (let g = 0; g < values.length; g++) {
+    blocks.push({ v: values[g], w: weights[g], n: 1 });
+    while (blocks.length > 1 && blocks[blocks.length - 2].v > blocks[blocks.length - 1].v) {
+      const b = blocks.pop(), a = blocks.pop();
+      blocks.push({ v: (a.v * a.w + b.v * b.w) / (a.w + b.w), w: a.w + b.w, n: a.n + b.n });
+    }
+  }
+  const out = [];
+  for (const b of blocks) for (let k = 0; k < b.n; k++) out.push(b.v);
+  return out;
 }
 
 // ---------- pretraining w0 to w3 ----------
@@ -261,17 +295,7 @@ export function pretrainStarts(cards, defaults, bounds, decayW20, priorN = FIT_D
     }
     logs.push(x); weights.push(n + priorN);
   }
-  // Pool adjacent violators: blocks of { value, weight, count }.
-  const blocks = [];
-  for (let g = 0; g < 4; g++) {
-    blocks.push({ v: logs[g], w: weights[g], n: 1 });
-    while (blocks.length > 1 && blocks[blocks.length - 2].v > blocks[blocks.length - 1].v) {
-      const b = blocks.pop(), a = blocks.pop();
-      blocks.push({ v: (a.v * a.w + b.v * b.w) / (a.w + b.w), w: a.w + b.w, n: a.n + b.n });
-    }
-  }
-  const out = [];
-  for (const b of blocks) for (let k = 0; k < b.n; k++) out.push(b.v);
+  const out = poolAscending(logs, weights);
   return out.map((x, g) => clamp(r8(Math.exp(x)), bounds[g][0], bounds[g][1]));
 }
 
@@ -376,7 +400,8 @@ export function* fit(input) {
     }
     w[g] = Math.exp((lo + hi) / 2);
   }
-  for (let g = 1; g < 4; g++) if (w[g] < w[g - 1]) { const mid = Math.sqrt(w[g] * w[g - 1]); w[g] = w[g - 1] = mid; }
+  const ordered = poolAscending(w.slice(0, 4).map(Math.log));          // w0 <= w1 <= w2 <= w3 again, as in pretraining
+  for (let g = 0; g < 4; g++) w[g] = clamp(Math.exp(ordered[g]), bounds[g][0], bounds[g][1]);
   const fitted = w.map((x, i) => clamp(round6(x), bounds[i][0], bounds[i][1]));
   yield { phase: 'refine', done: 4, total: 4, progress: at('refine', 1) };
 

@@ -6,8 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { rowKind, buildHistories, countEligible, deltaDays, MIN_REVIEWS, PLAY_POLICY } from '../js/fsrs-data.js';
 
-// A row at day D of October 2026 and hour H (local time), a day in the month being the study day when H >= 4.
-const at = (day, hour = 12) => new Date(2026, 9, day, hour).getTime();
+// A row at day D of October 2026 and hour H, in UTC (the day gaps count UTC calendar dates, like ts-fsrs).
+const at = (day, hour = 12) => Date.UTC(2026, 9, day, hour);
 let id = 0;
 const row = (cardId, day, extra = {}) => ({ id: ++id, cardId, timestamp: at(day), source: 'review', rating: 3, ...extra });
 
@@ -119,23 +119,53 @@ test('a history that starts with an unknown state is skipped, and so is one with
   assert.equal(h.skipped, 1);
 });
 
-test('days are study days: the new day starts at 4am', () => {
-  const t = (day, h, m = 0) => new Date(2026, 9, day, h, m).getTime();
-  assert.equal(deltaDays(t(5, 23, 30), t(6, 3, 59)), 0);          // 3:59 the next morning still belongs to the day before
-  assert.equal(deltaDays(t(5, 23, 30), t(6, 4, 0)), 1);
-  assert.equal(deltaDays(t(5, 3, 0), t(5, 5, 0)), 1);               // before and after 4am on the same calendar day
+test('day gaps are UTC calendar dates, the same as ts-fsrs dateDiffInDays (no 4am rollover)', () => {
+  const t = (day, h, m = 0) => Date.UTC(2026, 9, day, h, m);
+  assert.equal(deltaDays(t(5, 23, 30), t(6, 0, 30)), 1);          // an hour apart, but a new date
+  assert.equal(deltaDays(t(5, 23, 30), t(6, 3, 59)), 1);
+  assert.equal(deltaDays(t(5, 0, 0), t(5, 23, 59)), 0);
   assert.equal(deltaDays(t(5, 12), t(5, 12)), 0);
   assert.equal(deltaDays(t(5, 12), t(15, 12)), 10);
+  assert.equal(deltaDays(t(5, 12), t(4, 12)), -1);
   id = 0;
   const rows = [
     { id: 1, cardId: 'N', timestamp: t(5, 22), source: 'review', rating: 3, state: 0 },
     { id: 2, cardId: 'N', timestamp: t(6, 2), source: 'review', rating: 1, state: 2 },
     { id: 3, cardId: 'N', timestamp: t(6, 9), source: 'review', rating: 3, state: 3 }
   ];
-  assert.deepEqual([...buildHistories(rows).cards[0].deltas], [0, 0, 1]);   // late-night answer counts as the same day as the evening one
+  const h = buildHistories(rows).cards[0];
+  assert.deepEqual([...h.deltas], [0, 1, 0]);
+  assert.equal(h.day0, Math.floor(t(5, 22) / 86400000));
 });
 
-test('daylight saving: a 23 or 25 hour night is still one day (run in Europe/London)', () => {
+test('a reset card (state 0 again) keeps only what follows the last reset', () => {
+  id = 0;
+  const rows = [
+    row('R', 0 + 1, { state: 0 }), row('R', 4, { state: 2 }), row('R', 21, { state: 2 }),              // days 0, 3 and 20 Good
+    row('R', 221, { state: 0, rating: 1 }), row('R', 222, { state: 1 }),                                // reset, then Again at day 220 and Good at day 221
+    row('S', 1, { state: 0 }), row('S', 3, { state: 2 })                                              // another card, never reset
+  ].map(r => (r.cardId === 'R' ? { ...r, timestamp: Date.UTC(2026, 0, 1 + (r.timestamp - at(1)) / 86400000, 12) } : r));
+  const h = buildHistories(rows);
+  const r = h.cards.find(c => c.cardId === 'R');
+  assert.deepEqual([...r.ratings], [1, 3]);
+  assert.deepEqual([...r.deltas], [0, 1]);
+  assert.deepEqual([...r.scored], [1, 1]);
+  assert.equal(h.reviews, 2 + 2);
+  assert.equal(h.longTerm, 1 + 1);
+  // two resets: the last one wins; a reset with no earlier rows changes nothing; a Play row can follow it
+  id = 0;
+  const twice = [row('T', 1, { state: 0 }), row('T', 5, { state: 2 }), row('T', 9, { state: 0 }), row('T', 12, { state: 2 }), row('T', 20, { state: 0, rating: 2 }),
+    row('T', 21, { source: 'play', applied: true, state: 1 }), row('T', 25, { state: 2, rating: 4 })];
+  const t = buildHistories(twice).cards[0];
+  assert.deepEqual([...t.ratings], [2, 3, 4]);
+  assert.deepEqual([...t.scored], [1, 0, 1]);
+  assert.deepEqual([...buildHistories(twice, { playPolicy: 'truncate' }).cards[0].ratings], [2]);
+  // a reset card whose old history was not imported fully is fine: the new segment starts at "new"
+  id = 0;
+  assert.equal(buildHistories([row('U', 1, { state: 3 }), row('U', 4, { state: 0 }), row('U', 6, { state: 1 })]).cards[0].ratings.length, 2);
+});
+
+test('daylight saving: the gap is the UTC date difference, whatever the local clock says (run in Europe/London)', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('./fsrs-data.dst.child.mjs', import.meta.url))], { env: { ...process.env, TZ: 'Europe/London' }, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /ok tz=Europe\/London/);

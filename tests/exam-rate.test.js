@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 
 const local = process.env.TS_FSRS_PATH || new URL('../node_modules/ts-fsrs/dist/index.mjs', import.meta.url).pathname;
 const skip = existsSync(local) ? false : 'ts-fsrs 5.4.2 is not installed';
+if (skip) console.warn('\n*** ts-fsrs not installed: the scheduler tests in exam-rate.test.js are SKIPPED. Run `npm install` (ts-fsrs 5.4.2 is a devDependency). ***\n');
 if (!skip) register('./sim/loader.mjs', import.meta.url);
 const load = async () => ({
   ...(await import('../js/srs.js')), ...(await import('../js/exam.js')), ...(await import('../js/queue.js')),

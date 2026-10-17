@@ -1,7 +1,7 @@
 // Checks that the forward model in js/fsrs-fit.js gives the same memory state as the real scheduler (ts-fsrs 5.4.2).
 // Run with: node tests/fsrs-parity.test.js
 // If ts-fsrs drifts (a new FSRS version), this is the test that fails. It needs a local copy, like tests/exam-rate.test.js:
-//   npm install --no-save ts-fsrs@5.4.2      (or set TS_FSRS_PATH to its dist/index.mjs)
+//   npm install      (ts-fsrs 5.4.2 is a devDependency; or set TS_FSRS_PATH to its dist/index.mjs)
 // Without that copy these tests are skipped.
 
 import { test } from 'node:test';
@@ -12,6 +12,7 @@ import { forgettingCurve, initState, nextState, evaluate, mulberry32 } from '../
 
 const local = process.env.TS_FSRS_PATH || new URL('../node_modules/ts-fsrs/dist/index.mjs', import.meta.url).pathname;
 const skip = existsSync(local) ? false : 'ts-fsrs 5.4.2 is not installed';
+if (skip) console.warn('\n*** ts-fsrs not installed: the parity tests are SKIPPED. Run `npm install` (ts-fsrs 5.4.2 is a devDependency). ***\n');
 const load = () => import(pathToFileURL(local).href);
 
 // Random weights inside ts-fsrs's own bounds (so they are valid), or the defaults.
@@ -94,4 +95,14 @@ test('the bounds and defaults used by the fit tests are ts-fsrs\'s own', { skip 
   const BOUNDS = [[0.001, 100], [0.001, 100], [0.001, 100], [0.001, 100], [1, 10], [0.001, 4], [0.001, 4], [0.001, 0.75], [0, 4.5], [0, 0.8], [0.001, 3.5], [0.001, 5], [0.001, 0.25], [0.001, 0.9], [0, 4], [0, 1], [1, 6], [0, 2], [0, 2], [0.01, 0.8], [0.1, 0.8]];
   assert.deepEqual(clip, BOUNDS);
   assert.deepEqual([...lib.default_w], [0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542]);
+});
+
+test('day gaps in fsrs-data.js equal ts-fsrs dateDiffInDays', { skip }, async () => {
+  const lib = await load();
+  const { deltaDays } = await import('../js/fsrs-data.js');
+  const rng = mulberry32(11);
+  for (let i = 0; i < 2000; i++) {
+    const a = Date.UTC(2024, 0, 1) + Math.floor(rng() * 900 * 86400000), b = a + Math.floor(rng() * 40 * 86400000);
+    assert.equal(deltaDays(a, b), lib.dateDiffInDays(new Date(a), new Date(b)));
+  }
 });

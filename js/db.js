@@ -477,10 +477,14 @@ export function checkBackup(data) {
   if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
 }
-// The settings a backup restores: not this device's own (sign-in, sync bookmarks), and with fsrsParams cleaned
-// (anything unusable becomes null, the standard settings; the rest of the backup is still restored).
+// The settings a backup restores: not this device's own (sign-in, sync bookmarks), and with fsrsParams cleaned. A value that
+// does not clean (junk, or a version this app doesn't know) is left out altogether, rather than stored as null: a null would
+// be stamped as a new "reset" and could wipe good weights that sync from another device. The rest of the backup still restores.
 export function restoredSettings(settings) {
-  return Object.entries(settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k)).map(([k, v]) => (k === 'fsrsParams' ? [k, cleanFsrsParams(v)] : [k, v]));
+  return Object.entries(settings || {})
+    .filter(([k]) => !LOCAL_ONLY.includes(k))
+    .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
+    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
 }
 export const validDailyGoal = n => n == null || (Number.isInteger(n) && n >= 1 && n <= 500);      // null or missing means the default (20)
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10

@@ -11,9 +11,11 @@
 //      added to the lists below on purpose.
 //   4. A card's history must start at "new" (its first row has state 0, or has no state and nothing came before it).
 //      Otherwise the start is unknown and the card is skipped, as Anki does.
-//   5. Gaps are counted in study days (the 4am rollover from days.js), so two answers on the same day have a gap of 0.
-
-import { dayStart } from './days.js';
+//   5. A kept row with state 0 that comes after earlier kept rows is a reset ("Reset to new" in Browse, or Forget in Anki).
+//      Only the part from the last reset on is used, as Anki does.
+//   6. Gaps are whole calendar days in UTC, worked out exactly the way ts-fsrs does for the live scheduler (dateDiffInDays on the
+//      review times, see toLibrary in srs.js), so the fitted weights are trained on the same t they are applied with.
+//      Two answers on the same UTC date have a gap of 0.
 
 export const MIN_REVIEWS = 400;               // the optimizer unlocks at this many reviews that count
 export const PLAY_POLICY = 'replay';          // 'replay' | 'truncate' (owner decision Q1: replay)
@@ -31,16 +33,18 @@ export function rowKind(row) {
   return null;
 }
 
-// Whole study days from time a to time b (both in ms). Rounded, so a daylight-saving night (23 or 25 hours) still counts as one day.
-export const deltaDays = (a, b) => Math.round((dayStart(b) - dayStart(a)) / DAY);
+// Whole days from time a to time b (both in ms): a copy of ts-fsrs's dateDiffInDays. It compares the UTC calendar dates,
+// so it ignores the time zone, daylight saving and the 4am rollover, exactly like the live scheduler.
+const utcDate = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
+export const deltaDays = (a, b) => Math.floor((utcDate(b) - utcDate(a)) / DAY);
 
 // Build the histories the fit works on.
 //   rows    review-log rows (any order, any junk)
 //   playPolicy  'replay' (default) or 'truncate'
 // Returns { cards, reviews, cardsUsed, longTerm, skipped }:
 //   cards      [{ cardId, day0, deltas: Int32Array, ratings: Uint8Array, scored: Uint8Array }], one per usable card, in card order of first appearance.
-//              deltas[i] = study days since the previous row (0 for the first), scored[i] = 1 for a real review, 0 for a replayed Play answer.
-//              day0 = the study-day number of the first row (days since 1970, for splitting by time).
+//              deltas[i] = UTC calendar days since the previous row (0 for the first), scored[i] = 1 for a real review, 0 for a replayed Play answer.
+//              day0 = the UTC day number of the first row (days since 1970, for splitting by time).
 //   reviews    the number of real reviews on usable cards (this is what must reach MIN_REVIEWS)
 //   cardsUsed  usable cards with at least one real review
 //   longTerm   real reviews that follow an earlier row on a later day (the ones that get a prediction)
@@ -61,10 +65,11 @@ export function buildHistories(rows, { playPolicy = PLAY_POLICY } = {}) {
     let kept = [];
     for (const { row } of list) {
       const kind = rowKind(row);
-      if (!kind) continue;
-      if (kind === 'replay' && playPolicy === 'truncate') break;
-      kept.push({ row, kind });
+      if (kind) kept.push({ row, kind });
     }
+    // A reset (state 0 after earlier rows): keep only what follows the last one.
+    for (let i = kept.length - 1; i > 0; i--) if (kept[i].row.state === 0) { kept = kept.slice(i); break; }
+    if (playPolicy === 'truncate') { const cut = kept.findIndex(k => k.kind === 'replay'); if (cut >= 0) kept = kept.slice(0, cut); }
     if (!kept.length) continue;
     // The history must start at "new": state 0, or no state at all and no row of any kind before it.
     const first = kept[0].row;
@@ -81,7 +86,7 @@ export function buildHistories(rows, { playPolicy = PLAY_POLICY } = {}) {
       if (scored[i]) { reviews++; if (i > 0 && deltas[i] > 0) longTerm++; }
     }
     cardsUsed++;
-    cards.push({ cardId, day0: Math.round(dayStart(first.timestamp) / DAY), deltas, ratings, scored });
+    cards.push({ cardId, day0: Math.floor(utcDate(first.timestamp) / DAY), deltas, ratings, scored });
   }
   return { cards, reviews, cardsUsed, longTerm, skipped };
 }

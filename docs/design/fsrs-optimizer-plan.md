@@ -99,7 +99,7 @@ The game's answers will soon not write to FSRS or the log by default. The optimi
    - Example: an Anki import whose earlier history was not brought over.
    - Anki and fsrs-rs skip incomplete histories the same way.
 6. **Undo** already deletes the log row (`undoReview`), and deleting a card deletes its rows, so neither needs anything special.
-7. **Day gaps:** `deltaDays = Math.round((dayStart(t2) - dayStart(t1)) / 86400000)`, using the 4am rollover from `js/days.js`. `round` handles the DST changes. Same-day rows give 0 and go through the short-term formula (w17–w19), as with `enable_short_term: true`.
+7. **Day gaps:** the same rule the live scheduler uses: ts-fsrs's `dateDiffInDays`, i.e. `floor((UTC date of t2 - UTC date of t1) / 86400000)` on the review times (see `toLibrary` in `srs.js`). It ignores the time zone, DST and the 4am rollover on purpose, so the weights are trained on the same t they are applied with. Same-date rows give 0 and go through the short-term formula (w17–w19), as with `enable_short_term: true`.
 8. **Unlock count** = the number of scored training rows with deltaDays > 0 (long-term reviews) on eligible cards, plus same-day ones, i.e. all kind-1 rows that survive rule 5. It needs at least 400. The UI explains the gap between "answers" and "reviews that count".
 
 The game change itself (Play stops writing to FSRS and the log by default) is a separate task. This module needs no change when it lands: new Play rows will simply be absent or have `applied: false`.
@@ -225,7 +225,7 @@ Add styles to an existing sheet section of `css/styles.css`. Check 375px with no
   - review and anki rows are kept; applied Play rows are replayed but not scored; other Play rows are ignored
   - unknown sources are ignored
   - a card whose first row has `state !== 0` is skipped
-  - the 4am rollover and a DST night via a TZ child process (as in `tests/stats-dst.child.mjs`)
+  - the UTC-date rule, and a DST night in a non-UTC time zone via a TZ child process (as in `tests/stats-dst.child.mjs`)
   - the unlock count
   - the `truncate` policy switch
 - **`tests/fsrs-fit.test.js`**:
@@ -317,6 +317,10 @@ Owner decisions: Q1 replay, Q2 lower log loss AND RMSE no higher, Q3 no recalcul
 - **The decision is in-sample, so it is generous.** On a history made from the default weights, judged against those same weights, the fit still wins about half the time by a hair (noise it has fitted). That is the owner-approved rule (same as Anki); the test only requires that the answer follows the rule and that such a gain is tiny. Judging out of sample is `evaluateSplit`, for the simulator.
 - **Some weights cannot be recovered from a log.** w7 and w12 to w19 act through rare or same-day answers (same-day answers are never scored), so the test checks recovery on w0 to w6, w8 to w10 and w20 only.
 - **Decay follows w20 in every exam function, not only the three named in section 6.** `recall`, `recallAt`, `planFinalPass`, `examSchedule`, `examGainFrom`, `pullIn`, `examPrepQueue` and `readiness` take a trailing `w20`; `examClamp` reads `opts.w[20]`. `personalW20(settings)` (sched-settings.js) gives the number; it is kept in 0.1 to 0.8, the range the scheduler allows.
-- **`fsrsParams` cleaning.** `cleanFsrsParams` returns a clean copy with only the known fields. Settings reads, server rows (`acceptSetting` in sync-data.js: `null` is a real value, junk is skipped) and backups (`restoredSettings` in db.js: junk becomes `null`) all use it. `checkBackup` does not refuse a backup for a bad `fsrsParams`: the weights are derived data and the rest of the backup is still good.
+- **`fsrsParams` cleaning.** `cleanFsrsParams` returns a clean copy with only the known fields. Settings reads, server rows (`acceptSetting` in sync-data.js: `null` is a real value, junk is skipped) and backups (`restoredSettings` in db.js: junk is left out of the restore, not stored as `null`, so it cannot be stamped as a reset and wipe weights synced from another device) all use it. `checkBackup` does not refuse a backup for a bad `fsrsParams`: the weights are derived data and the rest of the backup is still good.
 - **`schedulerOptions` leaves `w` out** when no personal weights are in use, so existing option objects and the scheduler's cache key do not change.
 - **`sw.js`.** The new modules are listed in `CORE` and CACHE is bumped to v83, because `tests/preload.test.js` and `tests/sw.test.js` require both for any change under `js/`.
+- **Resets.** A kept row with state 0 after earlier kept rows is a reset (Browse "Reset to new", Anki Forget); only the part after the last reset is used (rule 3a, as Anki does).
+- **Day gaps are UTC dates, not study days (supersedes 3.7).** `deltaDays` mirrors ts-fsrs's `dateDiffInDays`, which the live scheduler applies to the review times, so training and use see the same t. The 4am rollover still decides when a card is *due* in the app; it does not enter the fit.
+- **For PR 2 (per-deck relearning steps).** `generatorParameters` clips w17 and w18 to a ceiling that depends on the deck's relearning-step count. Before PR 2 evaluates "current" and "fitted" weights (and before the final save), it must run `clipParameters(w, numRelearningSteps, true)` for each deck's step count, and compare the metrics on what the scheduler will really use.
+- **Ordering and speed.** After the refine step w0 to w3 are put in order with the same pool-adjacent-violators code as pretraining (`poolAscending`). The dual numbers keep their derivatives in one shared arena buffer instead of a new array per operation: same results bit for bit, about 12 times faster (49,851 answers: 14.8 s to 1.2 s).
