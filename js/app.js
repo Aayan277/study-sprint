@@ -4,7 +4,7 @@
 // That way the phone's back gesture and the browser's back button work as expected.
 
 import * as db from './db.js';
-import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
+import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS, UIS, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
@@ -19,7 +19,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.10';
+const APP_VERSION = '4.11';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -27,7 +27,7 @@ initInstall();       // listens for the browser saying the app can be installed 
 // ---------- settings ----------
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  const { skin, mode, oled } = settings.theme;
+  const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
     <nav class="set-nav" id="setNav" aria-label="Jump to a section">
@@ -36,7 +36,11 @@ async function renderSettings(el) {
 
     <section class="section" aria-labelledby="appearTitle">
       <h2 id="appearTitle">Appearance</h2>
-      <h3 class="set-sub" id="thTitle">Theme</h3>
+      <h3 class="set-sub" id="uiTitle">Style</h3>
+      <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
+        ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      </div>
+      <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
       <h3 class="set-sub" id="apTitle">Light or dark</h3>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
@@ -202,6 +206,10 @@ async function renderSettings(el) {
   });
   // The previews are redrawn after a light/dark or OLED change, so they show the new look
   const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
+  // Original or Clinical: the whole look changes at once; the accent buttons are redrawn with their names for that style
+  el.querySelectorAll('input[name="ui"]').forEach(r => r.addEventListener('change', () => {
+    saveTheme({ ...settings.theme, ui: r.value });
+  }));
   el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, mode: r.value });
     redrawSkins();
@@ -952,7 +960,10 @@ async function start() {
     settings.theme = e.detail;
     const r = document.querySelector(`input[name="mode"][value="${e.detail.mode}"]`);
     if (r) r.checked = true;
-    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new light/dark
+    const u = document.querySelector(`input[name="ui"][value="${e.detail.ui}"]`);
+    if (u) u.checked = true;
+    const h = $('thTitle'); if (h) h.textContent = accentTitle(e.detail.ui);          // "Theme" in Original, "Accent colour" in Clinical
+    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new style and light/dark
   });
   try {
     settings = await db.getSettings();

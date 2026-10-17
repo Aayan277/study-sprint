@@ -1,0 +1,297 @@
+// The Clinical style (Settings → Appearance → Style). Switching it, keeping it after a reload, setting it before the first paint,
+// and every key screen in Clinical at phone and desktop width, light and dark: no console errors, no sideways scroll, no gradient
+// or glow, text that passes AA. Also checks that Original is left alone (Today's goal line is hidden there).
+// Screenshots go to <out>/clinical-<screen>-<phone|desk>-<light|dark>.png.
+// Run with: node tests/browser/run.mjs clinical     (SCENES=today,review SIZES=phone MODES=dark narrow it while working on the CSS)
+import { chromium, realChromium } from './pw.mjs';
+const SP = process.argv[2] || '/tmp';
+const URL = process.env.APP_URL || 'http://localhost:8123/';
+const browser = await chromium.launch();
+const errors = [];
+const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+const watch = (p, tag) => {
+  p.on('pageerror', e => errors.push(`${tag} pageerror ${e.message}`));
+  // KaTeX comes from a CDN: a machine with no network just shows the formula as text, which is not what is tested here.
+  p.on('console', m => { if (m.type() === 'error' && !/katex|jsdelivr|Failed to load resource|net::ERR/i.test(m.text())) errors.push(`${tag} console ${m.text()}`); });
+};
+
+// ---------------------------------------------------------------- the data
+const PHARM = [['Mechanism of action of metformin', 'Decreases hepatic gluconeogenesis; increases peripheral insulin sensitivity (AMPK activation)'], ['First-line treatment for anaphylaxis', 'IM adrenaline 0.5 mg (1:1000) into the anterolateral thigh; repeat after 5 min if needed'], ['Antidote for warfarin overdose', 'Vitamin K (phytomenadione); prothrombin complex concentrate if major bleeding'], ['ACE inhibitor side effects', 'Dry cough, hyperkalaemia, angioedema, first-dose hypotension, renal impairment'], ['Loop diuretic site of action', 'Na-K-2Cl cotransporter in the thick ascending limb of the loop of Henle'], ['Digoxin toxicity signs', 'Nausea, xanthopsia, bradyarrhythmias, hyperkalaemia'], ['Beta-blocker contraindications', 'Asthma, second/third-degree heart block, acute decompensated heart failure'], ['Mechanism of statins', 'Inhibit HMG-CoA reductase, reducing hepatic cholesterol synthesis']];
+const ANAT = [['Brachial plexus roots', 'C5 to T1 ventral rami'], ['Nerve damaged in wrist drop', 'Radial nerve'], ['Contents of the carpal tunnel', 'Median nerve and nine flexor tendons (FDS x4, FDP x4, FPL)'], ['Rotator cuff muscles', 'Supraspinatus, infraspinatus, teres minor, subscapularis'], ['Blood supply of the femoral head', 'Mainly medial circumflex femoral artery'], ['Boundaries of the femoral triangle', 'Inguinal ligament, sartorius, adductor longus']];
+const PATHO = [['Virchow\'s triad', 'Stasis, endothelial injury, hypercoagulability'], ['Reed-Sternberg cells', 'Hodgkin lymphoma'], ['Caseating granulomas', 'Tuberculosis'], ['Most common site of colorectal cancer', 'Rectum and sigmoid colon'], ['Hallmark of acute inflammation', 'Neutrophil infiltration']];
+const MICRO = [['Gram-positive cocci in clusters', 'Staphylococcus'], ['Causative organism of syphilis', 'Treponema pallidum'], ['Rice-water stools', 'Vibrio cholerae'], ['Owl\'s eye inclusions', 'Cytomegalovirus']];
+
+// Four decks with a month of history. done = everything already scheduled for later and today's work finished.
+async function seed(page, theme, done = false) {
+  await page.evaluate(async ({ PHARM, ANAT, PATHO, MICRO, theme, done }) => {
+    const db = await import('./js/db.js');
+    await db.setSetting('theme', theme);
+    for (const id of ['sample', 'pharm', 'anat', 'path', 'micro', 'cloze', 'maths', 'image', 'occ']) await db.deleteDeck(id);
+    const DAY = 86400000, now = Date.now();
+    const iso = d => { const x = new Date(now + d * DAY); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+    const grow = (rows, n) => Array.from({ length: n }, (_, i) => rows[i % rows.length].map((s, k) => k === 0 && i >= rows.length ? `${s} (${Math.floor(i / rows.length) + 1})` : s));
+    const mk = (deckId, rows) => rows.map(([f, b], i) => ({ id: deckId + i, deckId, front: f, back: b, tags: i % 3 ? [] : ['block-b'], created: i }));
+    const decks = [
+      [{ id: 'pharm', name: 'Pharmacology', course: 'MED 2 · Block B', color: '#3E63DD', created: now + 1, examDate: iso(9) }, mk('pharm', grow(PHARM, 64))],
+      [{ id: 'anat', name: 'Upper & Lower Limb', course: 'Anatomy', color: '#46A758', created: now + 2 }, mk('anat', grow(ANAT, 48))],
+      [{ id: 'path', name: 'General Pathology', course: 'MED 2 · Block B', color: '#E5484D', created: now + 3, examDate: iso(23) }, mk('path', grow(PATHO, 40))],
+      [{ id: 'micro', name: 'Microbiology', course: 'MED 2', color: '#8E4EC6', created: now + 4 }, mk('micro', grow(MICRO, 36))]
+    ];
+    for (const [d, c] of decks) await db.addDeckWithCards(d, c);
+    const cs = await db.getAll('cards');
+    const states = cs.filter((_, i) => done || i % 5 !== 4).map((c, i) => ({ cardId: c.id, due: done ? now + (1 + i % 8) * DAY + 3 * 3600000 : now + ((i % 9) - 3) * DAY, stability: [1, 4, 12, 30, 60, 90][i % 6], difficulty: 3 + (i % 6), elapsedDays: 1, scheduledDays: 3, learningSteps: 0, reps: 3 + i % 4, lapses: i % 7 === 0 ? 4 : i % 3, state: !done && i % 11 === 0 ? 1 : 2, lastReview: now - DAY }));
+    await db.putMany('cardStates', states);
+    const logs = [];
+    const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+    for (let d = 0; d < 60; d++) {
+      if (d >= 3 && d % 5 === 0) continue;
+      const n = d === 0 ? (done ? 64 : 8) : 8 + ((d * 7) % 31);
+      for (let i = 0; i < n; i++) {
+        const c = cs[(d * 3 + i) % cs.length];
+        const ts = d === 0 ? midnight.getTime() + (now - midnight.getTime()) * (i + 1) / (n + 1) : now - d * DAY - i * 70000 - 3600000 * (d % 9) - 3600000;
+        logs.push({ cardId: c.id, timestamp: ts, source: i % 4 === 0 ? 'play' : 'review', mode: 'flip', correct: (d + i) % 6 !== 0, ms: 3000 + (i % 5) * 1500, rating: [3, 3, 1, 2, 4, 3, 3][i % 7], state: 2, applied: true, reason: 'due' });
+      }
+    }
+    await db.putMany('reviewLog', logs);
+  }, { PHARM, ANAT, PATHO, MICRO, theme, done });
+}
+
+// Small decks for the kinds of card the big seed has none of: a cloze, a maths card, a picture card, an image occlusion.
+async function seedKinds(page) {
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js'), cz = await import('./js/cloze.js'), occ = await import('./js/occlusion.js');
+    const now = Date.now();
+    const png = async (w, h) => {
+      const c = Object.assign(document.createElement('canvas'), { width: w, height: h }), g = c.getContext('2d');
+      g.fillStyle = '#e8ecf3'; g.fillRect(0, 0, w, h); g.fillStyle = '#4a6fa5'; g.beginPath(); g.ellipse(w / 2, h / 2, w * .3, h * .3, 0, 0, 7); g.fill();
+      g.fillStyle = '#222'; g.font = `${h / 8}px sans-serif`; g.fillText('Aorta', w * .08, h * .2); g.fillText('Valve', w * .6, h * .9);
+      return await (await new Promise(r => c.toBlob(r, 'image/png'))).arrayBuffer();
+    };
+    const media = async (id, w, h) => { const data = await png(w, h); await db.putMedia({ id, type: 'image/png', data, size: data.byteLength, created: now, uploaded: false }); };
+    for (const [id, name, color] of [['cloze', 'Cloze deck', '#3E63DD'], ['maths', 'Maths deck', '#46A758'], ['image', 'Picture deck', '#E5484D'], ['occ', 'Occlusion deck', '#8E4EC6']]) await db.saveDeck({ id, name, color, created: now + 10 });
+    await db.saveNote(cz.planNoteSave([], 'The {{c1::mitochondria}} makes {{c2::ATP}} by oxidative phosphorylation across the inner membrane'), { deckId: 'cloze', noteId: 'n-cloze', tags: [] });
+    await db.addDeckWithCards(await db.getDeck('maths'), [{ id: 'm1', deckId: 'maths', front: 'Solve for $x$: $x^2 - 5x + 6 = 0$', back: '$x = 2$ or $x = 3$, since $(x-2)(x-3)=0$', tags: [], created: 1 }]);
+    await media('img-heart', 1200, 800);
+    await db.addDeckWithCards(await db.getDeck('image'), [{ id: 'i1', deckId: 'image', front: 'Name this structure', back: 'Aortic valve', frontImage: 'img-heart', tags: [], created: 1 }]);
+    await media('img-occ', 1600, 1000);
+    const masks = [{ id: 'm1', n: 1, shape: 'rect', x: 0.06, y: 0.08, w: 0.2, h: 0.14, label: 'Aorta' }, { id: 'm2', n: 2, shape: 'rect', x: 0.58, y: 0.8, w: 0.2, h: 0.14, label: 'Valve' }];
+    await db.saveNote(occ.planOcclusionSave([], { masks, header: 'Heart anatomy', w: 1600, h: 1000, image: 'img-occ' }), { deckId: 'occ', noteId: 'n-occ', tags: [] });
+  });
+}
+
+// ---------------------------------------------------------------- the checks on every screen
+// All of these run in the page, on what is really drawn.
+async function audit(page, label) {
+  const r = await page.evaluate(() => {
+    const out = { overflow: document.documentElement.scrollWidth - innerWidth, gradient: [], glow: [], contrast: [] };
+    const visible = el => { const b = el.getBoundingClientRect(); const cs = getComputedStyle(el); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+    const name = el => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${[...el.classList].slice(0, 2).map(c => '.' + c).join('')}`;
+    const neutral = c => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return true; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return Math.max(v[0], v[1], v[2]) - Math.min(v[0], v[1], v[2]) <= 30 || (v[3] ?? 1) === 0; };
+    for (const el of document.querySelectorAll('body *, html, body')) {
+      for (const pseudo of [null, '::before', '::after']) {
+        const cs = getComputedStyle(el, pseudo);
+        if (pseudo && (cs.content === 'none' || cs.content === 'normal' || cs.display === 'none')) continue;
+        if (!pseudo && !visible(el)) continue;
+        const bg = cs.backgroundImage + ' ' + cs.maskImage + ' ' + cs.borderImageSource;
+        if (/gradient/.test(bg)) out.gradient.push(name(el) + (pseudo || '') + ' ' + bg.slice(0, 70));
+        if (cs.textShadow !== 'none') out.glow.push(name(el) + ' text-shadow');
+        if (/blur|drop-shadow/.test(cs.filter) || (cs.backdropFilter !== 'none' && cs.backdropFilter)) out.glow.push(name(el) + ' filter ' + cs.filter + cs.backdropFilter);
+        if (cs.boxShadow !== 'none') for (const sh of cs.boxShadow.split(/,(?![^(]*\))/)) {
+          const col = sh.match(/rgba?\([^)]*\)|color\([^)]*\)/)?.[0] || '';
+          const nums = sh.replace(col, '').trim().split(/\s+/).map(parseFloat);
+          if (nums[2] >= 8 && !neutral(col)) out.glow.push(name(el) + ' box-shadow ' + sh.trim().slice(0, 60));
+        }
+      }
+    }
+    // text against the solid colour behind it: AA (4.5, or 3 for large text)
+    const parse = c => { const m = c.match(/^rgba?\(([^)]+)\)/); if (m) { const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; }
+      const n = c.match(/^color\(srgb ([^)]+)\)/); if (n) { const v = n[1].split(/[ /]+/).filter(Boolean).map(Number); return [v[0] * 255, v[1] * 255, v[2] * 255, v[3] ?? 1]; } return null; };
+    const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(r) + .7152 * f(g) + .0722 * f(b); };
+    const bgOf = el => { const layers = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } } let o = parse(getComputedStyle(document.body).backgroundColor) || [255, 255, 255, 1]; for (const l of layers.reverse()) o = o.map((v, i) => i < 3 ? v * (1 - l[3]) + l[i] * l[3] : 1); return o; };
+    const bad = new Set();
+    for (let walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n; (n = walker.nextNode());) {
+      const el = n.parentElement; if (!n.textContent.trim() || !el) continue;
+      const b = el.getBoundingClientRect(); if (!b.width || !b.height || b.bottom < 0 || b.top > innerHeight) continue;
+      const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('[hidden],[aria-hidden="true"],.sr-only,:disabled,[aria-disabled="true"],canvas,.katex-html')) continue;
+      if (el.matches('.cap')) continue;                  // a chart's peak label sits above its bar on the card (text-2 on surface-1, covered by the token check)
+      let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; if (op < .99) continue;
+      const fg = parse(cs.color); if (!fg) continue; const bg = bgOf(el);
+      const f = fg.map((v, i) => i < 3 ? v * fg[3] + bg[i] * (1 - fg[3]) : 1);
+      const [a, c] = [lum(f), lum(bg)].sort((x, y) => y - x); const ratio = (a + .05) / (c + .05);
+      const big = parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && +cs.fontWeight >= 700);
+      if (ratio < (big ? 3 : 4.5)) bad.add(`${ratio.toFixed(2)} "${n.textContent.trim().slice(0, 28)}" <${name(el)}>`);
+    }
+    out.contrast = [...bad];
+    return out;
+  });
+  const dup = a => [...new Set(a)].slice(0, 6);
+  ok(r.overflow <= 0, `${label}: no sideways scroll${r.overflow > 0 ? ' (' + r.overflow + 'px too wide)' : ''}`);
+  ok(!r.gradient.length, `${label}: no gradient${r.gradient.length ? ': ' + dup(r.gradient).join(' | ') : ''}`);
+  ok(!r.glow.length, `${label}: no glow, text shadow or blur${r.glow.length ? ': ' + dup(r.glow).join(' | ') : ''}`);
+  ok(!r.contrast.length, `${label}: text is AA${r.contrast.length ? ': ' + r.contrast.slice(0, 6).join(' | ') : ''}`);
+}
+
+// ---------------------------------------------------------------- 1. switching the style
+{
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await ctx.newPage(); watch(page, 'switch');
+  await page.goto(URL + '#/settings'); await page.waitForSelector('#skins');
+  const html = () => page.evaluate(() => ({ ui: document.documentElement.dataset.ui, skin: document.documentElement.dataset.skin, theme: document.documentElement.dataset.theme }));
+  ok((await html()).ui === 'original', 'a fresh install is Original');
+  ok(await page.locator('#uiChips input[name=ui]').count() === 2 && (await page.locator('#uiChips .chip').allTextContents()).join() === 'Original,Clinical', 'Settings → Appearance has Style: Original | Clinical');
+  ok((await page.textContent('#thTitle')) === 'Theme' && (await page.locator('#skins .nm').allTextContents()).join() === 'Violet,Ocean,Forest,Ember,Rose', 'Original: "Theme" with Violet, Ocean, Forest, Ember, Rose');
+  const originalGoal = await page.evaluate(() => { const g = document.createElement('span'); g.className = 'goal'; document.body.append(g); const d = getComputedStyle(g).display; g.remove(); return d; });
+  ok(originalGoal === 'none', 'Original: the goal line is hidden');
+  await page.locator('#uiChips .chip', { hasText: 'Clinical' }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.ui === 'clinical');
+  ok((await page.textContent('#thTitle')) === 'Accent colour' && (await page.locator('#skins .nm').allTextContents()).join() === 'Indigo,Blue,Green,Rust,Plum', 'Clinical: "Accent colour" with Indigo, Blue, Green, Rust, Plum');
+  ok(await page.isChecked('#uiChips input[value=clinical]'), 'the Clinical chip is selected');
+  await page.locator('#skins .skin', { hasText: 'Green' }).click();
+  ok((await html()).skin === 'forest', 'choosing Green sets the forest accent');
+  await page.locator('input[name=mode][value=light]').check({ force: true });
+  ok((await html()).theme === 'light', 'Light still works in Clinical');
+  await page.locator('input[name=mode][value=auto]').check({ force: true });
+  ok(['light', 'dark'].includes((await html()).theme), 'Match my device still works in Clinical');
+  const saved = await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).theme);
+  ok(saved.ui === 'clinical' && saved.skin === 'forest' && saved.mode === 'auto', 'the choice is saved with the theme: ' + JSON.stringify(saved));
+  ok(JSON.parse(await page.evaluate(() => localStorage.getItem('study-sprint-theme'))).ui === 'clinical', "and in the device copy the page reads before it draws");
+
+  // After a reload it is still Clinical
+  await page.reload(); await page.waitForSelector('#skins');
+  ok((await html()).ui === 'clinical' && await page.isChecked('#uiChips input[value=clinical]'), 'still Clinical after a reload');
+  // No flash: the head script sets it before anything else runs. Block every script of the app and look at the page.
+  const p2 = await ctx.newPage(); watch(p2, 'flash');
+  await p2.route('**/js/**', r => r.abort());
+  await p2.goto(URL + '#/today', { waitUntil: 'domcontentloaded' });
+  ok(await p2.evaluate(() => document.documentElement.dataset.ui === 'clinical' && document.documentElement.dataset.skin === 'forest' && !!document.documentElement.dataset.theme), 'data-ui is already set when none of the app has run (before first paint)');
+  await p2.close();
+  // Back to Original: nothing of Clinical is left
+  await page.locator('#uiChips .chip', { hasText: 'Original' }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.ui === 'original');
+  ok((await page.textContent('#thTitle')) === 'Theme' && (await page.locator('#skins .nm').allTextContents()).join() === 'Violet,Ocean,Forest,Ember,Rose', 'back to Original: "Theme" and the old names');
+  // An old saved theme without ui is Original; a junk one too
+  const cleaned = await page.evaluate(async () => { const t = await import('./js/themes.js'); return [t.cleanTheme({ skin: 'ocean', mode: 'light' }).ui, t.cleanTheme({ ui: 'weird' }).ui, t.cleanTheme({ ui: 'clinical' }).ui, t.cleanTheme(null).ui]; });
+  ok(cleaned.join() === 'original,original,clinical,original', 'cleanTheme: no ui or an unknown one is original');
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------- 2. a brand-new install in Clinical (first run)
+{
+  for (const [size, w, h] of [['phone', 375, 812], ['desk', 1440, 900]]) for (const mode of ['light', 'dark']) {
+    if (process.env.SCENES && !process.env.SCENES.includes('welcome')) continue;
+    if (process.env.SIZES && !process.env.SIZES.includes(size)) continue;
+    if (process.env.MODES && !process.env.MODES.includes(mode)) continue;
+    const ctx = await realChromium.launch().then(b => b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: size === 'phone' ? 2 : 1, isMobile: size === 'phone', hasTouch: size === 'phone', serviceWorkers: 'block', reducedMotion: 'reduce' }));
+    await ctx.addInitScript(m => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode: m })); } catch { /* fine */ } }, mode);
+    const page = await ctx.newPage(); watch(page, 'welcome');
+    await page.goto(URL); await page.waitForSelector('#wlNext');
+    await page.evaluate(async m => { const db = await import('./js/db.js'); await db.setSetting('theme', { ui: 'clinical', skin: 'ocean', mode: m, oled: false }); }, mode);
+    await page.reload(); await page.waitForSelector('#wlNext');
+    await page.waitForTimeout(250);
+    ok(await page.evaluate(() => document.documentElement.dataset.ui === 'clinical'), `first run (${size} ${mode}) opens in Clinical`);
+    await page.screenshot({ path: `${SP}/clinical-welcome-${size}-${mode}.png` });
+    await audit(page, `first run ${size} ${mode}`);
+    // step through: name form, how to add cards
+    await page.click('#wlNext'); await page.waitForSelector('#wlForm');
+    await page.fill('#wlName', 'Cell Biology');
+    await page.screenshot({ path: `${SP}/clinical-welcome2-${size}-${mode}.png` });
+    await audit(page, `first run form ${size} ${mode}`);
+    await page.click('#wlForm button[type=submit]'); await page.waitForSelector('#wlSample');
+    await page.screenshot({ path: `${SP}/clinical-welcome3-${size}-${mode}.png` });
+    await audit(page, `first run choices ${size} ${mode}`);
+    await ctx.browser().close();
+  }
+}
+
+// ---------------------------------------------------------------- 3. every screen
+const SIZES = { phone: [375, 812, 2], desk: [1440, 900, 1] };
+const only = k => process.env[k] ? new Set(process.env[k].split(',')) : null;
+const wantScene = only('SCENES'), wantSize = only('SIZES'), wantMode = only('MODES');
+const flip = async p => { await p.keyboard.press('Space'); await p.waitForSelector('.rate'); };
+
+// Each scene: set the page up, then it is shot and audited. `data` says which seed it needs.
+const SCENES = [
+  { n: 'today', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.tdeck'); } },
+  { n: 'collapsed', desktop: true, run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#sideCollapse'); await p.click('#sideCollapse'); await p.waitForTimeout(400); }, after: async p => { await p.click('#sideCollapse'); await p.waitForTimeout(300); } },
+  { n: 'done', data: 'done', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.th-done'); } },
+  { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('[data-addexam]'); await p.click('[data-addexam]'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'options', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#optBtn'); await p.click('#optBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'streak', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#streakBtn'); await p.click('#streakBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'review-front', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },
+  { n: 'review', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#flash'); await flip(p); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },
+  { n: 'review-scratch', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#scratchBtn'); await p.click('#scratchBtn'); await p.waitForSelector('.scratch-tools, canvas.scratch'); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },
+  { n: 'decks', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); } },
+  { n: 'deck', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('.crow'); await p.waitForTimeout(300); } },
+  { n: 'deck-menu', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('#deckMore'); await p.click('#deckMore'); await p.waitForSelector('#deckMenu:not([hidden])'); }, after: p => p.keyboard.press('Escape') },
+  { n: 'browse', run: async p => { await p.goto(URL + '#/browse'); await p.waitForSelector('.crow'); await p.waitForTimeout(250); } },
+  { n: 'card-editor', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceFront'); await p.waitForTimeout(250); }, after: p => p.keyboard.press('Escape') },
+  { n: 'add-card', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm'); await p.waitForTimeout(250); }, after: p => p.keyboard.press('Escape') },
+  { n: 'deck-editor', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.click('#newDeck, [data-newdeck], .deck-add'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape'), optional: true },
+  { n: 'import', run: async p => { await p.goto(URL + '#/import'); await p.waitForSelector('#pasteBox'); await p.fill('#pasteBox', 'Question one\tAnswer one\nQuestion two\tAnswer two'); await p.waitForTimeout(400); } },
+  { n: 'stats', run: async p => { await p.goto(URL + '#/stats'); await p.waitForSelector('main h1'); await p.waitForTimeout(800); } },
+  { n: 'settings', run: async p => { await p.goto(URL + '#/settings'); await p.waitForSelector('#skins'); } },
+  { n: 'settings-more', run: async p => { await p.goto(URL + '#/settings'); await p.waitForSelector('#skins'); await p.locator('#studyTitle').scrollIntoViewIfNeeded(); await p.waitForTimeout(150); } },
+  { n: 'play', run: async p => { await p.goto(URL + '#/play'); await p.waitForSelector('#startBtn'); } },
+  { n: 'play-round', run: async p => { await p.goto(URL + '#/play'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(250); }, after: async p => { await p.goto(URL + '#/today'); } },
+  { n: 'play-correct', run: async p => { await p.goto(URL + '#/play'); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.keyboard.press('1'); await p.waitForSelector('.fb'); await p.waitForTimeout(250); }, after: async p => { await p.goto(URL + '#/today'); } },
+  { n: 'play-results', run: async p => {
+      await p.goto(URL + '#/play'); await p.waitForSelector('#startBtn');
+      for (const s of ['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]', 'input[name=diff][value=normal]', 'input[name=flash][value="0"]']) await p.$eval(s, el => el.click());
+      const backs = await p.evaluate(async () => Object.fromEntries((await (await import('./js/db.js')).getAll('cards')).map(c => [c.front, c.back])));
+      await p.click('#startBtn'); await p.waitForSelector('#pCard');
+      for (let i = 0; i < 10; i++) {
+        await p.waitForFunction(() => document.querySelector('#feedback')?.innerHTML === '' && document.querySelector('#pPrompt')?.textContent);
+        const prompt = (await p.textContent('#pPrompt')).trim();
+        const right = await p.evaluate(a => [...document.querySelectorAll('#options .lbl')].findIndex(b => b.textContent.trim() === a), backs[prompt]);
+        await p.keyboard.press(String(((i < 7 ? Math.max(right, 0) : (right + 1) % 4) % 4) + 1));
+        await p.waitForSelector('.fb'); await p.keyboard.press('Enter');
+      }
+      await p.waitForSelector('.res-head'); await p.waitForTimeout(500);
+    }, after: p => p.goto(URL + '#/today') },
+  { n: 'cloze', data: 'kinds', run: async p => { await p.goto(URL + '#/review/cloze'); await p.waitForSelector('#flash'); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },
+  { n: 'cloze-back', data: 'kinds', run: async p => { await p.goto(URL + '#/review/cloze'); await p.waitForSelector('#flash'); await flip(p); await p.waitForTimeout(250); }, after: p => p.goto(URL + '#/today') },
+  { n: 'maths', data: 'kinds', run: async p => { await p.goto(URL + '#/review/maths'); await p.waitForSelector('#flash'); await flip(p); await p.waitForTimeout(900); }, after: p => p.goto(URL + '#/today') },
+  { n: 'image', data: 'kinds', run: async p => { await p.goto(URL + '#/review/image'); await p.waitForSelector('#flash img'); await flip(p); await p.waitForTimeout(300); }, after: p => p.goto(URL + '#/today') },
+  { n: 'occlusion', data: 'kinds', run: async p => { await p.goto(URL + '#/review/occ'); await p.waitForSelector('.occ-img[src]'); await p.waitForTimeout(400); }, after: p => p.goto(URL + '#/today') },
+  { n: 'occlusion-back', data: 'kinds', run: async p => { await p.goto(URL + '#/review/occ'); await p.waitForSelector('.occ-img[src]'); await flip(p); await p.waitForTimeout(400); }, after: p => p.goto(URL + '#/today') },
+  { n: 'occlusion-editor', data: 'kinds', run: async p => { await p.goto(URL + '#/deck/occ'); await p.waitForSelector('.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceFront, .occ-ed, #ceOcc, [data-occ-edit]'); await p.waitForTimeout(300);
+      const edit = p.locator('#ceOccEdit, [data-occ-edit], button:has-text("Edit boxes"), button:has-text("Edit mask")').first();
+      if (await edit.count()) { await edit.click(); await p.waitForSelector('dialog.occ-ed[open]'); await p.waitForTimeout(600); } }, after: p => p.keyboard.press('Escape') },
+  { n: 'toast', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.tdeck'); await p.evaluate(async () => (await import('./js/ui.js')).toast('Saved. Three new cards a day.')); await p.waitForSelector('#toast:not([hidden])'); await p.waitForTimeout(200); } },
+];
+
+for (const [size, [w, h, scale]] of Object.entries(SIZES)) for (const mode of ['light', 'dark']) {
+  if (wantSize && !wantSize.has(size) || wantMode && !wantMode.has(mode)) continue;
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, isMobile: w < 800, hasTouch: w < 800, serviceWorkers: 'block' });
+  await ctx.addInitScript(([mode]) => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } }, [mode]);
+  const page = await ctx.newPage(); watch(page, `${size} ${mode}`);
+  await page.goto(URL); await page.waitForSelector('.today-hero');
+  const theme = { ui: 'clinical', skin: 'ocean', mode, oled: false };
+  await seed(page, theme); await page.reload(); await page.waitForSelector('.tdeck', { state: 'attached' });
+  ok(await page.evaluate(() => document.documentElement.dataset.ui === 'clinical'), `${size} ${mode}: running in Clinical`);
+  let have = 'normal';
+  for (const sc of SCENES) {
+    if (wantScene && !wantScene.has(sc.n)) continue;
+    if (sc.desktop && size !== 'desk') continue;
+    const need = sc.data || 'normal';
+    if (need !== have) {
+      if (have === 'kinds') { /* kinds decks stay; the big seed is rebuilt only for 'done' */ }
+      if (need === 'done') { await seed(page, theme, true); }
+      else if (need === 'kinds') { await page.evaluate(async () => { /* make sure Today is not in the way */ }); await seedKinds(page); }
+      else if (have === 'done') { await seed(page, theme, false); }
+      have = need === 'kinds' ? 'kinds' : need;
+      await page.goto(URL + '#/decks'); await page.waitForSelector('.deck', { state: 'attached' }).catch(() => {});
+    }
+    try { await sc.run(page); } catch (e) { if (sc.optional) continue; ok(false, `${size} ${mode} ${sc.n}: could not be set up (${e.message.split('\n')[0]})`); await page.goto(URL + '#/today').catch(() => {}); continue; }
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${SP}/clinical-${sc.n}-${size}-${mode}.png` });
+    await audit(page, `${sc.n} ${size} ${mode}`);
+    if (sc.after) await sc.after(page).catch(() => {});
+    await page.waitForTimeout(100);
+  }
+  await ctx.close();
+}
+
+ok(!errors.length, 'no console errors on any screen' + (errors.length ? ': ' + [...new Set(errors)].slice(0, 5).join(' | ') : ''));
+await browser.close();
