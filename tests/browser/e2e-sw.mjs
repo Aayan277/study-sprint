@@ -1,4 +1,4 @@
-// The service worker: app files come from the saved copy at once and update in the background,
+// The service worker: app files come from this version's saved copy (never refreshed file by file),
 // a new version of sw.js installs a fresh copy and reloads once, and the app opens offline.
 // It serves a temporary copy of the app (on any free port) so the test can change files between visits.
 import http from 'node:http';
@@ -45,13 +45,14 @@ const first = (await cacheNames())[0];
 ok(await page.evaluate(async c => !!(await (await caches.open(c)).match('js/today.js')), first), 'js/today.js is saved');
 ok(await probeNow() === 'A', 'first visit runs the files as served');
 
-// 2. Same version of the worker, a changed file: this visit still uses the saved copy, the next one has the update.
+// 2. Same version of the worker, a changed file: every visit keeps using this version's saved copy, so a new file can
+// never be mixed with old ones. The change arrives with the next worker version (step 3).
 setProbe('B');
 await page.reload(); await page.waitForSelector('.tdeck, .empty');
-ok(await probeNow() === 'A', 'a visit is answered from the saved copy straight away');
-await settle(800);   // the background copy is fetched and saved
+ok(await probeNow() === 'A', 'a visit is answered from the saved copy');
+await settle(800);
 await page.reload(); await page.waitForSelector('.tdeck, .empty');
-ok(await probeNow() === 'B', 'and the next visit has the update');
+ok(await probeNow() === 'A', 'and files are not refreshed one by one in the background (no mixed versions)');
 
 // 2b. CDN libraries (v4.2.2): save a good copy, an opaque one (no-cors) and one of a version the app no longer pins.
 const JSD = 'https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/';
