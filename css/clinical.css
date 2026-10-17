@@ -1,7 +1,7 @@
 /* Study Sprint, the "Clinical" style: plain and professional, no gradients, glows or blur.
    Settings → Appearance → Style switches it on: <html data-ui="clinical"> (js/themes.js; index.html sets it before first paint).
    Loaded after css/styles.css. Every rule below is scoped to :root[data-ui="clinical"], so the Original style is untouched.
-   (The one exception is `.goal` just below: new markup that Original must keep hidden.)
+   (Today's `.goal` line is hidden by css/styles.css, next to the ring rules, so Original never depends on this file.)
 
    Ported from the design rounds (design-previews ui3 "refined" + ui4 "A1 classic"): square 4px corners, hairlines instead of
    shadows, words instead of icons in the nav, a left-hand menu on desktop, Today as a goal line and thin bar instead of the ring.
@@ -17,9 +17,6 @@
    Specificity: styles.css's own theme blocks are :root[data-theme] (0,2,0). The rules here must beat them and each other in
    a fixed order, so they come in three tiers that differ only by repeating the same attribute selector (which adds weight):
    tier 0 = :root[data-ui="clinical"], tier 1 repeats it once, tier 2 twice. Add new rules at tier 0 unless they must beat one. */
-
-/* The goal line (a short sentence and a thin bar) replaces the ring in Clinical; Original never shows it. */
-.goal{display:none}
 
 /* ======================================================================
    1. Tokens and shared components (tier 0)
@@ -682,3 +679,8 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"][data-rail="on"] .side-new{padding:0!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"][data-rail="on"] .side-foot{padding:10px 0 12px}
 }
+
+/* ---- focus rings: the grouped lists clip what is outside them (overflow:hidden), so rings are drawn inside the row ---- */
+:root[data-ui="clinical"] :is(.exams,.tdecks,.decks) :focus-visible{outline-offset:-2px}
+/* ---- Settings: Rating feedback is the pulse, ring and interval of js/fx.js, which are always off in Clinical ---- */
+:root[data-ui="clinical"] .adv-row:has(#ratingFeedback){display:none}

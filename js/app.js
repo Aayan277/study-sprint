@@ -206,7 +206,8 @@ async function renderSettings(el) {
   });
   // The previews are redrawn after a light/dark or OLED change, so they show the new look
   const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
-  // Original or Clinical: the whole look changes at once; the accent buttons are redrawn with their names for that style
+  // Original or Clinical: the whole look changes at once. The heading, these chips and the accent buttons are updated by the
+  // 'themechange' listener in start-up below (applyTheme fires it): keep the two in step when adding a style-dependent control.
   el.querySelectorAll('input[name="ui"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, ui: r.value });
   }));

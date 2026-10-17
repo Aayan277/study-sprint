@@ -8,6 +8,7 @@ const SP = process.argv[2] || '/tmp';
 const URL = process.env.APP_URL || 'http://localhost:8123/';
 const browser = await chromium.launch();
 const errors = [];
+let skippedText = 0;     // text the contrast audit does not measure (hidden, aria-hidden, disabled, KaTeX), reported at the end
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const watch = (p, tag) => {
   p.on('pageerror', e => errors.push(`${tag} pageerror ${e.message}`));
@@ -83,7 +84,7 @@ async function seedKinds(page) {
 // All of these run in the page, on what is really drawn.
 async function audit(page, label) {
   const r = await page.evaluate(() => {
-    const out = { overflow: document.documentElement.scrollWidth - innerWidth, gradient: [], glow: [], contrast: [] };
+    const out = { overflow: document.documentElement.scrollWidth - innerWidth, gradient: [], glow: [], contrast: [], skipped: 0 };
     const visible = el => { const b = el.getBoundingClientRect(); const cs = getComputedStyle(el); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
     const name = el => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${[...el.classList].slice(0, 2).map(c => '.' + c).join('')}`;
     const neutral = c => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return true; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return Math.max(v[0], v[1], v[2]) - Math.min(v[0], v[1], v[2]) <= 30 || (v[3] ?? 1) === 0; };
@@ -112,10 +113,11 @@ async function audit(page, label) {
     for (let walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n; (n = walker.nextNode());) {
       const el = n.parentElement; if (!n.textContent.trim() || !el) continue;
       const b = el.getBoundingClientRect(); if (!b.width || !b.height || b.bottom < 0 || b.top > innerHeight) continue;
-      const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('[hidden],[aria-hidden="true"],.sr-only,:disabled,[aria-disabled="true"],canvas,.katex-html')) continue;
+      const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+      if (el.closest('[hidden],[aria-hidden="true"],.sr-only,:disabled,[aria-disabled="true"],canvas,.katex-html')) { out.skipped++; continue; }      // exempt: not shown to anyone, disabled, or drawn by KaTeX
       if (el.matches('.cap')) continue;                  // a chart's peak label sits above its bar on the card (text-2 on surface-1, covered by the token check)
-      let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; if (op < .99) continue;
-      const fg = parse(cs.color); if (!fg) continue; const bg = bgOf(el);
+      let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity;     // faded text is measured as it looks, not skipped
+      const fg = parse(cs.color); if (!fg) continue; fg[3] *= op; const bg = bgOf(el);
       const f = fg.map((v, i) => i < 3 ? v * fg[3] + bg[i] * (1 - fg[3]) : 1);
       const [a, c] = [lum(f), lum(bg)].sort((x, y) => y - x); const ratio = (a + .05) / (c + .05);
       const big = parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && +cs.fontWeight >= 700);
@@ -124,6 +126,7 @@ async function audit(page, label) {
     out.contrast = [...bad];
     return out;
   });
+  skippedText += r.skipped;
   const dup = a => [...new Set(a)].slice(0, 6);
   ok(r.overflow <= 0, `${label}: no sideways scroll${r.overflow > 0 ? ' (' + r.overflow + 'px too wide)' : ''}`);
   ok(!r.gradient.length, `${label}: no gradient${r.gradient.length ? ': ' + dup(r.gradient).join(' | ') : ''}`);
@@ -155,6 +158,24 @@ async function audit(page, label) {
   const saved = await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).theme);
   ok(saved.ui === 'clinical' && saved.skin === 'forest' && saved.mode === 'auto', 'the choice is saved with the theme: ' + JSON.stringify(saved));
   ok(JSON.parse(await page.evaluate(() => localStorage.getItem('study-sprint-theme'))).ui === 'clinical', "and in the device copy the page reads before it draws");
+
+  // Every accent works as the focus ring colour: 3:1 against the page, light and dark (WCAG 1.4.11)
+  const ratios = await page.evaluate(() => {
+    const root = document.documentElement, keep = ['data-ui', 'data-skin', 'data-theme'].map(a => [a, root.getAttribute(a)]);
+    const hex = c => { const m = c.trim().match(/^#([0-9a-f]{6})$/i); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+    const lum = v => { const f = x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }; return .2126 * f(v[0]) + .7152 * f(v[1]) + .0722 * f(v[2]); };
+    const out = [];
+    root.setAttribute('data-ui', 'clinical');
+    for (const mode of ['light', 'dark']) for (const skin of ['violet', 'ocean', 'forest', 'ember', 'rose']) {
+      root.setAttribute('data-theme', mode); root.setAttribute('data-skin', skin);
+      const cs = getComputedStyle(root), a = hex(cs.getPropertyValue('--accent')), bg = hex(cs.getPropertyValue('--bg')), s1 = hex(cs.getPropertyValue('--surface-1'));
+      const ratio = (x, y) => { const [h, l] = [lum(x), lum(y)].sort((p, q) => q - p); return (h + .05) / (l + .05); };
+      out.push({ mode, skin, page: a && bg ? ratio(a, bg) : 0, card: a && s1 ? ratio(a, s1) : 0 });
+    }
+    for (const [a, v] of keep) if (v === null) root.removeAttribute(a); else root.setAttribute(a, v);
+    return out;
+  });
+  ok(ratios.length === 10 && ratios.every(r => r.page >= 3 && r.card >= 3), 'every accent is at least 3:1 against the page and the card as a focus colour: ' + ratios.map(r => `${r.skin}/${r.mode} ${r.page.toFixed(1)}`).join(', '));
 
   // After a reload it is still Clinical
   await page.reload(); await page.waitForSelector('#skins');
@@ -209,10 +230,32 @@ const only = k => process.env[k] ? new Set(process.env[k].split(',')) : null;
 const wantScene = only('SCENES'), wantSize = only('SIZES'), wantMode = only('MODES');
 const flip = async p => { await p.keyboard.press('Space'); await p.waitForSelector('.rate'); };
 
+// Tab to the first element matching `sel` and check its focus ring is really drawn: it has an outline, and the ring (outline plus offset)
+// stays inside whatever clips it (the grouped lists use overflow:hidden).
+async function focusRing(page, sel, what) {
+  await page.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
+  let hit = false;
+  for (let i = 0; i < 80 && !hit; i++) { await page.keyboard.press('Tab'); hit = await page.evaluate(s => !!document.activeElement?.matches(s), sel); }
+  ok(hit, `${what}: reachable with Tab`);
+  const r = await page.evaluate(() => {
+    const el = document.activeElement, cs = getComputedStyle(el), b = el.getBoundingClientRect();
+    const w = parseFloat(cs.outlineWidth) || 0, off = parseFloat(cs.outlineOffset) || 0, grow = w + off;     // how far the ring reaches beyond the box (negative: inside)
+    let clip = null; for (let e = el.parentElement; e && e !== document.documentElement; e = e.parentElement) if (getComputedStyle(e).overflow !== 'visible') { clip = e; break; }
+    const c = clip ? clip.getBoundingClientRect() : { left: 0, top: -1e9, right: innerWidth, bottom: 1e9 };
+    return { style: cs.outlineStyle, w, off, clipped: !!clip, inside: b.left - grow >= c.left - .5 && b.right + grow <= c.right + .5 && b.top - grow >= c.top - .5 && b.bottom + grow <= c.bottom + .5 };
+  });
+  ok(r.style !== 'none' && r.w >= 2, `${what}: focus shows an outline (${r.style} ${r.w}px)`);
+  ok(r.inside, `${what}: the focus ring is inside the box that clips it${r.clipped ? '' : ' (nothing clips it)'}`);
+}
+
 // Each scene: set the page up, then it is shot and audited. `data` says which seed it needs.
 const SCENES = [
   { n: 'today', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.tdeck'); } },
-  { n: 'collapsed', desktop: true, run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#sideCollapse'); await p.click('#sideCollapse'); await p.waitForTimeout(400); }, after: async p => { await p.click('#sideCollapse'); await p.waitForTimeout(300); } },
+  { n: 'collapsed', desktop: true, run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#sideCollapse'); await p.click('#sideCollapse'); await p.waitForFunction(() => document.documentElement.dataset.rail === 'on'); await p.$eval('#sideCollapse', b => b.blur()); },
+    after: async p => { await p.evaluate(() => localStorage.setItem('study-sprint-rail', '0')); await p.reload(); await p.waitForSelector('.tdeck'); await p.waitForFunction(() => document.documentElement.dataset.rail !== 'on'); } },
+  { n: 'focus-today', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.tdeck'); await focusRing(p, '.tdeck', 'a Today deck row'); } },
+  { n: 'focus-decks', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await focusRing(p, '.decks .deck-open, .decks .deck-go', 'a Decks row'); } },
+  { n: 'focus-exam', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.exam-row'); await focusRing(p, '.exams a, .exams button', 'an exam row'); } },
   { n: 'done', data: 'done', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.th-done'); } },
   { n: 'today-sheet', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('[data-addexam]'); await p.click('[data-addexam]'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
   { n: 'options', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('#optBtn'); await p.click('#optBtn'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape') },
@@ -226,7 +269,7 @@ const SCENES = [
   { n: 'browse', run: async p => { await p.goto(URL + '#/browse'); await p.waitForSelector('.crow'); await p.waitForTimeout(250); } },
   { n: 'card-editor', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceFront'); await p.waitForTimeout(250); }, after: p => p.keyboard.press('Escape') },
   { n: 'add-card', run: async p => { await p.goto(URL + '#/deck/pharm'); await p.waitForSelector('#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm'); await p.waitForTimeout(250); }, after: p => p.keyboard.press('Escape') },
-  { n: 'deck-editor', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.click('#newDeck, [data-newdeck], .deck-add'); await p.waitForSelector('dialog[open]'); }, after: p => p.keyboard.press('Escape'), optional: true },
+  { n: 'deck-editor', run: async p => { await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.click('#newDeck'); await p.waitForSelector('dialog[open] #sheetTitle'); }, after: p => p.keyboard.press('Escape') },
   { n: 'import', run: async p => { await p.goto(URL + '#/import'); await p.waitForSelector('#pasteBox'); await p.fill('#pasteBox', 'Question one\tAnswer one\nQuestion two\tAnswer two'); await p.waitForTimeout(400); } },
   { n: 'stats', run: async p => { await p.goto(URL + '#/stats'); await p.waitForSelector('main h1'); await p.waitForTimeout(800); } },
   { n: 'settings', run: async p => { await p.goto(URL + '#/settings'); await p.waitForSelector('#skins'); } },
@@ -254,9 +297,8 @@ const SCENES = [
   { n: 'image', data: 'kinds', run: async p => { await p.goto(URL + '#/review/image'); await p.waitForSelector('#flash img'); await flip(p); await p.waitForTimeout(300); }, after: p => p.goto(URL + '#/today') },
   { n: 'occlusion', data: 'kinds', run: async p => { await p.goto(URL + '#/review/occ'); await p.waitForSelector('.occ-img[src]'); await p.waitForTimeout(400); }, after: p => p.goto(URL + '#/today') },
   { n: 'occlusion-back', data: 'kinds', run: async p => { await p.goto(URL + '#/review/occ'); await p.waitForSelector('.occ-img[src]'); await flip(p); await p.waitForTimeout(400); }, after: p => p.goto(URL + '#/today') },
-  { n: 'occlusion-editor', data: 'kinds', run: async p => { await p.goto(URL + '#/deck/occ'); await p.waitForSelector('.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceFront, .occ-ed, #ceOcc, [data-occ-edit]'); await p.waitForTimeout(300);
-      const edit = p.locator('#ceOccEdit, [data-occ-edit], button:has-text("Edit boxes"), button:has-text("Edit mask")').first();
-      if (await edit.count()) { await edit.click(); await p.waitForSelector('dialog.occ-ed[open]'); await p.waitForTimeout(600); } }, after: p => p.keyboard.press('Escape') },
+  { n: 'occlusion-editor', data: 'kinds', run: async p => { await p.goto(URL + '#/deck/occ'); await p.waitForSelector('.crow'); await p.locator('.crow').first().click();
+      await p.click('[data-occ-edit]'); await p.waitForSelector('dialog.occ-ed[open] .occ-ed-mask'); await p.waitForTimeout(600); }, after: p => p.keyboard.press('Escape') },
   { n: 'toast', run: async p => { await p.goto(URL + '#/today'); await p.waitForSelector('.tdeck'); await p.evaluate(async () => (await import('./js/ui.js')).toast('Saved. Three new cards a day.')); await p.waitForSelector('#toast:not([hidden])'); await p.waitForTimeout(200); } },
 ];
 
@@ -287,11 +329,12 @@ for (const [size, [w, h, scale]] of Object.entries(SIZES)) for (const mode of ['
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SP}/clinical-${sc.n}-${size}-${mode}.png` });
     await audit(page, `${sc.n} ${size} ${mode}`);
-    if (sc.after) await sc.after(page).catch(() => {});
+    if (sc.after) await sc.after(page);
     await page.waitForTimeout(100);
   }
   await ctx.close();
 }
 
+console.log(`info: the contrast audit left out ${skippedText} text nodes that are hidden from users (aria-hidden, disabled, KaTeX); all other visible text was measured, faded text included`);
 ok(!errors.length, 'no console errors on any screen' + (errors.length ? ': ' + [...new Set(errors)].slice(0, 5).join(' | ') : ''));
 await browser.close();
