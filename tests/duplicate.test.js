@@ -9,7 +9,7 @@ const mkId = () => { let n = 0; return () => 'new' + ++n; };
 const NOW = 1_800_000_000_000;
 const basic = {
   id: 'a', deckId: 'd1', front: 'F', back: 'B', frontImage: 'm1', backImage: 'm2', noteExtra: 'hook', tags: ['x', 'y'],
-  acceptAnswers: ['alt'], created: 5, flag: 2, suspended: true, buriedUntil: NOW + 1000, updatedAt: 99
+  acceptAnswers: ['alt'], frontSounds: ['s1'], backSounds: ['s2', 's3'], created: 5, flag: 2, suspended: true, buriedUntil: NOW + 1000, updatedAt: 99
 };
 
 test('a basic card is copied with everything but its id, schedule and own state', () => {
@@ -22,7 +22,9 @@ test('a basic card is copied with everything but its id, schedule and own state'
   assert.equal(c.created, NOW);
   for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt']) assert.ok(!(k in c), k + ' should not be copied');
   // the copy's lists are its own
-  c.tags.push('z'); c.acceptAnswers.push('q');
+  assert.deepEqual(c.frontSounds, ['s1']); assert.deepEqual(c.backSounds, ['s2', 's3']);
+  c.tags.push('z'); c.acceptAnswers.push('q'); c.backSounds.push('s9');
+  assert.deepEqual(basic.backSounds, ['s2', 's3']);
   assert.deepEqual(basic.tags, ['x', 'y']); assert.deepEqual(basic.acceptAnswers, ['alt']);
 });
 

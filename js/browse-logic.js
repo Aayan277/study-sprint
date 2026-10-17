@@ -256,6 +256,7 @@ export function duplicateCards(cards, all, newId, now = Date.now()) {
       if (c.noteId) copy.noteId = noteIds.get(c.noteId);
       if (c.tags) copy.tags = [...c.tags];
       if (c.acceptAnswers) copy.acceptAnswers = [...c.acceptAnswers];
+      for (const k of ['frontSounds', 'backSounds']) if (Array.isArray(c[k])) copy[k] = [...c[k]];      // sounds (media ids) are shared, the lists are not
       if (c.occlusion) copy.occlusion = { ...c.occlusion, masks: c.occlusion.masks.map(m => ({ ...m })) };
       of.set(c.id, copy.id);
       copies.push(copy);
