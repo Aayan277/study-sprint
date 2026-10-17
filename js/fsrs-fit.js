@@ -1,0 +1,426 @@
+// Fit FSRS-6 weights to a person's own review history, in plain JavaScript (no imports, no network).
+// Design and reasons: docs/design/fsrs-optimizer-plan.md (sections 2c and 4). Tested by tests/fsrs-fit.test.js and
+// tests/fsrs-parity.test.js (which checks the forward model against ts-fsrs 5.4.2).
+//
+// The pieces:
+//   forward model   nextState / forgettingCurve: the same maths as ts-fsrs 5.4.2 (FSRSAlgorithm), step by step through a card's history
+//   gradients       lossAndGrad: the same maths again on "dual numbers" (a value plus its 17 derivatives), so the gradient is exact
+//   pretraining     the four starting stabilities w0 to w3 from each first rating's next long-term review
+//   Adam            mini-batches of cards, a seeded shuffle, every weight kept inside its bounds
+//   metrics         evaluate: log loss and RMSE (bins) for any set of weights; decide: keep the new ones only if better
+//   fit             a generator: it yields progress as it goes, so it runs to the end in Node, in a Worker, or in slices on the main thread
+//
+// A history (built by fsrs-data.js) is { deltas: Int32Array, ratings: Uint8Array, scored: Uint8Array, day0? }, one entry per
+// answer: deltas[i] = whole days since the answer before (0 for the first or the same day), ratings[i] = 1 to 4,
+// scored[i] = 1 for a real review (checked against the prediction), 0 for a replayed one (only moves the memory state).
+
+export const S_MIN = 0.001;
+export const S_MAX = 36500;
+export const N_WEIGHTS = 21;
+export const FIRST_TRAINED = 4;                 // w0 to w3 come from pretraining; w4 to w20 are trained
+const P = N_WEIGHTS - FIRST_TRAINED;            // 17 trained weights = 17 derivatives per number
+const EPS = 1e-6;                               // predictions are kept this far from 0 and 1 in the loss
+const BINS = 20;
+const LN09 = Math.log(0.9);
+
+export const FIT_DEFAULTS = {
+  epochs: 5,            // passes over the data
+  batchSize: 512,       // real reviews (with a prediction) per step, about
+  lr: 0.04,             // Adam's step size at the start (it falls to a tenth by the end)
+  gamma: 8,             // strength of the pull towards the default weights, in "reviews" (see priorTerm)
+  seed: 1,              // the shuffle: the same seed and data give the same weights
+  minReviews: 400,      // fewer real reviews than this: no fit
+  priorN: 6             // pretraining blends with the default start stability as if it had this many samples
+};
+
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const r8 = x => Math.round(x * 1e8) / 1e8;      // ts-fsrs rounds to 8 decimals in many places
+
+// ---------- random numbers ----------
+// A small seeded generator (0 up to 1), so a fit can be repeated exactly.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- the forward model (numbers) ----------
+// round = true copies ts-fsrs exactly (it rounds to 8 decimals in places). round = false is the smooth version the gradients are for.
+
+// The chance of remembering after t days with stability s: (1 + FACTOR · t / s) ^ -w20, FACTOR chosen so R = 90% at t = s.
+export function forgettingCurve(w, t, s, round = true) {
+  const decay = -w[20];
+  let factor = Math.exp(Math.pow(decay, -1) * LN09) - 1;
+  if (round) factor = r8(factor);
+  const r = Math.pow(1 + factor * t / s, decay);
+  return round ? r8(r) : r;
+}
+
+// The first answer on a new card.
+export function initState(w, g, round = true) {
+  const d = w[4] - Math.exp((g - 1) * w[5]) + 1;
+  return { s: Math.max(w[g - 1], 0.1), d: clamp(round ? r8(d) : d, 1, 10) };
+}
+
+// The memory state after an answer: s = stability, d = difficulty, t = whole days since the last answer,
+// g = rating 1 to 4, r (optional) = the chance of remembering that was predicted for this answer.
+export function nextState(w, s, d, t, g, round = true, r) {
+  const R = round ? r8 : x => x;
+  if (r === undefined) r = forgettingCurve(w, t, s, round);
+  let ns;
+  if (t === 0) {                                                  // same day: the short-term formula
+    const sinc = Math.pow(s, -w[19]) * Math.exp(w[17] * (g - 3 + w[18]));
+    ns = R(clamp(s * (g >= 2 ? Math.max(sinc, 1) : sinc), S_MIN, S_MAX));
+  } else if (g === 1) {                                           // forgot
+    const fail = R(clamp(w[11] * Math.pow(d, -w[12]) * (Math.pow(s + 1, w[13]) - 1) * Math.exp((1 - r) * w[14]), S_MIN, S_MAX));
+    ns = clamp(R(s / Math.exp(w[17] * w[18])), S_MIN, fail);
+  } else {                                                        // remembered
+    const hard = g === 2 ? w[15] : 1, easy = g === 4 ? w[16] : 1;
+    ns = R(clamp(s * (1 + Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp((1 - r) * w[10]) - 1) * hard * easy), S_MIN, S_MAX));
+  }
+  const delta = -w[6] * (g - 3);
+  const next = d + R(delta * (10 - d) / 9);
+  const easyD = w[4] - Math.exp(3 * w[5]) + 1;
+  const nd = clamp(R(w[7] * (round ? r8(easyD) : easyD) + (1 - w[7]) * next), 1, 10);
+  return { s: ns, d: nd };
+}
+
+// ---------- metrics ----------
+// Walk every history with weights w and compare each prediction (scored, on a later day than the answer before) with what happened.
+//   logLoss  mean binary cross-entropy
+//   rmse     the 20 equal bins of predicted R: sqrt of the count-weighted mean of (mean predicted − observed recall)²  ("RMSE (bins)")
+//   n        how many predictions
+export function evaluate(cards, w, { round = true } = {}) {
+  let n = 0, loss = 0;
+  const cnt = new Float64Array(BINS), pred = new Float64Array(BINS), obs = new Float64Array(BINS);
+  for (const c of cards) {
+    const { deltas, ratings, scored } = c;
+    let s = 0, d = 0;
+    for (let i = 0; i < ratings.length; i++) {
+      const g = ratings[i];
+      if (i === 0) { ({ s, d } = initState(w, g, round)); continue; }
+      const t = deltas[i];
+      const r = forgettingCurve(w, t, s, round);
+      if (scored[i] && t > 0) {
+        const p = clamp(r, EPS, 1 - EPS), y = g > 1 ? 1 : 0;
+        loss -= y ? Math.log(p) : Math.log(1 - p);
+        const b = Math.min(BINS - 1, Math.floor(p * BINS));
+        cnt[b]++; pred[b] += p; obs[b] += y; n++;
+      }
+      ({ s, d } = nextState(w, s, d, t, g, round, r));
+    }
+  }
+  let sq = 0;
+  for (let b = 0; b < BINS; b++) if (cnt[b]) sq += cnt[b] * (pred[b] / cnt[b] - obs[b] / cnt[b]) ** 2;
+  return { logLoss: n ? loss / n : 0, rmse: n ? Math.sqrt(sq / n) : 0, n };
+}
+
+// The decision rule (owner decision Q2): keep the new weights only if the log loss is lower AND the RMSE is no higher.
+export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse;
+
+// ---------- gradients (dual numbers) ----------
+// A dual number is { v: value, g: Float64Array(17) | null }: the value, and its derivative with respect to each of w4 to w20
+// (null = a constant: all zeros). Only the few operations the model needs are here.
+const K = v => ({ v, g: null });
+const D = x => (typeof x === 'number' ? { v: x, g: null } : x);
+function lin(v, a, ca, b, cb) {                   // a number whose derivative is ca·a' + cb·b'
+  const ag = a && a.g, bg = b && b.g;
+  if (!ag && !bg) return { v, g: null };
+  const g = new Float64Array(P);
+  if (ag) for (let k = 0; k < P; k++) g[k] = ca * ag[k];
+  if (bg) for (let k = 0; k < P; k++) g[k] += cb * bg[k];
+  return { v, g };
+}
+const dadd = (a, b) => { a = D(a); b = D(b); return lin(a.v + b.v, a, 1, b, 1); };
+const dsub = (a, b) => { a = D(a); b = D(b); return lin(a.v - b.v, a, 1, b, -1); };
+const dmul = (a, b) => { a = D(a); b = D(b); return lin(a.v * b.v, a, b.v, b, a.v); };
+const ddiv = (a, b) => { a = D(a); b = D(b); return lin(a.v / b.v, a, 1 / b.v, b, -a.v / (b.v * b.v)); };
+const dneg = a => lin(-a.v, a, -1, null, 0);
+const dexp = a => { const v = Math.exp(a.v); return lin(v, a, v, null, 0); };
+const dpow = (a, b) => { a = D(a); b = D(b); const v = Math.pow(a.v, b.v); return lin(v, a, a.g ? b.v * Math.pow(a.v, b.v - 1) : 0, b, b.g ? Math.log(a.v) * v : 0); };
+const dclamp = (a, lo, hi) => (a.v < lo ? K(lo) : a.v > hi ? K(hi) : a);
+const dmin = (a, b) => (a.v > b.v ? b : a);     // the smaller of two (a tie keeps a)
+
+// Weights as dual numbers: w0 to w3 are constants, w4 to w20 each carry a derivative of 1 for themselves.
+function dualWeights(w) {
+  return w.map((v, i) => {
+    if (i < FIRST_TRAINED) return K(v);
+    const g = new Float64Array(P);
+    g[i - FIRST_TRAINED] = 1;
+    return { v, g };
+  });
+}
+
+function dCurve(W, t, s) {
+  const decay = dneg(W[20]);
+  const factor = dsub(dexp(ddiv(LN09, decay)), 1);
+  return dpow(dadd(1, dmul(factor, ddiv(t, s))), decay);
+}
+
+// The same update as nextState (round = false), on dual numbers. s and d are duals; r the dual prediction.
+function dNext(W, s, d, t, g, r) {
+  let ns;
+  if (t === 0) {
+    const sinc = dmul(dpow(s, dneg(W[19])), dexp(dmul(W[17], dadd(g - 3, W[18]))));
+    ns = dclamp(dmul(s, g >= 2 && sinc.v < 1 ? K(1) : sinc), S_MIN, S_MAX);
+  } else if (g === 1) {
+    let fail = dmul(dmul(dmul(W[11], dpow(d, dneg(W[12]))), dsub(dpow(dadd(s, 1), W[13]), 1)), dexp(dmul(dsub(1, r), W[14])));
+    fail = dclamp(fail, S_MIN, S_MAX);
+    const floor = dclamp(ddiv(s, dexp(dmul(W[17], W[18]))), S_MIN, Infinity);
+    ns = dmin(floor, fail);
+  } else {
+    let m = dmul(dmul(dexp(W[8]), dsub(11, d)), dpow(s, dneg(W[9])));
+    m = dmul(m, dsub(dexp(dmul(dsub(1, r), W[10])), 1));
+    if (g === 2) m = dmul(m, W[15]);
+    if (g === 4) m = dmul(m, W[16]);
+    ns = dclamp(dmul(s, dadd(1, m)), S_MIN, S_MAX);
+  }
+  const next = dadd(d, ddiv(dmul(dmul(W[6], -(g - 3)), dsub(10, d)), 9));
+  const easyD = dadd(dsub(W[4], dexp(dmul(W[5], 3))), 1);
+  const nd = dclamp(dadd(dmul(W[7], easyD), dmul(dsub(1, W[7]), next)), 1, 10);
+  return { s: ns, d: nd };
+}
+
+// The log loss summed over some histories, and its gradient with respect to w4 to w20.
+// Returns { loss (a sum, not a mean), count, grad: Float64Array(17) }. The forward values equal evaluate(..., { round: false }).
+export function lossAndGrad(cards, w) {
+  const W = dualWeights(w);
+  const grad = new Float64Array(P);
+  let loss = 0, count = 0;
+  for (const c of cards) {
+    const { deltas, ratings, scored } = c;
+    let last = -1;
+    for (let i = ratings.length - 1; i > 0; i--) if (scored[i] && deltas[i] > 0) { last = i; break; }
+    if (last < 0) continue;
+    let s, d;
+    for (let i = 0; i <= last; i++) {
+      const g = ratings[i];
+      if (i === 0) {
+        const o = initState(w, g, false);
+        s = K(o.s);
+        const d0 = dclamp(dadd(dsub(W[4], dexp(dmul(W[5], g - 1))), 1), 1, 10);
+        d = d0;
+        continue;
+      }
+      const t = deltas[i];
+      const r = dCurve(W, t, s);
+      if (scored[i] && t > 0) {
+        const p = r.v, y = g > 1;
+        if (p > EPS && p < 1 - EPS) {
+          loss -= Math.log(y ? p : 1 - p);
+          if (r.g) { const dl = y ? -1 / p : 1 / (1 - p); for (let k = 0; k < P; k++) grad[k] += dl * r.g[k]; }
+        } else loss -= Math.log(clamp(y ? p : 1 - p, EPS, 1));
+        count++;
+      }
+      ({ s, d } = dNext(W, s, d, t, g, r));
+    }
+  }
+  return { loss, count, grad };
+}
+
+// ---------- pretraining w0 to w3 ----------
+// The start stability for each first rating: the value that best predicts whether the card was remembered at its next
+// long-term review. A golden-section search on log stability, blended with the default when there are few samples,
+// then put in order (w0 ≤ w1 ≤ w2 ≤ w3) by pooling neighbours that are the wrong way round.
+export function pretrainStarts(cards, defaults, bounds, decayW20, priorN = FIT_DEFAULTS.priorN) {
+  const samples = [[], [], [], []];                          // per first rating: [days, remembered]
+  for (const c of cards) {
+    for (let i = 1; i < c.ratings.length; i++) {
+      if (c.scored[i] && c.deltas[i] > 0) { samples[c.ratings[0] - 1].push([c.deltas[i], c.ratings[i] > 1 ? 1 : 0]); break; }
+    }
+  }
+  const factor = Math.exp(Math.log(0.9) / -decayW20) - 1;
+  const nll = (x, list) => {
+    const s = Math.exp(x);
+    let sum = 0;
+    for (const [t, y] of list) {
+      const p = clamp(Math.pow(1 + factor * t / s, -decayW20), EPS, 1 - EPS);
+      sum -= y ? Math.log(p) : Math.log(1 - p);
+    }
+    return sum;
+  };
+  const gr = (Math.sqrt(5) - 1) / 2;
+  const logs = [], weights = [];
+  for (let g = 0; g < 4; g++) {
+    const list = samples[g], n = list.length;
+    const prior = Math.log(defaults[g]);
+    let x = prior;
+    if (n) {
+      let lo = Math.log(bounds[g][0]), hi = Math.log(bounds[g][1]);
+      let a = hi - gr * (hi - lo), b = lo + gr * (hi - lo), fa = nll(a, list), fb = nll(b, list);
+      for (let it = 0; it < 50; it++) {
+        if (fa < fb) { hi = b; b = a; fb = fa; a = hi - gr * (hi - lo); fa = nll(a, list); }
+        else { lo = a; a = b; fa = fb; b = lo + gr * (hi - lo); fb = nll(b, list); }
+      }
+      x = (n * (lo + hi) / 2 + priorN * prior) / (n + priorN);
+    }
+    logs.push(x); weights.push(n + priorN);
+  }
+  // Pool adjacent violators: blocks of { value, weight, count }.
+  const blocks = [];
+  for (let g = 0; g < 4; g++) {
+    blocks.push({ v: logs[g], w: weights[g], n: 1 });
+    while (blocks.length > 1 && blocks[blocks.length - 2].v > blocks[blocks.length - 1].v) {
+      const b = blocks.pop(), a = blocks.pop();
+      blocks.push({ v: (a.v * a.w + b.v * b.w) / (a.w + b.w), w: a.w + b.w, n: a.n + b.n });
+    }
+  }
+  const out = [];
+  for (const b of blocks) for (let k = 0; k < b.n; k++) out.push(b.v);
+  return out.map((x, g) => clamp(Math.exp(x), bounds[g][0], bounds[g][1]));
+}
+
+// ---------- the fit ----------
+const round6 = x => Math.round(x * 1e6) / 1e6;
+
+// How a fit goes, for the progress bar: pretraining 5%, training 80%, refining w0 to w3 7%, checking 8%.
+const PROGRESS = { pretrain: [0, 0.05], train: [0.05, 0.85], refine: [0.85, 0.92], check: [0.92, 1] };
+const at = (phase, frac) => PROGRESS[phase][0] + (PROGRESS[phase][1] - PROGRESS[phase][0]) * frac;
+
+// Fit weights to the histories. A generator: each `yield` is { phase, done, total, progress } (progress 0 to 1, never going
+// back), and the result is what `return` gives: use `yield*`, or step it with next() until done.
+//
+//   input.cards     the histories (fsrs-data.js buildHistories().cards)
+//   input.current   the 21 weights in use now (the fit starts from them, and has to beat them)
+//   input.defaults  ts-fsrs default_w (the pull of the prior, and the start for pretraining)
+//   input.bounds    [[min, max], …] ×21 (ts-fsrs CLAMP_PARAMETERS)
+//   input.config    overrides for FIT_DEFAULTS
+//
+// Result:
+//   { status: 'not-enough', reviews, needed }
+//   { status: 'better' | 'same', w, fitted, current, before, after, reviews, cards, longTerm }
+//     w = the weights to use (the fitted ones if they predict better, else current); before/after = { logLoss, rmse, n } of current and fitted
+export function* fit(input) {
+  const cfg = { ...FIT_DEFAULTS, ...(input.config || {}) };
+  const { defaults, bounds } = input;
+  const current = (input.current || defaults).slice();
+  const cards = input.cards;
+  let reviews = 0, longTerm = 0, usable = 0;
+  for (const c of cards) {
+    let any = false;
+    for (let i = 0; i < c.scored.length; i++) if (c.scored[i]) { reviews++; any = true; if (i > 0 && c.deltas[i] > 0) longTerm++; }
+    if (any) usable++;
+  }
+  if (reviews < cfg.minReviews || longTerm === 0) return { status: 'not-enough', reviews, needed: cfg.minReviews };
+
+  // 1. Pretraining
+  yield { phase: 'pretrain', done: 0, total: 1, progress: at('pretrain', 0) };
+  const starts = pretrainStarts(cards, defaults, bounds, current[20], cfg.priorN);
+  yield { phase: 'pretrain', done: 1, total: 1, progress: at('pretrain', 1) };
+
+  // 2. Adam on w4 to w20, from the current weights (w0 to w3 stay at their pretrained values)
+  const train = cards.filter(c => { for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) return true; return false; });
+  const weight = train.map(c => { let n = 0; for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) n++; return n; });
+  const total = weight.reduce((a, b) => a + b, 0);
+  const batches = Math.max(1, Math.ceil(total / cfg.batchSize));
+  const steps = cfg.epochs * batches;
+  const w = current.map((v, i) => clamp(i < FIRST_TRAINED ? starts[i] : v, bounds[i][0], bounds[i][1]));
+  const m = new Float64Array(P), v = new Float64Array(P);
+  const rng = mulberry32(cfg.seed);
+  const order = train.map((_, i) => i);
+  let step = 0;
+  for (let epoch = 0; epoch < cfg.epochs; epoch++) {
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    let p = 0, seen = 0;
+    for (let b = 0; b < batches; b++) {
+      const batch = [];
+      const upto = total * (b + 1) / batches;
+      while (p < order.length && (seen < upto || b === batches - 1)) { batch.push(train[order[p]]); seen += weight[order[p]]; p++; }
+      step++;
+      if (batch.length) {
+        const { count, grad } = lossAndGrad(batch, w);
+        const lr = cfg.lr * (0.1 + 0.45 * (1 + Math.cos(Math.PI * (step - 1) / steps)));
+        for (let k = 0; k < P; k++) {
+          const i = k + FIRST_TRAINED;
+          const range = bounds[i][1] - bounds[i][0];
+          // mean log loss + gamma/N · Σ ((w − default) / range)²: a weak pull towards the defaults
+          const gk = grad[k] / count + cfg.gamma / total * 2 * (w[i] - defaults[i]) / (range * range);
+          m[k] = 0.9 * m[k] + 0.1 * gk;
+          v[k] = 0.999 * v[k] + 0.001 * gk * gk;
+          const mh = m[k] / (1 - Math.pow(0.9, step)), vh = v[k] / (1 - Math.pow(0.999, step));
+          w[i] = clamp(w[i] - lr * mh / (Math.sqrt(vh) + 1e-8), bounds[i][0], bounds[i][1]);
+        }
+      }
+      yield { phase: 'train', done: step, total: steps, progress: at('train', step / steps) };
+    }
+  }
+
+  // 3. Refine w0 to w3. Pretraining only sees each card's first long-term review, and it was done with the curve we started
+  // from, so it is biased when the true curve is different. Now that w20 and the rest are fitted, put each start stability
+  // where the whole history of the cards that began with that rating is predicted best (a golden-section search on log S,
+  // with the same pull towards the defaults as above), then put them in order again.
+  const byFirst = [[], [], [], []];
+  for (const c of train) byFirst[c.ratings[0] - 1].push(c);
+  const gr = (Math.sqrt(5) - 1) / 2;
+  for (let g = 0; g < 4; g++) {
+    yield { phase: 'refine', done: g, total: 4, progress: at('refine', g / 4) };
+    const list = byFirst[g];
+    if (!list.length) continue;
+    const range = bounds[g][1] - bounds[g][0];
+    const cost = x => {
+      const t = w.slice();
+      t[g] = Math.exp(x);
+      const e = evaluate(list, t, { round: false });
+      return e.logLoss * e.n / total + cfg.gamma / total * ((t[g] - defaults[g]) / range) ** 2;
+    };
+    let lo = Math.log(bounds[g][0]), hi = Math.log(bounds[g][1]);
+    let a = hi - gr * (hi - lo), b = lo + gr * (hi - lo), fa = cost(a), fb = cost(b);
+    for (let it = 0; it < 40; it++) {
+      if (fa < fb) { hi = b; b = a; fb = fa; a = hi - gr * (hi - lo); fa = cost(a); }
+      else { lo = a; a = b; fa = fb; b = lo + gr * (hi - lo); fb = cost(b); }
+    }
+    w[g] = Math.exp((lo + hi) / 2);
+  }
+  for (let g = 1; g < 4; g++) if (w[g] < w[g - 1]) { const mid = Math.sqrt(w[g] * w[g - 1]); w[g] = w[g - 1] = mid; }
+  const fitted = w.map((x, i) => clamp(round6(x), bounds[i][0], bounds[i][1]));
+  yield { phase: 'refine', done: 4, total: 4, progress: at('refine', 1) };
+
+  // 4. Check: do the new weights predict the same history better than the ones in use?
+  yield { phase: 'check', done: 0, total: 2, progress: at('check', 0) };
+  const before = evaluate(cards, current);
+  yield { phase: 'check', done: 1, total: 2, progress: at('check', 0.5) };
+  const after = evaluate(cards, fitted);
+  const better = isBetter(before, after);
+  yield { phase: 'check', done: 2, total: 2, progress: 1 };
+  return { status: better ? 'better' : 'same', w: better ? fitted : current, fitted, current, before, after, reviews, cards: usable, longTerm };
+}
+
+// Run a generator to the end (Node, tests). `onProgress` gets every yielded step.
+export function runFit(input, onProgress) {
+  const it = fit(input);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+    if (onProgress) onProgress(r.value);
+  }
+}
+
+// An honest out-of-sample check, for the simulator: fit on the first `trainShare` of the days, then score current and fitted
+// weights on the answers after that (the memory state is still replayed from the whole history). Needs `day0` on each history.
+// A generator like fit(). Result: { status: 'not-enough', … } or { cutoffDay, fitted, before, after, trainResult }.
+export function* evaluateSplit(input, trainShare = 0.8) {
+  const days = [];
+  for (const c of input.cards) {
+    let day = c.day0 || 0;
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i]) days.push(day); }
+  }
+  days.sort((a, b) => a - b);
+  const cutoff = days.length ? days[Math.min(days.length - 1, Math.floor(days.length * trainShare))] : 0;
+  const head = [], test = [];
+  for (const c of input.cards) {
+    let day = c.day0 || 0, keep = 0;
+    const absolute = new Int32Array(c.ratings.length);
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; absolute[i] = day; if (day <= cutoff) keep = i + 1; }
+    if (keep) head.push({ ...c, deltas: c.deltas.slice(0, keep), ratings: c.ratings.slice(0, keep), scored: c.scored.slice(0, keep) });
+    test.push({ ...c, scored: c.scored.map((x, i) => (absolute[i] > cutoff ? x : 0)) });
+  }
+  const trained = yield* fit({ ...input, cards: head });
+  if (trained.status === 'not-enough') return trained;
+  const current = (input.current || input.defaults);
+  return { status: 'split', cutoffDay: cutoff, fitted: trained.fitted, before: evaluate(test, current), after: evaluate(test, trained.fitted), trainResult: trained };
+}
