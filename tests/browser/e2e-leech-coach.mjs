@@ -256,6 +256,7 @@ await p.evaluate(async () => {
   const db = await import('./js/db.js'); const now = Date.now();
   await db.addDeckWithCards({ id: 'pl', name: 'Play deck', color: '#E5484D', created: now + 1 },
     ['Alpha', 'Beta', 'Gamma', 'Delta'].map((f, i) => ({ id: 'pl' + i, deckId: 'pl', front: f, back: ['Apple', 'Banana', 'Cherry', 'Durian'][i], tags: [], created: i })));
+  await db.setSetting('playCountsAsReviews', true);       // v4.10: a Play miss only makes a leech when Play counts as reviews
 });
 await p.goto(URL + '#/play'); await p.reload(); await p.waitForSelector('#pDeck');
 await p.selectOption('#pDeck', 'bio');

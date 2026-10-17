@@ -18,7 +18,7 @@ export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewL
 // Settings that follow you between devices. Theme, light/dark and screen choices stay per device.
 export const SYNCED_SETTINGS = [
   'targetRetention', 'newPerDay', 'learningSteps', 'relearningSteps', 'maxInterval', 'fuzz',
-  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal',
+  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
   'fsrsParams'          // your own FSRS weights from the optimizer (null = the standard ones); newest wins
 ];
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off

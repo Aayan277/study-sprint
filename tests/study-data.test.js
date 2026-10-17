@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rescueState, rescueClearAt, clearDismissals, RESCUE_DISMISS, countFor, deckCounts, hasReviewLimit, answeredToday, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { rescueState, rescueClearAt, clearDismissals, RESCUE_DISMISS, countFor, deckCounts, hasReviewLimit, todayRing, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 import { dayStart } from '../js/days.js';
@@ -35,14 +35,6 @@ test('counting a deck from the pre-sorted lists gives the same numbers as buildi
     assert.equal(got.due, q.queue.filter(x => x.kind !== 'new').length + q.waiting.length, ids.join());
     assert.equal(got.cards.length, cards.filter(c => inside.has(c.deckId)).length);
   }
-});
-
-test('the daily goal counts answers in the same decks as the cards to go', () => {
-  const logs = [['c0', 'review'], ['c1', 'review'], ['c2', 'play'], ['c1', 'anki']].map(([cardId, source]) => ({ cardId, source, timestamp: now }));
-  const d = { ...data, logs };
-  assert.equal(answeredToday(d, []), 3);          // all decks (anki imports aren't today's work)
-  assert.equal(answeredToday(d, ['b']), 1);       // c2 is in b
-  assert.equal(answeredToday(d, ['a']), 2);       // c0 in a, c1 in a1
 });
 
 test('time per card comes from the gaps between reviews in a session', () => {
@@ -325,22 +317,95 @@ test('clearDismissals (Reset this device) forgets the mix-up and catch-up dismis
   assert.doesNotThrow(() => clearDismissals({ removeItem() { throw new Error('blocked'); } }));
 });
 
-test('goalFor: the ring denominator is the daily goal, or more when today has more to do; never 0', async () => {
-  const { goalFor } = await import('../js/study-data.js');
-  assert.equal(goalFor({ dailyGoal: 20 }, 0, 0), 20);            // nothing due, nothing answered: 0/20, not 0/0
-  assert.equal(goalFor({ dailyGoal: 20 }, 5, 0), 20);
-  assert.equal(goalFor({ dailyGoal: 20 }, 5, 30), 35);           // more due than the goal: the goal grows
-  assert.equal(goalFor({ dailyGoal: 20 }, 25, 0), 25);          // extra study counts, it never reads 25/20
-  assert.equal(goalFor({}, 0, 0), 20);                           // no setting yet: the default
-  assert.equal(goalFor({ dailyGoal: 0 }, 0, 0), 1);              // junk is clamped, never 0/0
-  assert.equal(goalFor({ dailyGoal: 9999 }, 0, 0), 500);
-  assert.equal(goalFor({ dailyGoal: 'x' }, 0, 0), 20);
+// ---------- the Today ring (v4.10): done out of today's work ----------
+// A small world: deck d has 3 new cards, 2 reviews due, 1 review due in 5 days.
+const ringWorld = ({ logs = [], newPerDay = 20, newCards = 3, learn = [] } = {}) => {
+  const ds = [{ id: 'd', name: 'D', created: 1 }];
+  const cs = [], st = new Map();
+  for (let i = 0; i < newCards; i++) cs.push({ id: 'n' + i, deckId: 'd', front: 'f', back: 'b', created: i });
+  for (const [id, due] of [['r0', now - 1000], ['r1', now - 2000], ['r2', now + 5 * DAY]]) { cs.push({ id, deckId: 'd', front: 'f', back: 'b', created: 10 }); st.set(id, { cardId: id, state: 2, due }); }
+  for (const [id, due] of learn) { cs.push({ id, deckId: 'd', front: 'f', back: 'b', created: 11 }); st.set(id, { cardId: id, state: 1, due }); }
+  const dOf = new Map(cs.map(c => [c.id, c.deckId]));
+  const ch = chainMap(ds);
+  const d = { decks: ds, cards: cs, allCards: cs, statesById: st, deckOf: dOf, logs, chains: ch, answered: new Map(), rescue: null,
+    newLeft: newLimits({ perDay: newPerDay, decks: ds, logs, deckOf: dOf, chains: ch }),
+    reviewLeft: reviewLimits({ perDay: null, decks: ds, logs, deckOf: dOf, chains: ch }) };
+  d.split = splitCards(cs, st, now); d.splitAt = Date.now();
+  return d;
+};
+const ringOf = (d, ids = []) => todayRing(d, ids, countFor(d, ids.length ? ids : ['d']), now);
+
+test('ring: work left reads done out of reviews due + new cards, and the total holds as cards are finished', () => {
+  const r = ringOf(ringWorld());
+  assert.deepEqual([r.state, r.done, r.left, r.total, r.of], ['todo', 0, 5, 5, 5]);       // 2 reviews + 3 new
+  assert.equal(r.frac, 0);
+  // two cards finished (a review and a new card): they are no longer in the queue, so done 2 of the same 5
+  const logs = [{ cardId: 'r0', source: 'review', timestamp: now }, { cardId: 'n0', source: 'review', timestamp: now, state: 0 }];
+  const d = ringWorld({ logs }); d.statesById.set('r0', { cardId: 'r0', state: 2, due: now + 4 * DAY }); d.statesById.set('n0', { cardId: 'n0', state: 2, due: now + DAY });
+  d.cards = d.cards; d.split = splitCards(d.cards, d.statesById, now);
+  d.newLeft = newLimits({ perDay: 20, decks: d.decks, logs, deckOf: d.deckOf, chains: d.chains });
+  const r2 = ringOf(d);
+  assert.deepEqual([r2.state, r2.done, r2.left, r2.total], ['todo', 2, 3, 5]);
+  assert.equal(r2.frac, 0.4);
 });
 
-test('goalFor: null or missing dailyGoal is the default 20, not 0', async () => {
-  const { goalFor } = await import('../js/study-data.js');
-  assert.equal(goalFor({ dailyGoal: null }, 0, 0), 20);
-  assert.equal(goalFor({ dailyGoal: undefined }, 3, 0), 20);
+test('ring: the new-cards-per-day limit caps the work', () => {
+  const r = ringOf(ringWorld({ newPerDay: 1 }));
+  assert.deepEqual([r.left, r.total], [3, 3]);          // 2 reviews + 1 of the 3 new cards
+});
+
+test('ring: a card in its learning steps counts once (to go while it is due today, done only after)', () => {
+  const logs = [{ cardId: 'L', source: 'review', timestamp: now, state: 0 }];
+  const soon = ringOf(ringWorld({ logs, newCards: 0, learn: [['L', now + 600000]] }));     // back in 10 minutes: still to do
+  assert.deepEqual([soon.done, soon.left, soon.total], [0, 3, 3]);
+  const later = ringOf(ringWorld({ logs, newCards: 0, learn: [['L', now + 3 * DAY]] }));    // graduated far ahead: done
+  assert.deepEqual([later.done, later.left, later.total], [1, 2, 3]);
+  // answered twice (Again, then Good) is still one card
+  const twice = ringOf(ringWorld({ logs: [...logs, { ...logs[0], timestamp: now + 1 }], newCards: 0, learn: [['L', now + 3 * DAY]] }));
+  assert.equal(twice.done, 1);
+});
+
+test('ring: all done, and nothing due at all (never 0/0, drawn full)', () => {
+  const logs = [{ cardId: 'r0', source: 'review', timestamp: now }];
+  const d = ringWorld({ logs, newCards: 0 }); d.statesById.set('r0', { cardId: 'r0', state: 2, due: now + DAY }); d.statesById.set('r1', { cardId: 'r1', state: 2, due: now + DAY });
+  d.split = splitCards(d.cards, d.statesById, now);
+  const done = ringOf(d);
+  assert.deepEqual([done.state, done.done, done.left, done.frac, done.allLearned], ['done', 1, 0, 1, true]);
+  const none = ringWorld({ newCards: 0 }); none.statesById.set('r0', { cardId: 'r0', state: 2, due: now + DAY }); none.statesById.set('r1', { cardId: 'r1', state: 2, due: now + DAY });
+  none.split = splitCards(none.cards, none.statesById, now);
+  const n = ringOf(none);
+  assert.deepEqual([n.state, n.done, n.total, n.frac, n.n, n.of], ['nothing', 0, 0, 1, 1, 1]);      // shown as 1/1 full, never 0/0
+});
+
+test('ring: "All cards learned" only when no deck has an unseen new card', () => {
+  assert.equal(ringOf(ringWorld()).allLearned, false);
+  assert.equal(ringOf(ringWorld({ newCards: 0 })).allLearned, true);
+  // new cards held back by the daily limit are still unseen
+  assert.equal(ringOf(ringWorld({ newPerDay: 0 })).allLearned, false);
+  // an empty set of cards is not "learned"
+  assert.equal(ringOf({ ...ringWorld({ newCards: 0 }), cards: [], allCards: [], split: { reviews: [], waiting: [], fresh: [] } }).allLearned, false);
+  // a suspended unseen new card was never learned
+  const sus = ringWorld({ newCards: 1 }); sus.allCards = sus.allCards.map(c => (c.id === 'n0' ? { ...c, suspended: true } : c)); sus.cards = sus.allCards.filter(c => !c.suspended);
+  sus.split = splitCards(sus.cards, sus.statesById, now);
+  assert.equal(ringOf(sus).allLearned, false);
+  // scoped to the chosen deck: another deck's unseen card does not count
+  const two = ringWorld({ newCards: 0 }); two.decks = [...two.decks, { id: 'e', name: 'E', created: 2 }];
+  two.allCards = [...two.allCards, { id: 'z', deckId: 'e', front: 'f', back: 'b', created: 20 }]; two.cards = two.allCards; two.deckOf.set('z', 'e'); two.chains = chainMap(two.decks);
+  two.split = splitCards(two.cards, two.statesById, now);
+  assert.equal(todayRing(two, ['d'], countFor(two, ['d']), now).allLearned, true);
+  assert.equal(todayRing(two, ['e'], countFor(two, ['e']), now).allLearned, false);
+});
+
+test('ring: counts Review answers and Play answers that changed the schedule, not practice or imports, and honours the deck choice', () => {
+  const rows = [
+    { cardId: 'r0', source: 'review' }, { cardId: 'r1', source: 'play', applied: true },
+    { cardId: 'n0', source: 'play', applied: false }, { cardId: 'n1', source: 'anki' }, { cardId: 'r2', source: 'play' }
+  ].map(l => ({ ...l, timestamp: now }));
+  const d = ringWorld({ logs: rows });
+  const r = ringOf(d);
+  assert.equal(r.done, 2);                                // r0 (review) and r1 (applied Play); not the logged-only Play, Anki or unmarked rows
+  assert.equal(ringOf(d, ['d']).done, 2);
+  assert.equal(ringOf(d, ['elsewhere']).done, 0);         // another deck's work is not this deck's
 });
 
 test("customQueue('ids') drops suspended and buried cards", async () => {
@@ -349,4 +414,13 @@ test("customQueue('ids') drops suspended and buried cards", async () => {
   const out = customQueue('ids', { statesById: new Map() }, cards, 3, ['a', 'b', 'c', 'd']);
   assert.deepEqual(out.queue.map(x => x.card.id), ['a', 'd']);
   assert.equal(out.label, 'Review these');
+});
+
+test('ring: a card answered today that is now suspended still counts as done, even in its learning steps', () => {
+  const logs = [{ cardId: 'L', source: 'review', timestamp: now, state: 0 }];
+  const d = ringWorld({ logs, newCards: 0, learn: [['L', now + 600000]] });
+  d.allCards = d.allCards.map(c => (c.id === 'L' ? { ...c, suspended: true } : c)); d.cards = d.allCards.filter(c => !c.suspended);
+  d.split = splitCards(d.cards, d.statesById, now);
+  const r = ringOf(d);
+  assert.deepEqual([r.done, r.left, r.total], [1, 2, 3]);        // out of the queue, so not left; it stays done
 });

@@ -17,10 +17,11 @@ export { cardLabel };     // (finish-extras and the card panel use it)
 
 // The pairs the person mixes up now (last 90 days, minus the ones they said they're not confused about), with the
 // cards by id. One read of the log; callers keep what they need.
-export async function loadPairs({ now = Date.now() } = {}) {
+// extraLogs: rows that were never saved (a practice-only Play round's own mix-ups), counted like saved ones.
+export async function loadPairs({ now = Date.now(), extraLogs = [] } = {}) {
   const [logs, cards] = await Promise.all([db.getLogsSince(daysAgoStart(MIX_WINDOW_DAYS, now)), db.getAll('cards')]);
   const cardsById = new Map(cards.map(c => [c.id, c]));
-  return { cardsById, pairs: mixPairs(logs, { cardsById, since: daysAgoStart(MIX_WINDOW_DAYS, now), dismissed: loadDismissed() }) };
+  return { cardsById, pairs: mixPairs([...logs, ...extraLogs], { cardsById, since: daysAgoStart(MIX_WINDOW_DAYS, now), dismissed: loadDismissed() }) };
 }
 
 const side = card => `
