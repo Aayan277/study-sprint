@@ -126,7 +126,8 @@ export function answeredToday(data, deckIds) {
 // already has more to do (answers so far plus what is still due), so extra study never reads 25/20 and it is never 0/0.
 export const GOAL_DEFAULT = 20, GOAL_MAX = 500;
 export function goalFor(settings, answered, left) {
-  const g = Number(settings?.dailyGoal);
+  const raw = settings?.dailyGoal;
+  const g = raw == null ? NaN : Number(raw);               // null or missing: the default, not 0
   const base = Number.isFinite(g) ? Math.max(1, Math.min(GOAL_MAX, Math.round(g))) : GOAL_DEFAULT;
   return Math.max(base, answered + left);
 }
@@ -149,7 +150,8 @@ export function customQueue(kind, data, cards, days = 3, ids = []) {
     for (const x of [...data.split.reviews, ...data.split.waiting]) if (x.card.noteId && !held.has(x.card.noteId)) held.set(x.card.noteId, new Set());
     return { ...ahead, queue: limitSiblings(ahead.queue, c => c.noteId, held), label: 'Review ahead' };       // follows the one-sibling-a-day rule
   }
-  if (kind === 'ids') return { ...pickedQueue(cards, data.statesById, ids), label: 'Review these' };
+  // Suspended and buried cards are left out, so "Review these" never starts an empty or surprising session.
+  if (kind === 'ids') return { ...pickedQueue(cards.filter(c => !isHidden(c)), data.statesById, ids), label: 'Review these' };
   if (kind === 'forgot') return { ...forgottenQueue(cards, data.statesById, data.logs), label: 'Forgotten today' };
   // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).

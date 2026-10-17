@@ -80,7 +80,7 @@ async function renderSettings(el) {
         <div><b>Daily goal</b><p>The answers a day the goal ring on Today counts to. It grows if more is due.</p></div>
         <div class="stepper">
           <button type="button" class="icon-btn" id="dgMinus" aria-label="Lower daily goal">−</button>
-          <input id="dgIn" type="number" inputmode="numeric" min="1" max="500" value="${settings.dailyGoal}" aria-label="Daily goal (answers a day)">
+          <input id="dgIn" type="number" inputmode="numeric" min="1" max="500" value="${Number(settings.dailyGoal) || db.DEFAULT_SETTINGS.dailyGoal}" aria-label="Daily goal (answers a day)">
           <button type="button" class="icon-btn" id="dgPlus" aria-label="Raise daily goal">+</button>
         </div>
       </div>
@@ -244,11 +244,11 @@ async function renderSettings(el) {
     const n = Number.isFinite(num) ? Math.max(1, Math.min(500, Math.round(num))) : db.DEFAULT_SETTINGS.dailyGoal;
     $('dgIn').value = n;
     settings.dailyGoal = n;
-    db.setSetting('dailyGoal', n);
+    db.setSetting('dailyGoal', n).then(() => drawSidebar());      // the desktop ring follows at once
   };
   $('dgIn').addEventListener('change', e => setGoal(e.target.value));
-  $('dgMinus').addEventListener('click', () => setGoal(settings.dailyGoal - 5));
-  $('dgPlus').addEventListener('click', () => setGoal(settings.dailyGoal + 5));
+  $('dgMinus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) - 5));
+  $('dgPlus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) + 5));
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));

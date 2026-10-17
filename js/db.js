@@ -475,7 +475,7 @@ export function checkBackup(data) {
   if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
 }
-export const validDailyGoal = n => Number.isInteger(n) && n >= 1 && n <= 500;
+export const validDailyGoal = n => n == null || (Number.isInteger(n) && n >= 1 && n <= 500);      // null or missing means the default (20)
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
 // A log row's `mixedWith` (the card whose answer was given by mistake, see confusion.js) is kept only when it is a

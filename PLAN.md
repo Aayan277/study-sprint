@@ -143,7 +143,7 @@ Material:
 - **Per-deck mastery grid** like kanji-sprint's, with levels from FSRS: New, Learning, Young (stability under 21 days), Mature (21 days or more). Tap a card to see its history.
 - **Retention:** % correct on due reviews over the last 30 days.
 - **Charts:** reviews per day (last 30 days) and due-card forecast (next 7 days).
-- **Hardest cards:** most lapses, with a "Drill these" button that starts a Play round.
+- **Hardest cards:** most lapses, with a "Review these" button that starts a Review session of those cards (v4.9; it used to start a Play round).
 - **Day streak** with a 7-day dot row, same as kanji-sprint.
 
 ### 7. Settings

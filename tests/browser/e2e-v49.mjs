@@ -62,7 +62,7 @@ await go(p, '#/today', '.today-hero');
 ok(await ringText(p) === '0/5', 'goal 5: the ring reads 0/5');
 await answers(p, 3); await reload(p);
 ok(await ringText(p) === '3/5' && await p.$eval('.today-hero .ring', e => !e.classList.contains('is-full')), 'after 3 answers: 3/5, not complete');
-await answers(p, 2); await reload(p);   // the same 5 log rows replace each other by id? no: new rows, so 5 + 3 = 8 in total
+await answers(p, 2); await reload(p);   // new log rows each time: 3 + 2 = 5 answers, the goal
 rt = await ringText(p);
 ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')), 'goal reached: the ring shows complete (a check, green)');
 await p.screenshot({ path: SP + '/v49-today-complete-375-dark.png' });
@@ -165,14 +165,16 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); const z = 
 await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('playPrefs', { deckId: 'S', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} }); });
 await p.reload(); await p.waitForSelector('#pDeck');
 const v = await p.$eval('#pDeck', s => s.value);
-ok(v === 'S' || v === 'Z', 'without an exam it opens on the last used deck (' + v + ')');
+ok(v === 'S', 'without an exam it opens on the last used deck (' + v + ')');
 await noHScroll(p, 'play 375'); await p.screenshot({ path: SP + '/v49-play-375-dark.png' });
-await p.evaluate(async () => (await import('./js/db.js')).setSetting('playPrefs', { deckId: 'all', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} }));
 await p.context().close();
 // A round on a real deck, with "Drill missed" still on the results
 p = await open(1440, 900, 'light');
+await p.evaluate(async () => (await import('./js/db.js')).setSetting('playPrefs', { deckId: 'all', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: { all: 'typing' } }));
 await go(p, '#/play', '#pDeck');
-ok(!(await p.$$eval('#pDeck option', o => o.some(x => x.value === 'all'))), '1440 light: no "All decks" either');
+const sel = await p.$eval('#pDeck', s => s.value);
+ok(!(await p.$$eval('#pDeck option', o => o.some(x => x.value === 'all'))) && sel !== 'all' && sel !== '', '1440 light: a saved "all" opens on a real deck (' + sel + ')');
+ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playPrefs.deckId) === sel, '1440 light: and the migrated deck is saved');
 await p.screenshot({ path: SP + '/v49-play-1440-light.png' });
 await p.context().close();
 

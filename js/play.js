@@ -222,7 +222,7 @@ function start(el, opts) {
   const all = playableCards(opts.pool, opts.qtype);         // every card that works for this question type
   const pool = opts.drill ? playableCards(opts.drill, opts.qtype) : all;
   const fmt = opts.drill ? 'classic' : opts.fmt;
-  const total = fmt === 'classic' ? (opts.drill ? opts.drillTotal || Math.max(pool.length * 2, 6) : opts.len) : null;
+  const total = fmt === 'classic' ? (opts.drill ? Math.max(pool.length * 2, 6) : opts.len) : null;
   // Cards you've forgotten before (lapses) come up more often.
   const weightOf = c => { const s = data.statesById.get(c.id); return 1 + 2 * Math.min(s?.lapses || 0, 5); };
   G = {
@@ -304,11 +304,9 @@ function showQuestion() {
     inp.value = ''; inp.disabled = false;
     inp.focus();
   } else {
-    // A drill from "You mix these up" always offers the partner's answer. Each option remembers which card it is the
-    // answer of, so picking another card's answer can be recorded as a mix-up (log.mixedWith).
-    const partner = G.mix?.get(card.id);
-    const include = partner ? G.all.filter(c => c.id === partner).map(c => questionFor(c, G.qtype).answer) : [];
-    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true, include });
+    // Each option remembers which card it is the answer of, so picking another card's answer can be recorded as a
+    // mix-up (log.mixedWith).
+    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true });
     const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
     G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
     const long = G.opts.some(o => o.length > 28);
@@ -651,7 +649,7 @@ async function finish() {
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
   import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
-  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill, mix: round.mix, drillTotal: round.drillTotal } : base));
+  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   $('againBtn').focus({ preventScroll: true });

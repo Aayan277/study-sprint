@@ -107,6 +107,6 @@ test('mixedWith on a log row is accepted by the check, and cleaned to a string o
 
 test('dailyGoal in a backup: a whole number from 1 to 500 (or none) passes, anything else is refused', () => {
   const withGoal = dailyGoal => ({ ...good, settings: { dailyGoal } });
-  for (const g of [1, 20, 500, null]) assert.equal(checkBackup(withGoal(g)), null);
+  for (const g of [1, 20, 500, null, undefined]) assert.equal(checkBackup(withGoal(g)), null);        // null or missing means the default
   for (const g of [0, -5, 501, 2.5, '20', NaN, [20], {}, true]) assert.match(checkBackup(withGoal(g)), /daily goal/);
 });
