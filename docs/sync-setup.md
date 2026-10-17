@@ -21,14 +21,24 @@ It uses a free Supabase project that belongs to you. This takes about 10 minutes
 
 This makes one table, and turns on rules so every account can only ever read or change its own data.
 
-## 2b. Storage for pictures
+## 2b. Storage for pictures and sounds
 
-Pictures on cards sync through Supabase Storage. Run one more script, the same way as step 2:
+Pictures and sounds on cards sync through Supabase Storage. Run one more script, the same way as step 2:
 
 1. **SQL Editor → New query**, paste in everything from [`supabase/media.sql`](../supabase/media.sql), and click **Run**.
 
 It makes a private bucket called `media`, with one folder per account; every account can only see its own
-pictures. (Until this is done, everything else still syncs: Settings → Sync shows a note.)
+pictures and sounds. (Until this is done, everything else still syncs: Settings → Sync shows a note.)
+
+**If you set this up before sounds were added to the app, run it once more.** The older copy of the script only
+allowed pictures, so Supabase turns sounds away until you do (pictures keep syncing meanwhile, and Settings → Sync
+says "Sounds can't sync yet"). Nothing is lost: the sounds wait on your device. The steps are the same as above:
+
+1. Open your project on supabase.com, then **SQL Editor → New query**.
+2. Paste in everything from the latest [`supabase/media.sql`](../supabase/media.sql) and click **Run**. It is safe to run again; it doesn't touch your pictures or any data.
+3. In Study Sprint, open Settings → Sync and tap **Sync now**. The note goes away and the sounds are sent.
+
+Each sound can be up to 1 MB (the app skips bigger ones when you import an Anki deck and tells you how many).
 
 ## 3. Turn off email confirmation
 
@@ -84,4 +94,4 @@ You can then sign in with the same email and password on every other device.
 - **Forgot your password?** On the Sync sign-in form, type your email and tap **Forgot password?**. Open the link in the email: it opens Study Sprint in your browser, where you set a new one. Then sign in with it on your other devices. (Supabase's free email sends only a few emails an hour.)
 - **Friends:** each person signs in with their own account and only ever sees their own data. With sign-ups off, add them in **Authentication → Users → Add user → Create new user** (tick **Auto Confirm User**), and give them the email and starting password; they can change it in Settings → Sync. As the project owner, you can see everyone's data in the Table Editor, so tell them.
 - **Removing an account:** Settings → Sync → **Delete my synced data** clears what's stored on the server. To remove the account itself, delete the user in **Authentication → Users** (that deletes their synced data too; their devices keep their own copy).
-- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB. Pictures are shrunk to about 100–250 KB each and use Storage's separate free 1 GB (roughly 5,000+ pictures).
+- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB. Pictures are shrunk to about 100–250 KB each and use Storage's separate free 1 GB (roughly 5,000+ pictures). Sounds are kept as they are (usually 10–150 KB each), so a big language deck with word and sentence audio can use 150–400 MB of that 1 GB, and every new device downloads each sound once. The import shows the total size first, and has a switch to leave the sounds out.

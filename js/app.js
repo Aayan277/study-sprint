@@ -21,7 +21,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.14';
+const APP_VERSION = '4.15';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -200,13 +200,17 @@ async function renderSettings(el) {
       <div class="set-row">
         <div><b>Storage</b><p>${persisted
           ? 'Saved permanently on this device.'
-          : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p></div>
+          : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p>
+          <p class="note" id="mediaLine"></p></div>
       </div>
       <div class="set-row">
         <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
           ${settings.lastBackup ? `Last backup: ${esc(new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}.` : 'No backup yet.'}</p></div>
         <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
       </div>
+      <label class="adv-row switch-row" id="bkSoundsRow" hidden><span><b id="bkSoundsTitle">Include sounds</b>
+        <span id="bkSoundsInfo"></span></span>
+        <input id="bkSounds" type="checkbox" class="switch"></label>
       <div class="set-row">
         <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
         <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
@@ -265,6 +269,7 @@ async function renderSettings(el) {
   drawSync();
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
+  fillMediaInfo();
   $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
 
   // New cards per day: typed or changed with − / +, kept between 0 and 999.
@@ -419,8 +424,26 @@ function saveTheme(theme) {
 }
 
 // ---------- backup ----------
+// How much room pictures and sounds take here (Storage row), and the backup's "Include sounds" switch: on up to 150 MB of sounds.
+const BIG_BACKUP = 150 * 1024 * 1024;
+async function fillMediaInfo() {
+  try {
+    const [{ sizeText }, totals, est] = await Promise.all([import('./media.js'), db.mediaTotals(), navigator.storage?.estimate?.().catch(() => null)]);
+    if (!$('mediaLine')) return;                       // moved to another screen meanwhile
+    const free = est?.quota ? ` · about ${sizeText(Math.max(0, est.quota - (est.usage || 0)))} free` : '';
+    const size = n => (n ? sizeText(n) : '0 KB');
+    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.`;
+    $('bkSoundsRow').hidden = !totals.sounds;
+    if (totals.sounds) {
+      $('bkSoundsTitle').textContent = `Include sounds (${sizeText(totals.sounds)})`;
+      $('bkSounds').checked = totals.sounds <= BIG_BACKUP;
+      $('bkSoundsInfo').textContent = totals.sounds <= BIG_BACKUP ? 'Pictures are always included. Turn this off for a smaller file.' : 'Very large backups can fail on phones.';
+    }
+  } catch (err) { console.error(err); }
+}
 async function exportBackup() {
-  const data = await db.exportAll();
+  // (The switch only shows when there are sounds; without it, everything is included.)
+  const data = await db.exportAll({ sounds: $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked });
   const d = new Date();
   const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -479,7 +502,7 @@ async function confirmRestore(file) {
     } catch (e) {
       console.error(e);
       closeSheet();
-      toast("Couldn't restore that backup. Nothing was changed.");
+      toast(e?.noSpace ? `${e.message} Nothing was changed.` : "Couldn't restore that backup. Nothing was changed.");
       return;
     }
     if (synced) sync.syncNow();
@@ -634,7 +657,7 @@ async function drawSync() {
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
   showSyncStatus(acct.lastSync);
-  $('syncNowBtn').addEventListener('click', () => sync.syncNow());
+  $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);

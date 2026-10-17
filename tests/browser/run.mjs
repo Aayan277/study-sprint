@@ -2,7 +2,7 @@
 // prints PASS or FAIL for every check. Run with: npm run test:browser   (or one: npm run test:browser review)
 //
 // Needs Playwright and Chromium once on a computer: npm install --no-save playwright && npx playwright install chromium
-// The app is served from this folder on http://localhost:8123 while the tests run. Screenshots and
+// The app is served from this folder while the tests run (the tests open http://localhost:8123; see below). Screenshots and
 // downloads go in tests/browser/out (not saved in git).
 
 import http from 'node:http';
@@ -30,26 +30,18 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
   fs.createReadStream(file).pipe(res);
 });
-// If another test run holds the port (e.g. two checkouts testing at once), wait for it to finish
-// instead of failing: retry every 5 seconds for up to an hour. WAIT_FOR_PORT=0 turns the waiting off.
-const listen = () => new Promise((ok, fail) => server.once('error', fail).listen(8123, ok));
-for (let tries = 0; ; tries++) {
-  try { await listen(); break; } catch (err) {
-    if (err.code !== 'EADDRINUSE' || process.env.WAIT_FOR_PORT === '0' || tries >= 720) {
-      console.error(err.code === 'EADDRINUSE' ? 'Port 8123 is busy: stop whatever is using it and try again.' : err);
-      process.exit(1);
-    }
-    if (tries === 0) console.log('Port 8123 is busy (another test run?). Waiting for it to free up…');
-    await new Promise(r => setTimeout(r, 5000));
-  }
-}
+// Each run serves the app on its own free port, so several checkouts can test at once. The tests still open
+// http://localhost:8123: tests/browser/pw.mjs tells the browser to send that address to this run's port (APP_PORT),
+// so the page keeps the same origin (storage, service worker) whichever port it really comes from.
+await new Promise((ok, fail) => server.once('error', fail).listen(0, '127.0.0.1', ok));
+const APP_PORT = server.address().port;
 
 const only = process.argv[2];
 const tests = fs.readdirSync(HERE).filter(f => /^(e2e.*|sweep)\.mjs$/.test(f) && (!only || f.includes(only))).sort();
 let failed = 0;
 for (const t of tests) {
   const out = await new Promise(resolve => {
-    const child = spawn(process.execPath, [path.join(HERE, t), OUT], { cwd: ROOT });
+    const child = spawn(process.execPath, [path.join(HERE, t), OUT], { cwd: ROOT, env: { ...process.env, APP_PORT: String(APP_PORT) } });
     let text = '';
     child.stdout.on('data', d => { text += d; });
     child.stderr.on('data', d => { text += d; });

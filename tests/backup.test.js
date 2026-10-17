@@ -125,6 +125,25 @@ test('glossary terms in a backup: the backup still passes, and bad terms are dro
   assert.ok(!('gloss:b' in out) && out['gloss:c'] === null && out.dailyGoal === 20);
 });
 
+test('backups with sounds: audio types are accepted, version 2 is the newest, and sound fields are checked', () => {
+  assert.equal(BACKUP_VERSION, 2);
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  for (const type of ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/flac']) {
+    assert.equal(checkBackup({ ...good, version: 2, media: [{ id: 'm', type, data: '', name: 'a.' + type.slice(6) }] }), null, type);
+  }
+  assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'audio/x-ms-wma', data: '' }] }), /not a supported image or sound/);
+  assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'text/html', data: '' }] }), /not a supported/);
+  assert.match(checkBackup({ ...good, version: 3 }), /newer version/);
+  assert.equal(checkBackup({ ...good, version: 1 }), null);                               // older backups still restore
+  const bad = /invalid sound fields/;
+  assert.equal(checkBackup({ ...good, cards: [card({ frontSounds: ['a'], backSounds: ['a', 'b', 'c', 'd'] }), card({ id: 'd' })] }), null);
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: ['a', 'b', 'c', 'd', 'e'] })] }), bad);       // at most 4
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: [] })] }), bad);                                // absent, not empty
+  assert.match(checkBackup({ ...good, cards: [card({ backSounds: 'a' })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ backSounds: [{ id: 'a' }] })] }), bad);
+  assert.match(checkBackup({ ...good, cards: [card({ frontSounds: [null] })] }), bad);
+});
+
 test('fsrsParams in a backup: a good value, a reset or none passes; a restore keeps the good one and leaves junk out', () => {
   const mine = { w: Array(21).fill(0.5), at: 1, reviews: 450, cards: 90, version: 'fsrs-6' };
   const withParams = fsrsParams => ({ ...good, settings: { fsrsParams } });

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels } from '../js/anki.js';
+import { ankiMath, htmlToText, clozeNumbers, clozeCard, notesToImport, onlyDeck, deckList, replayHistory, seedFromAnki, isCram, isReset, imageNames, mediaList, subdeckPaths, isOcclusionNote, ioLabels, soundNames, soundReport } from '../js/anki.js';
 import { splitMath } from '../js/math.js';
 import { isAnswerLog, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
 
@@ -131,7 +131,7 @@ test('the picture list in newer Anki files', () => {
   const e1 = [...str(1, 'brain.png'), 2 * 8, 123];
   const e2 = [...str(1, 'heart.jpg'), 2 * 8, 5, 0xf8, 0x0f, 7];          // field 255 (key 2040 = 0xf8 0x0f), value 7
   const list = mediaList(new Uint8Array([...entry(e1), ...entry(e2)]));
-  assert.deepEqual(list, [{ name: 'brain.png', zipName: undefined }, { name: 'heart.jpg', zipName: '7' }]);
+  assert.deepEqual(list, [{ name: 'brain.png', zipName: undefined, size: 123 }, { name: 'heart.jpg', zipName: '7', size: 5 }]);
 });
 
 test('keeping Anki subdecks: paths below what all rows share', () => {
@@ -352,4 +352,72 @@ test('maths: Anki [$] and [$$] become \\( \\) and \\[ \\], which are kept as the
   const br = notesToImport([{ mid: '1', fields: ['Sum [$]a +<br>b[/$] and [$$] c<br> d [/$$]', 'x'], tags: [], deck: 'D' }], models);
   assert.equal(br.rows[0][0], 'Sum \\(a +\nb\\) and \\[ c\nd \\]');
   assert.deepEqual(splitMath(br.rows[0][0]).filter(p => p.type === 'math').map(p => p.tex), ['a +\nb', 'c\nd']);
+});
+
+// ---------- sounds (item 3) and what could not be kept (item B) ----------
+test('sound names in Anki fields: in order, URL-decoded, and the tags leave the text', () => {
+  assert.deepEqual(soundNames('dog [sound:dog.mp3] and [sound:my%20cat.wav]<br>[sound:a&amp;b.ogg]'), ['dog.mp3', 'my cat.wav', 'a&b.ogg']);
+  assert.deepEqual(soundNames('[sound:100%.mp3]'), ['100%.mp3']);          // not valid URL-encoding: kept as it is
+  assert.deepEqual(soundNames('<img src="a.png"> nothing here'), []);
+  assert.deepEqual(soundNames(undefined), []);
+  const r = notesToImport([{ id: '1', mid: 'b', fields: ['dog [sound:dog.mp3]', 'inu'], tags: [], deck: 'D' }], SOUND_MODELS);
+  assert.deepEqual(r.rows[0], ['dog', 'inu']);                              // the text has no [sound:] left in it
+});
+
+// A package stand-in: files with sizes, like media.info in anki-read.js.
+const pack = files => ({ info: name => (name in files ? { size: files[name], type: /\.(mp3|wav)$/.test(name) ? 'audio/' + name.split('.').pop() : 'application/octet-stream' } : null) });
+const SOUND_MODELS = new Map([
+  ['b', { name: 'Basic', fields: ['Front', 'Back'], cloze: false }],
+  ['c', { name: 'Cloze', fields: ['Text', 'Back Extra'], cloze: true }],
+  ['o', { name: 'Image Occlusion', fields: ['Occlusion', 'Image', 'Header', 'Back Extra', 'Comments'], cloze: true }]
+]);
+
+test('sounds: the first field is the front, the other fields are the back', () => {
+  const media = pack({ 'dog.mp3': 100, 'cat.wav': 200, 'x.mp3': 50 });
+  const r = notesToImport([
+    { id: '1', mid: 'b', fields: ['dog [sound:dog.mp3]', 'inu [sound:cat.wav][sound:x.mp3]'], tags: [], deck: 'D' },
+    { id: '2', mid: 'b', fields: ['no sound', 'none'], tags: [], deck: 'D' }
+  ], SOUND_MODELS, new Map(), media);
+  assert.deepEqual(r.sounds[0], { note: '1', front: ['dog.mp3'], back: ['cat.wav', 'x.mp3'], lost: [] });
+  assert.equal(r.sounds[1], null);
+  assert.deepEqual([...r.soundFiles.keys()].sort(), ['cat.wav', 'dog.mp3', 'x.mp3']);
+});
+
+test('sounds: a cloze note keeps its Text sounds on the front of every card and the rest on the back; occlusion notes get none', () => {
+  const media = pack({ 'p.mp3': 10, 'e.mp3': 20 });
+  const r = notesToImport([{ id: '7', mid: 'c', fields: ['{{c1::Paris}} is in {{c2::France}} [sound:p.mp3]', 'Europe [sound:e.mp3]'], tags: [], deck: 'D' }], SOUND_MODELS, new Map(), media);
+  assert.equal(r.rows.length, 2);
+  assert.deepEqual(r.sounds.map(s => [s.front, s.back]), [[['p.mp3'], ['e.mp3']], [['p.mp3'], ['e.mp3']]]);       // both blanks share the note's sounds
+  const occ = notesToImport([{ id: '8', mid: 'o', fields: ['image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:oi=1 [sound:p.mp3]', '<img src="a.png">', 'Head', '', ''], tags: [], deck: 'D' }], SOUND_MODELS, new Map(), media);
+  assert.ok(occ.rows.length > 0 && occ.sounds.every(s => s === null));
+});
+
+test('sounds not kept are counted by reason, and a file named many times counts once', () => {
+  const MB = 1024 * 1024;
+  const numbered = Object.fromEntries(['1', '2', '3', '4', '5'].map(n => [n + '.mp3', 10]));
+  const media = pack({ 'ok.mp3': 1000, 'big.wav': MB + 1, 'old.wma': 500, 'edge.mp3': MB, ...numbered });
+  const notes = [
+    { id: '1', mid: 'b', fields: ['a [sound:ok.mp3]', 'b [sound:big.wav]'], tags: [], deck: 'A' },
+    { id: '2', mid: 'b', fields: ['c [sound:gone.mp3]', 'd [sound:old.wma][sound:big.wav]'], tags: [], deck: 'A' },
+    { id: '3', mid: 'b', fields: ['e [sound:gone.mp3]', 'f [sound:edge.mp3]'], tags: [], deck: 'B' },
+    { id: '4', mid: 'b', fields: ['g [sound:gone.mp3]', 'h [sound:1.mp3][sound:2.mp3][sound:3.mp3][sound:4.mp3][sound:5.mp3]'], tags: [], deck: 'B' }
+  ];
+  const r = notesToImport(notes, SOUND_MODELS, new Map(), media);
+  const rep = soundReport(r);
+  assert.deepEqual({ missing: rep.missing, tooBig: rep.tooBig, format: rep.format, extra: rep.extra, dropped: rep.dropped },
+    { missing: 1, tooBig: 1, format: 1, extra: 1, dropped: 4 });            // gone.mp3 on 3 cards counts once; exactly 1 MB is allowed
+  assert.equal(rep.notes, 3);                                                // notes 1, 3 and 4 have a sound that comes along
+  assert.deepEqual(rep.files.sort(), ['1.mp3', '2.mp3', '3.mp3', '4.mp3', 'edge.mp3', 'ok.mp3']);
+  assert.equal(rep.bytes, 1000 + MB + 40);
+  // picking one deck changes the counts
+  const a = soundReport(onlyDeck(r, 'A'));
+  assert.deepEqual({ missing: a.missing, tooBig: a.tooBig, format: a.format, extra: a.extra, notes: a.notes }, { missing: 1, tooBig: 1, format: 1, extra: 0, notes: 1 });
+  const b = soundReport(onlyDeck(r, 'B'));
+  assert.deepEqual({ missing: b.missing, tooBig: b.tooBig, format: b.format, extra: b.extra, notes: b.notes }, { missing: 1, tooBig: 0, format: 0, extra: 1, notes: 2 });
+});
+
+test('sounds: without a package every sound with a known ending is taken as present', () => {
+  const r = notesToImport([{ id: '1', mid: 'b', fields: ['a [sound:a.mp3][sound:b.amr]', 'x'], tags: [], deck: '' }], SOUND_MODELS);
+  assert.deepEqual(r.sounds[0].front, ['a.mp3']);
+  assert.deepEqual(r.sounds[0].lost, [{ name: 'b.amr', reason: 'format' }]);
 });
