@@ -16,12 +16,13 @@ export function splitBack(back) {
 // structure (the note text, the masks) that a split would lose.
 export const canSplit = card => !(card.noteId || card.cloze || card.occlusion);
 // The cards a split makes: same deck, the original's tags without "leech". rows: [{ front, back }], blank rows left out.
-// The first new card also gets the original's back picture and memory hook (noteExtra), so nothing is lost when it is deleted.
+// The first new card also gets the original's back picture, back sounds and memory hook (noteExtra), so nothing is lost when it is deleted.
 export function splitCards(card, rows, { newId, now = Date.now() }) {
   const tags = (card.tags || []).filter(t => t !== 'leech');
   return rows.filter(r => r.front.trim() && r.back.trim()).map((r, i) => ({
     id: newId(), deckId: card.deckId, front: r.front.trim(), back: r.back.trim(), ...(card.frontImage ? { frontImage: card.frontImage } : {}),
     ...(i === 0 && card.backImage ? { backImage: card.backImage } : {}), ...(i === 0 && card.noteExtra ? { noteExtra: card.noteExtra } : {}),
+    ...(card.frontSounds?.length ? { frontSounds: [...card.frontSounds] } : {}), ...(i === 0 && card.backSounds?.length ? { backSounds: [...card.backSounds] } : {}),      // sounds follow like pictures
     tags: [...tags], created: now + i
   }));
 }
