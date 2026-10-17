@@ -34,7 +34,8 @@
 <script>
   // Apply the saved theme before anything is drawn, so there's no flash of the wrong colors.
   // This mirrors cleanTheme() in js/themes.js (keep the two in step): unknown or old theme names become
-  // Violet, and with nothing saved the app is Violet Dark, even when the device is set to light.
+  // Violet, and with nothing saved the app is Original Violet Dark, even when the device is set to light.
+  // (The catch below also sets data-ui, so a broken saved value never leaves the page without one.)
   try {
     var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}'), r = document.documentElement;
     var skins = { violet: 1, ocean: 1, forest: 1, ember: 1, rose: 1 };
@@ -43,10 +44,11 @@
     var dark = ['neon', 'onyx', 'kuro'].indexOf(t.skin) >= 0;
     var mode = dark ? 'dark' : (t.mode === 'light' || t.mode === 'auto') ? t.mode : 'dark';
     if (mode === 'auto') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    r.setAttribute('data-ui', t.ui === 'clinical' ? 'clinical' : 'original');
     r.setAttribute('data-skin', skin);
     r.setAttribute('data-theme', mode);
     if (t.oled === true || t.skin === 'onyx' || t.skin === 'kuro') r.setAttribute('data-oled', 'on');
-  } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); document.documentElement.setAttribute('data-ui', 'original'); }
   // The desktop sidebar's collapsed (icon rail) state is remembered per device the same way (see js/sidebar.js).
   try { if (localStorage.getItem('study-sprint-rail') === '1') document.documentElement.setAttribute('data-rail', 'on'); } catch (e) { /* fine */ }
 </script>
@@ -69,12 +71,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">
 <link rel="stylesheet" href="css/styles.css">
+<!-- The Clinical style (Settings → Appearance → Style). Every rule in it is scoped to html[data-ui="clinical"]. -->
+<link rel="stylesheet" href="css/clinical.css">
 <!-- The files the app needs to start. Without these the browser finds them one import level at a time
      (app.js, then what it imports, then what those import...). Listing them lets it fetch them all at once.
      Keep in step with the imports of js/app.js (screens opened later, like Play and Stats, load on demand). -->
 <link rel="modulepreload" href="js/app.js">
 <link rel="modulepreload" href="js/db.js">
 <link rel="modulepreload" href="js/sync-data.js">
+<link rel="modulepreload" href="js/glossary.js">
 <link rel="modulepreload" href="js/sync-merge.js">
 <link rel="modulepreload" href="js/audio-type.js">
 <link rel="modulepreload" href="js/note-fields.js">

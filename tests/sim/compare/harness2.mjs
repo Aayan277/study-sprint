@@ -14,6 +14,11 @@
 //      AWAY=all|<n>  (B1) "I'm away until...": on the last study day before the break, also review ahead every card
 //                 that comes due during the break (all), or the n soonest. Unset = off.
 //      CARDS=n    override the number of cards (Gb has 1000, all introduced by day 40; 2000 keeps new cards coming).
+//      OPT=1      (FSRS optimizer, PR 2) once 400 reviews count, and then every OPT_EVERY (30) days, fit the learner's own weights with the
+//                 app's real fsrs-data.js + fsrs-fit.js (history from the simulated review log; fitChecked: fit on the first 80%, judged on the last 20%, refit on all)
+//                 and keep them in settings.fsrsParams only if they predict better there. Needs a copy that has js/fsrs-fit.js. OPT_CONFIG='{...}' overrides FIT_DEFAULTS. Extra metrics:
+//                 revR (mean true recall at the moment of a Review answer on a graduated card), optRuns / optKept, and oos (log loss of
+//                 what the app would use vs the standard weights, both scored on the last 20% after deciding on the first 80%).
 //      Extra metrics for break scenarios: Rret (mean true recall on the first day back, before studying), recPeak / recP90 (largest and 90th-percentile answers a day after the break),
 //      R30end (mean true recall 30 days after the break, non-exam decks), offered (did the offer fire).
 import { register } from 'node:module';
@@ -40,6 +45,9 @@ const AG = await J('autograde.js');
 const GAME = await J('game.js');
 const BL = await J('browse-logic.js');
 const DT = await J('deck-tree.js');
+const OPT = process.env.OPT === '1', OPT_EVERY = +(process.env.OPT_EVERY ?? 30);
+const FD = OPT ? await J('fsrs-data.js') : null;
+const FIT = OPT ? await J('fsrs-fit.js') : null;
 const DAYS = await J('days.js');
 const db = await import(pathToFileURL(path.join(here, 'memdb.mjs')).href);
 if (process.env.SPEED_JSON && AG.SPEED) Object.assign(AG.SPEED, JSON.parse(process.env.SPEED_JSON));   // B6 tuning grid
@@ -120,7 +128,7 @@ async function runSeed(seed) {
     if (first) { info.tc.stability *= info.m; info.tc.difficulty = clamp(info.tc.difficulty + 1.5 * info.z, 1, 10); }
     else if (lambda < 1 && wasReview && info.tc.stability > prevS) info.tc.stability = prevS + lambda * (info.tc.stability - prevS);
   };
-  const st = { nextRev: { mc: [0, 0], typing: [0, 0], review: [0, 0] } };   // recall at the next Review, by what counted last
+  const st = { nextRev: { mc: [0, 0], typing: [0, 0], review: [0, 0] }, revR: [0, 0] };   // recall at the next Review, by what counted last; true recall at Review answers
   const reviewAnswer = (id, now) => {
     const info = L.get(id), r = info.rng;
     let rating;
@@ -129,6 +137,7 @@ async function runSeed(seed) {
       rating = u < pA ? 1 : u < pA + 0.15 ? 2 : u < pA + 0.25 ? 4 : 3;
     } else {
       const R = trueR(info.tc, now);
+      st.revR[0] += R; st.revR[1]++;
       if (r() >= R) rating = 1;
       else { const pH = 0.08 + 0.5 * (1 - R), pE = 0.25 * R ** 6, u = r(); rating = u < pH ? 2 : u < pH + pE ? 4 : 3; }
     }
@@ -177,6 +186,27 @@ async function runSeed(seed) {
     const info = L.get(id);
     if (prev && prev.state === 2 && info.lastSrc) { const b = st.nextRev[info.lastSrc]; b[0]++; if (rating !== 1) b[1]++; }
   };
+
+
+  // ---- the optimizer (js/optimize-sheet.js startRun, without the page): fit, judge on what the scheduler uses, keep only if better ----
+  const run = g => { for (;;) { const r = g.next(); if (r.done) return r.value; } };
+  const optStat = { runs: 0, kept: 0 };
+  let lastOpt = null;
+  const optInput = hist => ({ cards: hist.cards, current: SCH.cleanFsrsParams(db.S.settings.fsrsParams)?.w || [...TF.default_w], defaults: [...TF.default_w], bounds: TF.CLAMP_PARAMETERS(TF.W17_W18_Ceiling, true), config: process.env.OPT_CONFIG ? JSON.parse(process.env.OPT_CONFIG) : undefined });
+  function maybeOptimize(d) {
+    if (!OPT || (lastOpt !== null && d - lastOpt < OPT_EVERY)) return;
+    const hist = FD.buildHistories(db.S.logs);
+    if (hist.reviews < FD.MIN_REVIEWS) return;
+    lastOpt = d;
+    const input = { ...optInput(hist), steps: hist.cards.map(() => 1) };       // one deck, one relearning step
+    const res = run(FIT.fitChecked(input));                                   // fit on the first 80%, judge on the last 20%, refit only if it wins
+    if (res.status === 'not-enough') return;
+    optStat.runs++;
+    if (res.status !== 'better') return;
+    optStat.kept++;
+    db.S.settings.fsrsParams = { w: TF.clipParameters(res.w, 0, true), at: NOW, reviews: hist.reviews, cards: hist.cardsUsed,
+      logLoss: { before: res.before.logLoss, after: res.after.logLoss }, rmse: { before: res.before.rmse, after: res.after.rmse }, version: SCH.FSRS_VERSION };
+  }
 
   // ---- Review session (review.js start()/answer() of v3.4) ----
   async function reviewSession(day) {
@@ -316,6 +346,7 @@ async function runSeed(seed) {
     const inRec = bFrom !== undefined && d >= bTo;
     if (inRec) { const s = daily[d]; rec.lostDays += s.lost; rec.rSum += s.meanR; rec.n++; if (d === bTo) rec.backlogStart = backlog(); }
     if (RESCUE > 0 && d === bTo) await startRescue();
+    maybeOptimize(d);
     const play = dayRng() < PLAY_P;
     if (play) { await playRound(day); NOW += 10 * 60000; }      // Play first (e.g. on the bus), then Review
     await reviewSession(day);
@@ -341,8 +372,23 @@ async function runSeed(seed) {
     score: mean(ids.map((id, i) => +(L.get(id).exam < Rs[i]))),
     reviews: perDay.reduce((n, x) => n + x.reviews, 0), answers: perDay.reduce((n, x) => n + x.answers, 0),
     maxDaily: Math.max(...perDay.map(x => x.reviews)), suspended, over: nOver ? over / nOver : 0,
-    play: pl, nextRev: st.nextRev, perDay: perDay.map(x => x.reviews)
+    play: pl, nextRev: st.nextRev, perDay: perDay.map(x => x.reviews), revR: st.revR[1] ? st.revR[0] / st.revR[1] : null
   };
+  if (OPT) {
+    Object.assign(out, { optRuns: optStat.runs, optKept: optStat.kept, wFinal: db.S.settings.fsrsParams?.w ?? null });
+    // an out-of-sample score of what the app does: use only the first 80% of the days, run the whole decision on it (fitChecked), and score the
+    // weights it would use (the fitted ones if it keeps them, else the standard ones) against the standard weights on the last 20%.
+    // rawAfter: the same without the decision (always take the fit), for comparison.
+    const hist = FD.buildHistories(db.S.logs);
+    const { head, test } = FIT.splitHistories(hist.cards);
+    const base = { ...optInput(hist), current: [...TF.default_w] };
+    const r = run(FIT.fitChecked({ ...base, cards: head, steps: head.map(() => 1) }));
+    const raw = run(FIT.fit({ ...base, cards: head, config: { ...base.config, minReviews: 1, skipCheck: true } }));
+    const use = r.status === 'better' ? r.w : base.current;
+    const before = FIT.evaluate(test, base.current);
+    out.oos = r.status === 'not-enough' || raw.status === 'not-enough' ? null : { before: before.logLoss, after: FIT.evaluate(test, use).logLoss, rawAfter: FIT.evaluate(test, raw.fitted).logLoss, n: before.n, kept: r.status === 'better' };
+    out.reviewsCounted = hist.reviews;
+  }
   if (cfg.breakFrom !== undefined) {
     const s = snap(cfg.noExam ? T : NOW);
     Object.assign(out, { recCleared: rec.cleared ?? (cfg.noExam ? cfg.recover + 1 : totalDays - bTo + 1), recClearedCensored: rec.cleared === null,

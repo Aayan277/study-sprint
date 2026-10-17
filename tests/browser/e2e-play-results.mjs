@@ -26,7 +26,7 @@ const seed = (p, { id = 'pr', n = 40, due = false, leech = false } = {}) => p.ev
   const cs = Array.from({ length: n }, (_, i) => ({ id: id + i, deckId: id, front: `Q${id}${i}`, back: `A${id}${i}`, tags: [], created: i }));
   await db.addDeckWithCards({ id, name: 'Results ' + id, color: '#46A758', created: Date.now() }, cs);
   if (due) await db.putStates(cs.map(c => ({ cardId: c.id, due: Date.now() - day, stability: 5, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: Date.now() - 10 * day })));
-  if (leech) { await db.setSetting('leechThreshold', 1); await db.setSetting('leechAction', 'tag'); }
+  if (leech) { await db.setSetting('playCountsAsReviews', true); await db.setSetting('leechThreshold', 1); await db.setSetting('leechAction', 'tag'); }
 }, { id, n, due, leech });
 const setup = async (p, deck) => {
   await p.evaluate(() => { location.hash = '#/play'; }); await p.waitForSelector('#pDeck');

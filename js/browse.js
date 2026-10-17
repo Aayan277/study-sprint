@@ -264,7 +264,13 @@ async function showMixedWith(card) {
 }
 
 // The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.
+// The text selected on the card, for "Add to glossary": a tap on the ⋯ button can clear the selection before the sheet opens, so
+// it is also noted as a press starts (and used if it is only moments old).
+let pressed = { text: '', at: 0 };
+const selectedText = () => String(getSelection?.() || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+document.addEventListener('pointerdown', () => { pressed = { text: selectedText(), at: Date.now() }; }, true);
 async function openCardActions(card, ctx) {
+  const picked = selectedText() || (Date.now() - pressed.at < 2000 ? pressed.text : '');
   const state = ctx.statesById.get(card.id);
   const now = Date.now();
   const status = cardStatus(card, state, now);
@@ -277,10 +283,12 @@ async function openCardActions(card, ctx) {
         ${FLAGS.map(f => `<button type="button" class="act-flag" data-flag="${f.id}" style="--c:${f.color}" aria-pressed="${card.flag === f.id}" aria-label="${f.name} flag"></button>`).join('')}</div>
       <button type="button" class="act-row" data-act="bury" aria-keyshortcuts="-">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span><kbd aria-hidden="true">-</kbd></button>
       <button type="button" class="act-row" data-act="suspend" aria-keyshortcuts="@">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span><kbd aria-hidden="true">@</kbd></button>
+      <button type="button" class="act-row" data-go="glossary">${icon('plus')}<span>Add to glossary${picked ? `<small>“${esc(picked)}”</small>` : ''}</span></button>
       <button type="button" class="act-row" data-go="more">${icon('more')}<span>More<small>Move, due date, reset, delete, card info</small></span>${icon('chevron')}</button>
     </div>`, { side: true });
   const { save } = cardOps(card, ctx);
   const sheet = $('sheet');
+  sheet.querySelector('[data-go="glossary"]').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openTermForm({ term: picked, back: 'close' })).catch(err => console.error(err)));
   sheet.querySelector('[data-go="edit"]').addEventListener('click', () => openCardEdit(card, ctx));
   sheet.querySelector('[data-go="more"]').addEventListener('click', () => openCardPanel(card, { ...ctx, mode: 'full' }));
   sheet.querySelector('[data-act="bury"]').addEventListener('click', () => toggleBury(card, save));

@@ -130,8 +130,28 @@ await page.evaluate(async () => {
   await db.addDeckWithCards({ id: 'lk', name: 'Leechy', color: '#E5484D', created: Date.now() },
     ['a', 'b', 'c', 'd'].map((f, i) => ({ id: 'lk' + i, deckId: 'lk', front: 'q' + f, back: 'ans' + f, tags: [], created: i })));
   await db.putStates(['a', 'b', 'c', 'd'].map((f, i) => ({ cardId: 'lk' + i, due: Date.now() - day, stability: 5, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: Date.now() - 10 * day })));
-  await db.setSetting('leechThreshold', 1);
 });
+await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
+await page.selectOption('#pDeck', 'lk');
+await setup(['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]']);
+// v4.10: Play is practice only by default. A wrong answer and a right one on due cards change nothing: no due date, no FSRS state, no log row.
+const lkState = () => page.evaluate(async () => JSON.stringify((await (await import('./js/db.js')).getAll('cardStates')).filter(s => s.cardId.startsWith('lk')).sort((a, b) => a.cardId.localeCompare(b.cardId))));
+const lkRows = () => page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.cardId.startsWith('lk')).length);
+ok(await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playCountsAsReviews) === false, 'Play counts as reviews is off by default');
+const before = await lkState(), nLogs = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length);
+await page.click('#startBtn'); await page.waitForSelector('#pCard');
+for (const wrong of [true, false]) {
+  await waitQuestion();
+  const pr = await page.textContent('#pPrompt'); const rt = await pick(null, 'ans' + pr.slice(1));
+  await page.keyboard.press(String((wrong ? (rt + 1) % 4 : rt) + 1)); await page.waitForSelector('.fb');
+  await page.keyboard.press('Enter');
+}
+await page.waitForTimeout(500);
+ok(await lkState() === before, 'Play off: the due dates and FSRS state of due cards did not change');
+ok(await lkRows() === 0 && await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length) === nLogs, 'Play off: no review-log rows were added');
+await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+// Turn it on: the old behaviour (the next checks)
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('playCountsAsReviews', true); await db.setSetting('leechThreshold', 1); });
 await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
 await page.selectOption('#pDeck', 'lk');
 await setup(['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]']);

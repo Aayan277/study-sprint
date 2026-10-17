@@ -106,3 +106,15 @@ test('day gaps in fsrs-data.js equal ts-fsrs dateDiffInDays', { skip }, async ()
     assert.equal(deltaDays(a, b), lib.dateDiffInDays(new Date(a), new Date(b)));
   }
 });
+
+test('clipWeights equals ts-fsrs clipParameters, for 0 to 4 relearning steps and wild weights', { skip }, async () => {
+  const lib = await load();
+  const { clipWeights } = await import('../js/fsrs-fit.js');
+  const bounds = lib.CLAMP_PARAMETERS(lib.W17_W18_Ceiling, true);
+  const rng = mulberry32(21);
+  for (let i = 0; i < 1000; i++) {
+    const w = bounds.map(([lo, hi]) => lo - (hi - lo) * 0.3 + (hi - lo) * 1.6 * rng());
+    const n = Math.floor(rng() * 5);
+    assert.deepEqual(clipWeights(w, n, bounds), lib.clipParameters(w, n, true), `n = ${n}`);
+  }
+});

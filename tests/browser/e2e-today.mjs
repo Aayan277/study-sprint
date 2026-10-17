@@ -20,6 +20,7 @@ ok(JSON.stringify(await page.$$eval('.tab', t => t.map(x => x.textContent.trim()
 ok((await page.textContent('#startBtn')).includes('12 cards') && (await page.textContent('#startBtn')).includes('min'), 'Start shows 12 cards and a time estimate');
 ok(+(await page.textContent('[data-count=new]')) === 12 && +(await page.textContent('[data-count=due]')) === 0, 'counts: 12 new, 0 due');
 ok((await page.textContent('.streak')).includes('0') && (await page.textContent('.streak')).includes('Study today to start one'), 'no streak yet');
+ok(await page.evaluate(() => { const g = document.querySelector('.today-hero .goal'); return !!g && getComputedStyle(g).display === 'none'; }), "Original: Today's goal line (Clinical's) is in the page but hidden");
 await noHScroll('today'); await page.screenshot({ path: SP + '/t-today.png', fullPage: true });
 
 // More decks, an exam, and some history
@@ -127,10 +128,10 @@ await run(async () => {
   await db.putMany('cardStates', st.map(s => ({ ...s, due: Date.now() + 3 * 86400000 }))); await db.setSetting('newPerDay', 0);
 });
 await page.reload(); await page.waitForSelector('.th-done');
-ok((await page.textContent('.th-done')).includes('All done for today') && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
+ok(/^(All done for today|Nothing due today)$/.test((await page.textContent('.th-big')).trim()) && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
 // v4.9: the game is only on the Play page, so the done state no longer suggests it; a quiet Custom study link instead
 ok(await page.locator('.th-done a[href="#/play"], .th-done [href*="play"]').count() === 0 && await page.locator('#startBtn').count() === 0, 'done state has no Play link');
-ok((await page.textContent('.th-done #customLink')).trim() === 'Custom study', 'done state has a quiet Custom study link');
+ok((await page.textContent('.th-done #customLink')).trim() === 'Extra study', 'done state has a calm Extra study button (v4.10, was a Custom study link)');
 await page.click('.th-done #customLink'); await page.waitForSelector('#sheet .cs-opt'); await page.keyboard.press('Escape'); await page.waitForSelector('#sheet', { state: 'hidden' });
 await page.reload(); await page.waitForSelector('.th-done');       // a clean page for the keyboard check below
 await page.screenshot({ path: SP + '/t-done.png', fullPage: true }); await noHScroll('done');

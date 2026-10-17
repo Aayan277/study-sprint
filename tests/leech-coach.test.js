@@ -25,3 +25,8 @@ test('unleeched: unsuspended, tag removed, the rest untouched', () => {
   const c = { id: 'x', suspended: true, tags: ['leech', 'bio'], noteExtra: 'h' };
   assert.deepEqual(unleeched(c), { id: 'x', suspended: false, tags: ['bio'], noteExtra: 'h' });
 });
+
+test('splitBack drops the "Element N:" prefixes of an elements card', async () => {
+  const { splitBack } = await import('../js/leech-logic.js');
+  assert.deepEqual(splitBack('Negligence\nElement 1: Duty\nElement 2: Breach\nelement 3) Causation'), ['Negligence', 'Duty', 'Breach', 'Causation']);
+});
