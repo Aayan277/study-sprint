@@ -11,7 +11,7 @@ import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
-import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
+import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
@@ -442,9 +442,16 @@ function typedMixup(typed) {
   return indexedMixup(G.mixIndex, typed, G.card);
 }
 
-// Save one answer: always to the review log (for stats), and to the review schedule when the
-// auto-grading rules allow it (see autograde.js).
+// Does Play count as reviews? (Settings, synced; off by default: Play is practice only.)
+const countsAsReviews = () => playCountsAsReviews(data?.settings);
+
+// Save one answer (only when Play counts as reviews, see above): always to the review log (source 'play', so stats and a
+// future FSRS optimizer can tell it from a Review), and to the review schedule when the auto-grading rules allow it (see autograde.js).
 async function record(round, entry) {
+  // Practice only (the default, Settings > "Count Play answers as reviews" off): nothing is saved. No schedule or FSRS
+  // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
+  // The round's own score, bests and results come from the round itself, not from the log.
+  if (!countsAsReviews()) { entry.decision = 'practice'; return; }
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
@@ -463,15 +470,8 @@ async function record(round, entry) {
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
   rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing' });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
-  const log = {
-    cardId: id, timestamp: now, source: 'play',
-    mode: round.qtype, format: round.fmt,
-    correct: entry.ok, ms: entry.ms, rating, chars, hard: !!round.hard,
-    state: prev ? prev.state : 0,      // the card's state before this answer
-    applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
-  };
-  if (entry.mixedWith) log.mixedWith = entry.mixedWith;     // the card whose answer was given instead (confusion.js)
+  const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
+    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith });
   if (applies(decision)) {
     let next = null;
     try {
@@ -559,6 +559,7 @@ async function scheduleSummary(round) {
   const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
   const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
+  if (!countsAsReviews()) return '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>';
   const parts = [];
   if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
   if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back`);

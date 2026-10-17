@@ -132,3 +132,64 @@ test('a right multiple-choice answer on a due card counts at most as Hard; typin
   assert.equal(appliedRating({ decision: 'due', rating: EASY, mc: false }), EASY);
   assert.equal(appliedRating({ decision: 'first', rating: GOOD, mc: true }), GOOD);
 });
+
+// ---------- v4.10: Play is practice only unless "Count Play answers as reviews" is on ----------
+import { playCountsAsReviews } from '../js/autograde.js';
+import { isAnswerLog, answerDays, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
+
+test('playCountsAsReviews: off unless the setting is exactly true', () => {
+  assert.equal(playCountsAsReviews({}), false);                       // the default
+  assert.equal(playCountsAsReviews(undefined), false);
+  assert.equal(playCountsAsReviews({ playCountsAsReviews: false }), false);
+  for (const v of ['true', 1, null, 'on']) assert.equal(playCountsAsReviews({ playCountsAsReviews: v }), false);
+  assert.equal(playCountsAsReviews({ playCountsAsReviews: true }), true);
+});
+
+test('stats readers treat Review rows (source review) and counted Play rows (source play) consistently', () => {
+  const t = NOW - 1000;
+  const review = { cardId: 'a', timestamp: t, source: 'review', state: 2, correct: true };
+  const play = { cardId: 'b', timestamp: t, source: 'play', state: 2, correct: true, applied: true, reason: 'due', mode: 'typing' };
+  const playOnly = { cardId: 'c', timestamp: t, source: 'play', state: 2, correct: true, applied: false, reason: 'not-due', mode: 'typing' };
+  assert.ok([review, play, playOnly].every(isAnswerLog));            // all are answers (heatmap and streak count the day)
+  assert.equal(answerDays([review, play, playOnly]).all.size, 1);
+  assert.deepEqual([isDueReview(review), isDueReview(play), isDueReview(playOnly)], [true, true, false]);     // retention: only answers that were the card's review
+  const day = reviewsPerDay([review, play, playOnly], NOW, 1)[0];
+  assert.deepEqual([day.review, day.play, day.total], [1, 2, 3]);        // the chart tells them apart by `source`
+});
+
+// ---------- Play log rows: practice only (off) writes none; on writes source 'play' rows that stats and the ring read correctly ----------
+import { playLogRow } from '../js/autograde.js';
+import { todayRing } from '../js/study-data.js';
+
+test('playLogRow: always source play, applied false until the schedule changes, mixedWith only when set', () => {
+  const base = { cardId: 'a', now: NOW, qtype: 'typing', fmt: 'classic', hard: false, ok: true, ms: 2500, rating: 3, chars: 6, prevState: 2, decision: 'due' };
+  const row = playLogRow(base);
+  assert.deepEqual([row.source, row.applied, row.reason, row.mode, row.format, row.state, row.hard], ['play', false, 'due', 'typing', 'classic', 2, false]);
+  assert.ok(!('mixedWith' in row));
+  assert.equal(playLogRow({ ...base, mixedWith: 'b' }).mixedWith, 'b');
+  assert.equal(playLogRow({ ...base, prevState: undefined }).state, 0);
+});
+
+test('Play off: nothing is written, so no stats reader, streak day or ring can see a Play answer', () => {
+  // With the setting off Play's record() returns before it builds a row, so the log holds no Play rows at all:
+  assert.equal(playCountsAsReviews({ playCountsAsReviews: false }), false);
+  const logs = [];
+  assert.equal(logs.filter(isAnswerLog).length, 0);
+  assert.equal(answerDays(logs).all.size, 0);
+  assert.equal(reviewsPerDay(logs, NOW, 1)[0].total, 0);
+});
+
+test('Play on: an applied row counts toward the ring; a logged-only row counts in stats but not in the ring', () => {
+  const applied = playLogRow({ cardId: 'a', now: NOW, qtype: 'typing', fmt: 'classic', ok: true, ms: 2000, rating: 3, prevState: 2, decision: 'due' });
+  applied.applied = true;
+  const loggedOnly = playLogRow({ cardId: 'b', now: NOW, qtype: 'front', fmt: 'classic', ok: true, ms: 2000, rating: 3, prevState: 2, decision: 'not-due' });
+  assert.ok(isAnswerLog(applied) && isAnswerLog(loggedOnly));
+  assert.equal(answerDays([applied, loggedOnly]).all.size, 1);
+  const cards = ['a', 'b', 'c'].map(id => ({ id, deckId: 'd', front: 'f', back: 'b', created: 1 }));
+  const st = new Map(cards.map(c => [c.id, { cardId: c.id, state: 2, due: NOW + 5 * 86400000 }]));
+  const world = logs => ({ decks: [{ id: 'd', name: 'D', created: 1 }], cards: cards, statesById: st, deckOf: new Map(cards.map(c => [c.id, 'd'])), logs, split: { reviews: [], waiting: [], fresh: [] } });
+  const ring = logs => todayRing(world(logs), [], { total: 0 }, NOW);
+  assert.equal(ring([]).state, 'nothing');                       // off: no Play rows, nothing done, nothing due
+  assert.equal(ring([applied, loggedOnly]).done, 1);             // on: only the card Play really rescheduled is done
+  assert.equal(ring([loggedOnly]).state, 'nothing');
+});

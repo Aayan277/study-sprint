@@ -19,6 +19,7 @@ const cards = await page.evaluate(async DAY => {
   await db.putMany('cardStates', [...cs.slice(0, 4).map(c => st(c, now - 2 * DAY)), ...cs.slice(4, 8).map(c => st(c, now + 10 * DAY))]);
   return cs.map((c, i) => ({ id: c.id, front: c.front, back: c.back, cat: i < 4 ? 'due' : i < 8 ? 'notdue' : 'new', i }));
 }, DAY);
+await page.evaluate(async () => (await import('./js/db.js')).setSetting('playCountsAsReviews', true));     // v4.10: Play is practice only unless this is on; these checks are the "on" behaviour
 const byFront = Object.fromEntries(cards.map(c => [c.front, c]));
 const wrongOn = new Set([cards[1].id, cards[5].id]);   // one due card and one not-due card answered wrong
 

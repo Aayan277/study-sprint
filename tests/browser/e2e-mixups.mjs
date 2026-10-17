@@ -28,7 +28,8 @@ const seed4 = p => p.evaluate(async ({ FRONTS, BACKS }) => {
   const db = await import('./js/db.js');
   await db.addDeckWithCards({ id: 'mx', name: 'Fruit', color: '#46A758', created: Date.now() },
     FRONTS.map((f, i) => ({ id: 'mx' + i, deckId: 'mx', front: f, back: BACKS[i], tags: [], created: i })));
-}, { FRONTS, BACKS });
+  await db.setSetting('playCountsAsReviews', true);       // v4.10: mix-ups are read from Play log rows, which are only written when Play counts as reviews
+},{ FRONTS, BACKS });
 // Twelve cards where card 0 and card 1 are confused in the log, so the drill's `include` is what puts the partner's answer in the options.
 const seed12 = p => p.evaluate(async () => {
   const db = await import('./js/db.js'); const now = Date.now();
