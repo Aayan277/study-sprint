@@ -5,6 +5,7 @@
 //   fzstd    unpacks the database in newer Anki files (2.1.50+), which is compressed
 //   sql.js   reads the SQLite database
 // readAnkiFile() returns { notes, models, reviews, media } for notesToImport() in anki.js.
+// media.has(name) / media.info(name) → { size, type } / media.get(name) → { data, type } tell about the pictures and sounds inside.
 
 import { mediaList } from './anki.js';
 
@@ -16,10 +17,12 @@ export async function readAnkiFile(file) {
   const { unzipSync } = await import(FFLATE_URL);
   const zip = new Uint8Array(await file.arrayBuffer());
   let files;
+  const entrySizes = new Map();      // zip member name → its size when unpacked (older files; in newer ones the list says)
   try {
     // Unpack just the database and the list of pictures for now: the pictures themselves can be large,
     // so they're unpacked one by one later, only the ones the cards use (see media.get below).
-    files = unzipSync(zip, { filter: f => /^(collection\.anki2(1b?)?|media)$/.test(f.name) });
+    // (The filter also sees every file's size on the way, which is how the sounds' sizes are known without unpacking them.)
+    files = unzipSync(zip, { filter: f => { entrySizes.set(f.name, f.originalSize); return /^(collection\.anki2(1b?)?|media)$/.test(f.name); } });
   } catch (err) {
     throw new Error('not-anki');
   }
@@ -43,26 +46,51 @@ export async function readAnkiFile(file) {
   // The pictures: which file in the zip holds each one. Older files list them as JSON ({"0": "brain.png"});
   // newer ones as a small compressed binary list, in zip order (see mediaList in anki.js).
   const members = new Map();      // picture name → zip member name
+  const sizes = new Map();        // picture name → its size in bytes, when known
   try {
-    if (newFormat && files.media) mediaList(zstd.decompress(files.media)).forEach((name, i) => members.set(name.name, name.zipName ?? String(i)));
+    if (newFormat && files.media) mediaList(zstd.decompress(files.media)).forEach((name, i) => { members.set(name.name, name.zipName ?? String(i)); if (name.size) sizes.set(name.name, name.size); });
     else if (files.media) Object.entries(JSON.parse(new TextDecoder().decode(files.media))).forEach(([member, name]) => members.set(name, member));
   } catch (err) {
     console.error('Could not read the list of pictures', err);
   }
   result.media = {
     has: name => members.has(name),
-    // A picture's bytes and type, or null.
+    // { size, type } of a picture or sound without unpacking it, or null when the file isn't in the package.
+    info(name) {
+      const member = members.get(name);
+      if (member === undefined) return null;
+      return { size: sizes.get(name) ?? entrySizes.get(member) ?? 0, type: fileType(name) };
+    },
+    // Several files at once, in one pass over the zip (it is searched once for the whole batch, not once for each file):
+    // a Map name → { data, type } of the ones found. Ask for a few dozen at a time, so they don't all sit in memory together.
+    async getMany(names) {
+      const wanted = new Map();                    // zip member → names that use it
+      for (const name of names) { const m = members.get(name); if (m !== undefined) wanted.set(m, [...(wanted.get(m) || []), name]); }
+      const got = wanted.size ? unzipSync(zip, { filter: f => wanted.has(f.name) }) : {};
+      const out = new Map();
+      for (const [member, list] of wanted) {
+        if (!got[member]) continue;
+        const data = newFormat ? zstd.decompress(got[member]) : got[member];
+        for (const name of list) out.set(name, { data, type: fileType(name) });
+      }
+      return out;
+    },
+    // A picture's or sound's bytes and type, or null.
     async get(name) {
       const member = members.get(name);
       if (member === undefined) return null;
       const got = unzipSync(zip, { filter: f => f.name === member })[member];
       if (!got) return null;
-      return { data: newFormat ? zstd.decompress(got) : got, type: imageType(name) };
+      return { data: newFormat ? zstd.decompress(got) : got, type: fileType(name) };
     }
   };
   return result;
 }
 
+// The sound types the app keeps (by file name), or null: mp3, m4a/mp4/aac, ogg/opus, webm, wav and flac. Anki writes names
+// in any case, and a file with another ending (like .wma or .amr) is a sound the app can't keep.
+export const audioType = name => ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', webm: 'audio/webm', wav: 'audio/wav', flac: 'audio/flac' })[String(name).split('.').pop().toLowerCase()] || null;
+const fileType = name => audioType(name) || imageType(name);
 const imageType = name => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' })[String(name).split('.').pop().toLowerCase()] || 'application/octet-stream';
 
 // sql.js isn't an ES module, so it's added as a <script> once. (Also used to make Anki files: export.js.)

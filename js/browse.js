@@ -9,10 +9,11 @@ import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, readCardText, setCardText, readCardImage, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, clearBasic } from './card-editor.js';
+import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, clearBasic } from './card-editor.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText, mathHTML } from './format.js';
+import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
 
@@ -109,7 +110,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
+          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -339,6 +340,7 @@ function cardOps(card, ctx) {
     const shared = { ...('deckId' in changes ? { deckId: changes.deckId } : {}), ...('tags' in changes ? { tags: changes.tags } : {}) };
     const merged = { ...card, ...changes };
     if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
+    for (const k of ['frontSounds', 'backSounds']) if (k in changes && !changes[k]?.length) delete merged[k];      // and no sounds is no list
     if ('acceptAnswers' in changes && !changes.acceptAnswers?.length) delete merged.acceptAnswers;      // and no accepted answers is none
     await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
     return again(msg, act);
@@ -359,7 +361,7 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
   ? Math.max(0, ...(await db.getAll('cards')).filter(c => c.noteId === card.noteId).map(c => c.occlusion?.n).filter(Number.isInteger))
   : 0);
 const cardFieldsHTML = (card, maxN = 0) => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
       ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
@@ -368,17 +370,19 @@ const cardFieldsHTML = (card, maxN = 0) => `
 const showErr = (id, text) => { $(id).textContent = text; $(id).hidden = false; };
 function wireCardForm(card, ctx, msg) {
   const ops = cardOps(card, ctx);
+  if (!isClozeCard(card) && !hasMasks(card)) { setCardSounds('ceFront', card.frontSounds || []); setCardSounds('ceBack', card.backSounds || []); }
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
     if (isClozeCard(card)) return saveClozeNote(card, ops, msg);
     if (hasMasks(card)) return saveOcclusionNote(card, ops, msg);
     const front = readCardText('ceFront').trim(), back = readBack('ce').trim();
     const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
-    // Each side needs something on it: text, a picture, or both.
-    if (!(front || frontImage) || !(back || backImage)) { showErr('ceErr', 'A card needs a front and a back (text or a picture).'); return; }
+    const frontSounds = readCardSounds('ceFront'), backSounds = readCardSounds('ceBack');
+    // Each side needs something on it: text, a picture or a sound.
+    if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
-    ops.save({ front, back, frontImage, backImage, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value), ...($('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {}) }, msg, 'edit');
+    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value), ...($('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {}) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -411,7 +415,8 @@ async function saveClozeNote(card, ops, msg) {
     if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim() });
+    // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), frontSounds: card.frontSounds, backSounds: card.backSounds });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -683,10 +688,11 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     } else {
       const front = readCardText('acFront').trim(), back = readBack('ac').trim(), hook = readCardText('acHook').trim();
       const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
-      if (!(front || frontImage) || !(back || backImage)) { showErr('acErr', 'A card needs a front and a back (text or a picture).'); return; }
+      const frontSounds = readCardSounds('acFront'), backSounds = readCardSounds('acBack');
+      if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('acErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
       const why = stepsProblem('ac');
       if (why) { showErr('acErr', why); return; }
-      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, ...(hook ? { noteExtra: hook } : {}), tags, created: Date.now() }]);
+      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), ...(hook ? { noteExtra: hook } : {}), tags, created: Date.now() }]);
     }
     adding = true;
     try {
@@ -701,7 +707,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     $('acErr').hidden = true;
     if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }
     else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
-    else { clearBasic('ac'); $('acFront').focus(); }
+    else { clearBasic('ac'); setCardSounds('acFront', []); setCardSounds('acBack', []); $('acFront').focus(); }
     updateAdd();
     toast(kindNow === 'basic' ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();

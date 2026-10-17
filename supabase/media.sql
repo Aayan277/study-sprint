@@ -1,12 +1,15 @@
--- Study Sprint pictures: run this once in your Supabase project (SQL Editor → New query → paste → Run).
--- It's safe to run again.
+-- Study Sprint pictures and sounds: run this in your Supabase project (SQL Editor → New query → paste → Run).
+-- It's safe to run again, and you need to run it again once if you ran an older copy (before sounds on cards):
+-- the older list of allowed file types only had pictures.
 --
--- Pictures on cards are files, so they live in Supabase Storage (not the sync_items table): a private
+-- Pictures and sounds on cards are files, so they live in Supabase Storage (not the sync_items table): a private
 -- bucket called "media", with one folder per account named after its user id. These rules mean every
 -- signed-in person can only see, add, change or delete the files in their own folder.
+-- The app keeps each sound to 1 MB or less; the bucket's own limit of 5 MB is a backstop.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('media', 'media', false, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+values ('media', 'media', false, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav', 'audio/flac'])
 on conflict (id) do update
   set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 

@@ -47,7 +47,7 @@ export function treeOrder(decks) {
 export const canNest = (decks, id, parentId) => !parentId || !subtreeIds(decks, id).has(parentId);
 
 // A deck with the settings it inherits filled in: its own if set, otherwise the nearest ancestor's.
-//   options (study options), examDate, ttsLang, ttsAuto
+//   options (study options), examDate, ttsLang, ttsAuto, soundAuto
 export function effectiveDeck(decks, id) {
   const chain = ancestors(decks, id);
   if (!chain.length) return null;
@@ -57,7 +57,8 @@ export function effectiveDeck(decks, id) {
     options: first('options', v => !!v) ?? null,
     examDate: first('examDate', v => !!v) ?? null,
     ttsLang: first('ttsLang', v => !!v) ?? '',
-    ttsAuto: first('ttsAuto', v => typeof v === 'boolean') ?? false
+    ttsAuto: first('ttsAuto', v => typeof v === 'boolean') ?? false,
+    soundAuto: first('soundAuto', v => typeof v === 'boolean') ?? true          // sounds play by themselves unless a deck says false
   };
 }
 

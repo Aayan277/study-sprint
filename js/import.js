@@ -320,6 +320,7 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
     ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),
     ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {}),
+    ...(result.sounds?.[i] && (result.sounds[i].front.length || result.sounds[i].back.length) ? { sounds: { front: result.sounds[i].front, back: result.sounds[i].back } } : {}),     // sound file names on each side (Anki imports; see anki.js)
     ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
     ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
     ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
@@ -329,9 +330,9 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
 }
 
 // A card only counts if both sides have something on them.
-// (A side can also be just a picture: Anki imports bring their pictures along. An image-occlusion card's back is its
+// (A side can also be just a picture or a sound: Anki imports bring those along. An image-occlusion card's back is its
 // label, which can be empty.)
-export const isComplete = c => !!c.occlusion || !!((c.front.trim() || c.pictures?.front) && (c.back.trim() || c.pictures?.back));
+export const isComplete = c => !!c.occlusion || !!((c.front.trim() || c.pictures?.front || c.sounds?.front?.length) && (c.back.trim() || c.pictures?.back || c.sounds?.back?.length));
 
 // Two fronts that differ only in capitals, spaces or punctuation count as the same.
 // Folded like a typed answer (match.js foldText): Latin accents off, but か ≠ が and कि ≠ की; a text of only
