@@ -56,6 +56,20 @@ function stopRound() {
   G = null;
 }
 
+// Quit or Esc during a round: with answers to keep, ask first (Esc again or Enter ends it, and the results show the score so far).
+// A round with no answers yet has nothing to keep, so it just closes.
+function askEnd() {
+  if (!G) return;
+  if (!G.log.length) { const el = G.el; stopRound(); renderPlay(el); return; }
+  $('endAsk').hidden = false;
+  $('endYes').focus({ preventScroll: true });
+}
+function keepPlaying() {
+  if (!G) return;
+  $('endAsk').hidden = true;
+  (G.qtype === 'typing' && !G.answered ? $('pInput') : $('pCard'))?.focus?.({ preventScroll: true });
+}
+
 // ---------- setup ----------
 const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back) });
 
@@ -244,6 +258,10 @@ function start(el, opts) {
       <span id="streakWrap">Streak <b id="streak">0</b></span>
       <button class="link" id="quitBtn" type="button">Quit</button>
     </div>
+    <div class="end-ask" id="endAsk" role="alertdialog" aria-labelledby="endAskT" hidden>
+      <p id="endAskT">End this round? Your score so far is kept in the results.</p>
+      <div class="end-ask-b"><button class="btn primary small" id="endYes" type="button">End round</button><button class="btn ghost small" id="endNo" type="button">Keep playing</button></div>
+    </div>
     <p class="prompt" id="pLabel"></p>
     <div class="flash play-card" id="pCard">
       <div class="flash-front" id="pPrompt"></div>
@@ -257,7 +275,9 @@ function start(el, opts) {
       <button class="btn ghost" type="button" id="skipBtn">Skip</button>
     </form>
     <div class="feedback" id="feedback" aria-live="polite"></div>`;
-  $('quitBtn').addEventListener('click', () => { stopRound(); renderPlay(el); });
+  $('quitBtn').addEventListener('click', askEnd);
+  $('endYes').addEventListener('click', finish);
+  $('endNo').addEventListener('click', keepPlaying);
   $('options').addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && !G.answered) answer(+b.dataset.i); });
   $('pType').addEventListener('submit', e => { e.preventDefault(); if (!G.answered) answer($('pInput').value); });
   $('skipBtn').addEventListener('click', () => { if (!G.answered) answer(''); });
@@ -490,7 +510,7 @@ async function record(round, entry) {
   // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
   let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
-  rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing' });
+  rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing', overridden: !!entry.overridden });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
     prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden });
@@ -791,7 +811,12 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
 // ---------- keyboard ----------
 document.addEventListener('keydown', e => {
   if (!G || !$('pCard') || e.ctrlKey || e.metaKey || e.altKey || document.getElementById('sheet')?.open) return;
-  if (e.key === 'Escape') { e.preventDefault(); const el = G.el; stopRound(); renderPlay(el); return; }
+  if ($('endAsk') && !$('endAsk').hidden) {
+    // The question "End this round?" is open: Esc again or Enter ends it (Enter on "Keep playing" presses that button instead).
+    if (e.key === 'Escape' || (e.key === 'Enter' && !onControl(e))) { e.preventDefault(); finish(); }
+    return;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); askEnd(); return; }
   if (G.answered) {
     if ((e.key === 'Enter' || e.key === ' ') && !onControl(e)) { e.preventDefault(); next(); }
     return;

@@ -45,5 +45,6 @@ await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#
 await page.setInputFiles('#fileIn', SP + '/files/broken.apkg');
 await page.waitForSelector('#loadErr:not([hidden])');
 ok((await page.textContent('#loadErr')).includes('Anki Deck Package'), 'broken file explained: ' + await page.textContent('#loadErr'));
+ok((await page.textContent('#fileName')).trim() === 'broken.apkg', 'the broken file clears "reading…": ' + await page.textContent('#fileName'));
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();

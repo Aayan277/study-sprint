@@ -40,7 +40,7 @@ export async function openGlossary() {
       : 'Define a term once and it’s underlined on every card, with its definition a tap away.';
     $('glList').innerHTML = hit.slice(0, SHOWN).map(e => `
       <div class="gl-row" data-id="${esc(e.id)}">
-        <div class="gl-row-t"><b>${esc(e.term)}</b>${e.def ? `<span>${esc(firstLine(e.def))}</span>` : '<span class="gl-none">No definition</span>'}</div>
+        <div class="gl-row-t"><b>${esc(e.term)}</b>${e.aliases.length ? `<small class="gl-alias">Also: ${esc(e.aliases.join(", "))}</small>` : ""}${e.def ? `<span>${esc(firstLine(e.def))}</span>` : '<span class="gl-none">No definition</span>'}</div>
         <button type="button" class="link" data-gl-edit-row="${esc(e.id)}" aria-label="Edit ${esc(e.term)}">Edit</button>
         <button type="button" class="link gl-del" data-gl-del="${esc(e.id)}" aria-label="Delete ${esc(e.term)}">Delete</button>
       </div>`).join('') + (hit.length > SHOWN ? `<p class="note">Showing ${SHOWN} of ${hit.length}. Search to find the others.</p>` : '')

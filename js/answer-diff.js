@@ -33,7 +33,7 @@ function prepare(text) {
   while (j < items.length && items[j].key) j++;
   const word = items.slice(i, j).map(x => x.key).join('');
   if (['the', 'a', 'an'].includes(word) && items.slice(j).some(x => x.key) && j < items.length) {
-    for (let k = i; k < j; k++) items[k].key = '';
+    for (let k = i; k < j; k++) { items[k].key = ''; items[k].article = word; }      // (remembered: an extra article is shown when the answer is wrong anyway)
   }
   return items;
 }
@@ -89,6 +89,13 @@ export function diffAnswer(typed, target) {
   // Nothing in common ("cat" and "dog"): marking every letter says nothing, so show the two texts.
   const tooDifferent = counts.wrong + counts.extra + counts.missing > Math.max(3, 0.6 * m) || (n > 0 && m > 0 && shared === 0);
   if (tooDifferent) return plain({ counts });
+
+  // A leading the/a/an is never held against you, so it is not marked on its own. But when the answer is wrong anyway and the
+  // typed text starts with one the answer does not, it is an extra word like any other: strike it through.
+  if (counts.wrong + counts.extra + counts.missing > 0) {
+    const mine = a.filter(x => x.article), theirs = b.find(x => x.article);
+    if (mine.length && mine[0].article !== theirs?.article) { mine.forEach(x => { ak[a.indexOf(x)] = 'extra'; }); counts.extra += mine.length; }
+  }
 
   // The typed row gets a zero-length 'missing' segment (the caret) where answer letters are missing; the one-line
   // version (`line`) has those letters themselves, inserted where they belong.

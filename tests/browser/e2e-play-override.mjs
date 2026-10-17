@@ -100,7 +100,7 @@ await p.waitForFunction(async () => (await (await import('./js/db.js')).getAll('
 st = await p.evaluate(async () => (await (await import('./js/db.js')).get('cardStates', 'pr0')));
 const rows = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.cardId === 'pr0'));
 ok(st.lapses === 0 && st.state === 2 && st.stability > 10 && st.reps === 4, `the schedule is what a right answer gives, not Again: ${JSON.stringify({ lapses: st.lapses, state: st.state, stability: Math.round(st.stability), reps: st.reps })}`);
-ok(rows.length === 1 && rows[0].correct === true && rows[0].overridden === true && rows[0].applied === true && rows[0].rating >= 2, 'one log row, right, marked overridden: ' + JSON.stringify(rows.map(r => [r.correct, r.overridden, r.rating, r.reason])));
+ok(rows.length === 1 && rows[0].correct === true && rows[0].overridden === true && rows[0].applied === true && rows[0].rating >= 2 && rows[0].rating <= 3, 'one log row, right, marked overridden: ' + JSON.stringify(rows.map(r => [r.correct, r.overridden, r.rating, r.reason])));
 await p.keyboard.press('Escape');
 
 // ----- the wrong answer made the card a leech: "I was right" takes that back too -----
