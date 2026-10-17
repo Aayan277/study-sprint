@@ -293,8 +293,10 @@ function renderSession(el, enter = false) {
   autoSpeak(card);
   wireRatebar(el);
   mountPad(kept);
+  $('flash').addEventListener('pointerdown', () => { selAtPress = selectedNow(); }, true);
   $('flash').addEventListener('click', e => {
     if (e.target.closest('.scratch, .scratch-tools')) return;      // drawing (or choosing a tool) is not a tap on the card
+    if (e.detail > 1 || selectionEndedHere()) return;      // a double-click, or a click that ends selecting some words, is not a tap to flip
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
@@ -311,6 +313,17 @@ function renderSession(el, enter = false) {
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else $('flash').focus({ preventScroll: true });
   publishLive();
+}
+
+// Did this click end selecting some words of the card? (Then it must not flip the card.) A selection that was already there when
+// the press began is old: tapping the card again just flips it (and drops the old selection).
+let selAtPress = '';
+const selectedNow = () => { const sel = getSelection?.(); return sel && !sel.isCollapsed && $('flash')?.contains(sel.anchorNode) ? String(sel).trim() : ''; };
+function selectionEndedHere() {
+  const now = selectedNow();
+  if (!now) return false;
+  if (now === selAtPress) { getSelection().removeAllRanges(); return false; }
+  return true;
 }
 
 // Your own glossary (item 12): the terms on the card get a dotted underline and a definition popover. The module is only loaded
@@ -374,7 +387,7 @@ function publishLive() {
 }
 
 function rateButtonsHTML() {
-  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card));
+  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card), Date.now(), R.current.card.id);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
       <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
