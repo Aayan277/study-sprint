@@ -57,6 +57,8 @@ Nothing is rewritten. On the first FSRS-7 review of a card (Review and Play), `p
 1. **Replay (preferred).** Run the card's review log through FSRS-7 from its first answer, with fractional days between answers. It uses the same rows the optimizer trains on (`rowKind` in fsrs-data.js: real reviews, imported Anki history, Play answers that moved the schedule), restarts at a "reset to new" row, and is only used if the log starts at "new" and its last row is within a minute of the card's `lastReview`.
 2. **Seed (no usable log, e.g. an Anki import without history).** `stability` and `difficulty` as FSRS-6 has them, `stabilityFast` = 0.8 × `stability` (the ratio FSRS-7 itself gives a card's first answer).
 
+The history must start at "new" (a first row with no `state` counts only when nothing at all came before it, the same rule as `buildHistories`). When the synced `ignoreBefore` setting (optimizer and health check, on another branch) has merged, the replay should treat it as a start boundary and seed from FSRS-6 if a card's history crosses it; there is a TODO at `replayRows`.
+
 The library offers no conversion, so replay is the migration, as its own error message recommends. Cost: one indexed read of the log per card, once. Review starts the rebuild when a card is shown, so it is nearly always done before the answer; if it is not, the card is rated from the seed. Interval buttons use the same memory.
 
 Until the first FSRS-7 review a card keeps its FSRS-6 due date. Turning FSRS-7 on does not reschedule anything (as with changing any scheduling option today: "Cards already scheduled keep their dates until you next review them").
@@ -86,6 +88,8 @@ Setting `fsrsVersion`: synced like `fsrsParams` (newest wins). Junk (not exactly
 
 - A new card answered Good comes back in about 5 days, not after 10 minutes: the model decides, the steps are a floor (`allowModelOverride`, the library's default for FSRS-7). Again still gives the first step (1 minute).
 - After a lapse the card comes back at the model's interval, between the relearning step and 1 day.
+- With the defaults a new card's four buttons are about 1 minute, 14 hours, 5 days and 54 days (Again, Hard, Good, Easy). Easy is long on purpose: it is the model's interval for a card you found trivial.
+- **Learning cards that cross a day.** Hard on a new card (about 14 hours) leaves it in the Learning state with a due time after the end of today's study day. The queue (`splitCards`) only shows a learning card that is due within today, so such a card is simply not shown again until its day, and then it comes back as an ordinary "learn" card (it is due, so it is in the reviews list). No queue rule was added: nothing is lost or shown twice, and FSRS-6 already behaves this way for a learning step longer than the rest of the day. If it turns out to feel wrong in use, the fix would be a rule in `splitCards` applying only under FSRS-7.
 - Same-day repeats now change the memory (FSRS-6 only nudges stability slightly).
 - Gaps are fractional days; `scheduledDays` is no longer a whole number. Load balancing and the 'Spread out due dates' option still pick whole days for gaps of 3 days or more.
 
@@ -120,7 +124,7 @@ Until then the Optimize row with FSRS-7 on shows "Personal tuning for FSRS-7 is 
 | FSRS-7 is not better for our users | Unknown: the benchmark is Anki users, our simulator's "students" are FSRS-6 by construction, so it cannot say. It is off by default and labelled beta. Judging it needs real data (roadmap item 1), and the review log and FSRS-6 memory stay intact so a person can switch back at any time. |
 | Mixed versions across devices | Safe by construction (section 2). The mix is a cost, not corruption. |
 | Memory rebuild fails or is incomplete (no log) | Falls back to the seed from FSRS-6, never blocks a review. `console.error` only. |
-| Intervals are fractional: code that assumed whole days | `scheduledDays` is read by `lastSeen` (exam.js, fine), postpone.js (rounds), Browse "set due date". Intervals under one day only appear for relearning after a lapse. Covered by the e2e test (review a few cards, switch back). |
+| Intervals are fractional: code that assumed whole days | `scheduledDays` is read by `lastSeen` (exam.js, fine), postpone.js (rounds), Browse "set due date". Intervals under a day are common under FSRS-7: Again on a new card is 1 minute, Hard on a new card about 14 hours, and after a lapse the card returns between the relearning step and a day. Covered by the e2e test (review a few cards, switch back). |
 | Old synced `fsrsVersion` from a stale backup flips a device | Same rule as every synced setting: newest wins; a backup restore stamps the time of the restore. |
 | Exam thresholds tuned on FSRS-6 | Documented in section 4; no change in behaviour for FSRS-6. |
 

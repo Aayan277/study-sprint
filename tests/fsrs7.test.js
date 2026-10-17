@@ -198,6 +198,10 @@ test('migration: a reset restarts the history; a log that does not start at new,
   assert.equal(replayRows(W7_DEFAULT, [{ id: 1, cardId: 'c1', timestamp: T(2), source: 'review', rating: 3, state: 2 }], T(2)), null);   // starts mid-life
   assert.equal(replayRows(W7_DEFAULT, reset, T(9)), null);                                  // the card was reviewed later than the log says
   assert.equal(replayRows(W7_DEFAULT, [], T(1)), null);
+  // a first row with no state counts as "new" only when nothing at all came before it (even a row that is not used)
+  const bare = { cardId: 'c1', source: 'review', rating: 3 };
+  assert.deepEqual(replayRows(W7_DEFAULT, [{ ...bare, id: 1, timestamp: T(2) }, { ...bare, id: 2, timestamp: T(4), state: 2 }], T(4)), replay7(W7_DEFAULT, [{ t: 0, g: 3 }, { t: 2, g: 3 }]));
+  assert.equal(replayRows(W7_DEFAULT, [{ cardId: 'c1', id: 0, timestamp: T(1), source: 'play', applied: false, rating: 3, state: 2 }, { ...bare, id: 1, timestamp: T(2) }], T(2)), null);
 });
 
 test('sync and backup: a card state with FSRS-7 fields goes out and comes back unchanged (unknown fields are not dropped)', () => {
@@ -219,7 +223,11 @@ test('exam: with the FSRS-7 model a card\'s FSRS-7 memory sets the curve; with F
   assert.ok(Math.abs(recallAt(st, when, model) - forgettingCurve7(W7_DEFAULT, m, 20)) < 1e-12);
   assert.equal(recallAt(st, when, undefined), recall(12, 20));                              // FSRS-6 mode ignores the FSRS-7 memory
   assert.equal(recallAt(st, when, 0.3), recall(12, 20, 0.3));
-  assert.equal(recallAt({ ...st, lastReview: NOW + 1 }, when, model), recall(12, (when - (NOW + 1)) / DAY));   // stale memory: FSRS-6 curve
+  // a card with no current FSRS-7 memory (stale, or never rated with FSRS-7) is read with the FSRS-7 curve from its seeded memory: the two curves are never mixed
+  const stale = { ...st, lastReview: NOW + 1 };
+  assert.ok(Math.abs(recallAt(stale, when, model) - forgettingCurve7(W7_DEFAULT, seedMemory(six), (when - (NOW + 1)) / DAY)) < 1e-12);
+  assert.ok(Math.abs(recallAt(six, when, model) - forgettingCurve7(W7_DEFAULT, seedMemory(six), 20)) < 1e-12);
+  assert.equal(recallAt(stale, when, undefined), recall(12, (when - (NOW + 1)) / DAY));            // FSRS-6 mode: the FSRS-6 curve
   assert.equal(recallFrom(7, 3, { w20: 0.3, w7: W7_DEFAULT }), recall(7, 3, 0.3));
   assert.equal(recallFrom({ stability: 7 }, 3, 0.3), recall(7, 3, 0.3));
 });
@@ -313,6 +321,26 @@ test('routing: switching on with FSRS-6 history, rating, switching back, and on 
   const again = rate('c1', back, 3, optsFor({ fsrsVersion: 7 }), t4 + 20 * DAY);
   assert.ok(again.fsrs7.stability > 0);
   clearRebuilt();
+});
+
+test('routing: a new card\'s preview (given its id) shows the interval rate() uses, with fuzz on', { skip }, async () => {
+  const { rate, previewIntervals } = await srs();
+  const opts = optsFor({ fsrsVersion: 7, fuzz: true });
+  for (const id of ['a', 'b', 'card-17', 'zz']) {
+    const ivl = previewIntervals(null, opts, NOW, id);
+    const real = rate(id, null, 3, opts, NOW);
+    assert.ok(Math.abs((real.due - NOW) - ivl[3]) < 2, id);
+    assert.equal(Number.isInteger(real.scheduledDays), true);                       // fuzz picks whole days from 2.5 days up
+  }
+});
+
+test('routing: two sets of scheduler options in turn (one rating with and without fuzz) give the same answers as each alone', { skip }, async () => {
+  const { rate } = await srs();
+  const a = optsFor({ fuzz: true }), b = optsFor({ fuzz: false });
+  const alone = [rate('c', null, 3, a, NOW), rate('c', null, 3, b, NOW)];
+  const mixed = [rate('c', null, 3, a, NOW), rate('c', null, 3, b, NOW), rate('c', null, 3, a, NOW), rate('c', null, 3, b, NOW)];
+  assert.deepEqual([mixed[0], mixed[1]], alone);
+  assert.deepEqual([mixed[2], mixed[3]], alone);
 });
 
 test('routing: previews, the maximum interval, balancing and the exam all work in FSRS-7 mode', { skip }, async () => {

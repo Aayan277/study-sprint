@@ -66,6 +66,7 @@ await page.waitForFunction(() => document.getElementById('optStatus')?.textConte
 ok((await setting(page, 'fsrsVersion')) === 7, 'choosing FSRS-7 saves the setting');
 ok((await page.textContent('#optStatus')) === 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.', 'with FSRS-7 on the Optimize row says tuning is coming');
 ok(await page.$eval('#optOpen', b => b.disabled), 'and the Optimize button is off');
+ok((await page.textContent('#optWhy')) === 'Your FSRS-6 tuning is kept for when you switch back.' && (await page.getAttribute('#optOpen', 'aria-describedby')).includes('optWhy'), 'with a note that FSRS-6 tuning is kept (no empty description)');
 ok(await page.evaluate(() => document.activeElement?.matches?.('input[name=fsrsVersion]')), 'focus stays on the Scheduler choice');
 await page.screenshot({ path: SP + '/fsrs7-settings.png', fullPage: true });
 

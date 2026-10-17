@@ -10,50 +10,32 @@
 // `fsrs7.at === lastReview` is the test that the FSRS-7 memory is current. A review in FSRS-6 mode, or by an older app version, writes a state
 // without it (or leaves it behind with an older `at`); the next FSRS-7 review then rebuilds it (below).
 
-import { W7_DEFAULT, clipWeights7, cleanMemory7, initState7, nextState7 } from './fsrs7-model.js';
+import { W7_DEFAULT, clipWeights7, nextState7, savedMemory, seedMemory, memoryFor, rebuilt, clearRebuilt } from './fsrs7-model.js';
 import { plan7, NEW } from './fsrs7-sched.js';
 import { rowKind } from './fsrs-data.js';
 
 const DAY = 86400000;
 
-// The FSRS-7 memory that belongs to a state, if it is current: { stability, stabilityFast, difficulty } or null.
-export const savedMemory = st => (st?.fsrs7 && st.fsrs7.at === st.lastReview ? cleanMemory7(st.fsrs7) : null);
+export { savedMemory, seedMemory, memoryFor, clearRebuilt };
 
 // ---------- rebuilding a card's FSRS-7 memory ----------
 // 1. Replay (best): run the card's review log through FSRS-7 from the first answer. Needs a log that starts at "new" and ends at the card's
 //    lastReview. Rows are the same ones the optimizer trains on (fsrs-data.js rowKind): real reviews, imported Anki history and Play answers
 //    that changed the schedule. A "reset to new" row (state 0 after earlier rows) restarts the history.
-// 2. Seed (when there is no usable log, e.g. an import without history): keep the FSRS-6 numbers as the FSRS-7 start:
-//    stability and difficulty as they are, fast stability 0.8 × stability (the ratio FSRS-7 itself gives a card's first answer).
+// 2. Seed (when there is no usable log, e.g. an import without history): seedMemory in fsrs7-model.js.
+// TODO(ignoreBefore): a separate branch adds the synced setting `ignoreBefore` (the optimizer and the health check leave out reviews before a
+// date). When it has merged, treat it here as a start boundary: if this card's history crosses it, return null so the card is seeded from FSRS-6.
 export function replayRows(w, rows, lastReview) {
-  const kept = [];
-  for (const row of [...rows].sort((a, b) => a.timestamp - b.timestamp || (a.id ?? 0) - (b.id ?? 0))) if (rowKind(row)) kept.push(row);
+  const all = [...rows].sort((a, b) => a.timestamp - b.timestamp || (a.id ?? 0) - (b.id ?? 0));
+  const kept = all.filter(rowKind);
   for (let i = kept.length - 1; i > 0; i--) if (kept[i].state === 0) { kept.splice(0, i); break; }
-  if (!kept.length || (kept[0].state !== 0 && kept[0].state !== undefined)) return null;     // the history does not start at "new"
+  // The history must start at "new": state 0, or no state at all and nothing of any kind before it (fsrs-data.js buildHistories, rule 4).
+  if (!kept.length || (kept[0].state !== 0 && !(kept[0].state === undefined && all[0] === kept[0]))) return null;
   if (Math.abs(kept[kept.length - 1].timestamp - lastReview) > 60000) return null;           // the log and the card disagree: it is incomplete
   let mem = null;
   for (let i = 0; i < kept.length; i++) mem = nextState7(w, mem, i ? (kept[i].timestamp - kept[i - 1].timestamp) / DAY : 0, kept[i].rating);
   return mem;
 }
-export function seedMemory(st, w = W7_DEFAULT) {
-  const fromSix = cleanMemory7({ stability: st.stability, stabilityFast: st.stability * 0.8, difficulty: st.difficulty });
-  return fromSix || initState7(w, 3);
-}
-
-// Memories rebuilt by prepare7 (the review log is asynchronous, rating a card is not): cardId → { at, memory }.
-const rebuilt = new Map();
-export const clearRebuilt = () => rebuilt.clear();
-
-// The FSRS-7 memory to start from: the saved one, a rebuilt one, or (nothing prepared) the seed. null for a card with no schedule yet.
-export function memoryFor(st, w = W7_DEFAULT) {
-  if (!st || st.state === NEW) return null;
-  const saved = savedMemory(st);
-  if (saved) return saved;
-  const r = rebuilt.get(st.cardId);
-  if (r && r.at === st.lastReview) return r.memory;
-  return seedMemory(st, w);
-}
-
 // Get cards ready for FSRS-7 (call before rating or previewing them): rebuilds, by replay, the memory of every state that has no current
 // one. getLogs(cardId) → Promise<rows> (db.getCardLogs). Cheap when nothing is needed (the usual case after the first review of a card).
 export async function prepare7(states, getLogs, w = W7_DEFAULT) {

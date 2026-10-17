@@ -15,7 +15,7 @@ import { dayStart, dayEnd } from './days.js';
 import { effectiveDeck, subtreeIds, treeOrder } from './deck-tree.js';
 import { dayKey } from './stats-calc.js';
 import { EASY_DAY_WEIGHT, NORMAL_WEEK } from './balance.js';
-import { forgettingCurve7, cleanMemory7, W7_DEFAULT } from './fsrs7-model.js';
+import { forgettingCurve7, cleanMemory7, memoryFor, W7_DEFAULT } from './fsrs7-model.js';
 
 const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
@@ -57,7 +57,9 @@ const lastSeen = st => st.lastReview || st.due - (st.scheduledDays || 0) * DAY;
 // leaves the old one behind, and a mismatch means it is stale).
 export const memory7Of = st => (st?.fsrs7 && st.fsrs7.at === st.lastReview ? cleanMemory7(st.fsrs7) : null);
 // The chance of remembering the card at a given time, with no review before it.
-export const recallAt = (st, when, model) => recallFrom((model !== null && typeof model === 'object' && model.w7 ? memory7Of(st) : null) ?? st.stability, (when - lastSeen(st)) / DAY, model);
+// With the FSRS-7 model every card is read with the FSRS-7 curve: its saved memory, or (not rated with FSRS-7 yet) the rebuilt or seeded one
+// (memoryFor in fsrs7-model.js), so a list of cards never mixes the two curves.
+export const recallAt = (st, when, model) => recallFrom((model !== null && typeof model === 'object' && model.w7 ? memoryFor(st, model.w7) : null) ?? st.stability, (when - lastSeen(st)) / DAY, model);
 
 // '2026-11-20' → the start of that study day (4am local time), or null.
 export function examStart(examDate) {

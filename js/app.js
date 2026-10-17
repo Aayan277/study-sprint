@@ -32,7 +32,7 @@ async function renderSettings(el) {
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
-  if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: '', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
+  if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
   const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>

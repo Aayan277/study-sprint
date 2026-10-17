@@ -35,26 +35,26 @@ export const RATINGS = [
 //   maxInterval      longest gap in days
 //   fuzz             spread long gaps a little so cards added together don't all come due together
 //   w                optional: your own 21 FSRS weights (the standard ones when missing)
-// Rebuilt only when the options change.
-let cached = null;
+// Rebuilt only when the options change. Two are kept (the newest two sets of options), because one rating can use two
+// (evening out the reviews runs without fuzz; FSRS-7 mode also steps the FSRS-6 memory without it) and they must not push each other out.
+const cached = new Map();
 function scheduler(opts) {
   const { maxDue, balance, fsrsVersion, w7, ...lib } = opts;      // maxDue, balance and the FSRS-7 settings are applied here, not by the library
   const key = JSON.stringify(lib);
-  if (!cached || cached.key !== key) {
-    cached = {
-      key,
-      f: fsrs(generatorParameters({
-        request_retention: lib.retention,
-        learning_steps: lib.learningSteps,
-        relearning_steps: lib.relearningSteps,
-        maximum_interval: lib.maxInterval,
-        enable_fuzz: lib.fuzz,
-        enable_short_term: true,
-        w: lib.w                       // undefined = the library's default weights
-      }))
-    };
-  }
-  return cached.f;
+  let f = cached.get(key);
+  if (f) { cached.delete(key); cached.set(key, f); return f; }        // (most recently used last)
+  f = fsrs(generatorParameters({
+    request_retention: lib.retention,
+    learning_steps: lib.learningSteps,
+    relearning_steps: lib.relearningSteps,
+    maximum_interval: lib.maxInterval,
+    enable_fuzz: lib.fuzz,
+    enable_short_term: true,
+    w: lib.w                       // undefined = the library's default weights
+  }));
+  cached.set(key, f);
+  if (cached.size > 2) cached.delete(cached.keys().next().value);
+  return f;
 }
 
 const DAY = 86400000;
@@ -111,16 +111,16 @@ const sixAfter = (state, opts, now) => rating => {
 
 // How long until the card comes back for each button: { 1: ms, 2: ms, 3: ms, 4: ms }.
 // (With fuzz on, the real interval can differ by a day or so on long gaps.)
-export function previewIntervals(state, opts, now = Date.now()) {
-  const preview = opts.fsrsVersion === 7 ? seven(state, opts, now) : scheduler(opts).repeat(toLibrary(state, now), new Date(now));
+export function previewIntervals(state, opts, now = Date.now(), cardId = state?.cardId) {
+  const preview = opts.fsrsVersion === 7 ? seven(cardId, state, opts, now) : scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   const out = {};
   for (const { rating } of RATINGS) out[rating] = examClamp(capInterval(preview[rating].card, now, opts.maxInterval), now, opts, opts.balance?.load).due.getTime() - now;
   return out;
 }
 
 // The four outcomes from FSRS-7, in the shape the library's repeat() gives: { 1: { card }, ... }
-function seven(state, opts, now) {
-  const cards = preview7(state?.cardId, state, opts, now);
+function seven(cardId, state, opts, now) {
+  const cards = preview7(cardId, state, opts, now);
   return Object.fromEntries(Object.entries(cards).map(([g, card]) => [g, { card }]));
 }
 

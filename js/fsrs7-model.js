@@ -174,3 +174,25 @@ export function cleanMemory7(m) {
   if (![stability, stabilityFast, difficulty].every(Number.isFinite) || stability <= 0 || stabilityFast <= 0 || difficulty < 1 || difficulty > 10) return null;
   return { stability, stabilityFast, difficulty };
 }
+
+// ---------- the FSRS-7 memory of a saved card state ----------
+// (Here, not in srs7.js, so exam.js can read them: it is loaded at start-up and this file already is.)
+// The memory that belongs to a state, if it is current (`fsrs7.at` is the card's lastReview): { stability, stabilityFast, difficulty } or null.
+export const savedMemory = st => (st?.fsrs7 && st.fsrs7.at === st.lastReview ? cleanMemory7(st.fsrs7) : null);
+// With no usable log, keep the FSRS-6 numbers as the FSRS-7 start: stability and difficulty as they are, fast stability 0.8 × stability
+// (the ratio FSRS-7 itself gives a card's first answer).
+export function seedMemory(st, w = W7_DEFAULT) {
+  return cleanMemory7({ stability: st.stability, stabilityFast: st.stability * 0.8, difficulty: st.difficulty }) || initState7(w, 3);
+}
+// Memories rebuilt by replaying a card's log (srs7.js prepare7; the log is asynchronous, rating a card is not): cardId → { at, memory, replayed }.
+export const rebuilt = new Map();
+export const clearRebuilt = () => rebuilt.clear();
+// The FSRS-7 memory to use for a state: the saved one, a rebuilt one, or (nothing prepared) the seed. null for a card with no schedule yet.
+export function memoryFor(st, w = W7_DEFAULT) {
+  if (!st || !st.state) return null;
+  const saved = savedMemory(st);
+  if (saved) return saved;
+  const r = rebuilt.get(st.cardId);
+  if (r && r.at === st.lastReview) return r.memory;
+  return seedMemory(st, w);
+}
