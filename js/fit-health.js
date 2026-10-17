@@ -3,36 +3,41 @@
 // Tested by tests/fit-health.test.js.
 //
 // Three checks:
-//   1. Fit quality  - how well your CURRENT weights predicted your recent reviews (log loss and RMSE, the same numbers the
-//                     Optimize sheet shows), judged Good / OK / Poor.
+//   1. Fit quality  - how well your CURRENT weights predicted your recent reviews, judged Good / OK / Poor.
 //   2. Retention    - how often you really remembered cards in the last 30 days, young (gap under 21 days) and mature, against
-//                     your target (retentionByAge in stats-calc.js does the counting).
+//                     your target (retentionByAge and retentionVerdict in stats-calc.js, shared with Stats).
 //   3. Hard button  - whether Hard is pressed far more than usual.
-// Each check ends in one line of advice.
+// Each check ends in one line of advice, and the lines never contradict each other (fitAdvice looks at the retention verdict).
 
 import { evaluateMany, clipWeights } from './fsrs-fit.js';
+import { retentionVerdict, RET_MIN_N } from './stats-calc.js';
+
+export { retentionVerdict, RET_MIN_N };
 
 // ---------- 1. fit quality ----------
-// Where the thresholds come from (docs/design/fsrs-research.md, the benchmark table of about 10,000 Anki users):
+// Three yardsticks; the verdict is the worst of the three. With fewer than HEALTH_MIN_N predictions there is no verdict;
+// under HEALTH_SOFT_N the sheet says the result is rough.
 //
-//   RMSE (bins) is how far the predicted chances sit from what really happened, in bins of similar predictions. It does not
-//   depend on how often you remember, so it is the main yardstick.
-//     - tuned FSRS-6 / FSRS-7 average 0.059 to 0.065   - FSRS-7 with default weights 0.091   - FSRS-7 per-deck 0.072
-//     Good: 0.07 or less    (as good as a tuned model's average, with a little room for one person's noise)
-//     OK:   0.10 or less    (about what untuned default weights score; usable, not tuned to you)
-//     Poor: above 0.10      (the predictions are off by more than ten points on average)
-//
-//   Log loss rewards confident, correct predictions, but it depends on how often you remember: someone who remembers 80% of
-//   the time cannot go below 0.50, someone at 95% cannot go below 0.20. So it is judged against the log loss of just guessing your
-//   own average every time ("excess" = log loss minus that). The benchmark's tuned FSRS-6 (0.346) sits at about the guess-your-average
-//   level of a typical user (who remembers about 89%: 0.347); untuned FSRS-7 (0.362) and DASH (0.368) are 0.015 to 0.02 above it;
-//   the crude models (ACT-R 0.403, HLR 0.469) are 0.06 to 0.12 above.
-//     Good: excess 0.01 or less      OK: 0.04 or less      Poor: more
-//
-//   The verdict is the worse of the two. With fewer than HEALTH_MIN_N predictions there is no verdict. Under HEALTH_SOFT_N the
-//   binned RMSE is noisy, so the sheet says the result is rough.
-export const RMSE_GOOD = 0.07, RMSE_OK = 0.10;
-export const EXCESS_GOOD = 0.01, EXCESS_OK = 0.04;
+//   a. Calibration: is the average predicted chance of remembering the same as what really happened?
+//      Poor when they differ by more than 0.03 AND by more than chance allows (1.96 standard errors of the observed share).
+//      This catches "the scheduler thinks you remember 90% but you remember 85%".
+//   b. RMSE (bins), with the luck taken out: the 20 bins of predicted R, how far each bin's average prediction sits from what happened.
+//      On a few hundred reviews luck alone makes this number large (even a perfect model scores about sqrt(sum over bins of p(1-p) / n),
+//      called "noise" here), so it is taken out first: excess = sqrt(max(0, rmse^2 - 2 * noise^2)) (twice the expected luck, so a good
+//      fit is not marked down for one unlucky draw).
+//      Good: excess 0.02 or less.   OK: 0.04 or less.   Poor: above.
+//      Where the numbers come from: simulated people whose true memory differs from the weights the scheduler uses, 12,000 predictions
+//      each: matching weights 0.00 to 0.005; a mild mismatch (start stabilities x0.7) 0.01 to 0.02; a clear one (x0.5, or a wrong curve
+//      shape w20 = 0.5) 0.03 to 0.04; a severe one (x0.3 and w20 0.4) 0.08. The benchmark's RMSE (0.059 to 0.065 for tuned FSRS, 0.091 for
+//      untuned FSRS-7) is per user on few reviews, i.e. mostly luck, so it is NOT the yardstick (the first version used it and called a
+//      clearly mismatched model Good).
+//   c. Log loss against guessing your own average recall every time: skill = (guess loss - your loss) / guess loss.
+//      A model no better than the constant guess has skill 0, so it cannot be Good.
+//      Good: skill 0.003 or more.   OK: at least -0.02.   Poor: worse than that.
+//      (Raw log loss depends on how often you remember: someone at 80% cannot go below 0.50, someone at 95% below 0.20.)
+export const RMSE_GOOD = 0.02, RMSE_OK = 0.04;
+export const SKILL_GOOD = 0.003, SKILL_OK = -0.02;
+export const BIAS_LIMIT = 0.03;
 export const HEALTH_MIN_N = 100;       // fewer predictions than this: no verdict
 export const HEALTH_SOFT_N = 300;      // fewer than this: the verdict is rough
 export const RECENT_DAYS = 90;         // "recent reviews" = the last 90 days, widened to the latest HEALTH_SOFT_N predictions if that is fewer
@@ -43,21 +48,29 @@ const worse = (a, b) => (RANK[a] >= RANK[b] ? a : b);
 // Log loss of guessing the share p every time.
 export const baseLoss = p => (p <= 0 || p >= 1 ? 0 : -(p * Math.log(p) + (1 - p) * Math.log(1 - p)));
 
-// { logLoss, rmse, n, recall (share remembered, 0 to 1) } → { grade: 'good' | 'ok' | 'poor' | 'unknown', rmseGrade, lossGrade, excess, rough }
-export function classifyFit({ logLoss, rmse, n, recall }) {
-  if (!(n >= HEALTH_MIN_N) || !Number.isFinite(logLoss) || !Number.isFinite(rmse)) return { grade: 'unknown', rmseGrade: null, lossGrade: null, excess: null, rough: false };
+// evaluate()'s numbers plus recall (the share remembered, 0 to 1): { logLoss, rmse, noise, meanPred, n, recall }
+// → { grade: 'good' | 'ok' | 'poor' | 'unknown', rmseGrade, lossGrade, calibGrade, excess (RMSE with luck removed), skill, bias (predicted − observed), rough }
+export function classifyFit({ logLoss, rmse, noise = 0, meanPred, n, recall }) {
+  if (!(n >= HEALTH_MIN_N) || !Number.isFinite(logLoss) || !Number.isFinite(rmse)) {
+    return { grade: 'unknown', rmseGrade: null, lossGrade: null, calibGrade: null, excess: null, skill: null, bias: null, rough: false };
+  }
   const E = 1e-9;      // (so a value right on a limit is on the better side)
-  const rmseGrade = rmse <= RMSE_GOOD + E ? 'good' : rmse <= RMSE_OK + E ? 'ok' : 'poor';
-  const excess = logLoss - baseLoss(recall);
-  const lossGrade = excess <= EXCESS_GOOD + E ? 'good' : excess <= EXCESS_OK + E ? 'ok' : 'poor';
-  return { grade: worse(rmseGrade, lossGrade), rmseGrade, lossGrade, excess, rough: n < HEALTH_SOFT_N };
+  const excess = Math.sqrt(Math.max(0, rmse * rmse - 2 * noise * noise));
+  const rmseGrade = excess <= RMSE_GOOD + E ? 'good' : excess <= RMSE_OK + E ? 'ok' : 'poor';
+  const guess = baseLoss(recall);
+  const skill = guess > 0 ? (guess - logLoss) / guess : 0;
+  const lossGrade = skill >= SKILL_GOOD - E ? 'good' : skill >= SKILL_OK - E ? 'ok' : 'poor';
+  const bias = Number.isFinite(meanPred) ? meanPred - recall : 0;
+  const se = Math.sqrt(Math.max(recall * (1 - recall), 0.01) / n);
+  const calibGrade = Math.abs(bias) > BIAS_LIMIT && Math.abs(bias) > 1.96 * se ? 'poor' : 'good';
+  return { grade: worse(worse(rmseGrade, lossGrade), calibGrade), rmseGrade, lossGrade, calibGrade, excess, skill, bias, rough: n < HEALTH_SOFT_N };
 }
 
 // Score the current weights on the recent reviews. A generator (like fit()): yields { phase, progress }, returns the result.
 //   input.cards   histories (fsrs-data.js buildHistories().cards)       input.steps  relearning-step count of each card's deck
 //   input.w       the weights in use now                               input.bounds ts-fsrs CLAMP_PARAMETERS (to clip them for each deck's steps)
 //   input.today   today's UTC day number (days since 1970)
-// Result: { status: 'ok', logLoss, rmse, n, recall, sinceDay } | { status: 'not-enough', n }
+// Result: { status: 'ok', logLoss, rmse, noise, meanPred, n, recall, sinceDay } | { status: 'not-enough', n }
 export function* healthFit(input) {
   const { cards, bounds, w } = input;
   const steps = input.steps || cards.map(() => 1);
@@ -85,7 +98,7 @@ export function* healthFit(input) {
   const e = evaluateMany(parts);
   yield { phase: 'health', progress: 1 };
   if (e.n < HEALTH_MIN_N) return { status: 'not-enough', n: e.n };
-  return { status: 'ok', logLoss: e.logLoss, rmse: e.rmse, n: e.n, recall: e.recalled / e.n, sinceDay };
+  return { status: 'ok', logLoss: e.logLoss, rmse: e.rmse, noise: e.noise, meanPred: e.meanPred, n: e.n, recall: e.recalled / e.n, sinceDay };
 }
 
 // ---------- 3. the Hard button ----------
@@ -105,59 +118,62 @@ export function hardUse(rows, now = Date.now(), days = HARD_DAYS) {
   return { hard, passes, share, overuse: passes >= HARD_MIN_N && share >= HARD_FLAG };
 }
 
-// ---------- 2. retention against the target ----------
-// A bucket from retentionByAge: { n, ok } → { n, rate }.  `target` is the (mean) target of those reviews.
-// "Under" or "over" needs the gap to be bigger than the noise: at least 3 points and at least 1.64 standard errors
-// (a one-sided 95% test), so a handful of reviews cannot cry wolf.
-export const RET_MIN_N = 30, RET_MARGIN = 0.03;
-export function retentionVerdict(bucket, target) {
-  if (!bucket || bucket.n < RET_MIN_N || !Number.isFinite(target)) return { verdict: 'few', gap: null };
-  const rate = bucket.ok / bucket.n;
-  const gap = rate - target;
-  const margin = Math.max(RET_MARGIN, 1.64 * Math.sqrt(Math.max(rate * (1 - rate), 0.01) / bucket.n));
-  return { verdict: gap < -margin ? 'under' : gap > margin ? 'over' : 'on', gap, rate };
-}
-
 // ---------- the plain words ----------
 const pts = x => Math.round(Math.abs(x) * 100);
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-export function fitAdvice(fit, { usingOwn, canOptimize }) {
+// fit: classifyFit's result. retention: the verdict of the retention check ('under' | 'over' | 'on' | 'few').
+// The two never contradict: when the fit is fine but you are off your target, it says the cause is how you study, not the settings.
+export function fitAdvice(fit, { usingOwn = false, canOptimize = false, retention = 'few' } = {}) {
+  const off = retention === 'under' || retention === 'over';
   switch (fit.grade) {
-    case 'good': return 'Your settings predict your reviews well. Nothing to change.';
+    case 'good': return off
+      ? 'Your settings predict your reviews well, so the gap to your target comes from how you study, not from the settings.'
+      : 'Your settings predict your reviews well.';
     case 'ok': return usingOwn
-      ? 'This is fine. Run Optimize again in a few weeks as you add reviews.'
-      : canOptimize ? 'The standard settings work for you, and Optimize may fit you better.' : 'The standard settings work for you. Optimize unlocks after 400 reviews.';
+      ? 'This is acceptable. Run Optimize again in a few weeks as you add reviews.'
+      : canOptimize ? 'The standard settings are acceptable for you, and Optimize may fit you better.' : 'The standard settings are acceptable for you. Optimize unlocks after 400 reviews.';
     case 'poor': return usingOwn
       ? 'Predictions are off even with your own settings. Run Optimize again; if your early history is messy, set “Ignore reviews before”.'
-      : canOptimize ? 'The standard settings don’t suit your memory. Run Optimize to tune them to you.' : 'The standard settings are off for you. Optimize unlocks after 400 reviews.';
+      : canOptimize ? 'The standard settings don’t match how you remember. Run Optimize to tune them to you.' : 'The standard settings don’t match how you remember. Optimize unlocks after 400 reviews.';
     default: return 'Keep reviewing; we need a few more recent reviews to say.';
   }
 }
-export const GRADE_WORDS = {
-  good: 'Good',
-  ok: 'OK',
-  poor: 'Poor',
-  unknown: 'Not enough yet'
-};
+export const GRADE_WORDS = { good: 'Good', ok: 'OK', poor: 'Poor', unknown: 'Not enough yet' };
 
-// One line about retention: the verdict for all reviews plus a word on young/mature when they differ.
-export function retentionAdvice(all, young, mature, target, { canOptimize = false } = {}) {
-  const a = retentionVerdict(all, target);
+// A sentence on which way the average prediction is off, for the fit section (only when the calibration check failed).
+export function biasLine(fit) {
+  if (fit.calibGrade !== 'poor') return '';
+  return fit.bias > 0
+    ? `On average the settings expect you to remember ${pts(fit.bias)} points more often than you do.`
+    : `On average the settings expect you to remember ${pts(fit.bias)} points less often than you do.`;
+}
+
+// One line about retention: the verdict for all reviews, and which kind of card is slipping.
+// fit: the grade of the fit check ('good' | 'ok' | 'poor' | 'unknown'). When the settings fit you, the advice never says to tune them
+// (the fit line says the same), it is about how the cards are studied.
+export function retentionAdvice(all, young, mature, target, { canOptimize = false, fit = 'unknown' } = {}) {
+  const a = retentionVerdict(all, target), y = retentionVerdict(young, target), m = retentionVerdict(mature, target);
+  const settingsFit = fit === 'good';
   if (a.verdict === 'few') return 'Not enough reviews in the last 30 days to say. Keep going.';
   if (a.verdict === 'under') {
-    const n = pts(a.gap);
-    const parts = [`Retention is ${plural(n, 'point')} under your target: consider fewer new cards`];
-    parts.push(canOptimize ? ' or running Optimize.' : ', or a higher target to bring cards back sooner.');
-    return parts.join('');
+    const gap = plural(pts(a.gap), 'point');
+    if (m.verdict === 'under' && y.verdict !== 'under') {
+      return settingsFit
+        ? `Retention is ${gap} under your target, and it is your mature cards (21 days or more) that slip. Your settings fit you, so look at how you review: do them on the day they come due, and catch up on overdue cards before adding new ones.`
+        : `Retention is ${gap} under your target, and it is your mature cards (21 days or more) that slip. Their gaps are longer than your memory allows: run Optimize${canOptimize ? '' : ' when it unlocks'}, lower the maximum interval, or raise the target a little.`;
+    }
+    if (y.verdict === 'under' && m.verdict !== 'under') return `Retention is ${gap} under your target, and it is your newer cards that slip. Try fewer new cards per day so each gets more attention.`;
+    return settingsFit
+      ? `Retention is ${gap} under your target: consider fewer new cards, and do reviews on the day they come due.`
+      : `Retention is ${gap} under your target: consider fewer new cards${canOptimize ? ' or running Optimize.' : ', or a higher target to bring cards back sooner.'}`;
   }
   if (a.verdict === 'over') {
     return `Retention is ${plural(pts(a.gap), 'point')} above your target, so you review more than you need to. A lower target (try “Help me choose”) would save reviews.`;
   }
-  const y = retentionVerdict(young, target), m = retentionVerdict(mature, target);
-  if (m.verdict === 'under') return 'On target overall, but mature cards are slipping. Review them as they come due and don’t skip days.';
+  if (m.verdict === 'under') return 'On target overall, but mature cards (21 days or more) are slipping. Review them as they come due and don’t skip days.';
   if (y.verdict === 'under') return 'On target overall, but newer cards are slipping. Try fewer new cards per day.';
-  return 'You’re on target. Nothing to change.';
+  return fit === 'ok' || fit === 'poor' ? 'You’re on target.' : 'You’re on target. Nothing to change.';         // (the fit line may still say to tune the settings)
 }
 
 export function hardAdvice(h) {
