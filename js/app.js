@@ -9,7 +9,7 @@ import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -97,7 +97,8 @@ async function renderSettings(el) {
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
-        <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
       </div>
       <div class="set-row">
         <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
@@ -141,6 +142,7 @@ async function renderSettings(el) {
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
             <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
+            <button class="btn ghost small" type="button" id="healthOpen">Check how well it fits you</button>
             ${personal.using ? '<button class="link" type="button" id="optReset">Reset to default</button>' : ''}
           </div>
           ${personal.canOptimize ? '' : `<span class="steps-hint" id="optWhy">${esc(personal.why)}</span>`}
@@ -149,6 +151,13 @@ async function renderSettings(el) {
             <div class="sheet-actions"><button class="btn ghost small" type="button" id="optNo">Cancel</button><button class="btn danger solid small" type="button" id="optYes">Reset</button></div>
           </div>
         </div>
+        <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
+          <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
+          <div class="steps-input">
+            <input id="ignoreBefore" type="date" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
+            <button class="btn ghost small" type="button" id="ignoreClear" ${settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
+          </div>
+          <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
           <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
           <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
@@ -319,6 +328,20 @@ async function renderSettings(el) {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
   });
+  $('retHelp').addEventListener('click', async () => {
+    try {
+      (await import('./retention-sheet.js')).openRetentionSheet({
+        deckId: '',
+        current: () => Math.round(settings.targetRetention * 100),
+        onPick: pct => {
+          settings.targetRetention = pct / 100;
+          db.setSetting('targetRetention', settings.targetRetention);
+          $('ret').value = pct; $('retOut').textContent = `${pct}%`;
+          toast(`Target retention is now ${pct}%`);
+        }
+      });
+    } catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
   rememberFold($('advanced'), 'settings-advanced');
   wireAdvanced(el);
 }
@@ -381,6 +404,23 @@ function wireAdvanced(el) {
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('healthOpen').addEventListener('click', async () => {
+    try { (await import('./health-sheet.js')).openHealthSheet(); }
+    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('ignoreBefore').addEventListener('change', e => {
+    const v = cleanIgnoreBefore(e.target.value);
+    e.target.value = v || '';
+    settings.ignoreBefore = v;
+    $('ignoreClear').hidden = !v;
+    db.setSetting('ignoreBefore', v);
+    toast(v ? `Reviews before ${v} are ignored when tuning` : 'Using all your reviews');
+  });
+  $('ignoreClear').addEventListener('click', () => {
+    $('ignoreBefore').value = ''; settings.ignoreBefore = null; $('ignoreClear').hidden = true;
+    db.setSetting('ignoreBefore', null);
+    toast('Using all your reviews');
   });
   $('optReset')?.addEventListener('click', () => {
     $('optConfirm').hidden = false;

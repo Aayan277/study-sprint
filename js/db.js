@@ -20,7 +20,7 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
-import { cleanFsrsParams } from './sched-settings.js';
+import { cleanFsrsParams, cleanIgnoreBefore } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS = {
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
+  ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
   playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced
@@ -430,7 +431,7 @@ export async function getSettings() {
   const os = await store('settings');
   const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
   const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !String(k).startsWith(PENDING)));
-  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams) };
+  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore) };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.

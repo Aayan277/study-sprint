@@ -684,3 +684,8 @@
 :root[data-ui="clinical"] :is(.exams,.tdecks,.decks) :focus-visible{outline-offset:-2px}
 /* ---- Settings: Rating feedback is the pulse, ring and interval of js/fx.js, which are always off in Clinical ---- */
 :root[data-ui="clinical"] .adv-row:has(#ratingFeedback){display:none}
+
+/* ---- Retention helper, health check and Stats retention rows: square, flat, hairlines (js/retention-sheet.js, health-sheet.js) ---- */
+:root[data-ui="clinical"] .rc-inline,:root[data-ui="clinical"] .rc-detail{border-radius:var(--r-sm);background:var(--surface-sunken)}
+:root[data-ui="clinical"] .hc-badge{border-radius:var(--r-xs)}
+:root[data-ui="clinical"] .rs-dot{box-shadow:none;border-radius:2px}

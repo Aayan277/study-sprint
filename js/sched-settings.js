@@ -74,6 +74,29 @@ export function cleanFsrsParams(v) {
   return out;
 }
 
+// ---------- "Ignore reviews before" ----------
+// The synced setting `ignoreBefore`: a date 'YYYY-MM-DD' (or null = none). The optimizer and the health check leave out every
+// review before the start of that day, for a messy early history (e.g. an old Anki import). Cards whose history then no longer
+// starts at "new" are skipped by the optimizer as usual (fsrs-data.js rule 4), so it is really "cards first studied from then on".
+export function cleanIgnoreBefore(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof v === 'string' ? v : '');
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3] ? v : null;
+}
+// The start of that day (local time) in ms, or 0 for none: reviews with an earlier timestamp are ignored.
+export function ignoreBeforeTime(v) {
+  const ok = cleanIgnoreBefore(v);
+  if (!ok) return 0;
+  const [y, m, d] = ok.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+// The review-log rows that count, given the setting.
+export const rowsFrom = (rows, ignoreBefore) => {
+  const from = ignoreBeforeTime(ignoreBefore);
+  return from ? rows.filter(r => r.timestamp >= from) : rows;
+};
+
 // The forgetting-curve decay (w20) the exam and readiness maths should use: your own, or undefined for the default.
 // Kept inside the range the scheduler allows (0.1 to 0.8), so the numbers agree with it.
 export function personalW20(settings) {
