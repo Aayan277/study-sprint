@@ -14,7 +14,8 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE } from './sync-merge.js';
+import { storedType } from './audio-type.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -246,11 +247,14 @@ async function syncMedia(auth) {
   });
   if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
   retrySounds = false;
-  const typeBlocked = upload.blocked.length > 0 || rows.some(m => m.blocked === 'type' && isSoundRow(m));
+  // What to tell the person: only files that are turned away now (this run), or were left out of it because they were before.
+  // (A file that was blocked, tried again and went up is no longer a problem.)
+  const left = [...upload.blocked.map(id => pending.find(m => m.id === id)), ...rows.filter(m => !pending.includes(m))].filter(Boolean);
+  const blockedKinds = { picture: left.some(m => !isSoundRow(m)), sound: left.some(isSoundRow) };
   upload.failed.forEach(f => console.error('Could not send a file', f.id, f.message));
 
   // Pictures and sounds that cards here use but this device doesn't have yet. Four at a time.
-  const have = new Set((await db.getAll('media')).map(m => m.id));
+  const have = new Set(await db.mediaKeys());
   const cards = await db.getAll('cards');
   const wantOf = fields => [...new Set(cards.flatMap(c => fields.flatMap(f => (Array.isArray(c[f]) ? c[f] : [c[f]]))).filter(id => id && !have.has(id)))];
   for (const [kind, ids] of [['pictures', wantOf(['frontImage', 'backImage'])], ['sounds', wantOf(['frontSounds', 'backSounds'])]]) {
@@ -261,12 +265,12 @@ async function syncMedia(auth) {
   // Pictures and sounds no card uses any more: remove them here and from the account.
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
-  return typeBlocked ? SOUNDS_BLOCKED_NOTE : null;
+  return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);
   if (!got) return null;
-  const m = { id, type: got.type, data: got.data, size: got.data.byteLength, created: Date.now() };
+  const m = { id, type: storedType(got.type, got.data), data: got.data, size: got.data.byteLength, created: Date.now() };
   await db.putRemoteMedia(m);
   return m;
 }

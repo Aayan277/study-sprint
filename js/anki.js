@@ -24,10 +24,11 @@ export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
 // The sound file names in a field, in order: 'dog [sound:dog.mp3]' → ['dog.mp3']. Names may be URL-encoded ("my%20sound.mp3").
 // Call it on the field's HTML before htmlToMarks, which removes the [sound:...] tags.
-export function soundNames(html) {
+//   raw: true gives the names as written (before URL-decoding), for a file whose name really has a % in it
+export function soundNames(html, { raw = false } = {}) {
   return [...String(html ?? '').matchAll(/\[sound:([^\]]+)\]/g)]
     .map(m => htmlToMarks(m[1], { marks: false }))
-    .map(n => { try { return decodeURIComponent(n); } catch { return n; } })
+    .map(n => (raw ? n : (() => { try { return decodeURIComponent(n); } catch { return n; } })()))
     .map(n => n.trim())
     .filter(Boolean);
 }
@@ -149,9 +150,14 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
     return verdicts.get(name);
   };
   // The sounds of a note's fields: front from the given fields, back from the rest. null when it names none.
+  // The name as written when the package has a file called that (a real "100%.mp3"), else the URL-decoded name ("my%20cat.wav").
+  const namesIn = f => {
+    const decoded = soundNames(f), written = soundNames(f, { raw: true });
+    return written.map((w, i) => (media && media.info(w) ? w : decoded[i]));
+  };
   const soundsOf = (note, frontFields) => {
     const names = { front: [], back: [] };
-    note.fields.forEach((f, i) => { for (const n of soundNames(f)) { const side = frontFields.includes(i) ? names.front : names.back; if (!side.includes(n)) side.push(n); } });
+    note.fields.forEach((f, i) => { for (const n of namesIn(f)) { const side = frontFields.includes(i) ? names.front : names.back; if (!side.includes(n)) side.push(n); } });
     if (!names.front.length && !names.back.length) return null;
     const out = { note: String(note.id ?? ''), front: [], back: [], lost: [] };
     for (const side of ['front', 'back']) {

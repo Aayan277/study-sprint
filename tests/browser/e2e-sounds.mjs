@@ -43,6 +43,7 @@ const deckRows = async name => run(async n => {
   return Promise.all((await db.getCardsInDeck(d.id)).map(async c => ({ ...c, soundInfo: await Promise.all([...(c.frontSounds || []), ...(c.backSounds || [])].map(async id => { const m = await db.getMedia(id); return m && { id, type: m.type, size: m.size, bytes: m.data.byteLength, name: m.name, uploaded: m.uploaded }; })) })));
 }, name);
 
+const soundRowTexts = [];
 // ---------- 1. importing a deck with sounds (both Anki file layouts) ----------
 for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-sound-legacy.apkg', 'Sounds old']]) {
   await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
@@ -54,6 +55,7 @@ for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-so
   ok(found.includes("3 sounds weren't imported: 1 is bigger than 1 MB, 1 isn't in the file, 1 is a format the app can't keep."), `${file}: the sounds not imported are counted by reason (${found.replace(/.*(\d sounds? w)/s, '$1').slice(0, 120)})`);
   ok(await page.isVisible('#soundRow') && (await page.textContent('#soundRow')).includes('Bring sounds') && /About \d+ KB\. Kept on this device, synced like pictures and kept in backups\./.test(await page.textContent('#soundRow')), `${file}: the Bring sounds switch shows the size`);
   ok(await page.isChecked('#ankiSounds'), `${file}: Bring sounds starts on`);
+  soundRowTexts.push(await page.textContent('#soundInfo'));
   if (file.includes('new')) await page.screenshot({ path: SP + '/snd-import-375.png', fullPage: true });
   await page.selectOption('#deckSel', '__new'); await page.fill('#newName', deckName); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const cards = await deckRows(deckName);
@@ -71,6 +73,7 @@ for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-so
   const rows = await run(async () => (await (await import('./js/db.js')).getAll('media')).filter(m => m.type.startsWith('audio/')).length);
   ok(rows === (file.includes('new') ? 4 : 8), `${file}: ${rows} sound files stored (4 per import)`);
 }
+ok(soundRowTexts.length === 2 && soundRowTexts[0] === soundRowTexts[1], `both Anki layouts report the same size for the sounds (${soundRowTexts[0]})`);
 ok(await run(() => navigator.storage.persisted().then(p => typeof p === 'boolean')), 'storage.persist() was asked for (no prompt)');
 
 // ---------- 2. the switch off, and the free-space check ----------
@@ -327,6 +330,40 @@ const noRoom = await run(async () => {
   return { err, cards: (await db.getAll('cards')).length === cards };
 });
 ok(noRoom.err?.noSpace && noRoom.err.msg === 'Not enough space on this device to restore this backup.' && noRoom.cards, 'Restore with no room: "Not enough space on this device to restore this backup." and everything stays as it was');
+
+// ---------- 8b. book-keeping: nothing needs to read every file's bytes ----------
+const book = await run(async () => {
+  const db = await import('./js/db.js'), media = await import('./js/media.js');
+  const kind = m => (m.type.startsWith('audio/') ? 'sounds' : 'pictures');
+  const actual = async () => { const out = { pictures: 0, sounds: 0 }; for (const id of await db.mediaKeys()) { const m = await db.getMedia(id); out[kind(m)] += m.size; } return out; };
+  const t1 = await db.mediaTotals(), a1 = await actual();
+  const s = await media.saveSound({ name: 't.wav', type: 'audio/wav', data: new Uint8Array(777).fill(1).buffer });
+  const t2 = await db.mediaTotals();
+  const pending = (await db.mediaToUpload()).map(m => m.id);
+  const removedFresh = await db.cleanMedia(Date.now());                      // too new: kept (its card may not be saved yet)
+  const stillThere = !!(await db.getMedia(s.id));
+  await db.putMedia({ ...(await db.getMedia(s.id)), created: Date.now() - 2 * 3600000, uploaded: true });
+  const pendingAfter = (await db.mediaToUpload()).map(m => m.id);
+  const removedOld = await db.cleanMedia(Date.now());                        // old, unused and on the server: removed, and listed so the server can drop it
+  const gone = !(await db.getMedia(s.id));
+  const t3 = await db.mediaTotals(), a3 = await actual();
+  // A backup without sounds never reads the sounds' bytes
+  const cards = await db.getAll('cards');
+  const soundIds = new Set(cards.flatMap(c => [...(c.frontSounds || []), ...(c.backSounds || [])]));
+  const asked = [];
+  const realGet = IDBObjectStore.prototype.get;
+  IDBObjectStore.prototype.get = function (k) { if (this.name === 'media') asked.push(k); return realGet.call(this, k); };
+  const bk = await db.exportAll({ sounds: false });
+  IDBObjectStore.prototype.get = realGet;
+  return { same1: JSON.stringify(t1) === JSON.stringify(a1), same2: t2.sounds === t1.sounds + 777, pending: pending.includes(s.id), removedFresh: removedFresh.includes(s.id), stillThere,
+    pendingAfter: pendingAfter.includes(s.id), removedOld: removedOld.includes(s.id), gone, same3: JSON.stringify(t3) === JSON.stringify(a3) && t3.sounds === t1.sounds,
+    readSound: asked.some(k => soundIds.has(k)), exported: !bk.media.some(m => m.type.startsWith('audio/')) };
+});
+ok(book.same1 && book.same2 && book.same3, 'Book-keeping: the totals record matches the real sizes, and follows an add and a removal');
+ok(book.pending && !book.pendingAfter, 'Book-keeping: a new sound is listed to upload, and is not once it is marked uploaded');
+ok(!book.removedFresh && book.stillThere, 'Clean-up: a sound added in the last hour is kept even if no card uses it');
+ok(book.removedOld && book.gone, 'Clean-up: an old unused sound is removed and listed for the server');
+ok(book.exported && !book.readSound, "A backup without sounds never read a sound's bytes");
 
 // ---------- 9. sync: sounds like pictures, and a server that still has the old file-type list ----------
 fake.setAudio(false);

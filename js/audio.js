@@ -7,11 +7,14 @@
 //   soundURL(id)           a blob: address for a sound, downloading it first if this device lacks it (null if not available)
 //   autoplayBlocked(root)  the browser refused to play by itself: pulse the first ▶ and say "Tap ▶ to play"
 //
-// One shared <audio> element plays everything. iOS only lets a page play sounds after a tap, so the first tap anywhere
-// "unlocks" that element with a silent clip, and later sounds (like auto-play on the next card) are allowed.
+// One shared <audio> element plays everything. iOS only lets a page start a sound inside a tap, and then lets that element play
+// later without one. So the element is "unlocked" with a silent clip inside the first tap (pointer, touch, click or key: whichever
+// comes first, kept listening until a play() really worked), and a ▶ tap unlocks it first if need be, then plays straight away
+// when the sound's address is ready (the ▶ buttons get theirs as soon as they appear).
 // The ▶ buttons work wherever they are on the page (Review, Play, the card editor, the card panel): one listener handles them all.
 
 import * as db from './db.js';
+import { stopSpeaking } from './speech.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -29,25 +32,41 @@ let el = null;
 const player = () => el || (el = Object.assign(new Audio(), { preload: 'auto' }));
 export const canPlayType = type => { try { return !!player().canPlayType(type); } catch { return false; } };
 
+// Addresses of sounds, most recently used last. Only so many are kept: the oldest is let go (never the one playing).
+const MAX_URLS = 30;
 const urls = new Map();          // id → { url, type }
-export async function soundURL(id) {
-  if (urls.has(id)) return urls.get(id).url;
+let current = null;              // the id playing now
+function remember(id, m) {
+  const old = urls.get(id);
+  if (old) { urls.delete(id); urls.set(id, old); return old.url; }
+  const url = URL.createObjectURL(new Blob([m.data], { type: m.type }));
+  urls.set(id, { url, type: m.type });
+  for (const [k, v] of urls) {
+    if (urls.size <= MAX_URLS) break;
+    if (k === current || k === id) continue;
+    URL.revokeObjectURL(v.url); urls.delete(k);
+  }
+  return url;
+}
+const cached = id => { const hit = urls.get(id); if (hit) { urls.delete(id); urls.set(id, hit); } return hit?.url || null; };
+export async function soundURL(id, { download = true } = {}) {
+  const hit = cached(id);
+  if (hit) return hit;
   let m = await db.getMedia(id);
-  if (!m) {
+  if (!m && download) {
     // Not on this device yet (added on another device): download it from the account, if signed in.
     try { m = await (await import('./sync.js')).downloadMedia(id); } catch { m = null; }
   }
-  if (!m) return null;
-  const url = URL.createObjectURL(new Blob([m.data], { type: m.type }));
-  urls.set(id, { url, type: m.type });
-  return url;
+  return m ? remember(id, m) : null;
 }
 
 let run = 0;                     // changes each time something new starts or everything stops
 let finishCurrent = null;        // ends the sound that is playing now (so a stop doesn't leave a promise hanging)
-let unlocked = null;
+let unlocked = null;             // the silent clip's promise, while it is playing
+let isUnlocked = false;
 
 function setPlaying(id) {
+  current = id;
   document.querySelectorAll('.snd-btn.playing').forEach(b => b.classList.remove('playing'));
   if (id) document.querySelectorAll(`.snd-btn[data-snd="${CSS.escape(id)}"]`).forEach(b => b.classList.add('playing'));
 }
@@ -68,6 +87,7 @@ function playOne(url, id, mine) {
     finishCurrent = end;
     a.onended = end;
     a.onerror = () => { markBroken(id); end(); };
+    a.muted = false;
     a.src = url;
     setPlaying(id);
     const p = a.play();
@@ -81,14 +101,16 @@ function playOne(url, id, mine) {
 }
 
 // Play sounds in order. Resolves true when they all played, false when stopped, missing or blocked.
+// The first sound starts in the same breath as the call when its address is ready, which is what iOS wants inside a tap.
 //   onBlocked  called when the browser refused to start a sound without a tap
 export async function playSounds(ids, { onBlocked } = {}) {
+  stopSpeaking();
   stopSound();
   const mine = run;
-  await unlocked?.catch(() => {});
+  if (unlocked) await unlocked.catch(() => {});
   if (mine !== run) return false;
   for (const id of ids || []) {
-    const url = await soundURL(id).catch(() => null);
+    const url = cached(id) || await soundURL(id).catch(() => null);
     if (mine !== run) return false;
     if (!url) { markMissing(id); continue; }
     try {
@@ -123,6 +145,27 @@ function markBroken(id) {
   buttonsOf(id).forEach(b => { b.title = "This sound can't play in this browser"; b.classList.add('missing', 'broken'); b.setAttribute('aria-disabled', 'true'); });
 }
 
+// ---------- unlocking (iOS) ----------
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'];
+// Call inside a tap or key press. Does nothing once unlocked, or while a sound is playing (it had to be allowed to start that one).
+function unlock() {
+  if (isUnlocked || unlocked || finishCurrent) return;
+  const a = player();
+  a.muted = true;
+  a.src = SILENCE;
+  let started;
+  try { started = Promise.resolve(a.play()); } catch (err) { started = Promise.reject(err); }
+  unlocked = started.then(() => {
+    isUnlocked = true;
+    GESTURES.forEach(g => removeEventListener(g, unlock, true));       // only now, when play() really worked
+  }).catch(() => { /* not allowed (yet): stay listening for the next tap */ }).then(() => {
+    unlocked = null;
+    if (!finishCurrent) { try { a.pause(); } catch { /* fine */ } a.muted = false; a.removeAttribute('src'); }
+  });
+}
+GESTURES.forEach(g => addEventListener(g, unlock, true));
+
 // ---------- wiring ----------
 // A tap on any ▶ plays that one sound (a second tap on the one that's playing stops it).
 document.addEventListener('click', e => {
@@ -133,14 +176,17 @@ document.addEventListener('click', e => {
   if (b.classList.contains('playing')) { stopSound(); return; }
   if (b.classList.contains('broken')) return;          // a type this browser can't play: nothing to try
   b.classList.remove('missing'); b.removeAttribute('aria-disabled'); b.removeAttribute('title');
+  unlock();                        // (inside the tap, in case nothing has yet)
   playSounds([b.dataset.snd], { onBlocked: () => autoplayBlocked(b.closest('.snd-row')?.parentElement || document) });
 }, true);
 
-// A ▶ whose sound this browser can't play is turned off as soon as it appears (we only know the type once we look the sound up).
+// A ▶ whose sound this browser can't play is turned off as soon as it appears, and its sound's address is made ready, so a tap can start it at once.
 async function check(btn) {
   btn.dataset.checked = '1';
   const m = await db.getMedia(btn.dataset.snd).catch(() => null);
-  if (m && !canPlayType(m.type)) markBroken(btn.dataset.snd);
+  if (!m) return;
+  if (!canPlayType(m.type)) markBroken(btn.dataset.snd);
+  else if (!cached(btn.dataset.snd)) remember(btn.dataset.snd, m);
 }
 function checkAll(root) {
   root.querySelectorAll?.('.snd-btn:not([data-checked])').forEach(check);
@@ -151,16 +197,3 @@ new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => n.nodeT
 
 // Leaving the screen stops the sound.
 addEventListener('hashchange', stopSound);
-
-// iOS: the first tap or key press plays a silent clip, which lets the shared element play later without a tap.
-const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-function unlock() {
-  removeEventListener('pointerdown', unlock, true);
-  removeEventListener('keydown', unlock, true);
-  const a = player();
-  a.muted = true;
-  a.src = SILENCE;
-  unlocked = Promise.resolve(a.play()).catch(() => {}).then(() => { a.pause(); a.muted = false; a.removeAttribute('src'); unlocked = null; });
-}
-addEventListener('pointerdown', unlock, true);
-addEventListener('keydown', unlock, true);

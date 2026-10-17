@@ -11,6 +11,7 @@
 
 import * as db from './db.js';
 import { soundsHTML } from './audio.js';
+import { soundType, soundExt, sniffAudioType } from './audio-type.js';
 
 const MAX_SIDE = 1280;     // pixels: plenty for a phone or laptop screen, and keeps files ~100–250 KB
 export const OCCLUSION_SIDE = 2048;     // image-occlusion pictures are kept larger, so small diagram text stays readable
@@ -66,16 +67,7 @@ export async function saveImage(type, data) {
 // ---------- sounds ----------
 export const MAX_SOUND_BYTES = 1024 * 1024;       // 1 MB per sound: longer ones are skipped (and reported), so a deck can't fill a phone
 export const MAX_SOUNDS = 4;                       // per side of a card
-const SOUND_EXT = { mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', webm: 'audio/webm', wav: 'audio/wav', flac: 'audio/flac' };
-const SOUND_TYPES = { 'audio/mpeg': 'audio/mpeg', 'audio/mp3': 'audio/mpeg', 'audio/mp4': 'audio/mp4', 'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4', 'audio/aac': 'audio/aac', 'audio/ogg': 'audio/ogg', 'application/ogg': 'audio/ogg',
-  'audio/webm': 'audio/webm', 'audio/wav': 'audio/wav', 'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'audio/vnd.wave': 'audio/wav', 'audio/flac': 'audio/flac', 'audio/x-flac': 'audio/flac' };
-// The sound type to keep for a file (its own type, else what its extension says), or null when it isn't one the app keeps.
-export function soundType(type, name = '') {
-  const t = SOUND_TYPES[String(type || '').toLowerCase().split(';')[0].trim()];
-  return t || SOUND_EXT[String(name).split('.').pop().toLowerCase()] || null;
-}
-// The file extension used when a sound goes into an Anki deck.
-export const soundExt = type => ({ 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/flac': 'flac' })[type] || 'mp3';
+export { soundType, soundExt };
 // "3.4 MB", "24 KB".
 export const sizeText = n => (n >= 1048576 ? `${(n / 1048576).toFixed(n >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -83,9 +75,10 @@ export const sizeText = n => (n >= 1048576 ? `${(n / 1048576).toFixed(n >= 10485
 // Throws an Error with a plain message when it is too big or not a sound the app keeps.
 export async function saveSound(file) {
   const name = file.name || '';
-  const type = soundType(file.type, name);
-  if (!type) throw new Error("That isn't a sound file the app can keep (use .mp3, .m4a, .ogg, .wav or .flac).");
   const data = file.data || await file.arrayBuffer();
+  // The file's own first bytes say what it is more honestly than its name or the type the picker guessed.
+  const type = sniffAudioType(data) || soundType(file.type, name);
+  if (!type) throw new Error("That isn't a sound file the app can keep (use .mp3, .m4a, .ogg, .wav or .flac).");
   if (data.byteLength > MAX_SOUND_BYTES) throw new Error(`That sound is ${sizeText(data.byteLength)}. Sounds can be up to 1 MB: shorten it or save it at a lower quality.`);
   const id = db.newId();
   await db.putMedia({ id, type, data, size: data.byteLength, name: name.slice(0, 120), created: Date.now(), uploaded: false });

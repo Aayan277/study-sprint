@@ -180,3 +180,4 @@ export async function runPool(items, work, { size = 4, onProgress } = {}) {
 
 // The note under Settings → Sync when the server turns sounds away (the owner hasn't re-run supabase/media.sql yet).
 export const SOUNDS_BLOCKED_NOTE = 'Sounds can’t sync yet: run the new supabase/media.sql in your Supabase project (see docs/sync-setup.md). Pictures and everything else are syncing.';
+export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync server doesn’t take that kind of picture (check supabase/media.sql was run, see docs/sync-setup.md). Everything else is syncing.';

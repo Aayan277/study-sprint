@@ -61,6 +61,20 @@ export async function readAnkiFile(file) {
       if (member === undefined) return null;
       return { size: sizes.get(name) ?? entrySizes.get(member) ?? 0, type: fileType(name) };
     },
+    // Several files at once, in one pass over the zip (it is searched once for the whole batch, not once for each file):
+    // a Map name → { data, type } of the ones found. Ask for a few dozen at a time, so they don't all sit in memory together.
+    async getMany(names) {
+      const wanted = new Map();                    // zip member → names that use it
+      for (const name of names) { const m = members.get(name); if (m !== undefined) wanted.set(m, [...(wanted.get(m) || []), name]); }
+      const got = wanted.size ? unzipSync(zip, { filter: f => wanted.has(f.name) }) : {};
+      const out = new Map();
+      for (const [member, list] of wanted) {
+        if (!got[member]) continue;
+        const data = newFormat ? zstd.decompress(got[member]) : got[member];
+        for (const name of list) out.set(name, { data, type: fileType(name) });
+      }
+      return out;
+    },
     // A picture's or sound's bytes and type, or null.
     async get(name) {
       const member = members.get(name);

@@ -270,7 +270,11 @@ async function readAnki(file) {
     $('sheetPick').innerHTML = `<option value="">All decks (${all.rows.length})</option>` +
       decks.map(d => `<option value="${esc(d.name)}">${esc(d.name.split('::').join(' › '))} (${d.count})</option>`).join('');
     $('sheetPickRow').hidden = false;
-    $('sheetPick').onchange = () => showResult(onlyDeck(all, $('sheetPick').value));
+    $('sheetPick').onchange = async () => {
+      const part = onlyDeck(all, $('sheetPick').value);
+      await checkSoundSpace(part);               // the room needed depends on the deck picked
+      showResult(part);
+    };
   }
   showResult(all);
 }
@@ -610,20 +614,21 @@ async function save() {
     const withSounds = toAdd.map((c, i) => [c.sounds, cards[i]]).filter(([sn]) => sn && S.ankiMedia);
     if (withSounds.length) {
       const { saveSound } = await import('./media.js');
-      const done = new Map();          // a sound used on several cards is saved once
-      const sound = name => {
-        if (!done.has(name)) {
-          done.set(name, (async () => {
-            const got = await S.ankiMedia.get(name);
-            if (!got) return null;
-            return (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id;     // (a copy: a view would drag the whole package along)
-          })().catch(err => { console.error('Skipped a sound', name, err); soundsSkipped++; return null; }));
+      const names = [...new Set(withSounds.flatMap(([sn]) => [...sn.front, ...sn.back]))];      // a sound used on several cards is saved once
+      const ids = new Map();                                                                  // name → the saved sound's id
+      for (let i = 0; i < names.length; i += 40) {
+        saveBtn.textContent = `Adding sounds: ${Math.min(i + 40, names.length)} of ${names.length}…`;
+        const batch = names.slice(i, i + 40), found = await S.ankiMedia.getMany(batch);
+        for (const name of batch) {
+          try {
+            const got = found.get(name);
+            if (!got) throw new Error('not in the file');
+            ids.set(name, (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id);     // (a copy: a view would drag the whole package along)
+          } catch (err) { console.error('Skipped a sound', name, err); soundsSkipped++; }
         }
-        return done.get(name);
-      };
-      for (const [n, [sn, card]] of withSounds.entries()) {
-        saveBtn.textContent = `Adding sounds: ${n + 1} of ${withSounds.length}…`;
-        const [f, b] = [(await Promise.all(sn.front.map(sound))).filter(Boolean), (await Promise.all(sn.back.map(sound))).filter(Boolean)];
+      }
+      for (const [sn, card] of withSounds) {
+        const f = sn.front.map(n => ids.get(n)).filter(Boolean), b = sn.back.map(n => ids.get(n)).filter(Boolean);
         if (f.length) card.frontSounds = f;
         if (b.length) card.backSounds = b;
       }
