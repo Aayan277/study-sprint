@@ -14,7 +14,7 @@ import {
 } from './game.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { daysAgoStart } from './stats-calc.js';
-import { deckSchedulerOptions } from './sched-settings.js';
+import { deckSchedulerOptions, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { loadAll } from './study-data.js';
 import { examOptions, examInfo, pickPlayDeck } from './exam.js';
@@ -496,7 +496,8 @@ async function record(round, entry) {
   if (applies(decision)) {
     let next = null;
     try {
-      const { rate } = await import('./srs.js');     // the FSRS library, loaded on demand
+      const { rate, prepare7 } = await import('./srs.js');     // the FSRS library, loaded on demand
+      if (usesFsrs7(data.settings)) await prepare7([prev], db.getCardLogs);     // FSRS-7 (beta): the card's memory, rebuilt from its history the first time
       const deck = effectiveDeck(data.decks, entry.card.deckId);     // with what it inherits from its parent decks
       // The deck's own settings (or the overall ones), its exam limits, and evening out the reviews.
       data.balance ||= { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };

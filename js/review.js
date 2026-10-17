@@ -6,7 +6,7 @@
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
-import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
 import { canType, checkTyped } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
@@ -19,7 +19,7 @@ import { speak, stopSpeaking, canSpeak, stepsSpeech, elementsSpeech } from './sp
 import { parseStructured, suggestRating } from './steps.js';
 import { maskMath } from './math.js';
 import { mountScratch } from './scratchpad.js';
-import { deckSchedulerOptions, personalW20 } from './sched-settings.js';
+import { deckSchedulerOptions, personalW20, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
@@ -171,6 +171,8 @@ function nextCard(el) {
   R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
+  // FSRS-7 (beta): get this card's FSRS-7 memory ready (rebuilt from its history the first time), while you read the question.
+  if (usesFsrs7(R.settings)) prepare7([R.statesById.get(R.current.card.id)], db.getCardLogs).catch(err => console.error(err));
   renderSession(el, true);
 }
 
@@ -542,6 +544,7 @@ async function answer(el, rating) {
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
   const now = Date.now();
+  if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
   const next = rate(id, prev, rating, schedFor(item.card, now), now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
