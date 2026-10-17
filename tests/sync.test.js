@@ -272,6 +272,17 @@ test('the sync server turning a sound away for its type is reported as media_typ
   } finally { globalThis.fetch = realFetch; }
 });
 
+test('glossary terms are synced settings, one per term (gloss:<id>), and the newest copy of each wins', async () => {
+  const { isSyncedSetting } = await import('../js/sync-data.js');
+  assert.ok(isSyncedSetting('gloss:abc') && isSyncedSetting('newPerDay'));
+  assert.ok(!isSyncedSetting('theme') && !isSyncedSetting('glossaryUnderline') && !isSyncedSetting('_times') && !isSyncedSetting(undefined));
+  assert.ok(!SYNCED_SETTINGS.some(k => k.startsWith('gloss:')));                    // the fixed list is untouched
+  // two devices adding different terms keep both (separate rows); the same term: the later change wins, and a delete (null) is a change
+  assert.equal(decide({ updated_at: 20, deleted: false }, 10), 'put');
+  assert.equal(decide({ updated_at: 10, deleted: false }, 20), 'skip');
+  assert.deepEqual(rowFromSetting('gloss:x', null, 7), { store: 'settings', id: 'gloss:x', data: { value: null }, deleted: false, updated_at: 7 });
+});
+
 // ---------- your own FSRS parameters (fsrsParams, v4.10) ----------
 test('fsrsParams is a synced setting: the newest copy wins as a whole, it is not merged', () => {
   assert.ok(SYNCED_SETTINGS.includes('fsrsParams'));

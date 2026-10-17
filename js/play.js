@@ -3,15 +3,16 @@
 //   Questions: Front → pick the back, Back → pick the front, Typing
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
-// Every answer is saved to the review log, and feeds the review schedule following the
-// auto-grading rules in autograde.js.
+// Play is practice only by default: nothing is saved to the review log or the schedule. With the synced setting
+// "Count Play answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
+// schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
-import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey } from './autograde.js';
+import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
@@ -185,7 +186,7 @@ export async function renderPlay(el) {
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
-        <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
+        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
       <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
@@ -406,7 +407,7 @@ function answer(choice) {
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
   let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
-  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, at: Date.now(), ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
     typed: diff ? given : undefined, target: diff ? target : undefined,
     chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);
@@ -444,9 +445,16 @@ function typedMixup(typed) {
   return indexedMixup(G.mixIndex, typed, G.card);
 }
 
-// Save one answer: always to the review log (for stats), and to the review schedule when the
-// auto-grading rules allow it (see autograde.js).
+// Does Play count as reviews? (Settings, synced; off by default: Play is practice only.)
+const countsAsReviews = () => playCountsAsReviews(data?.settings);
+
+// Save one answer (only when Play counts as reviews, see above): always to the review log (source 'play', so stats and a
+// future FSRS optimizer can tell it from a Review), and to the review schedule when the auto-grading rules allow it (see autograde.js).
 async function record(round, entry) {
+  // Practice only (the default, Settings > "Count Play answers as reviews" off): nothing is saved. No schedule or FSRS
+  // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
+  // The round's own score, bests and results come from the round itself, not from the log.
+  if (!countsAsReviews()) { entry.decision = 'practice'; return; }
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
@@ -465,15 +473,8 @@ async function record(round, entry) {
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
   rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing' });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
-  const log = {
-    cardId: id, timestamp: now, source: 'play',
-    mode: round.qtype, format: round.fmt,
-    correct: entry.ok, ms: entry.ms, rating, chars, hard: !!round.hard,
-    state: prev ? prev.state : 0,      // the card's state before this answer
-    applied: false,                    // did it change the schedule?
-    reason: decision                   // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
-  };
-  if (entry.mixedWith) log.mixedWith = entry.mixedWith;     // the card whose answer was given instead (confusion.js)
+  const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
+    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith });
   if (applies(decision)) {
     let next = null;
     try {
@@ -561,6 +562,7 @@ async function scheduleSummary(round) {
   const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
   const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
+  if (!countsAsReviews()) return '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>';
   const parts = [];
   if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
   if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back`);

@@ -1,8 +1,11 @@
 // Themes. The colors themselves live in css/styles.css;
 // this file switches between them and draws the picker in Settings.
 //
-// A theme is three choices:
-//   skin  which accent color set (stored on <html data-skin="...">): violet (the default), ocean, forest, ember, rose
+// A theme is four choices:
+//   ui    the style of the whole app (stored on <html data-ui="...">): 'original' (the default) or 'clinical', a plain,
+//         professional look (css/clinical.css, which only acts under html[data-ui="clinical"])
+//   skin  which accent color set (stored on <html data-skin="...">): violet (the default), ocean, forest, ember, rose.
+//         In Clinical they are shown as Indigo, Blue, Green, Rust and Plum (the ids stay the same, so saved themes keep working)
 //   mode  'dark' (the default), 'light', or 'auto' to follow the device's light/dark setting.
 //         The page always gets a plain data-theme="light" or "dark" (auto is worked out here).
 //   oled  true = pure black page background in dark mode (<html data-oled="on">)
@@ -17,6 +20,14 @@ export const SKINS = {
   rose:   { name: 'Rose',   note: 'Bright pink' }
 };
 
+// The two styles. Original is the app as it always looked; Clinical is css/clinical.css.
+export const UIS = [['original', 'Original'], ['clinical', 'Clinical']];
+export const cleanUi = v => (UIS.some(u => u[0] === v) ? v : 'original');
+// What the accents are called in Clinical (same ids as above).
+export const CLINICAL_NAMES = { violet: 'Indigo', ocean: 'Blue', forest: 'Green', ember: 'Rust', rose: 'Plum' };
+// The heading above the accent buttons in Settings.
+export const accentTitle = ui => (ui === 'clinical' ? 'Accent colour' : 'Theme');
+
 // Themes were renamed or dropped. Anyone who saved an old name gets the closest new one.
 // Neon and Onyx were always dark, so they stay dark (and Onyx keeps its pure black).
 const OLD_NAMES = {
@@ -28,14 +39,14 @@ const OLD_NAMES = {
 const ALWAYS_DARK = ['neon', 'onyx', 'kuro'];
 export const isAlwaysDark = skin => ALWAYS_DARK.includes(skin);
 
-// Turn whatever was saved (maybe an old theme) into a valid { skin, mode, oled }.
+// Turn whatever was saved (maybe an old theme) into a valid { ui, skin, mode, oled }.
 export function cleanTheme(theme) {
   const saved = theme?.skin;
   const skin = SKINS[saved] ? saved : (OLD_NAMES[saved] || 'violet');
   let mode = ['light', 'dark', 'auto'].includes(theme?.mode) ? theme.mode : 'dark';
   if (ALWAYS_DARK.includes(saved)) mode = 'dark';
   const oled = theme?.oled === true || ['onyx', 'kuro'].includes(saved);
-  return { skin, mode, oled };
+  return { ui: cleanUi(theme?.ui), skin, mode, oled };
 }
 
 // A copy of the theme is also kept in localStorage. The tiny script in index.html's <head> reads it
@@ -47,6 +58,7 @@ let current = null;
 export function applyTheme(theme) {
   current = cleanTheme(theme);
   const root = document.documentElement;
+  root.setAttribute('data-ui', current.ui);
   root.setAttribute('data-skin', current.skin);
   root.setAttribute('data-theme', resolvedMode(current.mode));
   if (current.oled) root.setAttribute('data-oled', 'on'); else root.removeAttribute('data-oled');
@@ -90,12 +102,13 @@ export function syncBrowserBar() {
 // carries the same data-skin / data-theme / data-oled attributes, so styles.css colors it by itself.
 export function skinButtonsHTML(selected) {
   const t = document.documentElement;
+  const names = t.getAttribute('data-ui') === 'clinical';
   const mode = t.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   const oled = t.getAttribute('data-oled') === 'on' ? ' data-oled="on"' : '';
   return Object.entries(SKINS).map(([id, s]) =>
     `<button type="button" class="skin" data-skin="${id}" aria-pressed="${selected === id}">
       <span class="pv" aria-hidden="true" data-skin="${id}" data-theme="${mode}"${oled}><b>Aa</b></span>
-      <span style="min-width:0"><span class="nm">${s.name}</span><span class="nt">${s.note}</span></span></button>`
+      <span style="min-width:0"><span class="nm">${names ? CLINICAL_NAMES[id] : s.name}</span><span class="nt">${s.note}</span></span></button>`
   ).join('');
 }
 

@@ -6,7 +6,7 @@ export const MAX_PARTS = 4;
 // Always returns at least 2 entries (padded with ''); more than 4 pieces: the extras join the last one.
 export function splitBack(back) {
   const parts = String(back ?? '').split(/\r?\n|;/)
-    .map(s => s.replace(/^\s*(?:[•·▪●◦*\-–—]|\d+[.)])\s+/, '').trim())
+    .map(s => s.replace(/^\s*element\s*\d+\s*[:.)]\s*/i, '').replace(/^\s*(?:[•·▪●◦*\-–—]|\d+[.)])\s+/, '').trim())      // (an elements card's "Element 1:" lines lose their prefix)
     .filter(Boolean);
   while (parts.length > MAX_PARTS) { const last = parts.pop(); parts[parts.length - 1] += '; ' + last; }
   while (parts.length < 2) parts.push('');
