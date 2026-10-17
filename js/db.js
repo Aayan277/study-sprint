@@ -26,6 +26,7 @@ import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombston
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { validFields } from './note-fields.js';
+import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { ui: 'original', skin: 'violet', mode: 'dark', oled: false }, // ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -303,6 +304,20 @@ export async function undoReview(cardId, prevState, logId) {
   };
   await finished(tx);
   scheduleChanges++;
+  changed();
+}
+
+// Delete one review-log row and nothing else (Play's "I was right" on an answer that was only logged).
+export async function deleteLogRow(logId) {
+  const db = await openDB();
+  const tx = db.transaction(['reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  const logs = tx.objectStore('reviewLog');
+  logs.get(logId).onsuccess = e => {
+    if (e.target.result?.uid) markDeleted(tx, 'reviewLog', e.target.result.uid, now);
+    logs.delete(logId);
+  };
+  await finished(tx);
   changed();
 }
 
@@ -616,6 +631,7 @@ export async function importAll(data, { everywhere = false } = {}) {
       for (const x of data[name]) {
         let rec = upgradeRecord(name, x, now);
         if (name === 'reviewLog') rec = cleanMixedWith(rec);
+        if (name === 'cards') rec = cleanAccept(rec);
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
         tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing
@@ -802,7 +818,8 @@ export async function applyRemote(rows) {
         if (local) os.delete(row.store === 'reviewLog' ? local.id : row.id);
         deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
       } else {
-        const record = recordFromRow(row);
+        let record = recordFromRow(row);
+        if (row.store === 'cards') record = cleanAccept(record);      // a bad accepted-answers list from another device is dropped
         if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
         os.put(record);
         if (tomb) deleted.delete(tomb.key);

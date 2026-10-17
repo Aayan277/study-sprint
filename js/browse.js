@@ -4,7 +4,9 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
+import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
+import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
@@ -347,6 +349,7 @@ function cardOps(card, ctx) {
     if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
     if ('noteFields' in changes && !changes.noteFields?.length) delete merged.noteFields;      // and no other fields is no list
     for (const k of ['frontSounds', 'backSounds']) if (k in changes && !changes[k]?.length) delete merged[k];      // and no sounds is no list
+    if ('acceptAnswers' in changes && !changes.acceptAnswers?.length) delete merged.acceptAnswers;      // and no accepted answers is none
     await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
     return again(msg, act);
   };
@@ -372,6 +375,7 @@ const cardFieldsHTML = (card, maxN = 0, pair = null) => `
       ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
       ${noteFieldsEditHTML('ce', card.noteFields)}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
 const showErr = (id, text) => { $(id).textContent = text; $(id).hidden = false; };
@@ -390,9 +394,10 @@ function wireCardForm(card, ctx, msg, pair = null) {
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
     const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
+    const accept = $('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {};
     const both = !!$('ceRevOn')?.checked && !stepsOn('ce');
-    if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds }, { tags, noteExtra, noteFields }, ops, msg);
-    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
+    if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
+    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -609,10 +614,17 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
 // fine) and "Link cloze cards" (older imports: turn separate fill-in-the-blank cards into notes).
 function openTools(cards, { scope, refresh }) {
   const tags = tagCounts(cards);
+  // Tags with "::" (Anki decks like AnKing) are shown as folders, opened one at a time; other tags stay a flat list.
+  const folders = hasFolders(cards);
+  const tree = folders ? tagTree(cards) : null;
   openSheet(`
     <h2 id="sheetTitle">Tools</h2>
+    <h3 class="tool-h">Find by tag or question ID</h3>
+    <p class="note">Paste the IDs of questions you missed in a question bank, or pick a tag, and study those cards. Looks in all decks.</p>
+    <button class="btn ghost small" type="button" id="toolTagStudy">Find by tag or question ID</button>
     <h3 class="tool-h">Tags in ${esc(scope)}</h3>
-    ${tags.length ? `<ul class="tag-list">${tags.map(({ tag, count }) => `
+    ${folders ? `<div class="tag-tree-box" id="tagTreeBox">${tagTreeHTML(tree, { mode: 'manage' })}</div>`
+      : tags.length ? `<ul class="tag-list">${tags.map(({ tag, count }) => `
       <li data-tag="${esc(tag)}"><span class="tag-name">${esc(tag)}</span><span class="muted small">${plural(count, 'card')}</span>
         <button class="btn ghost small" type="button" data-tag-rename>Rename</button>
         <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
@@ -623,23 +635,55 @@ function openTools(cards, { scope, refresh }) {
     <button class="btn ghost small" type="button" id="linkFind">Find cards to link</button>
     <div id="linkOut" aria-live="polite"></div>`, { side: true });
   wireLinkTool(cards, { scope, refresh });
-  const apply = async (from, to) => {
-    const changed = renameTag(cards, from, to);
+  $('toolTagStudy').addEventListener('click', async () => {
+    try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: refresh }); }
+    catch { toast("Couldn't open this. Check your connection and try again."); }
+  });
+  const apply = async (from, to, { folder = false, name = from, exact = false } = {}) => {
+    const changed = folder ? renameTagPrefix(cards, from, to) : exact ? renameTagExact(cards, from, to) : renameTag(cards, from, to);
     await db.saveCards(changed);
-    toast(to ? `Renamed “${from}” on ${plural(changed.length, 'card')}` : `Removed “${from}” from ${plural(changed.length, 'card')}`);
+    const what = folder ? `the folder “${name}”` : `“${from}”`;
+    toast(to ? `Renamed ${what} on ${plural(changed.length, 'card')}` : `Removed ${what} from ${plural(changed.length, 'card')}`);
     await refresh();
     closeSheet();
   };
+  const renameForm = (label, from, onGo) => {
+    $('tagEdit').innerHTML = `<form class="confirm" id="tagForm"><label class="field"><span>${label}</span>
+      <input id="tagNew" value="${esc(from)}" autocomplete="off" autocapitalize="off"></label>
+      <div class="sheet-actions"><button class="btn ghost" type="button" id="tagNo">Cancel</button><button class="btn primary" type="submit">Rename</button></div></form>`;
+    $('tagNew').select();
+    $('tagNo').addEventListener('click', () => { $('tagEdit').innerHTML = ''; });
+    $('tagForm').addEventListener('submit', e => { e.preventDefault(); const to = $('tagNew').value.trim(); if (to && to.toLowerCase() !== from) onGo(to); });
+    $('tagForm').scrollIntoView({ block: 'nearest' });
+  };
+  if (tree) {
+    // How many different tags a folder holds (a tag that is also a folder counts itself).
+    const tagsIn = n => (n.own ? 1 : 0) + n.children.reduce((t, k) => t + tagsIn(k), 0);
+    wireTagTree($('tagTreeBox'), tree, { mode: 'manage', on: {
+      show: path => {
+        // Close the sheet and put the folder in the search box (the list filters as if it was typed).
+        closeSheet();
+        const box = $('brQuery');
+        if (!box) return;
+        box.value = `tag:${/\s/.test(path) ? `"${path}"` : path}`;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        box.scrollIntoView({ block: 'nearest' });
+      },
+      rename: (path, node, li) => {
+        const own = li.hasAttribute('data-own'), isFolder = node.children.length && !own;
+        renameForm(isFolder ? `Rename the folder “${esc(node.name)}” to` : `Rename “${esc(own ? path : node.name)}” to`, path,
+          to => (isFolder ? apply(path, to, { folder: true, name: node.name }) : apply(path, to, { exact: true })));
+      },
+      remove: (path, node, li) => {
+        const own = li.hasAttribute('data-own'), isFolder = node.children.length && !own;
+        if (isFolder) confirmIn('tagEdit', `Remove the folder “${node.name}” and its ${tagsIn(node).toLocaleString('en')} ${tagsIn(node) === 1 ? 'tag' : 'tags'} from every card in ${scope}? The cards stay.`, 'Remove folder', () => apply(path, "", { folder: true, name: node.name }));
+        else confirmIn('tagEdit', `Remove the tag “${path}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(path, '', { exact: true }));
+      }
+    } });
+  }
   document.querySelectorAll('#sheet .tag-list li').forEach(li => {
     const tag = li.dataset.tag;
-    li.querySelector('[data-tag-rename]').addEventListener('click', () => {
-      $('tagEdit').innerHTML = `<form class="confirm" id="tagForm"><label class="field"><span>Rename “${esc(tag)}” to</span>
-        <input id="tagNew" value="${esc(tag)}" autocomplete="off" autocapitalize="off"></label>
-        <div class="sheet-actions"><button class="btn ghost" type="button" id="tagNo">Cancel</button><button class="btn primary" type="submit">Rename</button></div></form>`;
-      $('tagNew').select();
-      $('tagNo').addEventListener('click', () => { $('tagEdit').innerHTML = ''; });
-      $('tagForm').addEventListener('submit', e => { e.preventDefault(); const to = $('tagNew').value.trim(); if (to && to.toLowerCase() !== tag) apply(tag, to); });
-    });
+    li.querySelector('[data-tag-rename]').addEventListener('click', () => renameForm(`Rename “${esc(tag)}” to`, tag, to => apply(tag, to)));
     li.querySelector('[data-tag-remove]').addEventListener('click', () =>
       confirmIn('tagEdit', `Remove the tag “${tag}” from every card in ${scope}? The cards stay.`, 'Remove tag', () => apply(tag, '')));
   });

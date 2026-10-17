@@ -88,6 +88,12 @@ await page.locator('.mdeck').first().scrollIntoViewIfNeeded(); await page.screen
 await pickDeck('chem'); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 5);
 ok((await page.textContent('.pgrid .card:nth-child(2)')).includes('–'), 'filter: Chemistry has no reviews yet');
 ok((await page.locator('.mdeck h3').count()) === 0, 'filter: single deck has no deck heading');
+// Round 3 (E): the readiness number says it is an estimate
+const fine = page.locator('.ready-card details.fine');
+ok(await fine.count() === 1 && (await fine.locator('summary').textContent()).trim() === 'How sure is this?', 'readiness has a "How sure is this?" note');
+await fine.locator('summary').click();
+ok((await fine.textContent()).includes('It’s an estimate. It uses the standard FSRS memory model, not one tuned to you yet, and assumes you stop reviewing now. Treat it as a guide, not a promise.'), 'the note says it is an estimate: ' + (await fine.locator('p').textContent()).trim());
+await noHScroll('readiness note open');
 await pickDeck(''); await page.waitForFunction(() => document.querySelectorAll('.mtile').length === 17);
 // a huge deck: only the first squares are drawn, "Show more" adds the rest, and a pressed square stays one
 await page.evaluate(async () => {

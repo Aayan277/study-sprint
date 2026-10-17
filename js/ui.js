@@ -10,19 +10,24 @@ export function esc(s) {
 }
 
 // A short message that pops up above the tab bar for a few seconds.
-let toastTimer = 0;
-// `link` ({ href, label }) adds a link after the message and keeps the toast up longer, so it can be tapped.
-export function toast(msg, { link = null } = {}) {
+let toastTimer = 0, toastLeave = null;      // toastLeave: the hashchange listener of a held toast
+// `link` ({ href, label, onClick }) adds a link after the message and keeps the toast up longer, so it can be tapped.
+// With onClick the link does that instead of going to href, and the toast closes.
+// `hold` keeps the toast up until you leave the screen (or 10 minutes, or the next toast): for an Undo.
+export function toast(msg, { link = null, hold = false } = {}) {
   const t = $('toast');
+  if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one
   t.textContent = msg;
   if (link) {
     const a = document.createElement('a');
     a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
+    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); t.hidden = true; clearTimeout(toastTimer); link.onClick(); });
     t.append(' ', a);
   }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, link ? 7000 : 2600);
+  toastTimer = setTimeout(() => { t.hidden = true; }, hold ? 600000 : link ? 7000 : 2600);
+  if (hold) { toastLeave = () => { t.hidden = true; toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
