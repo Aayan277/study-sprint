@@ -1,0 +1,161 @@
+/* Clinical C, "calm / focus": more white space, one centred column, a review screen like a page of a good textbook.
+   <html data-ui="clinical" data-var="c">. Loaded after css/styles.css.
+   - desktop: the sidebar starts as its slim icon rail (the app's own collapsed state), the page is one centred 680px column
+   - Today: no panels; the heading, one line of figures, a thin progress bar, Start, and plain lists divided by hairlines
+   - Review: no card box or chrome; the question and answer sit on the page in a serif (card text only), ratings are quiet text buttons
+   - the UI stays in the system sans; the serif is the device's own (Charter / Iowan on Apple, Cambria / Georgia on Windows), no download
+   CSS only, plus the shared mocks and the rail default (see NOTES.md). */
+@import url("clinical-base.css");
+
+:root[data-ui="clinical"][data-var="c"]{
+  --f-read:"Iowan Old Style","Charter","Bitstream Charter","Sitka Text",Cambria,Georgia,serif;
+  --r-sm:6px; --r-md:8px; --r-lg:10px; --r-xl:12px;
+  --col:680px;
+}
+/* A slightly softer page in light mode: off-white page, white reading surfaces stay white */
+:root[data-ui="clinical"][data-var="c"][data-theme="light"]{--bg:#FBFBFA; --side-bg:#F6F6F4; --side-on:#ECECE9; --surface-2:#F4F4F2; --surface-3:#EAEAE7; --line:#E6E6E2; --line-strong:#D4D4CF}
+:root[data-ui="clinical"][data-var="c"][data-theme="dark"]{--bg:#161616; --surface-1:#1C1C1C; --surface-2:#232323; --surface-3:#2C2C2C; --side-bg:#131313; --side-on:#262626; --line:#2A2A2A; --line-strong:#3A3A3A}
+
+:root[data-ui="clinical"][data-var="c"] h1{font-size:1.875rem;font-weight:600;letter-spacing:-.02em}
+:root[data-ui="clinical"][data-var="c"] .eyebrow{font-size:var(--fs-sm);font-weight:400;color:var(--text-2);text-transform:none}
+:root[data-ui="clinical"][data-var="c"] .screen-head{margin:var(--s-2) 0 var(--s-5)}
+:root[data-ui="clinical"][data-var="c"] .section{margin-bottom:var(--s-8)}
+:root[data-ui="clinical"][data-var="c"] :is(.section > h2,.sec-head h2){font-size:var(--fs-sm);font-weight:600;color:var(--text-2);letter-spacing:0}
+:root[data-ui="clinical"][data-var="c"] .card{box-shadow:none;background:none;border-top:1px solid var(--line);border-radius:0;padding:var(--s-5) 0}
+
+/* ---------- Today: no panels ---------- */
+:root[data-ui="clinical"][data-var="c"] .today-hero{background:none;box-shadow:none;padding:0 0 var(--s-6);margin-bottom:var(--s-6);border-radius:0;border-bottom:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] .th-main{gap:var(--s-4)}
+:root[data-ui="clinical"][data-var="c"] .today-hero .ring{width:56px!important;height:56px!important}
+:root[data-ui="clinical"][data-var="c"] .ring-fg,:root[data-ui="clinical"][data-var="c"] .ring-bg{stroke-width:4px}
+:root[data-ui="clinical"][data-var="c"] .today-hero .th-main .ring-in b{font-size:1rem;font-weight:600}
+:root[data-ui="clinical"][data-var="c"] .today-hero .th-main .ring-in small{display:none}
+:root[data-ui="clinical"][data-var="c"] .th-label{display:none}
+:root[data-ui="clinical"][data-var="c"] .th-big{font-size:1.375rem;font-weight:600;letter-spacing:-.015em}
+:root[data-ui="clinical"][data-var="c"] .th-sub{font-size:var(--fs-base);color:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .th-sub b{font-weight:600}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak{margin:var(--s-4) 0 var(--s-5);font-size:var(--fs-sm);gap:4px 8px;width:100%}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak b{font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak > span:not(.frz-pill):not(.sr-only){flex-basis:auto;padding-left:0}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak > span:not(.frz-pill):not(.sr-only)::before{content:"·";margin-right:8px;color:var(--control)}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak .frz-pill{border:0;background:none;padding:0;color:var(--text-2);font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak .frz-pill .ico{display:none}
+:root[data-ui="clinical"][data-var="c"] .pgrid .card:first-child{background:none}
+:root[data-ui="clinical"][data-var="c"] .today-hero .streak .sb-go{margin-left:auto}
+:root[data-ui="clinical"][data-var="c"] .today-hero .btn.big{min-height:52px;font-size:var(--fs-base);font-weight:600;border-radius:var(--r-md)}
+/* All done: a short, calm paragraph and a plain secondary button */
+:root[data-ui="clinical"][data-var="c"] .today-hero:has(.th-done) .streak{margin-bottom:var(--s-4)}
+:root[data-ui="clinical"][data-var="c"] .th-done p{font-size:var(--fs-base);line-height:1.55}
+
+/* lists: rows on the page, divided by hairlines, no boxes */
+:root[data-ui="clinical"][data-var="c"] :is(.exams,.tdecks,.decks){gap:0;border-top:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] :is(.exam-row,.tdeck,.deck){background:none;box-shadow:none;border-radius:0;border-bottom:1px solid var(--line);padding-left:0!important;padding-right:0}
+:root[data-ui="clinical"][data-var="c"] :is(.tdeck,.deck):hover{background:none;box-shadow:none}
+:root[data-ui="clinical"][data-var="c"] :is(.tdeck,.deck):hover :is(.td-name,.deck-name){color:var(--accent-text)}
+:root[data-ui="clinical"][data-var="c"] .tdeck{min-height:68px;padding-top:var(--s-3);padding-bottom:var(--s-3)}
+:root[data-ui="clinical"][data-var="c"] .td-name{font-size:var(--fs-md);font-weight:600}
+:root[data-ui="clinical"][data-var="c"] .td-counts{font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="c"] .td-go .ico{width:20px;height:20px;padding:0;background:none!important;box-shadow:none!important;color:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .tdeck:hover .td-go .ico{color:var(--accent-text)}
+:root[data-ui="clinical"][data-var="c"] .exam-row{padding-top:var(--s-3);padding-bottom:var(--s-3)}
+:root[data-ui="clinical"][data-var="c"] .exam-link .ico{display:none}
+:root[data-ui="clinical"][data-var="c"] .exam-add{margin:var(--s-4) 0 var(--s-8)}
+:root[data-ui="clinical"][data-var="c"] .exam-chip{border-style:solid;border-color:var(--line-strong);border-radius:var(--r-pill)}
+
+/* ---------- Decks: one list ---------- */
+:root[data-ui="clinical"][data-var="c"] .deck{padding-top:var(--s-4);padding-bottom:var(--s-4)}
+:root[data-ui="clinical"][data-var="c"] .deck-name{font-size:var(--fs-md)}
+:root[data-ui="clinical"][data-var="c"] .deck-counts{font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="c"] .deck-go{background:none!important;box-shadow:inset 0 0 0 1px var(--line-strong)!important;color:var(--text-2)!important}
+:root[data-ui="clinical"][data-var="c"] .deck-go.lead{box-shadow:inset 0 0 0 1px var(--accent)!important;color:var(--accent-text)!important}
+:root[data-ui="clinical"][data-var="c"] .dr-cap{color:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .deck-search input{background:var(--surface-1);border-color:var(--line-strong);border-radius:var(--r-pill)}
+:root[data-ui="clinical"][data-var="c"] .deck-sort{background:none;box-shadow:none}
+:root[data-ui="clinical"][data-var="c"] .deck-sort button[aria-pressed="true"]{background:var(--surface-2);box-shadow:none}
+
+/* ---------- Deck page ---------- */
+:root[data-ui="clinical"][data-var="c"] .deck-summary{padding:var(--s-4) 0!important;border-bottom:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] .crows{background:none;box-shadow:none;border-radius:0;border-top:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] .crow-btn{padding-left:0;padding-right:0;min-height:60px}
+:root[data-ui="clinical"][data-var="c"] .crow + .crow .crow-btn{background-size:100% 1px;background-position:0 0}
+:root[data-ui="clinical"][data-var="c"] .crow-main .f{font-family:var(--f-read);font-weight:600;font-size:1.0625rem;letter-spacing:0}
+
+/* ---------- Review: a page, not a card ---------- */
+:root[data-ui="clinical"][data-var="c"] .rv-head{min-height:40px}
+:root[data-ui="clinical"][data-var="c"] .rv-counts{background:none;box-shadow:none;padding:0}
+:root[data-ui="clinical"][data-var="c"] .rv-counts span{padding:6px 5px}
+:root[data-ui="clinical"][data-var="c"] .rv-counts .now{background:none;box-shadow:inset 0 -2px 0 var(--line-strong);border-radius:0}
+:root[data-ui="clinical"][data-var="c"] .rv-head .link{background:none;box-shadow:none;color:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .rv-head .link:hover:not(:disabled){background:var(--surface-2)}
+:root[data-ui="clinical"][data-var="c"] .rv-prog{height:2px;background:var(--line)}
+:root[data-ui="clinical"][data-var="c"] .rv-prog i{background:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .rv-face{background:none;box-shadow:none;border-radius:0;padding:var(--s-5) var(--s-2) var(--s-4)}
+:root[data-ui="clinical"][data-var="c"] .flash-deck{text-align:center;color:var(--text-2);letter-spacing:.02em}
+:root[data-ui="clinical"][data-var="c"] .flash-front{font-family:var(--f-read);font-weight:600;letter-spacing:-.005em;line-height:1.25;font-size:clamp(1.625rem,7vw,2.25rem)}
+:root[data-ui="clinical"][data-var="c"] .flash-recap{font-family:var(--f-read);font-weight:600;color:var(--text-2);letter-spacing:0;font-size:clamp(1.125rem,5vw,1.375rem);line-height:1.3}
+:root[data-ui="clinical"][data-var="c"] .flash-ans::before{left:35%;right:35%;background:var(--line-strong)}
+:root[data-ui="clinical"][data-var="c"] .flash-back{font-family:var(--f-read);font-weight:400;letter-spacing:0;font-size:clamp(1.1875rem,5.2vw,1.375rem);line-height:1.6;color:var(--text)}
+:root[data-ui="clinical"][data-var="c"] .flash-hint{color:var(--text-2)}
+:root[data-ui="clinical"][data-var="c"] .ratebar{background:var(--bg)}
+:root[data-ui="clinical"][data-var="c"] .ratebar .btn.wide{min-height:52px;background:var(--surface-1);color:var(--text);border:1px solid var(--line-strong);box-shadow:none}
+:root[data-ui="clinical"][data-var="c"] .ratebar .btn.wide:hover{background:var(--surface-2)}
+:root[data-ui="clinical"][data-var="c"] .rates{gap:0;border-top:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] .rate{background:none!important;border:0;border-radius:0;min-height:64px}
+:root[data-ui="clinical"][data-var="c"] .rate + .rate{box-shadow:inset 1px 0 0 var(--line)}
+:root[data-ui="clinical"][data-var="c"] .rate:hover{background:var(--surface-2)!important}
+:root[data-ui="clinical"][data-var="c"] .rate b{font-weight:600}
+
+/* ---------- Stats and Settings: sections on the page ---------- */
+:root[data-ui="clinical"][data-var="c"] .pgrid{gap:0 var(--s-6)}
+:root[data-ui="clinical"][data-var="c"] .pgrid .card{padding:var(--s-4) 0}
+:root[data-ui="clinical"][data-var="c"] .pgrid .card h2{text-transform:none;letter-spacing:0;font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="c"] .set-nav{border-bottom:1px solid var(--line)}
+:root[data-ui="clinical"][data-var="c"] .set-nav a{border-color:transparent;background:none}
+:root[data-ui="clinical"][data-var="c"] .set-nav a:hover{background:var(--surface-2)}
+:root[data-ui="clinical"][data-var="c"] .more-toggle,:root[data-ui="clinical"][data-var="c"] .fold-toggle{background:none;box-shadow:none;border-top:1px solid var(--line);border-radius:0;padding-left:0}
+
+/* ---------- Phone ---------- */
+@media (max-width:1023px){
+  :root[data-ui="clinical"][data-var="c"] main{padding-left:20px;padding-right:20px}
+  :root[data-ui="clinical"][data-var="c"] .top{border-bottom-color:transparent;background:var(--bg)}
+  :root[data-ui="clinical"][data-var="c"] .tabs{background:var(--bg)}
+  :root[data-ui="clinical"][data-var="c"] .tab[aria-current="page"]{color:var(--text)}
+  :root[data-ui="clinical"][data-var="c"] .tab[aria-current="page"] svg{color:var(--text)}
+  :root[data-ui="clinical"][data-var="c"] body.focus main[data-route="review"]{padding-left:20px;padding-right:20px}
+}
+
+/* ---------- Desktop: icon rail, one centred column ---------- */
+@media (min-width:1024px){
+  :root[data-ui="clinical"][data-var="c"] :is(.top,.tabs){background:var(--side-bg);border-color:var(--line)}
+  :root[data-ui="clinical"][data-var="c"] .tab[aria-current="page"]{background:var(--side-on);box-shadow:none}
+  :root[data-ui="clinical"][data-var="c"] main{padding-top:56px}
+  :root[data-ui="clinical"][data-var="c"] main > .view{max-width:var(--col);margin:0 auto}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="stats"] > .view{max-width:880px}
+  :root[data-ui="clinical"][data-var="c"] main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view > *{max-width:none}
+  :root[data-ui="clinical"][data-var="c"] h1{font-size:2.125rem}
+  /* Today: one column; the hero is a stack, not a split */
+  :root[data-ui="clinical"][data-var="c"] .today-hero{display:block;padding:0 0 var(--s-6)}
+  :root[data-ui="clinical"][data-var="c"] .today-hero .ring{width:64px!important;height:64px!important}
+  :root[data-ui="clinical"][data-var="c"] .today-hero .th-main .ring-in b{font-size:1.125rem}
+  :root[data-ui="clinical"][data-var="c"] .th-big{font-size:1.625rem}
+  :root[data-ui="clinical"][data-var="c"] .today-hero .btn.big{width:100%}
+  :root[data-ui="clinical"][data-var="c"] .today-hero .streak .frz-pill::before{content:"·";margin-right:8px;color:var(--control)}
+  :root[data-ui="clinical"][data-var="c"] .tdecks,:root[data-ui="clinical"][data-var="c"] .exams{grid-template-columns:1fr}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="decks"] .decks{grid-template-columns:1fr;gap:0}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="decks"] .deck{min-height:0;padding:var(--s-4) 0}
+  /* the deck tree column stays hidden: the column layout has room enough */
+  :root[data-ui="clinical"][data-var="c"] .deck-tree{display:none!important}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="deck"]{margin-left:var(--side)!important;padding:56px 44px}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="deck"] > .view{max-width:760px;margin:0 auto}
+  /* Stats: one column of sections */
+  :root[data-ui="clinical"][data-var="c"] main[data-route="stats"] > .view{grid-template-columns:minmax(0,1fr);gap:0}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="stats"] :is(.ready-card,.stats-mastery.up,.cal-card){grid-column:1}
+  /* Review: a centred page, the text measure of a book */
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] > .view > *{max-width:720px}
+  :root[data-ui="clinical"][data-var="c"] body.focus main[data-route="review"] > .view{max-width:720px}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .rv-face{padding:var(--s-8) var(--s-4)}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .flash-front{font-size:2.5rem}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .flash-recap{font-size:1.5rem}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .flash-back{font-size:1.4375rem;line-height:1.6}
+  :root[data-ui="clinical"][data-var="c"] main[data-route="review"] .rate{min-height:68px}
+}

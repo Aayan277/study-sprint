@@ -1,0 +1,325 @@
+/* Study Sprint, Clinical base (design round 3). Loaded after css/styles.css, and @imported by each variant:
+     a-refined.css   <html data-ui="clinical" data-var="a">
+     b-compact.css   <html data-ui="clinical" data-var="b">
+     c-calm.css      <html data-ui="clinical" data-var="c">
+   This is the ui2 Clinical layer, trimmed to Clinical only and updated for v4.9 (goal ring, "All done for today").
+   Rules here apply to every variant; the variant files only add to them.
+   1. Shared component rules: no glow, no gradients, no blur, hairlines instead of shadows.
+   2. Neutral tokens (light, dark, OLED) and muted rating colours.
+   3. Accents: the 5 existing skins remapped (violet Indigo, ocean Blue, forest Teal, ember Rust, rose Plum).
+   Specificity: token blocks are :root[data-ui][data-theme] (0,3,0), accents add [data-skin] (0,4,0), so they beat
+   styles.css's theme blocks because this file loads later. Variant rules add [data-var] and so beat these. */
+
+/* ======================================================================
+   1. Shared: both styles
+   ====================================================================== */
+:root[data-ui="clinical"]{
+  --f-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --f-num:var(--f-ui);
+  --f-read:var(--f-ui);                     /* card text; C sets a serif */
+  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:10px; --r-xl:12px;
+  /* no glow anywhere: every glow in styles.css goes through these */
+  --a-glow:0; --a-soft:0; --a-hero:0;
+  --glow:transparent; --glow-soft:transparent;
+  --hero:var(--surface-1);
+  --hi:transparent;
+  /* tints a touch quieter */
+  --a-tint:.10; --a-line:.35;
+  /* mastery and heatmap: plain steps of the accent */
+  --lv-young:color-mix(in srgb,var(--accent) 50%,var(--surface-1));
+}
+:root[data-ui="clinical"] body{letter-spacing:-.003em}
+/* Tabular figures wherever numbers are compared (not on body: some fonts also widen hyphens with tnum) */
+:root[data-ui="clinical"] :is(.mono,.rv-counts,.ring-in,.big,.st,.rate span,.side-due,.side-badge,.dt-n,.chart-line span,.cap,.chart-x,.legend b,.td-counts b,.deck-counts b,.th-sub b,.streak b,.res-score,.stats4 .v,.hud b,.pick-n,.sd-counts b,.side-st span){font-variant-numeric:tabular-nums}
+
+/* --- frame: solid bars, no blur, no glowing tab indicator --- */
+:root[data-ui="clinical"] .top{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-ui="clinical"] .tabs{background:var(--surface-1);backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-ui="clinical"] .brand{font-weight:600;letter-spacing:-.01em}
+:root[data-ui="clinical"] .brand-mark{filter:none;width:22px;height:22px}
+:root[data-ui="clinical"] .brand-mark rect:first-child{fill:var(--line-strong)}
+:root[data-ui="clinical"] .tab{color:var(--text-2)}
+:root[data-ui="clinical"] .tab[aria-current="page"]{color:var(--accent-text)}
+:root[data-ui="clinical"] .tab[aria-current="page"] svg{color:var(--accent-text);filter:none}
+:root[data-ui="clinical"] .tab[aria-current="page"]::before{display:none}
+
+/* --- type: calmer headings, quieter eyebrows --- */
+:root[data-ui="clinical"] h1{font-weight:600;font-size:1.75rem;letter-spacing:-.02em;line-height:1.15}
+:root[data-ui="clinical"] .eyebrow,
+:root[data-ui="clinical"] .th-label{font:500 var(--fs-xs)/1.4 var(--f-ui);letter-spacing:0;text-transform:none;color:var(--text-2)}
+:root[data-ui="clinical"] .deck-code{letter-spacing:0;font-weight:500}
+:root[data-ui="clinical"] ::selection{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+
+/* --- buttons and controls: solid fills, no glow --- */
+:root[data-ui="clinical"] .btn{font-weight:550;letter-spacing:0}
+:root[data-ui="clinical"] .btn.primary{box-shadow:none}
+:root[data-ui="clinical"] .btn.primary:hover{box-shadow:none}
+:root[data-ui="clinical"] .btn.ghost{background:var(--surface-1);border-color:var(--line-strong)}
+:root[data-ui="clinical"] .btn.ghost:hover{background:var(--surface-2)}
+:root[data-ui="clinical"] .btn:active:not(:disabled){transform:none}
+:root[data-ui="clinical"] .btn.big{min-height:48px;font-size:var(--fs-base)}
+:root[data-ui="clinical"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"],.mode:has(input:checked),.skin[aria-pressed="true"]){box-shadow:none}
+:root[data-ui="clinical"] .switch:checked{box-shadow:none}
+:root[data-ui="clinical"] .switch::after{box-shadow:0 1px 2px rgb(0 0 0 / .2)}
+:root[data-ui="clinical"] :is(.field input,.field select,.field textarea,.br-controls input,.br-controls select,.row-form input,#pasteBox,.typeform input,.rich,.adv-row input,.pcells textarea):focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+:root[data-ui="clinical"] .set-nav{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-ui="clinical"] .set-nav a{border-radius:var(--r-sm);background:var(--surface-1);font-weight:500}
+:root[data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);border-color:var(--line-strong)}
+:root[data-ui="clinical"] .set-sub{color:var(--text-2);font-weight:600;font-size:var(--fs-xs);letter-spacing:.02em;text-transform:uppercase}
+:root[data-ui="clinical"] dialog.sheet::backdrop{backdrop-filter:none}
+
+:root[data-ui="clinical"] :is(.chip span,.tchip,.flagbtn){border-radius:var(--r-sm);background:var(--surface-1)}
+:root[data-ui="clinical"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:var(--surface-2);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+:root[data-ui="clinical"] .chip:hover span,:root[data-ui="clinical"] .tchip:hover{border-color:var(--control)}
+:root[data-ui="clinical"] .mode:has(input:checked){background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--accent)}
+:root[data-ui="clinical"] :is(.mode,.skin,.opt):hover{border-color:var(--control)}
+
+/* --- Today --- */
+:root[data-ui="clinical"] .today-hero{background:var(--surface-1);box-shadow:var(--e-1)}
+:root[data-ui="clinical"] .th-big{text-shadow:none;font-weight:600;letter-spacing:-.025em}
+:root[data-ui="clinical"] .ring-fg{filter:none}
+:root[data-ui="clinical"] .ring-bg{stroke:var(--surface-3)}
+:root[data-ui="clinical"] .streak.kept .ico{filter:none}
+:root[data-ui="clinical"] .resume{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+/* Deck color: a small dot before the name instead of a glowing edge stripe */
+:root[data-ui="clinical"] :is(.deck,.tdeck,.exam-row,.deck-summary)::before{display:none}
+:root[data-ui="clinical"] :is(.td-name,.deck-name)::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-right:8px;vertical-align:1px}
+:root[data-ui="clinical"] .exam-link .ico{color:var(--deck)}
+:root[data-ui="clinical"] :is(.tdeck,.deck,.exam-row){padding-left:var(--s-4)}
+:root[data-ui="clinical"] :is(.tdeck,.deck):hover{box-shadow:var(--e-2)}
+:root[data-ui="clinical"] .td-name,:root[data-ui="clinical"] .deck-name{letter-spacing:-.01em}
+/* Due counts: plain text, not glowing pills */
+:root[data-ui="clinical"] :is(.td-counts,.deck-counts) .due{padding:0;background:none;box-shadow:none;color:var(--text-2)}
+:root[data-ui="clinical"] :is(.td-counts,.deck-counts) .due b{color:var(--accent-text);font-weight:650}
+:root[data-ui="clinical"] :is(.td-counts,.deck-counts) .due.zero b{color:var(--text);font-weight:500}
+/* Round play buttons become quiet outlined buttons; the "next up" one is solid */
+:root[data-ui="clinical"] .td-go .ico,
+:root[data-ui="clinical"] .deck-go{background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text-2)}
+:root[data-ui="clinical"] .tdeck:hover .td-go .ico,
+:root[data-ui="clinical"] .deck-go:hover{color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}
+:root[data-ui="clinical"] .deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:none}
+:root[data-ui="clinical"] :is(.tdeck.done .td-go .ico,.deck-go.done){background:none;box-shadow:inset 0 0 0 1px var(--line);color:var(--good)}
+/* Exams: quiet outlined badge, amber text */
+:root[data-ui="clinical"] .exam-badge{background:none;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--exam);font-weight:550;border-radius:var(--r-xs)}
+:root[data-ui="clinical"] .exam-badge.soon{background:none;box-shadow:inset 0 0 0 1px var(--again-line);color:var(--again)}
+:root[data-ui="clinical"] .exam-chip{border-style:solid;border-color:var(--line-strong);border-radius:var(--r-sm)}
+:root[data-ui="clinical"] .exam-chip .ico{color:var(--text-2)}
+:root[data-ui="clinical"] .streak .frz-pill{border-radius:var(--r-xs)}
+:root[data-ui="clinical"] .streak .frz-pill:not(.used){border-style:solid;border-color:var(--line)}
+
+/* --- Deck page and card list --- */
+:root[data-ui="clinical"] .deck-summary{padding-left:var(--s-4)}
+:root[data-ui="clinical"] .st{border-radius:var(--r-xs);font-weight:550}
+:root[data-ui="clinical"] .st-due{background:none;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--accent-text)}
+:root[data-ui="clinical"] .st-new{background:none;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--easy)}
+:root[data-ui="clinical"] .st-learning{background:none;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--hard)}
+:root[data-ui="clinical"] .crow.selected .crow-btn,:root[data-ui="clinical"] .crow.sel .crow-btn{background-color:var(--surface-2)}
+:root[data-ui="clinical"] .lv-mature,:root[data-ui="clinical"] .mtile.lv-mature{box-shadow:none}
+:root[data-ui="clinical"] .mbar{height:6px;border-radius:var(--r-xs)}
+:root[data-ui="clinical"] .mbar span{border-radius:1px}
+:root[data-ui="clinical"] .more-menu{background:var(--surface-1);box-shadow:var(--e-3)}
+:root[data-ui="clinical"] .more-menu button:hover{background:var(--surface-2)}
+:root[data-ui="clinical"] .more-btn{background:var(--surface-1);border-color:var(--line-strong)}
+:root[data-ui="clinical"] .bulkbar{border-color:var(--line-strong)}
+
+/* --- Review: a plain sheet of paper, rating buttons with colored words --- */
+:root[data-ui="clinical"] .flash,
+:root[data-ui="clinical"] .rv-face{background:var(--surface-1);box-shadow:var(--e-1)}
+:root[data-ui="clinical"] .flash.rv-card{background:none;box-shadow:none}
+:root[data-ui="clinical"] .flash-ans::before{background:var(--line);box-shadow:none}
+:root[data-ui="clinical"] .flash-front{font-family:var(--f-read);font-weight:600;letter-spacing:-.02em}
+:root[data-ui="clinical"] .flash-recap{font-family:var(--f-read);font-weight:500;letter-spacing:-.01em;color:var(--text-2)}
+:root[data-ui="clinical"] .flash-back{font-family:var(--f-read);font-weight:400;letter-spacing:0;color:var(--text)}
+:root[data-ui="clinical"] .flash-deck{color:var(--text-2)}
+:root[data-ui="clinical"] .rv-prog i{box-shadow:none}
+:root[data-ui="clinical"] .rv-counts .now{background:var(--surface-2)}
+:root[data-ui="clinical"] .ratebar{background:var(--bg)}
+:root[data-ui="clinical"] .rates{gap:8px}
+:root[data-ui="clinical"] .rate{background:var(--surface-1);border-color:var(--line-strong);gap:2px}
+:root[data-ui="clinical"] .rate::before{display:none}
+:root[data-ui="clinical"] .rate b{color:inherit;font-weight:600}
+:root[data-ui="clinical"] .rate span{color:var(--text-2);font-weight:500}
+:root[data-ui="clinical"] .rate:hover{background:var(--surface-2);border-color:currentColor;box-shadow:none}
+:root[data-ui="clinical"] .rate:active{transform:none}
+:root[data-ui="clinical"] .rate.suggested{box-shadow:inset 0 0 0 1px currentColor}
+:root[data-ui="clinical"] .savebar{background:var(--bg)}
+:root[data-ui="clinical"] .cloze-blank{box-shadow:inset 0 0 0 1px var(--line-strong);background:var(--surface-2)}
+:root[data-ui="clinical"] mark.cloze-ans{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none;text-decoration:underline 2px color-mix(in srgb,var(--accent) 50%,transparent);text-underline-offset:3px}
+
+/* --- Play --- */
+:root[data-ui="clinical"] .timer-fill{box-shadow:none}
+:root[data-ui="clinical"] .stamp{text-shadow:none;transform:none;border-width:2px}
+:root[data-ui="clinical"] .opt.correct::after{display:none}
+
+/* --- Stats: flat bars and tiles --- */
+:root[data-ui="clinical"] .bar{background:color-mix(in srgb,var(--accent) 72%,var(--surface-1));border-radius:2px 2px 0 0}
+:root[data-ui="clinical"] .col:last-child .bar,
+:root[data-ui="clinical"] .col:hover .bar{background:var(--accent);box-shadow:none}
+:root[data-ui="clinical"] .pgrid .card:first-child{background:var(--surface-1)}
+:root[data-ui="clinical"] .pgrid .card:first-child .big{text-shadow:none}
+:root[data-ui="clinical"] .pgrid .card h2{letter-spacing:.02em;font-weight:600}
+:root[data-ui="clinical"] .pgrid .big{font-weight:600;letter-spacing:-.03em}
+:root[data-ui="clinical"] .wd.on i{box-shadow:none}
+:root[data-ui="clinical"] .cal-grid i.lv4,:root[data-ui="clinical"] .cal-key i.lv4{box-shadow:none}
+:root[data-ui="clinical"] .cal-grid i,:root[data-ui="clinical"] .cal-key i{border-radius:2px}
+:root[data-ui="clinical"] .ready-card{background:var(--surface-1)}
+:root[data-ui="clinical"] .stats-scope .pick-btn{background:var(--surface-1);border-color:var(--line-strong)}
+:root[data-ui="clinical"] .info-fold[open] summary{background:var(--surface-2)}
+:root[data-ui="clinical"] .mhead h2{font-weight:600}
+
+/* --- Settings: accent choices are plain swatches --- */
+:root[data-ui="clinical"] .skin{padding:10px 12px;border-color:var(--line-strong)}
+:root[data-ui="clinical"] .skin[aria-pressed="true"]{background:var(--surface-2);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+:root[data-ui="clinical"] .skin .pv{width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:inset 0 0 0 1px rgb(0 0 0 / .12)}
+:root[data-ui="clinical"] .skin .pv b{display:none}
+:root[data-ui="clinical"] .skin .nt{display:none}
+:root[data-ui="clinical"] .skins{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (min-width:1024px){
+  :root[data-ui="clinical"] .skins{grid-template-columns:repeat(5,minmax(0,1fr))}
+  :root[data-ui="clinical"] .skins .skin{flex-direction:row;align-items:center;gap:10px}
+  :root[data-ui="clinical"] .skins .skin .pv{width:20px;height:20px}
+}
+/* The proposed "Style" row (a segmented control; mocked into the page for the preview) */
+.ui-seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;padding:3px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);max-width:100%}
+.ui-seg button{border:0;background:none;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);min-height:36px;padding:0 16px;border-radius:calc(var(--r-md) - 2px);cursor:pointer;white-space:nowrap}
+.ui-seg button[aria-pressed="true"]{background:var(--surface-1);color:var(--text);box-shadow:0 0 0 1px var(--line-strong),0 1px 2px rgb(0 0 0 / .06)}
+
+/* --- Desktop sidebar --- */
+@media (min-width:1024px){
+  :root[data-ui="clinical"] .top,
+  :root[data-ui="clinical"] .tabs{background:var(--side-bg)}
+  :root[data-ui="clinical"] .tab{color:var(--text-2)}
+  :root[data-ui="clinical"] .tab[aria-current="page"]{background:var(--side-on);color:var(--text);box-shadow:none}
+  :root[data-ui="clinical"] .tab[aria-current="page"] svg{color:var(--text)}
+  :root[data-ui="clinical"] .tab:hover{background:var(--side-on)}
+  :root[data-ui="clinical"] .side-add{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
+  :root[data-ui="clinical"] .side-add svg{color:var(--text-2)}
+  :root[data-ui="clinical"] .side-badge,
+  :root[data-ui="clinical"] .tab[aria-current="page"] .side-badge{background:none;box-shadow:none;color:var(--text-2);font-weight:500}
+  :root[data-ui="clinical"] .side-head{letter-spacing:.02em;color:var(--text-2)}
+  :root[data-ui="clinical"] .side-deck:not(.side-new)::before{left:16px;top:50%;bottom:auto;width:7px;height:7px;margin-top:-3.5px;border-radius:50%}
+  :root[data-ui="clinical"] .side-deck[aria-current="page"]{background:var(--side-on);box-shadow:none}
+  :root[data-ui="clinical"] .side-deck:hover{background:var(--side-on)}
+  :root[data-ui="clinical"] .side-exam{background:none;box-shadow:none;color:var(--exam);font-weight:550;padding:0 2px}
+  :root[data-ui="clinical"] .side-exam.soon{background:none;box-shadow:none;color:var(--again)}
+  :root[data-ui="clinical"] .side-dot{box-shadow:none}
+  :root[data-ui="clinical"] .side-streak.kept .ring-in .ico{filter:none}
+  :root[data-ui="clinical"] .side-streak:hover,
+  :root[data-ui="clinical"] .side-sync:hover,
+  :root[data-ui="clinical"] .side-set:hover,
+  :root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}
+  :root[data-ui="clinical"] .today-hero{padding:var(--s-6) var(--s-8)}
+  :root[data-ui="clinical"] .th-big{font-size:2rem}
+}
+
+/* --- Import (the sparkle "AI" button becomes an ordinary button), motion halos, first run --- */
+:root[data-ui="clinical"] #claudeBtn{background:var(--surface-1);border-color:var(--line-strong);box-shadow:none}
+:root[data-ui="clinical"] #claudeBtn::before{display:none}
+:root[data-ui="clinical"] .fx-glow-h1::before{display:none}
+:root[data-ui="clinical"] .fx-ghost{background:var(--surface-1);box-shadow:var(--e-2)}
+:root[data-ui="clinical"] :is(.fr-next,.wl-opt.fr-first){background:var(--surface-1)}
+:root[data-ui="clinical"] .wl-bar i.on,:root[data-ui="clinical"] .wl-done{box-shadow:none}
+:root[data-ui="clinical"] .inst-icon{box-shadow:0 0 0 1px var(--line-strong)}
+
+/* ======================================================================
+   2. Neutral tokens per style and mode
+   ====================================================================== */
+/* ---- Clinical, light: white page, cool graphite text ---- */
+:root[data-ui="clinical"][data-theme="light"]{
+  --bg:#FFFFFF; --surface-1:#FFFFFF; --surface-2:#F5F6F8; --surface-3:#EBEDF0; --surface-sunken:#FFFFFF;
+  --side-bg:#F6F7F9; --side-on:#E9EBEF;
+  --text:#14171C; --text-2:#4A5260; --text-3:#5C6470; --control:#868D98;
+  --line:#E3E6EA; --line-strong:#D2D6DC;
+  --e-1:0 0 0 1px var(--line);
+  --e-2:0 0 0 1px var(--line-strong),0 1px 3px rgb(16 24 40 / .06);
+  --e-3:0 0 0 1px var(--line),0 16px 40px -12px rgb(16 24 40 / .22);
+  --scrim:rgb(16 24 40 / .40);
+}
+/* ---- Clinical, dark: graphite, not black-blue ---- */
+:root[data-ui="clinical"][data-theme="dark"]{
+  --bg:#131416; --surface-1:#1B1C1F; --surface-2:#222327; --surface-3:#2B2D31; --surface-sunken:#151618;
+  --side-bg:#17181A; --side-on:#26272B;
+  --text:#ECEDEF; --text-2:#A8ADB6; --text-3:#90959E; --control:#6C727C;
+  --line:#2A2C30; --line-strong:#383A40;
+  --e-1:0 0 0 1px var(--line);
+  --e-2:0 0 0 1px var(--line-strong);
+  --e-3:0 0 0 1px var(--line-strong),0 20px 48px -16px rgb(0 0 0 / .7);
+  --scrim:rgb(0 0 0 / .6);
+}
+/* OLED black still works in dark mode */
+:root[data-ui="clinical"][data-oled="on"][data-theme="dark"]{
+  --bg:#000000; --surface-1:#0E0E10; --surface-2:#161618; --surface-3:#1F1F22; --surface-sunken:#08080A; --side-bg:#050506; --side-on:#1A1A1D;
+}
+
+/* Rating colors: muted, still clearly four. Light values are 4.5:1+ on white; dark values 4.5:1+ on the dark card. */
+:root[data-ui="clinical"][data-theme="light"]{
+  --again:#B42318; --again-tint:#FDF1F0; --again-line:#F2C4BF;
+  --hard:#975A06;  --hard-tint:#FDF6EA;  --hard-line:#EBD3AA;
+  --good:#18794E;  --good-tint:#EEF7F2;  --good-line:#BFDDCC;
+  --easy:#2457B5;  --easy-tint:#EFF3FB;  --easy-line:#C3D3F0;
+}
+:root[data-ui="clinical"][data-theme="dark"]{
+  --again:#F2867C; --again-tint:rgb(242 134 124 / .10); --again-line:rgb(242 134 124 / .35);
+  --hard:#E0AE5C;  --hard-tint:rgb(224 174 92 / .10);  --hard-line:rgb(224 174 92 / .32);
+  --good:#6BC195;  --good-tint:rgb(107 193 149 / .10); --good-line:rgb(107 193 149 / .32);
+  --easy:#86AEF0;  --easy-tint:rgb(134 174 240 / .10); --easy-line:rgb(134 174 240 / .34);
+  --on-role:#121314;
+}
+
+/* ======================================================================
+   3. Accents (the 5 skins, remapped). --accent = fills and rings, --accent-text = links and small text,
+      --on-accent = text on a filled button. Previews (.pv) in Settings get the same values.
+   ====================================================================== */
+/* Light */
+:root[data-ui="clinical"][data-theme="light"][data-skin="violet"],:root[data-ui="clinical"][data-theme="light"] .pv[data-skin="violet"]{--accent:#4F46BA; --accent-text:#4239A8; --accent-hover:#4239A8; --on-accent:#FFFFFF; --acc:79 70 186}
+:root[data-ui="clinical"][data-theme="light"][data-skin="ocean"], :root[data-ui="clinical"][data-theme="light"] .pv[data-skin="ocean"] {--accent:#1F5FBF; --accent-text:#1A52A6; --accent-hover:#1A52A6; --on-accent:#FFFFFF; --acc:31 95 191}
+:root[data-ui="clinical"][data-theme="light"][data-skin="forest"],:root[data-ui="clinical"][data-theme="light"] .pv[data-skin="forest"]{--accent:#0E6B68; --accent-text:#0B5D5A; --accent-hover:#0B5D5A; --on-accent:#FFFFFF; --acc:14 107 104}
+:root[data-ui="clinical"][data-theme="light"][data-skin="ember"], :root[data-ui="clinical"][data-theme="light"] .pv[data-skin="ember"] {--accent:#A94A1C; --accent-text:#963F15; --accent-hover:#963F15; --on-accent:#FFFFFF; --acc:169 74 28}
+:root[data-ui="clinical"][data-theme="light"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="light"] .pv[data-skin="rose"]  {--accent:#97366A; --accent-text:#852D5C; --accent-hover:#852D5C; --on-accent:#FFFFFF; --acc:151 54 106}
+/* Dark: a mid tone for fills and rings (white text on it, 4.5:1+; 3:1+ against the card), a light tone for links and small text */
+:root[data-ui="clinical"][data-theme="dark"][data-skin="violet"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="violet"]{--accent:#5F66DC; --accent-text:#ADA8F0; --accent-hover:#6E75E2; --on-accent:#FFFFFF; --acc:95 102 220}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="ocean"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ocean"] {--accent:#3B6FD4; --accent-text:#93B6F0; --accent-hover:#4A7CDB; --on-accent:#FFFFFF; --acc:59 111 212}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="forest"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="forest"]{--accent:#1E7773; --accent-text:#7FCCC6; --accent-hover:#25827E; --on-accent:#FFFFFF; --acc:30 119 115}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="ember"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ember"] {--accent:#B4571F; --accent-text:#E8A683; --accent-hover:#BF6229; --on-accent:#FFFFFF; --acc:180 87 31}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="rose"]  {--accent:#B04C82; --accent-text:#E29EC0; --accent-hover:#BA578C; --on-accent:#FFFFFF; --acc:176 76 130}
+
+/* ======================================================================
+   4. Style-specific
+   ====================================================================== */
+/* ---- Type sizes (variants adjust) ---- */
+:root[data-ui="clinical"] h1{font-size:1.625rem}
+:root[data-ui="clinical"] .screen-head{margin-bottom:var(--s-4)}
+:root[data-ui="clinical"] .card{padding:14px var(--s-4)}
+:root[data-ui="clinical"] .today-hero{padding:var(--s-4)}
+:root[data-ui="clinical"] .tdeck{min-height:60px;padding-top:10px;padding-bottom:10px}
+:root[data-ui="clinical"] .tdecks,:root[data-ui="clinical"] .decks{gap:6px}
+:root[data-ui="clinical"] .th-big{font-size:1.375rem}
+:root[data-ui="clinical"] .flash-front{font-size:clamp(1.5rem,6.6vw,2.125rem)}
+:root[data-ui="clinical"] .flash-back{font-size:clamp(1.0625rem,4.6vw,1.25rem);line-height:1.5}
+:root[data-ui="clinical"] .flash-recap{font-size:clamp(1.0625rem,4.6vw,1.3rem)}
+@media (min-width:1024px){
+  :root[data-ui="clinical"] main[data-route="review"] .flash-front{font-size:2.5rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-recap{font-size:1.4rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-back{font-size:1.3rem}
+  :root[data-ui="clinical"] .today-hero{padding:var(--s-5) var(--s-6)}
+  :root[data-ui="clinical"] .th-big{font-size:1.75rem}
+}
+
+
+/* ======================================================================
+   4. v4.9 additions (all variants)
+   ====================================================================== */
+/* "All done for today": no repeated headline, no "0 due · 0 new"; the ring turns a quiet green; extra study is secondary */
+:root[data-ui="clinical"] .today-hero:has(.th-done) .th-sub,
+:root[data-ui="clinical"] .th-done > b{display:none}
+:root[data-ui="clinical"] .today-hero:has(.th-done) .ring-fg{stroke:var(--good)}
+:root[data-ui="clinical"] .ring-check{color:var(--good);width:26px;height:26px}
+:root[data-ui="clinical"] .th-done p{font-size:var(--fs-sm);color:var(--text-2);margin:0 0 var(--s-3)}
+:root[data-ui="clinical"] .th-done .th-extra{color:var(--accent-text)}
+:root[data-ui="clinical"] .th-done .th-extra.btn{min-height:40px;padding:8px 16px;color:var(--text);font-size:var(--fs-sm);font-weight:550;background:var(--surface-1);border:1px solid var(--line-strong)}
+:root[data-ui="clinical"] .th-done .th-extra.btn:hover{background:var(--surface-2)}
+/* The rating buttons' coloured top edge and the tinted fills are gone in every variant */
+:root[data-ui="clinical"] :is(.rate.r1,.rate.r2,.rate.r3,.rate.r4){background:var(--surface-1)}
+:root[data-ui="clinical"] .ring-bg{stroke:var(--surface-3)}
+/* Brand mark: plain, no second "card" behind it */
+:root[data-ui="clinical"] .brand-mark rect:first-child{display:none}

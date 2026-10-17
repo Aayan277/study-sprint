@@ -1,0 +1,95 @@
+/* Clinical A, "refined": the ui2 Clinical, polished. Same layout as today's app; quieter and tidier.
+   <html data-ui="clinical" data-var="a">. Loaded after css/styles.css.
+   What changes from ui2 Clinical:
+   - Today: one tidy summary panel (ring, figures, a one-line streak, Start), deck rows as one grouped list with dividers
+   - lists: grouped (iOS Settings / clinical reference style) instead of separate floating cards
+   - desktop: white sidebar with a hairline, the page in an 960px column, the Start button a normal width
+   - review: a hairline sheet, a plain divider before the answer, calm rating buttons
+   CSS only, apart from the shared mocks (the "Extra study" button and the Style row in Settings). */
+@import url("clinical-base.css");
+
+:root[data-ui="clinical"][data-var="a"]{ --r-lg:10px; --r-xl:12px; }
+:root[data-ui="clinical"][data-var="a"] h1{font-size:1.5rem;font-weight:650;letter-spacing:-.018em}
+:root[data-ui="clinical"][data-var="a"] .eyebrow{font-size:var(--fs-xs);color:var(--text-2);font-weight:500}
+:root[data-ui="clinical"][data-var="a"] .section > h2,
+:root[data-ui="clinical"][data-var="a"] .sec-head h2{font-size:var(--fs-sm);font-weight:600;color:var(--text-2);letter-spacing:0}
+
+/* ---------- Today: one summary panel ---------- */
+:root[data-ui="clinical"][data-var="a"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
+:root[data-ui="clinical"][data-var="a"] .th-main{gap:var(--s-4)}
+:root[data-ui="clinical"][data-var="a"] .th-label{font-size:var(--fs-xs);font-weight:500;color:var(--text-2)}
+:root[data-ui="clinical"][data-var="a"] .th-big{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+:root[data-ui="clinical"][data-var="a"] .th-sub{font-size:var(--fs-sm)}
+/* streak: one quiet line under a hairline instead of a three-line block */
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak{margin:var(--s-4) 0 var(--s-4);padding:var(--s-3) 0 0;border-top:1px solid var(--line);font-size:var(--fs-sm);gap:4px 8px;width:100%}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak b{font-size:var(--fs-sm)}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak > span:not(.frz-pill):not(.sr-only){flex-basis:auto;padding-left:0;color:var(--text-2)}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak > span:not(.frz-pill):not(.sr-only)::before{content:"·";margin-right:8px;color:var(--control)}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak .frz-pill{font-size:var(--fs-xs);padding:1px 6px}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak .sb-go{margin-left:auto}
+:root[data-ui="clinical"][data-var="a"] .today-hero .streak.kept .ico:first-child{color:var(--hard)}
+:root[data-ui="clinical"][data-var="a"] .today-hero .btn.big{min-height:48px;font-size:var(--fs-base);font-weight:600}
+:root[data-ui="clinical"][data-var="a"] .th-done{padding-top:var(--s-1)}
+
+/* exam rows and deck rows: grouped lists (one bordered box, rows divided by hairlines) */
+:root[data-ui="clinical"][data-var="a"] :is(.exams,.tdecks){gap:0;border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line);background:var(--surface-1);overflow:hidden}
+:root[data-ui="clinical"][data-var="a"] :is(.exam-row,.tdeck){border-radius:0;box-shadow:none;background:var(--surface-1)}
+:root[data-ui="clinical"][data-var="a"] :is(.exam-row,.tdeck) + :is(.exam-row,.tdeck){box-shadow:inset 0 1px 0 var(--line)}
+:root[data-ui="clinical"][data-var="a"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
+:root[data-ui="clinical"][data-var="a"] .tdeck + .tdeck:hover{box-shadow:inset 0 1px 0 var(--line)}
+:root[data-ui="clinical"][data-var="a"] .tdeck{min-height:64px;padding:10px 12px 10px 16px}
+:root[data-ui="clinical"][data-var="a"] .td-name{font-size:var(--fs-base);font-weight:600}
+:root[data-ui="clinical"][data-var="a"] .td-go .ico{width:32px;height:32px;padding:8px}
+:root[data-ui="clinical"][data-var="a"] .exam-add{margin-top:var(--s-3)}
+:root[data-ui="clinical"][data-var="a"] .exam-chip{border-radius:var(--r-sm);border-style:dashed;border-color:var(--control)}
+
+/* ---------- Decks ---------- */
+:root[data-ui="clinical"][data-var="a"] .deck{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-lg)}
+:root[data-ui="clinical"][data-var="a"] .deck:hover{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
+:root[data-ui="clinical"][data-var="a"] .deck-ring .ring-fg{stroke:var(--accent)}
+:root[data-ui="clinical"][data-var="a"] .dr-cap{color:var(--text-2)}
+:root[data-ui="clinical"][data-var="a"] .deck-search input{background:var(--surface-1);border-color:var(--line-strong)}
+:root[data-ui="clinical"][data-var="a"] .deck-sort{box-shadow:0 0 0 1px var(--line)}
+:root[data-ui="clinical"][data-var="a"] .deck-sort button[aria-pressed="true"]{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
+
+/* ---------- Review ---------- */
+:root[data-ui="clinical"][data-var="a"] .rv-face{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-xl)}
+:root[data-ui="clinical"][data-var="a"] .rv-counts{box-shadow:0 0 0 1px var(--line)}
+:root[data-ui="clinical"][data-var="a"] .rv-head .link{box-shadow:0 0 0 1px var(--line)}
+:root[data-ui="clinical"][data-var="a"] .rv-prog{height:3px;background:var(--surface-3)}
+:root[data-ui="clinical"][data-var="a"] .flash-front{font-weight:600;letter-spacing:-.02em}
+:root[data-ui="clinical"][data-var="a"] .ratebar .btn.wide{min-height:52px}
+:root[data-ui="clinical"][data-var="a"] .rate{min-height:60px;border-color:var(--line-strong)}
+:root[data-ui="clinical"][data-var="a"] .rate b{font-size:var(--fs-base)}
+
+/* ---------- Stats and Settings: hairline cards ---------- */
+:root[data-ui="clinical"][data-var="a"] .card{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-lg)}
+
+/* ---------- Desktop ---------- */
+@media (min-width:1024px){
+  :root[data-ui="clinical"][data-var="a"]{--side:240px}
+  :root[data-ui="clinical"][data-var="a"] :is(.top,.tabs){background:var(--side-bg)}
+  :root[data-ui="clinical"][data-var="a"] .tab[aria-current="page"]{background:var(--surface-1);box-shadow:0 0 0 1px var(--line)}
+  :root[data-ui="clinical"][data-var="a"] .tab[aria-current="page"] svg{color:var(--accent-text)}
+  :root[data-ui="clinical"][data-var="a"] main{padding:36px 48px 56px}
+  :root[data-ui="clinical"][data-var="a"] main[data-route="today"] > .view{max-width:960px;margin:0}
+  :root[data-ui="clinical"][data-var="a"] main:is([data-route="decks"],[data-route="stats"],[data-route="deck"]) > .view{margin:0}
+  /* Today: ring + figures on the left, the Start button (normal width) on the right, streak as a footer line */
+  :root[data-ui="clinical"][data-var="a"] .today-hero{grid-template-columns:minmax(0,1fr) 300px;column-gap:var(--s-6);padding:var(--s-5) var(--s-6)}
+  :root[data-ui="clinical"][data-var="a"] .today-hero .ring{width:88px!important;height:88px!important}
+  :root[data-ui="clinical"][data-var="a"] .today-hero .th-main .ring-in b{font-size:1.5rem}
+  :root[data-ui="clinical"][data-var="a"] .th-big{font-size:1.75rem}
+  :root[data-ui="clinical"][data-var="a"] .today-hero .streak{grid-column:1 / -1;grid-row:2;margin:var(--s-5) 0 0}
+  :root[data-ui="clinical"][data-var="a"] .today-hero .btn.big,
+  :root[data-ui="clinical"][data-var="a"] .today-hero .th-done{grid-column:2;grid-row:1;align-self:center}
+  :root[data-ui="clinical"][data-var="a"] .tdecks{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+  :root[data-ui="clinical"][data-var="a"] .tdecks .tdeck{box-shadow:inset 0 1px 0 var(--line)}
+  :root[data-ui="clinical"][data-var="a"] .tdecks .tdeck:nth-child(-n+2){box-shadow:none}
+  :root[data-ui="clinical"][data-var="a"] .tdecks .tdeck:nth-child(even){box-shadow:inset 1px 0 0 var(--line),inset 0 1px 0 var(--line)}
+  :root[data-ui="clinical"][data-var="a"] .tdecks .tdeck:nth-child(2){box-shadow:inset 1px 0 0 var(--line)}
+  :root[data-ui="clinical"][data-var="a"] .exams{grid-template-columns:repeat(2,minmax(0,1fr))}
+  :root[data-ui="clinical"][data-var="a"] .exams .exam-row + .exam-row{box-shadow:inset 1px 0 0 var(--line)}
+  :root[data-ui="clinical"][data-var="a"] main[data-route="decks"] .decks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  :root[data-ui="clinical"][data-var="a"] main[data-route="decks"] .deck{min-height:132px}
+  :root[data-ui="clinical"][data-var="a"] main[data-route="review"] .rv-face{padding:var(--s-8) var(--s-10)}
+}
