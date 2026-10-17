@@ -2,8 +2,9 @@
 // editable preview, then save them into a deck. The actual format detection lives in import.js.
 
 import * as db from './db.js';
-import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
-import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport } from './anki.js';
+import { parseText, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
+import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
+import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
 import { formatHTML } from './format.js';
 import { hasMath } from './math.js';
@@ -41,6 +42,8 @@ export async function renderImport(el, arg) {
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
     suggestedName: '',     // a deck name taken from the file name
     noCloze: false,        // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
+    keepFields: true,      // the "Keep the other fields" switch (Anki notes with more than two fields)
+    makeReverse: true,     // the "Make the reverse cards too" switch (notes that work in both directions)
     bringSounds: true,     // the "Bring sounds" switch (Anki imports)
     freeNote: ''           // "Not enough free space on this device for the sounds…", when the switch started off for that reason
   };
@@ -108,6 +111,12 @@ export async function renderImport(el, arg) {
       <label class="adv-row switch-row prog-row" id="soundRow" hidden><span><b>Bring sounds</b>
         <span id="soundInfo"></span></span>
         <input id="ankiSounds" type="checkbox" class="switch" checked></label>
+      <label class="adv-row switch-row prog-row" id="fieldsRow" hidden><span><b>Keep the other fields</b>
+        <span id="fieldsInfo"></span></span>
+        <input id="keepFields" type="checkbox" class="switch" checked></label>
+      <label class="adv-row switch-row prog-row" id="revRow" hidden><span><b>Make the reverse cards too</b>
+        <span id="revInfo"></span></span>
+        <input id="makeReverse" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="subRow" hidden><span><b>Keep Anki's subdecks</b>
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
@@ -348,14 +357,22 @@ function showResult(result, keepError = false, pasted = '') {
     $('frontCol').innerHTML = opts; $('backCol').innerHTML = opts;
     $('frontCol').value = '0'; $('backCol').value = '1';
   }
-  S.cards = buildCards(S.result, S.frontCol, S.backCol);
+  S.hasFields = hasKeptFields(S.result, S.frontCol, S.backCol);
+  S.cards = build();
   renderList();
 }
+
+// The cards the result makes with the columns picked. `row` says which row of the result a card came from (rows can be deleted
+// from the preview), so the "Keep the other fields" switch can change a card's extras without rebuilding the list and losing edits.
+const build = () => buildCards(S.result, S.frontCol, S.backCol, { keepFields: S.keepFields }).map((c, i) => ({ ...c, row: i }));
+// Does this card also make a reverse card when saved? (A card that can't be reversed, like a step-by-step one, doesn't.)
+const makesReverse = c => S.makeReverse && !!c.reversed && canReverse({ front: c.front, back: c.back, frontImage: c.pictures?.front, backImage: c.pictures?.back, frontSounds: c.sounds?.front, backSounds: c.sounds?.back });
 
 function wirePreview() {
   const pickCols = () => {
     S.frontCol = +$('frontCol').value; S.backCol = +$('backCol').value;
-    S.cards = buildCards(S.result, S.frontCol, S.backCol);
+    S.hasFields = hasKeptFields(S.result, S.frontCol, S.backCol);
+    S.cards = build();
     renderList();
   };
   $('frontCol').addEventListener('change', pickCols);
@@ -396,6 +413,18 @@ function wirePreview() {
   });
 
   $('ankiSounds').addEventListener('change', e => { S.bringSounds = e.target.checked; refreshFlags(); });
+  $('keepFields').addEventListener('change', e => {
+    S.keepFields = e.target.checked;
+    const fresh = build();
+    for (const c of S.cards) {
+      const f = fresh[c.row];
+      delete c.noteExtra; delete c.noteFields;
+      if (f?.noteExtra) c.noteExtra = f.noteExtra;
+      if (f?.noteFields) c.noteFields = f.noteFields;
+    }
+    refreshFlags();
+  });
+  $('makeReverse').addEventListener('change', e => { S.makeReverse = e.target.checked; refreshFlags(); });
   $('saveBtn').addEventListener('click', save);
 }
 
@@ -432,6 +461,7 @@ function refreshFlags() {
   if (!S.result) return;
   S.flags = findDuplicates(S.cards, S.deckFronts);
   const complete = S.cards.filter(c => isComplete(live(c))).length;
+  const pairN = S.cards.filter(c => isComplete(live(c)) && makesReverse(c)).length;       // cards that also make a reverse card
   const missing = S.cards.length - complete;
   const dups = S.flags.filter(Boolean).length;
 
@@ -447,9 +477,10 @@ function refreshFlags() {
     }
     row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion;
+    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !makesReverse(c);
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
+      : makesReverse(c) ? 'Both directions: makes 2 cards'
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 
@@ -478,6 +509,29 @@ function refreshFlags() {
     ].filter(Boolean);
     parts.push(`<span class="warn">${plural(snd.dropped, 'sound')} ${snd.dropped === 1 ? "wasn't" : "weren't"} imported: ${why.join(', ')}.</span>`);
   }
+  // Cards that work in both directions (Anki "Basic (and reversed card)", or the CSV's Both directions column).
+  const reversible = S.cards.filter(c => c.reversed).length;
+  $('revRow').hidden = !reversible;
+  if (reversible) {
+    $('makeReverse').checked = S.makeReverse;
+    $('revInfo').textContent = 'Each of these also asks the back and expects the front, with its own schedule. Review shows one of the two a day.';
+    parts.push(S.makeReverse ? `${plural(pairN, 'note')} work${pairN === 1 ? 's' : ''} in both directions, so ${pairN === 1 ? 'it makes' : 'each makes'} 2 cards.`
+      : '<span class="warn">Reverse cards are left out (Make the reverse cards too is off).</span>');
+  }
+  // The other fields of Anki notes (item A) and the note types that have more cards than come in.
+  $('fieldsRow').hidden = !S.hasFields;
+  const fields = fieldReport(S.result);
+  if (S.hasFields) {
+    $('keepFields').checked = S.keepFields;
+    $('fieldsInfo').textContent = 'Anki fields like First Aid or Sketchy stay under the answer, folded, with their names.';
+    if (S.keepFields) {
+      parts.push('Other fields come along as folded sections.');
+      if (fields.pictures) parts.push(`<span class="warn">Pictures in other fields are left out (${fields.pictures}).</span>`);
+      const cut = fields.cut + basicFieldsCut(S.result, S.frontCol, S.backCol);
+      if (cut) parts.push(`<span class="warn">${plural(cut, 'very long field')} ${cut === 1 ? 'was' : 'were'} shortened or left out.</span>`);
+    }
+  }
+  if (fields.more) parts.push(`<span class="warn">${plural(fields.more, 'note')} ${fields.more === 1 ? 'has' : 'have'} more card types in Anki (like a listening card); only the first card of each comes in.</span>`);
   // Cloze notes: how many notes the cards come from.
   const notesN = new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
@@ -508,14 +562,15 @@ function refreshFlags() {
   // The button says where the cards go: the deck's name once it has one. A new deck without a name asks for it above.
   const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].textContent).replace(/\s+/g, ' ');
   const shown = name.length > 32 ? name.slice(0, 31) + '…' : name;
-  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(complete, 'card')} to “${shown}”` : `Add ${plural(complete, 'card')}`;
+  const total = complete + pairN;          // a reverse card is a card too
+  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(total, 'card')} to “${shown}”` : `Add ${plural(total, 'card')}`;
   $('saveHint').hidden = !complete || !!name;
   $('saveBtn').disabled = !complete;
 }
 
 // ---------- saving ----------
 async function save() {
-  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra }));
+  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -564,6 +619,7 @@ async function save() {
     let cards = toAdd.map((c, i) => {
       const card = { id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i };
       if (c.ankiGuid) card.ankiGuid = c.ankiGuid;
+      if (c.noteFields?.length && !c.occlusion) card.noteFields = c.noteFields;       // an Anki note's other fields, shown folded (note-fields.js)
       if (c.cloze) {
         if (!noteIds.has(c.cloze.noteKey)) noteIds.set(c.cloze.noteKey, db.newId());
         Object.assign(card, clozeCard(c.cloze.text, c.cloze.n), { noteId: noteIds.get(c.cloze.noteKey), cloze: c.cloze.n, noteText: c.cloze.text });
@@ -669,12 +725,27 @@ async function save() {
         cards[i].deckId = id;
       }
     }
+    // Notes that work in both directions: a reverse card for each (reverse.js). Both share a note id and the same change time; the reverse
+    // card's history is replayed from its own Anki card.
+    const ankiOf = new Map(cards.map((c, i) => [c.id, toAdd[i].ankiId]));
+    const reverses = [];
+    cards.forEach((card, i) => {
+      const r = toAdd[i].reverse;
+      if (!r) return;
+      card.noteId = db.newId();
+      card.noteEditedAt = now;
+      const rev = reverseOf(card, db.newId());
+      rev.noteEditedAt = now;
+      reverses.push(rev);
+      ankiOf.set(rev.id, r.ankiId);
+    });
+    cards.push(...reverses);
     let withHistory = 0;
     const states = [], logs = [];
     if (replay) {
       const decksNow = [...await db.getDecks(), ...newDecks];
-      cards.forEach((card, i) => {
-        const entries = toAdd[i].ankiId && S.result.reviews.get(toAdd[i].ankiId);
+      cards.forEach(card => {
+        const entries = ankiOf.get(card.id) && S.result.reviews.get(ankiOf.get(card.id));
         if (!entries) return;
         const { state, logs: cardLogs } = replay(card, entries, decksNow);
         if (state) states.push(state);

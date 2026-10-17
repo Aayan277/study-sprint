@@ -12,6 +12,7 @@ import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { cardMediaHTML } from './media.js';
+import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
@@ -28,7 +29,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -274,6 +275,7 @@ function renderSession(el, enter = false) {
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
             <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${sp ? ' steps-back' : ''}${backSize}">${answerHTML}</div>
             ${card.noteExtra ? `<p class="flash-extra"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${formatHTML(card.noteExtra)}</p>` : ''}
+            ${card.noteFields?.length ? `<div class="flash-fields"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${noteFieldsHTML(card.noteFields, name => foldOpen('field:' + name.toLowerCase()), formatHTML)}</div>` : ''}
           </div>
         </div>
       </div>
@@ -312,6 +314,8 @@ function renderSession(el, enter = false) {
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
+  // A note field's fold stays open (or shut) the next time, for that field name, on this device. (toggle doesn't bubble: listen while it goes down.)
+  $('flash').addEventListener('toggle', e => { const d = e.target.closest?.('.note-field'); if (d) saveFold('field:' + d.dataset.field, d.open); }, true);
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
   if (typeThis && !R.flipped) $('typeIn').focus();
@@ -498,7 +502,7 @@ function revealStep(el, all = false) {
   R.stepShown = all ? sp.steps.length : from + 1;
   const flash = $('flash'), items = [...flash.querySelectorAll('#steps > li')];
   items.forEach((li, i) => { li.hidden = i >= R.stepShown; });
-  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra').forEach(x => { x.hidden = false; });
+  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
   const final = flash.querySelector('.steps-final');

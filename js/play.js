@@ -8,6 +8,7 @@
 // schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
+import { loneIds, unpaired } from './reverse.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
@@ -62,12 +63,19 @@ const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back
 export async function renderPlay(el) {
   stopRound();
   // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
-  const { settings, decks, cards: visible, logs, statesById, exam, newLeft } = await loadAll();
-  if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
+  const [{ settings, decks, cards: visible, logs, statesById, exam, newLeft }, everyCard, speedLogs] = await Promise.all([loadAll(), db.getAll('cards'), db.getLogsSince(daysAgoStart(60))]);
+  // Your usual answer times per question type (speed relative to you, not the timer): the last 60 days of Play.
+  // (Read before the check below: every wait comes first, so nothing can change the screen between the check and the drawing.)
+  const speed = speedProfiles(speedLogs);
+  // You already moved to another screen: don't draw (or start a round) there. Quit and Esc call this directly, so no router
+  // catches it; drawing into a box that left the page would wire $('customBtn') & co. to elements that are not there.
+  if (!el.isConnected) return;
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
   // (loadAll leaves out suspended cards, and cards buried until tomorrow.)
-  const cards = visible.map(playCopy);
+  // A card with a pair's noteId but no partner plays as an ordinary card (reverse.js loneIds; suspended partners still count).
+  const lone = loneIds(everyCard);
+  const cards = visible.map(c => playCopy(lone.has(c.id) ? unpaired(c) : c));
   data = {
     settings, decks, cards, statesById,
     // Cards that an exam's final pass brings forward count as due today (see exam.js).
@@ -77,8 +85,7 @@ export async function renderPlay(el) {
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
     // Only new cards really started today count (newLimits ignores Play answers that were only logged).
     newLeft,
-    // Your usual answer times per question type (speed relative to you, not the timer): the last 60 days of Play.
-    speed: speedProfiles(await db.getLogsSince(daysAgoStart(60)))
+    speed
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   // One deck per game. Opening Play: the deck with the nearest exam, else the one you used last, else the first deck.
@@ -704,7 +711,8 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   const deckName = deckPath(data.decks, round.deckId);
   const schedule = await scheduleSummary(round);
   // You may have switched to another screen while that saved: don't draw over it.
-  if (!location.hash.startsWith('#/play')) return;
+  // (The box must still be on the page too: Play may have been left and opened again, which draws into a new box.)
+  if (!el.isConnected || !location.hash.startsWith('#/play')) return;
   const line = round.fmt === 'survival' ? `Survived ${plural(total, 'question')}.`
     : round.fmt === 'lightning' ? `${plural(correct, 'right answer')} in 60 seconds.` : '';
 

@@ -26,6 +26,7 @@ import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
+import { validFields, cleanFields } from './note-fields.js';
 import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
@@ -512,8 +513,15 @@ export async function exportAll({ sounds = true } = {}) {
   }
   // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
   const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !isLocalOnly(k)));
-  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
+  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards: cards.map(safeFields), cardStates, reviewLog, settings, media };
 }
+
+// A card's other fields (note-fields.js) are cleaned to their limits on the way out, so a backup always passes checkBackup.
+const safeFields = c => {
+  if (c.noteFields === undefined || validFields(c.noteFields)) return c;
+  const { noteFields, ...rest } = c, { fields } = cleanFields(noteFields);
+  return fields.length ? { ...rest, noteFields: fields } : rest;
+};
 
 // How much room pictures and sounds take on this device: { pictures, sounds } in bytes. Kept up to date as files are added and
 // removed (a small record in settings); worked out once, a file at a time, when there is none yet.
@@ -548,6 +556,9 @@ export function checkBackup(data) {
   if (!data.cards.every(c => ['frontSounds', 'backSounds'].every(k => c[k] === undefined || (Array.isArray(c[k]) && c[k].length >= 1 && c[k].length <= MAX_SOUNDS_PER_SIDE && c[k].every(validKey))))) {
     return 'This backup file is damaged (a card has invalid sound fields).';
   }
+  // A note's other fields (item A) are a short list of { name, text }; a reverse card (item 5) is marked reverse: true and shares a noteId.
+  if (!data.cards.every(c => c.noteFields === undefined || validFields(c.noteFields))) return 'This backup file is damaged (a card has invalid note fields).';
+  if (!data.cards.every(c => c.reverse === undefined || (c.reverse === true && typeof c.noteId === 'string' && c.noteId !== ''))) return 'This backup file is damaged (a card has an invalid reverse card link).';
   // Image-occlusion fields end up in style attributes, so the boxes must be plain numbers in range.
   if (!data.cards.every(c => c.occlusion === undefined || (validOcclusion(c.occlusion) && typeof c.noteId === 'string'))) {
     return 'This backup file is damaged (a card has invalid image-occlusion fields).';
