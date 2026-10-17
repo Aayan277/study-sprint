@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { parseText, parseRows, buildCards, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
-import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths } from './anki.js';
+import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport } from './anki.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
 import { formatHTML } from './format.js';
 import { hasMath } from './math.js';
@@ -13,6 +13,7 @@ import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
+import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { importWarnings } from './quota.js';
 
@@ -40,7 +41,9 @@ export async function renderImport(el, arg) {
     deckId: decks.some(d => d.id === deckId) ? deckId : decks.some(d => d.id === lastDeck()) ? lastDeck() : NEW_DECK,
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
     suggestedName: '',     // a deck name taken from the file name
-    noCloze: false         // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
+    noCloze: false,        // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
+    bringSounds: true,     // the "Bring sounds" switch (Anki imports)
+    freeNote: ''           // "Not enough free space on this device for the sounds…", when the switch started off for that reason
   };
 
   el.innerHTML = `
@@ -103,6 +106,9 @@ export async function renderImport(el, arg) {
       <label class="adv-row switch-row prog-row" id="progRow" hidden><span><b>Bring over my Anki progress</b>
         <span id="progInfo"></span></span>
         <input id="ankiProg" type="checkbox" class="switch" checked></label>
+      <label class="adv-row switch-row prog-row" id="soundRow" hidden><span><b>Bring sounds</b>
+        <span id="soundInfo"></span></span>
+        <input id="ankiSounds" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="subRow" hidden><span><b>Keep Anki's subdecks</b>
         <span id="subInfo"></span></span>
         <input id="ankiSubs" type="checkbox" class="switch" checked></label>
@@ -247,15 +253,16 @@ async function readExcel(file) {
 }
 
 // Anki deck files (.apkg): see anki-read.js and anki.js. Cards come in as new cards, with their tags;
-// formatting, images and sounds are left out.
+// formatting is left out; pictures and sounds come along (sounds can be switched off).
 async function readAnki(file) {
   $('found').textContent = '';
   $('fileName').textContent = `${file.name} · reading…`;
   const { readAnkiFile } = await import('./anki-read.js');
   const { notes, models, reviews, media, mediaBytes } = await readAnkiFile(file);
-  const all = notesToImport(notes, models, reviews);
-  S.ankiMedia = media;                 // the file's pictures, unpacked when the cards are added
-  S.ankiMediaBytes = mediaBytes || 0;  // about how much its pictures and sounds take (for the size warning)
+  const all = notesToImport(notes, models, reviews, media);
+  S.ankiMedia = media;                 // the file's pictures and sounds, unpacked when the cards are added
+  S.ankiMediaBytes = mediaBytes || 0;  // about how much they take (for the size warning)
+  await checkSoundSpace(all);
   $('fileName').textContent = file.name;
   if (!all.rows.length) { showError('That Anki file has no cards in it.'); return; }
   // Several Anki decks inside: let the user pick one, or take them all.
@@ -265,9 +272,27 @@ async function readAnki(file) {
     $('sheetPick').innerHTML = `<option value="">All decks (${all.rows.length})</option>` +
       decks.map(d => `<option value="${esc(d.name)}">${esc(d.name.split('::').join(' › '))} (${d.count})</option>`).join('');
     $('sheetPickRow').hidden = false;
-    $('sheetPick').onchange = () => showResult(onlyDeck(all, $('sheetPick').value));
+    $('sheetPick').onchange = async () => {
+      const part = onlyDeck(all, $('sheetPick').value);
+      await checkSoundSpace(part);               // the room needed depends on the deck picked
+      showResult(part);
+    };
   }
   showResult(all);
+}
+
+// Sounds can be big: when they would fill more than 80% of this device's free storage, the "Bring sounds" switch starts off.
+async function checkSoundSpace(all) {
+  S.bringSounds = true; S.freeNote = '';
+  const need = soundReport(all).bytes;
+  if (!need) return;
+  try {
+    const { usage = 0, quota = 0 } = (await navigator.storage?.estimate?.()) || {};
+    if (quota && usage + need > 0.8 * quota) {
+      S.bringSounds = false;
+      S.freeNote = `Not enough free space on this device for the sounds (about ${sizeText(need)} needed, ${sizeText(Math.max(0, quota - usage))} free).`;
+    }
+  } catch { /* no estimate: just bring them */ }
 }
 
 // ---------- Google Sheets ----------
@@ -339,7 +364,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -372,8 +397,12 @@ function wirePreview() {
     renderList();
   });
 
+  $('ankiSounds').addEventListener('change', e => { S.bringSounds = e.target.checked; refreshFlags(); });
   $('saveBtn').addEventListener('click', save);
 }
+
+// The card as it will be saved: without its sounds when "Bring sounds" is off.
+const live = c => (S.bringSounds || !c.sounds ? c : { ...c, sounds: undefined });
 
 // Draw the editable list of cards.
 function renderList() {
@@ -404,7 +433,7 @@ function autosize(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight 
 function refreshFlags() {
   if (!S.result) return;
   S.flags = findDuplicates(S.cards, S.deckFronts);
-  const complete = S.cards.filter(isComplete).length;
+  const complete = S.cards.filter(c => isComplete(live(c))).length;
   const missing = S.cards.length - complete;
   const dups = S.flags.filter(Boolean).length;
 
@@ -418,10 +447,10 @@ function refreshFlags() {
       pv.hidden = !mathSrc;
       pv.innerHTML = mathSrc ? `<div class="pv-f">${formatHTML(c.front)}</div><div class="pv-b">${formatHTML(c.back)}</div>` : '';
     }
-    row.classList.toggle('incomplete', !isComplete(c));
+    row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(c) && !c.cloze && !c.occlusion;
-    badge.textContent = !isComplete(c) ? 'Missing a side, will be skipped'
+    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion;
+    badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
@@ -432,6 +461,25 @@ function refreshFlags() {
     parts.push(`${plural(S.result.images, 'note')} ${S.result.images === 1 ? 'has' : 'have'} pictures, which come along too${S.result.extraImages ? ' (the first one on each side)' : ''}.`);
   }
   const prog = S.result.progress;
+  // Sounds (Anki imports): how many notes have them, and what could not be kept (and why).
+  const snd = soundReport(S.result);
+  $('soundRow').hidden = !snd.files.length;
+  if (!$('soundRow').hidden) {
+    $('ankiSounds').checked = S.bringSounds;
+    $('soundInfo').textContent = `About ${sizeText(snd.bytes)}. Kept on this device, synced like pictures and kept in backups.`;
+  }
+  if (S.bringSounds && snd.notes) parts.push(`${plural(snd.notes, 'note')} ${snd.notes === 1 ? 'has' : 'have'} sounds, which come along too.`);
+  if (!S.bringSounds && snd.files.length) parts.push(`<span class="warn">Sounds are left out (Bring sounds is off).${S.freeNote ? ` ${esc(S.freeNote)}` : ''}</span>`);
+  if (S.bringSounds && snd.dropped) {
+    const be = n => (n === 1 ? 'is' : 'are');
+    const why = [
+      snd.tooBig && `${snd.tooBig} ${be(snd.tooBig)} bigger than 1 MB`,
+      snd.missing && `${snd.missing} ${snd.missing === 1 ? "isn't" : "aren't"} in the file`,
+      snd.format && `${snd.format} ${be(snd.format)} a format the app can't keep`,
+      snd.extra && `${snd.extra} ${be(snd.extra)} past the 4 allowed on a side`
+    ].filter(Boolean);
+    parts.push(`<span class="warn">${plural(snd.dropped, 'sound')} ${snd.dropped === 1 ? "wasn't" : "weren't"} imported: ${why.join(', ')}.</span>`);
+  }
   // Cloze notes: how many notes the cards come from.
   const notesN = new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
@@ -471,7 +519,7 @@ function refreshFlags() {
 
 // ---------- saving ----------
 async function save() {
-  let toAdd = S.cards.filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra }));
+  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -565,6 +613,30 @@ async function save() {
         if (b) card.backImage = b;
       }
     }
+    // Sounds from an Anki file: kept exactly as they are (never converted), each file stored once however many cards use it.
+    let soundsSkipped = 0;
+    const withSounds = toAdd.map((c, i) => [c.sounds, cards[i]]).filter(([sn]) => sn && S.ankiMedia);
+    if (withSounds.length) {
+      const { saveSound } = await import('./media.js');
+      const names = [...new Set(withSounds.flatMap(([sn]) => [...sn.front, ...sn.back]))];      // a sound used on several cards is saved once
+      const ids = new Map();                                                                  // name → the saved sound's id
+      for (let i = 0; i < names.length; i += 40) {
+        saveBtn.textContent = `Adding sounds: ${Math.min(i + 40, names.length)} of ${names.length}…`;
+        const batch = names.slice(i, i + 40), found = await S.ankiMedia.getMany(batch);
+        for (const name of batch) {
+          try {
+            const got = found.get(name);
+            if (!got) throw new Error('not in the file');
+            ids.set(name, (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id);     // (a copy: a view would drag the whole package along)
+          } catch (err) { console.error('Skipped a sound', name, err); soundsSkipped++; }
+        }
+      }
+      for (const [sn, card] of withSounds) {
+        const f = sn.front.map(n => ids.get(n)).filter(Boolean), b = sn.back.map(n => ids.get(n)).filter(Boolean);
+        if (f.length) card.frontSounds = f;
+        if (b.length) card.backSounds = b;
+      }
+    }
     // Nothing is saved until everything is ready; then it all goes in together (see db.addImport).
     const newDecks = [];
     let color;
@@ -616,7 +688,7 @@ async function save() {
     }
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
     rememberDeck(deckId);
-    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}`);
+    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;

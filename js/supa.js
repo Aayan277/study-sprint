@@ -179,6 +179,8 @@ async function storage(path, { method = 'GET', token, body, type } = {}) {
     let json = null;
     try { json = await res.json(); } catch { /* not JSON */ }
     const msg = String(json?.message || json?.error || '');
+    // The bucket turns away a kind of file it isn't set up for (a sound, before supabase/media.sql was run again).
+    if (String(json?.statusCode) === '415' || /invalid_mime_type|mime type/i.test(`${json?.error} ${msg}`)) throw new SupaError('The sync server doesn’t take this kind of file yet.', { status: res.status, code: 'media_type' });
     if (/bucket not found/i.test(msg)) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'bucket_missing' });
     if (/row-level security|unauthorized/i.test(msg) && res.status !== 401) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'media_policy' });
     throw new SupaError(explain(res.status, json?.error || '', msg), { status: res.status, code: String(json?.statusCode || json?.error || '') });

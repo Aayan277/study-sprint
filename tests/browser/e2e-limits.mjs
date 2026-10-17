@@ -59,6 +59,9 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   const st = await syncNow(A);
   ok(st.note === FULL, 'full account: the exact message is the sync note: ' + st.note);
   ok(await unsent(A) === 2 && [...fake.files.keys()].filter(k => k !== 'user-1/old').length === 0, 'the pictures stay on the device, nothing is uploaded');
+  await run(A, async () => { const db = await import('./js/db.js'); await db.putMedia({ id: 'snd-1', type: 'audio/mpeg', data: new Uint8Array(5000).buffer, size: 5000, created: Date.now(), uploaded: false }); });
+  const stS = await syncNow(A);
+  ok(stS.note === FULL && await unsent(A) === 3, 'a sound waits with the pictures, with the same message');
   ok(fake.userRows('me@example.com').some(r => r.store === 'cards' && r.id === 'bio-1'), 'but the new card still synced');
   await openSettings(A);
   await A.waitForFunction(() => /180 MB of 180 MB/.test(document.querySelector('#usageLine')?.textContent || ''));
@@ -68,7 +71,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   // room again: the waiting pictures go
   fake.files.delete('user-1/old');
   const st2 = await syncNow(A);
-  ok(!st2.note && await unsent(A) === 0 && fake.mediaUsed('user-1') === 500 * 1024, 'when there is room again, the waiting pictures upload and the note goes');
+  ok(!st2.note && await unsent(A) === 0 && fake.mediaUsed('user-1') === 500 * 1024 + 5000, 'when there is room again, the waiting pictures upload and the note goes');
 
   // another device filled the account meanwhile: the server refuses, the rest waits
   fake.files.set('user-1/old', { type: 'image/jpeg', data: { length: 180 * MB } });

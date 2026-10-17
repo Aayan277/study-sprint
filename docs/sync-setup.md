@@ -5,7 +5,7 @@ It uses a free Supabase project that belongs to you. Anyone can make an account 
 ever sees its own data), so it also needs a few protections. This takes about an hour, once. Steps 1 to 4
 are the basics; steps 5 to 9 are what makes it safe to let other people in.
 
-**Already set up before version 4.15?** Do steps 2, 2b and 2c again (they are safe to repeat: run
+**Already set up before version 4.16?** Do steps 2, 2b and 2c again (they are safe to repeat: run
 `setup.sql`, then `media.sql`, then `limits.sql`), then steps 3 to 9.
 
 What you'll need: a Supabase account (free), a free Resend account, a free Cloudflare account, a domain name
@@ -32,15 +32,24 @@ This makes one table, and turns on rules so every account can only ever read or 
 (Running it again is how an older project gets the newer rules: faster checks, ignoring a re-sent copy of the
 same change, and not letting a device with a wrong clock win every conflict.)
 
-## 2b. Storage for pictures
+## 2b. Storage for pictures and sounds
 
-Pictures on cards sync through Supabase Storage. Run one more script, the same way as step 2:
+Pictures and sounds on cards sync through Supabase Storage. Run one more script, the same way as step 2:
 
 1. **SQL Editor → New query**, paste in everything from [`supabase/media.sql`](../supabase/media.sql), and click **Run**.
 
 It makes a private bucket called `media`, with one folder per account; every account can only see its own
-pictures. Each file can be at most 3 MB. (Until this is done, everything else still syncs: Settings → Sync
-shows a note.)
+pictures and sounds. Each file can be at most 3 MB. (Until this is done, everything else still syncs: Settings → Sync shows a note.)
+
+**If you set this up before sounds were added to the app, run it once more.** The older copy of the script only
+allowed pictures, so Supabase turns sounds away until you do (pictures keep syncing meanwhile, and Settings → Sync
+says "Sounds can't sync yet"). Nothing is lost: the sounds wait on your device. The steps are the same as above:
+
+1. Open your project on supabase.com, then **SQL Editor → New query**.
+2. Paste in everything from the latest [`supabase/media.sql`](../supabase/media.sql) and click **Run**. It is safe to run again; it doesn't touch your pictures or any data.
+3. In Study Sprint, open Settings → Sync and tap **Sync now**. The note goes away and the sounds are sent.
+
+Each sound can be up to 1 MB (the app skips bigger ones when you import an Anki deck and tells you how many).
 
 ## 2c. Limits and "Delete my account"
 

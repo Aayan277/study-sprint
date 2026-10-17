@@ -201,6 +201,78 @@ test('days off: keys beyond what can be planned are dropped and the number of fu
   assert.ok(sameDayFlags(many, Object.fromEntries(Object.entries(many).slice(0, 62)), T));     // the junk beyond is ignored when comparing
 });
 
+// ---------- pictures and sounds (files in Supabase Storage) ----------
+import { uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE } from '../js/sync-merge.js';
+import * as supa from '../js/supa.js';
+
+const file = (id, type = 'image/jpeg') => ({ id, type });
+const rejection = () => Object.assign(new Error('nope'), { code: 'media_type' });
+
+test('files: one file failing on its own never stops the others', async () => {
+  const rows = [file('a'), file('b'), file('c'), file('s1', 'audio/mpeg'), file('s2', 'audio/wav')];
+  const tried = [], sentNow = [];
+  const out = await uploadMediaFiles(rows, async m => { tried.push(m.id); if (m.id === 'b' || m.id === 's1') throw new Error('flaky'); }, { onSent: m => sentNow.push(m.id) });
+  assert.deepEqual(tried, ['a', 'b', 'c', 's1', 's2']);
+  assert.deepEqual(out.sent, ['a', 'c', 's2']);
+  assert.deepEqual(sentNow, ['a', 'c', 's2']);
+  assert.deepEqual(out.failed.map(f => f.id), ['b', 's1']);
+  assert.deepEqual(out.blocked, []);
+});
+
+test('files: a type rejection never stops pictures; the sounds wait (blocked) and are not tried again in that run', async () => {
+  const rows = [file('s1', 'audio/mpeg'), file('p1'), file('s2', 'audio/ogg'), file('p2', 'image/png'), file('s3', 'audio/wav')];
+  const tried = [];
+  const out = await uploadMediaFiles(rows, async m => { tried.push(m.id); if (isSoundRow(m)) throw rejection(); });
+  assert.deepEqual(tried, ['p1', 'p2', 's1']);                       // pictures first, then one sound is tried, which tells us all sounds are turned away
+  assert.deepEqual(out.sent, ['p1', 'p2']);
+  assert.deepEqual(out.blocked, ['s1', 's2', 's3']);
+  assert.deepEqual(out.failed, []);
+});
+
+test('files: a problem with the whole storage (not set up, offline, signed out) stops the run, after keeping what already went', async () => {
+  for (const err of [Object.assign(new Error('x'), { code: 'bucket_missing' }), Object.assign(new Error('x'), { code: 'network' }), Object.assign(new Error('x'), { status: 401 })]) {
+    const sentNow = [];
+    await assert.rejects(uploadMediaFiles([file('a'), file('b'), file('c')], async m => { if (m.id === 'b') throw err; }, { onSent: m => sentNow.push(m.id) }), e => e === err);
+    assert.deepEqual(sentNow, ['a']);
+  }
+  assert.match(SOUNDS_BLOCKED_NOTE, /Sounds can.t sync yet.*media\.sql.*docs\/sync-setup\.md.*Pictures and everything else are syncing/);
+});
+
+test('downloads: four at a time; a file that fails is skipped, a whole-storage problem stops the rest', async () => {
+  let running = 0, most = 0;
+  const seen = [];
+  const out = await runPool(Array.from({ length: 12 }, (_, i) => i), async i => {
+    running++; most = Math.max(most, running);
+    await new Promise(r => setTimeout(r, 2));
+    running--;
+    if (i === 5) throw new Error('missing on the server');
+    seen.push(i);
+  });
+  assert.equal(most, 4);
+  assert.deepEqual(out, { done: 11, failed: 1 });
+  assert.equal(seen.length, 11);
+  const progress = [];
+  await runPool([1, 2, 3], async () => {}, { onProgress: (n, total) => progress.push(`${n}/${total}`) });
+  assert.deepEqual(progress, ['1/3', '2/3', '3/3']);
+  const fatal = Object.assign(new Error('offline'), { code: 'network' });
+  await assert.rejects(runPool([1, 2, 3, 4, 5, 6, 7, 8], async i => { if (i === 2) throw fatal; await new Promise(r => setTimeout(r, 5)); }), e => e === fatal);
+});
+
+test('the sync server turning a sound away for its type is reported as media_type', async () => {
+  const realFetch = globalThis.fetch;
+  const answer = (status, body) => { globalThis.fetch = async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }); };
+  try {
+    answer(415, { statusCode: '415', error: 'invalid_mime_type', message: 'mime type audio/mpeg is not supported' });
+    await assert.rejects(supa.uploadMedia('tok', 'uid', 'id1', 'audio/mpeg', new ArrayBuffer(4)), e => e.code === 'media_type');
+    answer(400, { statusCode: '415', error: 'invalid_mime_type', message: 'mime type audio/ogg is not supported' });      // (some versions answer 400 with the code inside)
+    await assert.rejects(supa.uploadMedia('tok', 'uid', 'id1', 'audio/ogg', new ArrayBuffer(4)), e => e.code === 'media_type');
+    answer(400, { statusCode: '404', error: 'Bucket not found', message: 'Bucket not found' });
+    await assert.rejects(supa.uploadMedia('tok', 'uid', 'id1', 'image/jpeg', new ArrayBuffer(4)), e => e.code === 'bucket_missing');
+    answer(400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
+    await assert.rejects(supa.uploadMedia('tok', 'uid', 'id1', 'image/jpeg', new ArrayBuffer(4)), e => e.code === 'media_policy');
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('glossary terms are synced settings, one per term (gloss:<id>), and the newest copy of each wins', async () => {
   const { isSyncedSetting } = await import('../js/sync-data.js');
   assert.ok(isSyncedSetting('gloss:abc') && isSyncedSetting('newPerDay'));

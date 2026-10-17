@@ -454,7 +454,10 @@ async function openExport(deck, decks, deckCards) {
   const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
-    <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${cards.some(c => c.frontImage || c.backImage) ? ' Pictures go in the Anki deck (a spreadsheet can only hold text).' : ''}</p>
+    <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${(() => {
+      const pics = cards.some(c => c.frontImage || c.backImage), snds = cards.some(c => c.frontSounds?.length || c.backSounds?.length);
+      return pics || snds ? ` ${pics && snds ? 'Pictures and sounds go' : pics ? 'Pictures go' : 'Sounds go'} in the Anki deck (a spreadsheet can only hold text).` : '';
+    })()}</p>
     ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
       <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
@@ -574,7 +577,10 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(code || !parentNow ? name : 'Same as the deck it’s inside')}</option>`).join('')}</select></label>
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
         <span>In Review: the front when it appears, the back when you flip. (The speaker button or R reads it any time.)</span></span>
-        <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>`}
+        <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b>
+        <span>In Review: the front's sounds when a card appears, the back's when you flip.</span></span>
+        <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>`}
       <p class="err" id="deckErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -610,6 +616,8 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     // Read aloud automatically: a subdeck only stores it when it differs from the deck it's inside.
     const auto = !!$('deckTtsAuto')?.checked;
     const ttsAuto = parentId && auto === inherited()?.ttsAuto ? null : auto;
+    const soundOn = !!$('deckSoundAuto')?.checked;
+    const soundAuto = soundOn === (parentId ? inherited()?.soundAuto : true) ? null : soundOn;      // (nothing stored = the default, on)
     // This deck's own new-card limit: blank = none (only the overall limit applies).
     const raw = $('deckNew')?.value.trim();
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
@@ -624,7 +632,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     const saved = isNew
       ? { id: db.newId(), name, course, color, parentId, created: Date.now(), ...($('deckExam').value ? { examDate: $('deckExam').value } : {}) }
       : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
-        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto };
+        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto, soundAuto };
     // A new exam date (its own, or from the deck it's moved into) brings forward the cards scheduled after it: see
     // commitDeck in exam-sheet.js, which the short "Add exam date" sheet uses too. (A new deck has no cards to move yet.)
     let moved;

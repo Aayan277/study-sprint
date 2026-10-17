@@ -10,7 +10,9 @@ import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } fro
 import { hasMath, wrapMath, maskMath } from './math.js';
 import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
 import { esc, toast } from './ui.js';
-import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
+import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
+import { canPlayType } from './audio.js';
+import * as db from './db.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
 import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
@@ -18,17 +20,22 @@ const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fi
 
 //   image: the side's picture (a media id), shown under the box with Remove; the toolbar's picture
 //          button adds or replaces it. Read it back with readCardImage(id).
-//   images: false leaves out the picture button (cloze text and Extra have none)
+//   images: false leaves out the picture button and the sound button (cloze text and Extra have none)
+//   Sounds are shown in a row under the box (up to 4 on each side). Fill it with setCardSounds(id, ids) and read it back with
+//   readCardSounds(id).
 //   cloze: true makes it the text of a cloze note (the [...] buttons and the preview work on it: see below)
 export function cardTextField(id, label, value = '', { rows = 2, placeholder = '', image = null, images = true, cloze = false } = {}) {
   const pics = !images ? '' : `<div class="img-row" id="${id}Img" data-media-id="${esc(image || '')}">${pictureHTML(id, image)}</div>
-      <input type="file" id="${id}File" accept="image/*" hidden data-img-file="${id}">`;
+      <input type="file" id="${id}File" accept="image/*" hidden data-img-file="${id}">
+      <div class="snd-edit" id="${id}Snd" data-sound-ids=""></div>
+      <input type="file" id="${id}SndFile" accept="audio/*" multiple hidden data-snd-file="${id}">`;
   const tools = `<span class="fmt-tools" role="toolbar" aria-label="Formatting">
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
       <button type="button" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
       <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
       <button type="button" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
-      ${!images ? '' : `<button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>`}</span>`;
+      ${!images ? '' : `<button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>
+      <button type="button" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>`}</span>`;
   // Said once, under the Back box: maths goes between $ signs.
   const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
@@ -52,6 +59,59 @@ export function setCardImage(id, image) {
   row.dataset.mediaId = image || '';
   row.innerHTML = pictureHTML(id, image);
 }
+
+// ---------- sounds on a side ----------
+// The ids of the side's sounds, in order.
+export const readCardSounds = id => (document.getElementById(id + 'Snd')?.dataset.soundIds || '').split(',').filter(Boolean);
+// Show these sounds under the box. Each is "▶ Sound 1 · 24 KB · Remove" (the size fills in a moment later).
+export function setCardSounds(id, ids) {
+  const row = document.getElementById(id + 'Snd');
+  if (!row) return;
+  ids = (ids || []).slice(0, MAX_SOUNDS);
+  row.dataset.soundIds = ids.join(',');
+  row.innerHTML = ids.map((sid, i) => `<div class="snd-item">
+      <button type="button" class="snd-btn" data-snd="${esc(sid)}" aria-label="Play sound ${i + 1}">▶\uFE0E</button>
+      <span class="snd-name">Sound ${i + 1} · <span data-size-of="${esc(sid)}"></span></span>
+      <button type="button" class="btn ghost small" data-snd-remove="${id}" data-sid="${esc(sid)}" aria-label="Remove sound ${i + 1}">Remove</button></div>`).join('')
+    + (ids.length >= MAX_SOUNDS ? `<small class="note">Up to ${MAX_SOUNDS} sounds on each side</small>` : '');
+}
+// The size of each sound in a row, once its record is read.
+new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => {
+  if (n.nodeType !== 1) return;
+  [...n.querySelectorAll('[data-size-of]'), ...(n.matches('[data-size-of]') ? [n] : [])].forEach(async span => {
+    const m = await db.getMedia(span.dataset.sizeOf).catch(() => null);
+    span.textContent = m ? sizeText(m.size || m.data?.byteLength || 0) : 'not on this device yet';
+  });
+}))).observe(document.documentElement, { childList: true, subtree: true });
+
+document.addEventListener('click', e => {
+  const add = e.target.closest?.('[data-snd-add]');
+  if (add) {
+    if (readCardSounds(add.dataset.sndAdd).length >= MAX_SOUNDS) { toast(`Up to ${MAX_SOUNDS} sounds on each side`); return; }
+    document.getElementById(add.dataset.sndAdd + 'SndFile')?.click();
+  }
+  const rm = e.target.closest?.('[data-snd-remove]');
+  if (rm) setCardSounds(rm.dataset.sndRemove, readCardSounds(rm.dataset.sndRemove).filter(x => x !== rm.dataset.sid));
+});
+document.addEventListener('change', async e => {
+  const id = e.target.dataset?.sndFile;
+  if (!id || !e.target.files?.length) return;
+  const files = [...e.target.files];
+  e.target.value = '';
+  for (const file of files) {
+    const have = readCardSounds(id);
+    if (have.length >= MAX_SOUNDS) { toast(`Up to ${MAX_SOUNDS} sounds on each side`); break; }
+    try {
+      const saved = await saveSound(file);
+      setCardSounds(id, [...readCardSounds(id), saved.id]);
+      // Saved anyway: another device may play it.
+      if (!canPlayType(saved.type)) toast(`This browser can't play .${(file.name.split('.').pop() || 'this').toLowerCase()} files. Other devices may.`);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || "Couldn't add that sound");
+    }
+  }
+});
 
 // The box's text, with formatting as marks.
 export function readCardText(id) {
@@ -339,10 +399,10 @@ export function whyNotAdd(p) {
     if (!clozeNumbers(text).length) return 'Select a word and press New blank to hide it.';
     return planNoteSave([], text).error || '';
   }
-  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front');
+  const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front') || readCardSounds(p + 'Front')[0];
   const stepsWhy = stepsProblem(p);
   if (stepsOn(p)) return !front ? 'Add a front to save the card.' : stepsWhy;
-  const back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back');
+  const back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back') || readCardSounds(p + 'Back')[0];
   if (front && back) return '';
   return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
 }
@@ -362,7 +422,7 @@ export function watchAdd(p) {
     why.hidden = !reason;
   };
   const watcher = new MutationObserver(update);
-  watcher.observe(form, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-media-id', 'hidden'] });
+  watcher.observe(form, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-media-id', 'data-sound-ids', 'hidden'] });
   form.addEventListener('input', update);
   form.addEventListener('change', update);
   update();

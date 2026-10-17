@@ -99,7 +99,7 @@ const IO_CSS = `#image-occlusion-canvas {
 `;
 
 // Everything that goes in the Anki database, as plain values (no database yet).
-//   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile?, deckName? }]    now  ms
+//   deck   { id, name }    cards  [{ id, front, back, tags, frontImageFile?, backImageFile?, frontSoundFiles?, backSoundFiles?, deckName? }]    now  ms
 // deckName (e.g. "Psych 101::Unit 1") puts a card in that Anki deck (subdecks); otherwise it's deck.name.
 // Returns { col, notes, cards } rows for the tables of Anki's older (and widely supported) file layout.
 export async function ankiContents(deck, cards, now = Date.now()) {
@@ -174,6 +174,8 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   };
   // A side's picture (if any) goes after its text, as <img src="file name"> (the file is in the package).
   const withPic = (html, file) => (file ? `${html}${html ? '<br>' : ''}<img src="${file}">` : html);
+  // Its sounds go last in the field, as [sound:file name] (Anki's own way; importing the file here gives them back).
+  const withSounds = (html, files) => `${html}${(files || []).map(f => `[sound:${f}]`).join('')}`;
   const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');
   const notes = [], ankiCards = [];
   let cardCount = 0;
@@ -196,8 +198,8 @@ export async function ankiContents(deck, cards, now = Date.now()) {
           ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
       }
     } else if (g.cloze) {
-      const text = withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile);
-      const extra = withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile);
+      const text = withSounds(withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile), g.cards.find(c => c.frontSoundFiles?.length)?.frontSoundFiles);
+      const extra = withSounds(withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile), g.cards.find(c => c.backSoundFiles?.length)?.backSoundFiles);
       note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
         flds: `${text}\x1f${extra}`, sfld: plainText(first.noteText), csum: await ankiChecksum(plainText(first.noteText)), flags: 0, data: '' };
       // Blank number n is Anki card number n - 1.
@@ -207,10 +209,11 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       }
     } else {
       const c = g.card;
-      const front = withPic(toAnkiHTML(c.front), c.frontImageFile);
+      const front = withSounds(withPic(toAnkiHTML(c.front), c.frontImageFile), c.frontSoundFiles);
       let back = withPic(toAnkiHTML(c.back), c.backImageFile);
       // The memory hook (noteExtra) goes at the end of Back as an Extra line.
       if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
+      back = withSounds(back, c.backSoundFiles);
       note = { id: noteId, guid: c.ankiGuid || ankiGuid(c.id), mid: BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order.
@@ -237,16 +240,17 @@ CREATE INDEX ix_cards_sched on cards (did, queue, due);
 CREATE INDEX ix_revlog_cid on revlog (cid);
 CREATE INDEX ix_notes_csum on notes (csum);`;
 
-// Build the .apkg file: a zip with the database, the pictures (files "0", "1", …) and the list saying which
+// Build the .apkg file: a zip with the database, the pictures and sounds (files "0", "1", …) and the list saying which
 // is which ("media": {"0": "abc.jpg"}). Browser only.
 export async function makeApkg(deck, cards) {
   const { getMedia } = await import('./db.js');
+  const { soundExt } = await import('./media.js');
   const files = {}, names = {};
   const fileFor = async id => {
     if (!id) return null;
     const m = await getMedia(id);
     if (!m) return null;
-    const name = `${id}.${m.type === 'image/png' ? 'png' : m.type === 'image/gif' ? 'gif' : m.type === 'image/webp' ? 'webp' : 'jpg'}`;
+    const name = `${id}.${m.type.startsWith('audio/') ? soundExt(m.type) : m.type === 'image/png' ? 'png' : m.type === 'image/gif' ? 'gif' : m.type === 'image/webp' ? 'webp' : 'jpg'}`;
     if (!Object.values(names).includes(name)) {
       const n = String(Object.keys(names).length);
       names[n] = name;
@@ -255,7 +259,8 @@ export async function makeApkg(deck, cards) {
     return name;
   };
   const withFiles = [];
-  for (const c of cards) withFiles.push({ ...c, frontImageFile: await fileFor(c.frontImage), backImageFile: await fileFor(c.backImage) });
+  const soundFiles = async ids => (await Promise.all((ids || []).map(fileFor))).filter(Boolean);
+  for (const c of cards) withFiles.push({ ...c, frontImageFile: await fileFor(c.frontImage), backImageFile: await fileFor(c.backImage), frontSoundFiles: await soundFiles(c.frontSounds), backSoundFiles: await soundFiles(c.backSounds) });
   const [{ loadSqlJs, FFLATE_URL }, contents] = await Promise.all([import('./anki-read.js'), ankiContents(deck, withFiles)]);
   const [SQL, { zipSync }] = await Promise.all([loadSqlJs(), import(FFLATE_URL)]);
   const db = new SQL.Database();

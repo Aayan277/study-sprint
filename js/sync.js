@@ -14,8 +14,10 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { sendPending, fetchUsage } from './sync-quota.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink } from './sync-merge.js';
+import { planMedia, refusedAsFull, fetchUsage } from './sync-quota.js';
+import { fullMessage } from './quota.js';
+import { storedType } from './audio-type.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -23,6 +25,7 @@ const PAGE = 1000;                    // rows per request when pulling
 const BATCH = 500;                    // rows per request when pushing
 
 let running = null, again = false, timer = 0, started = false;
+let retrySounds = true;       // sounds the server turned away are tried again once each time the app opens, and on Sync now
 let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
 
 function emit(detail) {
@@ -191,7 +194,8 @@ export async function healNotes() {
 
 // ---------- syncing ----------
 // Sync now. If a sync is already running, one more runs straight after it (so nothing is missed).
-export function syncNow() {
+export function syncNow({ retry = false } = {}) {
+  if (retry) retrySounds = true;
   if (running) { again = true; return running; }
   running = run()
     .catch(err => {
@@ -255,28 +259,55 @@ async function run() {
   emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null, note: mediaNote });
 }
 
-// ---------- pictures ----------
+// ---------- pictures and sounds ----------
+// Both are files in the same bucket. Pictures go first, so a problem with sounds can never hold them up.
+// Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
-  const pending = await db.mediaToUpload();
-  // Within the account's space limit (sync-quota.js); what doesn't fit waits on this device. Returns a note about that.
-  const quotaNote = await sendPending(auth, pending, (i, n) => { if (n > 3) emit({ progress: `Sending pictures: ${i + 1} of ${n}…` }); });
-  // Pictures that cards here use but this device doesn't have yet.
-  const have = new Set((await db.getAll('media')).map(m => m.id));
-  const want = [...new Set((await db.getAll('cards')).flatMap(c => [c.frontImage, c.backImage]).filter(id => id && !have.has(id)))];
-  for (const [i, id] of want.entries()) {
-    if (want.length > 3) emit({ progress: `Downloading pictures: ${i + 1} of ${want.length}…` });
-    await fetchMedia(token, uid, id);
+  const rows = await db.mediaToUpload();
+  // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
+  const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
+  // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
+  const gate = await planMedia(auth, pending);
+  let upload;
+  try {
+    upload = await uploadMediaFiles(gate.send, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
+      onSent: m => db.markUploaded([m.id]),
+      onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
+    });
+  } catch (err) {
+    const full = await refusedAsFull(auth, err);      // the server itself said the account is full
+    if (!full) throw err;
+    gate.full = full;
+    upload = { sent: [], blocked: [], failed: [] };
   }
-  // Pictures no card uses any more: remove them here and from the account.
+  if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
+  retrySounds = false;
+  // What to tell the person: only files that are turned away now (this run), or were left out of it because they were before.
+  // (A file that was blocked, tried again and went up is no longer a problem.)
+  const left = [...upload.blocked.map(id => pending.find(m => m.id === id)), ...rows.filter(m => !pending.includes(m))].filter(Boolean);
+  const blockedKinds = { picture: left.some(m => !isSoundRow(m)), sound: left.some(isSoundRow) };
+  upload.failed.forEach(f => console.error('Could not send a file', f.id, f.message));
+
+  // Pictures and sounds that cards here use but this device doesn't have yet. Four at a time.
+  const have = new Set(await db.mediaKeys());
+  const cards = await db.getAll('cards');
+  const wantOf = fields => [...new Set(cards.flatMap(c => fields.flatMap(f => (Array.isArray(c[f]) ? c[f] : [c[f]]))).filter(id => id && !have.has(id)))];
+  for (const [kind, ids] of [['pictures', wantOf(['frontImage', 'backImage'])], ['sounds', wantOf(['frontSounds', 'backSounds'])]]) {
+    await runPool(ids, id => fetchMedia(token, uid, id), {
+      onProgress: (n, total) => { if (total > 3) emit({ progress: `Downloading ${kind}: ${n} of ${total}…` }); }
+    });
+  }
+  // Pictures and sounds no card uses any more: remove them here and from the account.
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
-  return quotaNote;
+  if (gate.full) return fullMessage(gate.full);
+  return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);
   if (!got) return null;
-  const m = { id, type: got.type, data: got.data, size: got.data.byteLength, created: Date.now() };
+  const m = { id, type: storedType(got.type, got.data), data: got.data, size: got.data.byteLength, created: Date.now() };
   await db.putRemoteMedia(m);
   return m;
 }
