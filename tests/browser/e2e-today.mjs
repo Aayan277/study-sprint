@@ -20,6 +20,7 @@ ok(JSON.stringify(await page.$$eval('.tab', t => t.map(x => x.textContent.trim()
 ok((await page.textContent('#startBtn')).includes('12 cards') && (await page.textContent('#startBtn')).includes('min'), 'Start shows 12 cards and a time estimate');
 ok(+(await page.textContent('[data-count=new]')) === 12 && +(await page.textContent('[data-count=due]')) === 0, 'counts: 12 new, 0 due');
 ok((await page.textContent('.streak')).includes('0') && (await page.textContent('.streak')).includes('Study today to start one'), 'no streak yet');
+ok(await page.evaluate(() => { const g = document.querySelector('.today-hero .goal'); return !!g && getComputedStyle(g).display === 'none'; }), "Original: Today's goal line (Clinical's) is in the page but hidden");
 await noHScroll('today'); await page.screenshot({ path: SP + '/t-today.png', fullPage: true });
 
 // More decks, an exam, and some history

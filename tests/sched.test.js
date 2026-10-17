@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSteps, formatSteps, parseMaxInterval, schedulerOptions, deckSchedulerOptions, SCHED_DEFAULTS, stepWords, sortSteps, explainSteps, cleanFsrsParams, personalW20, FSRS_VERSION } from '../js/sched-settings.js';
+import { parseSteps, formatSteps, parseMaxInterval, schedulerOptions, deckSchedulerOptions, SCHED_DEFAULTS, stepWords, sortSteps, explainSteps, cleanFsrsParams, personalW20, personalRow, FSRS_VERSION } from '../js/sched-settings.js';
 
 test('steps: minutes, hours and days, with spaces or commas', () => {
   assert.deepEqual(parseSteps('1m 10m'), { steps: ['1m', '10m'] });
@@ -118,4 +118,22 @@ test('personalW20: the decay of your weights, kept in the range the scheduler al
   assert.equal(personalW20({ fsrsParams: { ...MINE, w: W.map((x, i) => (i === 20 ? 0 : x)) } }), 0.1);
   assert.equal(personalW20({ fsrsParams: { ...MINE, w: W.map((x, i) => (i === 20 ? 5 : x)) } }), 0.8);
   assert.equal(personalW20(undefined), undefined);
+});
+
+test('personalRow: the Settings row for Personal parameters', async () => {
+  const none = personalRow(null, 132);
+  assert.deepEqual(none, { using: false, status: 'Using the standard FSRS settings.', canOptimize: false, why: 'Available after 400 reviews (you have 132).' });
+  assert.equal(personalRow(null, 400).canOptimize, true);
+  assert.equal(personalRow(null, 1234).why, '');
+  const mine = personalRow({ w: Array(21).fill(1), at: Date.UTC(2026, 9, 12, 12), reviews: 3412, cards: 611, version: FSRS_VERSION }, 5000, 'en-GB');
+  assert.equal(mine.status, 'Using your own settings, from 3,412 reviews (12 Oct).');
+  assert.equal(mine.using, true);
+  // after "Reset to default" ({ w: null }), and with junk: the standard settings
+  assert.equal(personalRow({ w: null, at: 1, version: FSRS_VERSION }, 500).using, false);
+  assert.equal(personalRow({ w: [1, 2], version: FSRS_VERSION }, 500).using, false);
+  assert.equal(personalRow(undefined, 0).why, 'Available after 400 reviews (you have 0).');
+  // sched-settings.js does not import fsrs-data.js (it loads at start-up), so it keeps its own 400: it must agree with the fit's
+  const { MIN_REVIEWS } = await import('../js/fsrs-data.js');
+  assert.equal(personalRow(null, MIN_REVIEWS).canOptimize, true);
+  assert.equal(personalRow(null, MIN_REVIEWS - 1).canOptimize, false);
 });

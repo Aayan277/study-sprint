@@ -312,6 +312,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .btn .ico{width:18px;height:18px}
 /* Progress ring (js/ui.js ring()) */
 .ring{position:relative;display:inline-grid;place-items:center;flex:none}
+.goal{display:none}      /* Today's goal line (a sentence and a bar): only the Clinical style shows it, in place of the ring (css/clinical.css) */
 .ring > svg{position:absolute;inset:0;width:100%;height:100%}
 .ring-bg{fill:none;stroke:color-mix(in srgb,var(--text) 13%,transparent)}
 .ring-fg{fill:none;stroke:var(--accent);filter:drop-shadow(0 0 4px var(--glow))}
@@ -550,6 +551,22 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-foot .btn{flex:1 1 auto;min-height:48px;white-space:nowrap}
 .sheet-foot .btn.primary,.sheet-foot .btn.solid{flex-grow:1.6;min-width:44%}
 .sheet-foot.stack{flex-direction:column;align-items:stretch}
+/* Your own glossary (item 12): underlined terms on cards, their popover, and the list in the glossary sheet */
+.gl-term{display:inline;padding:0;margin:0;border:0;background:none;color:inherit;font:inherit;letter-spacing:inherit;cursor:help;text-decoration:underline dotted;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:var(--accent);-webkit-user-select:text;user-select:text}
+.gl-term:hover,.gl-term[aria-expanded="true"]{background:var(--accent-tint)}
+.gl-term:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.gl-pop{position:fixed;z-index:60;max-width:min(320px,calc(100vw - 16px));max-height:50dvh;overflow:auto;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);box-shadow:var(--e-3);font:400 var(--fs-sm) var(--f-ui);line-height:1.45;text-align:left;white-space:normal}
+.gl-pop:focus{outline:none}
+.gl-pop-t{display:block;margin-bottom:var(--s-1);font-size:var(--fs-md)}
+.gl-pop-d{overflow-wrap:anywhere;color:var(--text-2)}
+.gl-edit{margin-top:var(--s-2)}
+.gl-search{width:100%}
+.gl-list{display:grid;gap:var(--s-1)}
+.gl-row{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-2) 0;border-bottom:1px solid var(--line)}
+.gl-row-t{flex:1;min-width:0;display:grid}
+.gl-row-t span{color:var(--text-2);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-row-t .gl-none{color:var(--text-3)}
+.gl-del{color:var(--again)}
 .sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
 .sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;opacity:.7;margin-left:4px}
 @media (pointer:coarse){.sheet-foot kbd{display:none}}
@@ -559,6 +576,21 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sheet-actions .btn{flex:1 1 auto}
 .confirm .sheet-actions{justify-content:flex-end}
+/* The Optimize parameters sheet (js/optimize-sheet.js) */
+.opt-run{display:grid;gap:var(--s-3);min-width:0}
+.opt-run p{margin:0}
+.opt-intro,.opt-note,.opt-detail{font-size:var(--fs-sm);color:var(--text-2);line-height:1.55}
+.opt-bar{height:8px;border-radius:var(--r-pill);background:var(--surface-3);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.opt-bar i{display:block;height:100%;width:0;border-radius:var(--r-pill);background:var(--accent);box-shadow:0 0 10px var(--glow);transition:width 200ms var(--ease)}
+.opt-phase{font-size:var(--fs-base);font-weight:600;display:flex;flex-wrap:wrap;gap:0 var(--s-2)}
+.opt-phase .mono{color:var(--text-2);font-variant-numeric:tabular-nums}
+.opt-result{font-size:var(--fs-base);line-height:1.55}
+.opt-result.good{padding:12px 14px;border-radius:var(--r-md);background:var(--good-tint);border:1px solid var(--good-line)}
+.opt-result.bad{padding:12px 14px;border-radius:var(--r-md);background:var(--again-tint);border:1px solid var(--again-line)}
+.opt-detail b{color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.opt-fold{border-top:1px solid var(--line);padding-top:6px}
+.opt-fold summary{cursor:pointer;font-weight:600;font-size:var(--fs-sm);min-height:40px;display:flex;align-items:center}
+.opt-w{display:block;margin-top:6px;padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-sunken);font:500 var(--fs-xs)/1.7 var(--f-num);overflow-wrap:anywhere;user-select:all;color:var(--text)}
 .sheet-danger,.card-info{border-top:1px solid var(--line)}
 .sheet-danger{padding-top:14px}
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
@@ -712,6 +744,14 @@ main[data-route="import"] > .view > .savebar{order:5}
 /* The question again, smaller, above the answer */
 .flash-recap{margin:0;font-weight:600;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em;line-height:1.15;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
 @keyframes card-in{from{opacity:0;transform:translateY(16px) scale(.985)}}
+/* Elements cards (item 4): "4 elements" under the question, a Got it / Missed toggle on each element, a ring on the suggested rating */
+.el-count{margin:var(--s-2) 0 0;text-align:center;font:500 var(--fs-sm) var(--f-ui);color:var(--text-3)}
+.steps.elements .step{grid-template-columns:28px minmax(0,1fr) auto}
+.el-tick{align-self:start;min-height:36px;padding:0 var(--s-3);border-radius:var(--r-md);border:1px solid var(--good);background:var(--good-tint);color:var(--good);font:600 var(--fs-sm) var(--f-ui);cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.el-tick[aria-pressed="false"]{border-color:var(--again);background:var(--again-tint);color:var(--again)}
+.el-tick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.el-sum{margin:0 0 var(--s-2);font-weight:600;color:var(--text)}
+.rate .sug-l{font:600 var(--fs-xs) var(--f-ui);letter-spacing:.02em;text-transform:uppercase;color:inherit}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
@@ -1099,6 +1139,8 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .switch:checked::after{transform:translateX(20px);background:var(--on-accent)}
 .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .advanced #schedReset{margin-top:12px}
+.opt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2) var(--s-3)}
+.opt-row .confirm{margin-top:4px}
 /* steps: text box + reset, and a plain-words explanation underneath */
 .steps-input{display:flex;gap:var(--s-2)}
 .steps-input input{flex:1}
@@ -2225,7 +2267,8 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-actions #stepAllBtn{padding-inline:var(--s-5)}
 .step-actions .key-hint{margin:0 0 0 8px;background:transparent;color:inherit;border-color:currentColor}
 /* Card editor: Answer in steps, Memory hook */
-.steps-switch{margin:var(--s-1) 0}
+.answer-mode{align-items:center;margin:var(--s-1) 0}
+.answer-mode-l{font:600 var(--fs-sm) var(--f-ui);color:var(--text-2);margin-right:var(--s-1)}
 .steps-ed{display:grid;gap:var(--s-3)}
 .step-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
 .step-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s-2);align-items:start}

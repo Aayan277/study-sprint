@@ -93,6 +93,7 @@ export async function renderToday(el) {
             <b class="th-big">${tr.state === 'todo' ? `${c.total} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
             ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>`}
             ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
+            ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> of ${tr.total} done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>
         </div>
         ${streakHTML(streak, { button: true })}

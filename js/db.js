@@ -18,15 +18,16 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
-import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams } from './sched-settings.js';
+import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
-  theme: { skin: 'violet', mode: 'dark', oled: false }, // mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
+  theme: { ui: 'original', skin: 'violet', mode: 'dark', oled: false }, // ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
   compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
   ratingFeedback: true,  // Review: a ring on the pressed button, the interval floating up and an outline of the old card leaving. This device only
@@ -141,6 +142,22 @@ async function store(name, mode = 'readonly') {
 
 // ---------- generic helpers ----------
 export async function getAll(name) { return done((await store(name)).getAll()); }
+// Every record of a store, read a few thousand at a time with a pause between, so a big review log doesn't hold the page up while
+// it is turned into objects (getAll does all of it in one go). Same result as getAll, in key order. For the optimizer.
+export async function getAllInPieces(name, size = 3000) {
+  const out = [];
+  let after = null;
+  for (;;) {
+    const os = await store(name);
+    const piece = await done(os.getAll(after === null ? undefined : IDBKeyRange.lowerBound(after, true), size));
+    out.push(...piece);
+    if (piece.length < size) return out;
+    after = piece[piece.length - 1][os.keyPath];
+    await new Promise(r => setTimeout(r, 0));
+  }
+}
+// How many records a store holds, without reading them (Settings uses it for the review log).
+export async function count(name) { return done((await store(name)).count()); }
 export async function get(name, key) { return done((await store(name)).get(key)); }
 export async function getAllByIndex(name, index, value) {
   return done((await store(name)).index(index).getAll(value));
@@ -422,7 +439,7 @@ export async function setSetting(key, value, { at: given } = {}) {
   const tx = db.transaction('settings', 'readwrite');
   const os = tx.objectStore('settings');
   os.put(value, key);
-  if (SYNCED_SETTINGS.includes(key)) {
+  if (isSyncedSetting(key)) {
     // A merged setting must beat the version the server already holds even if another device's clock is ahead.
     os.get(SETTING_TIMES).onsuccess = e => {
       const times = e.target.result || {};
@@ -431,7 +448,27 @@ export async function setSetting(key, value, { at: given } = {}) {
     };
   }
   await finished(tx);
-  if (SYNCED_SETTINGS.includes(key)) changed();
+  if (key === 'fsrsParams') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
+  if (isSyncedSetting(key)) changed();
+}
+
+// Several settings in one go (one transaction, one change report): Paste a list in the glossary. pairs: [[key, value], ...]
+export async function setSettings(pairs) {
+  const db = await openDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const os = tx.objectStore('settings');
+  let any = false;
+  for (const [key, value] of pairs) { os.put(value, key); any ||= isSyncedSetting(key); }
+  if (any) {
+    os.get(SETTING_TIMES).onsuccess = e => {
+      const times = { ...(e.target.result || {}) };
+      const at = Date.now();
+      for (const [key] of pairs) if (isSyncedSetting(key)) times[key] = at;
+      os.put(times, SETTING_TIMES);
+    };
+  }
+  await finished(tx);
+  if (any) changed();
 }
 
 // ---------- wipe everything ----------
@@ -566,13 +603,18 @@ export async function importAll(data, { everywhere = false } = {}) {
     // Settings are replaced too (on this device), except this device's sign-in and sync bookmarks.
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
-    const restored = restoredSettings(data.settings);
+    // (Glossary terms that are broken are dropped, not the whole backup, and a backup is never cut to the 2,000-term limit: cleanGlossary.)
+    const restored = restoredSettings(cleanGlossary(data.settings, { limit: Infinity }));
     restored.forEach(([k, v]) => settings.put(v, k));
     // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
     // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
     if (everywhere) {
       // The backup's study settings win in the account too.
-      settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
+      const times = Object.fromEntries(restored.filter(([k]) => isSyncedSetting(k)).map(([k]) => [k, now]));
+      // Terms that were here but are not in the backup are deleted in the account too (a null term, newer than theirs).
+      // (Only keys the backup does not have at all: a term the backup holds, even a broken one, is never turned into a delete.)
+      for (const k of oldKeys) if (typeof k === 'string' && k.startsWith('gloss:') && !Object.hasOwn(data.settings || {}, k)) { settings.put(null, k); times[k] = now; }
+      settings.put(times, SETTING_TIMES);
     }
   });
   scheduleChanges++;
@@ -639,8 +681,8 @@ export async function localChangesSince(since) {
   const os = tx.objectStore('settings');
   const times = (await done(os.get(SETTING_TIMES))) || {};
   const settings = [];
-  for (const key of SYNCED_SETTINGS) {
-    if (times[key] > since) settings.push({ key, value: await done(os.get(key)), time: times[key] });
+  for (const key of Object.keys(times)) {
+    if (isSyncedSetting(key) && times[key] > since) settings.push({ key, value: await done(os.get(key)), time: times[key] });
   }
   return { records, tombstones, settings };
 }
@@ -695,12 +737,14 @@ export async function applyRemote(rows) {
           }
           continue;
         }
-        if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
+        if (!isSyncedSetting(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
         const accepted = acceptSetting(row.id, row.data?.value);
         if (!accepted.ok) continue;                  // junk from the server is ignored
-        settingsStore.put(accepted.value, row.id);
+        // (A glossary term from another device is checked first; a broken one is stored as deleted.)
+        settingsStore.put(row.id.startsWith('gloss:') ? cleanGlossary({ [row.id]: accepted.value })[row.id] ?? null : accepted.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
+        if (row.id === 'fsrsParams') schedules = true;       // another device's weights: an open Review session was planned with the old ones
       } else if (row.store in SYNC_ID) {
         const key = `${row.store}:${row.id}`;
         if (!todo.has(key) || row.updated_at >= todo.get(key).updated_at) todo.set(key, row);

@@ -15,7 +15,9 @@
 //   - A failure in here must never break studying, so every entry point catches its own errors.
 
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
-export const reduced = () => RM.matches;
+// The Clinical style is plain and calm: it has no pulses, pops, count-ups, confetti or sliding screens, so every effect
+// here treats it like "reduce motion" (the final values simply show). Nothing else in this file needs to know.
+export const reduced = () => RM.matches || document.documentElement.dataset.ui === 'clinical';
 
 // The two switches in Settings → Appearance (this device only). app.js calls configure() whenever they change.
 export const flags = { rating: true, smooth: true };

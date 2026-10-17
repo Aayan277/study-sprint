@@ -116,6 +116,15 @@ test('playCountsAsReviews in a backup: on or off passes, anything else is refuse
   for (const v of ['yes', 1, 0, [], {}]) assert.match(checkBackup(withSetting(v)), /Play setting/);
 });
 
+test('glossary terms in a backup: the backup still passes, and bad terms are dropped on restore (cleanGlossary)', async () => {
+  const { cleanGlossary } = await import('../js/glossary.js');
+  const settings = { 'gloss:a': { term: 'ATP', aliases: ['adenosine triphosphate'], def: 'energy', at: 5 }, 'gloss:b': { nope: 1 }, 'gloss:c': null, dailyGoal: 20 };
+  assert.equal(checkBackup({ ...good, settings }), null);
+  const out = cleanGlossary(settings);
+  assert.deepEqual(out['gloss:a'], settings['gloss:a']);            // a good term round-trips unchanged
+  assert.ok(!('gloss:b' in out) && out['gloss:c'] === null && out.dailyGoal === 20);
+});
+
 test('fsrsParams in a backup: a good value, a reset or none passes; a restore keeps the good one and leaves junk out', () => {
   const mine = { w: Array(21).fill(0.5), at: 1, reviews: 450, cards: 90, version: 'fsrs-6' };
   const withParams = fsrsParams => ({ ...good, settings: { fsrsParams } });
