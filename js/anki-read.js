@@ -15,11 +15,15 @@ const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
 export async function readAnkiFile(file) {
   const { unzipSync } = await import(FFLATE_URL);
   const zip = new Uint8Array(await file.arrayBuffer());
-  let files;
+  let files, mediaBytes = 0;
   try {
     // Unpack just the database and the list of pictures for now: the pictures themselves can be large,
     // so they're unpacked one by one later, only the ones the cards use (see media.get below).
-    files = unzipSync(zip, { filter: f => /^(collection\.anki2(1b?)?|media)$/.test(f.name) });
+    // (The numbered files are the pictures and sounds: only counted here, for the "this deck is big" warning.)
+    files = unzipSync(zip, { filter: f => {
+      if (/^\d+$/.test(f.name)) mediaBytes += f.originalSize || 0;
+      return /^(collection\.anki2(1b?)?|media)$/.test(f.name);
+    } });
   } catch (err) {
     throw new Error('not-anki');
   }
@@ -49,6 +53,7 @@ export async function readAnkiFile(file) {
   } catch (err) {
     console.error('Could not read the list of pictures', err);
   }
+  result.mediaBytes = mediaBytes;           // about how much the deck's pictures and sounds take
   result.media = {
     has: name => members.has(name),
     // A picture's bytes and type, or null.

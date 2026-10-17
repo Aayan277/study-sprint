@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Check</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  #box { min-height: 70px; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<!--
+  The "are you a person?" box (Cloudflare Turnstile or hCaptcha) for sign-up, sign-in and password reset.
+  js/captcha.js puts this page in a sandboxed iframe (sandbox="allow-scripts", no allow-same-origin), so the
+  provider's script runs in a page with no access to the app's data or sign-in. It can only post the
+  one-time token back. Opened by captcha.js with ?p=turnstile|hcaptcha&k=SITE_KEY.
+
+  Why no integrity fingerprint (like the import map in index.html gives the libraries): Cloudflare and hCaptcha
+  change their script without a version number, and say it must be loaded from their address as it is, so a
+  fingerprint would break the box as soon as they update it. The sandbox is the protection instead.
+-->
+<div id="box"></div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var provider = q.get('p'), key = q.get('k') || '';
+  var SCRIPTS = {
+    turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ssCaptchaReady',
+    hcaptcha: 'https://js.hcaptcha.com/1/api.js?render=explicit&onload=ssCaptchaReady'
+  };
+  var tell = function (type, extra) {
+    parent.postMessage(Object.assign({ from: 'study-sprint-captcha', type: type }, extra || {}), '*');
+  };
+  if (!SCRIPTS[provider] || !/^[A-Za-z0-9_-]{6,80}$/.test(key)) { tell('error'); return; }
+  window.ssCaptchaReady = function () {
+    var api = provider === 'turnstile' ? window.turnstile : window.hcaptcha;
+    try {
+      api.render('#box', {
+        sitekey: key,
+        callback: function (token) { tell('token', { token: token }); },
+        'error-callback': function () { tell('error'); },
+        'expired-callback': function () { tell('expired'); }
+      });
+      tell('ready');
+    } catch (e) { tell('error'); }
+  };
+  var s = document.createElement('script');
+  s.src = SCRIPTS[provider];
+  s.async = true;
+  s.onerror = function () { tell('error'); };
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

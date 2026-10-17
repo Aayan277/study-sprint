@@ -4,9 +4,11 @@
 -- Pictures on cards are files, so they live in Supabase Storage (not the sync_items table): a private
 -- bucket called "media", with one folder per account named after its user id. These rules mean every
 -- signed-in person can only see, add, change or delete the files in their own folder.
+-- Files are limited to 3 MB each. After this, run supabase/limits.sql: it adds the per-account space limit to the
+-- "add" rule below (run limits.sql again if you ever run this file again).
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('media', 'media', false, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+values ('media', 'media', false, 3145728, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 on conflict (id) do update
   set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 

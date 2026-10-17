@@ -19,6 +19,7 @@ import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
+import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.14';
@@ -193,6 +194,9 @@ async function renderSettings(el) {
         <div><b>Storage</b><p>${persisted
           ? 'Saved permanently on this device.'
           : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p></div>
+      </div>
+      <div class="set-row" id="usageRow" hidden>
+        <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p></div>
       </div>
       <div class="set-row">
         <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
@@ -546,22 +550,24 @@ async function drawSync() {
   if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
   $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
     : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
+  drawUsage();
   if (!acct) {
     box.innerHTML = `
-      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one.</p>
+      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one. Anyone can make an account; each account only ever sees its own data.</p>
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
           <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
         ${passwordField('syncPw', 'Password', 'current-password')}
         <p class="pw-rules-title">New accounts need:</p>
         ${rulesList('syncRules')}
+        <div id="captchaBox" hidden></div>
         <p class="err" id="syncErr" hidden></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="syncCreate">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">First time? Use <b>Create account</b> once, then <b>Sign in</b> on your other devices.
+      <p class="note">First time? Use <b>Create account</b> once (we email you a link to confirm it), then <b>Sign in</b> on your other devices.
         <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
@@ -573,7 +579,19 @@ async function drawSync() {
       if (create && !passwordOk(pw)) { err.textContent = `Your password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
       box.querySelectorAll('button').forEach(b => { b.disabled = true; });
       try {
-        await (create ? sync.createAccount(email, pw) : sync.signIn(email, pw));
+        // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
+        const captcha = await captchaToken();
+        const made = await (create ? sync.createAccount(email, pw, captcha) : sync.signIn(email, pw, captcha));
+        if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
+          box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          openSheet(`
+            <h2 id="sheetTitle">Check your email</h2>
+            <p>We sent a link to <b>${esc(email)}</b>. Open it to confirm your account, then come back here and <b>sign in</b> with your email and password.</p>
+            <p class="note">No email after a few minutes? Look in your spam folder, or tap Create account again to send it again.</p>
+            <div class="sheet-actions"><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
+          $('pendOk').addEventListener('click', closeSheet);
+          return;
+        }
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
       } catch (e) {
@@ -588,8 +606,8 @@ async function drawSync() {
       const email = $('syncEmail').value.trim(), err = $('syncErr');
       if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email above first, then tap Forgot password.'; err.hidden = false; $('syncEmail').focus(); return; }
       try {
-        await sync.sendPasswordReset(email);
         err.hidden = true;
+        await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
           <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
@@ -614,6 +632,10 @@ async function drawSync() {
       <button class="btn ghost small" type="button" id="signOutBtn">Sign out…</button>
     </div>
     <div class="set-row">
+      <div><b>Delete my account</b><p>Permanently deletes your account and everything stored in it on the server. Your devices keep their own copy.</p></div>
+      <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
+    </div>
+    <div class="set-row">
       <div><b>Delete my synced data</b><p>Removes everything stored in your account on the server. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
@@ -622,6 +644,30 @@ async function drawSync() {
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
+  $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
+}
+
+// Settings → Your data → "In your account: data … · pictures and sounds … of …" (only when signed in, and the
+// server has supabase/limits.sql). Amber from 80%, with the full message once the account is full.
+async function drawUsage() {
+  const row = $('usageRow');
+  if (!row) return;
+  const u = (await sync.account()) ? usageLine(await sync.usage()) : null;
+  if (!row.isConnected) return;
+  row.hidden = !u;
+  if (!u) return;
+  $('usageLine').textContent = u.text;
+  $('usageLine').className = 'usage-line ' + u.level;
+  $('usageNote').hidden = !u.detail;
+  $('usageNote').textContent = u.detail;
+  $('usageNote').className = 'note usage-line ' + u.level;
+}
+
+// A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads
+// when it's needed.)
+async function captchaToken() {
+  const { captchaOn, askCaptcha } = await import('./captcha.js');
+  return captchaOn() ? askCaptcha($('captchaBox')) : undefined;
 }
 
 // A password box with a Show / Hide button (handy on phones).
@@ -728,7 +774,7 @@ function confirmDeleteServer() {
     <h2 id="sheetTitle">Delete your synced data?</h2>
     <div class="confirm">
       <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress and settings. It can't be undone.</p>
-      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, delete the user in Supabase → Authentication → Users.)</p>
+      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="dsNo">Cancel</button>
         <button class="btn danger solid" type="button" id="dsYes">Delete from server</button>
@@ -744,6 +790,36 @@ function confirmDeleteServer() {
       toast('Your synced data was deleted from the server');
       drawSync();
     } catch (e) { toast(e.message); $('dsYes').disabled = false; }
+  });
+}
+
+// Delete the account itself. A typed confirmation: the button stays off until the box says DELETE.
+function confirmDeleteAccount() {
+  openSheet(`
+    <h2 id="sheetTitle">Delete your account?</h2>
+    <div class="confirm">
+      <p>This permanently deletes your <b>account</b> and <b>everything stored in it on the server</b>: decks, cards, progress, settings, pictures and sounds, and your sign-in. It can't be undone, and you'd need to make a new account to sync again.</p>
+      <p class="note"><b>Your data on this device is kept.</b> This device is signed out afterwards. Your other devices keep their own copies too, but can no longer sync.</p>
+      <label class="field"><span>Type DELETE to confirm</span>
+        <input id="daText" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <p class="err" id="daErr" hidden></p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="daNo">Cancel</button>
+        <button class="btn danger solid" type="button" id="daYes" disabled>Delete my account</button>
+      </div>
+    </div>`);
+  $('daText').focus();
+  $('daNo').addEventListener('click', closeSheet);
+  $('daText').addEventListener('input', () => { $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
+  $('daYes').addEventListener('click', async () => {
+    if ($('daText').value.trim() !== 'DELETE') return;
+    $('daYes').disabled = true; $('daErr').hidden = true;
+    try {
+      await sync.deleteAccount();
+      closeSheet();
+      toast('Your account was deleted. Your data is still on this device.');
+      drawSync();
+    } catch (e) { $('daErr').textContent = e.message; $('daErr').hidden = false; $('daYes').disabled = false; }
   });
 }
 
@@ -790,7 +866,7 @@ let warnedStale = false;
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
-  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else showSyncStatus(); }
+  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') drawUsage(); } }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.
@@ -980,6 +1056,7 @@ async function showResetLink(link) {
   resetShown = true;
   const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
   if (link.error) { forget(); toast(link.error); return; }
+  if (link.confirmed) { toast('Email confirmed. Now sign in with your email and password.'); return; }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
   let user;
   try { user = await sync.lookUpResetLink(link.session); } catch (err) {

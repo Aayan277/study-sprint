@@ -14,6 +14,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
+import { sendPending, fetchUsage } from './sync-quota.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
@@ -37,8 +38,16 @@ export async function account() {
   return syncAuth ? { email: syncAuth.user.email, id: syncAuth.user.id, lastSync: syncState?.lastSync || 0 } : null;
 }
 
-export async function createAccount(email, password) { return signedIn(await supa.signUp(email.trim(), password)); }
-export async function signIn(email, password) { return signedIn(await supa.signIn(email.trim(), password)); }
+// Make an account. With email confirmation turned on (the normal setup, docs/sync-setup.md) nobody is signed in
+// yet: Supabase emails a link first. Returns { pending: true } then, { pending: false } once signed in.
+// captcha: the token from captcha.js, when the project uses one.
+export async function createAccount(email, password, captcha) {
+  const made = await supa.signUp(email.trim(), password, { captcha, redirectTo: appUrl() });
+  if (made.pending) return { pending: true };
+  await signedIn(made.session);
+  return { pending: false };
+}
+export async function signIn(email, password, captcha) { return signedIn(await supa.signIn(email.trim(), password, { captcha })); }
 
 async function signedIn(session) {
   const { syncState } = await db.getSettings();
@@ -56,7 +65,7 @@ async function signedIn(session) {
 // The app's own address, which the reset email links back to.
 const appUrl = () => location.origin + location.pathname;
 
-export const sendPasswordReset = email => supa.sendPasswordReset(email.trim(), appUrl());
+export const sendPasswordReset = (email, captcha) => supa.sendPasswordReset(email.trim(), appUrl(), { captcha });
 
 // Opened from a password-reset email? The link's address holds a sign-in (see parseAuthLink).
 // Returns { session } to set a new password with, { error } if the link didn't work, or null.
@@ -123,6 +132,22 @@ export async function deleteServerData() {
   await supa.deleteAllRows(auth.access_token, auth.user.id);
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
+}
+
+// Delete the account itself: its files, its synced data, and the sign-in. This device keeps its own data and is
+// signed out. (Needs supabase/limits.sql on the project.)
+export async function deleteAccount() {
+  const auth = await session();
+  if (!auth) throw new supa.SupaError('Sign in first.');
+  // Files first, through the Storage API (that also frees the space); the server function removes any left.
+  try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
+  await supa.deleteAccount(auth.access_token);
+  await signOut({ forget: true });
+}
+// What this account uses and may use: { data, media, limit } in bytes, or null (limits.sql not run, or offline).
+export async function usage() {
+  const auth = await session().catch(() => null);
+  return auth ? fetchUsage(auth.access_token) : null;
 }
 
 // Sign out on this device. Its data stays here. (Signing back in to the same account carries on where it
@@ -208,7 +233,7 @@ async function run() {
   //    devices use (so they work offline). A picture problem (e.g. storage not set up yet) doesn't stop the
   //    rest of the sync; it's reported as a note.
   let mediaNote = null;
-  try { await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
+  try { mediaNote = await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
 
   // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
@@ -234,11 +259,8 @@ async function run() {
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
   const pending = await db.mediaToUpload();
-  for (const [i, m] of pending.entries()) {
-    if (pending.length > 3) emit({ progress: `Sending pictures: ${i + 1} of ${pending.length}…` });
-    await supa.uploadMedia(token, uid, m.id, m.type, m.data);
-    await db.markUploaded([m.id]);
-  }
+  // Within the account's space limit (sync-quota.js); what doesn't fit waits on this device. Returns a note about that.
+  const quotaNote = await sendPending(auth, pending, (i, n) => { if (n > 3) emit({ progress: `Sending pictures: ${i + 1} of ${n}…` }); });
   // Pictures that cards here use but this device doesn't have yet.
   const have = new Set((await db.getAll('media')).map(m => m.id));
   const want = [...new Set((await db.getAll('cards')).flatMap(c => [c.frontImage, c.backImage]).filter(id => id && !have.has(id)))];
@@ -249,6 +271,7 @@ async function syncMedia(auth) {
   // Pictures no card uses any more: remove them here and from the account.
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
+  return quotaNote;
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);

@@ -91,7 +91,8 @@ test('reading a password reset link', () => {
   assert.match(parseAuthLink('#error=server_error&error_description=Click+evil.example+now').error, /^That link didn’t work/);   // the link's own text is never shown
   assert.equal(parseAuthLink('#/decks'), null);
   assert.equal(parseAuthLink(''), null);
-  assert.equal(parseAuthLink('#access_token=abc&type=signup'), null);      // only reset links are handled
+  assert.deepEqual(parseAuthLink('#access_token=abc&type=signup'), { confirmed: true });      // the confirm-email link: nothing is kept from it
+  assert.equal(parseAuthLink('#access_token=abc&type=magiclink'), null);      // anything else is ignored
 });
 
 test('password rules for new passwords: 8+ characters, a letter and a number', () => {
