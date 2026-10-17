@@ -206,7 +206,10 @@ export function stepsProblem(p) {
   if (mode === 'text') return '';
   if (mode === 'elements') {
     if (stepValues(p).length < 2) return 'Add at least two elements, or choose Text.';
-    return elementsRoundTrip(elementParts(p), { mask: maskMath }) ? '' : "A line inside an element can't start with 'Element N:'.";
+    if (elementsRoundTrip(elementParts(p), { mask: maskMath })) return '';
+    // Name the real cause: an "Element N:" line inside an element, or a "Step N:" line that would turn the card into a steps card.
+    return stepValues(p).some(t => /^\s*element\s*\d+\s*[:.)]/im.test(t)) || /^\s*element\s*\d+\s*[:.)]/im.test(document.getElementById(p + 'Intro').value)
+      ? "A line inside an element can't start with 'Element N:'." : "A line inside an element can't start with 'Step N:'.";
   }
   if (stepValues(p).length < 2) return 'Add at least two steps, or choose Text.';
   // What is saved must read back as the same steps (a line inside a step that starts "Step 3:" or "Answer:" would not).

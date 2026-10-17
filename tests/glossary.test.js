@@ -95,6 +95,13 @@ test('the matcher is cached per glossary version', () => {
   assert.notEqual(buildMatcher(es), buildMatcher([E('1', 'ATP'), E('2', 'ADP')]));
 });
 
+test('hyphenated and regex-special terms never break matching', () => {
+  const es = [E('1', 'X-ray'), E('2', 'T-cell'), E('3', 'beta-blocker'), E('4', 'C++'), E('5', '(a)'), E('6', 'x.y'), E('7', '$'), E('8', '?'), E('9', 'a|b'), E('10', '[x]'), E('11', 'back\\slash'), E('12', 'a/b')];
+  const text = 'An X-ray and a t-cell, a beta-blocker, C++ and (a) with x.y, then $ and ? and a|b plus [x] and back\\slash and a/b. Not xzy.';
+  assert.deepEqual(marks(text, es), ['X-ray', 't-cell', 'beta-blocker', 'C++', '(a)', 'x.y', '$', '?', 'a|b', '[x]', 'back\\slash', 'a/b']);
+  assert.deepEqual(marks('X-RAY machines and x-rays', [E('1', 'X-ray')]), ['X-RAY']);       // whole words: "x-rays" is not "X-ray"
+});
+
 test('2,000 terms: matching a card is fast', () => {
   const es = Array.from({ length: 2000 }, (_, i) => E(`id${i}`, `term${i} word${i % 7}`));
   const m = buildMatcher(es);
@@ -103,8 +110,23 @@ test('2,000 terms: matching a card is fast', () => {
   const t0 = performance.now();
   for (let i = 0; i < 5; i++) findTerms(text, m);
   const each = (performance.now() - t0) / 5;
-  assert.ok(each < 20, `${each.toFixed(1)} ms per card`);
+  assert.ok(each < 10, `${each.toFixed(1)} ms per card`);
   assert.equal(findTerms(text, m).length, 2);
+});
+
+test('2,000 terms on a 5,000-character text: under 10 ms (also with many terms sharing a first letter)', () => {
+  const es = Array.from({ length: 2000 }, (_, i) => E(`id${i}`, i % 2 ? `term${i}` : `Tissue type ${i}`));
+  es.push(E('x', 'ATP synthase'), E('y', 'mitochondria'));
+  const m = buildMatcher(es);
+  const text = ('The mitochondria make ATP with the help of ATP synthase, a tissue that tends to talk about term and terms. ').repeat(48);
+  assert.ok(text.length >= 5000);
+  findTerms(text, m);
+  const t0 = performance.now();
+  let found;
+  for (let i = 0; i < 5; i++) found = findTerms(text, m);
+  const each = (performance.now() - t0) / 5;
+  assert.ok(each < 10, `${each.toFixed(1)} ms for 5k characters`);
+  assert.deepEqual(found.map(f => f.entry.id).sort(), ['x', 'y']);
 });
 
 test('paste a list: new terms, ones already there, lines without a definition', () => {

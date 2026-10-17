@@ -85,7 +85,12 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.keyboard.press('Space');
   ok(await shown(p) === 1 && /Reveal element 2 of 4/.test(await p.textContent('#stepBtn')), `${tag}: Space reveals element 1`);
   ok((await p.getAttribute('#steps > li:not([hidden]) .el-tick', 'aria-pressed')) === 'true' && /Got it/.test(await p.textContent('#steps > li:not([hidden]) .el-tick')), `${tag}: it starts as "Got it"`);
+  // tapping Got it / Missed must not take the keyboard away: Space still reveals the next element
+  await p.click('#steps > li:nth-child(1) .el-tick'); await p.click('#steps > li:nth-child(1) .el-tick');
+  ok(await p.evaluate(() => !document.activeElement?.matches('.el-tick')), `${tag}: a tap on a toggle leaves the focus where it was`);
+  ok(/X marks a miss/.test(await p.textContent('.key-line')), `${tag}: the key line mentions X`);
   await p.keyboard.press('Space');                 // element 2
+  ok(await shown(p) === 2, `${tag}: Space revealed element 2 after the taps`);
   await p.keyboard.press('x');                     // miss the latest (element 2)
   ok((await p.getAttribute('#steps > li:nth-child(2) .el-tick', 'aria-pressed')) === 'false' && /Missed/.test(await p.textContent('#steps > li:nth-child(2) .el-tick')), `${tag}: X marks the latest element Missed`);
   await p.keyboard.press('Space');                 // element 3

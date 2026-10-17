@@ -148,6 +148,40 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok(sync.afterNew === 'FromElsewhere' && sync.afterOld === 'FromElsewhere', `${tag}: the newest copy of a term wins`);
   ok(sync.added === 'Brand new' && sync.broken === null && sync.deleted === null, `${tag}: a new term from another device arrives, a broken one is stored as deleted, a delete wins when newer`);
 
+  // ---------- hyphenated terms ----------
+  const hy = await p.evaluate(async () => {
+    const g = await import('./js/glossary.js'), v = await import('./js/glossary-view.js');
+    const es = ['X-ray', 'T-cell', 'beta-blocker', 'C++', '(a)', 'x.y', '$', '?'].map((t, i) => ({ id: 'h' + i, term: t, aliases: [], def: 'd', at: i }));
+    const root = document.createElement('div');
+    root.innerHTML = '<p>An X-ray, a T-cell and a beta-blocker with C++ and (a) and x.y and $ and ?</p>';
+    document.body.append(root);
+    const n = v.underline(root, g.buildMatcher(es));
+    const got = [...root.querySelectorAll('.gl-term')].map(b => b.textContent);
+    root.remove();
+    return { n, got };
+  });
+  ok(hy.n === 8 && hy.got[0] === 'X-ray' && hy.got[2] === 'beta-blocker', `${tag}: hyphenated and regex-special terms are underlined (${hy.got.join(' | ')})`);
+
+  // ---------- restore everywhere ----------
+  const rest = await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const before = await db.exportAll();
+    // the account holds terms 'old1' (not in the backup) and the backup has 2,001 terms, one of them broken, one deleted
+    await db.setSetting('gloss:old1', { term: 'Old', aliases: [], def: '', at: 1 });
+    const settings = { ...before.settings };
+    for (let i = 0; i < 2001; i++) settings['gloss:b' + i] = { term: 'Back' + i, aliases: [], def: '', at: i };
+    settings['gloss:broken'] = { nonsense: 1 };
+    settings['gloss:gone'] = null;
+    await db.importAll({ ...before, settings }, { everywhere: true });
+    const after = await db.getSettings();
+    const times = after._times || {};
+    const kept = Object.entries(after).filter(([k, v]) => k.startsWith('gloss:b') && v).length;
+    return { kept, old: after['gloss:old1'], oldTime: times['gloss:old1'] > 0, broken: 'gloss:broken' in after, brokenNull: after['gloss:broken'] === null, goneNull: after['gloss:gone'] === null, goneTimed: times['gloss:gone'] > 0 };
+  });
+  ok(rest.kept === 2001, `${tag}: a restore keeps all ${rest.kept} terms of the backup (no 2,000 cap)`);
+  ok(rest.old === null && rest.oldTime, `${tag}: restore everywhere deletes a term the backup does not have at all`);
+  ok(!rest.broken && rest.goneNull && rest.goneTimed, `${tag}: a broken term of the backup is dropped, not turned into a delete; a deleted one stays deleted`);
+
   await p.close();
 }
 

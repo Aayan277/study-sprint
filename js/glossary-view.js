@@ -19,10 +19,13 @@ const AVOID = 'button, input, textarea, select, a, script, style, .tex, .katex, 
 let loaded = null;
 export const forgetGlossary = () => { loaded = null; };
 export function glossaryNow() {
-  loaded ||= db.getSettings().then(settings => {
-    const entries = entriesFrom(settings);
-    return { entries, byId: new Map(entries.map(e => [e.id, e])), matcher: buildMatcher(entries) };
-  });
+  if (!loaded) {
+    const mine = loaded = db.getSettings().then(settings => {
+      const entries = entriesFrom(settings);
+      return { entries, byId: new Map(entries.map(e => [e.id, e])), matcher: buildMatcher(entries), on: settings.glossaryUnderline !== false };
+    });
+    mine.catch(() => { if (loaded === mine) loaded = null; });          // a failed read is not kept: the next card tries again
+  }
   return loaded;
 }
 // A change in the sheet, or a sync that brought other devices' terms.
@@ -63,12 +66,21 @@ export function underline(root, matcher, { skip = null } = {}) {
   return count;
 }
 
+// The terms in each card's answer, kept for the glossary version they were found with (a card comes up again and again).
+const answerTerms = new WeakMap();
+let run = 0;
 export async function underlineCard(flash, card) {
   closePop();
+  const mine = ++run;
   const g = await glossaryNow();
-  if (!g.matcher || !flash?.isConnected) return 0;
+  // (A newer card was drawn while this one waited: only the newest draw underlines, so a face is never underlined twice.)
+  if (mine !== run || !g.on || !g.matcher || !flash?.isConnected || flash.querySelector('.gl-term')) return 0;
   // On the front, a term that is also in the answer is left alone (it would give the answer away).
-  const skip = termIdsIn(String(card?.back ?? ''), g.matcher);
+  const back = String(card?.back ?? '');
+  let cached = answerTerms.get(g.matcher);
+  if (!cached) answerTerms.set(g.matcher, cached = new Map());
+  let skip = cached.get(back);
+  if (!skip) { skip = termIdsIn(back, g.matcher); if (cached.size > 500) cached.clear(); cached.set(back, skip); }
   return underline(flash.querySelector('.rv-front'), g.matcher, { skip }) + underline(flash.querySelector('.rv-back'), g.matcher);
 }
 
@@ -129,6 +141,8 @@ document.addEventListener('click', e => {
 // Escape closes it and gives the focus back to the word.
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && pop) { e.preventDefault(); e.stopPropagation(); closePop({ refocus: true }); }
+  // Space or Enter on the popover itself closes it (on its Edit button they press the button, as usual).
+  else if ((e.key === ' ' || e.key === 'Enter') && pop && e.target === pop) { e.preventDefault(); e.stopPropagation(); closePop({ refocus: true }); }
 }, true);
 // A mouse resting on a word for 300 ms shows it too (and it goes again when the mouse leaves, unless it was opened by a tap or key).
 document.addEventListener('mouseover', e => {

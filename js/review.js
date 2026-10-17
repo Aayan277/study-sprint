@@ -265,7 +265,7 @@ function renderSession(el, enter = false) {
       </form>` : ''}
     ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad</p>`;
+    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad${sp?.kind === 'elements' ? ' · X marks a miss' : ''}</p>`;
   drawSessionPage(el, head, body);
   glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
@@ -274,6 +274,7 @@ function renderSession(el, enter = false) {
   $('endBtn').addEventListener('click', () => finish(el));
   $('moreBtn').addEventListener('click', () => openCardMenu('actions'));
   $('scratchBtn').addEventListener('click', toggleScratch);
+  keepFocusOnPress($('flash'), '.el-tick');      // a tap on Got it / Missed must leave Space free to reveal and rate
   keepFocusOnPress($('scratchBtn').parentElement, '#scratchBtn');      // a mouse click on the pen must leave Space free to flip the card
   $('speakBtn')?.addEventListener('click', e => { e.stopPropagation(); readAloud(); });      // (the card flips on a click: not this one)
   autoSpeak(card);
@@ -299,14 +300,14 @@ function renderSession(el, enter = false) {
 }
 
 // Your own glossary (item 12): the terms on the card get a dotted underline and a definition popover. The module is only loaded
-// when the glossary has terms and Settings → Appearance → "Glossary underlines" is on (this device).
-const hasTerms = settings => settings?.glossaryUnderline !== false && Object.keys(settings || {}).some(k => k.startsWith('gloss:') && settings[k]);
+// when the glossary has terms (the module itself checks Settings → Appearance → "Glossary underlines", this device, each time).
+const hasTerms = settings => Object.keys(settings || {}).some(k => k.startsWith('gloss:') && settings[k]);
 function glossHook() {
   if (!R?.gloss || !R.current) return;
   const id = R.current.card.id;
   import('./glossary-view.js').then(v => (R?.current?.card.id === id ? v.underlineCard($('flash'), R.current.card) : null)).catch(err => console.error(err));
 }
-addEventListener('glossary-changed', () => { if (R) R.gloss = R.settings?.glossaryUnderline !== false; });      // the first term, added mid-session, counts from the next card
+addEventListener('glossary-changed', () => { if (R) R.gloss = true; });      // the first term, added mid-session, counts from the next card
 
 // Draws the header and the card, around the progress bar. The bar is NOT redrawn with them: it stays in the page
 // from card to card, so its fill slides to the new value instead of starting again from empty.
@@ -408,7 +409,7 @@ function stepsHTML(sp) {
 }
 const tickHTML = i => {
   const missed = R.elMissed.has(i);
-  return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
+  return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
@@ -741,6 +742,7 @@ document.addEventListener('keydown', e => {
   if (!R?.active || !document.getElementById('flash') || document.getElementById('sheet')?.open) return;
   if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the zoom viewer and the box editor have their own keys
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('.gl-pop')) return;      // a glossary popover has its own keys (Escape, Space and Enter close it)
   const inInput = e.target.matches('input, textarea, select');
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {

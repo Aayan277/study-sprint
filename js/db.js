@@ -417,6 +417,25 @@ export async function setSetting(key, value, { at: given } = {}) {
   if (isSyncedSetting(key)) changed();
 }
 
+// Several settings in one go (one transaction, one change report): Paste a list in the glossary. pairs: [[key, value], ...]
+export async function setSettings(pairs) {
+  const db = await openDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const os = tx.objectStore('settings');
+  let any = false;
+  for (const [key, value] of pairs) { os.put(value, key); any ||= isSyncedSetting(key); }
+  if (any) {
+    os.get(SETTING_TIMES).onsuccess = e => {
+      const times = { ...(e.target.result || {}) };
+      const at = Date.now();
+      for (const [key] of pairs) if (isSyncedSetting(key)) times[key] = at;
+      os.put(times, SETTING_TIMES);
+    };
+  }
+  await finished(tx);
+  if (any) changed();
+}
+
 // ---------- wipe everything ----------
 export async function resetAll() {
   const db = await openDB();
@@ -540,7 +559,7 @@ export async function importAll(data, { everywhere = false } = {}) {
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
     // (Glossary terms that are broken are dropped, not the whole backup: cleanGlossary.)
-    const restored = Object.entries(cleanGlossary(data.settings)).filter(([k]) => !LOCAL_ONLY.includes(k));
+    const restored = Object.entries(cleanGlossary(data.settings, { limit: Infinity })).filter(([k]) => !LOCAL_ONLY.includes(k));
     restored.forEach(([k, v]) => settings.put(v, k));
     // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
     // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
@@ -548,7 +567,8 @@ export async function importAll(data, { everywhere = false } = {}) {
       // The backup's study settings win in the account too.
       const times = Object.fromEntries(restored.filter(([k]) => isSyncedSetting(k)).map(([k]) => [k, now]));
       // Terms that were here but are not in the backup are deleted in the account too (a null term, newer than theirs).
-      for (const k of oldKeys) if (typeof k === 'string' && k.startsWith('gloss:') && !(k in times)) { settings.put(null, k); times[k] = now; }
+      // (Only keys the backup does not have at all: a term the backup holds, even a broken one, is never turned into a delete.)
+      for (const k of oldKeys) if (typeof k === 'string' && k.startsWith('gloss:') && !Object.hasOwn(data.settings || {}, k)) { settings.put(null, k); times[k] = now; }
       settings.put(times, SETTING_TIMES);
     }
   });

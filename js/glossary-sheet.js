@@ -160,10 +160,8 @@ export async function openPasteList() {
     if (!plan?.items.length) return;
     $('glPasteGo').disabled = true;
     const at = Date.now();
-    for (const [i, it] of plan.items.entries()) {
-      const entry = cleanEntry({ term: it.term, aliases: [], def: it.def, at: at + i });
-      if (entry) await db.setSetting(GLOSS_PREFIX + randomId(), entry);
-    }
+    const pairs = plan.items.map((it, i) => [GLOSS_PREFIX + randomId(), cleanEntry({ term: it.term, aliases: [], def: it.def, at: at + i })]).filter(([, e]) => e);
+    await db.setSettings(pairs);          // one transaction, one change report
     changed();
     toast(`Added ${plural(plan.items.length, 'term')}`);
     openGlossary();

@@ -257,8 +257,13 @@ async function showMixedWith(card) {
 }
 
 // The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.
+// The text selected on the card, for "Add to glossary": a tap on the ⋯ button can clear the selection before the sheet opens, so
+// it is also noted as a press starts (and used if it is only moments old).
+let pressed = { text: '', at: 0 };
+const selectedText = () => String(getSelection?.() || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+document.addEventListener('pointerdown', () => { pressed = { text: selectedText(), at: Date.now() }; }, true);
 async function openCardActions(card, ctx) {
-  const picked = String(getSelection?.() || '').replace(/\s+/g, ' ').trim().slice(0, 80);      // text selected on the card, for "Add to glossary"
+  const picked = selectedText() || (Date.now() - pressed.at < 2000 ? pressed.text : '');
   const state = ctx.statesById.get(card.id);
   const now = Date.now();
   const status = cardStatus(card, state, now);
