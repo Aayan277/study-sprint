@@ -86,7 +86,7 @@ function playOne(url, id, mine) {
     const end = () => { if (done) return; done = true; a.onended = a.onerror = null; if (finishCurrent === end) finishCurrent = null; resolve(); };
     finishCurrent = end;
     a.onended = end;
-    a.onerror = () => { markBroken(id); end(); };
+    a.onerror = () => { if (a.getAttribute('src') !== url) return; markBroken(id); end(); };      // (an error about an earlier src, like the silent clip, is not this sound's)
     a.muted = false;
     a.src = url;
     setPlaying(id);
@@ -161,7 +161,8 @@ function unlock() {
     GESTURES.forEach(g => removeEventListener(g, unlock, true));       // only now, when play() really worked
   }).catch(() => { /* not allowed (yet): stay listening for the next tap */ }).then(() => {
     unlocked = null;
-    if (!finishCurrent) { try { a.pause(); } catch { /* fine */ } a.muted = false; a.removeAttribute('src'); }
+    // Only pause: taking the src away would raise an error event later, which would land on whatever sound started in the meantime.
+    if (!finishCurrent) { try { a.pause(); } catch { /* fine */ } a.muted = false; }
   });
 }
 GESTURES.forEach(g => addEventListener(g, unlock, true));
