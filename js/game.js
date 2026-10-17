@@ -4,7 +4,7 @@
 import { canType, normalizeAnswer } from './match.js';
 import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
-import { isStepped, finalStep } from './steps.js';
+import { isStepped, finalStep, parseElements } from './steps.js';
 import { maskMath } from './math.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
@@ -31,9 +31,12 @@ export function shuffle(a, rnd = Math.random) {
 export const isCloze = card => !!card.noteId && card.cloze !== undefined;
 // An image-occlusion card (see occlusion.js) is front-only too: the picture with its highlighted box is the question, the
 // box's label the answer. Cards that can't be asked back → front.
-// A step-by-step card (its back is "Step 1: ... Step 2: ..."; see steps.js) asks for its final answer.
+// A step-by-step card (its back is "Step 1: ... Step 2: ..."; see steps.js) asks for its final answer. An elements card
+// ("Element 1: ...") asks for the whole list, joined with " · ": multiple choice only, never typed.
 const stepped = card => !isCloze(card) && !hasMasks(card) && isStepped(card.back, { mask: maskMath });
-export const isFrontOnly = card => isCloze(card) || hasMasks(card) || stepped(card);
+const elemental = card => !isCloze(card) && !hasMasks(card) && !!parseElements(card.back, { mask: maskMath });
+const structured = card => stepped(card) || elemental(card);
+export const isFrontOnly = card => isCloze(card) || hasMasks(card) || structured(card);
 
 export function questionFor(card, qtype) {
   if (hasMasks(card)) {
@@ -46,6 +49,10 @@ export function questionFor(card, qtype) {
     const answer = finalStep(card.back, { mask: maskMath });
     const ask = card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer };
     return qtype === 'front' || (qtype === 'typing' && canType(answer)) ? ask : null;
+  }
+  if (elemental(card)) {
+    const answer = parseElements(card.back, { mask: maskMath }).items.join(' · ');
+    return qtype === 'front' ? (card.frontImage ? { prompt: card.front, answer, image: card.frontImage } : { prompt: card.front, answer }) : null;
   }
   const q = (front, image) => {
     const [prompt, answer] = front ? [card.front, card.back] : [card.back, card.front];

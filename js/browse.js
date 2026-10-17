@@ -258,6 +258,7 @@ async function showMixedWith(card) {
 
 // The short sheet for a card in Review or Play: the few things you do while studying, and More for the rest.
 async function openCardActions(card, ctx) {
+  const picked = String(getSelection?.() || '').replace(/\s+/g, ' ').trim().slice(0, 80);      // text selected on the card, for "Add to glossary"
   const state = ctx.statesById.get(card.id);
   const now = Date.now();
   const status = cardStatus(card, state, now);
@@ -270,10 +271,12 @@ async function openCardActions(card, ctx) {
         ${FLAGS.map(f => `<button type="button" class="act-flag" data-flag="${f.id}" style="--c:${f.color}" aria-pressed="${card.flag === f.id}" aria-label="${f.name} flag"></button>`).join('')}</div>
       <button type="button" class="act-row" data-act="bury" aria-keyshortcuts="-">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span><kbd aria-hidden="true">-</kbd></button>
       <button type="button" class="act-row" data-act="suspend" aria-keyshortcuts="@">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span><kbd aria-hidden="true">@</kbd></button>
+      <button type="button" class="act-row" data-go="glossary">${icon('plus')}<span>Add to glossary${picked ? `<small>“${esc(picked)}”</small>` : ''}</span></button>
       <button type="button" class="act-row" data-go="more">${icon('more')}<span>More<small>Move, due date, reset, delete, card info</small></span>${icon('chevron')}</button>
     </div>`, { side: true });
   const { save } = cardOps(card, ctx);
   const sheet = $('sheet');
+  sheet.querySelector('[data-go="glossary"]').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openTermForm({ term: picked, back: 'close' })).catch(err => console.error(err)));
   sheet.querySelector('[data-go="edit"]').addEventListener('click', () => openCardEdit(card, ctx));
   sheet.querySelector('[data-go="more"]').addEventListener('click', () => openCardPanel(card, { ...ctx, mode: 'full' }));
   sheet.querySelector('[data-act="bury"]').addEventListener('click', () => toggleBury(card, save));

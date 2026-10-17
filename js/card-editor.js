@@ -8,7 +8,7 @@
 
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { hasMath, wrapMath, maskMath } from './math.js';
-import { parseSteps, joinSteps, stepsRoundTrip } from './steps.js';
+import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
 import { esc, toast } from './ui.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE } from './media.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
@@ -155,60 +155,77 @@ document.addEventListener('paste', e => {
   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
 });
 
-// ---------- Basic card: Front, Back (or steps) and a memory hook ----------
-// "Answer in steps" swaps the Back box for one box per step (+ Add step, move up / down, delete) and an optional Final answer.
-// Saving writes the steps into the back as "Step 1: ...", "Step 2: ..." lines (steps.js joinSteps), so the card needs nothing new
-// in the data. Editing a card whose back has those lines opens with the switch on. The memory hook is the card's noteExtra.
+// ---------- Basic card: Front, Back (or steps, or elements) and a memory hook ----------
+// "Answer: Text | Steps | Elements". Steps and Elements swap the Back box for one box per step or element (+ Add, move up / down, delete)
+// and an optional intro (Steps also has a Final answer). Saving writes them into the back as "Step 1: ..." or "Element 1: ..." lines
+// (steps.js joinSteps / joinElements), so the card needs nothing new in the data. Editing a card whose back has those lines opens in
+// the matching mode. The memory hook is the card's noteExtra.
 //   basicFields(p, { front, back, frontImage, backImage, hook, frontPh, backPh })   the HTML for the form whose ids start with p
-//   readBack(p)       the back to save (from the steps when the switch is on)
-//   stepsOn(p)        is the switch on?      stepsProblem(p)   why the steps can't be saved ('' when they can)
+//   readBack(p)       the back to save (from the rows when Steps or Elements is chosen)
+//   stepsOn(p)        is Steps or Elements chosen?      stepsProblem(p)   why they can't be saved ('' when they can)
 //   clearBasic(p)     empty the form after a card was added
-const stepRowHTML = (i, text = '', n = 3) => `<li class="step-row" data-step-row>
+const MODES = [['text', 'Text'], ['steps', 'Steps'], ['elements', 'Elements']];
+const NOUN = { steps: 'Step', elements: 'Element' };
+const noun = p => NOUN[document.getElementById(p + 'Steps')?.dataset.mode] || 'Step';
+const stepRowHTML = (i, text = '', n = 3, word = 'Step') => `<li class="step-row" data-step-row>
       <span class="step-n" aria-hidden="true">${i + 1}</span>
-      <textarea class="step-in" rows="2" data-step-in aria-label="Step ${i + 1}" placeholder="${i ? 'Next step' : 'The first step'}">${esc(text)}</textarea>
-      <span class="step-tools" role="group" aria-label="Step ${i + 1} actions">
-        <button type="button" class="step-btn" data-step="up" ${i === 0 ? 'disabled' : ''} aria-label="Move step ${i + 1} up" title="Move up">↑</button>
-        <button type="button" class="step-btn" data-step="down" ${i === n - 1 ? 'disabled' : ''} aria-label="Move step ${i + 1} down" title="Move down">↓</button>
-        <button type="button" class="step-btn" data-step="del" ${n <= 2 ? 'disabled' : ''} aria-label="Delete step ${i + 1}" title="Delete step">×</button>
+      <textarea class="step-in" rows="2" data-step-in aria-label="${word} ${i + 1}" placeholder="${i ? 'Next ' + word.toLowerCase() : 'The first ' + word.toLowerCase()}">${esc(text)}</textarea>
+      <span class="step-tools" role="group" aria-label="${word} ${i + 1} actions">
+        <button type="button" class="step-btn" data-step="up" ${i === 0 ? 'disabled' : ''} aria-label="Move ${word.toLowerCase()} ${i + 1} up" title="Move up">↑</button>
+        <button type="button" class="step-btn" data-step="down" ${i === n - 1 ? 'disabled' : ''} aria-label="Move ${word.toLowerCase()} ${i + 1} down" title="Move down">↓</button>
+        <button type="button" class="step-btn" data-step="del" ${n <= 2 ? 'disabled' : ''} aria-label="Delete ${word.toLowerCase()} ${i + 1}" title="Delete ${word.toLowerCase()}">×</button>
       </span></li>`;
 
 export function basicFields(p, { front = '', back = '', frontImage = null, backImage = null, hook = '', frontPh = '', backPh = '' } = {}) {
-  const parsed = parseSteps(back, { mask: maskMath });
-  const rows = parsed ? parsed.steps : ['', ''];
+  const st = parseSteps(back, { mask: maskMath }), el = st ? null : parseElements(back, { mask: maskMath });
+  const mode = st ? 'steps' : el ? 'elements' : 'text';
+  const parsed = st || el, rows = st ? st.steps : el ? el.items : ['', ''], word = NOUN[mode] || 'Step';
   return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
-      <label class="adv-row switch-row steps-switch"><span><b>Answer in steps</b><span>Review shows the answer one step at a time.</span></span>
-        <input type="checkbox" class="switch" id="${p}StepsOn" data-steps-for="${p}" ${parsed ? 'checked' : ''}></label>
+      <div class="chips answer-mode" role="radiogroup" aria-label="Answer">
+        <span class="answer-mode-l">Answer:</span>
+        ${MODES.map(([k, l]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${l}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      </div>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
-      <div class="steps-ed" id="${p}Steps" ${parsed ? '' : 'hidden'}>
-        <label class="field"><span>Intro (optional)</span><textarea id="${p}Intro" rows="2" placeholder="Shown before the first step.">${esc(parsed?.intro || '')}</textarea></label>
-        <ol class="step-list" id="${p}StepList" aria-label="Steps">${rows.map((t, i) => stepRowHTML(i, t, rows.length)).join('')}</ol>
-        <button type="button" class="btn ghost small" data-step-add="${p}">+ Add step</button>
-        <label class="field"><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(parsed?.final || '')}</textarea></label>
+      <div class="steps-ed" id="${p}Steps" data-mode="${mode === 'text' ? 'steps' : mode}" data-cur="${mode}" ${parsed ? '' : 'hidden'}>
+        <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro (optional)' : 'Intro (optional)'}</span><textarea id="${p}Intro" rows="2" placeholder="${mode === 'elements' ? 'Shown above the elements.' : 'Shown before the first step.'}">${esc(parsed?.intro || '')}</textarea></label>
+        <ol class="step-list" id="${p}StepList" aria-label="${word}s">${rows.map((t, i) => stepRowHTML(i, t, rows.length, word)).join('')}</ol>
+        <button type="button" class="btn ghost small" data-step-add="${p}" id="${p}StepAdd">+ Add ${word.toLowerCase()}</button>
+        <label class="field" id="${p}FinalWrap" ${mode === 'elements' ? 'hidden' : ''}><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(st?.final || '')}</textarea></label>
       </div>
       ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'A trick to remember it. Shown under the answer.' })}`;
 }
-export const stepsOn = p => !!document.getElementById(p + 'StepsOn')?.checked;
+// 'text', 'steps' or 'elements'
+export const answerMode = p => document.querySelector(`input[name="${p}Mode"]:checked`)?.value || 'text';
+export const stepsOn = p => answerMode(p) !== 'text';
 const stepRows = p => [...document.querySelectorAll(`#${p}StepList [data-step-row]`)];
 const stepValues = p => stepRows(p).map(r => r.querySelector('textarea').value.trim()).filter(Boolean);
 const stepParts = p => ({ intro: document.getElementById(p + 'Intro').value, steps: stepValues(p), final: document.getElementById(p + 'Final').value });
+const elementParts = p => ({ intro: document.getElementById(p + 'Intro').value, items: stepValues(p) });
 export function stepsProblem(p) {
-  if (!stepsOn(p)) return '';
-  if (stepValues(p).length < 2) return 'Add at least two steps, or switch off “Answer in steps”.';
+  const mode = answerMode(p);
+  if (mode === 'text') return '';
+  if (mode === 'elements') {
+    if (stepValues(p).length < 2) return 'Add at least two elements, or choose Text.';
+    return elementsRoundTrip(elementParts(p), { mask: maskMath }) ? '' : "A line inside an element can't start with 'Element N:'.";
+  }
+  if (stepValues(p).length < 2) return 'Add at least two steps, or choose Text.';
   // What is saved must read back as the same steps (a line inside a step that starts "Step 3:" or "Answer:" would not).
   return stepsRoundTrip(stepParts(p), { mask: maskMath }) ? '' : "A line inside a step can't start with 'Step N:' or 'Answer:'.";
 }
 export function readBack(p) {
-  if (!stepsOn(p)) return readCardText(p + 'Back');
-  return joinSteps(stepParts(p));
+  const mode = answerMode(p);
+  if (mode === 'text') return readCardText(p + 'Back');
+  return mode === 'elements' ? joinElements(elementParts(p)) : joinSteps(stepParts(p));
 }
 // Number the rows again (after adding, moving or deleting) and keep the names the buttons speak.
 function renumberSteps(p) {
-  const rows = stepRows(p);
+  const rows = stepRows(p), word = noun(p), low = word.toLowerCase();
   rows.forEach((r, i) => {
     r.querySelector('.step-n').textContent = i + 1;
-    r.querySelector('textarea').setAttribute('aria-label', `Step ${i + 1}`);
-    r.querySelector('.step-tools').setAttribute('aria-label', `Step ${i + 1} actions`);
-    const names = { up: 'Move step N up', down: 'Move step N down', del: 'Delete step N' };
+    r.querySelector('textarea').setAttribute('aria-label', `${word} ${i + 1}`);
+    r.querySelector('textarea').placeholder = i ? `Next ${low}` : `The first ${low}`;
+    r.querySelector('.step-tools').setAttribute('aria-label', `${word} ${i + 1} actions`);
+    const names = { up: `Move ${low} N up`, down: `Move ${low} N down`, del: `Delete ${low} N` };
     r.querySelectorAll('[data-step]').forEach(b => { b.setAttribute('aria-label', names[b.dataset.step].replace('N', i + 1)); });
     r.querySelector('[data-step=up]').disabled = i === 0;
     r.querySelector('[data-step=down]').disabled = i === rows.length - 1;
@@ -216,7 +233,7 @@ function renumberSteps(p) {
   });
 }
 function fillSteps(p, steps, final = '', intro = '') {
-  document.getElementById(p + 'StepList').innerHTML = steps.map((t, i) => stepRowHTML(i, t, steps.length)).join('');
+  document.getElementById(p + 'StepList').innerHTML = steps.map((t, i) => stepRowHTML(i, t, steps.length, noun(p))).join('');
   document.getElementById(p + 'Final').value = final;
   document.getElementById(p + 'Intro').value = intro;
   renumberSteps(p);
@@ -226,28 +243,50 @@ export function clearBasic(p) {
   setCardImage(p + 'Front', null); setCardImage(p + 'Back', null);
   fillSteps(p, ['', '']);
 }
+// Choosing Text / Steps / Elements. What was typed comes along: the rows are written into Back when going to Text, Back's lines
+// become rows when going to Steps or Elements, and Steps <-> Elements keeps the rows (the Final answer stays in its box, hidden).
 document.addEventListener('change', e => {
-  const p = e.target.dataset?.stepsFor;
+  const p = e.target.dataset?.modeFor;
   if (!p) return;
-  const on = e.target.checked, steps = document.getElementById(p + 'Steps'), wrap = document.getElementById(p + 'BackWrap');
-  if (on) {
-    const back = readCardText(p + 'Back').trim(), parsed = parseSteps(back, { mask: maskMath });
-    if (parsed) fillSteps(p, parsed.steps, parsed.final || '', parsed.intro);
-    else if (back) fillSteps(p, [back, ''], '', '');            // what was in Back becomes the first step
-    else if (stepValues(p).length === 0) fillSteps(p, ['', ''], '', '');
-  } else {
-    const joined = joinSteps(stepParts(p));
+  const to = e.target.value, panel = document.getElementById(p + 'Steps'), wrap = document.getElementById(p + 'BackWrap');
+  const from = panel.dataset.cur || 'text';
+  if (to === from) return;
+  panel.dataset.cur = to;
+  const parseTo = back => (to === 'elements' ? parseElements(back, { mask: maskMath }) : parseSteps(back, { mask: maskMath }));
+  if (to === 'text') {
+    const joined = from === 'elements' ? joinElements(elementParts(p)) : joinSteps(stepParts(p));
     if (joined) setCardText(p + 'Back', joined);
+  } else {
+    const back = from === 'text' ? readCardText(p + 'Back').trim() : '';
+    panel.dataset.mode = to;
+    if (from === 'text') {
+      const parsed = parseTo(back);
+      if (parsed) fillSteps(p, parsed.steps || parsed.items, parsed.final || '', parsed.intro);
+      else if (back) fillSteps(p, [back, ''], '', '');            // what was in Back becomes the first row
+      else if (stepValues(p).length === 0) fillSteps(p, ['', ''], '', '');
+      else fillSteps(p, stepRows(p).map(r => r.querySelector('textarea').value), document.getElementById(p + 'Final').value, document.getElementById(p + 'Intro').value);
+    } else {
+      // Steps <-> Elements: the rows stay, the labels change.
+      fillSteps(p, stepRows(p).map(r => r.querySelector('textarea').value), document.getElementById(p + 'Final').value, document.getElementById(p + 'Intro').value);
+    }
   }
-  steps.hidden = !on; wrap.hidden = on;
+  const el = to === 'elements';
+  if (to !== 'text') {
+    document.getElementById(p + 'FinalWrap').hidden = el;
+    document.getElementById(p + 'IntroL').textContent = el ? 'Rule or intro (optional)' : 'Intro (optional)';
+    document.getElementById(p + 'Intro').placeholder = el ? 'Shown above the elements.' : 'Shown before the first step.';
+    document.getElementById(p + 'StepList').setAttribute('aria-label', el ? 'Elements' : 'Steps');
+    document.getElementById(p + 'StepAdd').textContent = el ? '+ Add element' : '+ Add step';
+  }
+  panel.hidden = to === 'text'; wrap.hidden = to !== 'text';
   renumberSteps(p);
-  (on ? stepRows(p)[0]?.querySelector('textarea') : document.getElementById(p + 'Back'))?.focus();
+  (to !== 'text' ? stepRows(p)[0]?.querySelector('textarea') : document.getElementById(p + 'Back'))?.focus({ preventScroll: true });
 });
 document.addEventListener('click', e => {
   const add = e.target.closest?.('[data-step-add]');
   if (add) {
     const p = add.dataset.stepAdd, list = document.getElementById(p + 'StepList');
-    list.insertAdjacentHTML('beforeend', stepRowHTML(stepRows(p).length));
+    list.insertAdjacentHTML('beforeend', stepRowHTML(stepRows(p).length, '', stepRows(p).length + 1, noun(p)));
     renumberSteps(p);
     list.lastElementChild.querySelector('textarea').focus();
     return;
