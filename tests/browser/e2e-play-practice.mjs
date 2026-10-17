@@ -45,6 +45,7 @@ const wrongRound = async () => {
 };
 await page.click('.tab[data-tab=play]'); await page.waitForSelector('#startBtn');
 ok(await page.inputValue('#pDeck') === 'px', 'Play opens on the exam deck');
+for (const sel of ['input[name=fmt][value=classic]', 'input[name=qtype][value=typing]', 'input[name=len][value="10"]', 'input[name=diff][value=normal]', 'input[name=flash][value="0"]']) await page.$eval(sel, el => el.click());
 await page.click('#startBtn'); await page.waitForSelector('#pInput');
 await wrongRound();
 await page.waitForSelector('.stamp');
