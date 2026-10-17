@@ -231,3 +231,36 @@ export function renameTagPrefix(cards, from, to) {
   }
   return out;
 }
+
+// ---------- duplicating ----------
+// Copies of cards as new cards: the same deck, text, tags, pictures, memory hook and accepted answers, but a new id, a
+// fresh schedule (copies have no schedule row, so they are new) and none of the card's own state (flag, suspended, buried).
+// A card that belongs to a note (a cloze or image-occlusion card) is copied with the whole note: every card of it, under one
+// new noteId. Cards of the same note in `cards` are copied once.
+//   cards    the cards to copy        all   every card (to find the rest of a note)
+//   newId    makes an id              now   when the copies are created (each one a millisecond later, to keep their order)
+// Returns { copies, firstCopy, of }: the new cards, the copy of cards[0], and a Map from an original's id to its copy's id.
+export function duplicateCards(cards, all, newId, now = Date.now()) {
+  const copies = [], of = new Map(), noteIds = new Map();
+  const seen = new Set();
+  let i = 0;
+  for (const card of cards) {
+    const group = card.noteId ? all.filter(c => c.noteId === card.noteId).sort((a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1)) : [card];
+    if (!group.some(c => c.id === card.id)) group.push(card);
+    for (const c of group) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      if (c.noteId && !noteIds.has(c.noteId)) noteIds.set(c.noteId, newId());
+      const copy = { ...c, id: newId(), created: now + i++ };
+      for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt']) delete copy[k];
+      if (c.noteId) copy.noteId = noteIds.get(c.noteId);
+      if (c.tags) copy.tags = [...c.tags];
+      if (c.acceptAnswers) copy.acceptAnswers = [...c.acceptAnswers];
+      if (c.occlusion) copy.occlusion = { ...c.occlusion, masks: c.occlusion.masks.map(m => ({ ...m })) };
+      of.set(c.id, copy.id);
+      copies.push(copy);
+    }
+  }
+  const first = cards.length ? of.get(cards[0].id) : null;
+  return { copies, firstCopy: copies.find(c => c.id === first) || null, of };
+}

@@ -10,6 +10,7 @@ import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { initPanelResize } from './panel-resize.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -1002,6 +1003,7 @@ async function showResetLink(link) {
 // ---------- start up ----------
 async function start() {
   initSheet();
+  initPanelResize();
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });

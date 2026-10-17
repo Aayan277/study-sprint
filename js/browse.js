@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
 import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -188,6 +188,7 @@ export async function openCardPanel(card, ctx) {
     <div class="act-grid">
       <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
       <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
@@ -225,6 +226,7 @@ export async function openCardPanel(card, ctx) {
     const act = b.dataset.act;
     if (act === 'suspend') toggleSuspend(card, save);
     if (act === 'bury') toggleBury(card, save);
+    if (act === 'duplicate') duplicateAndEdit(card, ctx);
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
     if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
       : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
@@ -447,6 +449,32 @@ async function saveOcclusionNote(card, ops, msg) {
 const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
 const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');
 
+// ---------- duplicating ----------
+// A duplicate is a new card (or, for a cloze or image-occlusion note, a new note with all its cards) with the same deck, text,
+// tags, pictures, memory hook and accepted answers, and a fresh schedule (see duplicateCards in browse-logic.js).
+// Undo deletes the copies again (they have no schedule or history to lose, unless they were studied in the meantime).
+const undoDuplicate = (copies, refresh) => ({
+  hold: true,
+  link: { href: '#', label: 'Undo', onClick: async () => {
+    // If the editor is showing one of the copies, it closes (the copy is gone).
+    const open = document.querySelector('.crow.sel')?.dataset.id;
+    await db.deleteCards(copies.map(c => c.id));
+    if (open && copies.some(c => c.id === open)) closeSheet();
+    toast(copies.length === 1 ? 'Copy removed' : 'Copies removed');
+    await refresh();
+  } }
+});
+// One card: make the copy, then open it in the editor.
+async function duplicateAndEdit(card, ctx) {
+  const { copies, firstCopy } = duplicateCards([card], await db.getAll('cards'), db.newId);
+  await db.saveCards(copies);
+  const { refresh = async () => {}, onAction } = ctx;
+  await refresh();
+  if (onAction) await onAction('duplicate', firstCopy, undefined);
+  await openCardPanel(firstCopy, { ...ctx, mode: 'full', showInfo: false });
+  toast('Duplicated. Editing the copy.', undoDuplicate(copies, refresh));
+}
+
 // ---------- acting on several cards ----------
 function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   const n = selected.length;
@@ -458,6 +486,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       <button class="btn ghost small" type="button" data-act="unsuspend">Unsuspend</button>
       <button class="btn ghost small" type="button" data-act="bury">Bury until tomorrow</button>
       <button class="btn ghost small" type="button" data-act="unbury">Unbury</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>Reset to new</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
@@ -487,6 +516,13 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'unsuspend') update({ suspended: false }, `Unsuspended ${plural(n, 'card')}`);
     if (act === 'bury') update({ buriedUntil: buryUntil() }, `Buried ${plural(n, 'card')} until tomorrow`);
     if (act === 'unbury') update({ buriedUntil: 0 }, `Unburied ${plural(n, 'card')}`);
+    if (act === 'duplicate') (async () => {
+      const { copies } = duplicateCards(selected, await db.getAll('cards'), db.newId);
+      await db.saveCards(copies);
+      closeSheet();
+      toast(`Duplicated ${plural(copies.length, 'card')}`, undoDuplicate(copies, refresh));
+      await refresh();
+    })();
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, () => db.deleteCards(selected.map(c => c.id)).then(() => { clear(); return done(`Deleted ${plural(n, 'card')}`); }));
   }));

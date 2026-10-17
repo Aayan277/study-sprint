@@ -7,6 +7,7 @@
 // Starting a session hands over to review.js through setLaunch() (see study-data.js).
 
 import * as db from './db.js';
+import { deckSchedulerOptions } from './sched-settings.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, nextDueText, typicalCardMs, loadStreak, todayRing, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
 import { lastStatus } from './sync.js';
@@ -60,6 +61,12 @@ export async function renderToday(el) {
   if (rescue.finished && lastStatus().state !== 'syncing') { const at = rescueClearAt(data.settings.rescue); data.settings.rescue = null; db.setSetting('rescue', null, { at }); rescue = rescueState(data, Date.now(), dismissedDay()); }
   let rescueDays = rescue.offer?.n;
   const cardMs = typicalCardMs(data.history);
+  // Learning steps of the chosen decks (their own options, else the settings): a new card is shown that many times + 1.
+  const learnSteps = ids => {
+    const decks = data.decks.filter(d => ids.includes(d.id));
+    const n = decks.map(d => deckSchedulerOptions(data.settings, d).learningSteps.length);
+    return n.length ? n.reduce((a, b) => a + b, 0) / n.length : deckSchedulerOptions(data.settings).learningSteps.length;
+  };
   const allIds = data.decks.map(d => d.id);
   let chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
   let typing = data.settings.reviewTyping;
@@ -98,7 +105,7 @@ export async function renderToday(el) {
         </div>
         ${streakHTML(streak, { button: true })}
         ${tr.state === 'todo'
-          ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs)}</button>`
+          ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs, c.fresh, learnSteps(ids))}</button>`
           : `<div class="th-done">
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
