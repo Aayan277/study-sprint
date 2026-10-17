@@ -168,10 +168,14 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     flds: ['Text', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     css: `${ANKI_CSS}\n.cloze {\n  font-weight: bold;\n  color: blue;\n}\n.nightMode .cloze {\n  color: lightblue;\n}\n`, req: [[0, 'any', [0]]]
   };
-  // "Basic (and reversed card)": card 1 asks Front, card 2 asks Back (the same two fields).
+  // "Basic (and reversed card)": card 1 asks Front, card 2 asks Back. The question is only that field; the memory hook, the other
+  // fields (as <details> sections) and the back's sounds are in a third field, Back Extra, shown on the answer side of both cards.
   const revModel = {
     ...model, id: BASIC_REV_ID, name: 'Study Sprint Basic (and reversed card)',
-    tmpls: [model.tmpls[0], { name: 'Card 2', ord: 1, qfmt: '{{Back}}', afmt: '{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}', did: null, bqfmt: '', bafmt: '' }],
+    tmpls: [
+      { name: 'Card 1', ord: 0, qfmt: '{{Front}}', afmt: '{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}<br>\n{{Back Extra}}', did: null, bqfmt: '', bafmt: '' },
+      { name: 'Card 2', ord: 1, qfmt: '{{Back}}', afmt: '{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}<br>\n{{Back Extra}}', did: null, bqfmt: '', bafmt: '' }],
+    flds: ['Front', 'Back', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     req: [[0, 'any', [0]], [1, 'any', [1]]]
   };
   const usesRev = groups.some(g => g.pair);
@@ -237,11 +241,18 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       const c = g.pair ? g.cards.find(x => !x.reverse) : g.card;
       const front = withSounds(withPic(toAnkiHTML(c.front), c.frontImageFile), c.frontSoundFiles);
       let back = withPic(toAnkiHTML(c.back), c.backImageFile);
-      // The memory hook (noteExtra) goes at the end of Back as an Extra line, then the other fields.
-      if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
-      back = withSounds(back + fieldsHTML(c), c.backSoundFiles);
+      let flds;
+      if (g.pair) {
+        // The hook, the other fields and the back's sounds go in Back Extra, so the reverse card's question is the Back field alone.
+        const hook = c.noteExtra && String(c.noteExtra).trim() ? toAnkiHTML(c.noteExtra) : '';
+        flds = `${front}\x1f${back}\x1f${withSounds(hook + fieldsHTML(c), c.backSoundFiles)}`;
+      } else {
+        // The memory hook (noteExtra) goes at the end of Back as an Extra line, then the other fields.
+        if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
+        flds = `${front}\x1f${withSounds(back + fieldsHTML(c), c.backSoundFiles)}`;
+      }
       note = { id: noteId, guid: c.ankiGuid || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? BASIC_REV_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
-        flds: `${front}\x1f${back}`, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
+        flds, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order. Card 1 is the forward card, card 2 the reverse one.
       for (const [ord, x] of (g.pair ? [c, g.cards.find(y => y.reverse)] : [c]).entries()) {
         ankiCards.push({ id: now + groups.length + cardCount++, nid: noteId, did: deckIds.get(x.deckName || deck.name), ord, mod: secs, usn: -1, type: 0, queue: 0, due: cardCount,

@@ -8,6 +8,7 @@
 // schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
+import { loneIds, unpaired } from './reverse.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
@@ -67,7 +68,9 @@ export async function renderPlay(el) {
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
   // (loadAll leaves out suspended cards, and cards buried until tomorrow.)
-  const cards = visible.map(playCopy);
+  // A card with a pair's noteId but no partner plays as an ordinary card (reverse.js loneIds; suspended partners still count).
+  const lone = loneIds(await db.getAll('cards'));
+  const cards = visible.map(c => playCopy(lone.has(c.id) ? unpaired(c) : c));
   data = {
     settings, decks, cards, statesById,
     // Cards that an exam's final pass brings forward count as due today (see exam.js).

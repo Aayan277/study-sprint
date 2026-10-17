@@ -287,10 +287,11 @@ test('Anki: a card with its reverse card goes out as one "Basic (and reversed ca
   const models = JSON.parse(col.models);
   const rev = models[1_600_000_000_004];
   assert.equal(rev.name, 'Study Sprint Basic (and reversed card)');
-  assert.deepEqual(rev.tmpls.map(t => [t.ord, t.qfmt]), [[0, '{{Front}}'], [1, '{{Back}}']]);
-  assert.deepEqual(rev.flds.map(x => x.name), ['Front', 'Back']);
+  assert.deepEqual(rev.tmpls.map(t => [t.ord, t.qfmt]), [[0, '{{Front}}'], [1, '{{Back}}']], 'each card asks with one field only');
+  assert.ok(rev.tmpls.every(t => t.afmt.includes('{{Back Extra}}')), 'and shows Back Extra on the answer');
+  assert.deepEqual(rev.flds.map(x => x.name), ['Front', 'Back', 'Back Extra']);
   const note = notes.find(n => n.mid === 1_600_000_000_004);
-  assert.equal(note.flds, 'Mitosis\x1fCell division<br><br>Hook');
+  assert.equal(note.flds, 'Mitosis\x1fCell division\x1fHook', 'the hook is in Back Extra, not in the reverse card\'s question');
   assert.equal(note.guid, ankiGuid('N1'), 'a stable guid from the note id');
   assert.deepEqual(ac.filter(c => c.nid === note.id).map(c => c.ord).sort(), [0, 1]);
   assert.equal(notes.find(n => n.mid !== 1_600_000_000_004).mid, 1_600_000_000_001, 'ordinary cards stay Basic');
@@ -301,6 +302,10 @@ test('Anki: a card with its reverse card goes out as one "Basic (and reversed ca
   const back = notesToImport(asNotes(notes, ac), mm);
   assert.equal(back.reversed.filter(Boolean).length, 1);
   assert.equal(buildCards(back).filter(c => c.reversed).length, 1);
+  const pairBack = buildCards(back).find(c => c.reversed);
+  assert.equal(pairBack.noteExtra, 'Hook', 'Back Extra comes back as the hook, not as a named field');
+  assert.equal(pairBack.back, 'Cell division');
+  assert.equal(pairBack.noteFields, undefined);
   // a reverse card without its forward card goes out as an ordinary card
   const lone = await ankiContents({ id: 'd', name: 'Bio' }, [r], 1_800_000_000_000);
   assert.equal(lone.notes.length, 1); assert.equal(lone.notes[0].mid, 1_600_000_000_001); assert.equal(lone.cards.length, 1);

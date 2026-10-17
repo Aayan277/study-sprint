@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPair, canReverse, reverseOf, pairPlan, healPairs, playRole, playPool, unpaired, syncPairChanges, swappedSides, reverseSwitchHTML } from '../js/reverse.js';
+import { isPair, canReverse, reverseOf, pairPlan, healPairs, playRole, playPool, unpaired, syncPairChanges, swappedSides, reverseSwitchHTML, loneIds } from '../js/reverse.js';
 import { questionFor, playableCards } from '../js/game.js';
 import { replaceInCards } from '../js/browse-logic.js';
 
@@ -86,21 +86,38 @@ test('healPairs: after a sync clash the newer note edit wins and rewrites the ot
   assert.equal(old[0].id, 'r'); assert.equal(old[0].back, 'Y');
 });
 
-test('healPairs: a card whose partner is gone becomes an ordinary card (after a few minutes), cloze and picture notes are left to their own healing', () => {
-  const now = 1_000_000_000;
-  const [f] = pair({ noteEditedAt: now - 3_600_000, updatedAt: now - 3_600_000 });
-  const [lone] = healPairs([f], now);
-  assert.equal(lone.noteId, undefined); assert.equal(lone.reverse, undefined); assert.equal(lone.noteEditedAt, undefined); assert.equal(lone.front, 'Mitosis');
-  // saved a minute ago: its partner may still be on its way
-  assert.deepEqual(healPairs([{ ...f, updatedAt: now - 60_000 }], now), []);
-  // the reverse card alone is just as ordinary
-  const [, r] = pair({ updatedAt: 1, noteEditedAt: 1 }, { updatedAt: 1, noteEditedAt: 1 });
-  assert.equal(healPairs([r], now)[0].reverse, undefined);
-  // cloze and occlusion notes are not pairs
+test('healPairs: a card whose partner is missing is left alone, however old (the partner may arrive later); cloze and picture notes are not pairs', () => {
+  const [f, r] = pair({ noteEditedAt: 5, updatedAt: 5 }, { noteEditedAt: 5, updatedAt: 5 });
+  assert.deepEqual(healPairs([f]), [], 'the forward card alone, saved long ago');
+  assert.deepEqual(healPairs([r]), [], 'the reverse card alone');
+  // a split arrival: the partner is missing for hours, then arrives; nothing was ever rewritten, so the pair is whole
+  assert.deepEqual(healPairs([f]), []);
+  assert.deepEqual(healPairs([f, r]), []);
+  assert.deepEqual(loneIds([f]), new Set(['f']));
+  assert.deepEqual(loneIds([f, r]), new Set());
+  assert.deepEqual(loneIds([f, r, fwd({ id: 'x', noteId: 'M', reverse: true })]), new Set(['x']));
   const cloze = { id: 'c1', noteId: 'C', cloze: 1, noteText: '{{c1::a}}', front: 'x', back: 'a', updatedAt: 1 };
-  assert.deepEqual(healPairs([cloze], now), []);
-  // two forward cards with one note id are not a clean pair: nothing is guessed
-  assert.deepEqual(healPairs([fwd({ id: 'a', updatedAt: 1 }), fwd({ id: 'b', updatedAt: 1 })], now), []);
+  assert.deepEqual(healPairs([cloze]), []);
+  assert.equal(loneIds([cloze]).size, 0);
+  // two forward cards with one note id are not a clean pair: nothing is guessed, and both play as ordinary cards
+  assert.deepEqual(healPairs([fwd({ id: 'a', updatedAt: 1 }), fwd({ id: 'b', updatedAt: 1 })]), []);
+  assert.deepEqual(loneIds([fwd({ id: 'a' }), fwd({ id: 'b' })]), new Set(['a', 'b']));
+  // a tie in noteEditedAt goes to the card saved last, so an older client's edit is not overwritten
+  const t = healPairs([{ ...f, front: 'A', noteEditedAt: 9, updatedAt: 10 }, { ...r, back: 'B', noteEditedAt: 9, updatedAt: 20 }]);
+  assert.equal(t.length, 1); assert.equal(t[0].id, 'f'); assert.equal(t[0].front, 'B');
+});
+
+test('a lone reverse card plays as an ordinary card (front → back), once made ordinary', () => {
+  const [, r] = pair();
+  const lone = unpaired(r);
+  assert.deepEqual(questionFor(lone, 'front'), { prompt: 'Cell division', answer: 'Mitosis' });
+  assert.deepEqual(questionFor(lone, 'back'), { prompt: 'Mitosis', answer: 'Cell division' });
+});
+
+test('pairPlan drops empty picture fields and acceptAnswers', () => {
+  const [f, r] = pair({ acceptAnswers: ['x'] });
+  const [a] = pairPlan(f, r, { frontImage: '', backImage: '', acceptAnswers: [] });
+  assert.ok(!('frontImage' in a) && !('backImage' in a) && !('acceptAnswers' in a));
 });
 
 test('Play: front → back and typing use the forward card, back → front uses the reverse card asked front → back', () => {

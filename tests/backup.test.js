@@ -182,3 +182,25 @@ test('reverse cards: reverse is true and comes with a noteId', () => {
   assert.match(checkBackup({ ...good, cards: [card({ reverse: true })] }), bad, 'no noteId');
   assert.match(checkBackup({ ...good, cards: [card({ noteId: '', reverse: true })] }), bad);
 });
+
+// ---- batch 1b review: an over-limit basic note still makes a backup that restores ----
+import { notesToImport } from '../js/anki.js';
+import { buildCards, basicFieldsCut } from '../js/import.js';
+import { fieldReport } from '../js/anki.js';
+
+test('a basic note with 33 other fields, a 77-character name and a 25,000-character text is cut to the limits and round-trips through a backup', () => {
+  const names = ['Front', 'Back', ...Array.from({ length: 33 }, (_, i) => (i === 0 ? 'n'.repeat(77) : `Field ${i}`))];
+  const fields = ['Q', 'A', ...Array.from({ length: 33 }, (_, i) => (i === 1 ? 'x'.repeat(25000) : `text ${i}`))];
+  const r = notesToImport([{ id: 'n1', mid: '9', fields, tags: [], deck: 'D' }], new Map([['9', { name: 'Many', fields: names, cloze: false }]]));
+  const [c] = buildCards(r, 0, 1);
+  assert.equal(c.noteFields.length, 24);
+  assert.equal(c.noteFields[0].name.length, 60);
+  assert.equal(c.noteFields[1].text.length, 20000);
+  assert.ok(c.noteFields[1].text.endsWith('…'));
+  assert.equal(basicFieldsCut(r, 0, 1), 10, '9 fields over the 24 and 1 text over 20,000');
+  assert.equal(fieldReport(r).cut, 0, 'fieldReport leaves basic notes to basicFieldsCut');
+  const card = { id: 'c1', deckId: 'd', front: c.front, back: c.back, noteFields: c.noteFields };
+  assert.equal(checkBackup({ ...good, cards: [card] }), null);
+  // the same list, uncleaned, is what a backup refuses
+  assert.match(checkBackup({ ...good, cards: [{ ...card, noteFields: fields.slice(2).map((t, i) => ({ name: names[i + 2], text: t })) }] }), /invalid note fields/);
+});

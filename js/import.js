@@ -9,6 +9,7 @@
 
 import { maskMath, MASK_CHAR } from './math.js';
 import { foldText } from './match.js';
+import { cleanFields } from './note-fields.js';
 
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
 // because fronts are usually short terms (so "Term: def - more" splits at ': ', not ' - ').
@@ -354,14 +355,25 @@ function extrasOf(result, i, frontCol, backCol, keep) {
   const out = result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {};
   if (!keep) return out;
   const names = result.fieldNames?.[i];
+  const fields = keptFields(result, i, frontCol, backCol);
+  return fields.length ? { ...out, noteFields: fields } : out;
+}
+// The fields a basic note keeps, cleaned to the limits (note-fields.js), so what is saved always passes a backup check.
+function rawFields(result, i, frontCol, backCol) {
+  const names = result.fieldNames?.[i];
   const fields = [];
   if (names) result.rows[i].forEach((text, c) => {
     if (c === frontCol || c === backCol || names[c] === null || names[c] === undefined || !String(text).trim()) return;
     fields.push({ name: names[c], text: String(text).trim() });
   });
   fields.push(...(result.detailFields?.[i] || []));
-  return fields.length ? { ...out, noteFields: fields } : out;
+  return fields;
 }
+const keptFields = (result, i, frontCol, backCol) => cleanFields(rawFields(result, i, frontCol, backCol)).fields;
+// How many of a basic note's fields were shortened or dropped for the length limits with these columns (what fieldReport can't
+// know, because the columns are chosen in the preview). Cloze notes are counted in anki.js.
+export const basicFieldsCut = (result, frontCol = 0, backCol = 1) =>
+  result.rows.reduce((n, _, i) => (result.clozes?.[i] || result.occlusions?.[i] ? n : n + cleanFields(rawFields(result, i, frontCol, backCol)).cut), 0);
 
 // How many of the rows have fields to keep (the "Keep the other fields" switch shows when there are any).
 export const hasKeptFields = (result, frontCol = 0, backCol = 1) =>

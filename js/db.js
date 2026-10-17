@@ -25,7 +25,7 @@ import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
-import { validFields } from './note-fields.js';
+import { validFields, cleanFields } from './note-fields.js';
 import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
@@ -511,8 +511,15 @@ export async function exportAll({ sounds = true } = {}) {
   }
   // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
   const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !isLocalOnly(k)));
-  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
+  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards: cards.map(safeFields), cardStates, reviewLog, settings, media };
 }
+
+// A card's other fields (note-fields.js) are cleaned to their limits on the way out, so a backup always passes checkBackup.
+const safeFields = c => {
+  if (c.noteFields === undefined || validFields(c.noteFields)) return c;
+  const { noteFields, ...rest } = c, { fields } = cleanFields(noteFields);
+  return fields.length ? { ...rest, noteFields: fields } : rest;
+};
 
 // How much room pictures and sounds take on this device: { pictures, sounds } in bytes. Kept up to date as files are added and
 // removed (a small record in settings); worked out once, a file at a time, when there is none yet.

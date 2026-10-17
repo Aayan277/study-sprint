@@ -10,7 +10,8 @@ import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
-import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges } from './reverse.js';
+import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
+import { cleanFields } from './note-fields.js';
 import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
@@ -347,7 +348,7 @@ function cardOps(card, ctx) {
     const shared = { ...('deckId' in changes ? { deckId: changes.deckId } : {}), ...('tags' in changes ? { tags: changes.tags } : {}) };
     const merged = { ...card, ...changes };
     if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
-    if ('noteFields' in changes && !changes.noteFields?.length) delete merged.noteFields;      // and no other fields is no list
+    if ('noteFields' in changes) { const f = cleanFields(changes.noteFields).fields; if (f.length) merged.noteFields = f; else delete merged.noteFields; }      // no other fields is no list, and the list is kept within its limits
     for (const k of ['frontSounds', 'backSounds']) if (k in changes && !changes[k]?.length) delete merged[k];      // and no sounds is no list
     if ('acceptAnswers' in changes && !changes.acceptAnswers?.length) delete merged.acceptAnswers;      // and no accepted answers is none
     await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
@@ -432,7 +433,7 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
       const [keep, drop] = a.reverse ? [b, a] : [a, b];
       await db.saveNote({ update: [unpaired(keep)], remove: [drop] }, { ...common, noteId: undefined });
     } else {
-      const fwd = { ...card, ...sides };
+      const fwd = { ...unpaired(card), ...sides };
       for (const k of ['frontImage', 'backImage']) if (!fwd[k]) delete fwd[k];
       for (const k of ['frontSounds', 'backSounds']) if (!fwd[k]?.length) delete fwd[k];
       if (!canReverse(fwd)) { showErr('ceErr', "This card can't have a reverse card."); return; }
@@ -534,7 +535,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       <button class="btn ghost small" type="button" data-act="bury">Bury until tomorrow</button>
       <button class="btn ghost small" type="button" data-act="unbury">Unbury</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>Reset to new</button>
-      <button class="btn ghost small" type="button" data-act="reverse" ${selected.some(c => !isPair(c)) ? '' : 'disabled'}>Both directions</button>
+      <button class="btn ghost small" type="button" data-act="reverse">Both directions</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
     <div id="ceConfirm"></div>
@@ -564,16 +565,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'bury') update({ buriedUntil: buryUntil() }, `Buried ${plural(n, 'card')} until tomorrow`);
     if (act === 'unbury') update({ buriedUntil: 0 }, `Unburied ${plural(n, 'card')}`);
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
-    if (act === 'reverse') {
-      const todo = selected.filter(c => !isPair(c) && canReverse(c)), stuck = selected.filter(c => !isPair(c) && !canReverse(c)).length;
-      if (!todo.length) { toast('None of these can get a reverse card'); return; }
-      confirmIn('ceConfirm', `Add reverse cards to ${plural(todo.length, 'card')}?${stuck ? ` ${stuck} can't be reversed (cloze, image-occlusion or step-by-step cards).` : ''}`, `Add ${plural(todo.length, 'reverse card')}`, async () => {
-        const now = Date.now();
-        const cards = todo.flatMap(c => { const fwd = { ...c, noteId: db.newId(), noteEditedAt: now }; return [fwd, { ...reverseOf(fwd, db.newId()), noteEditedAt: now }]; });
-        await db.saveCards(cards);
-        done(`Added ${plural(todo.length, 'reverse card')}`);
-      });
-    }
+    if (act === 'reverse') bulkReverse(selected, done);
     if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
       await db.deleteCards(selected.map(c => c.id));
       // A card whose partner is deleted becomes an ordinary card again.
@@ -607,6 +599,25 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
   wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${deckPath(decks, deckId)}`));
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
+}
+
+// "Both directions" for the selected cards. The cards are read again first (a sync or another tab may have changed them) and again when
+// the question is answered. A card that carries a pair's noteId but has no partner counts as an ordinary card and can be paired again.
+async function bulkReverse(selected, done) {
+  const ids = selected.map(c => c.id);
+  const fresh = async () => {
+    const all = await db.getAll('cards'), lone = loneIds(all), byId = new Map(all.map(c => [c.id, c]));
+    const cards = ids.map(id => byId.get(id)).filter(Boolean);
+    return { todo: cards.filter(c => (!isPair(c) || lone.has(c.id)) && canReverse(unpaired(c))), stuck: cards.filter(c => !isPair(c) && !canReverse(c)).length };
+  };
+  const { todo, stuck } = await fresh();
+  if (!todo.length) { toast('None of these can get a reverse card'); return; }
+  confirmIn('ceConfirm', `Add reverse cards to ${plural(todo.length, 'card')}?${stuck ? ` ${stuck} can't be reversed (cloze, image-occlusion or step-by-step cards).` : ''}`, `Add ${plural(todo.length, 'reverse card')}`, async () => {
+    const now = Date.now(), { todo: again } = await fresh();
+    const cards = again.flatMap(c => { const fwd = { ...unpaired(c), noteId: db.newId(), noteEditedAt: now }; return [fwd, { ...reverseOf(fwd, db.newId()), noteEditedAt: now }]; });
+    await db.saveCards(cards);
+    done(`Added ${plural(again.length, 'reverse card')}`);
+  });
 }
 
 // ---------- tools ----------

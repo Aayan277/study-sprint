@@ -43,7 +43,9 @@ export const toDetails = (fields, toHTML) =>
 // Returns { rest, fields: [{ name, html }] }: the HTML that is left, and each block's name (still HTML) and content.
 const DETAILS = /<details\b[^>]*>\s*<summary\b[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi;
 const trimBreaks = html => String(html).replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/gi, '');
+const MAX_HTML = 1_000_000;          // a field longer than this is not searched for sections (the regex below stays fast)
 export function parseDetails(html) {
+  if (String(html ?? '').length > MAX_HTML || !/<details/i.test(String(html ?? ''))) return { rest: String(html ?? ''), fields: [] };
   const fields = [];
   const rest = String(html ?? '').replace(DETAILS, (m, summary, body) => { fields.push({ name: summary, html: trimBreaks(body) }); return ''; });
   return { rest: fields.length ? trimBreaks(rest) : String(html ?? ''), fields };

@@ -2,7 +2,7 @@
 // editable preview, then save them into a deck. The actual format detection lives in import.js.
 
 import * as db from './db.js';
-import { parseText, parseRows, buildCards, hasKeptFields, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
+import { parseText, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
@@ -527,7 +527,8 @@ function refreshFlags() {
     if (S.keepFields) {
       parts.push('Other fields come along as folded sections.');
       if (fields.pictures) parts.push(`<span class="warn">Pictures in other fields are left out (${fields.pictures}).</span>`);
-      if (fields.cut) parts.push(`<span class="warn">${plural(fields.cut, 'very long field')} ${fields.cut === 1 ? 'was' : 'were'} shortened.</span>`);
+      const cut = fields.cut + basicFieldsCut(S.result, S.frontCol, S.backCol);
+      if (cut) parts.push(`<span class="warn">${plural(cut, 'very long field')} ${cut === 1 ? 'was' : 'were'} shortened or left out.</span>`);
     }
   }
   if (fields.more) parts.push(`<span class="warn">${plural(fields.more, 'note')} ${fields.more === 1 ? 'has' : 'have'} more card types in Anki (like a listening card); only the first card of each comes in.</span>`);

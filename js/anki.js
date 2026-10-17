@@ -321,10 +321,13 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
       ankiIds.push(note.cards?.[0] ?? null);            // the front → back card
       usedTypes.add(String(note.mid));
       const at = rows.length - 1;
+      // A field called Back Extra (after the first two: what this app's reversed-card export writes) is the note's extra, shown open.
+      const extraAt = fieldIndex(model, 'back extra', -1);
+      if (extraAt >= 2 && !isOcclusionNote(note, model)) { noteExtras[at] = text[extraAt].trim(); }
       // "Basic (and reversed card)" brings both cards: the reverse card exists in Anki when the note has a second card.
       const reverse = reverseModel(model) && note.cards?.[1] ? { ankiId: note.cards[1] } : null;
       if (reverse) revAt.set(at, reverse);
-      if (model.fields?.length) namesAt.set(at, model.fields.map(n => (conditionOnly(model, n) ? null : n)));
+      if (model.fields?.length) namesAt.set(at, model.fields.map((n, i) => (conditionOnly(model, n) || (i === extraAt && extraAt >= 2) ? null : n)));
       if (details.length) detailsAt.set(at, details.filter(d => d.text).map(d => ({ name: d.name, text: d.text })));
       const named = namesAt.get(at) || [];
       const spare = [];
@@ -334,7 +337,7 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
         if (t.trim()) spare.push({ name: named[i] ?? `Field ${i + 1}`, text: t.trim() });
         else if (hasImage(note.fields[i])) lost++;
       });
-      infoAt.set(at, { note: String(note.id ?? index), pics: lost, cut: cleanFields([...spare, ...(detailsAt.get(at) || [])]).cut,
+      infoAt.set(at, { note: String(note.id ?? index), pics: lost, cut: 0,        // (the length limits for a basic note depend on the columns picked: basicFieldsCut in import.js)
         more: !reverse && (model.templates?.length || 0) >= 2 && Object.keys(note.cards || {}).length >= 2 });
     }
   }

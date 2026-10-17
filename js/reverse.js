@@ -54,7 +54,8 @@ export function reverseOf(card, id, created = (card.created || 0) + 0.5) {
 // with the partner's sides rewritten to match (swapped), so one db.saveNote saves both.
 export function pairPlan(card, partner, edits = {}) {
   const a = { ...card, ...edits };
-  for (const k of ['frontImage', 'backImage', 'frontSounds', 'backSounds']) if (a[k] === null || (Array.isArray(a[k]) && !a[k].length)) delete a[k];
+  for (const k of ['frontImage', 'backImage', 'frontSounds', 'backSounds']) if (a[k] === null || a[k] === '' || (Array.isArray(a[k]) && !a[k].length)) delete a[k];
+  if (Array.isArray(a.acceptAnswers) && !a.acceptAnswers.length) delete a.acceptAnswers;
   const b = { ...withoutSides(partner), ...swappedSides(a) };
   return [a, b];
 }
@@ -63,22 +64,17 @@ export function pairPlan(card, partner, edits = {}) {
 // rewrites the other, the way cloze.js healNotes does for cloze notes: the newer noteEditedAt (the time the note was last
 // edited; db.saveNote writes it on both cards) wins; cards saved before that existed compete by updatedAt; a tie goes to the
 // forward card, so every device picks the same. The rewritten card gets the winner's noteEditedAt (never "now").
-// A card whose partner is gone (deleted on another device) becomes an ordinary card again, unless it was saved in the last
-// few minutes (its partner may be on its way: the next sync settles it).
+// A card whose partner is not there is left exactly as it is: the partner may be on its way (a split push, a card made offline),
+// and a lone card with a noteId is harmless, because every place that reads a pair treats it as an ordinary card (loneIds below).
+// Deleting a card on purpose turns its partner into an ordinary card at once (browse.js, leech-coach.js).
+// A tie in noteEditedAt goes to the card saved last (updatedAt), then to the forward card.
 // Returns the cards to save.
-const SETTLE_MS = 10 * 60 * 1000;
-export function healPairs(cards, now = Date.now()) {
+export function healPairs(cards) {
   const notes = new Map();
   for (const c of cards) if (isPair(c)) (notes.get(c.noteId) || notes.set(c.noteId, []).get(c.noteId)).push(c);
   const out = [];
   for (const members of notes.values()) {
-    if (members.length === 1) {
-      const [c] = members;
-      if (now - Math.max(c.updatedAt || 0, c.noteEditedAt || 0) < SETTLE_MS && (c.updatedAt || c.noteEditedAt)) continue;
-      const { noteId, reverse, noteEditedAt, ...rest } = c;
-      out.push(rest);
-      continue;
-    }
+    if (members.length === 1) continue;
     const fwd = members.filter(c => !c.reverse), rev = members.filter(c => c.reverse);
     if (fwd.length !== 1 || rev.length !== 1) continue;           // not a clean pair: leave it alone
     const [f] = fwd, [r] = rev;
@@ -86,7 +82,7 @@ export function healPairs(cards, now = Date.now()) {
     if (sig(f) === sig({ ...swappedSides(r), noteExtra: r.noteExtra, noteFields: r.noteFields })) continue;      // they agree
     const stamped = f.noteEditedAt !== undefined || r.noteEditedAt !== undefined;
     const time = c => (stamped ? c.noteEditedAt ?? -1 : c.updatedAt || 0);
-    const win = time(r) > time(f) ? r : f, lose = win === f ? r : f;
+    const win = time(r) > time(f) || (time(r) === time(f) && (r.updatedAt || 0) > (f.updatedAt || 0)) ? r : f, lose = win === f ? r : f;
     const fixed = { ...withoutSides(lose), ...swappedSides(win) };
     if (win.noteExtra) fixed.noteExtra = win.noteExtra; else delete fixed.noteExtra;
     if (win.noteFields?.length) fixed.noteFields = win.noteFields; else delete fixed.noteFields;
@@ -103,7 +99,7 @@ export function healPairs(cards, now = Date.now()) {
 //   back → front              the reverse card, asked front → back (its front is the forward card's back); the forward card sits out
 // Returns the question type to use for this card in a round of `qtype`, or null when the card sits out.
 export function playRole(card, qtype) {
-  if (!isPair(card)) return qtype;
+  if (!isPair(card)) return qtype;          // (a card whose partner is missing is made ordinary first: see loneIds)
   if (qtype === 'back') return card.reverse ? 'front' : null;
   return card.reverse ? null : qtype;
 }
@@ -146,6 +142,19 @@ export function syncPairChanges(changed, all, now = Date.now()) {
     const r = { ...r0, front: f.back, back: f.front };
     if (f.front !== f0.front || f.back !== f0.back) out.push({ ...f, noteEditedAt: now });
     if (r.front !== r0.front || r.back !== r0.back) out.push({ ...r, noteEditedAt: now });
+  }
+  return out;
+}
+
+// The ids of cards that carry a pair's noteId but have no partner (or that are not one clean pair): they behave as ordinary cards.
+// Pass every card (not only the ones Play or Review can see: a suspended partner is still a partner).
+export function loneIds(all) {
+  const notes = new Map();
+  for (const c of all) if (isPair(c)) (notes.get(c.noteId) || notes.set(c.noteId, []).get(c.noteId)).push(c);
+  const out = new Set();
+  for (const members of notes.values()) {
+    const clean = members.length === 2 && members.filter(c => c.reverse).length === 1;
+    if (!clean) members.forEach(c => out.add(c.id));
   }
   return out;
 }
