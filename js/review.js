@@ -14,8 +14,8 @@ import { imgHTML } from './media.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
 import { noteSession } from './install.js';
-import { speak, stopSpeaking, canSpeak, stepsSpeech } from './speech.js';
-import { parseSteps } from './steps.js';
+import { speak, stopSpeaking, canSpeak, stepsSpeech, elementsSpeech } from './speech.js';
+import { parseStructured, suggestRating } from './steps.js';
 import { maskMath } from './math.js';
 import { mountScratch } from './scratchpad.js';
 import { deckSchedulerOptions } from './sched-settings.js';
@@ -125,6 +125,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     statesById: data.statesById,
     queue, waiting,
     current: null, flipped: false, typed: null, suggest: null,
+    gloss: hasTerms(data.settings),             // does the glossary have terms to underline? (glossary-view.js is only loaded then)
     shownAt: 0, answerMs: 0, busy: false,
     stats: { reviewed: 0, again: 0, spent: 0, started: Date.now() },
     undo: [],
@@ -142,8 +143,9 @@ const schedFor = (card, now = Date.now()) => {
 };
 
 const deckOf = card => R.effective.get(card.deckId);
-// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). → { intro, steps, final } or null.
-const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseSteps(card.back, { mask: maskMath }));
+// A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). An elements card has "Element 1: ..." lines and
+// is shown the same way (its steps are the elements, kind 'elements', no final answer). → { kind, intro, steps, final } or null.
+const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseStructured(card.back, { mask: maskMath }));
 const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.current.card); return sp ? sp.steps.length - R.stepShown : 0; };
 // Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
 // label to type (without one you flip, saying it in your head).
@@ -158,14 +160,14 @@ function readAloud() {
   const { card } = R.current;
   // A cloze card says "blank" for the hidden part, and the whole sentence once flipped. A picture says which part is hidden.
   const sp = stepsOf(card);
-  const text = sp ? (R.flipped ? stepsSpeech(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
+  const text = sp ? (R.flipped ? (sp.kind === 'elements' ? elementsSpeech : stepsSpeech)(sp, R.stepShown) : card.front) : hasMasks(card) ? occSpeech(card, R.flipped) : hasBlank(card) ? (R.flipped ? clozeFull(card.noteText) : card.front.replace(/(?<!\\)\[[^\]]*\]/, 'blank')) : (R.flipped ? card.back : card.front);
   speak(text, deckOf(card)?.ttsLang || '');
 }
 
 function nextCard(el) {
   stopSpeaking();
   R.current = takeNext(R.queue, R.waiting);
-  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
+  R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
   renderSession(el, true);
@@ -196,6 +198,7 @@ function renderSession(el, enter = false) {
   const { card } = R.current;
   const sp = stepsOf(card);
   R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
+  R.elMissed = new Set([...(R.elMissed || [])].filter(i => sp && i < R.stepShown));
   // The drawing stays when the same card is drawn again (an edit from the menu), and goes with the next card.
   const kept = pad && padKey === R.shownAt ? pad.canvas : null;
   destroyPad();
@@ -241,6 +244,7 @@ function renderSession(el, enter = false) {
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           ${deckLabel}
           <div class="flash-front${size}">${front}</div>
+          ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
         <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
@@ -259,10 +263,11 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && !sp && !R.flipped ? `<p class="note center" id="longNote">${occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
+    ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad</p>`;
   drawSessionPage(el, head, body);
+  glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
   $('undoBtn')?.addEventListener('click', () => undo(el));
@@ -279,6 +284,9 @@ function renderSession(el, enter = false) {
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
+    if (e.target.closest('.gl-term, .gl-pop')) return;      // a tap on an underlined term opens its definition; it never flips the card
+    const tick = e.target.closest('[data-tick]');
+    if (tick) { toggleMissed(el, +tick.dataset.tick); return; }
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
@@ -289,6 +297,16 @@ function renderSession(el, enter = false) {
   else $('flash').focus({ preventScroll: true });
   publishLive();
 }
+
+// Your own glossary (item 12): the terms on the card get a dotted underline and a definition popover. The module is only loaded
+// when the glossary has terms and Settings → Appearance → "Glossary underlines" is on (this device).
+const hasTerms = settings => settings?.glossaryUnderline !== false && Object.keys(settings || {}).some(k => k.startsWith('gloss:') && settings[k]);
+function glossHook() {
+  if (!R?.gloss || !R.current) return;
+  const id = R.current.card.id;
+  import('./glossary-view.js').then(v => (R?.current?.card.id === id ? v.underlineCard($('flash'), R.current.card) : null)).catch(err => console.error(err));
+}
+addEventListener('glossary-changed', () => { if (R) R.gloss = R.settings?.glossaryUnderline !== false; });      // the first term, added mid-session, counts from the next card
 
 // Draws the header and the card, around the progress bar. The bar is NOT redrawn with them: it stays in the page
 // from card to card, so its fill slides to the new value instead of starting again from empty.
@@ -337,7 +355,7 @@ function rateButtonsHTML() {
   const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card));
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
-      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span><kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
+      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
 }
 
 function typedResultHTML() {
@@ -382,21 +400,42 @@ function flip(el) {
 // reveals one step at a time (Space, Enter, → or the button), A shows them all, and the rating buttons come once every step
 // is on screen (1–4 rate at any time). Each revealed step takes the focus (no live region: the focus move is what is read out); the last one moves it to the final answer.
 function stepsHTML(sp) {
-  const shown = R.stepShown, all = shown >= sp.steps.length;
+  const shown = R.stepShown, all = shown >= sp.steps.length, el = sp.kind === 'elements';
+  // An elements card adds a "Got it / Missed" toggle to each element (the rating is suggested from them, see backBarHTML).
   return `${sp.intro ? `<div class="steps-intro">${formatHTML(sp.intro)}</div>` : ''}
-    <ol class="steps" id="steps" aria-label="Steps">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div></li>`).join('')}</ol>
+    <ol class="steps${el ? ' elements' : ''}" id="steps" aria-label="${el ? 'Elements' : 'Steps'}">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div>${el ? tickHTML(i) : ''}</li>`).join('')}</ol>
     ${sp.final ? `<div class="steps-final" tabindex="-1" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
 }
+const tickHTML = i => {
+  const missed = R.elMissed.has(i);
+  return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
+};
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
+// Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() {
   const sp = stepsOf(R.current.card);
+  if (sp?.kind === 'elements' && R.stepShown >= sp.steps.length) {
+    const n = sp.steps.length, missed = R.elMissed.size, rating = suggestRating(n, missed);
+    R.suggest = rating;
+    const word = RATINGS.find(r => r.rating === rating)?.label || '';
+    return `<p class="step-try el-sum" id="elSum">You got ${n - missed} of ${n}. Suggested: ${word}.</p>${rateButtonsHTML()}`;
+  }
   if (!sp || R.stepShown >= sp.steps.length) return rateButtonsHTML();
-  const n = R.stepShown + 1, m = sp.steps.length;
-  return `<p class="step-try" id="stepTry">Try step ${n} yourself, then reveal.</p>
+  const n = R.stepShown + 1, m = sp.steps.length, noun = sp.kind === 'elements' ? 'element' : 'step';
+  return `<p class="step-try" id="stepTry">${noun === 'element' ? `Recall element ${n} of ${m}, then reveal.` : `Try step ${n} yourself, then reveal.`}</p>
     <div class="step-actions">
-      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal step ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
+      <button class="btn primary wide" type="button" id="stepBtn" aria-keyshortcuts="Space Enter ArrowRight">Reveal ${noun} ${n} of ${m} <kbd class="key-hint" aria-hidden="true">Space</kbd></button>
       <button class="btn ghost wide" type="button" id="stepAllBtn" aria-keyshortcuts="A">Show all <kbd class="key-hint" aria-hidden="true">A</kbd></button>
     </div>`;
+}
+// An element's "Got it / Missed" toggle (a tap on it, or X for the latest revealed element).
+function toggleMissed(el, i) {
+  const sp = R?.flipped && R.current && stepsOf(R.current.card);
+  if (!sp || sp.kind !== 'elements' || !(i >= 0 && i < R.stepShown)) return;
+  if (R.elMissed.has(i)) R.elMissed.delete(i); else R.elMissed.add(i);
+  const b = $('flash').querySelector(`[data-tick="${i}"]`);
+  if (b) { const had = document.activeElement === b; b.outerHTML = tickHTML(i); if (had) $('flash').querySelector(`[data-tick="${i}"]`)?.focus(); }
+  if (R.stepShown >= sp.steps.length) { $('ratebar').innerHTML = backBarHTML(); wireRatebar(el); }
 }
 function revealStep(el, all = false) {
   const sp = R?.flipped && R.current && stepsOf(R.current.card);
@@ -543,7 +582,7 @@ async function undo(el) {
     if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
     if (u.again) R.stats.again--;
     R.active = true;
-    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0;
+    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
   } finally {
@@ -711,6 +750,7 @@ document.addEventListener('keydown', e => {
     if (k === 'r') { e.preventDefault(); readAloud(); return; }
     if (k === 'd') { e.preventDefault(); toggleScratch(); return; }
     if (k === 'a' && stepsLeft()) { e.preventDefault(); revealStep(R.el, true); return; }
+    if (k === 'x' && R.flipped && R.stepShown && stepsOf(R.current.card)?.kind === 'elements') { e.preventDefault(); toggleMissed(R.el, R.stepShown - 1); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
     if (k === 'z' && face?.querySelector('.occ-zoom')) {

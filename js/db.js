@@ -18,7 +18,8 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
+import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
@@ -404,7 +405,7 @@ export async function setSetting(key, value, { at: given } = {}) {
   const tx = db.transaction('settings', 'readwrite');
   const os = tx.objectStore('settings');
   os.put(value, key);
-  if (SYNCED_SETTINGS.includes(key)) {
+  if (isSyncedSetting(key)) {
     // A merged setting must beat the version the server already holds even if another device's clock is ahead.
     os.get(SETTING_TIMES).onsuccess = e => {
       const times = e.target.result || {};
@@ -413,7 +414,7 @@ export async function setSetting(key, value, { at: given } = {}) {
     };
   }
   await finished(tx);
-  if (SYNCED_SETTINGS.includes(key)) changed();
+  if (isSyncedSetting(key)) changed();
 }
 
 // ---------- wipe everything ----------
@@ -538,13 +539,17 @@ export async function importAll(data, { everywhere = false } = {}) {
     // Settings are replaced too (on this device), except this device's sign-in and sync bookmarks.
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
-    const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
+    // (Glossary terms that are broken are dropped, not the whole backup: cleanGlossary.)
+    const restored = Object.entries(cleanGlossary(data.settings)).filter(([k]) => !LOCAL_ONLY.includes(k));
     restored.forEach(([k, v]) => settings.put(v, k));
     // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
     // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
     if (everywhere) {
       // The backup's study settings win in the account too.
-      settings.put(Object.fromEntries(SYNCED_SETTINGS.filter(k => restored.some(([r]) => r === k)).map(k => [k, now])), SETTING_TIMES);
+      const times = Object.fromEntries(restored.filter(([k]) => isSyncedSetting(k)).map(([k]) => [k, now]));
+      // Terms that were here but are not in the backup are deleted in the account too (a null term, newer than theirs).
+      for (const k of oldKeys) if (typeof k === 'string' && k.startsWith('gloss:') && !(k in times)) { settings.put(null, k); times[k] = now; }
+      settings.put(times, SETTING_TIMES);
     }
   });
   scheduleChanges++;
@@ -611,8 +616,8 @@ export async function localChangesSince(since) {
   const os = tx.objectStore('settings');
   const times = (await done(os.get(SETTING_TIMES))) || {};
   const settings = [];
-  for (const key of SYNCED_SETTINGS) {
-    if (times[key] > since) settings.push({ key, value: await done(os.get(key)), time: times[key] });
+  for (const key of Object.keys(times)) {
+    if (isSyncedSetting(key) && times[key] > since) settings.push({ key, value: await done(os.get(key)), time: times[key] });
   }
   return { records, tombstones, settings };
 }
@@ -667,8 +672,9 @@ export async function applyRemote(rows) {
           }
           continue;
         }
-        if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
-        settingsStore.put(row.data?.value, row.id);
+        if (!isSyncedSetting(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
+        // (A glossary term from another device is checked first; a broken one is stored as deleted.)
+        settingsStore.put(row.id.startsWith('gloss:') ? cleanGlossary({ [row.id]: row.data?.value })[row.id] ?? null : row.data?.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
       } else if (row.store in SYNC_ID) {
