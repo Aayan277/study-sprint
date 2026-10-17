@@ -7,6 +7,7 @@ import * as db from './db.js';
 import { dayStart } from './days.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { examInfo, countdown, badgeClass, readiness } from './exam.js';
+import { personalW20 } from './sched-settings.js';
 import { openDeckPicker } from './deck-picker.js';
 import { startStudy } from './today.js';
 import { openExamSheet } from './exam-sheet.js';
@@ -197,7 +198,7 @@ export async function renderStats(el) {
   // when there is no exam, if you stopped reviewing now.
   const exam = course ? examInfo(effectiveDeck(decks, course.id)) : null;
   const readyHTML = () => {
-    const r = readiness(cards, statesById, exam ? exam.start : now);
+    const r = readiness(cards, statesById, exam ? exam.start : now, personalW20(settings));
     const pct = Math.round(r.share * 100);
     const seen = cards.length - counts.new;
     const share = k => `${(counts[k] / Math.max(1, cards.length) * 100).toFixed(2)}%`;
