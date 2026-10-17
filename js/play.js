@@ -3,8 +3,9 @@
 //   Questions: Front → pick the back, Back → pick the front, Typing
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
-// Every answer is saved to the review log, and feeds the review schedule following the
-// auto-grading rules in autograde.js.
+// Play is practice only by default: nothing is saved to the review log or the schedule. With the synced setting
+// "Count Play answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
+// schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
 import {
@@ -184,7 +185,7 @@ export async function renderPlay(el) {
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
-        <p>Answers on due cards count as their review, and so do new cards in a deck with an exam.</p></details>
+        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
       <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
@@ -404,7 +405,7 @@ function answer(choice) {
   // Typing: which letters were wrong (for a wrong answer, and for a right one that needed forgiving). Lightning stays quick.
   let diff = G.qtype === 'typing' && given.trim() && !exact && !(lightning && ok) ? diffAgainstBack(given, target) : null;
   if (diff && ok && !hasMarks(diff)) diff = null;
-  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
+  const entry = { card: G.card, q: G.q, ok, seconds, mixedWith, at: Date.now(), ms: Math.round(elapsed), limitMs: G.limit, speed, given: choice === null ? null : given,
     typed: diff ? given : undefined, target: diff ? target : undefined,
     chars: answerText(G.q.prompt).length + (G.qtype === 'typing' ? 0 : G.opts.reduce((n, o) => n + answerText(o).length, 0)) + (G.q.occ ? 60 : 0) };     // text read, for speed relative to you (a picture question gets a fixed allowance)
   G.log.push(entry);

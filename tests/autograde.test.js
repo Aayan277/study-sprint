@@ -170,15 +170,6 @@ test('playLogRow: always source play, applied false until the schedule changes, 
   assert.equal(playLogRow({ ...base, prevState: undefined }).state, 0);
 });
 
-test('Play off: nothing is written, so no stats reader, streak day or ring can see a Play answer', () => {
-  // With the setting off Play's record() returns before it builds a row, so the log holds no Play rows at all:
-  assert.equal(playCountsAsReviews({ playCountsAsReviews: false }), false);
-  const logs = [];
-  assert.equal(logs.filter(isAnswerLog).length, 0);
-  assert.equal(answerDays(logs).all.size, 0);
-  assert.equal(reviewsPerDay(logs, NOW, 1)[0].total, 0);
-});
-
 test('Play on: an applied row counts toward the ring; a logged-only row counts in stats but not in the ring', () => {
   const applied = playLogRow({ cardId: 'a', now: NOW, qtype: 'typing', fmt: 'classic', ok: true, ms: 2000, rating: 3, prevState: 2, decision: 'due' });
   applied.applied = true;

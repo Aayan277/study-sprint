@@ -3,7 +3,7 @@
 //   Today badge    countFor(data, chosen decks or all).total: the same number as Today's Start button. Hidden at 0.
 //   Decks dot      the nearest exam (examInfo) within 7 days: amber, red inside 3 days (the badgeClass rule)
 //   Decks list     top-level decks in tree order: colour stripe, due count, and an exam pill within 14 days
-//   Footer         goal ring + streak (as on Today), sync status (the wording of Settings), Settings, theme, collapse
+//   Footer         today ring + streak (as on Today), sync status (the wording of Settings), Settings, theme, collapse
 // The numbers come from the same loadAll() Today uses, so nothing here reads the whole review log. Today hands over the
 // data it just loaded (drawSidebar(loaded)), so opening Today costs nothing extra.
 // drawSidebar() runs on start, after Review/Play rounds, after deck edits and when a sync brought changes in.
@@ -118,7 +118,7 @@ async function paint(loaded) {
   markCurrent();
   fadeList();
 
-  // Footer: goal ring and streak
+  // Footer: today ring and streak
   const st = $('sideStreak');
   st.className = 'side-streak' + (streak.studiedToday ? ' kept' : '');
   // A streak freeze: "freeze ready" (none used this week) or "freeze used Tue"; a snowflake while one was used in the last 7 days.

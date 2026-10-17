@@ -42,20 +42,54 @@ export function parseMaxInterval(value) {
 // Everything the scheduler needs, from the saved settings. Anything unreadable falls back to the default.
 // A deck's options: its own scheduling settings (deck.options, same names as Settings) where it has them,
 // otherwise the overall ones.
+// Your own FSRS parameters (fsrsParams) are the same for every deck, so a deck's options never override them.
 export function deckSchedulerOptions(settings, deck) {
-  return schedulerOptions(deck?.options ? { ...settings, ...deck.options } : settings);
+  return schedulerOptions(deck?.options ? { ...settings, ...deck.options, fsrsParams: settings?.fsrsParams } : settings);
+}
+
+// ---------- your own FSRS parameters ----------
+// The synced setting `fsrsParams` (fitted by js/fsrs-fit.js, see docs/design/fsrs-optimizer-plan.md section 6):
+//   { w: [21 numbers] | null, at, reviews, cards, logLoss: { before, after }, rmse: { before, after }, version: 'fsrs-6' }
+// w is null after "Reset to default" (the value is kept, not deleted, because a stamped value syncs and a missing one does not).
+export const FSRS_VERSION = 'fsrs-6';
+export const FSRS_W_COUNT = 21;
+
+const isNum = x => typeof x === 'number' && Number.isFinite(x);
+const pair = o => (o && typeof o === 'object' && isNum(o.before) && isNum(o.after) ? { before: o.before, after: o.after } : undefined);
+
+// The value if it can be used, as a clean copy with only the known fields; otherwise null (= the standard settings).
+// Used wherever the value comes in: when settings are read, from the server, and from a backup. (The scheduler still
+// clips every weight to its allowed range, so a wild number can't break it.)
+export function cleanFsrsParams(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v) || v.version !== FSRS_VERSION) return null;
+  if (v.w !== null && !(Array.isArray(v.w) && v.w.length === FSRS_W_COUNT && v.w.every(isNum))) return null;
+  const out = { w: v.w === null ? null : [...v.w] };
+  if (isNum(v.at)) out.at = v.at;
+  for (const k of ['reviews', 'cards']) if (Number.isInteger(v[k]) && v[k] >= 0) out[k] = v[k];
+  for (const k of ['logLoss', 'rmse']) { const p = pair(v[k]); if (p) out[k] = p; }
+  out.version = FSRS_VERSION;
+  return out;
+}
+
+// The forgetting-curve decay (w20) the exam and readiness maths should use: your own, or undefined for the default.
+// Kept inside the range the scheduler allows (0.1 to 0.8), so the numbers agree with it.
+export function personalW20(settings) {
+  const w = cleanFsrsParams(settings?.fsrsParams)?.w;
+  return w ? Math.min(0.8, Math.max(0.1, w[20])) : undefined;
 }
 
 export function schedulerOptions(settings = {}) {
   const ls = parseSteps(settings.learningSteps ?? SCHED_DEFAULTS.learningSteps);
   const rs = parseSteps(settings.relearningSteps ?? SCHED_DEFAULTS.relearningSteps);
   const mi = parseMaxInterval(settings.maxInterval ?? SCHED_DEFAULTS.maxInterval);
+  const w = cleanFsrsParams(settings.fsrsParams)?.w;
   return {
     retention: settings.targetRetention ?? 0.9,
     learningSteps: ls.steps || parseSteps(SCHED_DEFAULTS.learningSteps).steps,
     relearningSteps: rs.steps || parseSteps(SCHED_DEFAULTS.relearningSteps).steps,
     maxInterval: mi.days || SCHED_DEFAULTS.maxInterval,
-    fuzz: settings.fuzz ?? SCHED_DEFAULTS.fuzz
+    fuzz: settings.fuzz ?? SCHED_DEFAULTS.fuzz,
+    ...(w ? { w } : {})                      // your own FSRS weights (left out when the standard ones are used)
   };
 }
 

@@ -18,7 +18,8 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId } from './sync-data.js';
+import { cleanFsrsParams } from './sched-settings.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS = {
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
+  fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
   playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
@@ -395,7 +397,7 @@ export async function getSettings() {
   const os = await store('settings');
   const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
   const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]));
-  return { ...DEFAULT_SETTINGS, ...saved };
+  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams) };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
@@ -477,6 +479,15 @@ export function checkBackup(data) {
   if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
 }
+// The settings a backup restores: not this device's own (sign-in, sync bookmarks), and with fsrsParams cleaned. A value that
+// does not clean (junk, or a version this app doesn't know) is left out altogether, rather than stored as null: a null would
+// be stamped as a new "reset" and could wipe good weights that sync from another device. The rest of the backup still restores.
+export function restoredSettings(settings) {
+  return Object.entries(settings || {})
+    .filter(([k]) => !LOCAL_ONLY.includes(k))
+    .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
+    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
+}
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
 // A log row's `mixedWith` (the card whose answer was given by mistake, see confusion.js) is kept only when it is a
@@ -539,7 +550,7 @@ export async function importAll(data, { everywhere = false } = {}) {
     // Settings are replaced too (on this device), except this device's sign-in and sync bookmarks.
     const settings = tx.objectStore('settings');
     oldKeys.filter(k => !LOCAL_ONLY.includes(k)).forEach(k => settings.delete(k));
-    const restored = Object.entries(data.settings || {}).filter(([k]) => !LOCAL_ONLY.includes(k));
+    const restored = restoredSettings(data.settings);
     restored.forEach(([k, v]) => settings.put(v, k));
     // Note: `restDays` (days off) is a MERGED setting. Restoring replaces this device's copy, but the next sync merges
     // it with the account's, so a day off that the backup lacks comes back from the server rather than being deleted.
@@ -669,7 +680,9 @@ export async function applyRemote(rows) {
           continue;
         }
         if (!SYNCED_SETTINGS.includes(row.id) || decide(row, times[row.id] || 0) !== 'put') continue;
-        settingsStore.put(row.data?.value, row.id);
+        const accepted = acceptSetting(row.id, row.data?.value);
+        if (!accepted.ok) continue;                  // junk from the server is ignored
+        settingsStore.put(accepted.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
       } else if (row.store in SYNC_ID) {

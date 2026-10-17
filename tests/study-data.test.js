@@ -383,7 +383,17 @@ test('ring: "All cards learned" only when no deck has an unseen new card', () =>
   // new cards held back by the daily limit are still unseen
   assert.equal(ringOf(ringWorld({ newPerDay: 0 })).allLearned, false);
   // an empty set of cards is not "learned"
-  assert.equal(ringOf({ ...ringWorld({ newCards: 0 }), cards: [], split: { reviews: [], waiting: [], fresh: [] } }).allLearned, false);
+  assert.equal(ringOf({ ...ringWorld({ newCards: 0 }), cards: [], allCards: [], split: { reviews: [], waiting: [], fresh: [] } }).allLearned, false);
+  // a suspended unseen new card was never learned
+  const sus = ringWorld({ newCards: 1 }); sus.allCards = sus.allCards.map(c => (c.id === 'n0' ? { ...c, suspended: true } : c)); sus.cards = sus.allCards.filter(c => !c.suspended);
+  sus.split = splitCards(sus.cards, sus.statesById, now);
+  assert.equal(ringOf(sus).allLearned, false);
+  // scoped to the chosen deck: another deck's unseen card does not count
+  const two = ringWorld({ newCards: 0 }); two.decks = [...two.decks, { id: 'e', name: 'E', created: 2 }];
+  two.allCards = [...two.allCards, { id: 'z', deckId: 'e', front: 'f', back: 'b', created: 20 }]; two.cards = two.allCards; two.deckOf.set('z', 'e'); two.chains = chainMap(two.decks);
+  two.split = splitCards(two.cards, two.statesById, now);
+  assert.equal(todayRing(two, ['d'], countFor(two, ['d']), now).allLearned, true);
+  assert.equal(todayRing(two, ['e'], countFor(two, ['e']), now).allLearned, false);
 });
 
 test('ring: counts Review answers and Play answers that changed the schedule, not practice or imports, and honours the deck choice', () => {
@@ -404,4 +414,13 @@ test("customQueue('ids') drops suspended and buried cards", async () => {
   const out = customQueue('ids', { statesById: new Map() }, cards, 3, ['a', 'b', 'c', 'd']);
   assert.deepEqual(out.queue.map(x => x.card.id), ['a', 'd']);
   assert.equal(out.label, 'Review these');
+});
+
+test('ring: a card answered today that is now suspended still counts as done, even in its learning steps', () => {
+  const logs = [{ cardId: 'L', source: 'review', timestamp: now, state: 0 }];
+  const d = ringWorld({ logs, newCards: 0, learn: [['L', now + 600000]] });
+  d.allCards = d.allCards.map(c => (c.id === 'L' ? { ...c, suspended: true } : c)); d.cards = d.allCards.filter(c => !c.suspended);
+  d.split = splitCards(d.cards, d.statesById, now);
+  const r = ringOf(d);
+  assert.deepEqual([r.done, r.left, r.total], [1, 2, 3]);        // out of the queue, so not left; it stays done
 });
