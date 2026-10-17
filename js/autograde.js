@@ -29,6 +29,11 @@ import { TYPING_TIME } from './game.js';
 export const AGAIN = 1, HARD = 2, GOOD = 3, EASY = 4;   // same numbers as ts-fsrs's Rating
 const NEW = 0;
 
+// Does Play count as reviews? Off unless the synced setting `playCountsAsReviews` is exactly true (Settings). Off = practice
+// only: Play writes no schedule change and no review-log row at all, so stats, heatmap, streak, readiness and Today's
+// ring cannot see it. On: the rules above, and every row Play writes has source 'play' (a future FSRS optimizer can skip them).
+export const playCountsAsReviews = settings => settings?.playCountsAsReviews === true;
+
 // Lightning has no per-question timer, so speed is measured against this many seconds instead.
 export const LIGHTNING_REF_MS = 6000;
 

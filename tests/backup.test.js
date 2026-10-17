@@ -110,3 +110,9 @@ test('dailyGoal in a backup: a whole number from 1 to 500 (or none) passes, anyt
   for (const g of [1, 20, 500, null, undefined]) assert.equal(checkBackup(withGoal(g)), null);        // null or missing means the default
   for (const g of [0, -5, 501, 2.5, '20', NaN, [20], {}, true]) assert.match(checkBackup(withGoal(g)), /daily goal/);
 });
+
+test('playCountsAsReviews in a backup: on or off passes, anything else is refused', () => {
+  const withSetting = playCountsAsReviews => ({ ...good, settings: { playCountsAsReviews } });
+  for (const v of [true, false, null, undefined]) assert.equal(checkBackup(withSetting(v)), null);
+  for (const v of ['yes', 1, 0, [], {}]) assert.match(checkBackup(withSetting(v)), /Play setting/);
+});

@@ -2,8 +2,8 @@
 // (Kept apart from review.js so Today can open at once, without waiting for the FSRS library review.js loads.)
 
 import * as db from './db.js';
-import { dayStart } from './days.js';
-import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW } from './queue.js';
+import { dayStart, dayEnd } from './days.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -116,20 +116,32 @@ export function countFor(data, deckIds) {
   return c;
 }
 
-// Answers given today in a set of decks (all decks when none are chosen): what the daily goal counts as done.
-export function answeredToday(data, deckIds) {
+// Today's work, for the ring on Today and in the sidebar (they share this): what is done out of what today holds,
+// i.e. reviews due today plus today's new cards up to the new-cards-per-day limit (`left` is what deckCounts says
+// Review would show now, learning steps included, so the total follows the queue).
+//   done      cards finished today in these decks (all decks when none are chosen): a Review answer, or a Play answer
+//             that changed the schedule (Play with "Count Play answers as reviews" on). A card still in its learning
+//             steps for today is in `left`, so it is not also counted as done.
+//   left      cards still to go           total  done + left (0 = nothing was due today)
+//   state     'todo' (work left), 'done' (finished today's work) or 'nothing' (nothing was due at all today)
+//   frac      the ring's fill: done / total, and full (1) when there was nothing to do
+//   n, of     the numbers the ring shows (n of 1 for 'nothing', so the ring is never 0/0)
+//   allLearned true when none of these decks has an unseen new card left
+export function todayRing(data, deckIds, counts, now = Date.now()) {
   const ids = deckIds.length ? withSubdecks(data, deckIds) : null;
-  return data.logs.filter(l => (l.source === 'review' || l.source === 'play') && (!ids || ids.has(data.deckOf.get(l.cardId)))).length;
-}
-
-// The goal ring's denominator (Today and the sidebar share it): your daily goal from Settings, or more when today
-// already has more to do (answers so far plus what is still due), so extra study never reads 25/20 and it is never 0/0.
-export const GOAL_DEFAULT = 20, GOAL_MAX = 500;
-export function goalFor(settings, answered, left) {
-  const raw = settings?.dailyGoal;
-  const g = raw == null ? NaN : Number(raw);               // null or missing: the default, not 0
-  const base = Number.isFinite(g) ? Math.max(1, Math.min(GOAL_MAX, Math.round(g))) : GOAL_DEFAULT;
-  return Math.max(base, answered + left);
+  const end = dayEnd(now);
+  const finished = new Set();
+  for (const l of data.logs) {
+    if (!(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    if (ids && !ids.has(data.deckOf.get(l.cardId))) continue;
+    const st = data.statesById.get(l.cardId);
+    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end) continue;      // still to come back today: part of `left`
+    finished.add(l.cardId);
+  }
+  const done = finished.size, left = counts.total, total = done + left;
+  const state = left > 0 ? 'todo' : done > 0 ? 'done' : 'nothing';
+  const allLearned = data.cards.length > 0 && !data.split.fresh.some(c => !ids || ids.has(c.deckId));
+  return { done, left, total, state, allLearned, frac: total ? done / total : 1, n: total ? done : 1, of: total || 1 };
 }
 
 // "The next card is due in 3h." (or '' when there's nothing scheduled), for cards that are all done today.

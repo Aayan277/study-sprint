@@ -42,7 +42,8 @@ export const DEFAULT_SETTINGS = {
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
-  dailyGoal: 20,             // answers a day the goal ring on Today and in the sidebar counts to (1 to 500). Synced
+  dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
+  playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
   restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
   rescue: null,      // catch-up plan after a break: { start, days, backlog, pauseNew, at } (queue.js rescueToday). Synced, newest wins; Today clears it when it is over
@@ -471,6 +472,7 @@ export function checkBackup(data) {
     return 'This backup file is damaged (a picture is invalid or not a supported image type).';
   }
   if (data.settings?.dailyGoal != null && !validDailyGoal(data.settings.dailyGoal)) return 'This backup file is damaged (the daily goal must be a whole number from 1 to 500).';
+  if (data.settings?.playCountsAsReviews != null && typeof data.settings.playCountsAsReviews !== 'boolean') return 'This backup file is damaged (the Play setting must be on or off).';
   // The catch-up plan is read as numbers and a flag, so nothing else may sit in it.
   if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;

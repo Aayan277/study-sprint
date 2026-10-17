@@ -132,3 +132,27 @@ test('a right multiple-choice answer on a due card counts at most as Hard; typin
   assert.equal(appliedRating({ decision: 'due', rating: EASY, mc: false }), EASY);
   assert.equal(appliedRating({ decision: 'first', rating: GOOD, mc: true }), GOOD);
 });
+
+// ---------- v4.10: Play is practice only unless "Count Play answers as reviews" is on ----------
+import { playCountsAsReviews } from '../js/autograde.js';
+import { isAnswerLog, answerDays, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
+
+test('playCountsAsReviews: off unless the setting is exactly true', () => {
+  assert.equal(playCountsAsReviews({}), false);                       // the default
+  assert.equal(playCountsAsReviews(undefined), false);
+  assert.equal(playCountsAsReviews({ playCountsAsReviews: false }), false);
+  for (const v of ['true', 1, null, 'on']) assert.equal(playCountsAsReviews({ playCountsAsReviews: v }), false);
+  assert.equal(playCountsAsReviews({ playCountsAsReviews: true }), true);
+});
+
+test('stats readers treat Review rows (source review) and counted Play rows (source play) consistently', () => {
+  const t = NOW - 1000;
+  const review = { cardId: 'a', timestamp: t, source: 'review', state: 2, correct: true };
+  const play = { cardId: 'b', timestamp: t, source: 'play', state: 2, correct: true, applied: true, reason: 'due', mode: 'typing' };
+  const playOnly = { cardId: 'c', timestamp: t, source: 'play', state: 2, correct: true, applied: false, reason: 'not-due', mode: 'typing' };
+  assert.ok([review, play, playOnly].every(isAnswerLog));            // all are answers (heatmap and streak count the day)
+  assert.equal(answerDays([review, play, playOnly]).all.size, 1);
+  assert.deepEqual([isDueReview(review), isDueReview(play), isDueReview(playOnly)], [true, true, false]);     // retention: only answers that were the card's review
+  const day = reviewsPerDay([review, play, playOnly], NOW, 1)[0];
+  assert.deepEqual([day.review, day.play, day.total], [1, 2, 3]);        // the chart tells them apart by `source`
+});
