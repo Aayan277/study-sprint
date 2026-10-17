@@ -7,6 +7,7 @@ import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQu
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
+import { personalW20 } from './sched-settings.js';
 import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
 
 // How far back Today looks for the time estimate and the streak.
@@ -39,7 +40,7 @@ export async function loadAll({ history = false } = {}) {
   const reviewLeft = reviewLimits({ perDay: settings.reviewLimit, decks, logs, deckOf, now, chains });
   const statesById = new Map(states.map(s => [s.cardId, s]));
   // Decks with an exam: cards that need a review before it are brought forward (the final pass, see exam.js).
-  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays);
+  const exam = examSchedule(decks, visible, statesById, now, null, null, settings.easyDays, personalW20(settings));
   // Cloze siblings: a note with a card answered today shows no other card (see limitSiblings in queue.js).
   const answered = answeredNotes(logs, cards, now);       // every card, so a buried or suspended sibling answered today still counts
   // Catch-up plan ("back from a break", settings.rescue): decks with an exam are exempt (also through their parent).
@@ -175,7 +176,7 @@ export function customQueue(kind, data, cards, days = 3, ids = []) {
   // Exam prep shows every sibling of a cloze note (the point is to see everything before the exam).
   // Exam prep covers decks with an exam coming up (subdecks use their parent's date unless they set one).
   const examOf = new Map(data.decks.map(d => [d.id, examInfo(effectiveDeck(data.decks, d.id))]));
-  return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById), label: 'Exam prep' };
+  return { ...examPrepQueue(cards.filter(c => examOf.get(c.deckId)), data.statesById, undefined, undefined, personalW20(data.settings)), label: 'Exam prep' };
 }
 
 // ---------- the catch-up plan on Today ----------
