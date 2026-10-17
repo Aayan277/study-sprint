@@ -312,13 +312,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .btn .ico{width:18px;height:18px}
 /* Progress ring (js/ui.js ring()) */
 .ring{position:relative;display:inline-grid;place-items:center;flex:none}
+.goal{display:none}      /* Today's goal line (a sentence and a bar): only the Clinical style shows it, in place of the ring (css/clinical.css) */
 .ring > svg{position:absolute;inset:0;width:100%;height:100%}
 .ring-bg{fill:none;stroke:color-mix(in srgb,var(--text) 13%,transparent)}
 .ring-fg{fill:none;stroke:var(--accent);filter:drop-shadow(0 0 4px var(--glow))}
 .ring-in{position:relative;display:flex;flex-direction:column;align-items:center;line-height:1;color:var(--text)}
 .ring-check{width:30px;height:30px;color:var(--good)}
 
-/* Today: goal ring, streak and one big Start button, then a row per course */
+/* Today: today ring, streak and one big Start button, then a row per course */
 .today-hero{background:var(--hero);border-radius:var(--r-lg);box-shadow:var(--e-2);padding:var(--s-5);margin-bottom:var(--s-4)}
 .th-main{display:flex;align-items:center;gap:var(--s-4)}
 .th-main .ring-in b{font-size:1.5rem;font-weight:600;letter-spacing:-.04em}
@@ -338,7 +339,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .th-done > b{display:block;font-size:var(--fs-md);margin-bottom:2px}
 .th-done p{margin:0 0 var(--s-3);color:var(--text-2);font-size:var(--fs-sm)}
 .th-done p b{color:var(--text);font-weight:600}
-.th-done .th-extra{padding:6px 0;min-height:32px;color:var(--accent-text)}
+.th-done .th-extra{width:100%}
+.th-learned{margin-top:2px}
 .resume{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);margin-bottom:var(--s-3);background:var(--accent-tint);border-radius:var(--r-md);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:var(--fs-sm)}
 .resume .ico{vertical-align:-3px;margin-right:4px}
 .filtered{margin:calc(var(--s-1) * -1) 0 var(--s-5)}
@@ -549,6 +551,22 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-foot .btn{flex:1 1 auto;min-height:48px;white-space:nowrap}
 .sheet-foot .btn.primary,.sheet-foot .btn.solid{flex-grow:1.6;min-width:44%}
 .sheet-foot.stack{flex-direction:column;align-items:stretch}
+/* Your own glossary (item 12): underlined terms on cards, their popover, and the list in the glossary sheet */
+.gl-term{display:inline;padding:0;margin:0;border:0;background:none;color:inherit;font:inherit;letter-spacing:inherit;cursor:help;text-decoration:underline dotted;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:var(--accent);-webkit-user-select:text;user-select:text}
+.gl-term:hover,.gl-term[aria-expanded="true"]{background:var(--accent-tint)}
+.gl-term:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.gl-pop{position:fixed;z-index:60;max-width:min(320px,calc(100vw - 16px));max-height:50dvh;overflow:auto;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);box-shadow:var(--e-3);font:400 var(--fs-sm) var(--f-ui);line-height:1.45;text-align:left;white-space:normal}
+.gl-pop:focus{outline:none}
+.gl-pop-t{display:block;margin-bottom:var(--s-1);font-size:var(--fs-md)}
+.gl-pop-d{overflow-wrap:anywhere;color:var(--text-2)}
+.gl-edit{margin-top:var(--s-2)}
+.gl-search{width:100%}
+.gl-list{display:grid;gap:var(--s-1)}
+.gl-row{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-2) 0;border-bottom:1px solid var(--line)}
+.gl-row-t{flex:1;min-width:0;display:grid}
+.gl-row-t span{color:var(--text-2);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-row-t .gl-none{color:var(--text-3)}
+.gl-del{color:var(--again)}
 .sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
 .sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;opacity:.7;margin-left:4px}
 @media (pointer:coarse){.sheet-foot kbd{display:none}}
@@ -726,6 +744,14 @@ main[data-route="import"] > .view > .savebar{order:5}
 /* The question again, smaller, above the answer */
 .flash-recap{margin:0;font-weight:600;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em;line-height:1.15;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
 @keyframes card-in{from{opacity:0;transform:translateY(16px) scale(.985)}}
+/* Elements cards (item 4): "4 elements" under the question, a Got it / Missed toggle on each element, a ring on the suggested rating */
+.el-count{margin:var(--s-2) 0 0;text-align:center;font:500 var(--fs-sm) var(--f-ui);color:var(--text-3)}
+.steps.elements .step{grid-template-columns:28px minmax(0,1fr) auto}
+.el-tick{align-self:start;min-height:36px;padding:0 var(--s-3);border-radius:var(--r-md);border:1px solid var(--good);background:var(--good-tint);color:var(--good);font:600 var(--fs-sm) var(--f-ui);cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.el-tick[aria-pressed="false"]{border-color:var(--again);background:var(--again-tint);color:var(--again)}
+.el-tick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.el-sum{margin:0 0 var(--s-2);font-weight:600;color:var(--text)}
+.rate .sug-l{font:600 var(--fs-xs) var(--f-ui);letter-spacing:.02em;text-transform:uppercase;color:inherit}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
@@ -1228,7 +1254,7 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
   main[data-route="decks"] .decks.compact{align-items:start}
   main[data-route="decks"] .decks.compact .deck{min-height:0}
   main[data-route="deck"] .screen-head{flex-direction:row;align-items:flex-end}
-  /* Today: the goal and streak on the left, the big Start button beside them */
+  /* Today: the ring and streak on the left, the big Start button beside them */
   .today-hero{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:var(--s-8);align-items:center;padding:var(--s-8)}
   .th-big{font-size:2.25rem}
   .th-sub{font-size:var(--fs-base)}
@@ -1425,7 +1451,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .fx-ghost{border-radius:var(--r-xl);background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--rc) 22%,transparent),transparent 70%),var(--surface-1);
   box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent),0 0 40px -12px var(--rc)}
 
-/* C2. Today: the goal ring fills from where it was; a finished goal is green, with a halo and a check that pops */
+/* C2. Today: the today ring fills from where it was; a finished day is green, with a halo and a check that pops */
 .ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
 .ring.is-full .ring-fg{stroke:var(--good);filter:drop-shadow(0 0 6px var(--good-line))}
 .ring.fx-win{isolation:isolate}
@@ -1773,7 +1799,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 
 /* ---------- 22. Desktop sidebar (v3.9) ----------
    From 1024px the tab bar is a sidebar: Add cards on top, the four sections with a Today count and an exam dot, a Decks
-   list, and a footer (goal ring and streak, sync, Settings, light/dark, collapse). Collapsed it is a 72px icon rail.
+   list, and a footer (today ring and streak, sync, Settings, light/dark, collapse). Collapsed it is a 72px icon rail.
    Phones show none of the extras. js/sidebar.js fills it in; <html data-rail="on"> is the collapsed state.
    Only the app's colour tokens are used, so every skin passes the same contrast in dark, light and OLED. */
 .side-add,.side-decks,.side-foot,.side-badge,.side-dot,.side-tip{display:none}
@@ -2211,7 +2237,8 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-actions #stepAllBtn{padding-inline:var(--s-5)}
 .step-actions .key-hint{margin:0 0 0 8px;background:transparent;color:inherit;border-color:currentColor}
 /* Card editor: Answer in steps, Memory hook */
-.steps-switch{margin:var(--s-1) 0}
+.answer-mode{align-items:center;margin:var(--s-1) 0}
+.answer-mode-l{font:600 var(--fs-sm) var(--f-ui);color:var(--text-2);margin-right:var(--s-1)}
 .steps-ed{display:grid;gap:var(--s-3)}
 .step-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
 .step-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s-2);align-items:start}

@@ -4,9 +4,11 @@
 // That way the phone's back gesture and the browser's back button work as expected.
 
 import * as db from './db.js';
-import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS } from './themes.js';
+import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS, UIS, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
+import { entriesFrom } from './glossary.js';
+const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
@@ -19,7 +21,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.9';
+const APP_VERSION = '4.13';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -29,7 +31,7 @@ async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
-  const { skin, mode, oled } = settings.theme;
+  const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
     <nav class="set-nav" id="setNav" aria-label="Jump to a section">
@@ -38,7 +40,11 @@ async function renderSettings(el) {
 
     <section class="section" aria-labelledby="appearTitle">
       <h2 id="appearTitle">Appearance</h2>
-      <h3 class="set-sub" id="thTitle">Theme</h3>
+      <h3 class="set-sub" id="uiTitle">Style</h3>
+      <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
+        ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      </div>
+      <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
       <h3 class="set-sub" id="apTitle">Light or dark</h3>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
@@ -66,6 +72,9 @@ async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
         <span>Pick a course in Stats to see how ready you are for its exam. This device only.</span></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b>Glossary underlines</b>
+        <span>Terms from your glossary are underlined on Review cards. This device only.</span></span>
+        <input id="glossaryUnderline" type="checkbox" class="switch" ${settings.glossaryUnderline !== false ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -79,21 +88,20 @@ async function renderSettings(el) {
         </div>
       </div>
       <div class="set-row">
-        <div><b>Daily goal</b><p>The answers a day the goal ring on Today counts to. It grows if more is due.</p></div>
-        <div class="stepper">
-          <button type="button" class="icon-btn" id="dgMinus" aria-label="Lower daily goal">−</button>
-          <input id="dgIn" type="number" inputmode="numeric" min="1" max="500" value="${Number(settings.dailyGoal) || db.DEFAULT_SETTINGS.dailyGoal}" aria-label="Daily goal (answers a day)">
-          <button type="button" class="icon-btn" id="dgPlus" aria-label="Raise daily goal">+</button>
-        </div>
-      </div>
-      <div class="set-row">
         <div><b>Reviews per day</b><p>The most reviews shown in a day, across all decks. Blank means no limit, which suits FSRS best.</p></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
+      <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b>
+        <span>Off: Play is practice only and doesn't change when cards are due, stats or streaks.</span></span>
+        <input id="playCounts" type="checkbox" class="switch" ${settings.playCountsAsReviews === true ? 'checked' : ''}></label>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
         <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+      </div>
+      <div class="set-row">
+        <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
+        <button class="btn ghost small" type="button" id="glossBtn">Open</button>
       </div>
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
         <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
@@ -221,6 +229,11 @@ async function renderSettings(el) {
   });
   // The previews are redrawn after a light/dark or OLED change, so they show the new look
   const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
+  // Original or Clinical: the whole look changes at once. The heading, these chips and the accent buttons are updated by the
+  // 'themechange' listener in start-up below (applyTheme fires it): keep the two in step when adding a style-dependent control.
+  el.querySelectorAll('input[name="ui"]').forEach(r => r.addEventListener('change', () => {
+    saveTheme({ ...settings.theme, ui: r.value });
+  }));
   el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     saveTheme({ ...settings.theme, mode: r.value });
     redrawSkins();
@@ -233,6 +246,10 @@ async function renderSettings(el) {
   for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion']) {
     $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); });
   }
+  $('glossaryUnderline').addEventListener('change', e => { settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
+  $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
+  const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'; };
+  addEventListener('glossary-changed', glossCount);
   $('oled').addEventListener('change', e => {
     saveTheme({ ...settings.theme, oled: e.target.checked });
     redrawSkins();
@@ -252,17 +269,8 @@ async function renderSettings(el) {
   $('npd').addEventListener('change', e => setNpd(e.target.value));
   $('npdMinus').addEventListener('click', () => setNpd(settings.newPerDay - 5));
   $('npdPlus').addEventListener('click', () => setNpd(settings.newPerDay + 5));
-  // Daily goal: typed or changed with − / +, kept between 1 and 500 (it is the ring's denominator, so never 0).
-  const setGoal = v => {
-    const num = String(v).trim() === '' ? NaN : Number(v);       // 0 is a number (kept at 1); only blank or text falls back to the default
-    const n = Number.isFinite(num) ? Math.max(1, Math.min(500, Math.round(num))) : db.DEFAULT_SETTINGS.dailyGoal;
-    $('dgIn').value = n;
-    settings.dailyGoal = n;
-    db.setSetting('dailyGoal', n).then(() => drawSidebar());      // the desktop ring follows at once
-  };
-  $('dgIn').addEventListener('change', e => setGoal(e.target.value));
-  $('dgMinus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) - 5));
-  $('dgPlus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) + 5));
+  // Play: practice only (default) or counted as reviews. Synced, so every device plays the same way.
+  $('playCounts').addEventListener('change', e => { settings.playCountsAsReviews = e.target.checked; db.setSetting('playCountsAsReviews', e.target.checked); });
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
@@ -432,12 +440,15 @@ async function confirmRestore(file) {
   try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
   const problem = db.checkBackup(data);
   if (problem) { toast(problem); return; }
+  // Glossary terms on this device that the backup does not have would be removed too: say so.
+  const lostTerms = entriesFrom(await db.getSettings()).filter(t => !Object.hasOwn(data.settings || {}, `gloss:${t.id}`)).length;
   const when = data.exported ? new Date(data.exported).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'an unknown date';
   openSheet(`
     <h2 id="sheetTitle">Restore this backup?</h2>
     <p style="margin:0">Backup from <b>${esc(when)}</b>: ${plural(data.decks.length, 'deck')}, ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}.</p>
     <div class="confirm">
       <p>Everything on this device now is <b>replaced</b> by the backup${synced ? ', <b>and in your sync account too</b>: your other devices change to match when they sync' : ''}. Export a backup first if you want to keep it.</p>
+      ${lostTerms ? `<p>This also removes ${plural(lostTerms, 'glossary term')} that ${lostTerms === 1 ? 'is' : 'are'} not in the backup.</p>` : ''}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="rbNo">Cancel</button>
         <button class="btn danger solid" type="button" id="rbYes">Replace and restore</button>
@@ -1002,7 +1013,10 @@ async function start() {
     settings.theme = e.detail;
     const r = document.querySelector(`input[name="mode"][value="${e.detail.mode}"]`);
     if (r) r.checked = true;
-    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new light/dark
+    const u = document.querySelector(`input[name="ui"][value="${e.detail.ui}"]`);
+    if (u) u.checked = true;
+    const h = $('thTitle'); if (h) h.textContent = accentTitle(e.detail.ui);          // "Theme" in Original, "Accent colour" in Clinical
+    const s = $('skins'); if (s) s.innerHTML = skinButtonsHTML(e.detail.skin);      // Settings' previews follow the new style and light/dark
   });
   try {
     settings = await db.getSettings();
