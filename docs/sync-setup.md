@@ -5,12 +5,11 @@ It uses a free Supabase project that belongs to you. Anyone can make an account 
 ever sees its own data), so it also needs a few protections. This takes about an hour, once. Steps 1 to 4
 are the basics; steps 5 to 9 are what makes it safe to let other people in.
 
-**Already set up before version 4.16?** Do steps 2, 2b and 2c again (they are safe to repeat: run
+**Already set up before the limits update?** Do steps 2, 2b and 2c again (they are safe to repeat: run
 `setup.sql`, then `media.sql`, then `limits.sql`), then steps 3 to 9.
 
-What you'll need: a Supabase account (free), a free Resend account, a free Cloudflare account, a domain name
-you own (about 10 dollars a year; Resend needs one to send email to anybody but yourself), and your GitHub
-repository for this app.
+What you'll need: a Supabase account (free), a new Gmail account just for this app (free), a free Cloudflare
+account, and your GitHub repository for this app.
 
 ## 1. Create the project
 
@@ -57,12 +56,32 @@ Because anyone can join, one account must not be able to fill the whole project.
 
 1. **SQL Editor → New query**, paste in everything from [`supabase/limits.sql`](../supabase/limits.sql), and click **Run**.
 
+> **Read this if anyone can sign up.** The free plan has 1 GB of files and a 500 MB database for the whole
+> project, and when either is full the project stops working for everybody. Out of the box each account may
+> use **180 MB of pictures and sounds** and **80 MB of synced data**, and the project as a whole stops taking
+> new pictures at 900 MB and new data at 420 MB (so it never reaches the free plan's own limits). Five people
+> at full size fill the project. **If you will let strangers in, lower the default first** (one line, below)
+> and give more space by hand to the people you know.
+> To make 50 MB the default for pictures and sounds, run this once in the SQL Editor (**New query**, paste, **Run**):
+>
+> ```sql
+> create or replace function public.default_media_limit() returns bigint
+> language sql immutable as 'select 52428800::bigint';
+> ```
+>
+> (For synced data it is `default_data_limit()`. Running `limits.sql` again does not undo either.)
+
 It adds:
 
-- **Space for pictures and sounds: 180 MB per account** (room for you and four others in the free 1 GB).
+- **Space for pictures and sounds: 180 MB per account.** A new picture or sound is accepted only if it fits.
   When an account is full, its new pictures and sounds wait on the person's device and **everything else keeps
-  syncing**. The app tells them. The server can't see the size of the file being added, so an account can go
-  over its limit by at most one file (3 MB).
+  syncing**. The app tells them. (If Supabase doesn't tell the server a file's size until after it is stored,
+  the check falls back to "is the account under its limit", which can let one 3 MB file over.)
+- **Space for synced data (cards, reviews, settings): 80 MB per account.** Going over is refused, and the app
+  keeps the changes on the device and says so. Deleting is always allowed.
+- **Project-wide ceilings** (table `global_limits`: 900 MB of files, 420 MB of data; totals re-counted at most
+  once a minute). When one is hit, everybody's new files or data wait, and the app says "The sync server is full
+  right now. Everything is safe on this device and will sync when there's room." On the Pro plan, raise them.
 - **3 MB per file** and **64 KB per card or other record**.
 - A **usage line** in the app (Settings → Your data → *In your account: …*).
 - The **Delete my account** button in Settings → Sync (it needs this script).
@@ -71,7 +90,8 @@ It adds:
 
 1. Open **Authentication → Users** and copy the person's **User UID**.
 2. Open **Table Editor → quotas → Insert → Insert row**. Paste the UID into `user_id`, and type the space in
-   **bytes** into `media_bytes_limit`. Click **Save**. Useful numbers:
+   **bytes** into `media_bytes_limit` (pictures and sounds) and, if you like, `data_bytes_limit` (synced data,
+   default 83886080 = 80 MB). Click **Save**. Useful numbers:
 
    | Space | Bytes |
    |---|---|
@@ -83,7 +103,8 @@ It adds:
 3. To go back to the default, delete that row.
 
 **If you move to the Pro plan** ($25 a month: 100 GB of files, 8 GB database), run this once in the SQL
-Editor (**New query**, paste, **Run**) to make 2 GB everyone's new default:
+Editor (**New query**, paste, **Run**) to make 2 GB everyone's new default, and raise the project-wide
+ceilings in `global_limits` to match your plan (Table Editor → global_limits):
 
 ```sql
 create or replace function public.default_media_limit() returns bigint
@@ -106,22 +127,24 @@ New accounts must prove their email address, so nobody can make accounts with ot
 Until step 4 below (your own email service) is done, Supabase's built-in email only reaches people on your
 Supabase team and allows 2 emails an hour, so nobody else can confirm their account.
 
-## 4. Send email from your own address (Resend)
+## 4. Send the sign-up emails from a Gmail address
 
-Supabase's built-in email is only for trying things out. To email everybody, connect a real email sender.
-Resend has a free plan (3,000 emails a month, 100 a day), which is plenty.
+Supabase's built-in email is only for trying things out: it reaches only people on your Supabase team and
+sends 2 an hour. To email everybody, Supabase can send through a Gmail account. You need no domain name.
 
-**In Resend:**
+**Trade-offs:** the emails come from a `gmail.com` address, so the first ones may land in the spam folder
+(tell new people to check spam), and Gmail sends about 500 emails a day, which is plenty for confirmations and
+password resets. If you ever buy a domain, see "Later: your own domain (Resend)" below.
 
-1. Go to [resend.com](https://resend.com) and sign up.
-2. In the left menu click **Domains → Add Domain**. Type a sub-domain of a domain you own, like
-   `mail.yourdomain.com` (a sub-domain keeps your normal email untouched). Pick the region closest to you and click **Add**.
-3. Resend shows a few DNS records (names like `send` and `resend._domainkey`, types MX, TXT). Open your domain
-   registrar's DNS settings (where you bought the domain) and add each record exactly as shown. Back in Resend,
-   click **Verify DNS Records**. It can take from a few minutes to a few hours; wait until it says **Verified**.
-4. In the left menu click **API Keys → Create API Key**. Name it `supabase`, set **Permission** to
-   **Sending access**, set **Domain** to the one you just verified, and click **Add**.
-5. **Copy the key now** (it starts with `re_`); Resend shows it only once.
+**In Google:**
+
+1. Make a new Gmail account just for this, for example `studysprint.app@gmail.com`. Don't use your own
+   address: the app password you create below can send email as the account.
+2. Sign in to that account, go to [myaccount.google.com](https://myaccount.google.com) → **Security** and turn on
+   **2-Step Verification** (it asks for a phone number). Google only offers app passwords once it is on.
+3. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (if the page isn't found,
+   search *App passwords* in the search box at the top of your Google account page). Type the name `Supabase`
+   and click **Create**. Google shows a password of **16 letters**. Copy it now (spaces don't matter); you can't see it again.
 
 **In Supabase:**
 
@@ -129,20 +152,30 @@ Resend has a free plan (3,000 emails a month, 100 a day), which is plenty.
    **Project Settings → Authentication → SMTP Settings**).
 2. Turn on **Enable custom SMTP**.
 3. Fill in:
-   - **Sender email address:** `no-reply@mail.yourdomain.com` (any name at the domain you verified)
+   - **Sender email address:** the Gmail address, e.g. `studysprint.app@gmail.com`
    - **Sender name:** `Study Sprint`
-   - **Host:** `smtp.resend.com`
-   - **Port number:** `465`
+   - **Host:** `smtp.gmail.com`
+   - **Port number:** `465` (if that doesn't work, `587`)
    - **Minimum interval between emails being sent:** leave the default
-   - **Username:** `resend`
-   - **Password:** the `re_…` key you copied
+   - **Username:** the full Gmail address
+   - **Password:** the 16-letter app password
 4. Click **Save**.
-5. Open **Authentication → Rate Limits** and check **Rate limit for sending emails**. With your own sender
-   Supabase starts at 30 an hour; that is enough. (The other limits there, like sign-ups per hour from one
-   network, protect you from abuse; the defaults are fine. The app shows people a clear message if they hit one.)
+5. Open **Authentication → Rate Limits** and set **Rate limit for sending emails** to something sensible, like
+   `60` an hour (Gmail's own limit is about 500 a day). The other limits there (sign-ups per hour from one
+   network, and so on) protect you from abuse; the defaults are fine. The app shows people a clear message
+   if they hit one.
 
-**Test it:** in the app, make an account with an email address that isn't yours. The confirmation email should
-arrive within a minute (check spam the first time).
+**Test it:** in the app, make an account with a second email address (not the sender). The confirmation email
+should arrive within a minute (check spam the first time). If nothing arrives, check **Authentication → Logs**
+in Supabase for the error; a wrong app password is the usual cause.
+
+### Later: your own domain (Resend)
+
+If you buy a domain (about 10 dollars a year), you can send from `no-reply@mail.yourdomain.com` instead, which
+lands in the inbox more reliably. Resend's free plan allows 3,000 emails a month. In Resend: **Domains → Add Domain**
+(a sub-domain like `mail.yourdomain.com`), add the DNS records it shows at your registrar and click **Verify**,
+then **API Keys → Create API Key** ("Sending access") and copy the `re_…` key. In Supabase SMTP Settings use host
+`smtp.resend.com`, port `465`, username `resend`, password the `re_…` key, and a sender address on your domain.
 
 ## 5. Make the email links open the app
 
@@ -171,9 +204,15 @@ will stop working until the app is updated.
 3. Copy the **Site Key** and the **Secret Key**.
 4. In the app's code, open `js/sync-config.js` and fill in the site key:
    `export const CAPTCHA = { provider: 'turnstile', siteKey: 'PASTE-THE-SITE-KEY' };`
-   Commit it and let the site publish (the version of the app people have must update before step 5).
+   Commit it and let the site publish (the version of the app people have must update before step 6).
    The site key is public by design. **Never put the secret key in the code.**
-5. In Supabase open **Authentication → Attack Protection**, turn on **Enable Captcha protection**, choose
+5. **Mandatory check, before you touch Supabase:** open the live site (after it has updated, and with a hard
+   refresh), go to Settings → Sync, type your email and password and tap **Sign in**. A box should appear and
+   you should be signed in a few seconds later: that proves a token comes back from Cloudflare. If the box never
+   appears, or you see *"The bot check didn't load"*, **do not go to step 6**: set `siteKey` back to `''`, publish,
+   and tell the developer (the check runs in a locked-down frame, and some setups may need a change). Turning on
+   step 6 without this check would stop every sign-in, sign-up and password reset.
+6. In Supabase open **Authentication → Attack Protection**, turn on **Enable Captcha protection**, choose
    **Cloudflare Turnstile**, paste the **Secret Key**, and click **Save**.
 
 From then on, every sign-up, sign-in and password reset needs the check (Supabase insists on it for all
