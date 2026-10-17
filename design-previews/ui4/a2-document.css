@@ -1,0 +1,124 @@
+/* A2, "document": a university portal / journal site. A header bar with the name and the sections as text tabs,
+   and each page as one 760px column of text with clear headings and rules, no boxes.
+   <html data-ui="clinical" data-var="a" data-lay="2">
+   - header: name, Today / Decks / Play / Stats, then Add cards, the streak and Settings (desktop); name + tab strip (phone)
+   - Today: the goal written as a sentence with a thin bar, Start at its normal width, then "Upcoming exams" and
+     "Your decks" as headed sections of ruled rows
+   - Review: a printed question and answer, left aligned, ruled; Decks and Stats: ruled sections in the column
+   CSS only, apart from the shared goal line (see NOTES.md). On desktop the sidebar's deck list and sync line are hidden
+   (Decks is one click away), the same trade-off as B in round 3. */
+@import url("layout-common.css");
+
+:root[data-ui][data-var][data-lay="2"]{--tb:56px; --col:760px}
+:root[data-ui][data-var][data-lay="2"] h1{font-size:1.875rem;font-weight:650;letter-spacing:-.02em}
+:root[data-ui][data-var][data-lay="2"] .screen-head{padding-bottom:var(--s-3);margin-bottom:var(--s-5);border-bottom:2px solid var(--text)}
+:root[data-ui][data-var][data-lay="2"] .eyebrow{font-size:var(--fs-xs);letter-spacing:.04em}
+:root[data-ui][data-var][data-lay="2"] .section{margin-bottom:var(--s-8)}
+:root[data-ui][data-var][data-lay="2"] :is(.section > h2,.sec-head h2,.mhead h2){font-size:1.125rem;font-weight:650;color:var(--text);letter-spacing:-.005em}
+:root[data-ui][data-var][data-lay="2"] .section > h2,
+:root[data-ui][data-var][data-lay="2"] .sec-head{padding-bottom:var(--s-2);margin-bottom:0;border-bottom:1px solid var(--line-strong)}
+:root[data-ui][data-var][data-lay="2"] .sec-head h2{border:0;padding:0;margin:0}
+
+/* ---------- Today: a written summary ---------- */
+:root[data-ui][data-var][data-lay="2"] .today-hero{display:block;background:none;box-shadow:none;border-radius:0;padding:0 0 var(--s-6);margin-bottom:var(--s-6)}
+:root[data-ui][data-var][data-lay="2"] .th-big{font-size:1.375rem}
+:root[data-ui][data-var][data-lay="2"] .th-sub{font-size:var(--fs-base)}
+:root[data-ui][data-var][data-lay="2"] .goal{max-width:none}
+:root[data-ui][data-var][data-lay="2"] .today-hero .streak{border:0;padding:0;margin:var(--s-3) 0 var(--s-5)}
+:root[data-ui][data-var][data-lay="2"] .today-hero .btn.big{width:auto;min-width:260px;padding:0 28px;justify-content:center}
+/* rows on the page */
+:root[data-ui][data-var][data-lay="2"] :is(.exams,.tdecks,.decks){gap:0!important;box-shadow:none!important;background:none;border-radius:0;grid-template-columns:1fr!important}
+:root[data-ui][data-var][data-lay="2"] :is(.exam-row,.tdeck,.deck){background:none!important;border-radius:0;box-shadow:none!important;border-bottom:1px solid var(--line);padding-left:0!important;padding-right:0!important}
+:root[data-ui][data-var][data-lay="2"] :is(.tdeck,.deck):hover :is(.td-name,.deck-name){text-decoration:underline;text-underline-offset:3px}
+:root[data-ui][data-var][data-lay="2"] .exam-name{font-size:var(--fs-base)}
+:root[data-ui][data-var][data-lay="2"] .exam-add{margin:var(--s-3) 0 var(--s-8)}
+:root[data-ui][data-var][data-lay="2"] .sec-head .link{font-size:var(--fs-sm)}
+
+/* ---------- Decks ---------- */
+:root[data-ui][data-var][data-lay="2"] .deck{min-height:0!important;padding-top:var(--s-4)!important;padding-bottom:var(--s-4)!important}
+:root[data-ui][data-var][data-lay="2"] .decks{border-top:1px solid var(--line-strong)}
+:root[data-ui][data-var][data-lay="2"] .deck-sort{box-shadow:none}
+
+/* ---------- Review: a printed question and answer ---------- */
+:root[data-ui][data-var][data-lay="2"] .rv-face{background:none;box-shadow:none;border-radius:0;border-top:2px solid var(--text);border-bottom:1px solid var(--line-strong);padding:var(--s-5) 0!important}
+:root[data-ui][data-var][data-lay="2"] .flash-deck{font-size:var(--fs-xs);letter-spacing:.04em;text-transform:uppercase;color:var(--text-2)}
+:root[data-ui][data-var][data-lay="2"] :is(.rv-front .flash-front,.flash-recap,.flash-back){text-align:left}
+:root[data-ui][data-var][data-lay="2"] .flash-recap{color:var(--text);font-weight:650;font-size:1.25rem;margin:0}
+:root[data-ui][data-var][data-lay="2"] .flash-ans::before{left:0;right:0}
+:root[data-ui][data-var][data-lay="2"] .flash-back{font-size:1.125rem;line-height:1.6}
+:root[data-ui][data-var][data-lay="2"] .rv-counts{box-shadow:none;background:none;padding:0}
+:root[data-ui][data-var][data-lay="2"] .rv-counts .now{background:none;box-shadow:none;text-decoration:underline;text-underline-offset:4px}
+:root[data-ui][data-var][data-lay="2"] .rv-head .link{box-shadow:0 0 0 1px var(--line-strong)}
+
+/* ---------- Stats: sections, not panels ---------- */
+:root[data-ui][data-var][data-lay="2"] .card{box-shadow:none;background:none;border-radius:0;border-top:1px solid var(--line-strong);padding:var(--s-4) 0}
+:root[data-ui][data-var][data-lay="2"] .pgrid{gap:0 var(--s-6)}
+
+/* ---------- Phone: name bar, then the sections as a text tab strip ---------- */
+@media (max-width:1023px){
+  :root[data-ui][data-var][data-lay="2"] .top{background:var(--surface-1);border-bottom:0}
+  :root[data-ui][data-var][data-lay="2"] .tabs{top:calc(48px + env(safe-area-inset-top,0px));bottom:auto;background:var(--surface-1);border-top:0;border-bottom:1px solid var(--line-strong);padding:0}
+  :root[data-ui][data-var][data-lay="2"] .tabs-in{display:flex;gap:4px;padding:0 8px}
+  :root[data-ui][data-var][data-lay="2"] .tab{flex:none;min-height:40px;padding:0 8px;font-size:var(--fs-sm)}
+  :root[data-ui][data-var][data-lay="2"] .tab[aria-current="page"]::before{top:auto;bottom:0;left:8px;right:8px}
+  :root[data-ui][data-var][data-lay="2"] main{padding-top:64px;padding-bottom:32px}
+  :root[data-ui][data-var][data-lay="2"] .today-hero .btn.big{width:100%}
+  :root[data-ui][data-var][data-lay="2"] .screen-head{border-bottom-width:1px}
+}
+
+/* ---------- Desktop: a header bar, one column ---------- */
+@media (min-width:1024px){
+  :root[data-ui][data-var][data-lay="2"]{--side:0px}
+  :root[data-ui][data-var][data-lay="2"] .top{left:0;right:0;width:auto;height:var(--tb);background:var(--surface-1);border-right:0;border-bottom:1px solid var(--line-strong);box-shadow:inset 0 3px 0 var(--accent)}
+  :root[data-ui][data-var][data-lay="2"] .top-in{height:100%;padding:3px 32px 0}
+  :root[data-ui][data-var][data-lay="2"] .top .brand{font-size:1.125rem}
+  :root[data-ui][data-var][data-lay="2"] .tabs{top:3px;left:190px;right:32px;bottom:auto;width:auto;height:calc(var(--tb) - 3px);padding:0;flex-direction:row;align-items:center;gap:16px;background:none;border:0;overflow:visible;z-index:6}
+  :root[data-ui][data-var][data-lay="2"] .tabs-in{flex-direction:row;width:auto;padding:0;gap:4px;height:100%}
+  :root[data-ui][data-var][data-lay="2"] .tab{height:100%;min-height:0;padding:0 12px;border-radius:0;background:none!important;box-shadow:none!important;color:var(--text-2);font-size:var(--fs-base);gap:6px}
+  :root[data-ui][data-var][data-lay="2"] .tab:hover{color:var(--text)}
+  :root[data-ui][data-var][data-lay="2"] .tab[aria-current="page"]{color:var(--text);font-weight:650}
+  :root[data-ui][data-var][data-lay="2"] .tab[aria-current="page"]::before{display:block;top:auto;bottom:-1px;left:12px;right:12px;width:auto;height:2px;border-radius:0;background:var(--text);box-shadow:none}
+  :root[data-ui][data-var][data-lay="2"] .side-badge{margin-left:4px}
+  :root[data-ui][data-var][data-lay="2"] .side-decks,
+  :root[data-ui][data-var][data-lay="2"] .side-sync,
+  :root[data-ui][data-var][data-lay="2"] .side-ver,
+  :root[data-ui][data-var][data-lay="2"] #sideCollapse,
+  :root[data-ui][data-var][data-lay="2"] .side-set span{display:none}
+  :root[data-ui][data-var][data-lay="2"] .side-add{order:3;margin:0 0 0 auto;height:34px;box-shadow:0 0 0 1px var(--line-strong);padding:0 14px}
+  :root[data-ui][data-var][data-lay="2"] .side-foot{order:4;display:flex;align-items:center;gap:8px;margin:0;padding:0;border:0}
+  :root[data-ui][data-var][data-lay="2"] .side-streak{padding:4px 8px}
+  :root[data-ui][data-var][data-lay="2"] .side-st{display:flex;gap:8px;align-items:baseline}
+  :root[data-ui][data-var][data-lay="2"] .side-st b,:root[data-ui][data-var][data-lay="2"] .side-st span{font-size:var(--fs-sm)}
+  :root[data-ui][data-var][data-lay="2"] .side-tools{display:flex;align-items:center;gap:2px;margin:0}
+  :root[data-ui][data-var][data-lay="2"] .side-set{padding:0;width:34px;height:34px;display:grid;place-items:center}
+  :root[data-ui][data-var][data-lay="2"] main{margin:0;padding:calc(var(--tb) + 40px) 32px 64px}
+  :root[data-ui][data-var][data-lay="2"] main > .view{max-width:var(--col);margin:0 auto}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="stats"] > .view{max-width:960px}
+  :root[data-ui][data-var][data-lay="2"] main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view > *{max-width:none}
+  :root[data-ui][data-var][data-lay="2"] .toast,:root[data-ui][data-var][data-lay="2"] body.focus .toast{left:50%}
+  :root[data-ui][data-var][data-lay="2"] h1{font-size:2.25rem}
+  :root[data-ui][data-var][data-lay="2"] .exams{grid-template-columns:1fr!important}
+  /* Today's decks: name | course | counts | Study */
+  :root[data-ui][data-var][data-lay="2"] .tdeck{display:grid;grid-template-columns:minmax(0,1fr) 150px 140px 52px;align-items:center;column-gap:16px;min-height:52px}
+  :root[data-ui][data-var][data-lay="2"] .td-main{display:contents}
+  :root[data-ui][data-var][data-lay="2"] .td-name{grid-column:1;grid-row:1}
+  :root[data-ui][data-var][data-lay="2"] .tdeck .deck-code{grid-column:2;grid-row:1;font-size:var(--fs-sm);color:var(--text-2)}
+  :root[data-ui][data-var][data-lay="2"] .td-counts{grid-column:3;grid-row:1;margin:0}
+  :root[data-ui][data-var][data-lay="2"] .td-go{grid-column:4;grid-row:1;justify-self:end}
+  /* Decks: one column of entries */
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck{display:grid;grid-template-columns:minmax(0,1fr) 140px 64px 36px;grid-template-rows:auto;column-gap:16px;align-items:center}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck > *{align-self:center}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck-open{grid-column:1;grid-row:1}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck-ring{grid-column:2;grid-row:1;margin:0}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck-act{grid-column:3;grid-row:1;margin:0;justify-self:end}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck > .icon-btn{grid-column:4;grid-row:1;position:static}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="decks"] .deck :is(.subdecks,.subbox){grid-column:1 / -1}
+  /* Stats: the panels become sections; two columns kept for the small figures */
+  :root[data-ui][data-var][data-lay="2"] main[data-route="stats"] > .view{gap:0 var(--s-8)}
+  /* Review: the column, not a floating card */
+  :root[data-ui][data-var][data-lay="2"] main[data-route="review"] > .view > *{max-width:var(--col)}
+  :root[data-ui][data-var][data-lay="2"] body.focus main[data-route="review"] > .view{max-width:var(--col);justify-content:flex-start}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="review"] .flash{min-height:340px}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="review"] .flash-recap{font-size:1.5rem}
+  :root[data-ui][data-var][data-lay="2"] main[data-route="review"] .flash-back{font-size:1.25rem}
+}

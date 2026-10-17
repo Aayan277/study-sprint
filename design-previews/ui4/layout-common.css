@@ -1,0 +1,102 @@
+/* Study Sprint, design round 4: what the three layout versions of Clinical A share.
+   <html data-ui="clinical" data-var="a" data-lay="1|2|3">. Same colours, type and tokens as A (ui3/a-refined.css).
+   This file takes out the "modern app" tells; each a1/a2/a3 file then sets its own page structure.
+   - corners: 4px everywhere (2px on small marks), no pills, no circles
+   - no goal ring: a plain "6 of 94 done today" line and a thin bar (proposed markup, mocked in by shoot.mjs)
+   - no decorative icons: no flame, snowflake, play circles, nav icons or logo mark; plain words instead
+   - exam countdowns are coloured text, not outlined badges; deck colours are small squares
+   Specificity: :root[data-ui][data-var][data-lay] (0,4,0) beats A's :root[data-ui][data-var] rules. */
+@import url("../ui3/a-refined.css");
+
+:root[data-ui][data-var][data-lay]{--r-xs:2px; --r-sm:4px; --r-md:4px; --r-lg:4px; --r-xl:4px; --r-pill:4px}
+
+/* ---- logo: the word only ---- */
+:root[data-ui][data-var][data-lay] .brand-mark{display:none}
+:root[data-ui][data-var][data-lay] .brand{font-weight:650;letter-spacing:-.01em;gap:0}
+
+/* ---- goal: a line and a bar instead of the ring ---- */
+:root[data-ui][data-var][data-lay] .today-hero .th-main > .ring,
+:root[data-ui][data-var][data-lay] .th-label{display:none}
+:root[data-ui][data-var][data-lay] .th-text{display:grid;gap:2px;min-width:0;flex:1}
+:root[data-ui][data-var][data-lay] .goal{display:grid;gap:6px;margin-top:var(--s-3);max-width:420px}
+:root[data-ui][data-var][data-lay] .goal-t{font-size:var(--fs-sm);color:var(--text-2)}
+:root[data-ui][data-var][data-lay] .goal-t b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+:root[data-ui][data-var][data-lay] .goal-bar{display:block;height:6px;background:var(--surface-3);border-radius:1px;overflow:hidden}
+:root[data-ui][data-var][data-lay] .goal-bar i{display:block;height:100%;background:var(--accent);min-width:2px}
+:root[data-ui][data-var][data-lay] .today-hero:has(.th-done) .goal-bar i{background:var(--good)}
+:root[data-ui][data-var][data-lay] .th-big{font-size:1.5rem;font-weight:650;letter-spacing:-.015em}
+
+/* ---- streak: one line of text ---- */
+:root[data-ui][data-var][data-lay] .streak .ico{display:none}
+:root[data-ui][data-var][data-lay] .today-hero .streak .sb-go{display:none}
+:root[data-ui][data-var][data-lay] .today-hero .streak{font-size:var(--fs-sm);color:var(--text-2)}
+:root[data-ui][data-var][data-lay] .streak .frz-pill,
+:root[data-ui][data-var][data-lay] .streak .frz-pill:not(.used){background:none;border:0;box-shadow:none;padding:0;margin:0;font-size:var(--fs-sm);color:var(--text-2);font-weight:400}
+:root[data-ui][data-var][data-lay] .streak .frz-pill::before{content:"·";margin-right:8px;color:var(--control)}
+:root[data-ui][data-var][data-lay] .streak.kept .ico{filter:none}
+
+/* ---- exam countdowns: coloured text ---- */
+:root[data-ui][data-var][data-lay] :is(.exam-badge,.exam-badge.soon,.side-exam,.side-exam.soon){background:none!important;box-shadow:none!important;border:0;padding:0!important;height:auto;font-weight:600;border-radius:0}
+:root[data-ui][data-var][data-lay] .exam-link .ico{display:none}
+:root[data-ui][data-var][data-lay] .exam-chip{border-radius:var(--r-sm);border-style:solid;border-color:var(--line-strong)}
+:root[data-ui][data-var][data-lay] .exam-chip .ico{display:none}
+:root[data-ui][data-var][data-lay] .exam-chip::after{content:"+";color:var(--text-2);font-weight:400;margin-left:2px}
+:root[data-ui][data-var][data-lay] .exam-chip i{border-radius:1px}
+
+/* ---- deck colour: a small square ---- */
+:root[data-ui][data-var][data-lay] :is(.td-name,.deck-name)::before{width:8px;height:8px;border-radius:1px}
+:root[data-ui][data-var][data-lay] .side-deck:not(.side-new)::before{border-radius:1px!important}
+
+/* ---- "Study" and "Done" in words, not play / check circles ---- */
+:root[data-ui][data-var][data-lay] .td-go .ico{display:none}
+:root[data-ui][data-var][data-lay] .td-go::after{content:"Study";font-size:var(--fs-sm);font-weight:600;color:var(--accent-text)}
+:root[data-ui][data-var][data-lay] .tdeck.done .td-go::after{content:"Done";font-weight:500;color:var(--text-2)}
+:root[data-ui][data-var][data-lay] .tdeck:hover .td-go::after{text-decoration:underline;text-underline-offset:3px}
+:root[data-ui][data-var][data-lay] .deck-go{width:auto!important;height:30px;padding:0 10px;border-radius:var(--r-sm)!important;font:600 var(--fs-xs)/1 var(--f-ui)}
+:root[data-ui][data-var][data-lay] .deck-go .ico{display:none}
+:root[data-ui][data-var][data-lay] .deck-go::after{content:"Study"}
+:root[data-ui][data-var][data-lay] .deck-go.done{box-shadow:none!important;color:var(--text-2)!important;padding:0}
+:root[data-ui][data-var][data-lay] .deck-go.done::after{content:"Done"}
+/* mastery: "73% mastered" as text */
+:root[data-ui][data-var][data-lay] .deck-ring .ring{width:auto!important;height:auto!important;display:inline}
+:root[data-ui][data-var][data-lay] .deck-ring .ring > svg{display:none}
+:root[data-ui][data-var][data-lay] .deck-ring .ring-in{position:static;display:inline;font-size:var(--fs-sm);color:var(--text)}
+:root[data-ui][data-var][data-lay] .deck-ring .ring-in small{font-size:inherit;color:inherit}
+:root[data-ui][data-var][data-lay] .deck-ring{display:flex;align-items:baseline;gap:4px;flex-direction:row}
+:root[data-ui][data-var][data-lay] .deck-ring .dr-cap{font-size:var(--fs-sm);color:var(--text-2)}
+
+/* ---- navigation: words only ---- */
+:root[data-ui][data-var][data-lay] .tab svg,
+:root[data-ui][data-var][data-lay] .side-add svg,
+:root[data-ui][data-var][data-lay] .side-head svg,
+:root[data-ui][data-var][data-lay] .side-new .ico{display:none}
+:root[data-ui][data-var][data-lay] .side-badge{background:none!important;box-shadow:none!important;color:var(--text-2)!important;font-weight:500;padding:0;min-width:0}
+:root[data-ui][data-var][data-lay] .side-dot{border-radius:1px;box-shadow:none}
+:root[data-ui][data-var][data-lay] .side-streak > .ring,
+:root[data-ui][data-var][data-lay] .side-snow{display:none}
+:root[data-ui][data-var][data-lay] .side-sync i{border-radius:1px}
+:root[data-ui][data-var][data-lay] .side-new{padding-left:10px!important}
+:root[data-ui][data-var][data-lay] .side-new .side-name::before{content:"+ "}
+/* phones: the tab bar is words only, the current one underlined from above */
+@media (max-width:1023px){
+  :root[data-ui][data-var][data-lay] .tab{min-height:48px;padding:0;justify-content:center;font-size:var(--fs-sm);font-weight:500}
+  :root[data-ui][data-var][data-lay] .tab[aria-current="page"]{color:var(--text);font-weight:650}
+  :root[data-ui][data-var][data-lay] .tab[aria-current="page"]::before{display:block;top:0;left:20%;right:20%;height:2px;border-radius:0;background:var(--accent);box-shadow:none}
+}
+
+/* ---- review: square corners, plain counts ---- */
+:root[data-ui][data-var][data-lay] .rv-counts,
+:root[data-ui][data-var][data-lay] .rv-counts .now{border-radius:var(--r-sm)}
+:root[data-ui][data-var][data-lay] .rate kbd,:root[data-ui][data-var][data-lay] .rate i{border-radius:2px}
+
+/* ---- stats: square marks ---- */
+:root[data-ui][data-var][data-lay] .wd i{border-radius:2px}
+:root[data-ui][data-var][data-lay] .switch{border-radius:4px}
+:root[data-ui][data-var][data-lay] .switch::after{border-radius:2px}
+/* no icons inside text buttons (Start, Options); icon-only buttons keep theirs */
+:root[data-ui][data-var][data-lay] :is(.today-hero .btn.big,#optBtn,#resumeBtn) .ico{display:none}
+/* phones: the freeze note gets its own line rather than wrapping after a stray "·" */
+@media (max-width:1023px){
+  :root[data-ui][data-var][data-lay] .today-hero .streak .frz-pill{flex-basis:100%}
+  :root[data-ui][data-var][data-lay] .today-hero .streak .frz-pill::before{content:none}
+}

@@ -1,0 +1,125 @@
+/* A3, "two-pane": like Outlook or a reference manager. A list pane on the left (the sections as a text tab row, then
+   every deck with its due count), the selected page on the right, and Review full width with the panes put away.
+   <html data-ui="clinical" data-var="a" data-lay="3">
+   - desktop: a 300px list pane; the right pane has a header bar (title + actions) over a rule and uses the full width
+   - Today: the goal as a one-row strip (figures, bar, Start), then exams as a table; the deck list is already in the pane,
+     so "Your decks" is not repeated
+   - Decks: a table across the right pane; Stats: the app's panels, square-cornered
+   - Review: full width, no sidebar, a wide two-column card (question left, answer right) above the rating row
+   - phone: list first. A slim goal strip with Start, then the decks, then exams
+   CSS only, apart from the shared goal line (see NOTES.md). */
+@import url("layout-common.css");
+
+:root[data-ui][data-var][data-lay="3"] .section > h2,
+:root[data-ui][data-var][data-lay="3"] .sec-head h2{font-size:var(--fs-sm);font-weight:650;color:var(--text)}
+:root[data-ui][data-var][data-lay="3"] :is(.exams,.tdecks,.decks){gap:0!important;box-shadow:0 0 0 1px var(--line-strong)!important;border-radius:var(--r-md);overflow:hidden;background:var(--surface-1);grid-template-columns:1fr!important}
+:root[data-ui][data-var][data-lay="3"] :is(.exam-row,.tdeck,.deck){border-radius:0;box-shadow:none!important;background:none}
+:root[data-ui][data-var][data-lay="3"] :is(.exam-row,.tdeck,.deck) + :is(.exam-row,.tdeck,.deck){box-shadow:inset 0 1px 0 var(--line)!important}
+:root[data-ui][data-var][data-lay="3"] :is(.tdeck,.deck):hover{background:var(--surface-2)}
+
+/* the goal: one strip */
+:root[data-ui][data-var][data-lay="3"] .today-hero{box-shadow:0 0 0 1px var(--line-strong);padding:var(--s-3) var(--s-4)}
+:root[data-ui][data-var][data-lay="3"] .th-big{font-size:1.25rem}
+:root[data-ui][data-var][data-lay="3"] .goal{margin-top:var(--s-2)}
+:root[data-ui][data-var][data-lay="3"] .today-hero .streak{margin:var(--s-3) 0;padding-top:var(--s-2);border-top:1px solid var(--line)}
+:root[data-ui][data-var][data-lay="3"] .today-hero .btn.big{min-height:44px}
+
+/* ---------- Phone: list first ---------- */
+@media (max-width:1023px){
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] > .view{display:flex;flex-direction:column}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] > .view > *{order:3}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] > .view > :is(.screen-head,.resume){order:0}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] > .view > .today-hero{order:1}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] > .view > .section:has(.tdecks){order:2}
+  :root[data-ui][data-var][data-lay="3"] .today-hero .streak{display:none}
+  :root[data-ui][data-var][data-lay="3"] .tdeck{min-height:52px;padding:8px 12px}
+  :root[data-ui][data-var][data-lay="3"] .td-name{font-size:var(--fs-base)}
+  :root[data-ui][data-var][data-lay="3"] .tdeck .deck-code{display:none}
+}
+
+/* ---------- Desktop: two panes ---------- */
+@media (min-width:1024px){
+  :root[data-ui][data-var][data-lay="3"]{--side:300px}
+  :root[data-ui][data-var][data-lay="3"] :is(.top,.tabs){background:var(--side-bg);border-right:1px solid var(--line-strong)}
+  :root[data-ui][data-var][data-lay="3"] .top-in{padding:16px 16px 6px}
+  :root[data-ui][data-var][data-lay="3"] .tabs{top:52px}
+  /* the sections: one row of text tabs at the top of the pane */
+  :root[data-ui][data-var][data-lay="3"] .tabs-in{flex-direction:row;gap:0;padding:0 16px;border-bottom:1px solid var(--line-strong);order:0}
+  :root[data-ui][data-var][data-lay="3"] .tab{flex:none;min-height:38px;padding:0 10px;border-radius:0;background:none!important;box-shadow:none!important;font-size:var(--fs-sm);gap:4px}
+  :root[data-ui][data-var][data-lay="3"] .tab:first-child{padding-left:0}
+  :root[data-ui][data-var][data-lay="3"] .tab[aria-current="page"]{color:var(--text);font-weight:650}
+  :root[data-ui][data-var][data-lay="3"] .tab[aria-current="page"]::before{display:block;top:auto;bottom:-1px;left:10px;right:10px;width:auto;height:2px;border-radius:0;background:var(--accent)}
+  :root[data-ui][data-var][data-lay="3"] .tab:first-child[aria-current="page"]::before{left:0}
+  :root[data-ui][data-var][data-lay="3"] .side-badge{margin-left:2px}
+  :root[data-ui][data-var][data-lay="3"] .side-add{order:1;position:absolute;top:-44px;right:16px;margin:0;height:30px;padding:0 10px;font-size:var(--fs-xs);box-shadow:0 0 0 1px var(--line-strong)}
+  :root[data-ui][data-var][data-lay="3"] .tabs{overflow:visible}
+  /* the deck list is the pane's main content */
+  :root[data-ui][data-var][data-lay="3"] .side-decks{order:2;flex:1 1 auto;margin-top:0}
+  :root[data-ui][data-var][data-lay="3"] .side-head{margin:0;padding:12px 16px 6px;border-radius:0}
+  :root[data-ui][data-var][data-lay="3"] .side-list{padding:0;gap:0}
+  :root[data-ui][data-var][data-lay="3"] .side-deck{min-height:44px;padding:0 16px 0 34px;border-radius:0;font-size:var(--fs-base);color:var(--text);box-shadow:inset 0 -1px 0 var(--line)!important}
+  :root[data-ui][data-var][data-lay="3"] .side-deck:not(.side-new)::before{left:16px!important;width:8px!important;height:8px!important;margin-top:-4px!important}
+  :root[data-ui][data-var][data-lay="3"] .side-deck:hover{background:var(--side-on)}
+  :root[data-ui][data-var][data-lay="3"] .side-deck[aria-current="page"]{background:var(--surface-1);box-shadow:inset 3px 0 0 var(--accent),inset 0 -1px 0 var(--line)!important}
+  :root[data-ui][data-var][data-lay="3"] .side-due{font-size:var(--fs-sm);color:var(--accent-text);font-weight:600}
+  :root[data-ui][data-var][data-lay="3"] .side-exam{font-size:var(--fs-xs)}
+  :root[data-ui][data-var][data-lay="3"] .side-new{padding-left:16px!important;color:var(--text-2);font-size:var(--fs-sm);box-shadow:none!important}
+  :root[data-ui][data-var][data-lay="3"] .side-foot{order:3;padding:10px 16px 12px;border-top:1px solid var(--line-strong)}
+  :root[data-ui][data-var][data-lay="3"] .side-streak{padding:4px 0}
+  :root[data-ui][data-var][data-lay="3"] .side-sync{padding-left:0}
+  :root[data-ui][data-var][data-lay="3"] .side-set{padding:0}
+
+  /* the right pane: a header bar, then the page at full width */
+  :root[data-ui][data-var][data-lay="3"] main{padding:0 32px 48px}
+  :root[data-ui][data-var][data-lay="3"] main > .view{max-width:none;margin:0}
+  :root[data-ui][data-var][data-lay="3"] main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view > *{max-width:820px}
+  :root[data-ui][data-var][data-lay="3"] .screen-head{margin:0 -32px var(--s-5);padding:14px 32px;border-bottom:1px solid var(--line-strong);align-items:center;flex-direction:row;min-height:64px}
+  :root[data-ui][data-var][data-lay="3"] .screen-head h1{font-size:1.375rem}
+  :root[data-ui][data-var][data-lay="3"] .screen-head .eyebrow{display:inline;margin-right:12px}
+  :root[data-ui][data-var][data-lay="3"] .screen-head > div:first-child{display:flex;flex-direction:row-reverse;align-items:baseline;justify-content:flex-end;gap:12px}
+  /* Today: the strip, exams; the deck list lives in the pane */
+  :root[data-ui][data-var][data-lay="3"] main[data-route="today"] .section:has(.tdecks){display:none}
+  :root[data-ui][data-var][data-lay="3"] .today-hero{grid-template-columns:minmax(0,1fr) 300px;padding:var(--s-4) var(--s-5);column-gap:var(--s-6)}
+  :root[data-ui][data-var][data-lay="3"] .today-hero .th-main{display:block}
+  :root[data-ui][data-var][data-lay="3"] .th-text{grid-template-columns:auto auto minmax(0,1fr);align-items:baseline;column-gap:16px}
+  :root[data-ui][data-var][data-lay="3"] .th-text .goal{grid-column:1 / -1}
+  :root[data-ui][data-var][data-lay="3"] .goal{max-width:none}
+  :root[data-ui][data-var][data-lay="3"] .today-hero .streak{grid-column:1;grid-row:2;margin:var(--s-3) 0 0;border:0;padding:0}
+  :root[data-ui][data-var][data-lay="3"] .today-hero :is(.btn.big,.th-done){grid-column:2;grid-row:1 / span 2;align-self:center}
+  :root[data-ui][data-var][data-lay="3"] .exams{grid-template-columns:1fr!important}
+  :root[data-ui][data-var][data-lay="3"] .exam-row{grid-template-columns:260px minmax(0,1fr) auto;min-height:52px}
+  :root[data-ui][data-var][data-lay="3"] .exam-new{grid-column:2;grid-row:1;font-size:var(--fs-sm)}
+  :root[data-ui][data-var][data-lay="3"] .exam-row > [data-prep]{grid-column:3}
+  :root[data-ui][data-var][data-lay="3"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
+  /* Decks: a table across the pane */
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 140px 64px 36px;grid-template-rows:auto;column-gap:16px;align-items:center;padding:10px 12px 10px 16px}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck > *{align-self:center}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-open{grid-column:1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) 140px 220px;column-gap:16px;align-items:center}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-open > .deck-name{grid-column:1;grid-row:1;margin:0}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-open > .deck-code{grid-column:2;grid-row:1;font-size:var(--fs-sm)}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:3;grid-row:1;margin:0}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-open > [class*="exam-badge"]{grid-column:1;grid-row:2;justify-self:start;margin-left:16px;font-size:var(--fs-xs)}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-ring{grid-column:2;grid-row:1;margin:0}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-act{grid-column:3;grid-row:1;margin:0;justify-self:end}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck > .icon-btn{grid-column:4;grid-row:1;position:static}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck :is(.subdecks,.subbox){grid-column:1 / -1}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="decks"] .deck-tools{max-width:none}
+  /* Review: full width, the panes put away */
+  :root[data-ui][data-var][data-lay="3"]:has(main[data-route="review"]) :is(.top,.tabs){display:none}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"]{margin-left:0;padding:24px 48px 48px}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] > .view,
+  :root[data-ui][data-var][data-lay="3"] body.focus main[data-route="review"] > .view{max-width:1200px;margin:0 auto;justify-content:flex-start}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] > .view > *{max-width:none}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .flash{min-height:420px}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-face{box-shadow:0 0 0 1px var(--line-strong);padding:var(--s-6) var(--s-8)}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);grid-template-rows:auto 1fr;column-gap:var(--s-8);align-items:center}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-deck{align-self:start}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-deck{grid-column:1 / -1}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-recap{text-align:left;color:var(--text);font-size:1.75rem;font-weight:650}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-ans{margin:0;padding:0 0 0 var(--s-8);border-left:1px solid var(--line-strong)}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-ans::before{display:none}
+  :root[data-ui][data-var][data-lay="3"] main[data-route="review"] .rv-back .flash-back{text-align:left;font-size:1.375rem}
+}
+@media (max-width:1023px){
+  :root[data-ui][data-var][data-lay="3"] .today-hero .btn.big{margin-top:var(--s-4)}
+}
