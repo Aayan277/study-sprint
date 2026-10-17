@@ -1,5 +1,5 @@
 // The Today screen: the app's home. What to study right now, in one tap.
-//   - daily goal ring, day streak, and one big Start button for everything due
+//   - today ring (done out of today's work), day streak, and one big Start button for everything due
 //   - a row per course (top-level deck) with its due and new cards, and one tap to study just that deck
 //   - upcoming exams
 //   - Options (a sheet): which decks, how to answer (flip or type) and Custom study. Nothing from the old
@@ -8,7 +8,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, goalFor, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
+import { loadAll, countFor, nextDueText, typicalCardMs, loadStreak, todayRing, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
 import { lastStatus } from './sync.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
@@ -71,9 +71,7 @@ export async function renderToday(el) {
     const c = countFor(data, ids);
     drawSidebar({ data, streak, chosen });          // the sidebar shows the same count as Start, from the data loaded here
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
-    const answered = answeredToday(data, chosen);          // the same decks as the cards still to go
-    const goal = goalFor(data.settings, answered, c.total);
-    const goalMet = answered >= goal;                      // nothing left to do and the daily goal reached
+    const tr = todayRing(data, chosen, c);                 // the same decks as the cards still to go
     const resume = live.resume && live.resume.day === dayStart() && live.resume.version === db.scheduleVersion() ? live.resume : null;
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft).slice(0, 3);
     const noExam = coursesWithoutExam();
@@ -87,21 +85,22 @@ export async function renderToday(el) {
       ${resume ? `<div class="resume">
         <span>${icon('clock')} Session in progress · ${plural(resume.left, 'card')} left</span>
         <a class="btn small primary" id="resumeBtn" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}">Resume</a></div>` : ''}
-      <section class="today-hero" aria-label="Today's goal">
+      <section class="today-hero" aria-label="Today's work">
         <div class="th-main">
-          ${ring(goal ? answered / goal : 0, 84, 8, goalMet ? icon('check', 'ring-check') : `<b class="mono">${answered}</b><small class="mono">/${goal}</small>`)}
+          ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
-            <span class="th-label mono">DAILY GOAL</span>
-            <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
-            <span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>
+            <span class="th-label mono">TODAY</span>
+            <b class="th-big">${tr.state === 'todo' ? `${c.total} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
+            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>`}
+            ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
           </div>
         </div>
         ${streakHTML(streak, { button: true })}
-        ${c.total
+        ${tr.state === 'todo'
           ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs)}</button>`
-          : `<div class="th-done"><b>All done for today</b>
+          : `<div class="th-done">
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
-              <button class="link th-extra" type="button" id="customLink">Custom study</button></div>`}
+              <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
       </section>
       ${rescueHTML()}
       <div id="installSlot"></div>
@@ -127,7 +126,8 @@ export async function renderToday(el) {
         <div class="tdecks">${top.map(deckRow).join('')}</div>
       </section>`}`;
     wire(c);
-    fx.goalRing(el, answered, goal);
+    if (tr.state === 'nothing') el.querySelector('.today-hero .ring')?.classList.add('is-full');    // calm, no "you did it" pop when there was nothing to do
+    else fx.goalRing(el, tr.n, tr.of);
     drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
   };
 

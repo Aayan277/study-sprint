@@ -127,10 +127,10 @@ await run(async () => {
   await db.putMany('cardStates', st.map(s => ({ ...s, due: Date.now() + 3 * 86400000 }))); await db.setSetting('newPerDay', 0);
 });
 await page.reload(); await page.waitForSelector('.th-done');
-ok((await page.textContent('.th-done')).includes('All done for today') && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
+ok(/^(All done for today|Nothing due today)$/.test((await page.textContent('.th-big')).trim()) && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
 // v4.9: the game is only on the Play page, so the done state no longer suggests it; a quiet Custom study link instead
 ok(await page.locator('.th-done a[href="#/play"], .th-done [href*="play"]').count() === 0 && await page.locator('#startBtn').count() === 0, 'done state has no Play link');
-ok((await page.textContent('.th-done #customLink')).trim() === 'Custom study', 'done state has a quiet Custom study link');
+ok((await page.textContent('.th-done #customLink')).trim() === 'Extra study', 'done state has a calm Extra study button (v4.10, was a Custom study link)');
 await page.click('.th-done #customLink'); await page.waitForSelector('#sheet .cs-opt'); await page.keyboard.press('Escape'); await page.waitForSelector('#sheet', { state: 'hidden' });
 await page.reload(); await page.waitForSelector('.th-done');       // a clean page for the keyboard check below
 await page.screenshot({ path: SP + '/t-done.png', fullPage: true }); await noHScroll('done');

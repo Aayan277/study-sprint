@@ -10,7 +10,7 @@
 // Changing screens only moves aria-current (markCurrent), called from route() in app.js.
 // Collapsed, the sidebar is a 72px icon rail; the choice is kept per device and applied from index.html's head script.
 
-import { loadAll, countFor, answeredToday, loadStreak, goalFor } from './study-data.js';
+import { loadAll, countFor, loadStreak, todayRing } from './study-data.js';
 import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
@@ -75,9 +75,10 @@ async function paint(loaded) {
   if (!shouldDraw()) return;
   const allIds = data.decks.map(d => d.id);
   const chosen = loaded?.chosen || data.settings.reviewDecks.filter(id => allIds.includes(id));
-  const total = countFor(data, chosen.length ? chosen : allIds).total;
-  const answered = answeredToday(data, chosen);          // the same decks as Today's ring
-  const goal = goalFor(data.settings, answered, total);
+  const counts = countFor(data, chosen.length ? chosen : allIds);
+  const total = counts.total;
+  const tr = todayRing(data, chosen, counts);            // the same helper and decks as Today's ring
+  const ringText = tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} today`;
 
   // Today badge
   const badge = $('sideBadge');
@@ -124,10 +125,10 @@ async function paint(loaded) {
   const { sub } = streakText(streak);
   const usedRecently = streak.week.some(d => d.frozen);
   const note = !streak.days ? '' : streak.freeze.usedOn ? ', ' + sub[0].toLowerCase() + sub.slice(1) : ', freeze ready';
-  st.setAttribute('aria-label', `${streak.days}-day streak${note}. ${answered} of ${goal} cards today`);
-  st.dataset.tip = `${streak.days}-day streak${note ? ' · ' + note.slice(2) : ''} · ${answered} of ${goal} today`;
-  st.innerHTML = `${ring(goal ? answered / goal : 0, 30, 3, icon('flame'))}
-    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b><span>${answered} of ${goal} today</span></span>`;
+  st.setAttribute('aria-label', `${streak.days}-day streak${note}. ${tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} cards today`}`);
+  st.dataset.tip = `${streak.days}-day streak${note ? ' · ' + note.slice(2) : ''} · ${ringText}`;
+  st.innerHTML = `${ring(tr.frac, 30, 3, icon('flame'))}
+    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b><span>${ringText}</span></span>`;
   await drawSync();
 }
 

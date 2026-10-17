@@ -1,5 +1,5 @@
 // v4.9: "the game is secondary, reviewing is the main feature".
-//   1. The Today goal ring counts to a fixed daily goal (Settings, synced), never "0/0"; Today and the sidebar agree.
+//   1. (v4.10: replaced the daily goal) The Today ring is today's work: done / (due + new), never "0/0"; Today and the sidebar agree.
 //   2. A Play round starts only from the Play page: no link or button on Today, Review's finish, Stats or the Compare sheet.
 //   3. Play is one deck per game: no "All decks"; nearest exam, else last used, else the first deck; a saved "all" migrates.
 import { chromium } from './pw.mjs';
@@ -34,73 +34,87 @@ const nothingDue = p => p.evaluate(async () => {
   await db.setSetting('newPerDay', 0);
 });
 
-// ================= 1. The goal ring =================
+// ================= 1. The Today ring = today's work =================
+// Finish n of today's new cards the way Review does: a review-log row (state 0 = it was new) and a schedule five days out.
+const study = (p, n) => p.evaluate(async n => {
+  const db = await import('./js/db.js'); const { loadAll } = await import('./js/study-data.js');
+  const now = Date.now(); const data = await loadAll(); const cs = data.split.fresh.slice(0, n);
+  await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now + 5 * 86400000, stability: 20, difficulty: 5, reps: 1, lapses: 0, state: 2, lastReview: now, scheduledDays: 5, elapsedDays: 0, learningSteps: 0 })));
+  await db.putMany('reviewLog', cs.map((c, i) => ({ cardId: c.id, timestamp: now - 60000 * (i + 1), source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 0, applied: true })));
+  return cs.length;
+}, n);
 let p = await open(375, 800, 'dark');
-await nothingDue(p); await reload(p);
-ok(await p.locator('.th-done').count() === 1, 'nothing is due: the done state shows');
+// Work left: N to go, and the ring reads done/total
 let rt = await ringText(p);
-ok(rt === '0/20', `nothing due, nothing answered: the ring reads 0/20, not 0/0 (${rt})`);
+const toGo = +(await p.textContent('.th-big')).match(/\d+/)?.[0];
+ok(toGo > 3 && rt === `0/${toGo}`, `work left: "${toGo} to go", the ring reads 0/${toGo} (${rt})`);
+ok((await p.textContent('.th-label')).trim() === 'TODAY' && !(await p.textContent('#screen')).includes('DAILY GOAL'), 'the ring label is TODAY, not DAILY GOAL');
+ok(!(await p.textContent('#screen')).includes('All cards learned'), 'unseen new cards left: no "All cards learned" line');
+await study(p, 3); await reload(p);
+rt = await ringText(p);
+ok(rt === `3/${toGo}` && await p.$eval('.today-hero .ring', e => !e.classList.contains('is-full')), `after 3 cards: 3/${toGo}, the total does not move (${rt})`);
+await p.screenshot({ path: SP + '/v49-today-todo-375-dark.png' });
+// Everything done: All done for today, a check, the learned line, Extra study (a normal secondary button)
+await study(p, 999); await reload(p);
+ok(await p.locator('.th-done').count() === 1 && await p.locator('#startBtn').count() === 0, 'all done: the done state shows');
+ok((await p.textContent('.th-big')).trim() === 'All done for today', 'all done: "All done for today"');
+ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')), 'all done: the ring is complete (a check, green)');
+ok((await p.textContent('.th-learned')).trim() === 'All cards learned · only reviews from now', 'no unseen new cards left: "All cards learned · only reviews from now"');
 ok(!(await p.textContent('#screen')).includes('0/0'), 'the text "0/0" appears nowhere on Today');
-ok(await p.$eval('.today-hero .ring', e => !e.classList.contains('is-full')) && await p.locator('.ring-check').count() === 0, 'and it is not shown as complete');
+const ex = p.locator('.th-done #customLink');
+ok((await ex.textContent()).trim() === 'Extra study' && await ex.evaluate(e => e.classList.contains('btn') && e.classList.contains('ghost') && !e.classList.contains('primary')), 'a plain secondary "Extra study" button');
 await noHScroll(p, 'today done 375'); await p.screenshot({ path: SP + '/v49-today-done-375-dark.png' });
-
-// Settings: the Daily goal stepper (Study section), 1 to 500, saved
-await go(p, '#/settings', '#dgIn');
-ok(await p.$eval('#dgIn', e => e.value) === '20', 'Settings > Study has a Daily goal stepper, default 20');
-ok(await p.evaluate(() => !!document.querySelector('#studyTitle')?.closest('.section')?.contains(document.querySelector('#dgIn'))), 'it sits in the Study section');
-await p.click('#dgMinus'); ok(await p.$eval('#dgIn', e => e.value) === '15', 'minus lowers it by 5');
-await p.click('#dgPlus'); await p.click('#dgPlus'); ok(await p.$eval('#dgIn', e => e.value) === '25', 'plus raises it by 5');
-await p.fill('#dgIn', '0'); await p.press('#dgIn', 'Tab'); ok(await p.$eval('#dgIn', e => e.value) === '1', '0 is kept at 1 (never 0/0)');
-await p.fill('#dgIn', '9999'); await p.press('#dgIn', 'Tab'); ok(await p.$eval('#dgIn', e => e.value) === '500', 'huge values are kept at 500');
-await p.fill('#dgIn', '5'); await p.press('#dgIn', 'Tab');
-ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).dailyGoal) === 5, 'the goal is saved in the settings');
-ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('dailyGoal')), 'and it is a synced setting');
-await noHScroll(p, 'settings 375'); await p.screenshot({ path: SP + '/v49-settings-375-dark.png' });
-
-// It fills as you study, and shows complete when the goal is reached
-await go(p, '#/today', '.today-hero');
-ok(await ringText(p) === '0/5', 'goal 5: the ring reads 0/5');
-await answers(p, 3); await reload(p);
-ok(await ringText(p) === '3/5' && await p.$eval('.today-hero .ring', e => !e.classList.contains('is-full')), 'after 3 answers: 3/5, not complete');
-await answers(p, 2); await reload(p);   // new log rows each time: 3 + 2 = 5 answers, the goal
-rt = await ringText(p);
-ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')), 'goal reached: the ring shows complete (a check, green)');
-await p.screenshot({ path: SP + '/v49-today-complete-375-dark.png' });
-// extra study counts: the denominator follows the answers, never 12/5
-await answers(p, 10); await reload(p);
-ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')), 'extra study counts: still complete, never over the goal');
-// a bigger goal than the answers: back to numbers
-await p.evaluate(async () => (await import('./js/db.js')).setSetting('dailyGoal', 40)); await reload(p);
-rt = await ringText(p);
-ok(/^\d+\/40$/.test(rt) && await p.locator('.ring-check').count() === 0, 'a goal of 40 with fewer answers reads N/40 (' + rt + ')');
+ok(await ex.evaluate(e => { const s = getComputedStyle(e); return s.backgroundImage === 'none' && s.boxShadow === 'none'; }), 'Extra study has no gradient and no glow');
+await ex.click(); await p.waitForSelector('#sheet .cs-opt');
+ok((await p.textContent('#sheet h2')).trim() === 'Custom study', 'all done: Extra study opens the Custom study sheet');
+await p.keyboard.press('Escape'); await p.waitForTimeout(300);
 await p.context().close();
 
-// More due than the goal: the goal grows to answers + what is left (30 due, 20 goal)
-p = await open(375, 800, 'light');
-await p.evaluate(async () => {
-  const db = await import('./js/db.js'); const now = Date.now(); const cs = await db.getAll('cards');
-  await db.addDeckWithCards({ id: 'Big', name: 'Big', color: '#3E63DD', created: now + 5 }, Array.from({ length: 30 }, (_, i) => ({ id: 'big' + i, deckId: 'Big', front: 'F' + i, back: 'B' + i, tags: [], created: now + i })));
-  await db.putMany('cardStates', cs.filter(c => !c.id.startsWith('big')).map(c => ({ cardId: c.id, due: now + 5 * 86400000, stability: 20, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now, scheduledDays: 5, elapsedDays: 1, learningSteps: 0 })));
-  await db.setSetting('newPerDay', 100);
-});
-await answers(p, 2); await reload(p);
+// Nothing due at all: a calm state, never 0/0
+p = await open(375, 800, 'dark');
+await nothingDue(p); await reload(p);
+ok((await p.textContent('.th-big')).trim() === 'Nothing due today', 'nothing due: "Nothing due today"');
 rt = await ringText(p);
-const left = +(await p.textContent('.th-big')).match(/\d+/)?.[0];
-ok(rt === `2/${2 + left}` && left > 18, `more to do than the goal: the ring counts answers + what is left (${rt}, ${left} to go)`);
-await p.screenshot({ path: SP + '/v49-today-todo-375-light.png' });
+ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')) && !rt.includes('/'), `nothing due: the ring is full with a check, not 0/0 (${rt})`);
+ok(!(await p.textContent('#screen')).includes('0/0') && /next card is due in/.test(await p.textContent('.th-done')), 'nothing due: no 0/0 and the next due time is shown');
+ok((await p.textContent('.th-learned')).includes('All cards learned'), 'nothing due and no new cards left: the learned line too');
+await noHScroll(p, 'today nothing due 375'); await p.screenshot({ path: SP + '/v49-today-nothing-375-dark.png' });
+
+// Settings: no Daily goal stepper, a Play switch (off), synced
+await go(p, '#/settings', '#playCounts');
+ok(await p.locator('#dgIn, #dgMinus, #dgPlus').count() === 0 && !(await p.textContent('#screen')).includes('Daily goal'), 'Settings has no Daily goal stepper');
+ok(await p.$eval('#playCounts', e => !e.checked), 'Settings: "Count Play answers as reviews" is off by default');
+ok((await p.textContent('.switch-row:has(#playCounts)')).includes("Off: Play is practice only and doesn't change when cards are due, stats or streaks."), 'with its hint');
+await p.click('#playCounts');
+ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playCountsAsReviews) === true, 'switching it on saves the setting');
+ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('playCountsAsReviews')), 'and it is a synced setting');
+await p.click('#playCounts');
+ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playCountsAsReviews) === false, 'and off again');
+await p.evaluate(async () => (await import('./js/db.js')).setSetting('dailyGoal', 40));      // an old synced value
+await noHScroll(p, 'settings 375'); await p.screenshot({ path: SP + '/v49-settings-375-dark.png' });
+await go(p, '#/today', '.today-hero');
+ok((await p.textContent('.th-big')).trim() === 'Nothing due today', 'a leftover dailyGoal changes nothing on Today');
 await p.context().close();
 
 // Desktop: Today's ring and the sidebar footer show the same numbers (1440, light and dark)
 for (const scheme of ['light', 'dark']) {
   p = await open(1440, 900, scheme);
-  await nothingDue(p); await answers(p, 7); await reload(p);
+  const n0 = +(await p.textContent('.th-big')).match(/\d+/)?.[0];
+  await study(p, 4); await reload(p);
   rt = await ringText(p);
-  const side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
-  ok(rt === '7/20' && side.includes('7 of 20 today'), `${scheme} 1440: Today ring ${rt} and the sidebar "${side.match(/\d+ of \d+ today/)?.[0]}" agree`);
+  let side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
+  ok(rt === `4/${n0}` && side.includes(`4 of ${n0} today`), `${scheme} 1440: Today ring ${rt} and the sidebar "${side.match(/\d+ of \d+ today/)?.[0]}" agree`);
   await go(p, '#/decks', '.deck');
-  ok((await p.textContent('#sideStreak')).includes('7 of 20 today'), `${scheme}: the sidebar keeps the same goal on other screens`);
-  await go(p, '#/today', '.th-done'); await theme(p);
+  ok((await p.textContent('#sideStreak')).includes(`4 of ${n0} today`), `${scheme}: the sidebar keeps the same numbers on other screens`);
+  await study(p, 999); await go(p, '#/today', '.th-done'); await theme(p);
+  side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
+  ok(side.includes(`${n0} of ${n0} today`), `${scheme} 1440: all done reads ${n0} of ${n0} in the sidebar`);
   await p.screenshot({ path: SP + `/v49-today-done-1440-${scheme}.png` });
+  await p.context().close(); p = await open(1440, 900, scheme);
+  await nothingDue(p); await reload(p);
+  side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
+  ok(side.includes('Nothing due today') && !side.includes('0 of 0'), `${scheme} 1440: nothing due reads "Nothing due today" in the sidebar`);
+  await p.screenshot({ path: SP + `/v49-today-nothing-1440-${scheme}.png` });
   await p.context().close();
 }
 
@@ -129,9 +143,9 @@ await p.click('#endBtn'); await p.waitForSelector('.finish-next');
 await nothingDue(p); await go(p, '#/today', '.th-done');
 ok((await playLinks()).length === 0, 'Today (All done): no Play link');
 const done = (await p.textContent('.th-done')).replace(/\s+/g, ' ');
-ok(done.includes('All done for today') && /next card is due in/.test(done) && (await p.textContent('.th-done #customLink')).trim() === 'Custom study', 'All done: "All done for today", the next due time and a quiet Custom study link: ' + done.slice(0, 90));
+ok((await p.textContent('.today-hero .th-big')).trim() === 'Nothing due today' && /next card is due in/.test(done) && (await p.textContent('.th-done #customLink')).trim() === 'Extra study', 'Nothing due: "Nothing due today", the next due time and an Extra study button: ' + done.slice(0, 90));
 await p.click('#customLink'); await p.waitForSelector('#sheet .cs-opt');
-ok((await p.textContent('#sheet h2')).trim() === 'Custom study', 'the link opens Custom study');
+ok((await p.textContent('#sheet h2')).trim() === 'Custom study', 'Extra study opens the Custom study sheet');
 await p.keyboard.press('Escape'); await p.waitForTimeout(300);
 ok(await p.locator('.tab[data-tab="play"]').count() === 1, 'the Play tab stays');
 await p.context().close();

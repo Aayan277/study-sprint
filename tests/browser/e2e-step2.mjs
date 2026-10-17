@@ -137,12 +137,17 @@ await page.click('.sheet-x'); await page.click('#optBtn'); await page.click('#de
 await page.click('.tdeck:has-text("Short answers")'); await page.waitForSelector('#flash');
 await page.click('#showBtn'); await page.click('[data-rate="3"]'); await page.waitForFunction(() => !document.querySelector('.rv-card.flipped'));
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
-const answeredAll = await run(async () => (await (await import('./js/db.js')).getLogsSince((await import('./js/days.js')).dayStart())).filter(l => l.source === 'review').length);
-// (Round 2 A6: the "N answers today" line is gone; the goal ring's own number is the answers done)
+// v4.10: the ring's number is the cards finished today (each card once; a card still in its learning steps for today is still "to go")
+const answeredAll = await run(async () => {
+  const db = await import('./js/db.js'); const days = await import('./js/days.js');
+  const logs = (await db.getLogsSince(days.dayStart())).filter(l => l.source === 'review');
+  const states = new Map((await db.getAll('cardStates')).map(s => [s.cardId, s]));
+  return new Set(logs.filter(l => { const st = states.get(l.cardId); return !(st && (st.state === 1 || st.state === 3) && st.due <= days.dayEnd()); }).map(l => l.cardId)).size;
+});
 const goalDone = () => page.evaluate(() => { const b = document.querySelector('.th-main .ring-in b'); return b ? +b.textContent : null; });
-ok(answeredAll > 1 && (await goalDone()) === answeredAll, `all decks: the goal counts all ${answeredAll} answers`);
+ok(answeredAll >= 1 && (await goalDone()) === answeredAll, `all decks: the ring counts all ${answeredAll} finished cards`);
 await page.click('#optBtn'); await page.click('#deckChips [data-deck="L"]'); await page.click('#optDone');
-ok((await goalDone()) === 0, 'one other deck chosen: its goal does not count answers from elsewhere');
+ok((await goalDone()) === 0, 'one other deck chosen: its ring does not count cards finished elsewhere');
 await page.click('#allDecksBtn');
 
 // ---- A failed Review load keeps you on Today, and nothing starts later ----
