@@ -19,7 +19,7 @@ import { speak, stopSpeaking, canSpeak, stepsSpeech } from './speech.js';
 import { parseSteps } from './steps.js';
 import { maskMath } from './math.js';
 import { mountScratch } from './scratchpad.js';
-import { deckSchedulerOptions } from './sched-settings.js';
+import { deckSchedulerOptions, personalW20 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
@@ -110,7 +110,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   const now = Date.now();
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
-    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps);
+    examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,

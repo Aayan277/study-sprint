@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { stamp, tombstone, tombstoneKey, upgradeRecord, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
+import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
 import { mergeDayFlags, sameDayFlags, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
@@ -270,4 +270,27 @@ test('the sync server turning a sound away for its type is reported as media_typ
     answer(400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
     await assert.rejects(supa.uploadMedia('tok', 'uid', 'id1', 'image/jpeg', new ArrayBuffer(4)), e => e.code === 'media_policy');
   } finally { globalThis.fetch = realFetch; }
+});
+
+// ---------- your own FSRS parameters (fsrsParams, v4.10) ----------
+test('fsrsParams is a synced setting: the newest copy wins as a whole, it is not merged', () => {
+  assert.ok(SYNCED_SETTINGS.includes('fsrsParams'));
+  assert.ok(!MERGED_SETTINGS.includes('fsrsParams'));
+  assert.equal(DEFAULT_SETTINGS.fsrsParams, null);
+  const mine = { w: Array(21).fill(0.5), at: NOW, version: 'fsrs-6' };
+  assert.equal(decide(rowFromSetting('fsrsParams', mine, NOW + 5), NOW), 'put');            // a newer fit from another device is taken
+  assert.equal(decide(rowFromSetting('fsrsParams', mine, NOW - 5), NOW), 'skip');           // an older one is not
+  assert.equal(decide(rowFromSetting('fsrsParams', { w: null, at: NOW + 5, version: 'fsrs-6' }, NOW + 5), NOW), 'put');   // a reset elsewhere resets here
+});
+
+test('fsrsParams from the server: a good value is kept (cleaned), null means the standard settings, junk is ignored', () => {
+  const mine = { w: Array(21).fill(0.5), at: NOW, reviews: 500, version: 'fsrs-6', extra: 'x' };
+  assert.deepEqual(acceptSetting('fsrsParams', mine), { ok: true, value: { w: mine.w, at: NOW, reviews: 500, version: 'fsrs-6' } });
+  assert.deepEqual(acceptSetting('fsrsParams', null), { ok: true, value: null });
+  assert.deepEqual(acceptSetting('fsrsParams', undefined), { ok: true, value: null });
+  for (const bad of [{ ...mine, version: 'fsrs-7' }, { ...mine, w: [1, 2, 3] }, { ...mine, w: Array(21).fill('a') }, 'x', 5, [], { w: Array(21).fill(NaN), version: 'fsrs-6' }]) {
+    assert.deepEqual(acceptSetting('fsrsParams', bad), { ok: false }, JSON.stringify(bad));
+  }
+  // other settings are not touched
+  assert.deepEqual(acceptSetting('dailyGoal', 'anything'), { ok: true, value: 'anything' });
 });
