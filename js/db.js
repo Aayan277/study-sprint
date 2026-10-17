@@ -141,6 +141,22 @@ async function store(name, mode = 'readonly') {
 
 // ---------- generic helpers ----------
 export async function getAll(name) { return done((await store(name)).getAll()); }
+// Every record of a store, read a few thousand at a time with a pause between, so a big review log doesn't hold the page up while
+// it is turned into objects (getAll does all of it in one go). Same result as getAll, in key order. For the optimizer.
+export async function getAllInPieces(name, size = 3000) {
+  const out = [];
+  let after = null;
+  for (;;) {
+    const os = await store(name);
+    const piece = await done(os.getAll(after === null ? undefined : IDBKeyRange.lowerBound(after, true), size));
+    out.push(...piece);
+    if (piece.length < size) return out;
+    after = piece[piece.length - 1][os.keyPath];
+    await new Promise(r => setTimeout(r, 0));
+  }
+}
+// How many records a store holds, without reading them (Settings uses it for the review log).
+export async function count(name) { return done((await store(name)).count()); }
 export async function get(name, key) { return done((await store(name)).get(key)); }
 export async function getAllByIndex(name, index, value) {
   return done((await store(name)).index(index).getAll(value));
@@ -417,6 +433,7 @@ export async function setSetting(key, value, { at: given } = {}) {
     };
   }
   await finished(tx);
+  if (key === 'fsrsParams') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
   if (isSyncedSetting(key)) changed();
 }
 
@@ -711,6 +728,7 @@ export async function applyRemote(rows) {
         settingsStore.put(row.id.startsWith('gloss:') ? cleanGlossary({ [row.id]: accepted.value })[row.id] ?? null : accepted.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
+        if (row.id === 'fsrsParams') schedules = true;       // another device's weights: an open Review session was planned with the old ones
       } else if (row.store in SYNC_ID) {
         const key = `${row.store}:${row.id}`;
         if (!todo.has(key) || row.updated_at >= todo.get(key).updated_at) todo.set(key, row);

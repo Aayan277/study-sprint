@@ -27,7 +27,7 @@ export const FIT_DEFAULTS = {
   epochs: 5,            // passes over the data
   batchSize: 512,       // real reviews (with a prediction) per step, about
   lr: 0.04,             // Adam's step size at the start (it falls to a tenth by the end)
-  gamma: 8,             // strength of the pull towards the default weights, in "reviews" (see priorTerm)
+  gamma: 1000,          // strength of the pull towards the default weights, in "reviews" (see the loss above). Was 8; tuned on simulator seeds 31 to 60 (tests/sim/compare/report-optimizer.md)
   seed: 1,              // the shuffle: the same seed and data give the same weights
   minReviews: 400,      // fewer real reviews than this: no fit
   priorN: 6             // pretraining blends with the default start stability as if it had this many samples
@@ -95,10 +95,15 @@ export function nextState(w, s, d, t, g, round = true, r) {
 //   logLoss  mean binary cross-entropy
 //   rmse     the 20 equal bins of predicted R: sqrt of the count-weighted mean of (mean predicted − observed recall)²  ("RMSE (bins)")
 //   n        how many predictions
-export function evaluate(cards, w, { round = true } = {}) {
+export function evaluate(cards, w, opts) { return evaluateMany([{ cards, w }], opts); }
+
+// The same, over several groups of cards that each use their own weights (the scheduler clips w17 and w18 differently
+// for decks with different relearning steps): one log loss and one set of bins over everything.
+//   parts  [{ cards, w }, …]
+export function evaluateMany(parts, { round = true } = {}) {
   let n = 0, loss = 0;
   const cnt = new Float64Array(BINS), pred = new Float64Array(BINS), obs = new Float64Array(BINS);
-  for (const c of cards) {
+  for (const { cards, w } of parts) for (const c of cards) {
     const { deltas, ratings, scored } = c;
     let s = 0, d = 0;
     for (let i = 0; i < ratings.length; i++) {
@@ -120,8 +125,25 @@ export function evaluate(cards, w, { round = true } = {}) {
   return { logLoss: n ? loss / n : 0, rmse: n ? Math.sqrt(sq / n) : 0, n };
 }
 
-// The decision rule (owner decision Q2): keep the new weights only if the log loss is lower AND the RMSE is no higher.
-export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse;
+// The decision rule (owner decision Q2, softened after review): keep the new weights only if the log loss is lower AND the RMSE is not
+// more than RMSE_SLACK (absolute, 1 percentage point) higher. The binned RMSE is noisy on a small held-out slice: with a few hundred
+// predictions a strict "no higher" refused real gains about as often as it accepted them (see report-optimizer.md).
+export const RMSE_SLACK = 0.01;
+export const isBetter = (before, after) => after.logLoss < before.logLoss && after.rmse <= before.rmse + RMSE_SLACK;
+
+// ---------- judging (the page and the simulator both use this) ----------
+// Weights as the scheduler will use them: generatorParameters clips w17 and w18 to a ceiling that depends on the deck's number
+// of relearning steps, so each group of cards is scored with the weights clipped for its own step count.
+//   cards      histories (fsrs-data.js)       steps  relearning-step count of each card's deck (same order)
+//   clip(w, n) ts-fsrs clipParameters(w, n, true)
+// Returns { before, after, better } where before/after = { logLoss, rmse, n } for `current` and `fitted`.
+export function judge(cards, steps, current, fitted, clip) {
+  const groups = new Map();
+  cards.forEach((c, i) => { const n = steps[i] ?? 1; if (!groups.has(n)) groups.set(n, []); groups.get(n).push(c); });
+  const part = w => [...groups].map(([n, list]) => ({ cards: list, w: clip(w, n) }));
+  const before = evaluateMany(part(current)), after = evaluateMany(part(fitted));
+  return { before, after, better: isBetter(before, after) };
+}
 
 // ---------- gradients (dual numbers) ----------
 // A dual number is { v: value, o: offset }: the value, and where its 17 derivatives (with respect to w4 to w20) sit in one big
@@ -362,7 +384,7 @@ export function* fit(input) {
         for (let k = 0; k < P; k++) {
           const i = k + FIRST_TRAINED;
           const range = Math.max(bounds[i][1] - bounds[i][0], 1e-9);          // (a pinned weight has no range)
-          // mean log loss + gamma/N · Σ ((w − default) / range)²: a weak pull towards the defaults
+          // mean log loss + gamma/N · Σ ((w − default) / range)²: a pull towards the defaults (gamma is the strength)
           const gk = grad[k] / count + cfg.gamma / total * 2 * (w[i] - defaults[i]) / (range * range);
           m[k] = 0.9 * m[k] + 0.1 * gk;
           v[k] = 0.999 * v[k] + 0.001 * gk * gk;
@@ -395,6 +417,7 @@ export function* fit(input) {
     let lo = Math.log(bounds[g][0]), hi = Math.log(bounds[g][1]);
     let a = hi - gr * (hi - lo), b = lo + gr * (hi - lo), fa = cost(a), fb = cost(b);
     for (let it = 0; it < 40; it++) {
+      yield { phase: 'refine', done: g, total: 4, progress: at('refine', (g + it / 40) / 4) };       // each step scores a whole history: yield often
       if (fa < fb) { hi = b; b = a; fb = fa; a = hi - gr * (hi - lo); fa = cost(a); }
       else { lo = a; a = b; fa = fb; b = lo + gr * (hi - lo); fb = cost(b); }
     }
@@ -406,6 +429,8 @@ export function* fit(input) {
   yield { phase: 'refine', done: 4, total: 4, progress: at('refine', 1) };
 
   // 4. Check: do the new weights predict the same history better than the ones in use?
+  // (config.skipCheck: the caller judges them itself, on reviews this fit never saw, so this in-sample check is left out.)
+  if (cfg.skipCheck) return { status: 'trained', w: fitted, fitted, current, reviews, cards: usable, longTerm };
   yield { phase: 'check', done: 0, total: 2, progress: at('check', 0) };
   const before = evaluate(cards, current);
   yield { phase: 'check', done: 1, total: 2, progress: at('check', 0.5) };
@@ -425,27 +450,101 @@ export function runFit(input, onProgress) {
   }
 }
 
-// An honest out-of-sample check, for the simulator: fit on the first `trainShare` of the days, then score current and fitted
-// weights on the answers after that (the memory state is still replayed from the whole history). Needs `day0` on each history.
-// A generator like fit(). Result: { status: 'not-enough', … } or { cutoffDay, fitted, before, after, trainResult }.
-export function* evaluateSplit(input, trainShare = 0.8) {
+// Split the histories by time: `head` = every answer up to the day by which `trainShare` of the real reviews have happened
+// (cards with nothing in that part are left out), `test` = ALL the cards in their original order, with only the later reviews
+// scored (the memory state is still replayed from the whole history, so a card keeps its place in `steps` arrays).
+// Needs `day0` on each history. Only reviews that get a prediction (scored, not a card's first answer, on a later day than the one
+// before) are counted to find the cutoff, so the held-out part really holds about 20% of the predictions. Returns { head, test, cutoff }.
+export function splitHistories(cards, trainShare = 0.8) {
   const days = [];
-  for (const c of input.cards) {
+  for (const c of cards) {
     let day = c.day0 || 0;
-    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i]) days.push(day); }
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i] && i > 0 && c.deltas[i] > 0) days.push(day); }     // only reviews that get a prediction
   }
   days.sort((a, b) => a - b);
   const cutoff = days.length ? days[Math.min(days.length - 1, Math.floor(days.length * trainShare))] : 0;
   const head = [], test = [];
-  for (const c of input.cards) {
+  for (const c of cards) {
     let day = c.day0 || 0, keep = 0;
     const absolute = new Int32Array(c.ratings.length);
     for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; absolute[i] = day; if (day <= cutoff) keep = i + 1; }
     if (keep) head.push({ ...c, deltas: c.deltas.slice(0, keep), ratings: c.ratings.slice(0, keep), scored: c.scored.slice(0, keep) });
     test.push({ ...c, scored: c.scored.map((x, i) => (absolute[i] > cutoff ? x : 0)) });
   }
+  return { head, test, cutoff };
+}
+
+// An honest out-of-sample check, for the simulator: fit on the first `trainShare` of the days, then score current and fitted
+// weights on the answers after that. A generator like fit(). Result: { status: 'not-enough', … } or { cutoffDay, fitted, before, after, trainResult }.
+export function* evaluateSplit(input, trainShare = 0.8) {
+  const { head, test, cutoff } = splitHistories(input.cards, trainShare);
   const trained = yield* fit({ ...input, cards: head });
   if (trained.status === 'not-enough') return trained;
   const current = (input.current || input.defaults);
   return { status: 'split', cutoffDay: cutoff, fitted: trained.fitted, before: evaluate(test, current), after: evaluate(test, trained.fitted), trainResult: trained };
+}
+
+// ---------- the keep rule: judged on reviews the fit never saw ----------
+// ts-fsrs's clipParameters(w, numRelearningSteps, true), written out (tests/fsrs-parity.test.js checks they agree): every weight
+// inside its bounds, and with more than one relearning step w17 and w18 get a lower ceiling worked out from w11, w13 and w14.
+export function clipWeights(w, numRelearningSteps, bounds) {
+  const clip = bounds.map(b => b.slice());
+  if (Math.max(0, numRelearningSteps) > 1) {
+    const w11 = clamp(w[11] || 0, clip[11][0], clip[11][1]);
+    const w13 = clamp(w[13] || 0, clip[13][0], clip[13][1]);
+    const w14 = clamp(w[14] || 0, clip[14][0], clip[14][1]);
+    const value = -(Math.log(w11) + Math.log(Math.pow(2, w13) - 1) + w14 * 0.3) / numRelearningSteps;
+    const ceiling = clamp(r8(Math.sqrt(Math.max(value, 0))), 0.01, clip[17][1]);
+    clip[17][1] = ceiling; clip[18][1] = ceiling;
+  }
+  return clip.map(([lo, hi], i) => clamp(w[i] || 0, lo, hi));
+}
+
+export const HOLDOUT_SHARE = 0.8;       // fit on the first 80% of the days, judge on the last 20%
+export const HOLDOUT_MIN = 50;          // fewer than this many held-out predictions: no verdict, keep the current weights
+
+// The whole decision, as the Optimize sheet makes it (a generator like fit(): runs in the worker, in Node, or in slices):
+//   1. fit on the first 80% of the days
+//   2. judge those weights against the current ones on the last 20% (judge(): log loss lower AND RMSE no higher, each deck scored
+//      with its weights clipped for its relearning steps)
+//   3. only if they win, fit again on everything and use that
+// input = fit()'s input plus `steps`: the relearning-step count of each card's deck, in the order of input.cards (default 1).
+// Result: { status: 'not-enough', reviews, needed }
+//       | { status: 'same', reason, before, after, reviews, cards, longTerm }          the current weights stay
+//       | { status: 'better', w, fitted, headFitted, current, before, after, tested, reviews, cards, longTerm }
+//   before / after = log loss and RMSE of the current and the new weights on the held-out reviews (what the sheet shows);
+//   headFitted = the weights from step 1 (the sheet scores them again if the saved setting changed while it worked).
+export function* fitChecked(input) {
+  const cfg = { ...FIT_DEFAULTS, ...(input.config || {}) };
+  const { cards, bounds } = input;
+  const current = (input.current || input.defaults).slice();
+  const steps = input.steps || cards.map(() => 1);
+  let reviews = 0, longTerm = 0, usable = 0;
+  for (const c of cards) {
+    let any = false;
+    for (let i = 0; i < c.scored.length; i++) if (c.scored[i]) { reviews++; any = true; if (i > 0 && c.deltas[i] > 0) longTerm++; }
+    if (any) usable++;
+  }
+  if (reviews < cfg.minReviews || longTerm === 0) return { status: 'not-enough', reviews, needed: cfg.minReviews };
+  const totals = { reviews, cards: usable, longTerm };
+  // Phases of the inner fits are all "finding"; the verdict is "check". Progress: 0 to 0.45 first fit, 0.45 to 0.5 judging, 0.5 to 1 second fit.
+  const inner = function* (cardsIn, from, to, config) {
+    const it = fit({ ...input, cards: cardsIn, current, config });
+    for (;;) {
+      const r = it.next();
+      if (r.done) return r.value;
+      yield { phase: 'finding', done: r.value.done, total: r.value.total, progress: from + (to - from) * r.value.progress };
+    }
+  };
+  const { head, test } = splitHistories(cards, HOLDOUT_SHARE);
+  const first = yield* inner(head, 0, 0.45, { ...input.config, minReviews: 1, skipCheck: true });
+  yield { phase: 'check', done: 0, total: 1, progress: 0.47 };
+  if (first.status === 'not-enough') return { status: 'same', reason: 'little', ...totals };
+  const clip = (w, n) => clipWeights(w, n, bounds);
+  const verdict = judge(test, steps, current, first.fitted, clip);
+  yield { phase: 'check', done: 1, total: 1, progress: 0.5 };
+  if (verdict.before.n < HOLDOUT_MIN) return { status: 'same', reason: 'little', before: verdict.before, after: verdict.after, ...totals };
+  if (!verdict.better) return { status: 'same', reason: 'no-better', before: verdict.before, after: verdict.after, ...totals };
+  const second = yield* inner(cards, 0.5, 1, { ...input.config, skipCheck: true });
+  return { status: 'better', w: second.fitted, fitted: second.fitted, headFitted: first.fitted, current, before: verdict.before, after: verdict.after, tested: verdict.before.n, ...totals };
 }

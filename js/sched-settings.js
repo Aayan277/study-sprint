@@ -1,6 +1,9 @@
 // Advanced scheduling settings (Settings → Study → Advanced): checking what you type and turning
 // your settings into options for the FSRS scheduler. Pure functions, tested by tests/sched.test.js.
 
+// (the same number as MIN_REVIEWS in fsrs-data.js; tests/sched.test.js checks they agree, so this file needs no import)
+const MIN_REVIEWS = 400;
+
 export const SCHED_DEFAULTS = {
   learningSteps: '1m 10m',     // short gaps for a new card before it "graduates"
   relearningSteps: '10m',      // short gaps after you forget a card
@@ -76,6 +79,24 @@ export function cleanFsrsParams(v) {
 export function personalW20(settings) {
   const w = cleanFsrsParams(settings?.fsrsParams)?.w;
   return w ? Math.min(0.8, Math.max(0.1, w[20])) : undefined;
+}
+
+// The "Personal parameters" row in Settings (wording: docs/design/fsrs-optimizer-plan.md section 8).
+//   params  settings.fsrsParams     total  how many rows the review log has (a cheap count; the sheet counts the ones that qualify)
+// Returns { using, status, canOptimize, why }: using = personal weights are in use; why = the reason Optimize is off ('' when on).
+export function personalRow(params, total, locale) {
+  const p = cleanFsrsParams(params);
+  const using = !!p?.w;
+  const n = Math.max(0, total | 0);
+  let status = 'Using the standard FSRS settings.';
+  if (using) {
+    const bits = [];
+    if (Number.isInteger(p.reviews)) bits.push(`from ${p.reviews.toLocaleString('en')} reviews`);
+    if (isNum(p.at)) bits.push(`(${new Date(p.at).toLocaleDateString(locale, { day: 'numeric', month: 'short' })})`);
+    status = `Using your own settings${bits.length ? ', ' + bits.join(' ') : ''}.`;
+  }
+  const canOptimize = n >= MIN_REVIEWS;
+  return { using, status, canOptimize, why: canOptimize ? '' : `Available after ${MIN_REVIEWS} reviews (you have ${n.toLocaleString('en')}).` };
 }
 
 export function schedulerOptions(settings = {}) {

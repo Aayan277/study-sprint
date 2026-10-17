@@ -9,7 +9,7 @@ const [,, out, seedsArg, vArg, scArg, lArg, gridArg = '[{}]'] = process.argv;
 const seeds = +seedsArg, vs = vArg.split(','), scs = scArg.split(','), ls = lArg.split(','), grid = JSON.parse(gridArg);
 const jobs = [];
 for (const env of grid) for (const sc of scs) for (const le of ls) for (const v of vs)
-  for (let f = 1; f <= seeds; f += 10) jobs.push({ v, sc, le, env, from: f, to: Math.min(seeds, f + 9) });
+  for (let f = +(process.env.SEED_FROM || 1); f <= seeds; f += 10) jobs.push({ v, sc, le, env, from: f, to: Math.min(seeds, f + 9) });
 writeFileSync(out, '');
 let i = 0, done = 0;
 const runOne = job => new Promise((res, rej) => {
