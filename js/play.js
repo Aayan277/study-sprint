@@ -63,13 +63,13 @@ const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back
 export async function renderPlay(el) {
   stopRound();
   // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
-  const { settings, decks, cards: visible, logs, statesById, exam, newLeft } = await loadAll();
+  const [{ settings, decks, cards: visible, logs, statesById, exam, newLeft }, everyCard] = await Promise.all([loadAll(), db.getAll('cards')]);
   if (!el.isConnected) return;           // you already moved to another screen: don't draw (or start a round) there
   // Play works on plain-text copies (no bold or list marks), so options and typed answers compare cleanly.
   // Anything saved back (leeches, Card ⋯) uses the real card from the database instead.
   // (loadAll leaves out suspended cards, and cards buried until tomorrow.)
   // A card with a pair's noteId but no partner plays as an ordinary card (reverse.js loneIds; suspended partners still count).
-  const lone = loneIds(await db.getAll('cards'));
+  const lone = loneIds(everyCard);
   const cards = visible.map(c => playCopy(lone.has(c.id) ? unpaired(c) : c));
   data = {
     settings, decks, cards, statesById,
