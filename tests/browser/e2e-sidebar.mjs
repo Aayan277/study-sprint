@@ -99,7 +99,7 @@ await p.click('.side-deck[data-key=eco]'); await p.waitForSelector('main[data-ro
 ok(p.url().endsWith('#/deck/eco'), 'clicking a deck opens it');
 ok(await p.locator('.side-deck[aria-current="page"]').count() === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'eco', 'and marks it aria-current');
 ok((await p.getAttribute('.tab[data-tab=decks]', 'aria-current')) === 'true', 'the Decks link is current too, as the section ("true"; the deck row holds "page")');
-await p.click('.side-deck[data-key=bio]'); await p.waitForSelector('main[data-route=deck] h1');
+await p.click('.side-deck[data-key=bio]'); await p.waitForSelector('main[data-route=deck] h1'); await p.waitForFunction(() => location.hash.endsWith('/bio') && document.querySelector('.side-deck[data-key=bio]')?.getAttribute('aria-current') === 'page');   // v4.9: wait for the move (the old deck page also has an h1)
 ok((await p.locator('.side-deck[aria-current="page"]').count()) === 1 && (await p.getAttribute('.side-deck[aria-current="page"]', 'data-key')) === 'bio', 'the highlight moves to the next deck');
 await go(p, '#/stats', 'main[data-route=stats] .card');
 ok(await p.locator('.side-deck[aria-current]').count() === 0 && (await p.getAttribute('.tab[data-tab=stats]', 'aria-current')) === 'page', 'on another screen no deck is highlighted');

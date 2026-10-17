@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS = {
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
+  dailyGoal: 20,             // answers a day the goal ring on Today and in the sidebar counts to (1 to 500). Synced
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
   restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
   rescue: null,      // catch-up plan after a break: { start, days, backlog, pauseNew, at } (queue.js rescueToday). Synced, newest wins; Today clears it when it is over
@@ -469,10 +470,12 @@ export function checkBackup(data) {
   if (data.media !== undefined && !(Array.isArray(data.media) && data.media.every(m => m && validKey(m.id) && typeof m.data === 'string' && ALLOWED_IMAGE_TYPES.includes(m.type)))) {
     return 'This backup file is damaged (a picture is invalid or not a supported image type).';
   }
+  if (data.settings?.dailyGoal != null && !validDailyGoal(data.settings.dailyGoal)) return 'This backup file is damaged (the daily goal must be a whole number from 1 to 500).';
   // The catch-up plan is read as numbers and a flag, so nothing else may sit in it.
   if (data.settings?.rescue != null && !validRescue(data.settings.rescue)) return 'This backup file is damaged (the catch-up plan is invalid).';
   return null;
 }
+export const validDailyGoal = n => n == null || (Number.isInteger(n) && n >= 1 && n <= 500);      // null or missing means the default (20)
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
 // A log row's `mixedWith` (the card whose answer was given by mistake, see confusion.js) is kept only when it is a

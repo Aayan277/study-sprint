@@ -19,7 +19,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.8.1';
+const APP_VERSION = '4.9';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -74,6 +74,14 @@ async function renderSettings(el) {
           <button type="button" class="icon-btn" id="npdMinus" aria-label="Fewer new cards">−</button>
           <input id="npd" type="number" inputmode="numeric" min="0" max="999" value="${settings.newPerDay}" aria-label="New cards per day">
           <button type="button" class="icon-btn" id="npdPlus" aria-label="More new cards">+</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <div><b>Daily goal</b><p>The answers a day the goal ring on Today counts to. It grows if more is due.</p></div>
+        <div class="stepper">
+          <button type="button" class="icon-btn" id="dgMinus" aria-label="Lower daily goal">−</button>
+          <input id="dgIn" type="number" inputmode="numeric" min="1" max="500" value="${Number(settings.dailyGoal) || db.DEFAULT_SETTINGS.dailyGoal}" aria-label="Daily goal (answers a day)">
+          <button type="button" class="icon-btn" id="dgPlus" aria-label="Raise daily goal">+</button>
         </div>
       </div>
       <div class="set-row">
@@ -230,6 +238,17 @@ async function renderSettings(el) {
   $('npd').addEventListener('change', e => setNpd(e.target.value));
   $('npdMinus').addEventListener('click', () => setNpd(settings.newPerDay - 5));
   $('npdPlus').addEventListener('click', () => setNpd(settings.newPerDay + 5));
+  // Daily goal: typed or changed with − / +, kept between 1 and 500 (it is the ring's denominator, so never 0).
+  const setGoal = v => {
+    const num = String(v).trim() === '' ? NaN : Number(v);       // 0 is a number (kept at 1); only blank or text falls back to the default
+    const n = Number.isFinite(num) ? Math.max(1, Math.min(500, Math.round(num))) : db.DEFAULT_SETTINGS.dailyGoal;
+    $('dgIn').value = n;
+    settings.dailyGoal = n;
+    db.setSetting('dailyGoal', n).then(() => drawSidebar());      // the desktop ring follows at once
+  };
+  $('dgIn').addEventListener('change', e => setGoal(e.target.value));
+  $('dgMinus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) - 5));
+  $('dgPlus').addEventListener('click', () => setGoal((Number(settings.dailyGoal) || 20) + 5));
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));

@@ -429,3 +429,12 @@ test('rescue: an exam added mid-plan does not starve the other decks (review fix
   assert.equal(buildQueue(cards, states, 0, NOW, Infinity, null, undefined, r).queue.filter(q => q.card.deckId === 'Y').length, 20);
   assert.equal(rescueToday(p, cards, states, new Set(['X']), NOW + 2 * DAY).allow, 60);          // the last day still allows everything left
 });
+
+test('pickedQueue: the given cards in the given order, skipping missing ones', async () => {
+  const { pickedQueue } = await import('../js/queue.js');
+  const cards = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const states = new Map([['a', { state: REVIEW }], ['b', { state: LEARNING }]]);
+  const { queue, waiting } = pickedQueue(cards, states, ['c', 'zzz', 'a', 'c', 'b']);
+  assert.deepEqual(queue.map(x => [x.card.id, x.kind]), [['c', 'new'], ['a', 'review'], ['b', 'learn']]);
+  assert.deepEqual(waiting, []);
+});

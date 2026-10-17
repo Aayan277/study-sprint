@@ -324,3 +324,29 @@ test('clearDismissals (Reset this device) forgets the mix-up and catch-up dismis
   assert.deepEqual([...kept.keys()], ['study-sprint-scratch']);
   assert.doesNotThrow(() => clearDismissals({ removeItem() { throw new Error('blocked'); } }));
 });
+
+test('goalFor: the ring denominator is the daily goal, or more when today has more to do; never 0', async () => {
+  const { goalFor } = await import('../js/study-data.js');
+  assert.equal(goalFor({ dailyGoal: 20 }, 0, 0), 20);            // nothing due, nothing answered: 0/20, not 0/0
+  assert.equal(goalFor({ dailyGoal: 20 }, 5, 0), 20);
+  assert.equal(goalFor({ dailyGoal: 20 }, 5, 30), 35);           // more due than the goal: the goal grows
+  assert.equal(goalFor({ dailyGoal: 20 }, 25, 0), 25);          // extra study counts, it never reads 25/20
+  assert.equal(goalFor({}, 0, 0), 20);                           // no setting yet: the default
+  assert.equal(goalFor({ dailyGoal: 0 }, 0, 0), 1);              // junk is clamped, never 0/0
+  assert.equal(goalFor({ dailyGoal: 9999 }, 0, 0), 500);
+  assert.equal(goalFor({ dailyGoal: 'x' }, 0, 0), 20);
+});
+
+test('goalFor: null or missing dailyGoal is the default 20, not 0', async () => {
+  const { goalFor } = await import('../js/study-data.js');
+  assert.equal(goalFor({ dailyGoal: null }, 0, 0), 20);
+  assert.equal(goalFor({ dailyGoal: undefined }, 3, 0), 20);
+});
+
+test("customQueue('ids') drops suspended and buried cards", async () => {
+  const { customQueue } = await import('../js/study-data.js');
+  const cards = [{ id: 'a' }, { id: 'b', suspended: true }, { id: 'c', buriedUntil: Date.now() + 3600000 }, { id: 'd' }];
+  const out = customQueue('ids', { statesById: new Map() }, cards, 3, ['a', 'b', 'c', 'd']);
+  assert.deepEqual(out.queue.map(x => x.card.id), ['a', 'd']);
+  assert.equal(out.label, 'Review these');
+});

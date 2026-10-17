@@ -8,7 +8,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
-import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
+import { loadAll, countFor, answeredToday, nextDueText, typicalCardMs, loadStreak, goalFor, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
 import { lastStatus } from './sync.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
@@ -34,7 +34,7 @@ export async function startStudy(spec = {}) {
   const r = live.resume;
   const going = r && r.day === dayStart() && r.version === db.scheduleVersion() ? r : null;
   if (!going) return launchStudy(spec);
-  if (going.scope === scopeKey(spec.deckIds, spec.kind, spec.days)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
+  if (going.scope === scopeKey(spec.deckIds, spec.kind, spec.days, spec.cardIds)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
   openSheet(`
     <h2 id="sheetTitle">Start over?</h2>
     <p>You have a session in progress (${plural(going.left, 'card')} left). Starting a new one replaces it: your answers so far are saved, but you'll lose this session's undo.</p>
@@ -72,7 +72,8 @@ export async function renderToday(el) {
     drawSidebar({ data, streak, chosen });          // the sidebar shows the same count as Start, from the data loaded here
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
     const answered = answeredToday(data, chosen);          // the same decks as the cards still to go
-    const goal = answered + c.total;
+    const goal = goalFor(data.settings, answered, c.total);
+    const goalMet = answered >= goal;                      // nothing left to do and the daily goal reached
     const resume = live.resume && live.resume.day === dayStart() && live.resume.version === db.scheduleVersion() ? live.resume : null;
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft).slice(0, 3);
     const noExam = coursesWithoutExam();
@@ -88,7 +89,7 @@ export async function renderToday(el) {
         <a class="btn small primary" id="resumeBtn" href="#/review${resume.deckId ? '/' + encodeURIComponent(resume.deckId) : ''}">Resume</a></div>` : ''}
       <section class="today-hero" aria-label="Today's goal">
         <div class="th-main">
-          ${ring(goal ? answered / goal : 0, 84, 8, c.total || !answered ? `<b class="mono">${answered}</b><small class="mono">/${goal}</small>` : icon('check', 'ring-check'))}
+          ${ring(goal ? answered / goal : 0, 84, 8, goalMet ? icon('check', 'ring-check') : `<b class="mono">${answered}</b><small class="mono">/${goal}</small>`)}
           <div class="th-text">
             <span class="th-label mono">DAILY GOAL</span>
             <b class="th-big">${c.total ? `${c.total} to go` : 'All done'}</b>
@@ -100,7 +101,7 @@ export async function renderToday(el) {
           ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs)}</button>`
           : `<div class="th-done"><b>All done for today</b>
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
-              <a class="btn primary wide big" href="#/play">${icon('bolt')} Play a round</a></div>`}
+              <button class="link th-extra" type="button" id="customLink">Custom study</button></div>`}
       </section>
       ${rescueHTML()}
       <div id="installSlot"></div>
@@ -249,6 +250,7 @@ export async function renderToday(el) {
 
   const wire = c => {
     wireEmptyStart(el);
+    $('customLink')?.addEventListener('click', () => openCustomStudy());
     $('rescueManage')?.addEventListener('click', () => openRescue({ focus: 'rescueManage' }));
     $('rescueGo')?.addEventListener('click', () => openRescue({ offer: { ...rescue.offer, n: rescueDays }, focus: 'rescueGo' }));
     $('rescueNo')?.addEventListener('click', () => {

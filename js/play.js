@@ -16,7 +16,7 @@ import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { loadAll } from './study-data.js';
-import { examOptions, examInfo, nearestExamDeck } from './exam.js';
+import { examOptions, examInfo, pickPlayDeck } from './exam.js';
 import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { isNewLeechCounted, markLeech } from './browse-logic.js';
@@ -33,26 +33,14 @@ import * as fx from './fx.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
-// qtypeByDeck remembers the question type you picked for each deck ('all' = All decks).
-const DEFAULT_PREFS = { deckId: 'all', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} };
+// qtypeByDeck remembers the question type you picked for each deck. Play is one deck (and its subdecks) per game: no 'all'.
+const DEFAULT_PREFS = { deckId: '', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} };
 
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
-let pendingDrill = null;   // card ids sent from another screen (Stats → "Drill these")
-let pendingDrillOpts = {}; // { mix: Map(cardId → partner id), drillTotal }: the "You mix these up" drill (see compare-sheet.js)
 // Has the deck been picked in this visit? Until it has, Play opens on the deck with the nearest exam (see defaultDeck).
 let deckChosen = false;
 let customOpen = null;     // is the "Customise" fold open? (read from this device's saved choice the first time)
-
-// Open Play and start a drill round on these cards straight away.
-//   mix    pairs [[cardId, partnerCardId]]: the partner's answer is always one of that card's options
-//   total  how many questions (default: twice the cards, at least 6)
-export function drillCards(cardIds, { mix = [], total = 0 } = {}) {
-  pendingDrill = cardIds;
-  pendingDrillOpts = { mix: new Map(mix), drillTotal: total };
-  if (location.hash === '#/play') renderPlay(document.getElementById('screen'));
-  else location.hash = '#/play';
-}
 
 const fmtClock = ms => { const s = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const sizeClass = text => { const n = answerText(text).length; return n > 120 ? ' xlong' : n > 50 ? ' long' : ''; };      // measured as words, not as LaTeX
@@ -90,30 +78,19 @@ export async function renderPlay(el) {
     speed: speedProfiles(await db.getLogsSince(daysAgoStart(60)))
   };
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
-  if (prefs.deckId !== 'all' && !decks.some(d => d.id === prefs.deckId)) prefs.deckId = 'all';
-  // Opening Play: the deck with the nearest exam, otherwise the one you used last.
-  if (!deckChosen) prefs.deckId = nearestExamDeck(decks, cards) || prefs.deckId;
+  // One deck per game. Opening Play: the deck with the nearest exam, else the one you used last, else the first deck.
+  // A saved "All decks" (older versions) or a deleted deck becomes a real deck here, and is saved.
+  const wanted = prefs.deckId;
+  prefs.deckId = pickPlayDeck(decks, cards, prefs.deckId, { chosen: deckChosen });
+  delete prefs.qtypeByDeck.all;
+  if (settings.playPrefs && (wanted !== prefs.deckId && (wanted === 'all' || !decks.some(d => d.id === wanted)))) db.setSetting('playPrefs', { ...prefs });
   if (customOpen === null) customOpen = foldOpen('play-custom');
   let pace = settings.timer;
 
-  // Drill sent from Stats: use your usual question type when it works for these cards, otherwise
-  // Back → front (shows the definition, you pick the term), then Typing.
-  if (pendingDrill) {
-    const ids = new Set(pendingDrill);
-    const drillOpts = pendingDrillOpts;
-    pendingDrill = null; pendingDrillOpts = {};
-    const drill = cards.filter(c => ids.has(c.id));
-    const decksUsed = new Set(drill.map(c => c.deckId));
-    const pool = cards.filter(c => decksUsed.has(c.deckId));   // wrong options come from the same decks
-    const qtype = [prefs.qtype, 'back', 'typing'].find(q =>
-      q === 'typing' ? playableCards(drill, q).length : canMultipleChoice(pool, q) && playableCards(drill, q).length);
-    if (drill.length && qtype) return start(el, { ...prefs, deckId: decksUsed.size === 1 ? [...decksUsed][0] : 'all', qtype, pace, pool, drill, ...drillOpts });
-  }
-
   const draw = () => {
     // A deck includes its subdecks.
-    const inside = prefs.deckId === 'all' ? null : subtreeIds(decks, prefs.deckId);
-    const pool = inside ? cards.filter(c => inside.has(c.deckId)) : cards;
+    const inside = subtreeIds(decks, prefs.deckId);
+    const pool = cards.filter(c => inside.has(c.deckId));
     // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || defaultQuestionType(pool);
@@ -146,7 +123,6 @@ export async function renderPlay(el) {
       ${!cards.length ? emptyStartHTML() : `
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
-          <option value="all" ${prefs.deckId === 'all' ? 'selected' : ''}>All decks (${plural(cards.length, 'card')})</option>
           ${deckChoices(decks).map(d => { const ids = subtreeIds(decks, d.id); return `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.label)} (${cards.filter(c => ids.has(c.deckId)).length})</option>`; }).join('')}
         </select>
       </fieldset>
@@ -246,7 +222,7 @@ function start(el, opts) {
   const all = playableCards(opts.pool, opts.qtype);         // every card that works for this question type
   const pool = opts.drill ? playableCards(opts.drill, opts.qtype) : all;
   const fmt = opts.drill ? 'classic' : opts.fmt;
-  const total = fmt === 'classic' ? (opts.drill ? opts.drillTotal || Math.max(pool.length * 2, 6) : opts.len) : null;
+  const total = fmt === 'classic' ? (opts.drill ? Math.max(pool.length * 2, 6) : opts.len) : null;
   // Cards you've forgotten before (lapses) come up more often.
   const weightOf = c => { const s = data.statesById.get(c.id); return 1 + 2 * Math.min(s?.lapses || 0, 5); };
   G = {
@@ -328,11 +304,9 @@ function showQuestion() {
     inp.value = ''; inp.disabled = false;
     inp.focus();
   } else {
-    // A drill from "You mix these up" always offers the partner's answer. Each option remembers which card it is the
-    // answer of, so picking another card's answer can be recorded as a mix-up (log.mixedWith).
-    const partner = G.mix?.get(card.id);
-    const include = partner ? G.all.filter(c => c.id === partner).map(c => questionFor(c, G.qtype).answer) : [];
-    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true, include });
+    // Each option remembers which card it is the answer of, so picking another card's answer can be recorded as a
+    // mix-up (log.mixedWith).
+    const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true });
     const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
     G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
     const long = G.opts.some(o => o.length > 28);
@@ -621,7 +595,7 @@ async function finish() {
   }
   const seen = new Set();
   const missed = round.log.filter(l => !l.ok && !seen.has(l.card.id) && seen.add(l.card.id));
-  const deckName = round.deckId === 'all' ? 'All decks' : deckPath(data.decks, round.deckId);
+  const deckName = deckPath(data.decks, round.deckId);
   const schedule = await scheduleSummary(round);
   // You may have switched to another screen while that saved: don't draw over it.
   if (!location.hash.startsWith('#/play')) return;
@@ -675,7 +649,7 @@ async function finish() {
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
   import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
   const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
-  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill, mix: round.mix, drillTotal: round.drillTotal } : base));
+  $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   $('againBtn').focus({ preventScroll: true });

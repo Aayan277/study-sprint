@@ -45,7 +45,8 @@ ok((await p.textContent('h1')).trim() === 'Session ended', 'ended early: the tit
 ok(!(await p.textContent('main')).includes('Nothing due tomorrow') && !(await p.locator('.fn-line:has(.ico-calendar), .fn-line:has-text("due tomorrow")').count()), 'no calendar line, and never "Nothing due tomorrow"');
 ok(await p.locator('.fin-links a[href="#/decks"]').count() === 1 && await p.locator('.fin-links #undoLast').count() === 1, 'links row: Decks and Undo last');
 ok(await p.locator('#finishMore').count() === 1 && await p.evaluate(() => { const m = document.querySelector('#finishMore'); return m.previousElementSibling?.compareDocumentPosition(m) & 4 && m.nextElementSibling?.classList.contains('finish-next'); }), '#finishMore sits before .finish-next, after the stats');
-ok(await p.locator('.finish-next a[href="#/play"]').count() === 1, 'Play a round stays in the next-steps box');
+// v4.9: the game is only on the Play page, so the finish screen no longer offers a round
+ok(await p.locator('#screen a[href="#/play"]').count() === 0 && !(await p.textContent('#screen')).includes('Play a round'), 'no Play link on the finish screen');
 await p.screenshot({ path: SP + '/finish-keep-1440.png' });
 await p.click('#keepBtn'); await p.waitForSelector('#flash');
 ok((await p.textContent('.flash-deck')).includes('Second') && (await p.textContent('.rv-counts')).replace(/\D+/g, ' ').trim().split(' ').map(Number).reduce((a, b) => a + b) === 3, 'Keep going opens a new session of Today\'s deck with the 3 cards left');

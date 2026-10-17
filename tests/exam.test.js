@@ -293,3 +293,21 @@ test('readiness: suspended cards are left out of both the ready count and the to
   const states = new Map([['a', st('a')], ['b', st('b')]]);
   assert.deepEqual(readiness(cards, states, NOW), { ready: 1, total: 2, share: 0.5 });
 });
+
+test('pickPlayDeck: one real deck, never "all": nearest exam, else the saved deck, else the first with cards', async () => {
+  const { pickPlayDeck } = await import('../js/exam.js');
+  const d = (id, extra = {}) => ({ id, name: id, created: 1, ...extra });
+  const decks = [d('a'), d('b'), d('c', { examDate: '2026-10-20' }), d('d', { examDate: '2026-10-30' })];
+  const cards = id => ({ id: 'x' + id, deckId: id });
+  const all = ['a', 'b', 'c', 'd'].map(cards);
+  assert.equal(pickPlayDeck(decks, all, 'all', { now: NOW }), 'c');                         // the nearest exam
+  assert.equal(pickPlayDeck(decks, all, 'b', { now: NOW, chosen: true }), 'b');             // picked this visit: wins over the exam
+  const noExam = [d('a'), d('b')];
+  assert.equal(pickPlayDeck(noExam, [cards('b')], 'b', { now: NOW }), 'b');                  // else the last used
+  assert.equal(pickPlayDeck(noExam, [cards('b')], 'all', { now: NOW }), 'b');               // "all" migrates: first deck with cards
+  assert.equal(pickPlayDeck(noExam, [cards('b')], 'gone', { now: NOW }), 'b');              // a deleted deck too
+  assert.equal(pickPlayDeck(noExam, [], 'all', { now: NOW }), 'a');                         // nothing has cards: the first deck
+  assert.equal(pickPlayDeck([], [], 'all', { now: NOW }), '');
+  const nested = [d('p'), d('s', { parentId: 'p' })];
+  assert.equal(pickPlayDeck(nested, [cards('s')], 'all', { now: NOW }), 'p');               // a parent includes its subdecks' cards
+});

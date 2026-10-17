@@ -66,7 +66,7 @@ await page.click('#optDone');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 ok((await page.textContent('.flash-deck')).includes('Second'), 'Start follows the chosen decks');
 await page.click('#endBtn'); await page.waitForSelector('.finish-next');
-ok((await page.textContent('.finish-next')).includes('day streak') && (await page.textContent('.stats4')).includes('Due tomorrow') && (await page.textContent('.finish-next')).includes('Play a round'), 'finish shows streak, due tomorrow (in the stats) and a Play suggestion');
+ok((await page.textContent('.finish-next')).includes('day streak') && (await page.textContent('.stats4')).includes('Due tomorrow') && !(await page.textContent('#screen')).includes('Play a round'), 'finish shows streak and due tomorrow (in the stats), and no longer suggests Play (v4.9)');
 ok(!(await focusOn()), 'focus mode is off on the finish screen');
 await page.screenshot({ path: SP + '/t-finish.png' });
 await page.click('#againBtn'); await page.waitForSelector('.today-hero');
@@ -128,7 +128,11 @@ await run(async () => {
 });
 await page.reload(); await page.waitForSelector('.th-done');
 ok((await page.textContent('.th-done')).includes('All done for today') && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
-ok(await page.locator('.th-done a[href="#/play"]').count() === 1 && await page.locator('#startBtn').count() === 0, 'done state suggests Play');
+// v4.9: the game is only on the Play page, so the done state no longer suggests it; a quiet Custom study link instead
+ok(await page.locator('.th-done a[href="#/play"], .th-done [href*="play"]').count() === 0 && await page.locator('#startBtn').count() === 0, 'done state has no Play link');
+ok((await page.textContent('.th-done #customLink')).trim() === 'Custom study', 'done state has a quiet Custom study link');
+await page.click('.th-done #customLink'); await page.waitForSelector('#sheet .cs-opt'); await page.keyboard.press('Escape'); await page.waitForSelector('#sheet', { state: 'hidden' });
+await page.reload(); await page.waitForSelector('.th-done');       // a clean page for the keyboard check below
 await page.screenshot({ path: SP + '/t-done.png', fullPage: true }); await noHScroll('done');
 
 // Keyboard: Tab reaches Options, then the deck rows; focus ring is visible
