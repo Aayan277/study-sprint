@@ -11,10 +11,11 @@ import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
+import { configureShortcuts } from './shortcuts.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { settingsHTML as remindersHTML, wireSettings as wireReminders } from './reminders.js';
@@ -107,6 +108,9 @@ async function renderSettings(el) {
         <div><b>Reviews per day</b><p>The most reviews shown in a day, across all decks. Blank means no limit, which suits FSRS best.</p></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
+      <label class="adv-row switch-row"><span><b>Single-key shortcuts</b>
+        <span>Press E, I, R, D, Z, A, X, M, -, @ and 1 to 6 on the keyboard to act on a card. Turn off if voice control or a switch triggers them by accident (Space and Enter still work on the focused card). This device only.</span></span>
+        <input id="singleKeys" type="checkbox" class="switch" ${settings.singleKeys !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b>
         <span>Off: Play is practice only and doesn't change when cards are due, stats or streaks.</span></span>
         <input id="playCounts" type="checkbox" class="switch" ${settings.playCountsAsReviews === true ? 'checked' : ''}></label>
@@ -133,7 +137,7 @@ async function renderSettings(el) {
           </div>
           <span class="steps-hint" id="lstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.learningSteps}.</span>
           <ul class="steps-explain" aria-live="polite"></ul>
-          <span class="err" hidden></span>
+          <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning">
           <label for="rsteps"><b>Relearning steps</b></label>
@@ -144,14 +148,14 @@ async function renderSettings(el) {
           </div>
           <span class="steps-hint" id="rstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.relearningSteps}.</span>
           <ul class="steps-explain" aria-live="polite"></ul>
-          <span class="err" hidden></span>
+          <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row"><b id="maxLabel">Maximum interval</b>
           <span>The longest a card can go without being shown. Lower it before an exam so nothing drifts too far out.</span>
           <div class="chips" role="group" aria-labelledby="maxLabel">${MAX_INTERVAL_PRESETS.map(([d, l]) =>
             `<button type="button" class="tchip" data-max="${d}" aria-pressed="${settings.maxInterval === d}">${l}</button>`).join('')}</div>
           <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
-          <span class="err" id="maxErr" hidden></span></div>
+          <span class="err" id="maxErr" role="alert" hidden></span></div>
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
           <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
@@ -283,8 +287,8 @@ async function renderSettings(el) {
     db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
   }));
   // These two are per device too (not in SYNCED_SETTINGS): Decks and Stats read them when they are drawn.
-  for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion']) {
-    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); });
+  for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion', 'singleKeys']) {
+    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); configureShortcuts(settings); });
   }
   $('glossaryUnderline').addEventListener('change', e => { settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
   $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
@@ -375,7 +379,6 @@ async function renderSettings(el) {
 
 // Advanced scheduling: each box is checked when you leave it, and only saved if it makes sense.
 function wireAdvanced(el) {
-  const showErr = (id, msg) => { $(id).textContent = msg || ''; $(id).hidden = !msg; };
 
   // Learning / relearning steps: a text box like "1m 10m", with a plain-words list underneath of what
   // each step is for and what each button does. The list follows what you type; the box saves when
@@ -387,11 +390,11 @@ function wireAdvanced(el) {
       box.querySelector('.steps-explain').innerHTML = explainSteps(steps, kind)
         .map(([button, what]) => `<li><b>${esc(button)}</b> → ${esc(what)}</li>`).join('');
     };
-    input.addEventListener('input', () => { const r = parseSteps(input.value); if (r.steps) { explain(r.steps); err.hidden = true; } });
+    input.addEventListener('input', () => { const r = parseSteps(input.value); if (r.steps) { explain(r.steps); clearFieldError(input, err); } });
     input.addEventListener('change', () => {
       const r = parseSteps(input.value);
-      if (r.error) { err.textContent = r.error; err.hidden = false; return; }
-      err.hidden = true;
+      if (r.error) { showFieldError(input, err, r.error, { focus: false, clearOnInput: false }); return; }      // (checked as you leave the box: pulling the cursor back would trap it)
+      clearFieldError(input, err);
       settings[key] = formatSteps(sortSteps([...new Set(r.steps)]));   // tidy: in order, no duplicates
       input.value = settings[key];
       explain(parseSteps(settings[key]).steps);
@@ -401,7 +404,7 @@ function wireAdvanced(el) {
     box.querySelector('[data-reset]').addEventListener('click', () => {
       settings[key] = SCHED_DEFAULTS[key];
       input.value = settings[key];
-      err.hidden = true;
+      clearFieldError(input, err);
       explain(parseSteps(settings[key]).steps);
       db.setSetting(key, settings[key]);
       toast('Reset to ' + settings[key]);
@@ -411,8 +414,8 @@ function wireAdvanced(el) {
 
   const setMax = days => {
     const r = parseMaxInterval(days);
-    if (r.error) { showErr('maxErr', r.error); return; }
-    showErr('maxErr', '');
+    if (r.error) { showFieldError($('maxDays'), $('maxErr'), r.error, { focus: false, clearOnInput: false }); return; }
+    clearFieldError($('maxDays'), $('maxErr'));
     settings.maxInterval = r.days;
     $('maxDays').value = r.days;
     el.querySelectorAll('[data-max]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.max === r.days)));
@@ -421,6 +424,7 @@ function wireAdvanced(el) {
   };
   el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
   $('maxDays').addEventListener('change', e => setMax(e.target.value));
+  $('maxDays').addEventListener('input', e => { if (!parseMaxInterval(e.target.value).error) clearFieldError($('maxDays'), $('maxErr')); });      // (checked again as you type)
   $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
@@ -594,7 +598,7 @@ async function confirmRestore(file) {
     settings = await db.getSettings();
     settings.theme = applyTheme(settings.theme);
     applyCardAlign(settings.cardAlign);
-    fx.configure(settings);
+    fx.configure(settings); configureShortcuts(settings);
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     drawSidebar();
@@ -693,7 +697,7 @@ async function drawSync() {
         <p class="pw-rules-title">New accounts need:</p>
         ${rulesList('syncRules')}
         <div id="captchaBox" hidden></div>
-        <p class="err" id="syncErr" hidden></p>
+        <p class="err" id="syncErr" role="alert" hidden></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="syncCreate">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
@@ -703,12 +707,13 @@ async function drawSync() {
         <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
-      const err = $('syncErr');
-      err.hidden = true;
-      if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email address.'; err.hidden = false; return; }
+      const err = $('syncErr'), emailF = $('syncEmail'), pwF = $('syncPw');
+      clearFieldError(emailF, err); clearFieldError(pwF, err);
+      pwF.autocomplete = create ? 'new-password' : 'current-password';      // a new account's password is saved as new, not filled from an old one
+      if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError(emailF, err, 'Type your email address.'); return; }
       // New accounts follow the password rules; signing in doesn't check them (older passwords still work).
-      if (!pw) { err.textContent = 'Type your password.'; err.hidden = false; return; }
-      if (create && !passwordOk(pw)) { err.textContent = `Your password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
+      if (!pw) { showFieldError(pwF, err, 'Type your password.'); return; }
+      if (create && !passwordOk(pw)) { showFieldError(pwF, err, `Your password needs ${passwordMissing(pw)}.`); return; }
       box.querySelectorAll('button').forEach(b => { b.disabled = true; });
       try {
         // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
@@ -727,18 +732,23 @@ async function drawSync() {
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
       } catch (e) {
-        err.textContent = e.message; err.hidden = false;
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        showFieldError(pwF, err, e.message);          // (a refused sign-in: the password is the likeliest thing to fix)
       }
     };
     wireRules('syncPw', 'syncRules');
     $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
     $('syncCreate').addEventListener('click', () => go(true));
+    // The password box is told which kind of password it holds as soon as a button is aimed at (focus or press), not only when the form is sent.
+    const kind = v => () => { $('syncPw').autocomplete = v; };
+    for (const [btn, v] of [[$('syncCreate'), 'new-password'], [$('syncForm').querySelector('button[type=submit]'), 'current-password']]) {
+      for (const ev of ['focus', 'pointerdown']) btn.addEventListener(ev, kind(v));
+    }
     $('forgotBtn').addEventListener('click', async () => {
       const email = $('syncEmail').value.trim(), err = $('syncErr');
-      if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email above first, then tap Forgot password.'; err.hidden = false; $('syncEmail').focus(); return; }
+      if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError($('syncEmail'), err, 'Type your email above first, then tap Forgot password.'); return; }
       try {
-        err.hidden = true;
+        clearFieldError($('syncEmail'), err);
         await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
@@ -746,7 +756,7 @@ async function drawSync() {
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
           <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
-      } catch (e) { err.textContent = e.message; err.hidden = false; }
+      } catch (e) { showFieldError($('syncEmail'), err, e.message); }
     });
     return;
   }
@@ -857,7 +867,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
       ${passwordField('pw1', 'New password', 'new-password')}
       ${rulesList('pwRules')}
       ${passwordField('pw2', 'Type it again', 'new-password')}
-      <p class="err" id="pwErr" hidden></p>
+      <p class="err" id="pwErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="pwCancel">Cancel</button>
         <button class="btn primary" type="submit">Save password</button>
@@ -868,9 +878,9 @@ function openPasswordSheet({ title, intro = '', save, done }) {
   $('pwForm').addEventListener('submit', async e => {
     e.preventDefault();
     const pw = $('pw1').value, err = $('pwErr');
-    err.hidden = true;
-    if (!passwordOk(pw)) { err.textContent = `The password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
-    if (pw !== $('pw2').value) { err.textContent = "The two passwords don't match."; err.hidden = false; return; }
+    clearFieldError($('pw1'), err); clearFieldError($('pw2'), err);
+    if (!passwordOk(pw)) { showFieldError($('pw1'), err, `The password needs ${passwordMissing(pw)}.`); return; }
+    if (pw !== $('pw2').value) { showFieldError($('pw2'), err, "The two passwords don't match."); return; }
     const btn = e.submitter || [...$('pwForm').elements].find(b => b.type === 'submit');   // the footer's button lives outside the form but is linked to it
     btn.disabled = true;
     try {
@@ -878,7 +888,7 @@ function openPasswordSheet({ title, intro = '', save, done }) {
       closeSheet();
       toast(typeof done === 'function' ? done() : done);
       if (currentRoute === 'settings') drawSync();
-    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+    } catch (ex) { btn.disabled = false; showFieldError($('pw1'), err, ex.message); }
   });
 }
 
@@ -944,7 +954,7 @@ function confirmResend() {
       <p>Use this only if the sync server <b>lost your data</b> or was <b>restored from an older copy</b>, so your cards are missing online even though they are here. Normally you never need it.</p>
       <p class="note">This device sends all of its decks, cards, progress, settings, pictures and sounds again, which can take a while and uses data. Nothing is deleted, and newer changes already on the server are kept. Your other devices don't send anything by themselves: do this on each of your devices, starting with the one you used most recently.</p>
       <p class="note warn" id="rsLack" hidden></p>
-      <p class="err" id="rsErr" hidden></p>
+      <p class="err" id="rsErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="rsNo">Cancel</button>
         <button class="btn primary" type="button" id="rsYes">Re-upload everything</button>
@@ -953,12 +963,12 @@ function confirmResend() {
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
   $('rsYes').addEventListener('click', async () => {
-    $('rsYes').disabled = true; $('rsErr').hidden = true;
+    $('rsYes').disabled = true; clearFieldError(null, $('rsErr'));
     try {
       await sync.resendEverything();        // only starts it; the sync line under Settings → Sync shows progress and any problem
       closeSheet();
       toast('Re-uploading everything from this device…');
-    } catch (e) { $('rsErr').textContent = e.message; $('rsErr').hidden = false; $('rsYes').disabled = false; }
+    } catch (e) { $('rsYes').disabled = false; showFieldError(null, $('rsErr'), e.message); }
   });
 }
 
@@ -996,7 +1006,7 @@ function wireSafeDelete({ yes, note, label, call, done, fail, ready = () => true
   let step = 0;                                // 0 first tap, 1 download then delete, 2 delete anyway
   $(yes).addEventListener('click', async () => {
     if (!ready()) return;
-    if ($('daErr')) $('daErr').hidden = true;
+    if ($('daErr')) clearFieldError(null, $('daErr'));
     $(yes).disabled = true;
     try {
       if (step === 0) {
@@ -1035,7 +1045,7 @@ function confirmDeleteAccount() {
       <label class="field"><span>Type DELETE to confirm</span>
         <input id="daText" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
       <p class="note" id="daNote" hidden></p>
-      <p class="err" id="daErr" hidden></p>
+      <p class="err" id="daErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="daNo">Cancel</button>
         <button class="btn danger solid" type="button" id="daYes" disabled>Delete my account</button>
@@ -1046,12 +1056,12 @@ function confirmDeleteAccount() {
   $('daText').addEventListener('input', () => { if ($('daYes').textContent === 'Delete my account') $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
   wireSafeDelete({ yes: 'daYes', note: 'daNote', label: 'Delete my account', ready: () => $('daText')?.value.trim() === 'DELETE', call: o => sync.deleteAccount(o),
     done: () => { closeSheet(); toast('Your account was deleted. Your data is still on this device.'); drawSync(); },
-    fail: msg => { const e = $('daErr'); if (e) { e.textContent = msg; e.hidden = false; } } });
+    fail: msg => { const e = $('daErr'); if (e) showFieldError(null, e, msg); } });
 }
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime } = settings;
+  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime } = settings;
   await db.resetAll();
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
@@ -1060,9 +1070,10 @@ async function wipeThisDevice() {
   await db.setSetting('statsReadiness', statsReadiness);
   await db.setSetting('ratingFeedback', ratingFeedback);
   await db.setSetting('smoothMotion', smoothMotion);
+  await db.setSetting('singleKeys', singleKeys !== false);
   await db.setSetting('appBadge', appBadge === true);
   await db.setSetting('reminderTime', reminderTime || '19:00');
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime };
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
   refreshBadgeNow();              // the number on the app icon follows the fresh data
@@ -1365,7 +1376,7 @@ async function start() {
   }
   settings.theme = applyTheme(settings.theme);
   applyCardAlign(settings.cardAlign);
-  fx.configure(settings);
+  fx.configure(settings); configureShortcuts(settings);
   const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Opening the app with no "#/..." in the address shows Today.

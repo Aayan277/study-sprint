@@ -13,6 +13,8 @@ import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
+import { questionAnnouncement, spokenPrompt } from './game.js';
+import { singleKeysOn, keyHint } from './shortcuts.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { deckSchedulerOptions, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
@@ -39,7 +41,7 @@ import * as fx from './fx.js';
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
 const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
 // qtypeByDeck remembers the question type you picked for each deck. Play is one deck (and its subdecks) per game: no 'all'.
-const DEFAULT_PREFS = { deckId: '', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, qtypeByDeck: {} };
+const DEFAULT_PREFS = { deckId: '', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, untimed: false, qtypeByDeck: {} };
 
 let G = null;      // the round in progress
 let data = null;   // decks, cards and settings loaded for the setup screen
@@ -142,7 +144,8 @@ export async function renderPlay(el) {
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
 
     // One line saying what's in "Customise", so the folded part is still visible at a glance.
-    const timeText = prefs.fmt === 'lightning' ? '60 s clock' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
+    const untimed = prefs.untimed === true && prefs.fmt !== 'lightning';      // (Lightning is a 60-second race: it stays timed)
+    const timeText = prefs.fmt === 'lightning' ? '60 s clock' : untimed ? 'No time limit' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
     const summary = [typing ? 'Typing' : QTYPES[prefs.qtype], prefs.hard ? 'Hard' : 'Normal', prefs.flash ? `Flash ${prefs.flash / 1000}s` : null,
       prefs.fmt === 'classic' ? `${prefs.len} questions` : null, timeText].filter(Boolean).join(' · ');
     const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
@@ -204,10 +207,13 @@ export async function renderPlay(el) {
           <p class="lightning-note"><b>60 seconds</b> in all. A wrong answer costs <b>3s</b>.</p></fieldset>` : `
         <fieldset><legend id="paceLegend">${prefs.fmt === 'survival' ? 'Starting time per question' : 'Time per question'}</legend>
           <div class="slider-row">
-            <input type="range" id="pace" min="3" max="20" step="1" value="${pace}" aria-labelledby="paceLegend">
-            <output for="pace" class="mono" id="paceOut"><b>${pace}s</b> ${paceName}</output>
+            <input type="range" id="pace" min="3" max="20" step="1" value="${pace}" aria-labelledby="paceLegend" ${untimed ? 'disabled' : ''}>
+            <output for="pace" class="mono" id="paceOut">${untimed ? '<b>Off</b>' : `<b>${pace}s</b> ${paceName}`}</output>
           </div>
-          ${notes.length ? `<p class="note">${notes.join(' ')}</p>` : ''}
+          <label class="adv-row switch-row"><span><b>No time limit</b>
+            <span>Take as long as you need. There is no speed bonus. (Lightning is a 60-second race, so it is always timed.)</span></span>
+            <input id="untimed" type="checkbox" class="switch" ${untimed ? 'checked' : ''}></label>
+          ${notes.length && !untimed ? `<p class="note">${notes.join(' ')}</p>` : ''}
         </fieldset>`}
       </div>
       </div>
@@ -215,7 +221,7 @@ export async function renderPlay(el) {
       <details class="how-score"><summary>ⓘ How scoring works</summary>
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
         <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
-      <p class="hint keys mono">Number keys to answer · Enter for next · Esc to quit</p>`}`;
+      <p class="hint keys mono">${singleKeysOn() ? 'Number keys to answer · Enter for next · Esc to quit' : 'Esc to quit'}</p>`}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
     const save = () => db.setSetting('playPrefs', { ...prefs });
@@ -234,6 +240,7 @@ export async function renderPlay(el) {
       if (r.name === 'len') prefs.len = +r.value;
       save(); draw();
     }));
+    $('untimed')?.addEventListener('change', e => { prefs.untimed = e.target.checked; save(); draw(); $('untimed')?.focus(); });
     $('pace')?.addEventListener('input', e => {
       pace = +e.target.value;
       const name = pace <= 4 ? 'Sprint' : pace <= 7 ? 'Quick' : pace <= 10 ? 'Standard' : pace <= 14 ? 'Relaxed' : 'Easy';
@@ -276,19 +283,21 @@ function start(el, opts) {
       <p id="endAskT">End this round? Your score so far is kept in the results.</p>
       <div class="end-ask-b"><button class="btn primary small" id="endYes" type="button">End round</button><button class="btn ghost small" id="endNo" type="button">Keep playing</button></div>
     </div>
+    <h1 class="sr-only" id="pTitle">Play: ${{ classic: 'Classic', survival: 'Survival', lightning: 'Lightning' }[fmt] || 'round'} round</h1>
     <p class="prompt" id="pLabel"></p>
     <div class="flash play-card" id="pCard">
-      <div class="flash-front" id="pPrompt"></div>
+      <div class="flash-front" id="pPrompt" role="heading" aria-level="2" tabindex="-1"></div>
       <span class="flash-q mono" id="flashQ" hidden>gone</span>
     </div>
-    <div class="timer" aria-hidden="true"><div class="timer-fill" id="pTimer"></div></div>
+    <div class="timer" aria-hidden="true" ${opts.untimed && fmt !== 'lightning' ? 'hidden' : ''}><div class="timer-fill" id="pTimer"></div></div>
     <div class="options" id="options"></div>
     <form class="typeform" id="pType" hidden autocomplete="off">
       <input id="pInput" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer" placeholder="Type the answer">
       <button class="btn primary" type="submit">Check</button>
       <button class="btn ghost" type="button" id="skipBtn">Skip</button>
     </form>
-    <div class="feedback" id="feedback" aria-live="polite"></div>`;
+    <div class="feedback" id="feedback" aria-live="polite"></div>
+    <div class="sr-only" id="pAnnounce" aria-live="polite"></div>`;
   $('quitBtn').addEventListener('click', askEnd);
   $('endYes').addEventListener('click', finish);
   $('endNo').addEventListener('click', keepPlaying);
@@ -331,6 +340,7 @@ function showQuestion() {
   // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
   stopSound();
   p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt) + soundsHTML(q.sounds);
+  if (q.prompt.includes('[…]')) p.setAttribute('aria-label', spokenPrompt(q)); else p.removeAttribute('aria-label');      // (a cloze blank is read "blank", not "left bracket ellipsis")
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
@@ -343,6 +353,10 @@ function showQuestion() {
     inp.value = ''; inp.disabled = false;
     inp.focus();
   } else {
+    // Focus would otherwise fall to the page when the last answer or Start button went away: put it on the question, but never
+    // pull it off a control the person chose (Quit, the End question) while a right answer moves on by itself.
+    const at = document.activeElement;
+    if (!at || at === document.body || at === document.documentElement || at.closest?.('#feedback, #options, #pCard') || at.disabled) p.focus({ preventScroll: true });
     // Each option remembers which card it is the answer of, so picking another card's answer can be recorded as a
     // mix-up (log.mixedWith).
     const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true });
@@ -351,9 +365,13 @@ function showQuestion() {
     const long = G.opts.some(o => o.length > 28);
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
-      `<button type="button" class="opt" data-i="${i}"><span class="key">${i + 1}</span><span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
+      `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
   }
-  G.limit = timeLimit({ fmt: G.fmt, pace: G.pace, typing, i: G.i });
+  // Said by the screen reader (a polite live region of its own, next to the feedback one, which keeps "Correct +189"). A right answer moves
+  // on by itself, so without this the next question would arrive in silence. With focus on the question it only gives the number (the
+  // prompt is read from the focus); otherwise (typing, or focus left on Quit) it says the prompt too.
+  $('pAnnounce').replaceChildren(Object.assign(document.createElement('p'), { textContent: questionAnnouncement(G, q, { withText: document.activeElement !== p }) }));
+  G.limit = timeLimit({ fmt: G.fmt, pace: G.pace, typing, i: G.i, untimed: G.untimed });
   G.qStart = performance.now();
   $('pTimer').classList.remove('low');
   cancelAnimationFrame(G.raf);
@@ -519,8 +537,9 @@ async function record(round, entry) {
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
+  const untimed = !!round.untimed && round.fmt !== 'lightning';
   let rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing',
-    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars });
+    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars, untimed });
   const prev = data.statesById.get(id);
   // A new card in a deck with an exam coming up (its own or a parent's) is started by Play: this answer is its
   // first review. That uses up one of today's new cards. Over the deck's new-card limit (overall, the deck's own
@@ -535,7 +554,7 @@ async function record(round, entry) {
   rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing', overridden: !!entry.overridden });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
-    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden });
+    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden, untimed });
   entry.prev = prev;                      // kept with the log row's id, so "I was right" can take this answer back (see rerecord)
   if (applies(decision)) {
     let next = null;
@@ -740,7 +759,7 @@ async function finish() {
 // the Missed list so they can be accepted), all (the whole Missed list is open) }. Drawn again after each correction.
 async function drawResults(el, round, ctx, { again = false } = {}) {
   const { total, correct, accuracy: acc, avgSpeed, avgTime } = roundStats(round.log);
-  const { letter, label } = gradeFor(acc, avgSpeed);
+  const { letter, label } = gradeFor(acc, avgSpeed, { untimed: round.untimed && round.fmt !== 'lightning' });
   const { isBest, firstScore } = ctx;
   const seen = new Set();
   const listed = round.log.filter(l => (!l.ok || ctx.fixed.has(l)) && !seen.has(l.card.id) && seen.add(l.card.id));
@@ -827,7 +846,7 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   }));
   const slot = $('resultsMore'), cardIds = [...new Set(round.log.map(l => l.card.id))], leechIds = [...round.leeches], entries = round.log;
   if (!again) import('./finish-extras.js').then(m => m.drawFinishExtras(slot, { source: 'play', cardIds, leechIds, entries })).catch(err => console.error(err));
-  const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, pool: round.source };
+  const base = { deckId: round.deckId, fmt: round.fmt, qtype: round.qtype, hard: round.hard, flash: round.flash, len: round.len, pace: round.pace, untimed: round.untimed, pool: round.source };
   $('againBtn').addEventListener('click', () => start(el, round.drill ? { ...base, drill: round.drill } : base));
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
@@ -870,8 +889,8 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape') { e.preventDefault(); askEnd(); return; }
   if (G.answered) {
-    if ((e.key === 'Enter' || e.key === ' ') && !onControl(e)) { e.preventDefault(); next(); }
+    if (singleKeysOn() && (e.key === 'Enter' || e.key === ' ') && !onControl(e)) { e.preventDefault(); next(); }
     return;
   }
-  if (G.qtype !== 'typing' && /^[1-6]$/.test(e.key) && +e.key <= G.opts.length) { e.preventDefault(); answer(+e.key - 1); }
+  if (singleKeysOn() && G.qtype !== 'typing' && /^[1-6]$/.test(e.key) && +e.key <= G.opts.length) { e.preventDefault(); answer(+e.key - 1); }
 });

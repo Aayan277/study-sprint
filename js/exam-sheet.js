@@ -7,7 +7,7 @@
 import * as db from './db.js';
 import { drawSidebar } from './sidebar.js';
 import { dayStart } from './days.js';
-import { $, esc, toast, closeSheet, openSheet, plural } from './ui.js';
+import { $, esc, toast, closeSheet, openSheet, plural, showFieldError, clearFieldError } from './ui.js';
 import { effectiveDeck, subtreeIds } from './deck-tree.js';
 import { examInfo, examStart, countdown, pullIn } from './exam.js';
 import { personalW20 } from './sched-settings.js';
@@ -62,13 +62,13 @@ export async function openExamSheet(deckId, onDone = () => {}) {
         ${PRESETS.map(([label, n]) => `<button type="button" class="tchip" data-days="${n}" aria-pressed="false">${label}</button>`).join('')}
       </div>
       <p class="note" style="margin:0">Every card in ${esc(deck.name)} comes back before then, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately.</p>
-      <p class="err" id="xdErr" hidden></p>
+      <p class="err" id="xdErr" role="alert" hidden></p>
       <div class="sheet-actions"><button class="btn primary" type="submit">Save exam date</button></div>
     </form>`);
   const sync = () => document.querySelectorAll('#sheet [data-days]').forEach(b => b.setAttribute('aria-pressed', String($('xdDate').value === isoIn(+b.dataset.days))));
   sync();
   $('xdDate').addEventListener('input', sync);
-  document.querySelectorAll('#sheet [data-days]').forEach(b => b.addEventListener('click', () => { $('xdDate').value = isoIn(+b.dataset.days); sync(); $('xdErr').hidden = true; }));
+  document.querySelectorAll('#sheet [data-days]').forEach(b => b.addEventListener('click', () => { $('xdDate').value = isoIn(+b.dataset.days); sync(); clearFieldError($('xdDate'), $('xdErr')); }));
   // A double-click or a second Enter must not save twice: two saves ran two deck-page redraws at the same moment.
   let saving = false;
   $('xdForm').addEventListener('submit', async e => {
@@ -76,7 +76,7 @@ export async function openExamSheet(deckId, onDone = () => {}) {
     if (saving) return;
     const value = $('xdDate').value;
     const problem = value ? examDateError(value) : 'Pick an exam date.';
-    if (problem) { $('xdErr').textContent = problem; $('xdErr').hidden = false; return; }
+    if (problem) { showFieldError($('xdDate'), $('xdErr'), problem); return; }
     const saved = { ...deck, examDate: value };
     saving = true;
     let moved;

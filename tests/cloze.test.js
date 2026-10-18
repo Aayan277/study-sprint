@@ -23,16 +23,16 @@ test('card: the same number twice is one card with both blanks hidden', () => {
 });
 
 test('render: front and back go through formatHTML', () => {
-  assert.equal(renderCloze(T, 2, 'front'), 'The mitochondria makes <span class="cloze-blank">[…]</span> for the cell');
+  assert.equal(renderCloze(T, 2, 'front'), 'The mitochondria makes <span class="cloze-blank"><span class="sr-only">blank </span><span aria-hidden="true">[…]</span></span> for the cell');
   assert.equal(renderCloze(T, 2, 'back'), 'The mitochondria makes <mark class="cloze-ans">ATP</mark> for the cell');
-  assert.equal(renderCloze(T, 1, 'front'), 'The <span class="cloze-blank">[organelle]</span> makes ATP for the cell');
+  assert.equal(renderCloze(T, 1, 'front'), 'The <span class="cloze-blank"><span class="sr-only">blank </span>[organelle]</span> makes ATP for the cell');
   assert.equal(renderCloze('{{c1::a}} {{c2::b}}', 0, 'all'), '<mark class="cloze-ans">a</mark> <mark class="cloze-ans">b</mark>');
 });
 
 test('render: bold inside and around blanks keeps working', () => {
   assert.equal(renderCloze('A {{c1::**strong**}} word', 1, 'back'), 'A <mark class="cloze-ans"><b>strong</b></mark> word');
-  assert.equal(renderCloze('**A {{c1::big}} word**', 1, 'front'), '<b>A <span class="cloze-blank">[…]</span> word</b>');
-  assert.equal(renderCloze('Line one\n{{c1::two}}', 1, 'front'), 'Line one<br><span class="cloze-blank">[…]</span>');
+  assert.equal(renderCloze('**A {{c1::big}} word**', 1, 'front'), '<b>A <span class="cloze-blank"><span class="sr-only">blank </span><span aria-hidden="true">[…]</span></span> word</b>');
+  assert.equal(renderCloze('Line one\n{{c1::two}}', 1, 'front'), 'Line one<br><span class="cloze-blank"><span class="sr-only">blank </span><span aria-hidden="true">[…]</span></span>');
 });
 
 test('render: nothing in the text can inject HTML', () => {
@@ -214,7 +214,7 @@ test('pasted lines: one note per line, lines without blanks left out', async () 
 test('maths inside a blank is drawn in the answer', () => {
   const html = renderCloze('The area is {{c1::$\\pi r^2$}} here', 1, 'back');
   assert.match(html, /<mark class="cloze-ans"><span class="tex" data-tex="\\pi r\^2">\$\\pi r\^2\$<\/span><\/mark>/);
-  assert.match(renderCloze('Solve $x^2$ for {{c1::x}}', 1, 'front'), /<span class="tex" data-tex="x\^2">.*<span class="cloze-blank">\[…\]<\/span>/);
+  assert.match(renderCloze('Solve $x^2$ for {{c1::x}}', 1, 'front'), /<span class="tex" data-tex="x\^2">.*<span class="cloze-blank"><span class="sr-only">blank <\/span><span aria-hidden="true">\[…\]<\/span>/);
 });
 
 // ---------- v4.2.2: maths inside blanks (docs/design/katex-review.md, should-fix 3) ----------
@@ -228,7 +228,7 @@ test('a }} inside a formula does not end the blank', () => {
   assert.equal(clozeFull(t), 'Find $\\sqrt{x^{2}}$ and $\\frac{a}{b}$');
   const html = renderCloze(t, 1, 'back');
   assert.ok(html.includes('<mark class="cloze-ans"><span class="tex" data-tex="\\sqrt{x^{2}}">$\\sqrt{x^{2}}$</span></mark>'), html);
-  assert.ok(renderCloze(t, 1, 'front').includes('<span class="cloze-blank">[…]</span>'));
+  assert.ok(renderCloze(t, 1, 'front').includes('<span class="cloze-blank"><span class="sr-only">blank </span><span aria-hidden="true">[…]</span></span>'));
   assert.ok(renderCloze(t, 2, 'all').split('<mark class="cloze-ans">').length === 3);
   assert.equal(planNoteSave([], t).add.length, 2);
   assert.equal(planNoteSave([], 'x {{c1::$a$}}').error, undefined);

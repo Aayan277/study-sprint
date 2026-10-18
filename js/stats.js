@@ -130,6 +130,7 @@ const longDate = t => LONG.format(t);
 const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}${d.frozen ? ' · streak freeze' : d.rest ? ' · day off' : ''}`;
 function calendarHTML(cal, now) {
   const todayKey = dayKey(now);
+  const shown = cal.weeks.flat().filter(d => !d.future);      // (the squares are mouse and touch only; the date box under them is the keyboard way in)
   let lastMonth = -1;
   const cols = cal.weeks.map((week, wi) => {
     // A month's name over the first week that starts in it.
@@ -152,7 +153,8 @@ function calendarHTML(cal, now) {
         </div>
       </div>
       <div class="cal-foot">
-        <span class="muted small" id="calInfo" aria-live="polite">Tap a day to see it.</span>
+        <label class="cal-pick muted small">Pick a day <input type="date" id="calPick" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></label>
+        <span class="muted small" id="calInfo" aria-live="polite">Tap a day, or pick one, to see it.</span>
         <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
         <span class="cal-key cal-key2 muted small" aria-hidden="true"><i class="lv0 frz"></i> Streak freeze <i class="lv0 rest"></i> Day off</span>
       </div>
@@ -168,12 +170,22 @@ function wireCalendar(el) {
   box.scrollLeft = box.scrollWidth;
   hideCutLabels();
   box.addEventListener('scroll', hideCutLabels, { passive: true });
-  grid.addEventListener('click', e => {
-    const cell = e.target.closest('i[data-t]');
-    if (!cell) return;
+  const showCell = cell => {
     grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
     cell.classList.add('sel');
     el.querySelector('#calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n, frozen: !!cell.dataset.f, rest: !!cell.dataset.r });
+  };
+  grid.addEventListener('click', e => {
+    const cell = e.target.closest('i[data-t]');
+    if (cell) showCell(cell);
+  });
+  // The keyboard way (WCAG 2.1.1): the "Pick a day" date box shows the same line, and the square is marked and scrolled into view.
+  const pick = el.querySelector('#calPick');
+  pick?.addEventListener('change', () => {
+    const cell = [...grid.querySelectorAll('i[data-t]')].find(c => dayKey(+c.dataset.t) === pick.value);
+    if (!cell) { if (pick.value) el.querySelector('#calInfo').textContent = 'No calendar square for that day.'; return; }
+    showCell(cell);
+    cell.scrollIntoView({ inline: 'center', block: 'nearest' });
   });
 }
 

@@ -78,6 +78,22 @@ export function answerText(text) {
   return unholdMath(unescapeDollar(stripMarks(held.text)), held.items, it => texToPlain(it.tex));
 }
 
+// A card as one short phrase for a screen reader: "What is x²? Answer: a square" (formulas as plain words, long text cut off, no marks).
+// For a name on a list row, where the picture of the formula (KaTeX) would be read out symbol by symbol.
+export function spokenCard(front, back, max = 160) {
+  const clip = s => { const t = answerText(s).replace(/\[…\]/g, 'blank').replace(/\s+/g, ' ').trim(); return t.length > max ? `${t.slice(0, max - 1)}…` : t; };
+  const f = clip(front), b = clip(back);
+  return b ? `${f || 'Picture'}${/[.!?…:]$/.test(f) ? '' : '.'} Answer: ${b}` : f || 'Picture';
+}
+
+// A list row as one phrase: the card (spokenCard), then what the row shows only in pictures or badges: Reverse / Cloze, a picture or sound,
+// the deck it is in, its status and flag. Each part ends in a full stop unless it already ends in punctuation. About 160 characters of card text.
+export function spokenRow({ front, back, reverse = false, cloze = 0, pic = false, sound = false, where = '', status = '', flag = '' }) {
+  const parts = [reverse ? 'Reverse card' : '', cloze > 0 ? `Cloze card, blank ${cloze}` : '', spokenCard(front, back, 70), pic ? 'Has a picture' : '', sound ? 'Has a sound' : '',
+    where ? `In ${where}` : '', status, flag ? `${flag} flag` : ''].filter(Boolean);
+  return parts.map((p, i) => (i < parts.length - 1 && !/[.!?…:]$/.test(p) ? `${p}.` : p)).join(' ');
+}
+
 // The raw text typed as it stands (formulas as written), with "\$" as "$". The other thing a typed answer may match.
 export function rawAnswerText(text) {
   const held = holdMath(String(text ?? ''));
