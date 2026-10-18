@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { mergeDayFlags, sameDayFlags, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
@@ -127,7 +127,7 @@ test('cloze fields sync as they are, and siblings that diverged are healed', asy
 const T = new Date(2026, 9, 14, 12).getTime();      // Wed 14 Oct 2026
 test('restDays is a synced setting that is merged, not replaced', () => {
   assert.ok(SYNCED_SETTINGS.includes('restDays'));
-  assert.deepEqual(MERGED_SETTINGS, ['restDays']);
+  assert.deepEqual(MERGED_SETTINGS, ['restDays', 'idleDays']);
 });
 
 test('rescue (the catch-up plan) is a synced setting: the newest copy wins, it is not merged', () => {
@@ -304,4 +304,20 @@ test('fsrsParams from the server: a good value is kept (cleaned), null means the
   }
   // other settings are not touched
   assert.deepEqual(acceptSetting('dailyGoal', 'anything'), { ok: true, value: 'anything' });
+});
+
+// ---------- days with nothing due (the idleDays setting) ----------
+const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+test('idleDays is a synced, merged setting: the union of two devices, pruned to 200 days', () => {
+  assert.ok(SYNCED_SETTINGS.includes('idleDays') && MERGED_SETTINGS.includes('idleDays'));
+  const a = { '2026-10-10': true, '2026-10-11': true }, b = { '2026-10-11': true, '2026-10-12': true };
+  const merged = mergeIdleDays(a, b, T);
+  assert.deepEqual(Object.keys(merged).sort(), ['2026-10-10', '2026-10-11', '2026-10-12']);
+  assert.deepEqual(mergeIdleDays(b, a, T), merged);                         // the order does not matter
+  assert.ok(sameIdleDays(mergeIdleDays(merged, a, T), merged, T));          // merging again changes nothing
+  assert.ok(!sameIdleDays(a, merged, T));
+  assert.ok(sameIdleDays(a, { ...a, junk: true, '2026-10-13': false, '2026-10-09': 1 }, T));
+  const old = { '2020-01-01': true, [ymd(T - 199 * 86400000)]: true, [ymd(T - 230 * 86400000)]: true };
+  assert.equal(Object.keys(mergeIdleDays(old, null, T)).length, 1);
+  for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeIdleDays(bad, bad, T), {});
 });

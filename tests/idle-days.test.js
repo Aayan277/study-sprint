@@ -109,28 +109,40 @@ function world({ states = [], newCards = 0, logs = [], settings = {} }) {
 }
 const answerOn = n => ({ timestamp: daysAgoStart(n, T) + 10 * 3600000, source: 'review' });
 
-test('idleDaysToMark: days since the last answer with nothing due are found, today included', () => {
-  const { data, history } = world({ states: [{ due: T + 6 * DAY }, { due: T + 9 * DAY }], logs: [answerOn(3)] });
-  assert.deepEqual(idleDaysToMark(data, history, T), [k(2), k(1), k(0)]);
+test('idleDaysToMark: today is noted when the ring says "Nothing due today", and only today', () => {
+  const { data } = world({ states: [{ due: T + 6 * DAY }, { due: T + 9 * DAY }] });
   assert.equal(countFor(data, ['a']).total, 0);
+  assert.deepEqual(idleDaysToMark(data, T), [k(0)]);              // never the days before, however long ago the last answer was
 });
 
-test('idleDaysToMark: a day when a card came due and was not studied is not quiet; neither is one with new cards on offer', () => {
-  const due = world({ states: [{ due: daysAgoStart(1, T) + 9 * 3600000 }, { due: T + 9 * DAY }], logs: [answerOn(3)] });
-  assert.deepEqual(idleDaysToMark(due.data, due.history, T), []);          // yesterday's card is still waiting (it is due today as well)
-  const later = world({ states: [{ due: T + 60000 }, { due: T + 9 * DAY }], logs: [answerOn(3)] });
-  assert.deepEqual(idleDaysToMark(later.data, later.history, T), [k(2), k(1)]);         // due later today: today is not quiet, the days before were
-  const fresh = world({ states: [{ due: T + 6 * DAY }], newCards: 3, logs: [answerOn(3)] });
-  assert.deepEqual(idleDaysToMark(fresh.data, fresh.history, T), []);
+test('idleDaysToMark: a card due today or overdue, or new cards on offer, mean today is not quiet', () => {
+  assert.deepEqual(idleDaysToMark(world({ states: [{ due: daysAgoStart(1, T) + 9 * 3600000 }, { due: T + 9 * DAY }] }).data, T), []);
+  assert.deepEqual(idleDaysToMark(world({ states: [{ due: T + 60000 }, { due: T + 9 * DAY }] }).data, T), []);        // due later today
+  assert.deepEqual(idleDaysToMark(world({ states: [{ due: T + 6 * DAY }], newCards: 3 }).data, T), []);
 });
 
-test('idleDaysToMark: nothing when you studied today, with no history or no cards; days already noted are not repeated', () => {
-  const a = world({ states: [{ due: T + 6 * DAY }], logs: [answerOn(0)] });
-  assert.deepEqual(idleDaysToMark(a.data, a.history, T), []);
-  const b = world({ states: [{ due: T + 6 * DAY }], logs: [] });
-  assert.deepEqual(idleDaysToMark(b.data, b.history, T), []);
-  const c = world({ states: [], logs: [answerOn(3)] });
-  assert.deepEqual(idleDaysToMark(c.data, c.history, T), []);
-  const d = world({ states: [{ due: T + 6 * DAY }], logs: [answerOn(3)], settings: { idleDays: { [k(1)]: true } } });
-  assert.deepEqual(idleDaysToMark(d.data, d.history, T), [k(2), k(0)]);
+test('idleDaysToMark: suspending or burying the overdue cards cannot fake a quiet day', () => {
+  for (const hide of [{ suspended: true }, { buriedUntil: T + DAY }]) {
+    const { data } = world({ states: [{ due: daysAgoStart(4, T) }, { due: T + 9 * DAY }] });
+    data.allCards[0] = { ...data.allCards[0], ...hide };
+    data.cards = data.allCards.filter(c => !c.suspended && !(c.buriedUntil > T));
+    data.split = splitCards(data.cards, data.statesById, T, data.exam);
+    assert.deepEqual(idleDaysToMark(data, T), [], JSON.stringify(hide));
+  }
+});
+
+test('idleDaysToMark: nothing with no cards, and a day already noted is not repeated', () => {
+  assert.deepEqual(idleDaysToMark(world({ states: [] }).data, T), []);
+  assert.deepEqual(idleDaysToMark(world({ states: [{ due: T + 6 * DAY }], settings: { idleDays: { [k(0)]: true } } }).data, T), []);
+});
+
+test('idleDaysToMark: before 4am it is still the day before', () => {
+  const early = daysAgoStart(0, T) + 2 * 3600000;       // 2am: still yesterday's study day
+  const { data } = world({ states: [{ due: T + 6 * DAY }] });
+  assert.deepEqual(idleDaysToMark(data, early), [dayKey(early)]);
+});
+
+test('a day that is noted keeps the streak; days the app was not opened are for freezes', () => {
+  assert.equal(walk([1, 2], [0]).days, 2);
+  assert.equal(walk([3, 4], []).days, 0);              // two missed days, no note: broken (only one freeze)
 });

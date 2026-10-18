@@ -23,7 +23,7 @@ const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
-import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { decide, MERGERS, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { validFields, cleanFields } from './note-fields.js';
@@ -786,9 +786,10 @@ export async function applyRemote(rows) {
           // Merged, not replaced: keep this device's days off and add the server's (per day, the later decision wins).
           const local = await done(settingsStore.get(row.id));
           const remote = row.data?.value;
-          const merged = mergeDayFlags(local, remote);
-          const changed = !sameDayFlags(merged, local);
-          const sameAsRemote = sameDayFlags(merged, remote);
+          const [mergeFlags, sameFlags] = MERGERS[row.id];
+          const merged = mergeFlags(local, remote);
+          const changed = !sameFlags(merged, local);
+          const sameAsRemote = sameFlags(merged, remote);
           if (changed) { settingsStore.put(merged, row.id); applied++; }
           if (changed || !sameAsRemote) {
             // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.
