@@ -360,3 +360,40 @@ export function logPull(log, entry, cover) {
   }
   return out;
 }
+
+// ---------- pulling the pages ----------
+// The pull loop of sync.js: page after page until a short one. `st` is the state from startPull(), `from` the number to ask
+// after first (pullStart), `size` the page size to start with.
+//   get(after, size)  one page: { rows, size, at } (getPageSafely: the size that worked, and when that request was sent)
+//   apply(rows)       saves a page here (db.applyRemote, plus sync.js's counting)
+//   save(st)          keeps the bookmark and the log (together, once per page, after the page is saved)
+// The next request is sent as soon as a full page has ARRIVED, while it is being saved (saving 1,000 rows takes about as long as
+// asking for them, so a first download of 200,000 rows takes about the longer of the two instead of both). That changes nothing the
+// invariants above rest on:
+//   * the request asks after the highest number on the page before it (known on arrival, before saving), as it did one by one;
+//   * `at` is still when that request was sent (it is later than the page before it was sent, so the log stays in order);
+//   * a page is logged, and the bookmark moves, only after it is saved, and in order; a page that arrived but whose
+//     saving failed is never logged (its successor's answer is dropped, so the next pull asks after the old bookmark);
+//   * the page size used for a request is the one the page before it ended with (after any halving), and the short-page
+//     check uses the size of the request that page really came from.
+// Returns { st, pages }.
+export async function pullPages(st, from, size, { get, apply, save, now = Date.now }) {
+  const t0 = now(), from0 = from;
+  const fetchPage = after => get(after, size);
+  let upcoming = fetchPage(from), pages = 0;
+  for (;;) {
+    const after = from;
+    const page = await upcoming;
+    const rows = page.rows, at = page.at;
+    size = page.size;
+    const top = rows.length ? Math.max(...rows.map(r => Number(r.seq))) : after;     // (the highest number on this page)
+    const more = rows.length >= size;
+    if (more) { upcoming = fetchPage(Math.max(after, top)); upcoming.catch(() => {}); }     // (if saving below fails, this answer is not used)
+    if (rows.length) { await apply(rows); from = Math.max(from, top); }
+    pages++;
+    const lastSeq = Math.max(st.lastSeq, from);
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: top, n: rows.length }, { t0, from: from0, reach: more ? from : Infinity }) };
+    await save(st);
+    if (!more) return { st, pages };
+  }
+}
