@@ -8,7 +8,7 @@ const unfold = t => t.replace(/\r\n /g, '');
 const NOW = new Date(2026, 9, 18, 10, 30, 0).getTime();          // 18 Oct 2026, 10:30 local
 
 test('escapeText escapes backslash, semicolon, comma and newlines', () => {
-  assert.equal(escapeText('a,b;c\\d\ne'), 'a\\,b\;c\\\\d\\ne');
+  assert.equal(escapeText('a,b;c\\d\ne'), 'a\\,b\\;c\\\\d\\ne');
 });
 
 test('foldLine keeps lines to 75 bytes, never splits a character, and unfolds back', () => {
@@ -80,7 +80,7 @@ test('exam file: all-day events, UID per deck, two alerts, escaping, nothing for
   assert.equal((t.match(/BEGIN:VEVENT/g) || []).length, 2);
   assert.ok(t.includes('DTSTART;VALUE=DATE:20261120\r\nDTEND;VALUE=DATE:20261121'));
   assert.ok(t.includes('UID:exam-a@study-sprint'));
-  assert.ok(t.includes('SUMMARY:Exam: Bio\\, part 1\; "cells"'));
+  assert.ok(t.includes('SUMMARY:Exam: Bio\\, part 1\\; "cells"'));
   assert.equal((t.match(/BEGIN:VALARM/g) || []).length, 4);
   assert.ok(t.includes('TRIGGER:-P2DT15H') && t.includes('TRIGGER:PT9H'));
   for (const l of ics.split('\r\n')) assert.ok(bytes(l) <= 75);

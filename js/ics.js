@@ -3,6 +3,7 @@
 //   dailyReminderICS   one event that repeats every day at a time you pick, with an alert at that time
 //   examsICS           each course's exam day (all-day), with an alert 3 days before and one that morning
 //
+// (The reminder's UID is made once per device and kept in the settings (reminders.js), so two devices don't overwrite each other's time.)
 // Choices (the file has to work in Apple Calendar, Google Calendar and Outlook):
 //   - Times are FLOATING local times (DTSTART:20261019T190000, no "Z", no TZID). Every calendar reads that as
 //     "7pm wherever this calendar is", so the reminder stays at 7pm after a trip or a clock change. A TZID would
@@ -18,7 +19,7 @@ export const DEFAULT_TIME = '19:00';
 const CRLF = '\r\n';
 
 // Backslash, semicolon, comma and line breaks must be escaped in text values.
-export const escapeText = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
+export const escapeText = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 
 // One content line, cut so that no line is over 75 bytes (UTF-8, never in the middle of a character).
 // Each continuation line starts with a space, which counts toward its 75.
@@ -53,11 +54,12 @@ function wrap(events) {
   return lines.map(foldLine).join(CRLF) + CRLF;
 }
 
-// The stamps that tell a calendar this is a newer copy of the same event.
+// The stamps that tell a calendar this is a newer copy of the same event. SEQUENCE is the number of minutes since 1970:
+// it only has to go up with each file made, and a clock gives that without storing a counter.
 const versioned = now => [`DTSTAMP:${utcStamp(now)}`, `LAST-MODIFIED:${utcStamp(now)}`, `SEQUENCE:${Math.floor(now / 60000)}`];
 
 // time 'HH:MM' (local), url the app's address, now a time in ms. The first day is today, or tomorrow when the time has passed.
-export function dailyReminderICS({ time = DEFAULT_TIME, url = '', now = Date.now() } = {}) {
+export function dailyReminderICS({ time = DEFAULT_TIME, url = '', now = Date.now(), uid = DAILY_UID } = {}) {
   const { h, m } = parseTime(time);
   const at = new Date(now);
   const start = new Date(at.getFullYear(), at.getMonth(), at.getDate(), h, m, 0);
@@ -67,7 +69,7 @@ export function dailyReminderICS({ time = DEFAULT_TIME, url = '', now = Date.now
   const body = `Open Study Sprint and do today's cards.${url ? ' ' + url : ''}`;
   return wrap([[
     'BEGIN:VEVENT',
-    `UID:${DAILY_UID}`,
+    `UID:${uid}`,
     ...versioned(now),
     `DTSTART:${floating(start)}`,
     `DTEND:${floating(end)}`,

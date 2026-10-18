@@ -17,7 +17,7 @@ import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { drawCard as drawInstallCard } from './install.js';
-import { drawPrompt as drawRemindPrompt } from './reminders.js';
+import { drawPrompt as drawRemindPrompt, stepAside as stepAsideRemind } from './reminders.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
 import { drawSidebar } from './sidebar.js';
@@ -441,7 +441,7 @@ export async function renderToday(el) {
 
   draw();
   // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
-  const onInstall = () => { if (el.isConnected) { drawInstallCard($('installSlot')); drawRemindPrompt($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
+  const onInstall = () => { if (el.isConnected) { drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
   window.addEventListener('install-change', onInstall);
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant.
   import('./review.js').catch(() => {});

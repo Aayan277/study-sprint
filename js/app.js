@@ -18,7 +18,7 @@ import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { settingsHTML as remindersHTML, wireSettings as wireReminders } from './reminders.js';
-import { initBadge } from './badge.js';
+import { initBadge, refreshBadgeNow } from './badge.js';
 import { examList } from './ics.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
@@ -255,7 +255,7 @@ async function renderSettings(el) {
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
 
   wireSettingsRow($('installRow'));
-  wireReminders(el, { getDecks: () => db.getDecks(), settings });
+  wireReminders(el, { decks, settings });
   // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
   $('setNav').addEventListener('click', e => {
     const a = e.target.closest('a[data-sec]'); if (!a) return;
@@ -653,6 +653,7 @@ function confirmResetSynced() {
       return;
     }
     await db.deleteEverything();
+    refreshBadgeNow();            // nothing is due any more: the app icon's number goes
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
     settings = { ...(await db.getSettings()), theme: settings.theme };
@@ -1064,6 +1065,7 @@ async function wipeThisDevice() {
   settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
+  refreshBadgeNow();              // the number on the app icon follows the fresh data
 }
 
 // "Synced 2m ago", "Syncing…" or what went wrong.

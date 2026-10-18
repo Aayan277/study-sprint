@@ -40,34 +40,42 @@ test('refresher: many requests make one count; it shows the number', async () =>
   assert.deepEqual(shown, [10]);
 });
 
-test('refresher: off means no work; turning off clears once', async () => {
+test('refresher: off means no work and clears the badge on every run', async () => {
   const c = clock(); let on = false, computed = 0; const shown = [];
   const r = makeRefresher({ compute: async () => { computed++; return 4; }, apply: n => shown.push(n), enabled: async () => on, timer: c.timer, untimer: c.untimer });
-  await r.now(true);
-  assert.equal(computed, 0); assert.deepEqual(shown, []);
-  on = true; await r.now(true);
-  assert.deepEqual(shown, [4]);
-  on = false; await r.now(true); await r.now(true);
-  assert.deepEqual(shown, [4, 0], 'cleared exactly once');
+  await r.now(); await r.now();
+  assert.equal(computed, 0); assert.deepEqual(shown, [0, 0]);
+  on = true; await r.now();
+  assert.deepEqual(shown, [0, 0, 4]);
 });
 
-test('refresher: nothing is worked out during a round, unless forced (leaving the app)', async () => {
+test('refresher: nothing is worked out during a round, even when the page is hidden', async () => {
   const c = clock(); let held = true, computed = 0; const shown = [];
   const r = makeRefresher({ compute: async () => { computed++; return 9; }, apply: n => shown.push(n), enabled: async () => true, held: () => held, timer: c.timer, untimer: c.untimer });
   r.request(); c.fire(); await settle();
-  assert.equal(computed, 0);
-  await r.now(true);
-  assert.deepEqual(shown, [9]);
+  await r.now(); await r.now({ fresh: true });
+  assert.equal(computed, 0); assert.deepEqual(shown, []);
   held = false; r.request(); c.fire(); await settle();
-  assert.deepEqual(shown, [9, 9]);
+  assert.deepEqual(shown, [9]);
+});
+
+test('refresher: the same key reads nothing again; a new key or fresh does', async () => {
+  const c = clock(); let k = 'a', computed = 0; const shown = [];
+  const r = makeRefresher({ compute: async () => ++computed, apply: n => shown.push(n), enabled: async () => true, key: () => k, timer: c.timer, untimer: c.untimer });
+  await r.now(); await r.now(); await r.now();
+  assert.equal(computed, 1); assert.deepEqual(shown, [1, 1, 1]);
+  k = 'b'; await r.now();
+  assert.equal(computed, 2);
+  await r.now({ fresh: true });
+  assert.equal(computed, 3);
 });
 
 test('refresher: a count that is zero clears the badge, and errors are swallowed', async () => {
   const c = clock(); const n = fakeNav(); let fail = false;
   const r = makeRefresher({ compute: async () => { if (fail) throw new Error('db'); return 0; }, apply: v => applyBadge(n, v), enabled: async () => true, timer: c.timer, untimer: c.untimer });
-  await r.now(true);
+  await r.now();
   assert.deepEqual(n.calls, [['clear']]);
   fail = true;
-  await r.now(true);
+  await r.now({ fresh: true });
   assert.equal(n.calls.length, 1);
 });

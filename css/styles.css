@@ -1745,7 +1745,8 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .remind-icon{width:48px;height:48px;border-radius:12px;flex:none;display:grid;place-items:center;background:var(--accent-tint);color:var(--accent-text)}
 .remind-icon .ico{width:24px;height:24px}
 .remind .inst-btns{flex-wrap:wrap;align-items:center}
-.remind-pick{display:inline-flex}
+.remind-pick{display:flex;margin-top:10px}
+@media (max-width:480px){.remind-icon{display:none}.remind{padding-left:16px}}
 .remind-time{font:600 var(--fs-md) var(--f-num);color:var(--text);padding:8px 10px;min-height:36px;border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color-scheme:inherit}
 .remind-time:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
 .rem-actions{flex-wrap:wrap;align-items:center}

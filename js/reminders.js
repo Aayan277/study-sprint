@@ -35,16 +35,27 @@ export async function saveCalendar(text, name, title) {
   return 'saved';
 }
 
+// This device's own event id (so two devices' reminders don't overwrite each other, while adding again here replaces).
+// It is read from the settings when Settings or the card is drawn, so it is known by the time of the tap.
+let uid = null;
+const deviceUid = () => {
+  if (!uid) { uid = `daily-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)}@study-sprint`; db.setSetting('reminderUid', uid).catch(() => {}); }
+  return uid;
+};
+export const rememberUid = saved => { if (typeof saved === 'string' && saved) uid = saved; };
+
 // Make and hand over the daily reminder. Remembers the time. Returns what saveCalendar returns.
+// (No await before the Share sheet is opened: iPhone only allows it right after a tap.)
 export async function addDailyReminder(time) {
   const t = /^\d{1,2}:\d{2}$/.test(time || '') ? time : DEFAULT_TIME;
   db.setSetting('reminderTime', t).catch(() => {});
-  const out = await saveCalendar(dailyReminderICS({ time: t, url: appUrl() }), 'study-sprint-daily-reminder.ics', 'Study Sprint daily reminder');
+  const out = await saveCalendar(dailyReminderICS({ time: t, url: appUrl(), uid: deviceUid() }), 'study-sprint-daily-reminder.ics', 'Study Sprint daily reminder');
   if (out !== 'cancelled') set(DISMISSED);                  // they have what they asked for: the card on Today can go
   if (out === 'saved') toast('Calendar file saved. Open it to add the reminder.');
   return out;
 }
 
+// decks are already loaded (Settings has them), so nothing is awaited before the Share sheet opens.
 export async function addExams(decks) {
   const text = examsICS({ decks, url: appUrl() });
   if (!text) { toast('No exam dates yet. Set one on a course first.'); return 'none'; }
@@ -61,14 +72,16 @@ export const shouldShowPrompt = () => sessionFinished() && !get(DISMISSED) && !i
 export async function drawPrompt(slot) {
   if (!slot?.isConnected) return;
   if (!shouldShowPrompt()) { slot.innerHTML = ''; return; }
-  const time = (await db.getSettings()).reminderTime || DEFAULT_TIME;
+  const saved = await db.getSettings();
+  rememberUid(saved.reminderUid);
+  const time = saved.reminderTime || DEFAULT_TIME;
   if (!slot.isConnected || !shouldShowPrompt()) return;
   slot.innerHTML = `<section class="inst remind" aria-label="Daily reminder">
     <span class="remind-icon" aria-hidden="true">${icon('clock')}</span>
     <div class="inst-txt"><b>Remind me to study?</b>
       <p>Get a calendar alert at a time you pick. A few minutes a day keeps the streak going.</p>
-      <div class="inst-btns"><label class="remind-pick">${timeInput('remindTime', time)}</label>
-        <button class="btn primary small" type="button" data-remind="go">${icon('calendar')} Add to my calendar</button>
+      <label class="remind-pick">${timeInput('remindTime', time)}</label>
+      <div class="inst-btns"><button class="btn primary small" type="button" data-remind="go">${icon('calendar')} Add to calendar</button>
         <button class="btn ghost small" type="button" data-remind="no">Not now</button></div></div>
     <button class="inst-x" type="button" data-remind="no" aria-label="Dismiss">${icon('x')}</button></section>`;
   slot.querySelectorAll('[data-remind="no"]').forEach(b => b.addEventListener('click', () => { set(DISMISSED); slot.innerHTML = ''; }));
@@ -78,6 +91,9 @@ export async function drawPrompt(slot) {
   });
 }
 
+// The install card can turn up after Today was drawn (the browser announces it late): then this card steps aside.
+export function stepAside(slot) { if (slot && installCardShows()) slot.innerHTML = ''; }
+
 // ----- Settings → Study → Reminders -----
 export function settingsHTML({ time, exams, badgeOn }) {
   const row = badgeRow();
@@ -85,7 +101,7 @@ export function settingsHTML({ time, exams, badgeOn }) {
       <h3 class="set-sub" id="remTitle">Reminders</h3>
       <div class="set-row" id="remRow">
         <div><b><label for="remTime">Daily reminder</label></b>
-          <p id="remHelp">A calendar alert every day at the time you pick. Works with Apple, Google and Outlook calendars. Adding it again replaces the old one.</p></div>
+          <p id="remHelp">A calendar alert every day at the time you pick. Best in Apple Calendar and Outlook. In Google Calendar, alerts follow your default notifications.</p></div>
         <div class="steps-input rem-actions">${timeInput('remTime', time).replace('aria-label="Reminder time"', 'aria-describedby="remHelp"')}
           <button class="btn ghost small" type="button" id="remAdd">${icon('calendar')} Add to my calendar</button></div>
       </div>
@@ -94,32 +110,33 @@ export function settingsHTML({ time, exams, badgeOn }) {
         <button class="btn ghost small" type="button" id="examAdd">${icon('calendar')} Add exams to my calendar</button>
       </div>` : ''}
       ${row === 'switch' ? `<label class="adv-row switch-row" id="badgeRow"><span><b>Cards due on the app icon</b>
-        <span>Shows the number of cards due on the Study Sprint icon. It updates when you open or leave the app.${needsPermission() ? ' On iPhone this needs notifications allowed. Study Sprint sends none.' : ''}</span></span>
+        <span>Shows today's card count on the Study Sprint icon. It updates when you open or leave the app.${needsPermission() ? ' On iPhone this needs notifications allowed. Study Sprint sends none.' : ''}</span></span>
         <input id="appBadge" type="checkbox" class="switch" ${badgeOn ? 'checked' : ''}></label>
         <p class="note" id="badgeNote" role="status" hidden></p>`
       : row === 'install' ? `<div class="set-row" id="badgeRow"><div><b>Cards due on the app icon</b>
-        <p>Add Study Sprint to your Home Screen first. Then you can show the number of cards due on its icon.</p></div></div>` : ''}`;
+        <p>Works in the installed app. Add Study Sprint to your Home Screen or install it, then open it from there to show today's card count on its icon.</p></div></div>` : ''}`;
 }
 
 // root: the Settings screen. getDecks: () => decks (for the exam file).
-export function wireSettings(root, { getDecks, settings }) {
+export function wireSettings(root, { decks, settings }) {
   const $ = id => root.querySelector('#' + id);
+  rememberUid(settings.reminderUid);
   $('remAdd')?.addEventListener('click', () => addDailyReminder($('remTime').value));
   $('remTime')?.addEventListener('change', e => { if (e.target.value) db.setSetting('reminderTime', e.target.value); });
-  $('examAdd')?.addEventListener('click', async () => addExams(await getDecks()));
+  $('examAdd')?.addEventListener('click', () => addExams(decks));
   $('appBadge')?.addEventListener('change', async e => {
     const box = e.target, note = $('badgeNote');
     if (note) note.hidden = true;
     if (box.checked && needsPermission()) {
       const r = await askPermission();
-      if (r === 'denied') {
+      if (r !== 'granted') {
         box.checked = false;
-        if (note) { note.textContent = 'Notifications are off for Study Sprint, so iPhone cannot show the number. Turn them on in Settings → Notifications → Study Sprint.'; note.hidden = false; }
+        if (note) { note.textContent = 'iPhone only shows the number when notifications are allowed (Study Sprint sends none). Switch this on again and tap Allow, or turn them on in Settings → Notifications → Study Sprint.'; note.hidden = false; }
         return;
       }
     }
     settings.appBadge = box.checked;
     await db.setSetting('appBadge', box.checked);
-    refreshBadgeNow();
+    refreshBadgeNow();      // fresh: the setting just changed
   });
 }

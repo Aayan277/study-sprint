@@ -15,22 +15,27 @@ export function applyBadge(nav, n) {
 }
 
 // Debounced "work out the count and show it". Everything is passed in so it can be tested without a page:
-//   compute() the number   apply(n) show it   enabled() is the setting on and the badge available?
-//   held() true while a round is running (nothing is worked out then)
-export function makeRefresher({ compute, apply, enabled, held = () => false, delay = 2000, timer = setTimeout, untimer = clearTimeout }) {
-  let t = null, running = false, again = false, shown = false;
-  async function run(force) {
-    if (running) { again = true; return; }
+//   compute() the number   apply(n) show it   enabled() is the setting on?
+//   held() true while a round is running (nothing is worked out then, whatever asked)
+//   key() a string that changes when the answer could have changed (the data, the day, a 10-minute slot).
+//         While it is the same as last time the last number is shown again without reading anything.
+// request() waits `delay` ms and joins several asks into one; now() runs at once. now({ fresh: true }) ignores the key
+// (the setting was just switched on).
+export function makeRefresher({ compute, apply, enabled, held = () => false, key = () => '', delay = 2000, timer = setTimeout, untimer = clearTimeout }) {
+  let t = null, running = false, again = false, freshAsked = false, lastKey = null, lastN = 0;
+  async function run(fresh) {
+    if (running) { again = true; freshAsked ||= !!fresh; return; }
     running = true;
     try {
-      if (!(await enabled())) { if (shown) { apply(0); shown = false; } return; }
-      if (!force && held()) return;
-      const n = await compute();
-      apply(n); shown = true;
+      if (!(await enabled())) { apply(0); lastKey = null; return; }
+      if (held()) return;
+      const k = key();
+      if (fresh || k !== lastKey) { lastN = await compute(); lastKey = k; }
+      apply(lastN);
     } catch { /* the badge is a nicety: never break the app */ }
-    finally { running = false; if (again) { again = false; request(); } }
+    finally { running = false; if (again) { again = false; const f = freshAsked; freshAsked = false; if (f) run(true); else request(); } }
   }
   function request() { if (t !== null) untimer(t); t = timer(() => { t = null; run(false); }, delay); }
-  function now(force = false) { if (t !== null) { untimer(t); t = null; } return run(force); }
+  function now({ fresh = false } = {}) { if (t !== null) { untimer(t); t = null; } return run(fresh); }
   return { request, now };
 }
