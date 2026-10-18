@@ -45,7 +45,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await p.locator('.crow', { hasText: 'Old tag card' }).click(); await p.waitForSelector('#ceForm');
   await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(500);
   const old = await p.evaluate(async () => (await (await import('./js/db.js')).get('cards', 'c2')).tags);
-  ok(old.length === 1 && old[0].includes(' '), 'a tag saved earlier with a space is left alone when the card is saved again: ' + old.join('|'));
+  ok(old.length === 2 && old.every(t => !t.includes(' ')), 'a tag saved earlier with a space becomes the separate tags when the card is saved again (one rule): ' + old.join('|'));
 
   // ----- Add card -----
   await go(p, '#/deck/T', '#brAdd');
