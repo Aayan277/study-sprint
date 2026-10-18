@@ -22,6 +22,7 @@ const openSettings = async page => { await page.goto(APP + '#/decks'); await pag
 const waitSynced = page => page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 const syncNow = page => run(page, async () => { const s = await import('./js/sync.js'); await s.syncNow(); return s.lastStatus(); });
 const serverHas = (fake, id) => fake.userRows('me@example.com').some(r => r.store === 'cards' && r.id === id);
+const until = async (fn, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await new Promise(r => setTimeout(r, 100)); } return fn(); };
 const myCard = (page, id) => run(page, async id => (await (await import('./js/db.js')).getAll('cards')).find(c => c.id === id), id);
 
 const fake = fakeSupabase();
@@ -50,14 +51,24 @@ await A.click('#rsNo');
 ok(!serverHas(fake, 'c-1'), 'Cancel sends nothing');
 await A.click('#resendBtn'); await A.click('#rsYes');
 await A.waitForFunction(() => !document.getElementById('sheet').open);
-await A.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''));
-ok(serverHas(fake, 'c-1') && fake.files.size === 1, 'after Re-upload, the card and the picture are on the server again');
+ok(await until(() => serverHas(fake, 'c-1') && fake.files.size === 1), 'after Re-upload, the card and the picture are on the server again');
+
+// ---- the race: Re-upload pressed while one sync runs and another waits ----
+fake.rows.clear(); fake.files.clear();
+await run(A, async () => {
+  const s = await import('./js/sync.js');
+  s.syncNow(); s.syncNow();          // one running, one queued
+  await s.resendEverything();
+});
+ok(await until(() => serverHas(fake, 'c-1') && fake.files.size === 1), 'RACE: with syncs running and queued, the card and picture still go up again');
+await A.waitForTimeout(500);
+ok(!(await run(A, async () => (await (await import('./js/db.js')).getSettings()).resendPending)), 'and the flag is cleared');
 
 // ---- newer data on the server is not overwritten ----
 const mine = fake.userRows('me@example.com').find(r => r.id === 'c-1');
 fake.rows.set(`${mine.user_id}|cards|c-1`, { ...mine, data: { ...mine.data, back: 'Newer answer from another device' }, updated_at: Date.now() + 5000 });
 await run(A, async () => { const s = await import('./js/sync.js'); await s.resendEverything(); });
-await syncNow(A);
+await A.waitForTimeout(500); await syncNow(A);
 ok(fake.userRows('me@example.com').find(r => r.id === 'c-1').data.back === 'Newer answer from another device', 'a newer copy on the server is kept');
 ok((await myCard(A, 'c-1')).back === 'Newer answer from another device', 'and this device picks it up');
 

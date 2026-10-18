@@ -239,9 +239,9 @@ test('an over-long id is told apart from an over-big record', () => {
   const { ok, big } = splitOversized([card('fine', 'Fine'), card('x'.repeat(MAX_ID_BYTES + 1), 'Long id card'), card('é'.repeat(101), 'Two-byte id')]);
   assert.deepEqual(ok.map(r => r.id), ['fine']);
   assert.deepEqual(big.map(r => r.reason), ['id', 'id']);                                   // 202 bytes in 101 characters still counts
-  assert.equal(bigRowsNote([big[0]]), "1 card can't sync because its internal ID is too long: “Long id card”. Making a copy of it and deleting this one fixes that.");
+  assert.equal(bigRowsNote([big[0]]), "1 card can't sync because its internal ID is too long: “Long id card”. Deleting it, and adding it again if you still need it, fixes that.");
   const sizeRow = { store: 'cards', id: 's', label: 'Huge' };
-  assert.equal(bigRowsNote([sizeRow, big[0]]), '1 card is too large to sync: “Huge”. Shorten it to sync. 1 card can\'t sync because its internal ID is too long: “Long id card”. Making a copy of it and deleting this one fixes that.');
+  assert.equal(bigRowsNote([sizeRow, big[0]]), '1 card is too large to sync: “Huge”. Shorten it to sync. 1 card can\'t sync because its internal ID is too long: “Long id card”. Deleting it, and adding it again if you still need it, fixes that.');
   assert.match(bigRowsNote(big), /^2 cards can't sync because their internal IDs are too long, for example/);
   assert.ok(!/too large/.test(bigRowsNote(big)), 'the id wording never says "too large"');
 });
@@ -273,4 +273,12 @@ test('the editor refuses a card that would be too large to sync', () => {
   assert.match(savedTooBigNote([{ front: 'f', back: 'b' }], { noteExtra: 'y'.repeat(61000) }), /too large to save/);    // note-wide fields count too
   assert.match(savedTooBigNote([{ front: 'f', back: 'x'.repeat(100) }], {}, 50), /^This card is too large to save/);          // a smaller limit can be passed
   assert.equal(savedTooBigNote([{ front: 'f', back: 'b', updatedAt: 5, syncedAt: 5 }]), '');
+});
+
+test('editing a note: the new shared fields count, not the old ones', () => {
+  const old = { id: 'a', front: 'f', back: 'b', noteExtra: 'short old note' };
+  assert.equal(savedTooBigNote([old], { noteExtra: 'short' }), '');
+  assert.match(savedTooBigNote([old], { noteExtra: 'y'.repeat(70000) }), /too large to save/);            // new long note replaces the old short one
+  assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: '' }), '');       // emptied: taken off, as saveNote does
+  assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: undefined }), '');
 });

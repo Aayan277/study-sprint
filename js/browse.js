@@ -496,12 +496,13 @@ async function saveClozeNote(card, ops, msg) {
     const plan = await planNow();
     if (plan.error) { showErr('ceErr', plan.error); return; }
     if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
-    const big = savedTooBigNote([...plan.update, ...plan.add], { noteExtra: readCardText('ceExtra').trim() });
+    // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
+    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds };
+    const big = savedTooBigNote([...plan.update, ...plan.add], common);
     if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds });
+    await db.saveNote(plan, common);
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -526,11 +527,12 @@ async function saveOcclusionNote(card, ops, msg) {
   const go = async confirmed => {
     const plan = await planNow();
     if (plan.error) { showErr('ceErr', plan.error); return; }
-    const big = savedTooBigNote([...plan.update, ...plan.add], { noteExtra: readCardText('ceOccExtra').trim() });
+    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() };
+    const big = savedTooBigNote([...plan.update, ...plan.add], common);
     if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() });
+    await db.saveNote(plan, common);
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', occRemovalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));

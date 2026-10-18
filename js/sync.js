@@ -72,15 +72,20 @@ async function signedIn(session) {
 // and the server keeps whichever copy is newer (supabase/setup.sql, the "new.updated_at <= old.updated_at" check), so a
 // newer copy from another device stays. The same goes the other way: pulled rows only replace things here when they are newer (db.applyRemote).
 // Pulling starts over too (lastSeq 0), because a restored server numbers its changes from an earlier point.
+// This only asks: a flag is saved and a sync is started. The reset itself happens at the start of the next sync run
+// (startOverFromHere), so a sync that is running or waiting right now can't write its old bookmarks over it.
+// Progress and problems show in the normal sync status.
 export async function resendEverything() {
-  const auth = await session();
-  if (!auth) throw new supa.SupaError('Sign in first.');
-  await running;                       // a sync in progress would write the old bookmarks back when it finishes
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await db.setSetting('resendPending', true);
+  syncNow({ retry: true });
+}
+async function startOverFromHere(userId) {
   const { syncState } = await db.getSettings();
   await db.forgetSyncedMarks();
   await db.forgetUploadedMedia();
-  await db.setSetting('syncState', { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
-  return syncNow({ retry: true });
+  await db.setSetting('syncState', { userId, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
+  await db.setSetting('resendPending', false);       // only now: if this is cut short, the next sync does it again
 }
 
 // ---------- passwords ----------
@@ -216,7 +221,8 @@ export async function healNotes() {
 export function syncNow({ retry = false } = {}) {
   if (retry) retrySounds = true;
   if (running) { again = true; return running; }
-  running = run()
+  // (Two tabs of the app take turns, where the browser has Web Locks, so they can't mix up the bookmarks.)
+  running = (navigator.locks ? navigator.locks.request('study-sprint-sync', run) : run())
     .catch(err => {
       console.error('Sync failed', err);
       emit(supa.isSignedOutError(err) ? { state: 'signed-out', error: err.message } : { state: 'error', error: err.message });
@@ -233,6 +239,7 @@ async function run() {
   if (!auth) return;
   emit({ state: 'syncing', error: null, progress: null });
   const token = auth.access_token;
+  if ((await db.getSettings()).resendPending) await startOverFromHere(auth.user.id);
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time.
@@ -294,14 +301,14 @@ async function run() {
 // Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
-  const rows = await db.mediaToUpload();
+  const rows = await db.mediaToUpload();         // without their bytes; each file is loaded just before it is sent
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
   const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
   // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
   const gate = await planMedia(auth, pending);
   let upload;
   try {
-    upload = await uploadMediaFiles(gate.send, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
+    upload = await uploadMediaFiles(gate.send, async m => supa.uploadMedia(token, uid, m.id, m.type, (await db.getMedia(m.id)).data), {
       onSent: m => db.markUploaded([m.id]),
       onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
     });

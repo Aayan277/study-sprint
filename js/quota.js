@@ -153,10 +153,12 @@ export function splitOversized(rows, max = MAX_ROW_BYTES) {
 }
 
 // Used when saving in the editor: '' if these cards (or whatever records) will sync fine, else a plain sentence saying
-// the first one is too large. extra: fields saved with every one of them (tags, the extra note). Same size count as above.
+// the first one is too large. extra: fields saved with every one of them (tags, the extra note), which replace what the
+// record has, and are taken off it when undefined or '' (as db.saveNote does). Same size count as above.
 export function savedTooBigNote(records, extra = {}, max = MAX_ROW_BYTES) {
   for (const r of records) {
-    const { updatedAt, syncedAt, ...data } = { ...extra, ...r };
+    const { updatedAt, syncedAt, ...data } = { ...r, ...extra };
+    for (const [k, v] of Object.entries(extra)) if (v === undefined || v === '') delete data[k];
     const bytes = rowBytes({ data });
     if (bytes > max) return `This card is too large to save: it is about ${Math.round(bytes / 1000)} KB and the limit is ${Math.round(max / 1000)} KB. Shorten the text, or use smaller pictures, then save again.`;
   }
@@ -186,8 +188,8 @@ function idNote(list) {
   if (!list.length) return '';
   const one = kindOf(list), label = labelOf(list, one);
   return list.length === 1
-    ? `1 ${one} can't sync because its internal ID is too long: ${label}. Making a copy of it and deleting this one fixes that.`
-    : `${list.length} ${one}s can't sync because their internal IDs are too long, for example ${label}. Making copies and deleting these fixes that.`;
+    ? `1 ${one} can't sync because its internal ID is too long: ${label}. Deleting it, and adding it again if you still need it, fixes that.`
+    : `${list.length} ${one}s can't sync because their internal IDs are too long, for example ${label}. Deleting them, and adding them again if you still need them, fixes that.`;
 }
 
 // Why a push failed, if it's one we can work around: 'size' (a record over the server's size limit), 'id' (an id over
