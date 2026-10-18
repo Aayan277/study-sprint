@@ -830,13 +830,13 @@
    bands (a rule above and below, no side borders, no corners), so the only outlined things left are things you can tap.
    Desktop and tablet (600px and up) are untouched.
    ====================================================================== */
-:root[data-ui="clinical"]{--c-bleed:calc(-1 * var(--s-4))}
+:root[data-ui="clinical"]{--c-bleed:calc(-1 * var(--s-4))} /* assumes main's phone gutter is var(--s-4) */
 /* the streak line's hairline is a straight rule at every width (it inherited the button's rounded corners) */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{border-radius:0}
 /* the streak's icons are hidden in Clinical, so its lines no longer indent to make room for them (the streak sheet) */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak span{padding-left:0}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill{margin-left:0}
-@media (max-width:599px){
+@media (max-width:599.98px){
   /* 1. panels and grouped lists: edge-to-edge ruled bands */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.today-hero,.exams,.tdecks,.decks,.crows,.deck-summary,.card:not(.pgrid .card),.pgrid,.fold-toggle){
     margin-inline:var(--c-bleed);border-radius:0;box-shadow:none!important;border-block:1px solid var(--line)}
@@ -852,19 +852,24 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid,.today-hero){margin-bottom:var(--s-4)}
   /* bands that follow each other (Stats) share one rule instead of two rules with a strip of page between */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid):has(+ :is(.card,.pgrid)){margin-bottom:0;border-bottom:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid):is(.card,.pgrid):has(+ :is(.card,.pgrid)){border-bottom:0}
 
   /* 2. nothing outlined inside a row: status tags and the row's own buttons are coloured words */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.st-due,.st-new,.st-learning,.st-buried){box-shadow:none;padding:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.st-due,.st-new,.st-learning,.st-buried,.st-review,.st-suspended){box-shadow:none;background:none;padding:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go:not(.lead){box-shadow:none!important;background:none;color:var(--accent-text);padding:0 4px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go{height:44px;min-width:56px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.lead{height:36px;margin-block:4px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.lead{height:44px;margin-block:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .deck .icon-btn{min-width:44px;min-height:44px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row .btn.ghost{border-color:transparent;background:none;color:var(--accent-text);padding-inline:var(--s-2);min-height:44px}
 
   /* 3. controls that were a box around boxes become one shape */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-sort{box-shadow:none;background:var(--surface-2)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-sort button[aria-pressed="true"]{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-counts{box-shadow:none;background:none;padding-inline:0}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-head .link{box-shadow:none;background:none}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-head .link{box-shadow:none;background:none;min-height:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-head .link:not(#endBtn){min-width:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:focus-visible{outline-offset:-2px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .fold-toggle:focus-visible{outline-offset:-2px}
   /* Settings' section menu: words with a rule under the bar, not four outlined boxes running off the edge */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav{gap:0;padding-block:0;border-bottom:1px solid var(--line)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{border:0;border-radius:0;background:none;min-height:44px;padding:0 12px;color:var(--text-2)}
