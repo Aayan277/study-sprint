@@ -104,10 +104,11 @@ export function pictureTooBig(bytes, { occlusion = false } = {}) {
 // ---------- imports ----------
 // Warnings to show before an import, as plain sentences. mediaBytes: size of the deck's pictures and sounds
 // (0 if unknown); reviews: how many Anki reviews would come along.
-export function importWarnings({ mediaBytes = 0, reviews = 0 } = {}) {
+// soundBytes: how much of mediaBytes is sounds, when "Bring sounds" is on (0 = nothing to switch off): then the warning asks the question.
+export function importWarnings({ mediaBytes = 0, reviews = 0, soundBytes = 0 } = {}) {
   const out = [];
   if (mediaBytes > IMPORT_MEDIA_WARN) {
-    out.push(`This deck's pictures and sounds take about ${fmtSize(mediaBytes)}. That's a lot for a phone and for your account (${fmtSize(DEFAULT_MEDIA_LIMIT)} for pictures and sounds unless your account owner gave you more). Pictures are shrunk as they come in.`);
+    out.push(`This deck's pictures and sounds take about ${fmtSize(mediaBytes)}. That's a lot for a phone and for your account (${fmtSize(DEFAULT_MEDIA_LIMIT)} for pictures and sounds unless your account owner gave you more). Pictures are shrunk as they come in; sounds are kept as they are.${soundBytes > 0 ? ' Import without sounds? Turn off “Bring sounds” above to leave them out.' : ''}`);
   }
   if (reviews > IMPORT_REVIEWS_WARN) {
     out.push(`This deck has ${reviews.toLocaleString()} reviews of history. Keeping all of them uses about ${fmtSize(reviews * REVIEW_BYTES)} in your account and makes the first sync on a new device slower. If you don't need the history, turn off “Bring over my Anki progress”.`);
@@ -122,6 +123,13 @@ export const cardsWarning = count => count >= CARDS_WARN
   : null;
 // Did adding cards just take the account past the mark? (Used once, right after an import.)
 export const passedCardsWarning = (before, after) => before < CARDS_WARN && after >= CARDS_WARN;
+
+// What an import left out because the file was over the size limit, as plain sentences: ["3 pictures were too big and were left out",
+// "2 sounds were too big and were left out"]. Counts of distinct files. Nothing to say (empty list) when both are 0.
+export function tooBigNotes({ pictures = 0, sounds = 0 } = {}) {
+  const one = (n, word) => `${n} ${word}${n === 1 ? ' was' : 's were'} too big and ${n === 1 ? 'was' : 'were'} left out`;
+  return [pictures > 0 && one(pictures, 'picture'), sounds > 0 && one(sounds, 'sound')].filter(Boolean);
+}
 
 // ---------- records too big for the server, and what to do when a push is refused ----------
 export const MAX_ROW_BYTES = 60000;                 // the server's own limit is 64 KB (supabase/limits.sql); this leaves room for how it counts
