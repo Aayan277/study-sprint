@@ -984,7 +984,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .miss .r{font-size:var(--fs-base);color:var(--text-2);overflow-wrap:anywhere}
 .miss .y{font-size:var(--fs-sm);color:var(--again);overflow-wrap:anywhere}
 
-/* ---------- Practice test (js/test.js, js/test-sheet.js) ----------
+/* ---------- Practice test (js/mock-exam.js, js/mock-exam-sheet.js) ----------
    A calm mock exam: one question at a time, a navigator, and results. It shares Play's card, options and result pieces, and the
    tokens, so both styles and light and dark follow without their own rules. */
 main[data-route="test"] > .view{max-width:980px}
@@ -992,6 +992,8 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .t-hud{margin-bottom:10px}
 .t-hud .link,.t-ask .btn.small,.t-tools .btn,.pt-resume .btn.small{min-height:44px}
 .t-done{color:var(--text-2)}
+.t-hud .link{white-space:nowrap;flex:none}
+@media (max-width:480px){.t-timed .t-done{display:none}}
 .t-clock b{font-variant-numeric:tabular-nums}
 .t-clock.clock-low b{color:var(--again)}
 .t-bar{height:4px;border-radius:4px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-4)}
@@ -1098,6 +1100,21 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pt-hist li{display:flex;align-items:baseline;gap:var(--s-4);font-size:var(--fs-sm);color:var(--text-2)}
 .pt-hist li b{color:var(--text);min-width:3em}
 @media (prefers-reduced-motion:reduce){.t-bar i{transition:none}}
+/* High-contrast (forced colors): the page's own colours are replaced, so every state needs a shape or a system colour */
+@media (forced-colors:active){
+  .t-opt{border:1px solid ButtonText}
+  .t-opt:has(input:checked){border:3px solid Highlight;outline:2px solid Highlight;outline-offset:-1px}
+  .t-opt::after{border:2px solid ButtonText}
+  .t-opt:has(input:checked)::after{border:6px solid Highlight;background:Canvas}
+  .t-q{border:1px solid ButtonText;forced-color-adjust:none;background:Canvas;color:CanvasText}
+  .t-q.answered{border:4px double Highlight}
+  .t-q.current{box-shadow:none;outline:3px solid Highlight;outline-offset:2px}
+  .t-q.flagged::after{border-top-color:LinkText;border-right-color:LinkText}
+  .t-q:hover{border-color:Highlight}
+  .t-tools #tFlag[aria-pressed="true"]{border:3px solid Highlight}
+  .t-bar i,.t-bar-t i{forced-color-adjust:none;background:Highlight}
+  .t-bar,.t-bar-t{border:1px solid ButtonText}
+}
 
 /* ---------- 13. Stats ---------- */
 .filter-row{display:flex;gap:10px;margin-bottom:var(--s-3)}

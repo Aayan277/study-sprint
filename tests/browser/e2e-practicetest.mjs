@@ -240,6 +240,100 @@ await page.evaluate(async d => { const db = await import('./js/db.js'); await db
 await page.goto(URL + '#/today'); await page.waitForSelector('[data-prep="pt"]');
 ok(await page.locator('[data-mock="pt"]').count() === 0, 'with the exam 12 days away there is no mock exam button on Today');
 
+
+// ---------- Change setup on the results page, and on the "no test" page ----------
+const setPrefs = cfg => page.evaluate(async c => { const db = await import('./js/db.js'); await db.setSetting('testPrefs', { pt: { count: 10, kinds: ['mc', 'typing', 'tf'], limit: 0, order: 'random', counts: false, tags: [], ...c } }); }, cfg);
+const submitAll = async () => { await page.click('#tSubmit'); if (await page.isVisible('#tAskYes')) await page.click('#tAskYes'); await page.waitForSelector('#tReview'); };
+await setPrefs({ kinds: ['mc'] });
+await startFromDeck('pt');
+await submitAll();
+const idBefore = (await run()).id;
+await page.click('#tSetup'); await page.waitForSelector('#ptForm');
+await page.locator('.chip:has(input[name=count][value="20"])').click();
+await page.click('#ptStart'); await page.waitForSelector('#tPrompt');
+ok((await run()).id !== idBefore && (await run()).cfg.count === 20 && !(await state()).done, 'results > Change setup > Start draws the new test (it is saved and shown)');
+await page.evaluate(() => { localStorage.removeItem('study-sprint-test-run'); localStorage.removeItem('study-sprint-test-state'); });
+await page.reload(); await page.waitForSelector('#ptForm');
+await page.click('#ptStart'); await page.waitForSelector('#tPrompt');
+ok((await state()).i === 0 && !(await state()).done, 'the "no test in progress" page: Start draws the test too');
+
+// ---------- forced colors (high contrast) ----------
+await answerNow('right'); await next(); await page.click('#tFlag');
+await page.emulateMedia({ forcedColors: 'active' });
+const w = sel => page.evaluate(sel => { const c = getComputedStyle(document.querySelector(sel)); return { b: c.borderTopWidth, o: c.outlineWidth }; }, sel);
+await page.click('.t-grid [data-q="0"]');
+const on = await w('.t-opt:has(input:checked)'), off = await w('.t-opt:not(:has(input:checked))');
+ok(on.b !== off.b || on.o !== off.o, 'forced colors: a checked option differs from the others (border ' + on.b + ' vs ' + off.b + ')');
+const ans = await w('.t-grid [data-q="0"]'), un = await w('.t-grid [data-q="5"]'), cur = await w('.t-grid [data-q="0"].current');
+ok(ans.b !== un.b, 'forced colors: an answered cell has a different border from an unanswered one (' + ans.b + ' vs ' + un.b + ')');
+ok(cur.o !== '0px' && un.o === '0px', 'forced colors: the current cell has an outline (' + cur.o + ')');
+const lg = await w('.t-legend .t-q.answered'), lu = await w('.t-legend li:nth-child(2) .t-q');
+ok(lg.b !== lu.b, 'forced colors: the legend matches');
+await page.emulateMedia({ forcedColors: 'none' });
+ok(await page.locator('.t-opt .key[aria-hidden=true]').count() >= 2, 'the key hints in the options are hidden from screen readers');
+
+// ---------- two tabs ----------
+const B = await ctx.newPage();
+await B.goto(URL + '#/test/pt'); await B.waitForSelector('#tPrompt');
+await page.waitForSelector('#tAsk:not([hidden])', { timeout: 5000 });
+ok((await page.textContent('#tAsk')).includes('open in another tab'), 'a second tab on the same test makes the first one ask instead of overwriting');
+const frozenBefore = JSON.stringify((await state()).answers);
+await page.click('#tAskYes'); await page.waitForSelector('#tPrompt');
+await B.waitForSelector('#tAsk:not([hidden])', { timeout: 5000 });
+ok((await B.textContent('#tAsk')).includes('open in another tab'), 'Continue here takes over, and the other tab asks in turn');
+ok(JSON.stringify((await state()).answers) === frozenBefore, 'no answers were lost in the hand-over');
+await B.close();
+
+// ---------- count as reviews: reload in the middle of saving ----------
+await page.click('#tLeave'); await page.click('#tAskYes'); await page.waitForSelector('#testBtn');
+await setPrefs({ kinds: ['typing'], counts: true });
+const preRows = (await snapshot()).logs;
+await startFromDeck('pt');
+for (let i = 0; i < 10; i++) { await answerNow('right'); if (i < 9) await next(); }
+await submitAll();
+await page.waitForFunction(() => document.querySelector('#tSched')?.textContent.includes('Saved to your schedule'));
+const rowsFull = (await snapshot()).logs;
+ok(rowsFull - preRows === 10, 'counted answers are saved, and the status says "Saved to your schedule"');
+// 1. the reload comes after the rows were written but before they were marked: nothing is written twice
+await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('study-sprint-test-state')); s.rec = s.rec.map(() => 0); localStorage.setItem('study-sprint-test-state', JSON.stringify(s)); });
+await page.reload(); await page.waitForSelector('#tReview');
+await page.waitForFunction(() => document.querySelector('#tSched')?.textContent.includes('Saved to your schedule'));
+ok((await snapshot()).logs === rowsFull, 'reloading while the answers were marked unsaved does not write them a second time');
+ok((await state()).rec.every(r => r === 1), 'and they are marked saved now');
+// 2. the reload comes before anything was written: the answers are saved on resume
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const s = JSON.parse(localStorage.getItem('study-sprint-test-state'));
+  for (const l of (await db.getAll('reviewLog')).filter(l => l.source === 'test' && l.timestamp >= s.finished - 1000)) await db.deleteLogRow(l.id);
+  s.rec = s.rec.map(() => 0); localStorage.setItem('study-sprint-test-state', JSON.stringify(s));
+});
+ok((await snapshot()).logs === preRows, 'the test rows are gone (a reload before saving)');
+await page.reload(); await page.waitForSelector('#tReview');
+await page.waitForFunction(() => document.querySelector('#tSched')?.textContent.includes('Saved to your schedule'));
+ok((await snapshot()).logs === rowsFull, 'a reload in the middle of saving: the answers are saved when the results come back');
+await page.click('#tDone2'); await page.waitForSelector('#testBtn');
+
+// ---------- true or false: logged, not scheduled ----------
+await setPrefs({ kinds: ['tf'], counts: true });
+const statesBefore = (await snapshot()).states, rowsBefore = (await snapshot()).logs;
+await startFromDeck('pt');
+for (let i = 0; i < 10; i++) { await answerNow('right'); if (i < 9) await next(); }
+await submitAll();
+await page.waitForFunction(() => document.querySelector('#tSched')?.textContent.includes('Saved to your schedule'));
+const tfRows = await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'test').slice(-10));
+ok((await snapshot()).logs - rowsBefore === 10 && tfRows.every(l => l.reason === 'logged' && l.applied === false), 'true or false answers are logged but do not apply to the schedule');
+ok((await snapshot()).states === statesBefore, 'and no card schedule changed');
+ok((await page.textContent('#tSched')).includes('only logged'), 'the status says so');
+await page.click('#tDone2'); await page.waitForSelector('#testBtn');
+
+// ---------- a deleted deck ----------
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'tmpd', name: 'Temp deck', color: '#5C9DFF', created: Date.now() + 9 }, Array.from({ length: 5 }, (_, i) => ({ id: 'tm' + i, deckId: 'tmpd', front: 'T ' + i, back: 'A ' + i, tags: [], created: i }))); });
+await page.goto(URL + '#/deck/tmpd'); await page.waitForSelector('#testBtn'); await page.click('#testBtn'); await page.waitForSelector('#ptForm'); await page.click('#ptStart'); await page.waitForSelector('#tPrompt');
+await page.evaluate(async () => { await (await import('./js/db.js')).deleteDeck('tmpd'); });
+await page.reload(); await page.waitForSelector('#tPrompt');
+ok((await page.textContent('h1.sr-only')).includes('Deleted deck'), 'a deck deleted during the test is named "Deleted deck"');
+await page.evaluate(() => { localStorage.removeItem('study-sprint-test-run'); localStorage.removeItem('study-sprint-test-state'); });
+
 ok(errors.length === 0, 'no console errors: ' + errors.join(' | '));
 
 // ---------- phone ----------
@@ -257,6 +351,7 @@ await p2.goto(URL + '#/deck/ph'); await p2.waitForSelector('#testBtn');
 await p2.click('#testBtn'); await p2.waitForSelector('#ptForm'); await noH2('setup sheet (phone)');
 await p2.screenshot({ path: SP + '/pt-phone-setup.png' });
 await p2.locator('.chip:has(input[name=count][value="10"])').click();
+await p2.locator('.chip:has(input[name=kind][value=typing])').click();       // multiple choice and true or false only, so every question has options
 await p2.click('#ptStart'); await p2.waitForSelector('#tPrompt');
 ok(await p2.isHidden('.t-nav') && await p2.isVisible('#tNavBtn'), 'on a phone the navigator is a button');
 const box = async sel => (await p2.locator(sel).first().boundingBox());

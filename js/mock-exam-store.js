@@ -8,18 +8,26 @@ import * as db from './db.js';
 import { parseRun, cleanPrefs, cleanHistory, cleanCfg, addResult } from './mock-exam-logic.js';
 
 const RUN = 'study-sprint-test-run', STATE = 'study-sprint-test-state';
+export const KEYS = [RUN, STATE];     // for the "storage" event: another tab changed the test
 
+let mem = null;          // used when storage is blocked: the test works but cannot be resumed after a reload
+export let persistent = true;
 const read = key => { try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key, value) => { try { localStorage.setItem(key, value); return true; } catch { return false; } };
 
 // The saved test { run, state }, or null. A finished one is kept (state.done) until another test starts, so a reload on the results
 // screen shows them again.
-export const loadSaved = (now = Date.now()) => parseRun(read(RUN), read(STATE), now);
+export const loadSaved = (now = Date.now()) => (mem ? { run: mem.run, state: mem.state } : parseRun(read(RUN), read(STATE), now));
 // A test that is still being taken for this deck (not one that is finished).
 export const inProgress = (deckId, now = Date.now()) => { const s = loadSaved(now); return s && !s.state.done && (!deckId || s.run.deckId === deckId) ? s : null; };
-export function saveRun(run, state) { return write(RUN, JSON.stringify(run)) && write(STATE, JSON.stringify(state)); }
-export const saveState = state => write(STATE, JSON.stringify(state));
-export function clearSaved() { try { localStorage.removeItem(RUN); localStorage.removeItem(STATE); } catch { /* nothing to clear */ } }
+export function saveRun(run, state) {
+  mem = null;
+  persistent = write(RUN, JSON.stringify(run)) && write(STATE, JSON.stringify(state));
+  if (!persistent) mem = { run, state };      // blocked storage: keep it in memory (a quiet note says it cannot be resumed)
+  return true;
+}
+export const saveState = state => { if (mem) { mem.state = state; return true; } return write(STATE, JSON.stringify(state)); };
+export function clearSaved() { mem = null; try { localStorage.removeItem(RUN); localStorage.removeItem(STATE); } catch { /* nothing to clear */ } }
 
 // Last choices for a deck (the default choices when it has none yet).
 export async function prefsFor(deckId) {

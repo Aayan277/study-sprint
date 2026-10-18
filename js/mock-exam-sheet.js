@@ -1,5 +1,5 @@
 // The Practice test setup sheet: what to be tested on, how many questions, which kinds, the time limit and the order.
-// Opened from the deck page, Today's exam card (a "mock exam" in exam week) and the exam line. The test itself is test.js; the rules are
+// Opened from the deck page, Today's exam card (a "mock exam" in exam week) and the exam line. The test itself is mock-exam.js; the rules are
 // mock-exam-logic.js. The last choices are remembered per deck, and the last few results show here so progress is visible.
 
 import { loadAll } from './study-data.js';
@@ -9,8 +9,9 @@ import { plainText } from './format.js';
 import { recallAt, examInfo, countdown } from './exam.js';
 import { personalW20 } from './sched-settings.js';
 import {
-  COUNTS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
+  COUNTS, MAX_QUESTIONS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
 } from './mock-exam-logic.js';
+import * as store from './mock-exam-store.js';
 import { saveRun, inProgress, clearSaved, savePrefs } from './mock-exam-store.js';
 import { go as navGo } from './nav.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
@@ -38,7 +39,8 @@ export async function beginTest(deckId, cfgIn, { stay = false, data: loaded = nu
   });
   if (!questions.length) { toast('No questions fit these choices'); return false; }
   const run = newRun(cfg, questions, deckId, now);
-  if (!saveRun(run, newState(run, now))) { toast('This browser will not keep a test in progress, so it cannot be started here'); return false; }
+  saveRun(run, newState(run, now));
+  if (!store.persistent) toast('This browser blocks storage, so a reload would end this test.', { ms: 5000 });
   await savePrefs(deckId, cfg);
   if (!stay) navGo(`#/test/${encodeURIComponent(deckId)}`);
   return true;
@@ -85,7 +87,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
         ${tags.length > 1 ? `<fieldset><legend>Only these tags <small>(optional)</small></legend>
           <div class="chips" role="group" aria-label="Narrow by tag">${tags.map(t => `<button type="button" class="tchip" data-tag="${esc(t.tag)}" aria-pressed="${cfg.tags.includes(t.tag)}">${esc(t.label)} <small>${t.n}</small></button>`).join('')}</div></fieldset>` : ''}
         <fieldset><legend>Questions</legend>
-          <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? 'All' : n, cfg.count === n)).join('')}</div></fieldset>
+          <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? `All <small>(up to ${MAX_QUESTIONS})</small>` : n, cfg.count === n)).join('')}</div></fieldset>
         <fieldset><legend>Question types <small>(all on: a mix)</small></legend>
           <div class="chips">${Object.entries(KINDS).map(([k, label]) => `<label class="chip"><input type="checkbox" name="kind" value="${k}" ${cfg.kinds.includes(k) && perKind[k] ? 'checked' : ''} ${perKind[k] ? '' : 'disabled'}><span>${label}</span></label>`).join('')}</div>
           <p class="note" id="ptKindNote"></p></fieldset>
@@ -112,7 +114,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
   const refresh = () => {
     const narrowed = narrowByTags(pool, cfg.tags);
     const { able } = askable(narrowed, { ...cfg, tags: [] });
-    const n = cfg.count === 'all' ? able.length : Math.min(cfg.count, able.length);
+    const n = cfg.count === 'all' ? Math.min(able.length, MAX_QUESTIONS) : Math.min(cfg.count, able.length);
     $('ptNote').textContent = able.length
       ? `${plural(n, 'question')} from ${plural(able.length, 'card')}${cfg.limit ? `, ${cfg.limit} minutes` : ', no time limit'}.${narrowed.length > able.length ? ` ${narrowed.length - able.length} cards can't be asked with these question types.` : ''}`
       : 'No cards fit these choices. Try another deck, other tags or more question types.';

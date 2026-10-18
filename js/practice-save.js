@@ -1,4 +1,4 @@
-// Saving a practice answer as a review: the one code path Play (play.js) and the Practice test (test.js) share.
+// Saving a practice answer as a review: the one code path Play (play.js) and the Practice test (mock-exam.js) share.
 // Nothing here decides whether to save: the caller does (Play: the setting "Count Play answers as reviews"; the test: its own
 // "Count answers as reviews" switch). Once it does, an answer is written to the review log and, when the auto-grading rules allow
 // it (autograde.js), to the card's schedule. The log row's source says where it came from: 'play' or 'test'.
@@ -21,7 +21,7 @@ export const practicedToday = logs => new Set(logs.filter(l => (l.source === 'pl
 //   entry  { card, ok, ms, limitMs, chars, given (null = ran out of time), mixedWith, overridden }; this function adds
 //          prev, logId, applied, rating and decision to it
 //   o      { source: 'play' | 'test', qtype, fmt, hard, untimed, afterApply(card, prev, next, log) -> whatever it changed (kept as entry.leeched) }
-export async function savePracticeAnswer(data, entry, { source = 'play', qtype, fmt, hard = false, untimed = false, afterApply } = {}) {
+export async function savePracticeAnswer(data, entry, { source = 'play', qtype, fmt, hard = false, untimed = false, logOnly = false, afterApply } = {}) {
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
@@ -38,6 +38,7 @@ export async function savePracticeAnswer(data, entry, { source = 'play', qtype, 
   // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
   let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
     timedOut: entry.given === null, limitMs: entry.limitMs, fmt });
+  if (logOnly) decision = 'logged';      // e.g. true or false: a coin flip says too little about memory, so the answer is only written to the log
   rating = appliedRating({ decision, rating, mc: qtype !== 'typing', overridden: !!entry.overridden });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = playLogRow({ cardId: id, now, qtype, fmt, hard, ok: entry.ok, ms: entry.ms, rating, chars,
@@ -91,6 +92,7 @@ export async function markLeechIfDue(settings, card, prev, next, log) {
 // One line for the results screen saying how the saved answers changed the review schedule (entries have a `decision`, see above).
 export function scheduleSummaryHTML(entries) {
   const count = d => new Set(entries.filter(l => l.decision === d).map(l => l.card.id)).size;
+  const guesses = count('logged');
   const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   const parts = [];
   if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
@@ -102,5 +104,6 @@ export function scheduleSummaryHTML(entries) {
     : 'No cards were due: schedule unchanged.';
   const extra = (fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review.` : '')
     + (over ? ` ${plural(over, 'new card')} over today’s new-card limit ${over === 1 ? 'starts' : 'start'} in Review.` : '');
-  return `<p class="sched-note">${text}${extra}</p>`;
+  const tf = guesses ? ` ${plural(guesses, 'true or false answer')} ${guesses === 1 ? 'was' : 'were'} only logged.` : '';
+  return `<p class="sched-note">${text}${extra}${tf}</p>`;
 }

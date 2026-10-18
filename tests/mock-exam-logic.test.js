@@ -37,6 +37,12 @@ test('buildTest: All asks every card, and a count bigger than the deck asks all 
   assert.equal(buildTest(cards(6), { count: 50 }, { rnd: seeded() }).questions.length, 6);
 });
 
+test('buildTest: All stops at 200 questions', () => {
+  const { questions, available } = buildTest(cards(260), { count: 'all', kinds: ['typing'] }, { rnd: seeded() });
+  assert.equal(questions.length, 200);
+  assert.equal(available, 260);
+});
+
 test('buildTest: only the chosen kinds are used', () => {
   const { questions } = buildTest(cards(20), { count: 10, kinds: ['typing'] }, { rnd: seeded() });
   assert.ok(questions.length === 10 && questions.every(q => q.kind === 'typing' && q.qtype === 'typing'));

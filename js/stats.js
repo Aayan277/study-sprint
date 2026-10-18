@@ -23,7 +23,7 @@ import { normaliseLayout, visibleOrder, pairRows, widths, cardInfo } from './sta
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
 
 // Where an answer came from, for tooltips.
-const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
+const SOURCE_NAMES = { review: 'Review', play: 'Play', test: 'Test', anki: 'Anki' };
 
 const LEVELS = [['mature', 'Mature'], ['young', 'Young'], ['learning', 'Learning'], ['new', 'New']];
 const LEVEL_NOTE = {

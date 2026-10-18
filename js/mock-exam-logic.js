@@ -14,6 +14,7 @@ import { tagTree, cardsUnder, tagWords, normTag, pieces } from './tag-tree.js';
 
 // ---------- the choices ----------
 export const COUNTS = [10, 20, 30, 50, 'all'];
+export const MAX_QUESTIONS = 200;                   // "All" stops here: a bigger test is slow to draw and to save, and nobody sits it in one go
 export const LIMITS = [0, 10, 20, 30, 45, 60];                     // minutes; 0 = no time limit
 export const KINDS = { mc: 'Multiple choice', typing: 'Typed answer', cloze: 'Fill in the blank', tf: 'True or false' };
 export const ORDERS = { random: 'Random', weak: 'Weakest first' };
@@ -125,12 +126,12 @@ export function askable(cards, cfg) {
 export function buildTest(cards, cfgIn, { recallOf = () => null, lapsesOf = () => 0, rnd = Math.random } = {}) {
   const { cfg, ctx, kinds, kindsOf, able } = askable(cards, cfgIn);
   const all = cfg.count === 'all';
-  const want = all ? able.length : Math.min(cfg.count, able.length);
+  const want = Math.min(all ? MAX_QUESTIONS : cfg.count, able.length);
   // Which cards, and in what order.
   let ordered;
   if (cfg.order === 'weak') ordered = weakOrder(able, recallOf, lapsesOf, rnd);
   else ordered = shuffle(able.slice(), rnd);
-  if (!all) ordered = onePerNote(ordered);
+  if (!all || able.length > MAX_QUESTIONS) ordered = onePerNote(ordered);
   if (cfg.order === 'random') ordered = spreadSiblings(ordered, c => c.noteId);
   // Make the questions, spreading the kinds evenly. A card that can't make a question is skipped and the next one takes its place.
   const used = Object.fromEntries(kinds.map(k => [k, 0]));
