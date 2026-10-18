@@ -1741,6 +1741,17 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .inst-btns .ico{width:16px;height:16px}
 .inst-x{position:absolute;top:8px;right:8px;width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:50%;background:none;color:var(--text-3);cursor:pointer}
 .inst-x .ico{width:16px;height:16px}
+/* "Remind me to study?" card on Today and the Reminders rows in Settings (js/reminders.js) */
+.remind-icon{width:48px;height:48px;border-radius:12px;flex:none;display:grid;place-items:center;background:var(--accent-tint);color:var(--accent-text)}
+.remind-icon .ico{width:24px;height:24px}
+.remind .inst-btns{flex-wrap:wrap;align-items:center}
+.remind-pick{display:flex;margin-top:10px}
+@media (max-width:480px){.remind-icon{display:none}.remind{padding-left:16px}}
+.remind-time{font:600 var(--fs-md) var(--f-num);color:var(--text);padding:8px 10px;min-height:36px;border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color-scheme:inherit}
+.remind-time:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+.rem-actions{flex-wrap:wrap;align-items:center}
+.rem-actions .ico{width:16px;height:16px}
+#examAdd .ico{width:16px;height:16px}
 
 /* ---------- 20. Image occlusion (js/occlusion.js draws it, js/occlusion-view.js zooms it) ----------
    A picture with boxes over the parts to learn. The box (.occ) has the picture's own shape (aspect-ratio, set inline),

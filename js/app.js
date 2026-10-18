@@ -17,6 +17,9 @@ import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import * as fx from './fx.js';
 import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
+import { settingsHTML as remindersHTML, wireSettings as wireReminders } from './reminders.js';
+import { initBadge, refreshBadgeNow } from './badge.js';
+import { examList } from './ics.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
@@ -37,6 +40,7 @@ async function renderSettings(el) {
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   // "Last backup: 12 days ago", and a quiet nudge when it has been a month and there is a lot to lose (js/backup-nudge.js).
   const backup = backupNote({ lastBackup: settings.lastBackup, cards: await db.count('cards'), synced: !!(await sync.account()) });
+  const decks = await db.getDecks();
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
   if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
@@ -116,6 +120,7 @@ async function renderSettings(el) {
         <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
         <button class="btn ghost small" type="button" id="glossBtn">Open</button>
       </div>
+      ${remindersHTML({ time: settings.reminderTime || '19:00', exams: examList(decks).length, badgeOn: settings.appBadge === true })}
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
         <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
         <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
@@ -250,6 +255,7 @@ async function renderSettings(el) {
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
 
   wireSettingsRow($('installRow'));
+  wireReminders(el, { decks, settings });
   // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
   $('setNav').addEventListener('click', e => {
     const a = e.target.closest('a[data-sec]'); if (!a) return;
@@ -647,6 +653,7 @@ function confirmResetSynced() {
       return;
     }
     await db.deleteEverything();
+    refreshBadgeNow();            // nothing is due any more: the app icon's number goes
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
     settings = { ...(await db.getSettings()), theme: settings.theme };
@@ -1044,7 +1051,7 @@ function confirmDeleteAccount() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
-  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion } = settings;
+  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime } = settings;
   await db.resetAll();
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
@@ -1053,9 +1060,12 @@ async function wipeThisDevice() {
   await db.setSetting('statsReadiness', statsReadiness);
   await db.setSetting('ratingFeedback', ratingFeedback);
   await db.setSetting('smoothMotion', smoothMotion);
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion };
+  await db.setSetting('appBadge', appBadge === true);
+  await db.setSetting('reminderTime', reminderTime || '19:00');
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
+  refreshBadgeNow();              // the number on the app icon follows the fresh data
 }
 
 // "Synced 2m ago", "Syncing…" or what went wrong.
@@ -1343,6 +1353,7 @@ async function start() {
   addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
+  initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
