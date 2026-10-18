@@ -16,8 +16,8 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
-import { replace as navReplace, back as navBack } from './nav.js';
-import { readDocument, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
+import { replace as navReplace, back as navBack, rewrite as navRewrite } from './nav.js';
+import { readDocument, isDocFile, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
 import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
@@ -108,7 +108,7 @@ export async function renderImport(el, arg) {
           <button class="btn primary small" type="button" id="docAi">Make cards with AI</button>
           <button class="btn ghost small" type="button" id="docRaw">Use the text as it is</button>
         </div>
-        <p class="note">AI makes better cards from lecture text. You paste the text into your own chat, nothing is sent from here. Or use the text as it is and tidy it in the preview.</p>
+        <p class="note">AI makes better cards from lecture text. You paste the text into your own chat. Nothing is sent from here. Or use the text as it is and tidy it in the preview.</p>
         <div id="aiView" hidden>
           <h3 class="doc-h">Make cards with AI</h3>
           <p class="note" id="aiHow"></p>
@@ -222,7 +222,11 @@ function wirePaste() {
     timer = setTimeout(() => showText($('pasteBox').value), 250);
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
-  $('pasteBox').addEventListener('paste', () => { S.blocks = false; });
+  // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
+  $('pasteBox').addEventListener('paste', () => {
+    const b = $('pasteBox');
+    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) S.blocks = false;
+  });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(timer);
     S.blocks = false; S.aiMade = false; $('aiNote').hidden = true;
@@ -244,7 +248,7 @@ function showText(text) {
   const parse = S.blocks ? parseBlocks : parseText;
   let result = S.noCloze ? parse(text) : withClozeLines(text, parse).result;
   // Cards from an AI's answer carry the ai-made tag (same tag for every row; the preview says "Tags come along too").
-  if (S.aiMade && result.rows.length) result = { ...result, tags: result.rows.map(() => ['ai-made']) };
+  if (S.aiMade && result.rows.length) result = { ...result, tags: result.rows.map((_, i) => [...new Set([...(result.tags?.[i] || []), 'ai-made'])]) };
   showResult(result, false, text);
 }
 
@@ -270,7 +274,7 @@ function wireFile() {
     $('sheetPickRow').hidden = true;
     hideDoc();
     try {
-      if (/\.(pdf|pptx)$/i.test(file.name)) { await readDoc(file); return; }
+      if (isDocFile(file)) { await readDoc(file); return; }
       if (/\.xlsx?$/i.test(file.name)) await readExcel(file);
       else if (/\.(apkg|colpkg)$/i.test(file.name)) await readAnki(file);
       else if (/\.json$/i.test(file.name)) {
@@ -293,7 +297,6 @@ function wireFile() {
 
 // ---------- PDF and slides ----------
 // The text of the file is read here (js/doc-import.js). Then you choose: an AI prompt in parts, or the text as it is in the paste box.
-const isDoc = f => /\.(pdf|pptx)$/i.test(f.name);
 const docWord = (n, what) => (what === 'PDF' ? plural(n, 'page') : plural(n, 'slide'));
 
 function hideDoc() {
@@ -301,8 +304,13 @@ function hideDoc() {
   $('docBox').hidden = true; $('aiView').hidden = true; $('docStatus').hidden = true;
 }
 
+let readCount = 0, readAbort = null;
 async function readDoc(file) {
-  const what = /\.pdf$/i.test(file.name) || file.type === 'application/pdf' ? 'PDF' : 'slides';
+  const what = isDocFile(file) && (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') ? 'PDF' : 'slides';
+  // Another file picked (or the screen left) while this one is being read: the old read stops and says nothing.
+  readAbort?.abort();
+  const mine = ++readCount, st = S, ctl = readAbort = new AbortController();
+  const stale = () => S !== st || mine !== readCount || !$('docBox')?.isConnected;
   $('found').textContent = '';
   showResult(null);
   const status = $('docStatus');
@@ -310,8 +318,10 @@ async function readDoc(file) {
   $('fileName').textContent = `${file.name} · reading…`;
   try {
     const { pages } = await readDocument(file, (done, total) => {
+      if (stale()) { ctl.abort(); return; }
       if (total) status.textContent = `Reading page ${done} of ${total}…`;
-    });
+    }, ctl.signal);
+    if (stale()) return;
     S.doc = { pages, name: file.name, what };
     S.withNotes = true; $('docNotes').checked = true;
     S.aiMade = false; S.blocks = false; $('aiNote').hidden = true;
@@ -321,6 +331,7 @@ async function readDoc(file) {
     showDocInfo();
     $('docBox').hidden = false; $('aiView').hidden = true;
   } catch (err) {
+    if (err.name === 'AbortError' || stale()) return;
     $('fileName').textContent = file.name;
     status.hidden = true;
     if (err.code) { showError(err.message); return; }
@@ -382,7 +393,7 @@ function showAiView() {
     : 'Copy the prompt, paste it into a chat, and send it. Then paste the answer back here.';
   $('aiParts').innerHTML = aiParts.map((p, i) => `
     <li><span><b>Part ${i + 1} of ${aiParts.length}</b> <span class="muted">${esc(p.label)}, ${p.text.length.toLocaleString('en')} characters</span></span>
-      <button class="btn ghost small" type="button" data-part="${i}" aria-label="Copy part ${i + 1} of ${aiParts.length}">Copy</button></li>`).join('');
+      <button class="btn ghost small" type="button" data-part="${i}">Copy<span class="sr-only"> part ${i + 1} of ${aiParts.length}</span></button></li>`).join('');
   $('aiCur').textContent = curText();
   $('aiView').hidden = false;
 }
@@ -391,34 +402,43 @@ const copyPart = () => copyText(docPrompt(aiParts[S.part].text, S.part + 1, aiPa
 function markCopied(ok) {
   if (!ok) { toast("Couldn't copy. Your browser blocked it."); return; }
   toast(`Copied part ${S.part + 1} of ${aiParts.length}`);
-  $('aiParts').querySelectorAll('[data-part]').forEach(b => { b.textContent = +b.dataset.part === S.part ? 'Copied' : 'Copy'; });
+  $('aiParts').querySelectorAll('[data-part]').forEach(b => { b.firstChild.textContent = +b.dataset.part === S.part ? 'Copied' : 'Copy'; });
   $('aiCur').textContent = S.part + 1 < aiParts.length ? `Copied part ${S.part + 1} of ${aiParts.length}. Paste it into the chat, then copy the next part.` : `Copied part ${S.part + 1} of ${aiParts.length}. Paste it into the chat.`;
 }
 
-// Share → Study Sprint (Android): the service worker kept what was shared (sw.js, takeShare); read it, then clear it.
+// Share → Study Sprint (Android): the service worker kept what was shared (sw.js, takeShare). It stays kept until the cards are
+// saved or the next share replaces it (so an app update that reloads the page doesn't lose the file); one older than 10 minutes is ignored.
+const SHARE_CACHE = 'study-sprint-share', SHARE_MAX_AGE = 10 * 60 * 1000;
+const shareUrl = name => new URL('share-target/' + name, document.baseURI);
+async function clearShare() {
+  try { const c = await caches.open(SHARE_CACHE); for (const k of await c.keys()) await c.delete(k); } catch { /* nothing to clear */ }
+}
 async function takeShared() {
   let file = null, said = null;
   try {
-    const c = await caches.open('study-sprint-share');
-    const f = await c.match(new URL('share-target/file', document.baseURI));
-    const t = await c.match(new URL('share-target/text', document.baseURI));
-    if (f) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('content-type') || '' });
-    if (t) said = await t.json();
-    for (const k of await c.keys()) await c.delete(k);
+    const c = await caches.open(SHARE_CACHE);
+    const f = await c.match(shareUrl('file'));
+    const t = await c.match(shareUrl('text'));
+    if (f && Date.now() - Number(f.headers.get('x-at') || 0) < SHARE_MAX_AGE) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('content-type') || '' });
+    if (t) { const j = await t.json(); if (Date.now() - (j.at || 0) < SHARE_MAX_AGE) said = j; }
   } catch { /* nothing was kept: just show the screen */ }
+  navRewrite('#/import');                     // a reload or Back doesn't open the share again
+  if (said?.tooBig) { showError(tooBigMessage()); return; }
+  if (said?.failed) { showError("Couldn't get what you shared. Open Study Sprint and choose the file here instead."); return; }
   if (file) {
     $('tab-file').click();
     $('fileName').textContent = file.name;
     suggestName(file.name.replace(/\.[^.]+$/, ''));
-    if (isDoc(file)) { await readDoc(file); return; }
+    if (isDocFile(file)) { await readDoc(file); return; }
     if (file.size > MAX_BYTES) { showError(tooBigMessage()); return; }
     S.noCloze = false; showText(await file.text());
     return;
   }
-  const text = [said?.text, said?.url].filter(Boolean).join('\n').trim();
+  // Text, a link, or only a title (some apps put what they share in the title).
+  const text = [said?.text, said?.url].filter(Boolean).join('\n').trim() || String(said?.title || '').trim();
   if (!text) return;
   // A link on its own: the app can't read web pages.
-  if (/^https?:\/\/\S+$/.test(text)) { showError("That's a link, and Study Sprint can't read web pages. Share the text itself, or a PDF of the page.") ; return; }
+  if (/^https?:\/\/\S+$/.test(text)) { showError("That's a link, and Study Sprint can't read web pages. Share the text itself, or a PDF of the page."); return; }
   $('pasteBox').value = text; S.noCloze = false; showText(text);
 }
 
@@ -495,6 +515,7 @@ function wireSheet() {
       const text = await res.text();
       // A private sheet sends back a Google sign-in page (HTML) instead of CSV.
       if (!res.ok || /^\s*</.test(text)) throw new Error('not shared');
+      hideDoc();
       S.noCloze = false; showText(text);
     } catch (err) {
       showError(navigator.onLine
@@ -970,6 +991,7 @@ async function save() {
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
+    clearShare();                               // what was shared has been turned into cards
     navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);

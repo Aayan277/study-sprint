@@ -30,15 +30,17 @@ function boot(stores) {
   };
   const caches = {
     keys: async () => [...stores.keys()],
+    delete: async name => stores.delete(name),
     match: async (req, opts) => find(req, opts),
     open: async name => {
       if (!stores.has(name)) stores.set(name, new Map());
       const m = stores.get(name);
-      return { keys: async () => [...m.keys()].map(url => ({ url })), match: async req => m.get(req.url ?? req), put: async (req, res) => { m.set(req.url ?? req, res); } };
+      const key = req => String(req.url ?? req);
+      return { keys: async () => [...m.keys()].map(url => ({ url })), match: async req => m.get(key(req)), put: async (req, res) => { m.set(key(req), res); }, delete: async req => m.delete(key(req)) };
     }
   };
   const ctx = vm.createContext({
-    self: { addEventListener: (t, f) => { on[t] = f; }, skipWaiting() {}, clients: { claim() {} } },
+    self: { addEventListener: (t, f) => { on[t] = f; }, skipWaiting() {}, clients: { claim() {} }, registration: { scope: 'https://app.test/' } },
     caches, location: { origin: 'https://app.test' }, URL, Request, Response,
     fetch: async req => { fetched.push(req.url ?? req); return { ok: true, type: 'cors', clone() { return this; }, from: 'network' }; }
   });
@@ -48,7 +50,14 @@ function boot(stores) {
     on.fetch({ request: { method: 'GET', url, mode }, respondWith: p => { out = p; } });
     return out;
   };
-  return { ctx, caches, fetched, request, current: vm.runInContext('CACHE', ctx) };
+  // A form POSTed to share-target (what Android's Share menu sends): `form` is { files: [File], title, text, url }.
+  const share = form => {
+    let out;
+    on.fetch({ request: { method: 'POST', url: 'https://app.test/share-target', mode: 'navigate', formData: async () => { if (form === 'broken') throw new Error('no body'); return { getAll: k => (k === 'files' ? form.files || [] : []), get: k => form[k] ?? null }; } }, respondWith: p => { out = p; } });
+    return out;
+  };
+  const activate = () => { let p; on.activate({ waitUntil: x => { p = x; } }); return p; };
+  return { ctx, caches, fetched, request, share, activate, current: vm.runInContext('CACHE', ctx) };
 }
 const good = tag => ({ ok: true, type: 'cors', tag });
 
@@ -139,4 +148,58 @@ test("CACHE differs from origin/main's when the app files differ from it", t => 
   if (!mainCache || !mainHash) { t.skip("could not read origin/main's sw.js"); return; }
   if (computeHash() === mainHash) return;                       // the app files are the same as main's: nothing to bump
   assert.notEqual(CACHE_NAME, mainCache, `app files differ from origin/main but CACHE is still ${mainCache}: bump it in sw.js`);
+});
+
+// ---------- Share → Study Sprint (Android Web Share Target) ----------
+const SHARED = 'study-sprint-share';
+const kept = async (stores, name) => { const r = stores.get(SHARED)?.get('https://app.test/share-target/' + name); return r && { r, json: name === 'text' ? await r.clone().json() : null }; };
+
+test('a shared file is kept (with its name and time) and the person is sent on to the Add cards screen', async () => {
+  const stores = new Map();
+  const { share } = boot(stores);
+  const file = new File(['%PDF-1.4'], 'notes lecture.pdf', { type: 'application/pdf' });
+  const res = await share({ files: [file] });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), 'https://app.test/#/import/share');
+  const f = await kept(stores, 'file');
+  assert.equal(decodeURIComponent(f.r.headers.get('x-name')), 'notes lecture.pdf');
+  assert.ok(Date.now() - Number(f.r.headers.get('x-at')) < 5000);
+  assert.equal(await kept(stores, 'text'), undefined);
+});
+
+test('shared text is kept as a note, and a new share replaces the old one', async () => {
+  const stores = new Map();
+  const { share } = boot(stores);
+  await share({ files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] });
+  await share({ title: 'T', text: 'Cell - unit of life', url: '' });
+  assert.equal(await kept(stores, 'file'), undefined, 'the older file is gone');
+  const t = await kept(stores, 'text');
+  assert.equal(t.json.text, 'Cell - unit of life');
+  assert.ok(t.json.at > 0);
+});
+
+test('a shared file over 50 MB is not kept: a "too big" note instead', async () => {
+  const stores = new Map();
+  const { share } = boot(stores);
+  const big = { name: 'huge.pdf', type: 'application/pdf', size: 51 * 1024 * 1024 };
+  const res = await share({ files: [big] });
+  assert.equal(res.status, 303);
+  assert.equal(await kept(stores, 'file'), undefined);
+  assert.equal((await kept(stores, 'text')).json.tooBig, 'huge.pdf');
+});
+
+test('a share the worker cannot read still ends on the screen, with a "failed" note', async () => {
+  const stores = new Map();
+  const { share } = boot(stores);
+  const res = await share('broken');
+  assert.equal(res.status, 303);
+  assert.equal((await kept(stores, 'text')).json.failed, true);
+});
+
+test('an app update keeps a share that is waiting (the share cache is not an app cache)', async () => {
+  const stores = new Map([[SHARED, new Map([['https://app.test/share-target/text', good('waiting')]])], ['study-sprint-v1', new Map()]]);
+  const { activate } = boot(stores);
+  await activate();
+  assert.ok(stores.has(SHARED), 'the share is kept');
+  assert.ok(!stores.has('study-sprint-v1'), 'old app caches are still thrown away');
 });

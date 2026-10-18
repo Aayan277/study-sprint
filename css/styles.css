@@ -663,6 +663,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .drop .mono{font-size:var(--fs-sm);color:var(--accent-text);overflow-wrap:anywhere}
 .row-form{display:flex;gap:var(--s-2)}
 .doc-box{margin-top:var(--s-3)}
+.doc-box .btn{min-height:44px}
 .doc-h{margin:var(--s-4) 0 0;font-size:var(--fs-md)}
 .doc-parts{list-style:none;margin:var(--s-2) 0 0;padding:0;display:grid;gap:var(--s-2)}
 .doc-parts li{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}

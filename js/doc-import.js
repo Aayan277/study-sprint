@@ -8,12 +8,14 @@ export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser
 // The legacy build also runs on older phones (it brings its own fixes for newer browser features).
 export const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs';
 export const PDFJS_WORKER_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs';
+export const CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/';
 export const PDFJS_WORKER_INTEGRITY = 'sha384-vbNBYP03jHFPlgtK4qSXtazEmGfmpTWlSsfq9OiU20MroW/Q9TbaEXiM7PpeWg+6';
 
 export const MAX_PAGES = 300;
 export const MAX_BYTES = 50 * 1024 * 1024;
 export const PART_CHARS = 12000;                 // about how much of the material goes into one AI prompt
-const MAX_UNPACKED = 300 * 1024 * 1024;          // a .pptx that unpacks to more than this is refused (a "zip bomb")
+const MAX_SLIDE_BYTES = 20 * 1024 * 1024;        // one slide (or notes) file unpacking to more than this, or all of them to more than the next one,
+const MAX_UNPACKED = 100 * 1024 * 1024;          // makes the .pptx refused (a "zip bomb": a small file that unpacks huge)
 
 export const NO_TEXT_MESSAGE = "This PDF has no text in it (it's probably scanned). Try a PDF with selectable text.";
 export const tooBigMessage = (what = 'file') => `That ${what} is over 50 MB. Try a smaller one, or a few pages of it.`;
@@ -129,7 +131,7 @@ export function readPptx(bytes, unzipSync) {
     filter: f => {
       if (!/^ppt\/(presentation\.xml|_rels\/presentation\.xml\.rels|slides\/(_rels\/)?slide\d+\.xml(\.rels)?|notesSlides\/notesSlide\d+\.xml)$/.test(f.name)) return false;
       unpacked += f.originalSize;
-      if (unpacked > MAX_UNPACKED) throw new Error('too-big');
+      if (f.originalSize > MAX_SLIDE_BYTES || unpacked > MAX_UNPACKED) throw new Error('too-big');
       return true;
     }
   });
@@ -172,14 +174,19 @@ const pause = () => new Promise(r => setTimeout(r, 0));
 
 // Read every page's text. onProgress(done, total) is called as pages finish; the screen stays usable in between.
 // Throws Error('too-many:N') over the page limit.
-export async function readPdf(bytes, onProgress = () => {}, lib) {
+export async function readPdf(bytes, onProgress = () => {}, lib, signal) {
+  const aborted = () => Object.assign(new Error('Aborted'), { name: 'AbortError' });
+  if (signal?.aborted) throw aborted();
   lib = lib || await loadPdfjs();
-  const doc = await lib.getDocument({ data: bytes, isEvalSupported: false, verbosity: 0, disableFontFace: true }).promise;
+  if (signal?.aborted) throw aborted();
+  // cMaps are what lets pdf.js read the text of Japanese and Chinese PDFs (fetched only when a PDF needs them).
+  const doc = await lib.getDocument({ data: bytes, isEvalSupported: false, verbosity: 0, disableFontFace: true, cMapUrl: CMAP_URL, cMapPacked: true }).promise;
   try {
     const total = doc.numPages;
     if (total > MAX_PAGES) throw new Error('too-many:' + total);
     const pages = [];
     for (let n = 1; n <= total; n++) {
+      if (signal?.aborted) throw aborted();
       const page = await doc.getPage(n);
       try { pages.push({ label: `Page ${n}`, text: pdfPageText((await page.getTextContent()).items), notes: '' }); } finally { page.cleanup(); }
       onProgress(n, total);
@@ -271,10 +278,17 @@ export const AI_SITES = [
 
 // ---------- one file ----------
 
+// A PDF or PowerPoint file, by its name or by the type the phone or browser says it is (a share often has no usable name).
+export const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+export const isPdfFile = f => /\.pdf$/i.test(f.name || '') || f.type === 'application/pdf';
+export const isPptxFile = f => /\.pptx$/i.test(f.name || '') || f.type === PPTX_TYPE;
+export const isDocFile = f => isPdfFile(f) || isPptxFile(f);
+
+
 // Read a PDF or PowerPoint File. → { pages } or throws Error with .code: 'too-big', 'too-many', 'no-text' (message ready to show),
 // or any other error from the libraries (the screen says it couldn't read the file).
-export async function readDocument(file, onProgress = () => {}) {
-  const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+export async function readDocument(file, onProgress = () => {}, signal) {
+  const isPdf = isPdfFile(file);
   const what = isPdf ? 'PDF' : 'presentation';
   const fail = (code, message) => Object.assign(new Error(message), { code });
   if (file.size > MAX_BYTES) throw fail('too-big', tooBigMessage(what));
@@ -283,7 +297,7 @@ export async function readDocument(file, onProgress = () => {}) {
   try {
     if (isPdf) {
       onProgress(0, 0);
-      pages = await readPdf(bytes, onProgress);
+      pages = await readPdf(bytes, onProgress, undefined, signal);
     } else {
       const { unzipSync } = await import(/* @vite-ignore */ FFLATE_URL);
       pages = readPptx(bytes, unzipSync);

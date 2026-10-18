@@ -10,7 +10,7 @@
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
 const CACHE = 'study-sprint-v108';
-// files-hash: 352ce0f1db03dbf2
+// files-hash: e62cfef293cc4ae8
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'css/clinical.css',
   'js/app.js', 'js/note-fields.js', 'js/reverse.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/fsrs-data.js', 'js/fsrs-fit.js', 'js/fit-health.js', 'js/health-sheet.js', 'js/retention-sim.js', 'js/retention-sheet.js', 'js/worker-job.js', 'js/fsrs7-model.js', 'js/fsrs7-sched.js', 'js/srs7.js', 'js/fsrs-optimize-worker.js', 'js/optimize-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/panel-resize.js', 'js/audio.js', 'js/audio-type.js', 'js/backup-nudge.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/doc-import.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js', 'js/tag-tree.js', 'js/tag-study-sheet.js', 'js/postpone.js', 'js/postpone-sheet.js', 'js/accept.js', 'js/glossary.js', 'js/glossary-view.js', 'js/glossary-sheet.js', 'js/glossary-list.js',
@@ -30,8 +30,9 @@ const PINNED = [
   'https://cdn.sheetjs.com/xlsx-0.20.3/'
 ];
 // What was shared to the app (Android's Share menu) waits here for a moment, between the worker and the Add cards screen. Not a copy of
-// any app file, so it is kept when the app updates (see activate) and emptied by the screen as soon as it has read it.
+// any app file, so it is kept when the app updates (see activate) and emptied when the cards are saved, or replaced by the next share.
 const SHARE_CACHE = 'study-sprint-share';
+const MAX_SHARE_BYTES = 50 * 1024 * 1024;      // as the Add cards screen's limit for a file
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'cdn.sheetjs.com'];
 
@@ -83,11 +84,16 @@ async function takeShare(req) {
     const form = await req.formData();
     const c = await caches.open(SHARE_CACHE);
     for (const k of await c.keys()) await c.delete(k);
+    const at = Date.now();                    // the screen ignores a share older than 10 minutes
     const file = form.getAll('files').find(f => typeof f === 'object' && f && typeof f.name === 'string' && f.size > 0);
-    const text = { title: String(form.get('title') || ''), text: String(form.get('text') || ''), url: String(form.get('url') || '') };
-    if (file) await c.put(new URL('share-target/file', self.registration.scope), new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name) } }));
-    else await c.put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify(text), { headers: { 'content-type': 'application/json' } }));
-  } catch { /* fall through to the screen */ }
+    const note = body => c.put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify({ at, ...body }), { headers: { 'content-type': 'application/json' } }));
+    if (file && file.size > MAX_SHARE_BYTES) await note({ tooBig: file.name });                   // not kept: the screen says it is too big
+    else if (file) await c.put(new URL('share-target/file', self.registration.scope), new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name), 'x-at': String(at) } }));
+    else await note({ title: String(form.get('title') || ''), text: String(form.get('text') || ''), url: String(form.get('url') || '') });
+  } catch {
+    // The form couldn't be read or kept (storage full…): the screen says so instead of showing nothing.
+    try { await (await caches.open(SHARE_CACHE)).put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify({ at: Date.now(), failed: true }), { headers: { 'content-type': 'application/json' } })); } catch { /* the screen opens without it */ }
+  }
   return Response.redirect(new URL('./#/import/share', self.registration.scope).href, 303);
 }
 

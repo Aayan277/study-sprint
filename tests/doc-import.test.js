@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   xmlText, slideOrder, resolvePath, slideLines, notesText, notesTarget, pptxPages, pdfPageText, tidy,
-  pageBlock, pagesToText, splitParts, docPrompt, hasText, charCount, PART_CHARS, NO_TEXT_MESSAGE, tooManyMessage
+  pageBlock, pagesToText, splitParts, docPrompt, hasText, charCount, PART_CHARS, NO_TEXT_MESSAGE, tooManyMessage,
+  readPptx, readPdf, isDocFile, isPdfFile, isPptxFile, PPTX_TYPE
 } from '../js/doc-import.js';
 import { parseBlocks, parseText } from '../js/import.js';
 
@@ -157,4 +158,36 @@ test('messages', () => {
   assert.equal(NO_TEXT_MESSAGE, "This PDF has no text in it (it's probably scanned). Try a PDF with selectable text.");
   assert.match(tooManyMessage(450, 'PDF'), /450 pages\. The limit is 300/);
   assert.match(tooManyMessage(1, 'presentation'), /1 slides?/);
+});
+
+test('one page or slide on its own still reads as one card (heading, then the text)', () => {
+  const r = parseBlocks(pagesToText([{ label: 'Page 1', text: 'Mitosis - cell division\nMeiosis - four gametes', notes: '' }]));
+  assert.equal(r.format.id, 'blocks');
+  assert.deepEqual(r.rows, [['Page 1', 'Mitosis - cell division\nMeiosis - four gametes']]);
+  assert.equal(parseBlocks(pagesToText([{ label: 'Slide 1: Cells', text: 'one line', notes: '' }])).rows[0][0], 'Slide 1: Cells');
+});
+
+test('a .pptx whose parts unpack too big is refused, one slide file or all together', () => {
+  const fake = sizes => (bytes, { filter }) => { for (const [name, originalSize] of sizes) filter({ name, originalSize }); return {}; };
+  assert.throws(() => readPptx(new Uint8Array(1), fake([['ppt/slides/slide1.xml', 21 * 1024 * 1024]])), /too-big/);
+  const many = Array.from({ length: 6 }, (_, i) => [`ppt/slides/slide${i + 1}.xml`, 19 * 1024 * 1024]);       // each fine, 114 MB together
+  assert.throws(() => readPptx(new Uint8Array(1), fake(many)), /too-big/);
+  assert.deepEqual(readPptx(new Uint8Array(1), fake([['ppt/slides/slide1.xml', 1000], ['ppt/media/huge.png', 900 * 1024 * 1024]])), [], 'pictures are never unpacked or counted');
+});
+
+test('reading a PDF stops when told to (another file picked, screen left)', async () => {
+  let opened = 0, destroyed = 0;
+  const lib = { getDocument: () => ({ promise: Promise.resolve({ numPages: 50, destroy() { destroyed++; }, getPage: async () => { opened++; return { getTextContent: async () => ({ items: [{ str: 'x', hasEOL: true }] }), cleanup() {} }; } }) }) };
+  const ctl = new AbortController();
+  await assert.rejects(readPdf(new Uint8Array(1), n => { if (n === 3) ctl.abort(); }, lib, ctl.signal), { name: 'AbortError' });
+  assert.equal(opened, 3);
+  assert.equal(destroyed, 1, 'the document is closed');
+  await assert.rejects(readPdf(new Uint8Array(1), () => {}, lib, AbortSignal.abort()), { name: 'AbortError' });
+  assert.equal(opened, 3);
+});
+
+test('a PDF or slides file is recognised by its name or its type', () => {
+  assert.ok(isPdfFile({ name: 'a.PDF', type: '' }) && isPdfFile({ name: 'download', type: 'application/pdf' }) && !isPdfFile({ name: 'a.txt', type: 'text/plain' }));
+  assert.ok(isPptxFile({ name: 'deck.pptx', type: '' }) && isPptxFile({ name: 'deck', type: PPTX_TYPE }) && !isPptxFile({ name: 'a.ppt', type: '' }));
+  assert.ok(isDocFile({ name: 'x', type: 'application/pdf' }) && !isDocFile({ name: 'x.csv', type: 'text/csv' }));
 });
