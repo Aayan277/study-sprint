@@ -12,7 +12,7 @@ import { formatInterval } from './queue.js';
 import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
 import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
 import { cleanFields } from './note-fields.js';
-import { savedTooBigNote } from './quota.js';
+import { savedTooBigNote, splitTooBig, tooLargeNote } from './quota.js';
 import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
@@ -648,10 +648,16 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   $('frForm').addEventListener('submit', async e => {
     e.preventDefault();
     await loaded;
-    const changed = frChanges();
-    if (!changed.length) return;
+    const all = frChanges();
+    if (!all.length) return;
+    // A card that would end up too large to sync is left as it was (and so is its reverse card, so a pair never disagrees).
+    const big = splitTooBig(all).big, bigNotes = new Set(big.filter(isPair).map(c => c.noteId));
+    const changed = all.filter(c => !big.includes(c) && !(isPair(c) && bigNotes.has(c.noteId)));
+    const dropped = all.length - changed.length;
+    const left = dropped > big.length ? `${plural(dropped, 'card')} ${dropped === 1 ? 'was' : 'were'} left unchanged, because a card or its reverse card was too large` : tooLargeNote(dropped);
+    if (!changed.length) { $('frCount').textContent = `${left}.`; return; }
     await db.saveCards(changed);
-    done(`Replaced in ${plural(changed.length, 'card')}`);
+    done(`Replaced in ${plural(changed.length, 'card')}${left ? `. ${left}` : ''}`);
   });
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
   wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${deckPath(decks, deckId)}`));
@@ -784,8 +790,13 @@ function wireLinkTool(cards, { scope, refresh }) {
           return [{ ...fresh, noteId, cloze, noteText: n.noteText, ...clozeCard(n.noteText, cloze) }];
         });
       });
-      await db.saveCards(changed);
-      toast(`Linked ${plural(linked, 'card')} into ${plural(notes.length, 'note')}`);
+      // A note whose cards would be too large to sync stays as separate cards.
+      if (!changed.length) { toast('Nothing was linked: those cards changed since the preview.'); await refresh(); closeSheet(); return; }
+      const bigNotes = new Set(splitTooBig(changed).big.map(c => c.noteId));
+      const fits = changed.filter(c => !bigNotes.has(c.noteId));
+      if (fits.length) await db.saveCards(fits);
+      const left = tooLargeNote(changed.length - fits.length, 'unlinked');
+      toast(fits.length ? `Linked ${plural(fits.length, 'card')} into ${plural(new Set(fits.map(c => c.noteId)).size, 'note')}${left ? `. ${left}` : ''}` : `${left}.`);
       await refresh();
       closeSheet();
     });

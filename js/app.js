@@ -549,7 +549,9 @@ async function confirmRestore(file) {
   $('rbNo').addEventListener('click', closeSheet);
   $('rbYes').addEventListener('click', async () => {
     try {
-      if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
+      // Catch up first, so everything in the account gets replaced. If another window holds the sync, stop: going on could lose its changes.
+      // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
+      if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
       await db.importAll(data, { everywhere: synced });
     } catch (e) {
       console.error(e);
@@ -607,7 +609,13 @@ function confirmResetSynced() {
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
   $('rsAll').addEventListener('click', async () => {
-    await sync.syncNow();                 // first catch up, so nothing from another device is missed
+    // First catch up, so nothing from another device is missed. Stops if another window holds the sync (as with restore).
+    const caught = await sync.syncNow();
+    if (!caught.ok) {
+      closeSheet();
+      toast(caught.reason === 'error' ? "Couldn't sync first, so cards from your other devices might be missed. Connect to the internet and try again. Nothing was deleted." : 'Another window is syncing. Try again in a moment. Nothing was deleted.');
+      return;
+    }
     await db.deleteEverything();
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
@@ -860,9 +868,9 @@ async function confirmSignOut() {
     navGo('#/decks');
   });
   // Send anything waiting first, so signing out loses nothing.
-  await sync.syncNow();
+  const caught = await sync.syncNow();
   const pending = await sync.pendingChanges().catch(() => 0);
-  if ($('soNote') && !armed) $('soNote').textContent = pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
+  if ($('soNote') && !armed) $('soNote').textContent = caught.reason === 'busy' ? 'Another window is syncing. Close it, or try again in a moment, before signing out.' : pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
 }
 
 // Send everything on this device to the server again (sync.resendEverything). Safe: it never deletes anything or replaces newer data.
