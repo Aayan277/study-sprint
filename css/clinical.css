@@ -795,12 +795,6 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;margin-left:-12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
 }
-@media (min-width:1440px){
-  /* Stats: the streak and retention figures and the study calendar share the first row (the calendar filled a quarter of a
-     full-width card) */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .pgrid{grid-column:1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .cal-card{grid-column:2}
-}
 @media (min-width:1600px){
   /* the deck page on a wide screen: the deck's name and buttons in a column on the left, with the counts panel under them
      staying in view as the cards scroll; subdecks and cards on the right (one 1280px list left a long empty gap in every row) */
