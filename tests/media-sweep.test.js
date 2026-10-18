@@ -99,3 +99,12 @@ test('a swept file that a card here still uses, and this device has, is sent aga
 test("a file the account already lost is never marked again (the 'gone' note must stay for devices that hold it)", () => {
   assert.deepEqual(planSweep({ gone: ['a'], removed: ['a'], now: NOW }).mark, []);
 });
+
+test('after a re-upload every kept-back file is checked (cap Infinity), a few at a time', async () => {
+  const held = Array.from({ length: 60 }, (_, i) => ({ id: 'f' + i }));
+  let now = 0, most = 0;
+  const exists = async id => { most = Math.max(most, ++now); await new Promise(r => setTimeout(r, 1)); now--; return Number(id.slice(1)) % 2 === 0; };
+  const found = await alreadyOnServer(held, exists, new Set(), Infinity);
+  assert.equal(found.length, 30);                                   // all 60 were asked about, not 25
+  assert.ok(most > 1 && most <= 4, 'concurrency ' + most);
+});

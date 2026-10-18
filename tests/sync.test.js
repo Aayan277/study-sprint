@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, withSyncLock, trimForPush } from '../js/sync-merge.js';
 import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
@@ -376,4 +376,75 @@ test('idleDays is a synced, merged setting: the union of two devices, pruned onl
   assert.equal(Object.keys(mergeIdleDays(old, null, T)).length, 3);          // only the one over 3650 days old goes
   assert.deepEqual(Object.keys(mergeIdleDays({ [ymd(T + 86400000)]: true, [ymd(T + 2 * 86400000)]: true }, null, T)), [ymd(T + 86400000)]);      // one day ahead at most (time zones)
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeIdleDays(bad, bad, T), {});
+});
+
+// ---------- taking turns between tabs, giving up a failing re-upload, trimming days off on push ----------
+// A fake of navigator.locks: one holder at a time; ifAvailable gives null when held; signal aborts the wait.
+function fakeLocks() {
+  let held = null; const waiting = [];
+  const grant = async (fn) => { const p = (async () => fn({})) (); held = p.finally(() => { held = null; const next = waiting.shift(); if (next) next(); }); return p; };
+  return {
+    request(name, opts, fn) {
+      if (opts.ifAvailable) return held ? Promise.resolve(fn(null)) : grant(fn);
+      if (!held) return grant(fn);
+      return new Promise((resolve, reject) => {
+        const go = () => resolve(grant(fn));
+        waiting.push(go);
+        opts.signal?.addEventListener('abort', () => { const i = waiting.indexOf(go); if (i >= 0) waiting.splice(i, 1); reject(Object.assign(new Error('aborted'), { name: 'AbortError' })); });
+      });
+    }
+  };
+}
+
+test('sync lock: a routine sync is skipped while another tab syncs, and runs when nobody does', async () => {
+  const locks = fakeLocks(); let release; const ran = [];
+  const frozen = withSyncLock(() => new Promise(r => { release = r; ran.push('other tab'); }), { locks });
+  assert.equal(await withSyncLock(() => { ran.push('routine'); return 'x'; }, { skipIfBusy: true, locks }), undefined);
+  assert.deepEqual(ran, ['other tab']);
+  release(); await frozen;
+  assert.equal(await withSyncLock(() => { ran.push('routine'); return 'x'; }, { skipIfBusy: true, locks }), 'x');
+});
+
+test('sync lock: a sync that must run waits its turn, but not for ever (a frozen tab)', async () => {
+  const locks = fakeLocks(); let release;
+  const frozen = withSyncLock(() => new Promise(r => { release = r; }), { locks });
+  let ran = false;
+  await assert.rejects(withSyncLock(() => { ran = true; }, { waitMs: 20, locks }), { name: 'AbortError' });
+  assert.equal(ran, false);
+  const waiter = withSyncLock(() => 'second', { waitMs: 1000, locks });      // a shorter wait than the holder takes: gets its turn
+  release(); await frozen;
+  assert.equal(await waiter, 'second');
+});
+
+test('sync lock: without Web Locks the sync just runs', async () => {
+  assert.equal(await withSyncLock(() => 'ran', { locks: undefined, skipIfBusy: true }), 'ran');
+  assert.equal(await withSyncLock(() => 'ran', { locks: null }), 'ran');
+});
+
+test('re-upload start-over: a failure ends the sync twice, then it is given up once, with a note, and syncing carries on', async () => {
+  const { tryStartOver, resendGivenUp } = await import('../js/sync.js');
+  const failing = async () => { throw new Error('QuotaExceededError'); };
+  await assert.rejects(tryStartOver('u1', failing), /QuotaExceeded/);
+  await assert.rejects(tryStartOver('u1', failing), /QuotaExceeded/);
+  assert.equal(resendGivenUp(), false);
+  const note = await tryStartOver('u1', failing);                 // the third failure
+  assert.match(note, /re-upload couldn’t finish/);
+  assert.equal(resendGivenUp(), true);
+});
+
+test('re-upload start-over: a success clears the count', async () => {
+  const { tryStartOver } = await import('../js/sync.js');
+  assert.equal(await tryStartOver('u1', async () => {}), null);
+});
+
+test('days off: an oversized stored value is trimmed on the way out; other settings are untouched', () => {
+  const big = {};
+  for (let i = 0; i < 1200; i++) big[`2024-01-${String(i).padStart(4, '0')}`] = { on: i % 2 === 0, at: 5 };      // (keys only need to be unique here)
+  const out = trimForPush('restDays', big);
+  assert.equal(Object.keys(out).length, MAX_FLAG_ENTRIES);
+  assert.equal(Object.keys(big).length, 1200);                         // the stored value itself is not changed
+  const small = { '2026-01-01': { on: true, at: 5 } };
+  assert.deepEqual(trimForPush('restDays', small), small);
+  assert.equal(trimForPush('newPerDay', 30), 30);
+  assert.equal(trimForPush('restDays', null), null);
 });

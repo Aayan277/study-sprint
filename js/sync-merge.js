@@ -163,8 +163,28 @@ export function sameIdleDays(a, b, now = Date.now()) {
   const x = Object.keys(cleanIdleDays(a, now)), y = cleanIdleDays(b, now);
   return x.length === Object.keys(y).length && x.every(k => y[k]);
 }
+// What to send for a merged setting: days off are trimmed to the entry limit (capDayFlags) even when the stored value is already over it,
+// as when a single-device account got there before the limit existed; nothing else is touched.
+export function trimForPush(key, value) {
+  return key === 'restDays' && value && typeof value === 'object' && !Array.isArray(value) ? capDayFlags({ ...value }) : value;
+}
 // The merge and the comparison for each merged setting.
 export const MERGERS = { restDays: [mergeDayFlags, sameDayFlags], idleDays: [mergeIdleDays, sameIdleDays] };
+
+// ---------- taking turns between tabs ----------
+// Runs fn() while holding the sync lock, so two tabs can't mix up the bookmarks. A tab frozen while it holds the lock (a backgrounded
+// iPhone app, mid-request) would block the others for good, so nobody waits for ever:
+//   skipIfBusy  a routine sync does nothing when another tab is syncing (that tab does the work): fn is not run, and undefined comes back
+//   otherwise   wait up to waitMs for the lock, then give up with an AbortError (the caller says so; the work stays pending)
+// Where the browser has no Web Locks, fn just runs.
+export const LOCK_NAME = 'study-sprint-sync';
+export const LOCK_WAIT = 30000;
+export function withSyncLock(fn, { skipIfBusy = false, waitMs = LOCK_WAIT, locks = globalThis.navigator?.locks } = {}) {
+  if (!locks) return fn();
+  if (skipIfBusy) return locks.request(LOCK_NAME, { ifAvailable: true }, lock => (lock ? fn() : undefined));
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), waitMs);
+  return locks.request(LOCK_NAME, { signal: ctl.signal }, () => { clearTimeout(timer); return fn(); }).finally(() => clearTimeout(timer));
+}
 
 // ---------- pictures and sounds (files in Supabase Storage) ----------
 export const isSoundRow = m => String(m?.type || '').startsWith('audio/');

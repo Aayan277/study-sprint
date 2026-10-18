@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES, MAX_ID_BYTES, savedTooBigNote } from '../js/quota.js';
+import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES, MAX_ID_BYTES, savedTooBigNote, splitTooBig, tooLargeNote } from '../js/quota.js';
 import { pushSafely } from '../js/sync-push.js';
 
 const usage = (media, limit = 180 * MB, data = 3 * MB) => ({ data, media, limit });
@@ -292,4 +292,21 @@ test('editing a note: the new shared fields count, not the old ones', () => {
   assert.match(savedTooBigNote([old], { noteExtra: 'y'.repeat(70000) }), /too large to save/);            // new long note replaces the old short one
   assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: '' }), '');       // emptied: taken off, as saveNote does
   assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: undefined }), '');
+});
+
+test('bulk saves: cards too large to sync are split off, the rest go ahead', () => {
+  const small = { id: 'a', front: 'x', back: 'y', updatedAt: 5 }, huge = { id: 'b', front: 'x', back: 'y'.repeat(70000) };
+  const { ok, big } = splitTooBig([small, huge, { ...small, id: 'c' }]);
+  assert.deepEqual(ok.map(c => c.id), ['a', 'c']);
+  assert.deepEqual(big.map(c => c.id), ['b']);
+  assert.equal(savedTooBigNote([huge]) !== '', big.length === 1);                   // the same count as the editor's check
+  assert.deepEqual(splitTooBig([small], { noteExtra: 'z'.repeat(70000) }).big.length, 1);       // extra fields count too
+  assert.deepEqual(splitTooBig([{ ...small, noteExtra: 'z'.repeat(70000) }], { noteExtra: '' }).big, []);     // '' takes it off, as saving does
+});
+
+test('the words for cards left out of a bulk save', () => {
+  assert.equal(tooLargeNote(0), '');
+  assert.equal(tooLargeNote(1), '1 card was too large and was left unchanged');
+  assert.equal(tooLargeNote(2), '2 cards were too large and were left unchanged');
+  assert.equal(tooLargeNote(3, 'out'), '3 cards were too large and were left out');
 });

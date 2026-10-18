@@ -17,7 +17,7 @@ import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
-import { importWarnings, tooBigNotes, cardsWarning, passedCardsWarning } from './quota.js';
+import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -755,6 +755,12 @@ async function save() {
       ankiOf.set(rev.id, r.ankiId);
     });
     cards.push(...reverses);
+    // A card too large to sync is left out, with the rest of its note (the other blanks, the reverse card), so nothing comes in half.
+    const bigNotes = new Set(), bigIds = new Set();
+    for (const c of splitTooBig(cards).big) { bigIds.add(c.id); if (c.noteId) bigNotes.add(c.noteId); }
+    const countBefore = cards.length;
+    if (bigIds.size) cards = cards.filter(c => !bigIds.has(c.id) && !(c.noteId && bigNotes.has(c.noteId)));
+    const tooLarge = countBefore - cards.length;
     let withHistory = 0;
     const states = [], logs = [];
     if (replay) {
@@ -779,7 +785,7 @@ async function save() {
     }
     if (bigNote) { try { localStorage.setItem(CARDS_WARNED_KEY, '1'); } catch { /* fine */ } }
     const added = `Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`;
-    const left = tooBigNotes(tooBig);
+    const left = [...tooBigNotes(tooBig), tooLargeNote(tooLarge, 'out')].filter(Boolean);
     const said = left.length ? `${added}. ${left.join('. ')}` : added;
     if (bigNote) toast(`${said}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' }, hold: true });
     else toast(said, left.length ? { ms: 6000 } : undefined);
