@@ -13,7 +13,7 @@ import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
   gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
-import { questionAnnouncement } from './game.js';
+import { questionAnnouncement, spokenPrompt } from './game.js';
 import { singleKeysOn, keyHint } from './shortcuts.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -280,7 +280,7 @@ function start(el, opts) {
       <p id="endAskT">End this round? Your score so far is kept in the results.</p>
       <div class="end-ask-b"><button class="btn primary small" id="endYes" type="button">End round</button><button class="btn ghost small" id="endNo" type="button">Keep playing</button></div>
     </div>
-    <h1 class="sr-only" id="pTitle" tabindex="-1">Play: ${{ classic: 'Classic', survival: 'Survival', lightning: 'Lightning' }[fmt] || 'round'} round</h1>
+    <h1 class="sr-only" id="pTitle">Play: ${{ classic: 'Classic', survival: 'Survival', lightning: 'Lightning' }[fmt] || 'round'} round</h1>
     <p class="prompt" id="pLabel"></p>
     <div class="flash play-card" id="pCard">
       <div class="flash-front" id="pPrompt" role="heading" aria-level="2" tabindex="-1"></div>
@@ -329,9 +329,6 @@ function showQuestion() {
   warmCards(G.queue.slice(G.i + 1, G.i + 4));        // the next cards' pictures, if this device lacks them
   updateHud();
   $('feedback').innerHTML = '';
-  // Said by the screen reader (a polite live region of its own, next to the feedback one, which keeps "Correct +189"): which question this is
-  // and what it asks. A right answer moves on by itself after a moment, so without this the next question would arrive in silence.
-  $('pAnnounce').replaceChildren(Object.assign(document.createElement('p'), { textContent: questionAnnouncement(G, q) }));
   $('pCard').classList.remove('ok', 'no');
   if ($('pCard').getBoundingClientRect().top < 0) scrollTo(0, 0);   // scrolled down to Next last time
   $('pLabel').textContent = { front: 'Pick the matching answer', back: 'Which card is this?', typing: 'Type the answer' }[G.qtype];
@@ -340,6 +337,7 @@ function showQuestion() {
   // The prompt side's picture, if it has one. An image-occlusion question is the picture with its highlighted box.
   stopSound();
   p.innerHTML = (q.occ ? occlusionHTML(card, 'front', { zoom: false }) : imgHTML(q.image)) + mathHTML(q.prompt) + soundsHTML(q.sounds);
+  if (q.prompt.includes('[…]')) p.setAttribute('aria-label', spokenPrompt(q)); else p.removeAttribute('aria-label');      // (a cloze blank is read "blank", not "left bracket ellipsis")
   clearTimeout(G.flashTimer);
   $('flashQ').hidden = true;
   if (G.flash) G.flashTimer = setTimeout(() => { if (!G?.answered) { $('pPrompt')?.classList.add('gone'); $('flashQ').hidden = false; } }, G.flash);
@@ -366,6 +364,10 @@ function showQuestion() {
     $('options').innerHTML = G.opts.map((o, i) =>
       `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
   }
+  // Said by the screen reader (a polite live region of its own, next to the feedback one, which keeps "Correct +189"). A right answer moves
+  // on by itself, so without this the next question would arrive in silence. With focus on the question it only gives the number (the
+  // prompt is read from the focus); otherwise (typing, or focus left on Quit) it says the prompt too.
+  $('pAnnounce').replaceChildren(Object.assign(document.createElement('p'), { textContent: questionAnnouncement(G, q, { withText: document.activeElement !== p }) }));
   G.limit = timeLimit({ fmt: G.fmt, pace: G.pace, typing, i: G.i, untimed: G.untimed });
   G.qStart = performance.now();
   $('pTimer').classList.remove('low');
@@ -532,8 +534,9 @@ async function record(round, entry) {
   const id = entry.card.id;
   const now = Date.now();
   const chars = entry.chars ?? 0;
+  const untimed = !!round.untimed && round.fmt !== 'lightning';
   let rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing',
-    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars });
+    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars, untimed });
   const prev = data.statesById.get(id);
   // A new card in a deck with an exam coming up (its own or a parent's) is started by Play: this answer is its
   // first review. That uses up one of today's new cards. Over the deck's new-card limit (overall, the deck's own
@@ -548,7 +551,7 @@ async function record(round, entry) {
   rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing', overridden: !!entry.overridden });
   if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
   const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
-    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden });
+    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden, untimed });
   entry.prev = prev;                      // kept with the log row's id, so "I was right" can take this answer back (see rerecord)
   if (applies(decision)) {
     let next = null;
@@ -753,7 +756,7 @@ async function finish() {
 // the Missed list so they can be accepted), all (the whole Missed list is open) }. Drawn again after each correction.
 async function drawResults(el, round, ctx, { again = false } = {}) {
   const { total, correct, accuracy: acc, avgSpeed, avgTime } = roundStats(round.log);
-  const { letter, label } = gradeFor(acc, avgSpeed);
+  const { letter, label } = gradeFor(acc, avgSpeed, { untimed: round.untimed && round.fmt !== 'lightning' });
   const { isBest, firstScore } = ctx;
   const seen = new Set();
   const listed = round.log.filter(l => (!l.ok || ctx.fixed.has(l)) && !seen.has(l.card.id) && seen.add(l.card.id));

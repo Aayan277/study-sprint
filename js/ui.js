@@ -289,17 +289,20 @@ let errSeq = 0;
 // Show a problem with a form field. errEl is the error paragraph (role="alert" is set here if the markup forgot, but give it in the markup:
 // an alert that exists before its text appears is announced most reliably). The field gets aria-invalid and aria-describedby pointing at the
 // message, and the cursor moves to it. The error clears itself when the person edits the field. field may be null (an error about the whole form).
-export function showFieldError(field, errEl, text, { focus = true } = {}) {
+// When the cursor moves to the field, the field's aria-describedby makes the screen reader read the message, so the message is NOT also an alert
+// (it would be spoken twice). Without a field, or without moving focus, it is an alert, the only thing that tells the person.
+// clearOnInput false keeps the message until the caller clears it (for boxes that check the value again themselves as you type).
+export function showFieldError(field, errEl, text, { focus = true, clearOnInput = true } = {}) {
   if (!errEl) return;
   if (!errEl.id) errEl.id = `err${++errSeq}`;
-  if (!errEl.getAttribute('role')) errEl.setAttribute('role', 'alert');
+  if (field && focus) errEl.removeAttribute('role'); else errEl.setAttribute('role', 'alert');
   errEl.textContent = text;
   errEl.hidden = false;
   if (!field) return;
   field.setAttribute('aria-invalid', 'true');
   field.setAttribute('aria-describedby', toggleToken(field.getAttribute('aria-describedby'), errEl.id, true));
   if (focus) field.focus();
-  if (!field._errClear) {
+  if (clearOnInput && !field._errClear) {
     field._errClear = () => { field._errClear = null; clearFieldError(field, errEl); };
     field.addEventListener('input', field._errClear, { once: true });
   }

@@ -210,10 +210,14 @@ export function weightedQueue(items, len, weightOf = () => 1, rnd = Math.random,
 
 // What the screen reader says when a question is drawn: "Question 3 of 20: <the prompt as plain words>" (Survival and Lightning have no
 // total). A picture question has no text to read.
-export function questionAnnouncement(round, q) {
+// withText false: just the number, for when focus has moved to the question itself (the screen reader reads the prompt from there).
+export function questionAnnouncement(round, q, { withText = true } = {}) {
   const n = round.fmt === 'classic' && round.total ? `Question ${Math.min(round.i + 1, round.total)} of ${round.total}` : `Question ${round.i + 1}`;
-  const text = q.occ ? 'name the highlighted box in the picture' : answerText(q.prompt).trim() || 'look at the picture';
-  return `${n}: ${text}`;
+  return withText ? `${n}: ${spokenPrompt(q)}` : n;
+}
+// The prompt as a screen reader should hear it: formulas as words, a cloze blank "[…]" as "blank".
+export function spokenPrompt(q) {
+  return q.occ ? 'name the highlighted box in the picture' : answerText(q.prompt).replace(/\[…\]/g, 'blank').replace(/\s+/g, ' ').trim() || 'look at the picture';
 }
 
 // Time allowed for question number i (counting from 0), in ms.
@@ -263,8 +267,9 @@ export function roundStats(log) {
   };
 }
 
-export function gradeFor(accuracy, avgSpeed) {
-  const rating = accuracy * 0.75 + avgSpeed * 0.25;
+// untimed: there was no clock, so speed is not part of the grade (accuracy alone, so S is reachable).
+export function gradeFor(accuracy, avgSpeed, { untimed = false } = {}) {
+  const rating = untimed ? accuracy : accuracy * 0.75 + avgSpeed * 0.25;
   const [, letter, label] = GRADES.find(g => rating >= g[0]);
   return { letter, label };
 }

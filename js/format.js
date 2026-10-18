@@ -86,6 +86,14 @@ export function spokenCard(front, back, max = 160) {
   return b ? `${f || 'Picture'}${/[.!?…:]$/.test(f) ? '' : '.'} Answer: ${b}` : f || 'Picture';
 }
 
+// A list row as one phrase: the card (spokenCard), then what the row shows only in pictures or badges: Reverse / Cloze, a picture or sound,
+// the deck it is in, its status and flag. Each part ends in a full stop unless it already ends in punctuation. About 160 characters of card text.
+export function spokenRow({ front, back, reverse = false, cloze = 0, pic = false, sound = false, where = '', status = '', flag = '' }) {
+  const parts = [reverse ? 'Reverse card' : '', cloze > 0 ? `Cloze card, blank ${cloze}` : '', spokenCard(front, back, 70), pic ? 'Has a picture' : '', sound ? 'Has a sound' : '',
+    where ? `In ${where}` : '', status, flag ? `${flag} flag` : ''].filter(Boolean);
+  return parts.map((p, i) => (i < parts.length - 1 && !/[.!?…:]$/.test(p) ? `${p}.` : p)).join(' ');
+}
+
 // The raw text typed as it stands (formulas as written), with "\$" as "$". The other thing a typed answer may match.
 export function rawAnswerText(text) {
   const held = holdMath(String(text ?? ''));

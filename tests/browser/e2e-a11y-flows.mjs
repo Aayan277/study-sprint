@@ -25,7 +25,10 @@ await page.$eval('input[name=qtype][value=front]', el => el.click());
 await page.$eval('input[name=len][value="10"]', el => el.click());
 await page.focus('#startBtn'); await page.keyboard.press('Enter'); await page.waitForSelector('#pCard');
 ok(await active() === 'pPrompt', 'Play: starting a round puts focus on the question');
-ok((await page.textContent('#pAnnounce')).match(/^Question 1 of 10: ./) !== null, 'Play: the live region says "Question 1 of 10: <prompt>"');
+ok((await page.textContent('#pAnnounce')).trim() === 'Question 1 of 10', 'Play: with focus on the question, the live region only says "Question 1 of 10" (the prompt is read from the focus, not twice)');
+{ const cdp = await ctx.newCDPSession(page); const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+  const h = nodes.find(n => n.role?.value === 'heading' && n.properties?.some(p => p.name === 'focused' && p.value.value));
+  ok(h && (h.name?.value || '').length > 0, 'Play: the focused node in the accessibility tree is the question heading, named with the prompt'); await cdp.detach(); }
 ok((await page.locator('h1').first().textContent()).includes('Play'), 'Play: the round has an h1');
 { const s = await snap('#screen'); ok(/heading "Play: Classic round" \[level=1\]/.test(s) && /heading ".+" \[level=2\]/.test(s), 'Play: ARIA snapshot has the h1 and the question as a level-2 heading'); }
 const front = await page.textContent('#pPrompt');
@@ -35,7 +38,7 @@ await page.keyboard.press(String(idx + 1));
 await page.waitForSelector('.fb.ok');
 ok((await page.textContent('#feedback')).includes('Correct') && /\+\d+/.test(await page.textContent('#feedback')), 'Play: "Correct +points" is still in the feedback live region');
 ok(await attr('#feedback', 'aria-live') === 'polite' && await attr('#pAnnounce', 'aria-live') === 'polite', 'Play: both regions are polite live regions');
-await page.waitForFunction(() => /^Question 2 of 10/.test(document.querySelector('#pAnnounce')?.textContent || ''), null, { timeout: 4000 });
+await page.waitForFunction(() => /^Question 2 of 10$/.test(document.querySelector('#pAnnounce')?.textContent || ''), null, { timeout: 4000 });
 ok(await active() === 'pPrompt', 'Play: after a right answer moves on by itself, focus is back on the question (not on the page)');
 // Focus on Quit is left alone while a right answer moves on.
 await page.focus('#quitBtn');
@@ -46,6 +49,7 @@ await page.focus('#quitBtn');
 await page.focus('#quitBtn');
 await page.waitForFunction(() => /^Question 3 of 10/.test(document.querySelector('#pAnnounce')?.textContent || ''), null, { timeout: 4000 });
 ok(await active() === 'quitBtn', 'Play: focus on Quit is not pulled away by the next question');
+ok(/^Question 3 of 10: ./.test(await page.textContent('#pAnnounce')), 'Play: when focus is not on the question, the announcement includes the prompt');
 await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) await page.click('#endYes');
 await leaveResults();
 
@@ -54,11 +58,27 @@ await page.goto(URL + '#/play'); await page.waitForSelector('#startBtn');
 await page.$eval('input[name=qtype][value=typing]', el => el.click());
 await page.click('#startBtn'); await page.waitForSelector('#pInput');
 ok(await active() === 'pInput', 'Play typing: focus is in the answer box');
+ok(/^Question 1 of \d+: ./.test(await page.textContent('#pAnnounce')), 'Play typing: the announcement has the full prompt (focus is on the answer box)');
 await page.keyboard.type('abc');
 await page.waitForTimeout(500);
 ok(await page.inputValue('#pInput') === 'abc' && await active() === 'pInput', 'Play typing: text being typed is left alone');
 await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) await page.click('#endYes');
 await leaveResults();
+
+// ---------- 9. Play reads a cloze blank as "blank" ----------
+await page.evaluate(async () => { const db = await import('./js/db.js'); const { planNoteSave } = await import('./js/cloze.js');
+  await db.addDeckWithCards({ id: 'czdeck', name: 'Cloze check', created: Date.now() + 9 }, []);
+  const plan = planNoteSave([], 'The mitochondria makes {{c1::ATP}} for the cell'); await db.saveNote(plan, { deckId: 'czdeck', noteId: db.newId(), tags: [] }); });
+await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
+await page.goto(URL + '#/play'); await page.waitForSelector('#startBtn');
+await page.selectOption('#pDeck', 'czdeck');
+await page.$eval('input[name=qtype][value=typing]', el => el.click());
+await page.click('#startBtn'); await page.waitForSelector('#pInput');
+{ const said = await page.textContent('#pAnnounce'); console.log('   cloze announcement:', said);
+  ok(/makes blank for the cell/.test(said) && !said.includes('…'), 'Play: a cloze blank is announced as "blank"'); }
+await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) await page.click('#endYes');
+await leaveResults();
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.deleteDeck('czdeck'); await db.setSetting('playPrefs', {}); });
 
 // ---------- 12. Play: no time limit ----------
 await page.goto(URL + '#/play'); await page.waitForSelector('#startBtn');
@@ -85,7 +105,16 @@ await page.evaluate(async () => { const db = await import('./js/db.js'); const p
 await page.goto(URL + '#/today'); await page.waitForSelector('#startBtn');
 await page.focus('#startBtn'); await page.keyboard.press('Enter'); await page.waitForSelector('#flash');
 ok((await page.textContent('h1')).trim() === 'Review', 'Review: the page has an h1');
-ok((await attr('#flash', 'aria-label') || '').startsWith('Flashcard question'), 'Review: the card front has a name');
+{ const cdp = await ctx.newCDPSession(page); const { root } = await cdp.send('DOM.getDocument'); const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '#flash' });
+  const { node } = await cdp.send('DOM.describeNode', { nodeId });
+  const { nodes } = await cdp.send('Accessibility.getPartialAXTree', { backendNodeId: node.backendNodeId, fetchRelatives: false });
+  const card = nodes[0];
+  const q = (await page.textContent('#rvQ')).trim();
+  console.log('   card node:', card?.role?.value, '|', card?.name?.value, '|', card?.description?.value);
+  ok(card && (card.name?.value || '').includes(q.slice(0, 20)) && !/Press Space/.test(card.name.value), 'Review: the focused card is named by the question text (accessibility tree)');
+  ok(/Press Space or Enter to show the answer/.test(card?.description?.value || ''), 'Review: the Space/Enter hint is its description, not part of the name');
+  await cdp.detach(); }
+ok(await attr('#flash', 'aria-label') === null, 'Review: no aria-label hides the question text');
 { const s = await snap('#flash'); ok(/heading "Question" \[level=2\]/.test(s), 'Review: ARIA snapshot of the front has the Question heading'); }
 ok(await active() === 'flash', 'Review: the card has focus');
 await page.keyboard.press('Space'); await page.waitForSelector('.rate');
@@ -96,6 +125,7 @@ console.log('   rating names:', names.join(' | '));
 ok(names.length === 4 && names.every(n => /^(Again|Hard|Good|Easy), next review in (less than a minute|\d+ (minutes?|hours?|days?)|[\d.]+ (months?|years?))/.test(n)), 'Review: rating buttons say "Good, next review in 5 days"');
 ok(/^Again, next review in 1 minute/.test(names[0]) || /^Again, next review in \d+ minutes?/.test(names[0]), 'Review: Again is a few minutes for a new card');
 { const s = await snap('#ratebar'); ok(/button "Good, next review in /.test(s), 'Review: ARIA snapshot shows the spoken name of Good'); }
+ok(await attr('#flash', 'aria-labelledby') === null && await attr('#flash', 'aria-describedby') === null, 'Review: after flipping the card drops its question name and hint');
 ok(await page.locator('.rate kbd.key-hint').count() === 4 && (await page.textContent('#keyLine')).includes('1–4'), 'Review: key hints are shown while shortcuts are on');
 
 // ---------- 4. Single-key shortcuts ----------
@@ -119,6 +149,7 @@ await page.waitForSelector('#flash');
 console.log('   active before keys:', await active());
 ok(await page.locator('kbd').count() === 0 && (await page.textContent('#keyLine')).trim() === '', 'Shortcuts off: Review shows no key hints');
 ok(await page.locator('[aria-keyshortcuts]').count() === 0, 'Shortcuts off: no aria-keyshortcuts left on the page');
+ok(await page.evaluate(() => [...document.querySelectorAll('[title]')].every(e => !/\((?:[A-Z]|@|-|Space)\)$/.test(e.title))), 'Shortcuts off: no "(R)" or "(D)" in button titles');
 await page.keyboard.press('i'); await page.waitForTimeout(200);
 ok(!(await page.evaluate(() => document.getElementById('sheet').open)), 'Shortcuts off: I does nothing');
 const pen = await attr('#scratchBtn', 'aria-pressed');
@@ -133,6 +164,7 @@ await page.keyboard.press('Enter'); await page.waitForTimeout(400);
 ok((await page.textContent('.rv-counts')) !== before || await page.locator('.rate').count() === 0, 'Shortcuts off: Enter on the focused answer still rates the suggested button');
 // Play with the keys off
 await page.goto(URL + '#/play'); await page.waitForSelector('#startBtn');
+await page.$eval('input[name=qtype][value=front]', el => el.click());
 ok((await page.textContent('.keys')).trim() === 'Esc to quit', 'Shortcuts off: Play setup hint drops the number keys');
 await page.click('#startBtn'); await page.waitForSelector('#pCard');
 ok(await page.locator('#options .key').count() === 0, 'Shortcuts off: Play options show no number badges');
@@ -201,7 +233,7 @@ ok(await attr('#acForm button[type=submit], button[type=submit][form=acForm]', '
 // ---------- 3. Form errors: Add card ----------
 await page.evaluate(() => document.querySelector('button[type=submit][form=acForm], #acForm button[type=submit]').click());
 await page.waitForTimeout(200);
-ok(await attr('#acErr', 'role') === 'alert', 'Errors: the Add card error is an alert (and the sheet reports its reason through aria-describedby)');
+ok(await page.evaluate(() => { const f = document.activeElement; return f?.getAttribute('aria-invalid') === 'true' && (f.getAttribute('aria-describedby') || '').includes('acErr'); }) || await attr('#acErr', 'role') === 'alert', 'Errors: the Add card error is announced (described by the field, or an alert)');
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 
 // ---------- 3. Form errors: Edit deck ----------
@@ -210,7 +242,7 @@ await page.click('#deckMore'); await page.click('[data-act=edit], #deckEdit, but
 await page.fill('#deckName', '');
 await page.evaluate(() => document.querySelector('#deckForm').requestSubmit());
 await page.waitForSelector('#deckErr:not([hidden])');
-ok(await attr('#deckErr', 'role') === 'alert' && (await page.textContent('#deckErr')).includes('name'), 'Errors: Edit deck shows an alert');
+ok((await page.textContent('#deckErr')).includes('name') && await attr('#deckErr', 'role') === null, 'Errors: when focus moves to the field the message is its description, not also an alert (no double speech)');
 ok(await attr('#deckName', 'aria-invalid') === 'true' && (await attr('#deckName', 'aria-describedby') || '').includes('deckErr'), 'Errors: the name field is aria-invalid and described by the error');
 ok(await active() === 'deckName', 'Errors: focus goes to the field');
 { const s = await snap('#deckForm'); ok(/textbox "Name"/.test(s), 'Errors: the field keeps its name in the ARIA snapshot'); }
@@ -218,12 +250,29 @@ await page.keyboard.type('Biology');
 ok(await attr('#deckName', 'aria-invalid') === null && await page.locator('#deckErr').isHidden(), 'Errors: typing a fix clears aria-invalid and the message');
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 
+// ---------- 6. Steps editor keeps its error while the value is still wrong ----------
+await page.goto(URL + '#/settings'); await page.waitForSelector('#lsteps', { state: 'attached' });
+await page.evaluate(() => { document.getElementById('advanced').open = true; });
+await page.fill('#lsteps', 'zz'); await page.dispatchEvent('#lsteps', 'change');
+await page.waitForSelector('[data-key=learningSteps] .err:not([hidden])');
+ok(await attr('[data-key=learningSteps] .err', 'role') === 'alert' && await attr('#lsteps', 'aria-invalid') === 'true', 'Steps: a bad value is an alert and aria-invalid (focus is not pulled back)');
+await page.focus('#lsteps'); await page.keyboard.type('q');
+ok(await attr('#lsteps', 'aria-invalid') === 'true' && await page.locator('[data-key=learningSteps] .err').isVisible(), 'Steps: typing another wrong character keeps the error');
+await page.fill('#lsteps', '1m 10m');
+ok(await attr('#lsteps', 'aria-invalid') === null && await page.locator('[data-key=learningSteps] .err').isHidden(), 'Steps: a readable value clears it as you type');
+await page.fill('#maxDays', '0'); await page.dispatchEvent('#maxDays', 'change');
+ok(await attr('#maxDays', 'aria-invalid') === 'true', 'Max interval: a bad value is flagged');
+await page.focus('#maxDays'); await page.keyboard.type('0');
+ok(await attr('#maxDays', 'aria-invalid') === 'true', 'Max interval: still flagged while the value is still wrong');
+await page.fill('#maxDays', '30');
+ok(await attr('#maxDays', 'aria-invalid') === null, 'Max interval: cleared once it is valid');
+
 // ---------- 3 + 20. Sign-in form ----------
 await page.goto(URL + '#/settings'); await page.waitForSelector('#syncEmail');
 ok(await attr('#syncPw', 'autocomplete') === 'current-password', 'Sign-in: the password field starts as current-password');
 await page.focus('#syncForm button[type=submit]'); await page.keyboard.press('Enter');
 await page.waitForSelector('#syncErr:not([hidden])');
-ok(await attr('#syncErr', 'role') === 'alert' && await attr('#syncEmail', 'aria-invalid') === 'true' && await active() === 'syncEmail', 'Sign-in: an empty email is an alert, aria-invalid, and focuses the email box');
+ok(await attr('#syncErr', 'role') === null && await attr('#syncEmail', 'aria-invalid') === 'true' && await active() === 'syncEmail', 'Sign-in: an empty email is an alert, aria-invalid, and focuses the email box');
 ok((await attr('#syncEmail', 'aria-describedby') || '').includes('syncErr'), 'Sign-in: the email box is described by the error');
 await page.fill('#syncEmail', 'a@b.co');
 ok(await attr('#syncEmail', 'aria-invalid') === null, 'Sign-in: fixing the email clears aria-invalid');
@@ -231,6 +280,10 @@ await page.focus('#syncForm button[type=submit]'); await page.keyboard.press('En
 await page.waitForFunction(() => document.getElementById('syncPw').getAttribute('aria-invalid') === 'true');
 ok(await active() === 'syncPw' && (await page.textContent('#syncErr')).includes('password'), 'Sign-in: then the password box is flagged');
 await page.fill('#syncPw', 'short');
+await page.focus('#syncCreate');
+ok(await attr('#syncPw', 'autocomplete') === 'new-password', 'Sign-in: focusing Create account already marks the password as new-password');
+await page.focus('#syncForm button[type=submit]');
+ok(await attr('#syncPw', 'autocomplete') === 'current-password', 'Sign-in: focusing Sign in puts it back');
 await page.click('#syncCreate'); await page.waitForTimeout(200);
 ok(await attr('#syncPw', 'autocomplete') === 'new-password' && await attr('#syncPw', 'aria-invalid') === 'true', 'Sign-in: Create account marks the password as new-password and checks the rules');
 

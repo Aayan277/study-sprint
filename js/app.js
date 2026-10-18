@@ -393,7 +393,7 @@ function wireAdvanced(el) {
     input.addEventListener('input', () => { const r = parseSteps(input.value); if (r.steps) { explain(r.steps); clearFieldError(input, err); } });
     input.addEventListener('change', () => {
       const r = parseSteps(input.value);
-      if (r.error) { showFieldError(input, err, r.error, { focus: false }); return; }      // (checked as you leave the box: pulling the cursor back would trap it)
+      if (r.error) { showFieldError(input, err, r.error, { focus: false, clearOnInput: false }); return; }      // (checked as you leave the box: pulling the cursor back would trap it)
       clearFieldError(input, err);
       settings[key] = formatSteps(sortSteps([...new Set(r.steps)]));   // tidy: in order, no duplicates
       input.value = settings[key];
@@ -414,7 +414,7 @@ function wireAdvanced(el) {
 
   const setMax = days => {
     const r = parseMaxInterval(days);
-    if (r.error) { showFieldError($('maxDays'), $('maxErr'), r.error, { focus: false }); return; }
+    if (r.error) { showFieldError($('maxDays'), $('maxErr'), r.error, { focus: false, clearOnInput: false }); return; }
     clearFieldError($('maxDays'), $('maxErr'));
     settings.maxInterval = r.days;
     $('maxDays').value = r.days;
@@ -424,6 +424,7 @@ function wireAdvanced(el) {
   };
   el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
   $('maxDays').addEventListener('change', e => setMax(e.target.value));
+  $('maxDays').addEventListener('input', e => { if (!parseMaxInterval(e.target.value).error) clearFieldError($('maxDays'), $('maxErr')); });      // (checked again as you type)
   $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
@@ -738,6 +739,11 @@ async function drawSync() {
     wireRules('syncPw', 'syncRules');
     $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
     $('syncCreate').addEventListener('click', () => go(true));
+    // The password box is told which kind of password it holds as soon as a button is aimed at (focus or press), not only when the form is sent.
+    const kind = v => () => { $('syncPw').autocomplete = v; };
+    for (const [btn, v] of [[$('syncCreate'), 'new-password'], [$('syncForm').querySelector('button[type=submit]'), 'current-password']]) {
+      for (const ev of ['focus', 'pointerdown']) btn.addEventListener(ev, kind(v));
+    }
     $('forgotBtn').addEventListener('click', async () => {
       const email = $('syncEmail').value.trim(), err = $('syncErr');
       if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError($('syncEmail'), err, 'Type your email above first, then tap Forgot password.'); return; }

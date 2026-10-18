@@ -16,7 +16,7 @@ import { savedTooBigNote, splitTooBig, tooLargeNote } from './quota.js';
 import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
-import { plainText, mathHTML, spokenCard } from './format.js';
+import { plainText, mathHTML, spokenRow } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError } from './ui.js';
@@ -117,7 +117,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
       const flag = FLAGS.find(f => f.id === card.flag);
       const sel = B.selected.has(card.id);
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
-        <button type="button" class="crow-btn" aria-label="${esc(`${spokenCard(card.front, card.back)}. ${st.label}${flag ? `, ${flag.name} flag` : ''}`)}" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
+        <button type="button" class="crow-btn" aria-label="${esc(spokenRow({ front: card.front, back: card.back, reverse: isPair(card) && !!card.reverse, cloze: Number(card.cloze), pic: !!(card.frontImage || card.backImage), sound: !!(card.frontSounds?.length || card.backSounds?.length), where: where(card), status: st.label, flag: flag?.name }))}" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
           <span class="crow-main"><span class="f">${isPair(card) && card.reverse ? '<span class="rev-pill" title="Reverse card: asks the back, expects the front">Reverse</span> ' : ''}${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>

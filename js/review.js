@@ -260,7 +260,7 @@ function renderSession(el, enter = false) {
 
   const head = `
     <div class="rv-head">
-      <h1 class="sr-only" tabindex="-1">Review</h1>
+      <h1 class="sr-only">Review</h1>
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
       <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" title="Scratchpad${singleKeysOn() ? ' (D)' : ''}">${PEN_ICON}</button>
@@ -268,14 +268,15 @@ function renderSession(el, enter = false) {
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
-    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-label="Flashcard question${typeThis ? '' : '. Press Space or Enter to show the answer'}"`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
         ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
           <h2 class="sr-only">Question</h2>
           ${deckLabel}
-          <div class="flash-front${size}">${front}</div>
+          <div class="flash-front${size}" id="rvQ">${front}</div>
+          ${typeThis ? '' : '<span class="sr-only" id="rvHint">Press Space or Enter to show the answer</span>'}
           ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
@@ -463,7 +464,7 @@ function flip(el) {
   const flash = $('flash');
   flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
   flash.classList.add('flipped');
-  ['role', 'tabindex', 'aria-label'].forEach(a => flash.removeAttribute(a));
+  ['role', 'tabindex', 'aria-label', 'aria-labelledby', 'aria-describedby'].forEach(a => flash.removeAttribute(a));
   const front = flash.querySelector('.rv-front'), back = flash.querySelector('.rv-back');
   front.setAttribute('aria-hidden', 'true'); front.inert = true;
   back.removeAttribute('aria-hidden'); back.inert = false;

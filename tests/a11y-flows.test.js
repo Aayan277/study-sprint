@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { toggleToken, toolbarTarget } from '../js/a11y.js';
 import { formatInterval, formatIntervalLong } from '../js/queue.js';
 import { timeLimit, scoreAnswer, bestKey, questionAnnouncement } from '../js/game.js';
-import { spokenCard } from '../js/format.js';
+import { spokenCard, spokenRow } from '../js/format.js';
+import { gradeFor, spokenPrompt } from '../js/game.js';
+import { autoRating, speedProfiles, playLogRow, SPEED } from '../js/autograde.js';
 import { configureShortcuts, singleKeysOn, stripKeys, keyHint } from '../js/shortcuts.js';
 
 test('toggleToken adds and removes one id in an aria-describedby list', () => {
@@ -101,4 +103,35 @@ test('single-key shortcuts: on by default; off hides the hints and aria-keyshort
   assert.equal(keyHint('<kbd>E</kbd>'), '');
   configureShortcuts({ singleKeys: true });
   assert.equal(singleKeysOn(), true);
+});
+
+test('spokenRow: badges, picture, deck and status, no double full stops, about 160 characters', () => {
+  assert.equal(spokenRow({ front: 'Q?', back: 'A', status: 'New' }), 'Q? Answer: A. New');
+  assert.equal(spokenRow({ front: 'Q', back: 'A', reverse: true, pic: true, sound: true, where: 'Bio › Cells', status: 'Due', flag: 'Red' }),
+    'Reverse card. Q. Answer: A. Has a picture. Has a sound. In Bio › Cells. Due. Red flag');
+  assert.equal(spokenRow({ front: 'The [...] x', back: '', cloze: 2, status: 'New' }), 'Cloze card, blank 2. The [...] x. New');
+  assert.ok(!/\.\./.test(spokenRow({ front: 'What?', back: 'Yes.', status: 'New' })));
+  assert.ok(spokenRow({ front: 'a'.repeat(400), back: 'b'.repeat(400), status: 'New' }).length < 200);
+});
+
+test('Play: a cloze blank is read "blank" in the announcement', () => {
+  assert.equal(spokenPrompt({ prompt: 'The mitochondria makes […] for the cell' }), 'The mitochondria makes blank for the cell');
+  assert.equal(questionAnnouncement({ fmt: 'classic', i: 0, total: 5 }, { prompt: 'It is […]' }), 'Question 1 of 5: It is blank');
+  assert.equal(questionAnnouncement({ fmt: 'classic', i: 0, total: 5 }, { prompt: 'It is […]' }, { withText: false }), 'Question 1 of 5');
+  assert.equal(questionAnnouncement({ fmt: 'survival', i: 3 }, { prompt: 'x' }, { withText: false }), 'Question 4');
+});
+
+test('Play untimed: grade on accuracy alone, a right answer is Good, and it stays out of the speed profile', () => {
+  assert.equal(gradeFor(1, 0).letter, 'A');                              // timed: no speed, no S
+  assert.equal(gradeFor(1, 0, { untimed: true }).letter, 'S');
+  assert.equal(gradeFor(0.5, 1, { untimed: true }).letter, gradeFor(0.5, 0, { untimed: true }).letter);
+  assert.equal(autoRating({ ok: true, ms: 60000, limitMs: Infinity, typing: false, untimed: true }), 3);
+  assert.equal(autoRating({ ok: true, ms: 100, limitMs: Infinity, typing: true, untimed: true }), 3);
+  assert.equal(autoRating({ ok: false, ms: 100, limitMs: Infinity, typing: true, untimed: true }), 1);
+  assert.equal(autoRating({ ok: true, ms: 60000, limitMs: Infinity, typing: false }), 2);      // without the flag it is Hard, as before
+  assert.equal(playLogRow({ cardId: 'c', now: 1, qtype: 'front', fmt: 'classic', ok: true, ms: 9000, rating: 3, untimed: true }).untimed, true);
+  assert.equal(playLogRow({ cardId: 'c', now: 1, qtype: 'front', fmt: 'classic', ok: true, ms: 9000, rating: 3 }).untimed, undefined);
+  const mk = (n, extra) => Array.from({ length: n }, (_, i) => ({ source: 'play', correct: true, ms: 2000, chars: 10, mode: 'front', hard: false, ...extra }));
+  assert.equal(speedProfiles([...mk(SPEED.minN, {}), ...mk(300, { untimed: true, ms: 90000 })]).get('front'), 2000 / (SPEED.c0 + 10));
+  assert.equal(speedProfiles(mk(SPEED.minN, { untimed: true })).size, 0);
 });
