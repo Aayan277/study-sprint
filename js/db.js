@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS = {
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
+  statsLayout: null,         // Customise Stats: { order, hidden, size } or null (the default layout); see stats-layout.js. Synced, newest wins
   fsrsVersion: 6,            // which FSRS schedules cards: 6 (standard) or 7 (beta, off by default); see sched-settings.js and docs/design/fsrs7-plan.md. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
   playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced

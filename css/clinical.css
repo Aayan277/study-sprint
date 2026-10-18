@@ -166,8 +166,8 @@
 :root[data-ui="clinical"] .bar{background:color-mix(in srgb,var(--accent) 72%,var(--surface-1));border-radius:2px 2px 0 0}
 :root[data-ui="clinical"] .col:last-child .bar,
 :root[data-ui="clinical"] .col:hover .bar{background:var(--accent);box-shadow:none}
-:root[data-ui="clinical"] .pgrid .card:first-child{background:var(--surface-1)}
-:root[data-ui="clinical"] .pgrid .card:first-child .big{text-shadow:none}
+:root[data-ui="clinical"] .pgrid .pc-streak{background:var(--surface-1)}
+:root[data-ui="clinical"] .pgrid .pc-streak .big{text-shadow:none}
 :root[data-ui="clinical"] .pgrid .card h2{letter-spacing:.02em;font-weight:600}
 :root[data-ui="clinical"] .pgrid .big{font-weight:600;letter-spacing:-.03em}
 :root[data-ui="clinical"] .wd.on i{box-shadow:none}
