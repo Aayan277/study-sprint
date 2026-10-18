@@ -2474,3 +2474,38 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
 .rs-scale{display:flex;justify-content:space-between}
 @media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px 1fr minmax(96px,auto)}}
+
+/* ---- Phone tap targets (< 600px): every control gets at least 44x44 px to tap -------------------------------------------
+   Small controls keep their look. Their tap area grows with a see-through box (::before) that reaches past the edges, so
+   nothing looks bigger. The box sits on the control itself, so a tap on it is a tap on the control. Text fields, selects and
+   the slider are made a little taller for real. Clinical (css/clinical.css) uses ::after on a few of these, never ::before. */
+@media (max-width:599.98px){
+  .btn.small,.exam-chip,.deck-sort button,.deck .icon-btn,.deck-go,.link,.back,.brand,.rv-speak,.pw-show,.chip,.set-nav a,
+  .flagbtn,.tchip,.el-tick,.seg button,.fmt-tools button,.subdeck,.prow .icon-btn,.browse-all a{position:relative}
+  .btn.small::before,.exam-chip::before,.deck-sort button::before,.deck .icon-btn::before,.deck-go::before,.link::before,.back::before,
+  .brand::before,.rv-speak::before,.pw-show::before,.chip::before,.set-nav a::before,.flagbtn::before,.tchip::before,.el-tick::before,
+  .seg button::before,.fmt-tools button::before,.prow .icon-btn::before,.browse-all a::before,summary::before{content:"";position:absolute;inset:-5px -3px}
+  .btn.small::before{inset:-6px 0}
+  .exam-chip::before,.set-nav a::before{inset:-5px 0}
+  .deck-sort button::before{inset:-4px 0}
+  .deck .icon-btn::before{inset:-5px}
+  .more-btn::before{content:"";position:absolute;inset:-3px}
+  .deck-go::before,.rv-speak::before,.pw-show::before{inset:-2px}
+  .link::before{inset:-6px}
+  .back::before,.brand::before{inset:-6px -4px}
+  .browse-all a::before{inset:-14px -4px}
+  #planRest::before{inset:-10px -6px}
+  #forgotBtn::before{inset:-12px -6px}
+  .info-fold summary::before{inset:-12px}
+  .file-btn{overflow:visible}   /* its hidden file picker already fits inside, and the tap box must not be cut off */
+  .exam-add{padding-block:5px;margin:-5px 0 calc(var(--s-5) - 5px)}   /* room for the chips' tap boxes: this row scrolls sideways, which would cut them off */
+  summary{position:relative}
+  summary::before{inset:-6px 0}
+  .more-btn{position:relative}
+  /* Review header: the round buttons are 40px and 4px apart (they were 36px and 3px apart at 320px), so their tap areas meet without overlapping */
+  .rv-head{gap:4px}
+  .rv-head .link{width:40px;height:40px;min-height:40px}
+  .rv-head .link::before{inset:-2px}
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),select{min-height:44px}
+  .set-row input[type="range"]{height:44px}
+}
