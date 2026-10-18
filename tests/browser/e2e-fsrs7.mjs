@@ -129,7 +129,14 @@ await page.goto(URL + '#/settings'); await page.waitForSelector('#advanced');
 await page.evaluate(() => { document.getElementById('advanced').open = true; });
 await page.click('#fsrsChips label:has(input[value="7"])');
 await page.waitForFunction(() => document.getElementById('optStatus')?.textContent.includes('FSRS-7'));
-await run(page, async () => { const db = await import('./js/db.js'); await db.putStates([{ ...(await db.get('cardStates', 'f7-0')), due: Date.now() - 3600000 }]); });
+// Only f7-0 may be in this session. FSRS-7 sets a Good on a new card (f7-4, reviewed above) to come back after about 14 hours, and a
+// learning card due before the 4am rollover is "due today": the session then shows it early instead of ending, which is right
+// but depends on the time of day the test runs. So park every learning card a few days out, the same way f7-0 is made due.
+await run(page, async () => {
+  const db = await import('./js/db.js');
+  const learning = (await db.getAll('cardStates')).filter(s => (s.state === 1 || s.state === 3) && s.cardId !== 'f7-0');
+  await db.putStates([...learning.map(s => ({ ...s, due: Date.now() + 3 * 86400000 })), { ...(await db.get('cardStates', 'f7-0')), due: Date.now() - 3600000 }]);
+});
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 await page.keyboard.press('Space'); await page.waitForSelector('.rate'); await page.keyboard.press('3');
