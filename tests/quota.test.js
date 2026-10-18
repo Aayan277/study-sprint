@@ -141,7 +141,11 @@ test('the SQL files say the same numbers as the app', () => {
   assert.match(limits, /\('media', 943718400\), \('sync', 440401920\)/);           // 900 MB and 420 MB
   assert.equal(900 * MB, 943718400); assert.equal(420 * MB, 440401920); assert.equal(80 * MB, 83886080);
   assert.match(limits, /revoke all on public\.quotas from anon, authenticated;\s*grant select on public\.quotas to authenticated/);
-  assert.match(limits, /growth > 0 and new\.data is not null/);                    // a "deleted" row that still carries data is counted
+  assert.doesNotMatch(limits, /new\.data is not null/);                           // every new row is checked, "deleted" markers too
+  assert.match(limits, /120 \+ 2 \* octet_length\(new\.id\) \+ coalesce\(octet_length\(new\.data::text\), 0\)/);
+  assert.match(limits, /120 \+ 2 \* octet_length\(s\.id\)/);                      // recount_sync_usage counts the same way
+  assert.match(limits, /octet_length\(id\) <= 200\) not valid/);
+  assert.match(limits, /data_rows_limit bigint not null default 300000/);
   assert.match(limits, /pg_advisory_xact_lock/);
   assert.match(limits, /create policy "media: change own"/);
   assert.match(limits, /collate "C" like/);

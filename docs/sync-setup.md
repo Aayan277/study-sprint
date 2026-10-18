@@ -219,7 +219,8 @@ From then on, every sign-up, sign-in and password reset needs the check (Supabas
 three), and the app shows it automatically. People who already signed in stay signed in.
 
 If you ever want to switch it off: turn it off in Supabase first, then clear the site key in `sync-config.js`.
-(hCaptcha works too: choose it in Supabase, and use `provider: 'hcaptcha'` with its site key.)
+Cloudflare Turnstile is the only supported provider; set up and tested with it. (The code still has a hCaptcha path, but it is not
+tested or supported: don't use it.)
 
 ## 7. Copy two values for the app
 

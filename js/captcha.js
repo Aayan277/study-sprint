@@ -14,7 +14,8 @@ import { CAPTCHA } from './sync-config.js';
 const PROVIDERS = ['turnstile', 'hcaptcha'];
 export const captchaOn = () => PROVIDERS.includes(CAPTCHA.provider) && /^[A-Za-z0-9_-]{6,80}$/.test(CAPTCHA.siteKey || '');
 
-const WAIT = 20 * 1000;           // the box should answer within seconds: after this it is called failed, never a silent hang
+const WAIT = 20 * 1000;           // the frame should say "ready" within seconds: after this it is called failed, never a silent hang
+const SOLVE = 5 * 60 * 1000;      // once it is ready, the person gets this long to solve it (a visible puzzle can take a while)
 export const CAPTCHA_FAILED = 'The bot check didn’t load. Try again, or contact the site owner.';
 
 // Show the check inside `container` and give back its token (a string, good for one request).
@@ -43,8 +44,9 @@ export function askCaptcha(container, { wait = CAPTCHA.waitMs || WAIT } = {}) {
       if (e.source !== frame.contentWindow || e.data?.from !== 'study-sprint-captcha') return;
       if (e.data.type === 'token' && typeof e.data.token === 'string' && e.data.token) finish(resolve, e.data.token);
       else if (e.data.type === 'error') finish(reject, new Error(CAPTCHA_FAILED));
+      else if (e.data.type === 'ready' && !done) { clearTimeout(timer); timer = setTimeout(() => finish(reject, new Error(CAPTCHA_FAILED)), Math.max(wait, SOLVE)); }
     };
-    const timer = setTimeout(() => finish(reject, new Error(CAPTCHA_FAILED)), wait);
+    let timer = setTimeout(() => finish(reject, new Error(CAPTCHA_FAILED)), wait);
     addEventListener('message', onMessage);
     container.append(frame);
   });

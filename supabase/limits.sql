@@ -24,6 +24,7 @@ create table if not exists public.quotas (
   media_bytes_limit bigint not null default 188743680 check (media_bytes_limit >= 0)
 );
 alter table public.quotas add column if not exists data_bytes_limit bigint not null default 83886080 check (data_bytes_limit >= 0);
+alter table public.quotas add column if not exists data_rows_limit bigint not null default 300000 check (data_rows_limit >= 0);
 alter table public.quotas enable row level security;
 drop policy if exists "quotas: read own" on public.quotas;
 create policy "quotas: read own" on public.quotas for select to authenticated using (user_id = (select auth.uid()));
@@ -79,6 +80,11 @@ $$;
 create or replace function public._data_limit(uid uuid) returns bigint
 language sql stable security definer set search_path = '' as $$
   select coalesce((select q.data_bytes_limit from public.quotas q where q.user_id = uid), public.default_data_limit());
+$$;
+
+create or replace function public._rows_limit(uid uuid) returns bigint
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select q.data_rows_limit from public.quotas q where q.user_id = uid), 300000::bigint);
 $$;
 
 -- Bytes a person's folder in the media bucket takes, leaving out one file (the one being replaced).
@@ -146,7 +152,7 @@ end;
 $$;
 
 revoke all on function public.default_media_limit(), public.default_data_limit(), public._media_limit(uuid), public._data_limit(uuid),
-  public._media_used(uuid, text), public._total_media_bytes(), public._total_sync_bytes() from public, anon, authenticated;
+  public._rows_limit(uuid), public._media_used(uuid, text), public._total_media_bytes(), public._total_sync_bytes() from public, anon, authenticated;
 revoke all on function public.media_may_store(text, text) from public, anon;
 grant execute on function public.media_may_store(text, text) to authenticated;
 
@@ -176,25 +182,39 @@ begin
   end if;
 end $$;
 
+-- A record's id is at most 200 bytes (real ones are under 60: a UUID, "gloss:" + UUID, or deck id + "-" + number).
+-- "not valid" again: stored rows aren't checked.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sync_items_id_size' and conrelid = 'public.sync_items'::regclass) then
+    alter table public.sync_items
+      add constraint sync_items_id_size check (octet_length(id) <= 200) not valid;
+  end if;
+end $$;
+
 -- Keeps each person's byte and row counts, and refuses growth over their limit (or the project's). A row's size is
--- 120 bytes plus its data as text. Deleting and "deleted" markers (a row with no data) are always allowed; a row that
--- says "deleted" but still carries data is counted like any other. It runs after the row is stored (and only if it
+-- 120 bytes, twice its id (the primary key index holds it again) and its data as text. Every new row is checked, "deleted"
+-- markers (a row with no data) included, and so is each person's number of rows (default 300,000). Only deleting and
+-- changes that make a row smaller are always allowed. It runs after the row is stored (and only if it
 -- was: an older change that setup.sql ignores never gets here), under a per-person lock.
 create or replace function public.sync_items_quota() returns trigger
 language plpgsql security definer set search_path = '' as $$
-declare uid uuid; old_b bigint := 0; new_b bigint := 0; growth bigint; cur bigint; cap bigint;
+declare uid uuid; old_b bigint := 0; new_b bigint := 0; growth bigint; cur bigint; cur_rows bigint; cap bigint;
 begin
   if tg_op = 'DELETE' then uid := old.user_id; else uid := new.user_id; end if;
-  if tg_op <> 'INSERT' then old_b := 120 + coalesce(octet_length(old.data::text), 0); end if;
-  if tg_op <> 'DELETE' then new_b := 120 + coalesce(octet_length(new.data::text), 0); end if;
+  if tg_op <> 'INSERT' then old_b := 120 + 2 * octet_length(old.id) + coalesce(octet_length(old.data::text), 0); end if;
+  if tg_op <> 'DELETE' then new_b := 120 + 2 * octet_length(new.id) + coalesce(octet_length(new.data::text), 0); end if;
   growth := new_b - old_b;
   perform pg_advisory_xact_lock(hashtextextended(uid::text, 1));
   -- (No new counter row on a delete: when an account is removed its rows go too, and its counter row with them.)
   if tg_op <> 'DELETE' then
     insert into public.sync_usage (user_id) values (uid) on conflict (user_id) do nothing;
   end if;
-  if tg_op <> 'DELETE' and growth > 0 and new.data is not null then
-    select u.bytes into cur from public.sync_usage u where u.user_id = uid;
+  if tg_op <> 'DELETE' and growth > 0 then
+    select u.bytes, u.rows into cur, cur_rows from public.sync_usage u where u.user_id = uid;
+    if tg_op = 'INSERT' and cur_rows + 1 > public._rows_limit(uid) then
+      raise exception 'sync_data_full' using errcode = '54000';
+    end if;
     if cur + growth > public._data_limit(uid) then
       raise exception 'sync_data_full' using errcode = '54000';
     end if;
@@ -222,7 +242,7 @@ create trigger sync_items_quota
 create or replace function public.recount_sync_usage() returns void
 language sql security definer set search_path = '' as $$
   insert into public.sync_usage (user_id, bytes, rows)
-    select s.user_id, sum(120 + coalesce(octet_length(s.data::text), 0))::bigint, count(*)
+    select s.user_id, sum(120 + 2 * octet_length(s.id) + coalesce(octet_length(s.data::text), 0))::bigint, count(*)
     from public.sync_items s group by s.user_id
   on conflict (user_id) do update set bytes = excluded.bytes, rows = excluded.rows;
   delete from public.usage_cache where name = 'sync';
