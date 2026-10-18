@@ -14,7 +14,7 @@ const noHScroll = async w => ok(await page.evaluate(() => document.documentEleme
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // empty-ish state first: stats with no history
 await page.click('.tab[data-tab=stats]'); await page.waitForSelector('.pgrid');
-ok((await page.textContent('.pgrid')).includes('Review or play today'), 'no history: friendly streak message');
+ok((await page.textContent('.pgrid')).includes('Review today to start a streak'), 'no history: friendly streak message (Play is practice-only, so it is not mentioned)');
 ok((await page.textContent('.pgrid')).includes('–'), 'no history: retention shows a dash');
 
 // Seed: second deck, states at every level, 30 days of logs with a 5-day streak.

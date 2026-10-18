@@ -104,9 +104,9 @@ ok(true, 'and gone when you leave Today');
 const q = await open();
 await seed(q, '2026-10-17');           // 3 days away
 await openPostpone(q);
-ok((await q.textContent('#ppLine')).includes('Nothing to postpone: no reviews are due.') && await q.isDisabled('#ppGo'), 'exam in 3 days: nothing to postpone, button off');
+ok((await q.textContent('#ppLine')).includes("Your due reviews are in decks with an exam in the next 5 days, so they're left alone.") && await q.isDisabled('#ppGo'), 'exam in 3 days: due reviews are all left alone, and the line says why, button off: ' + (await q.textContent('#ppLine')).trim());
 await q.click('[data-pdays="1"]');
-ok((await q.textContent('#ppLine')).includes('Nothing to postpone'), 'still nothing for 1 day (3 ≤ 1 + 3)');
+ok((await q.textContent('#ppLine')).includes('exam in the next 4 days'), 'still nothing for 1 day (3 ≤ 1 + 3), and it names 4 days');
 await q.context().close();
 const e = await open();
 await seed(e, '2026-11-20');           // a month away: not near

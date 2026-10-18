@@ -17,6 +17,8 @@ const pick = (o, v) => page.evaluate(([v]) => {
   const opts = [...document.querySelectorAll('#options .opt')];
   return opts.findIndex(b => b.querySelector('.lbl').textContent === v);
 }, [v]);
+// Leave a round: Quit asks first when there are answers to keep (End round -> the results -> the menu).
+const quit = async () => { await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) { await page.click('#endYes'); await page.waitForSelector('#menuBtn'); await page.click('#menuBtn'); } await page.waitForSelector('#startBtn'); };
 const setup = async (sel) => { for (const s of sel) await page.$eval(s, el => el.click()); };
 const waitQuestion = () => page.waitForFunction(() => document.querySelector('#feedback')?.innerHTML === '' && document.querySelector('#pPrompt')?.textContent);
 
@@ -57,7 +59,17 @@ await page.waitForSelector('.fb.no');
 ok((await page.textContent('.fb-info')).includes(byFront[prompt]), 'wrong answer shows the right one');
 ok(await page.isVisible('.opt.correct') && await page.isVisible('.opt.wrong'), 'options marked right/wrong');
 await page.screenshot({ path: SP + '/p-wrong.png' });
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+// Quit (or Esc) mid-round asks first; the score so far is kept in the results.
+await page.click('#quitBtn');
+ok(await page.isVisible('#endAsk') && (await page.textContent('#endAskT')).includes('End this round? Your score so far is kept in the results.'), 'Quit asks "End this round? Your score so far is kept in the results."');
+await page.click('#endNo');
+ok(await page.isHidden('#endAsk') && await page.isVisible('#pCard'), 'Keep playing closes the question and the round goes on');
+await page.keyboard.press('Escape');
+ok(await page.isVisible('#endAsk'), 'Esc asks too');
+await page.keyboard.press('Escape');
+await page.waitForSelector('#menuBtn');
+ok(await page.isVisible('.res-grade'), 'Esc again ends the round and shows its results');
+await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 ok((await page.textContent('.mode-best')).includes('Best for this setup'), 'best score shown on setup');
 
 // Survival, back -> front, Hard: 6 options, three wrong answers end it
@@ -77,7 +89,7 @@ ok((await page.textContent('.res-line')).includes('Survived 3 questions'), 'surv
 ok(await page.isVisible('#drillBtn'), 'drill missed offered');
 await page.click('#drillBtn'); await page.waitForSelector('#pCard');
 ok((await page.textContent('#hudA')).includes('/6'), 'drill round of the missed cards: ' + await page.textContent('#hudA'));
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+await quit();
 
 // Typing (sample backs are long, so you type the front), Normal, with a typo
 await setup(['input[name=fmt][value=classic]', 'input[name=qtype][value=typing]', 'input[name=diff][value=normal]', 'input[name=flash][value="500"]']);
@@ -90,7 +102,7 @@ await page.fill('#pInput', ans.slice(0, -1) + (ans.length > 4 ? '' : ''));   // 
 await page.keyboard.press('Enter'); await page.waitForSelector('.fb');
 ok((await page.textContent('.fb-mark')).includes('Correct') || ans.length < 5, `typing with one typo accepted (${ans})`);
 await page.screenshot({ path: SP + '/p-typing.png' });
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+await quit();
 await setup(['input[name=flash][value="0"]']);
 
 // Classic timeout with 3s timer
@@ -101,7 +113,10 @@ await page.waitForSelector('.fb.no', { timeout: 6000 });
 ok((await page.textContent('.fb-mark')).includes('Out of time'), 'timer runs out after 3s');
 // Enter on a focused button presses that button (Quit), not "next question"
 await page.focus('#quitBtn'); await page.keyboard.press('Enter');
-ok(await page.waitForSelector('#startBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button quits');
+await page.waitForSelector('#endAsk', { state: 'visible', timeout: 3000 });
+await page.keyboard.press('Enter');             // (focus is on "End round")
+ok(await page.waitForSelector('#menuBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button asks, and Enter ends the round with its results');
+await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 ok((await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).timer)) === 3, 'timer setting saved');
 
 // Lightning: wrong answer costs 3s
@@ -113,7 +128,7 @@ const clk = await page.textContent('#hudClock');
 ok(clk === '0:57' || clk === '0:56', 'lightning: −3s for a wrong answer, clock paused during feedback: ' + clk);
 await page.waitForTimeout(1500);
 ok((await page.textContent('#hudClock')) <= clk, 'lightning keeps going');
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+await quit();
 
 // A deck with 3 cards: multiple choice is off
 await page.evaluate(async () => {
@@ -149,7 +164,7 @@ for (const wrong of [true, false]) {
 await page.waitForTimeout(500);
 ok(await lkState() === before, 'Play off: the due dates and FSRS state of due cards did not change');
 ok(await lkRows() === 0 && await page.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length) === nLogs, 'Play off: no review-log rows were added');
-await page.click('#quitBtn'); await page.waitForSelector('#startBtn');
+await quit();
 // Turn it on: the old behaviour (the next checks)
 await page.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('playCountsAsReviews', true); await db.setSetting('leechThreshold', 1); });
 await page.click('.tab[data-tab=decks]'); await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');

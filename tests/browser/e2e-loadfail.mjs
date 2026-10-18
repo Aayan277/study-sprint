@@ -16,4 +16,19 @@ blocked = false;
 await Promise.all([page.waitForEvent('load'), page.click('[data-reload]')]);
 await page.waitForSelector('.pgrid');
 ok(true, 'Reload brings the screen back');
+
+// Back online (no Reload pressed): the screen loads by itself, from a fresh address because the browser remembers a failed import.
+const ctx2 = await browser.newContext({ serviceWorkers: 'block' });
+const p2 = await ctx2.newPage();
+let down = true;
+const asked = [];
+await p2.route('**/js/stats.js**', route => { asked.push(route.request().url()); return down ? route.abort() : route.continue(); });
+await p2.goto('http://localhost:8123/#/decks'); await p2.waitForSelector('.deck');
+await p2.click('.tab[data-tab=stats]');
+await p2.waitForSelector('[data-reload]');
+down = false;
+await p2.evaluate(() => dispatchEvent(new Event('online')));
+await p2.waitForSelector('.pgrid', { timeout: 15000 });
+ok(await p2.locator('[data-reload]').count() === 0, 'back online: the screen loaded without pressing Reload');
+ok(asked.length === 2 && /stats\.js\?r=\d+/.test(asked[1]), 'the retry asked for a fresh address: ' + asked.map(u => u.replace(/^.*\/js\//, '')).join(', '));
 await browser.close();

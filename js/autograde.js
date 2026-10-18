@@ -103,7 +103,11 @@ export const applies = decision => decision === 'due' || decision === 'again' ||
 // The rating actually applied. Picking the right option (multiple choice) is recognition, which is easier than
 // recalling the answer, so on a due card it counts at most as Hard. Simulations showed counting it as Good made the
 // schedule think cards were better known than they were; capping it at Hard fixed that for 2-3% more reviews.
-export const appliedRating = ({ decision, rating, mc = false }) => (decision === 'due' && mc && rating > HARD ? HARD : rating);
+// "I was right" (overridden) never records more than Good: the answer was wrong as typed, so a fast one must not jump the interval to Easy.
+export const appliedRating = ({ decision, rating, mc = false, overridden = false }) => {
+  const r = decision === 'due' && mc && rating > HARD ? HARD : rating;
+  return overridden && r > GOOD ? GOOD : r;
+};
 
 // Speed relative to the person (B6). Your usual time per question type is the median of your last `window`
 // correct Play answers, per (SPEED.c0 + characters read). Until there are `minN` of them, the timer rule is used.

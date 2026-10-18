@@ -20,6 +20,9 @@ const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: tru
 export const pieces = tag => String(tag ?? '').split(SEP).map(s => s.trim()).filter(Boolean);
 export const normTag = tag => pieces(tag).join(SEP).toLowerCase();
 export const hasFolders = cards => cards.some(c => (c.tags || []).some(t => String(t).includes(SEP)));
+// A card's tags as the tree, the counts, the search, the rename and the ID lookup all read them. Tags are separated by spaces now; one saved
+// with a space in it, before that, is read as the separate tags it was meant to be ("#a::1 #a::2" is two).
+export const tagWords = tags => (tags || []).flatMap(t => String(t ?? '').split(/\s+/)).filter(t => normTag(t));
 
 // ---------- the tree ----------
 // A node: { path, name, count, own, children }
@@ -36,7 +39,7 @@ export function tagTree(cards) {
   };
   for (const card of cards) {
     const seen = new Set();
-    for (const tag of card.tags || []) {
+    for (const tag of tagWords(card.tags)) {
       const parts = pieces(tag).map(s => s.toLowerCase());
       let parent = null, path = '';
       parts.forEach((name, i) => {
@@ -68,7 +71,7 @@ export function findNode(tree, path) {
 export function cardsUnder(cards, path) {
   const p = normTag(path);
   if (!p) return [];
-  return cards.filter(c => (c.tags || []).some(t => { const n = normTag(t); return n === p || n.startsWith(p + SEP); }));
+  return cards.filter(c => tagWords(c.tags).some(t => { const n = normTag(t); return n === p || n.startsWith(p + SEP); }));
 }
 
 // ---------- question IDs ----------
@@ -107,7 +110,7 @@ export function matchIds(cards, ids, { under = '' } = {}) {
   const hits = new Map();                        // key → [{ card, folder }]
   const folders = new Map();                     // folder → { path, ids: Set, cards: Set }
   for (const card of cards) {
-    for (const tag of card.tags || []) {
+    for (const tag of tagWords(card.tags)) {
       const parts = pieces(tag);
       if (!parts.length) continue;
       const k = idKey(parts[parts.length - 1]);

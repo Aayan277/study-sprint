@@ -9,7 +9,7 @@
 import { dayEnd } from './days.js';
 import { formatInterval } from './queue.js';
 import { dupKey } from './import.js';
-import { normTag, SEP } from './tag-tree.js';
+import { normTag, tagWords, SEP } from './tag-tree.js';
 import { isPair, loneIds, unpaired } from './reverse.js';
 
 export const FLAGS = [
@@ -137,11 +137,12 @@ export function parseTagSearch(query) {
   return { text, tags };
 }
 // Does the card have the tag `path`, or a tag below it? (Ignores capitals; `path` as normTag gives it.)
-const hasTagUnder = (card, path) => (card.tags || []).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
+const hasTagUnder = (card, path) => tagWords(card.tags).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
 
-// "a, b , c" → ['a', 'b', 'c'] (no blanks, no repeats)
+// "a b, c" → ['a', 'b', 'c'] (lower case, no blanks, no repeats). Tags are separated by spaces, commas or line breaks (like Anki, whose tags
+// can't contain spaces): the same rule tagWords (tag-tree.js) uses to read what is saved. A piece with nothing in it but colons ("a :: b") is dropped.
 export function parseTags(text) {
-  return [...new Set(String(text ?? '').split(/[,\n]/).map(t => t.trim().toLowerCase()).filter(Boolean))];
+  return [...new Set(String(text ?? '').toLowerCase().split(/[\s,]+/).filter(t => normTag(t)))];
 }
 
 // ---------- leeches ----------
@@ -190,44 +191,45 @@ export function replaceInCards(cards, { find, replace = '', field = 'both', matc
   return out;
 }
 
-// Every tag used by these cards, with how many cards have it, most used first.
+// Every tag used by these cards, with how many cards have it, most used first. (A card with one tag twice counts once.)
 export function tagCounts(cards) {
   const counts = new Map();
-  for (const c of cards) for (const t of c.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  for (const c of cards) for (const t of new Set(tagWords(c.tags))) counts.set(t, (counts.get(t) || 0) + 1);
   return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || COLLATE.compare(a.tag, b.tag));
 }
+// The tags a rename gives: what was typed, split like the tags of a card (spaces, commas, line breaks). "a b" makes two tags.
+const renamedTo = text => parseTags(text);
 // Rename a tag on every card that has it (to = '' removes it). Returns only the cards that changed.
 export function renameTag(cards, from, to) {
-  const [clean] = parseTags(to);
-  return cards.filter(c => (c.tags || []).includes(from))
-    .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (t === from ? clean : t)).filter(Boolean))] }));
+  const clean = renamedTo(to);
+  return cards.filter(c => tagWords(c.tags).includes(from))
+    .map(c => ({ ...c, tags: [...new Set(tagWords(c.tags).flatMap(t => (t === from ? clean : [t])))] }));
 }
 
 // Rename (or, with to = '', remove) exactly one tag, matching it the way folders do: ignoring capitals and empty pieces
 // ("a::::b" is "a::b"). Tags below it are left alone. Returns only the cards that changed.
 export function renameTagExact(cards, from, to) {
-  const f = normTag(from), [clean] = parseTags(to);
+  const f = normTag(from), clean = renamedTo(to);
   if (!f) return [];
-  return cards.filter(c => (c.tags || []).some(t => normTag(t) === f))
-    .map(c => ({ ...c, tags: [...new Set(c.tags.map(t => (normTag(t) === f ? clean : t)).filter(Boolean))] }));
+  return cards.filter(c => tagWords(c.tags).some(t => normTag(t) === f))
+    .map(c => ({ ...c, tags: [...new Set(tagWords(c.tags).flatMap(t => (normTag(t) === f ? clean : [t])))] }));
 }
 
-// Rename a folder of "::" tags: the tag `from` and every tag below it move to `to` (to = '' removes them). A tag that
+// Rename a folder of "::" tags: the tag `from` and every tag below it move to `to` (to = '' removes them; "x y" moves them to both). A tag that
 // already exists at the new place is merged with. Returns only the cards that changed.
 export function renameTagPrefix(cards, from, to) {
   const f = normTag(from);
-  const [clean] = parseTags(to);
-  const target = clean ? normTag(clean) : '';
+  const targets = renamedTo(to).map(normTag).filter(Boolean);
   if (!f) return [];
   const out = [];
   for (const c of cards) {
     let hit = false;
-    const moved = (c.tags || []).map(t => {
+    const moved = tagWords(c.tags).flatMap(t => {
       const n = normTag(t);
-      if (n === f) { hit = true; return target; }
-      if (n.startsWith(f + SEP)) { hit = true; return target ? target + n.slice(f.length) : ''; }
-      return t;
-    }).filter(Boolean);
+      if (n === f) { hit = true; return targets; }
+      if (n.startsWith(f + SEP)) { hit = true; return targets.map(x => x + n.slice(f.length)); }
+      return [t];
+    });
     if (hit) out.push({ ...c, tags: [...new Set(moved)] });
   }
   return out;

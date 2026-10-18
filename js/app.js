@@ -23,7 +23,7 @@ import { watchMath } from './math.js';
 import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.21';
+const APP_VERSION = '4.22';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -1004,19 +1004,23 @@ async function seedSampleDeck(again = false) {
 }
 
 // ---------- navigation ----------
+// Loads a screen's file. A failed import() is remembered by the browser until the page reloads (even once you are back online), so after a
+// failure the file is asked for again under a new address (?r=...) the next time: the screen can load without pressing Reload.
+const busted = new Map();
+const lazy = path => import(busted.has(path) ? `${path}?r=${busted.get(path)}` : path).catch(err => { busted.set(path, Date.now()); throw err; });
 const ROUTES = {
   // Today is the home screen, so it loads with the app. Every other screen is loaded the first time it is
   // opened (the service worker has them saved, so that is quick), which keeps the first load small.
   // Review also needs the FSRS library from the internet (saved for offline after the first time).
   today: el => renderToday(el),
-  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
-  review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
-  play: async el => (await import('./play.js')).renderPlay(el),
-  decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
-  deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
-  browse: async (el, arg) => (await import('./browse.js')).renderBrowseAll(el, arg),
-  import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
-  stats: async el => (await import('./stats.js')).renderStats(el),
+  welcome: async (el, arg) => (await lazy('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
+  review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
+  play: async el => (await lazy('./play.js')).renderPlay(el),
+  decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
+  deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
+  browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
+  import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),
+  stats: async el => (await lazy('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)
 };
 
@@ -1074,6 +1078,8 @@ async function route() {
     if (/dynamically imported module|importing a module script/i.test(err.message)) {
       el.innerHTML = `<div class="empty"><b>Couldn't load this screen.</b><br>Check your connection and reload.<br><button class="btn" type="button" data-reload>Reload</button></div>`;
       el.querySelector('[data-reload]').onclick = () => location.reload();
+      // Back online while this message is still showing: load the screen again by itself.
+      addEventListener('online', () => { if (el.isConnected) route(); }, { once: true });
       return;
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;

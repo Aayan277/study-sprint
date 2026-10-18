@@ -379,7 +379,7 @@ const cardFieldsHTML = (card, maxN = 0, pair = null) => `
       ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
       ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
       ${noteFieldsEditHTML('ce', card.noteFields)}`}
-      <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
@@ -800,7 +800,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
+      <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>

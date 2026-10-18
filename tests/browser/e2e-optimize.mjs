@@ -155,6 +155,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok(done.includes("Done. Your new settings predict your answers better, so they're now in use."), `${tag}: the "better" wording`);
   ok(/rediction error \(log loss\) \d\.\d{3} → \d\.\d{3} · RMSE \d+\.\d% → \d+\.\d%/.test(done), `${tag}: the details line: ` + (done.match(/Checked on.*?%\s*→\s*[\d.]+%/s) || [''])[0]);
   ok(done.includes('Checked on your newest 20% of reviews'), `${tag}: the numbers say what they were checked on`);
+  ok(await p.locator('#optDone .opt-fold .opt-detail').count() === 1 && !(await p.textContent('#optDone .opt-result')).includes('log loss'), `${tag}: log loss and RMSE are in Details; the main line is plain words`);
   ok(done.includes('Run this again every month or so as you review more.'), `${tag}: the "run it again" line`);
   const first = await saved(p);
   const refit = await p.evaluate(async () => {
