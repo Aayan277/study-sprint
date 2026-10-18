@@ -433,6 +433,11 @@ async function takeShared() {
     suggestName(file.name.replace(/\.[^.]+$/, ''));
     if (isDocFile(file)) { await readDoc(file); return; }
     if (file.size > MAX_BYTES) { showError(tooBigMessage()); return; }
+    // A deck file from a friend (Share a deck): the same Anki import as choosing the file here.
+    if (/\.(apkg|colpkg)$/i.test(file.name)) {
+      try { await readAnki(file); } catch (err) { console.error(err); $('fileName').textContent = file.name; showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
+      return;
+    }
     S.noCloze = false; showText(await file.text());
     return;
   }

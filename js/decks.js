@@ -305,6 +305,7 @@ export async function renderDeck(el, deckId) {
             <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
             <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
+            ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
           </div>
         </div>
       </div>
@@ -326,6 +327,7 @@ export async function renderDeck(el, deckId) {
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { navGo(`#/deck/${b.dataset.open}`); }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }, { parentId: deckId }));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
+  $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));

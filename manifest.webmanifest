@@ -57,9 +57,12 @@
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "text/plain",
             "text/csv",
+            "application/zip",
+            "application/octet-stream",
             ".pdf",
             ".pptx",
-            ".txt"
+            ".txt",
+            ".apkg"
           ]
         }
       ]
