@@ -56,7 +56,7 @@ ok(await p.isVisible('.top .brand') && !(await p.locator('.top .icon-btn:visible
 ok(await p.isVisible('.side-add') && (await p.textContent('.side-add')).trim() === 'Add cards', 'a quiet "Add cards" button under the logo');
 
 // the Decks section is told apart from the Decks link
-ok(await p.locator('nav.tabs a[data-tab="decks"]').count() === 1 && (await p.getByRole('button', { name: 'Your decks' }).count()) === 1, 'the Decks link and the "Your decks" heading have different names');
+ok(await p.locator('nav.tabs a[data-tab="decks"]').count() === 1 && (await p.getByRole('button', { name: 'Decks list' }).count()) === 1, 'the Decks link and the "Decks list" button have different names');
 ok((await p.textContent('#sideDecksH')).trim() === 'Decks', 'the heading says "Decks", not "Courses"');
 ok(await p.evaluate(() => !/courses/i.test(document.querySelector('.side-decks').textContent)), 'the word "Courses" appears nowhere in the list');
 
@@ -388,6 +388,21 @@ await p.context().close();
   await q.goto(URL + '#/today'); await q.waitForSelector('#sideMode');
   ok(await q.evaluate(async () => { const t = await import('./js/themes.js'); return ['neon', 'onyx', 'kuro'].every(t.isAlwaysDark) && !t.isAlwaysDark('violet'); }), 'isAlwaysDark: neon, onyx and kuro, not violet');
   ok(!(await q.getAttribute('#sideMode', 'aria-disabled')), 'a normal skin: the toggle is enabled');
+  await q.context().close();
+}
+
+// short windows: below 261px tall (400% zoom) every sticky bar scrolls with the page; a 360dp phone held sideways (about 280px) keeps them
+{
+  const pos = async (q, sels) => q.evaluate(sels => Object.fromEntries(sels.map(s => { const e = document.createElement('div'); e.className = s.slice(1); document.querySelector('main').append(e); const v = getComputedStyle(e).position; e.remove(); return [s, v]; })), sels);
+  const BARS = ['.set-nav', '.savebar', '.bulkbar', '.ratebar'];
+  const q = await open(320, 256); await q.goto(URL + '#/decks'); await q.waitForSelector('.deck');
+  const short = await pos(q, BARS);
+  ok(BARS.every(s => short[s] === 'static') && await q.evaluate(() => getComputedStyle(document.querySelector('.top')).position === 'static'), '320x256: the top bar and every sticky bar scroll with the page: ' + JSON.stringify(short));
+  await q.setViewportSize({ width: 360, height: 260 });
+  ok((await pos(q, BARS))['.set-nav'] === 'static', '360x260 is still the short layout');
+  await q.setViewportSize({ width: 360, height: 280 });
+  const land = await pos(q, BARS);
+  ok(land['.set-nav'] === 'sticky' && land['.savebar'] === 'sticky' && land['.bulkbar'] === 'sticky' && land['.ratebar'] === 'sticky', '360x280 (a phone held sideways) keeps the bars sticky: ' + JSON.stringify(land));
   await q.context().close();
 }
 

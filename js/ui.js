@@ -10,25 +10,60 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Screen readers hear a toast through a live region that is always in the page (#toastLive, visually hidden). A region that
+// appears and fills in one step is often skipped, so it is cleared first and filled on the next tick. The visible toast is not
+// a live region itself (it comes and goes, and its Undo link must stay a normal link: it is the last stop in the tab order).
+let liveTimer = 0;
+// A modal dialog (showModal) makes everything outside it inert, and that includes the live region, so while one is open the
+// region moves inside it; it goes back to <body> when the dialog closes (or at the next toast, if the dialog was removed).
+let liveEl = null;
+// Puts the region in the topmost modal dialog if there is one, else in <body>. Called when a toast is announced, again just before
+// its text goes in (a sheet may have opened or closed in between), and whenever any dialog closes. A region whose dialog was
+// removed from the page is still held here, so it is simply attached again.
+function placeLive() {
+  liveEl = liveEl || document.getElementById('toastLive');
+  const live = liveEl;
+  if (!live) return null;
+  const modals = document.querySelectorAll('dialog:modal');
+  const host = modals[modals.length - 1] || document.body;
+  if (live.parentNode !== host || !live.isConnected) host.append(live);
+  return live;
+}
+if (typeof document !== 'undefined') document.addEventListener('close', placeLive, true);      // 'close' does not bubble; the capture phase still sees every dialog's
+function announceToast(msg) {
+  clearTimeout(liveTimer);
+  const live = placeLive();
+  if (!live) return;
+  live.textContent = '';
+  if (!msg) return;
+  liveTimer = setTimeout(() => { placeLive().textContent = msg; }, 60);
+}
+
 // A short message that pops up above the tab bar for a few seconds.
 let toastTimer = 0, toastLeave = null;      // toastLeave: the hashchange listener of a held toast
 // `link` ({ href, label, onClick }) adds a link after the message and keeps the toast up longer, so it can be tapped.
 // With onClick the link does that instead of going to href, and the toast closes.
 // `hold` keeps the toast up until you leave the screen (or 10 minutes, or the next toast): for an Undo.
+// Hiding the toast also empties the live region, so it never keeps (or re-reads) a message that is no longer on screen.
+function hideToast() {
+  $('toast').hidden = true;
+  announceToast('');
+}
 export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   const t = $('toast');
   if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one
   t.textContent = msg;
+  announceToast(link ? `${msg} ${link.label}` : msg);
   if (link) {
     const a = document.createElement('a');
     a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
-    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); t.hidden = true; clearTimeout(toastTimer); link.onClick(); });
+    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); clearTimeout(toastTimer); hideToast(); link.onClick(); });
     t.append(' ', a);
   }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, hold ? 600000 : ms || (link ? 7000 : 2600));
-  if (hold) { toastLeave = () => { t.hidden = true; toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
+  toastTimer = setTimeout(hideToast, hold ? 600000 : ms || (link ? 7000 : 2600));
+  if (hold) { toastLeave = () => { hideToast(); toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
@@ -161,7 +196,8 @@ export function openSheet(html, { side = false } = {}) {
   const body = document.createElement('div');
   body.className = 'sheet-in';
   body.appendChild(t.content);
-  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []));
+  const live = d.querySelector('#toastLive');      // the toast's live region may be in here: re-drawing the sheet must not throw it away
+  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []), ...(live ? [live] : []));
   d.setAttribute('aria-labelledby', 'sheetTitle');
   d.querySelector('.sheet-x').addEventListener('click', closeSheet);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }
