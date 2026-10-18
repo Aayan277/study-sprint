@@ -224,7 +224,7 @@ function renderSession(el, enter = false) {
   R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
   R.elMissed = new Set([...(R.elMissed || [])].filter(i => sp && i < R.stepShown));
   // The drawing stays when the same card is drawn again (an edit from the menu), and goes with the next card.
-  const kept = pad && padKey === R.shownAt ? pad.canvas : null;
+  const kept = pad && padKey === R.shownAt && pad.hasInk() ? pad.canvas : null;
   destroyPad();
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
   const typeThis = typesAnswer(card);
@@ -564,10 +564,7 @@ function mountPad(kept) {
       card.classList.toggle('scratching', on);
     }
   });
-  if (kept) {
-    const g = pad.canvas.getContext('2d');
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(kept, 0, 0); g.restore();
-  }
+  if (kept) pad.restore(kept);
   // Hidden while the zoom viewer is open (it is a dialog added to the page).
   const mine = pad;
   const hideForZoom = () => {

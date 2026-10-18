@@ -650,14 +650,25 @@ function renderList() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </li>`).join('');
-  $('plist').querySelectorAll('textarea').forEach(autosize);
+  autosizeAll($('plist').querySelectorAll('textarea'));
   $('moreNote').hidden = S.cards.length <= MAX_SHOWN;
   $('moreNote').textContent = `Showing the first ${MAX_SHOWN} to edit. All ${S.cards.length} will be added.`;
   refreshFlags();
 }
 
 // Grow a text box to fit its text, so long definitions are fully visible.
-function autosize(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+// Browsers with CSS `field-sizing: content` (see styles.css) do this themselves, so nothing is measured here.
+const SELF_SIZING = typeof CSS !== 'undefined' && !!CSS.supports?.('field-sizing', 'content');
+function autosize(t) { if (SELF_SIZING) return; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+// Many boxes at once: all the writes, then all the reads, then all the writes, so the browser lays the page out once
+// instead of once per box (5,000 boxes took ~3 s one at a time).
+function autosizeAll(boxes) {
+  if (SELF_SIZING) return;
+  const list = [...boxes];
+  for (const t of list) t.style.height = 'auto';
+  const heights = list.map(t => t.scrollHeight);
+  list.forEach((t, i) => { t.style.height = heights[i] + 'px'; });
+}
 
 // Update the "Found N cards" line, duplicate badges and the save button.
 function refreshFlags() {
