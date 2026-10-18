@@ -662,6 +662,13 @@ main[data-route="import"] > .view > .savebar{order:5}
 .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .drop .mono{font-size:var(--fs-sm);color:var(--accent-text);overflow-wrap:anywhere}
 .row-form{display:flex;gap:var(--s-2)}
+.doc-box{margin-top:var(--s-3)}
+.doc-box .btn{min-height:44px}
+.doc-h{margin:var(--s-4) 0 0;font-size:var(--fs-md)}
+.doc-parts{list-style:none;margin:var(--s-2) 0 0;padding:0;display:grid;gap:var(--s-2)}
+.doc-parts li{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.doc-parts li>span{min-width:0;display:flex;flex-direction:column;font-size:var(--fs-sm)}
+.doc-parts .muted{font-size:var(--fs-sm)}
 .row-form input{flex:1;min-width:0;font-size:var(--fs-md);padding:10px 12px}
 #claudeBtn{background:linear-gradient(90deg,var(--accent-tint),rgb(var(--acc) / .06));border-color:var(--accent-line);color:var(--text);box-shadow:0 0 20px -8px var(--glow)}
 #claudeBtn::before{content:"";width:15px;height:15px;background:var(--accent);
