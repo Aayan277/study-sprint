@@ -188,3 +188,14 @@ test('diffAgainstBack says whether the target is an alternate', () => {
   assert.equal(diffAgainstBack('mitocondria', 'mitochondria').alternate, false);
   assert.equal(diffAgainstBack('mitocondria', ' mitochondria ').alternate, false);
 });
+
+test('an extra leading article is marked when the answer is wrong anyway, never on its own', () => {
+  const d = diffAnswer('a cough', 'dry cough');
+  assert.deepEqual(d.counts, { wrong: 0, extra: 1, missing: 3 });
+  assert.deepEqual(marked(d.typed, 'extra'), ['a']);
+  assert.ok(diffHTML(d, { answerRow: false }).includes('<del class="d-extra">a</del>'));
+  // Alone it is still fine, as is an article the answer has too.
+  assert.ok(clean(diffAnswer('a cough', 'cough')));
+  assert.ok(clean(diffAnswer('the cough', 'the cough')));
+  assert.deepEqual(marked(diffAnswer('the cough', 'a dry cough').typed, 'extra'), ['the']);
+});

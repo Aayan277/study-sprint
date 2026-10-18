@@ -109,12 +109,25 @@ const sixAfter = (state, opts, now) => rating => {
   } catch (err) { console.error(err); return null; }
 };
 
+// A repeatable "random" for the day balancing picks (pickDay breaks ties with it). The same card, state and button always give
+// the same numbers, so the label on a button and the day rate() really picks can't disagree, and labels don't change on a redraw.
+function seededRandom(cardId, state, rating) {
+  let h = 2166136261;
+  for (const ch of `${cardId}|${state?.lastReview ?? ''}|${state?.reps ?? 0}|${state?.stability ?? ''}|${rating}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return () => { h = (h + 0x6d2b79f5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
 // How long until the card comes back for each button: { 1: ms, 2: ms, 3: ms, 4: ms }.
-// (With fuzz on, the real interval can differ by a day or so on long gaps.)
-export function previewIntervals(state, opts, now = Date.now(), cardId = state?.cardId) {
-  const preview = opts.fsrsVersion === 7 ? seven(cardId, state, opts, now) : scheduler(opts).repeat(toLibrary(state, now), new Date(now));
+// It runs rate() itself (on a copy of the busy-days map, so nothing is counted), so the label is the gap the card really gets.
+export function previewIntervals(state, opts, now = Date.now(), cardId = state?.cardId ?? '') {
   const out = {};
-  for (const { rating } of RATINGS) out[rating] = examClamp(capInterval(preview[rating].card, now, opts.maxInterval), now, opts, opts.balance?.load).due.getTime() - now;
+  for (const { rating } of RATINGS) {
+    const load = opts.balance?.load;
+    // With balancing, rate() picks the day (seeded, on a copy of the load). Without it, FSRS-6 fuzz is random, so it is turned off for the
+    // label (the exact gap); FSRS-7's fuzz is deterministic, so it is left on and the label is the gap rate() really gives.
+    const o = opts.balance ? { ...opts, balance: { ...opts.balance, load: load && new Map(load) } } : opts.fsrsVersion === 7 ? opts : { ...opts, fuzz: false };
+    out[rating] = rate(cardId, state, rating, o, now).due - now;
+  }
   return out;
 }
 
@@ -136,7 +149,7 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const load = opts.balance?.load;
   let counted = false;                          // did balancing add this card to the load?
   if (balanced && card.state === 2 && card.scheduled_days >= 3) {
-    const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now });
+    const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, rating) });
     card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
     card.scheduled_days = d;
     load?.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);

@@ -16,7 +16,7 @@ import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { isOcclusion, occLabel } from './occlusion.js';
 import { imgHTML } from './media.js';
 import { isHidden } from './browse-logic.js';
-import { readyEstimateText, streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, retentionVerdict, YOUNG_DAYS } from './stats-calc.js';
+import { readyEstimateText, streakFromDays, restDaySet, idleDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, retentionVerdict, YOUNG_DAYS } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
@@ -203,8 +203,9 @@ export async function renderStats(el) {
   const allDays = logs.days;
   const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
   const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
-  const rest = restDaySet(settings);
-  const streak = streakFromDays(allDays, now, { rest });
+  const planned = restDaySet(settings), idle = idleDaySet(settings);
+  const rest = new Set([...planned, ...idle]);          // (a day with nothing due is as safe as a day off)
+  const streak = streakFromDays(allDays, now, { rest: planned, idle });
   const ret = retention(recent, now);
   const perDay = reviewsPerDay(recent, now);
   const cardStates = cards.map(c => statesById.get(c.id));
@@ -282,7 +283,7 @@ export async function renderStats(el) {
       <div class="card">
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
-        <p>${streak.days === 0 ? 'Review or play today to start a streak.' : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
+        <p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
         ${weekDotsHTML(streak.week)}
         <p class="frz-note">One freeze a week covers a missed day. It doesn’t add to the count. <button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>

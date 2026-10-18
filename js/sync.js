@@ -14,6 +14,9 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
+import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
+import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
+import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
@@ -39,8 +42,16 @@ export async function account() {
   return syncAuth ? { email: syncAuth.user.email, id: syncAuth.user.id, lastSync: syncState?.lastSync || 0 } : null;
 }
 
-export async function createAccount(email, password) { return signedIn(await supa.signUp(email.trim(), password)); }
-export async function signIn(email, password) { return signedIn(await supa.signIn(email.trim(), password)); }
+// Make an account. With email confirmation turned on (the normal setup, docs/sync-setup.md) nobody is signed in
+// yet: Supabase emails a link first. Returns { pending: true } then, { pending: false } once signed in.
+// captcha: the token from captcha.js, when the project uses one.
+export async function createAccount(email, password, captcha) {
+  const made = await supa.signUp(email.trim(), password, { captcha, redirectTo: appUrl() });
+  if (made.pending) return { pending: true };
+  await signedIn(made.session);
+  return { pending: false };
+}
+export async function signIn(email, password, captcha) { return signedIn(await supa.signIn(email.trim(), password, { captcha })); }
 
 async function signedIn(session) {
   const { syncState } = await db.getSettings();
@@ -58,7 +69,7 @@ async function signedIn(session) {
 // The app's own address, which the reset email links back to.
 const appUrl = () => location.origin + location.pathname;
 
-export const sendPasswordReset = email => supa.sendPasswordReset(email.trim(), appUrl());
+export const sendPasswordReset = (email, captcha) => supa.sendPasswordReset(email.trim(), appUrl(), { captcha });
 
 // Opened from a password-reset email? The link's address holds a sign-in (see parseAuthLink).
 // Returns { session } to set a new password with, { error } if the link didn't work, or null.
@@ -125,6 +136,22 @@ export async function deleteServerData() {
   await supa.deleteAllRows(auth.access_token, auth.user.id);
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
+}
+
+// Delete the account itself: its files, its synced data, and the sign-in. This device keeps its own data and is
+// signed out. (Needs supabase/limits.sql on the project.)
+export async function deleteAccount() {
+  const auth = await session();
+  if (!auth) throw new supa.SupaError('Sign in first.');
+  // Files first, through the Storage API (that also frees the space); the server function removes any left.
+  try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
+  await supa.deleteAccount(auth.access_token);
+  await signOut({ forget: true });
+}
+// What this account uses and may use: { data, media, limit } in bytes, or null (limits.sql not run, or offline).
+export async function usage() {
+  const auth = await session().catch(() => null);
+  return auth ? fetchUsage(auth.access_token) : null;
 }
 
 // Sign out on this device. Its data stays here. (Signing back in to the same account carries on where it
@@ -216,21 +243,32 @@ async function run() {
   // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
   const changes = await db.localChangesSince(st.pushedUntil);
-  const rows = newestOnly([
+  // A clock that's ahead counts as at most a day ahead (the server does the same). A record over the server's size
+  // limit is left out and remembered (named in the note), so it can't block everything else.
+  const { ok: rows, big } = splitOversized(capTimes(newestOnly([
     ...Object.entries(changes.records).flatMap(([name, list]) => list.map(r => rowFromRecord(name, r))),
     ...changes.tombstones.map(rowFromTombstone),
     ...changes.settings.map(s => rowFromSetting(s.key, s.value, s.time))
-  ]);
-  let sent = 0;
-  for (const part of chunks(rows, BATCH)) {
-    if (rows.length > BATCH) emit({ progress: `Sending ${sent.toLocaleString()} of ${rows.length.toLocaleString()} changes…` });
-    await supa.putRows(token, part);
-    sent += part.length;
+  ])));
+  const pushed = await pushSafely(part => supa.putRows(token, part), rows, {
+    onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
+  });
+  // Records too big to send, kept until they are shortened (editing one makes it a new change, which is tried again)
+  // or deleted. Anything that went through now is no longer a problem.
+  const wentKeys = new Set(pushed.sent.map(r => `${r.store}|${r.id}`));
+  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row) }))];
+  const stillBig = [...new Map(tooBig.map(r => [`${r.store}|${r.id}`, r])).values()].filter(r => !wentKeys.has(`${r.store}|${r.id}`));
+  // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
+  // (What did go is sent again too; the server ignores a copy it already has.)
+  let spaceNote = null;
+  if (pushed.held.length) {
+    spaceNote = pushed.full === 'server' ? SERVER_FULL_MESSAGE : dataFullMessage(await fetchUsage(token));
   }
 
-  st = { ...st, pushedUntil: pushStart - 1, lastSync: Date.now() };
+  st = { ...st, pushedUntil: pushed.held.length ? st.pushedUntil : pushStart - 1, lastSync: Date.now(), tooBig: stillBig };
   await db.setSetting('syncState', st);
-  emit({ state: 'done', at: st.lastSync, applied, sent: rows.length, error: null, progress: null, note: mediaNote });
+  const note = [spaceNote, bigRowsNote(stillBig), mediaNote].filter(Boolean).join(' ') || null;
+  emit({ state: 'done', at: st.lastSync, applied, sent: pushed.sent.length, error: null, progress: null, note });
 }
 
 // ---------- pictures and sounds ----------
@@ -241,10 +279,20 @@ async function syncMedia(auth) {
   const rows = await db.mediaToUpload();
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
   const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
-  const upload = await uploadMediaFiles(pending, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
-    onSent: m => db.markUploaded([m.id]),
-    onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
-  });
+  // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
+  const gate = await planMedia(auth, pending);
+  let upload;
+  try {
+    upload = await uploadMediaFiles(gate.send, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
+      onSent: m => db.markUploaded([m.id]),
+      onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
+    });
+  } catch (err) {
+    const refused = await explainRefusal(auth, err);      // the server itself turned a file away: full account, full server...
+    if (!refused) throw err;
+    gate.note = refused;
+    upload = { sent: [], blocked: [], failed: [] };
+  }
   if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
   retrySounds = false;
   // What to tell the person: only files that are turned away now (this run), or were left out of it because they were before.
@@ -265,6 +313,8 @@ async function syncMedia(auth) {
   // Pictures and sounds no card uses any more: remove them here and from the account.
   const removed = await db.cleanMedia();
   if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
+  if (gate.full) return fullMessage(gate.full);
+  if (gate.note) return gate.note;
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function fetchMedia(token, uid, id) {

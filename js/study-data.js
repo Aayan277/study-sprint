@@ -3,12 +3,13 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, newRoomFor, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { personalW20 } from './sched-settings.js';
-import { lazyStreak, daysAgoStart, restDaySet } from './stats-calc.js';
+import { lazyStreak, daysAgoStart, restDaySet, idleDaySet, dayKey } from './stats-calc.js';
+import { mergeIdleDays } from './sync-merge.js';
 
 // How far back Today looks for the time estimate and the streak.
 const HISTORY_DAYS = 60;
@@ -298,4 +299,45 @@ export const live = { resume: null };
 // The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
 // if it has them, and reads further back only while the streak does.
 // ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
-export const loadStreak = (history = null, ctx = null) => lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(ctx?.settings) });
+// With the whole of loadAll()'s data (Today and the sidebar), today is noted when the ring says "Nothing due today" (idleDaysToMark): it never breaks the streak.
+export async function loadStreak(history = null, ctx = null) {
+  const settings = ctx?.settings;
+  let idle = idleDaySet(settings);
+  if (settings && ctx.split && ctx.statesById) {
+    const fresh = idleDaysToMark(ctx);
+    if (fresh.length) {
+      idle = new Set([...idle, ...fresh]);
+      const flags = mergeIdleDays(settings.idleDays, Object.fromEntries(fresh.map(k => [k, true])));       // (and prunes past 3650 days)
+      settings.idleDays = flags;
+      db.setSetting('idleDays', flags).catch(err => console.warn('idle days not saved:', err));      // (a synced setting, merged as a union: sync-merge.js)
+    }
+  }
+  const streak = await lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(settings), idle });
+  // A day noted as quiet earlier today (cards were added since, or came due) no longer says "Nothing due today".
+  if (streak.idleToday && settings && ctx.split && ctx.statesById && todayRing(ctx, [], countFor(ctx, ctx.decks.map(d => d.id))).state !== 'nothing') streak.idleToday = false;
+  return streak;
+}
+
+// Today, as a day key in a list of one, when the ring genuinely says "Nothing due today" and it is not noted yet; otherwise []. Only the
+// day itself is ever noted (never a past day, so hiding cards later cannot back-fill missed days: days the app was not opened are for
+// streak freezes). Cards that are suspended or buried count here, so hiding the overdue cards cannot fake a quiet day: no card at all
+// may be due by the end of today, and the ring must show no work and none done. Nor may an unseen card that today's new-card limit
+// would let in, hidden or not (suspending the new cards must not fake a quiet day). A day can still be quiet for a legitimate reason
+// the cards cannot tell apart: reviews postponed to later, or the new-card limit set to 0.
+export function idleDaysToMark(data, now = Date.now()) {
+  const all = data.allCards || data.cards || [];
+  if (!all.length) return [];
+  if (todayRing(data, [], countFor(data, data.decks.map(d => d.id)), now).state !== 'nothing') return [];
+  const end = dayEnd(now), inLibrary = new Set(all.map(c => c.id));
+  for (const st of data.statesById.values()) {
+    if (st.state === NEW || !inLibrary.has(st.cardId)) continue;
+    if (Math.min(st.due, data.exam?.caps?.get(st.cardId) ?? Infinity) <= end) return [];
+  }
+  const room = id => newRoomFor(data.newLeft, data.deckOf?.get(id) ?? all.find(c => c.id === id)?.deckId);
+  for (const c of all) {
+    const st = data.statesById.get(c.id);
+    if ((!st || st.state === NEW) && room(c.id)) return [];
+  }
+  const key = dayKey(now);
+  return idleDaySet(data.settings).has(key) ? [] : [key];
+}

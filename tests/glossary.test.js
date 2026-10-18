@@ -134,8 +134,92 @@ test('paste a list: new terms, ones already there, lines without a definition', 
   const have = [E('1', 'ATP')];
   const r = parseGlossaryList('ATP - energy\nOsmosis - water moving\nDiffusion - spreading out\nOsmosis - again\nLonely', have);
   assert.deepEqual(r.items.map(i => i.term), ['Osmosis', 'Diffusion']);
-  assert.equal(r.already, 2);
+  assert.equal(r.already, 1);
+  assert.equal(r.repeated, 1);
   assert.equal(r.skipped, 1);
   assert.equal(r.items[0].def, 'water moving');
   assert.deepEqual(parseGlossaryList('', []).items, []);
+});
+
+test('plurals and singulars: s, es and ies <-> y (the last word only)', () => {
+  const es = [E('1', 'ACE inhibitor'), E('2', 'study'), E('3', 'box'), E('4', 'lymph nodes'), E('5', 'bus'), E('6', 'virus'), E('7', 'diagnosis')];
+  const m = buildMatcher(es);
+  assert.deepEqual(marks('ACE inhibitors work. Many studies. Two boxes. A lymph node. Buses and bu. Viruses and viru. Diagnoses and diagnosi.', es),
+    ['ACE inhibitors', 'studies', 'boxes', 'lymph node']);
+  assert.deepEqual(marks('Many studies and one study', es), ['studies']);                      // (still only the first time each term appears)
+  assert.deepEqual(marks('one study and many studies', es), ['study']);
+  assert.deepEqual(marks('The bus and the buses. A virus.', es), ['bus', 'virus']);            // the exact terms still match
+  assert.ok(m);
+});
+
+test('plurals: words whose "s" form is another word get no variants (new/news, aid/AIDS, series)', () => {
+  assert.deepEqual(marks('Some news about new things', [E('1', 'new')]), ['new']);
+  assert.deepEqual(marks('The news and new things', [E('1', 'news')]), ['news']);
+  assert.deepEqual(marks('AIDS and a first aid kit', [E('1', 'aid')]), ['aid']);
+  assert.deepEqual(marks('HIV aid and AIDS', [E('1', 'AIDS')]), ['AIDS']);
+  assert.deepEqual(marks('A time series', [E('1', 'time series')]), ['time series']);
+  assert.deepEqual(marks('Some aids for the lens', [E('1', 'hearing aid')]), []);
+});
+
+test('hyphen or space: "ACE inhibitor", "ACE inhibitors" and "ACE-inhibitor" are one term', () => {
+  const es = [E('1', 'ACE inhibitor'), E('2', 'T-cell')];
+  assert.deepEqual(marks('an ACE-inhibitor', es), ['ACE-inhibitor']);
+  assert.deepEqual(marks('some ace-inhibitors', es), ['ace-inhibitors']);
+  assert.deepEqual(marks('ACE inhibitors', es), ['ACE inhibitors']);
+  assert.deepEqual(marks('a T cell and T-cells', es), ['T cell']);
+  assert.deepEqual(marks('t cells', es), ['t cells']);
+  assert.deepEqual(marks('ACE inhibitorsX and ACEinhibitor and cellular', es), []);            // whole words only
+  assert.equal(findTerms('ACE-inhibitors', buildMatcher(es))[0].entry.id, '1');
+});
+
+test('variants: aliases get them too, an exact spelling always wins, short terms stay exact', () => {
+  const es = [E('1', 'Heart attack', { aliases: ['myocardial infarction'] }), E('2', 'cells'), E('3', 'cell'), E('4', 'Na'), E('5', 'ATP')];
+  assert.deepEqual(marks('Myocardial infarctions', es), ['Myocardial infarctions']);
+  assert.deepEqual(marks('Heart-attacks', es), ['Heart-attacks']);
+  assert.deepEqual(marks('Heart attacks and a myocardial   infarction (one term, once)', es), ['Heart attacks']);
+  const m = buildMatcher(es);
+  assert.equal(findTerms('cells', m)[0].entry.id, '2');             // both exist: the exact spelling is not replaced by the plural of "cell"
+  assert.equal(findTerms('cell', m)[0].entry.id, '3');
+  assert.deepEqual(marks('Na, na and Nas. NA.', es), ['Na']);        // 1-2 character terms: exact case, no plurals
+  assert.deepEqual(marks('The ATPs and atp', es), ['ATPs']);        // 3 characters: plural yes (once)
+  assert.deepEqual(marks('The Heart attacks here', [E('1', 'Heart attack')]), ['Heart attacks']);
+});
+
+test('variants keep the performance budget (2,000 terms with other spellings: build and match)', () => {
+  const es = Array.from({ length: 2000 }, (_, i) => E(`id${i}`, i % 4 === 1 ? `lymph node ${i} type` : i % 4 === 0 ? `Tissue type ${i} inhibitor` : `organ${i} system`, { aliases: ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map(g => `${g}${i % 50} ${i}`) }));
+  es.push(E('x', 'ACE inhibitor'), E('y', 'mitochondrion'));
+  const t0 = performance.now();
+  const m = buildMatcher(es);
+  const build = performance.now() - t0;
+  assert.ok(build < 1500, `${build.toFixed(0)} ms to build`);
+  const text = ('The ACE inhibitors and mitochondrion, a tissue that tends to talk about term and terms, plus lymph nodes. ').repeat(48);
+  assert.ok(text.length >= 5000);
+  findTerms(text, m);
+  let found, each = Infinity;
+  for (let i = 0; i < 15; i++) { const t = performance.now(); found = findTerms(text, m); each = Math.min(each, performance.now() - t); }
+  assert.ok(each < 10, `${each.toFixed(1)} ms for 5k characters`);
+  assert.deepEqual(found.map(f => f.entry.id).sort(), ['x', 'y']);
+});
+
+test('paste a list: every line picks its own separator (tab, " - ", " – ", ": ", "=")', () => {
+  const r = parseGlossaryList('beta-agonist - stimulates beta receptors\nMallory-Weiss tear - mucosal tear at the GE junction\nAnti-HBs: antibody showing immunity\nOsmosis\twater moving\nPaO2 – oxygen pressure\nx = unknown\nNo definition here\n\nA - \n', []);
+  assert.deepEqual(r.items.map(i => [i.term, i.def]), [
+    ['beta-agonist', 'stimulates beta receptors'], ['Mallory-Weiss tear', 'mucosal tear at the GE junction'], ['Anti-HBs', 'antibody showing immunity'],
+    ['Osmosis', 'water moving'], ['PaO2', 'oxygen pressure'], ['x', 'unknown']]);
+  assert.equal(r.noDef, 2);
+  assert.equal(r.skipped, 2);
+  // A dash inside the definition, or a colon after a dash, does not move the split.
+  assert.deepEqual(parseGlossaryList('ACE inhibitor - blocks ACE: lowers BP\nHb:Hemoglobin: the protein', []).items.map(i => [i.term, i.def]), [['ACE inhibitor', 'blocks ACE: lowers BP'], ['Hb:Hemoglobin', 'the protein']]);
+  // The earliest separator in the line wins, whichever it is (not the first one in the list of separators).
+  assert.deepEqual(parseGlossaryList('Anti-HBs: antibody - seen early\nPaO2 = pressure - in mmHg\nOsmosis\twater: moving - in', []).items.map(i => [i.term, i.def]),
+    [['Anti-HBs', 'antibody - seen early'], ['PaO2', 'pressure - in mmHg'], ['Osmosis', 'water: moving - in']]);
+});
+
+test('paste a list: the counts add up (new, in the glossary, repeated, no definition, too long)', () => {
+  const have = [E('1', 'ATP')];
+  const long = 'x'.repeat(LIMITS.term + 1);
+  const r = parseGlossaryList(`atp - again\nA - 1\na - 2\nB: 3\nC\n${long} - 4\n  \nD = 5`, have);
+  assert.deepEqual([r.items.length, r.already, r.repeated, r.noDef, r.tooLong, r.over], [3, 1, 1, 1, 1, 0]);
+  // 5 lines of mixed separators (the QA case): none are dropped.
+  assert.equal(parseGlossaryList('a - 1\nb - 2\nc - 3\nd: 4\ne\t5', []).items.length, 5);
 });
