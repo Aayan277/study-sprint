@@ -997,7 +997,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
 // ---------- shared pieces ----------
 function flagButtons(current) {
   return `<div class="flags" role="group" aria-labelledby="flagLbl">
-    <button type="button" class="flagbtn" data-flag="0"${current < 0 ? '' : ` aria-pressed="${current === 0}"`} aria-label="No flag"><i class="none" aria-hidden="true"></i>None</button>
+    <button type="button" class="flagbtn" data-flag="0"${current < 0 ? '' : ` aria-pressed="${current === 0}"`} aria-label="None (no flag)"><i class="none" aria-hidden="true"></i>None</button>
     ${FLAGS.map(f => `<button type="button" class="flagbtn" data-flag="${f.id}"${current < 0 ? '' : ` aria-pressed="${current === f.id}"`} aria-label="${f.name} flag"><i style="background:${f.color}" aria-hidden="true"></i>${f.name}</button>`).join('')}
   </div>`;
 }
