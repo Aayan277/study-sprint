@@ -620,7 +620,7 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .field textarea,.rich{font-size:var(--fs-md)}
 /* The short card sheet in Review and Play: Edit, Flag, Bury, Suspend, More */
 .act-front{margin:0 0 -4px;font-weight:600;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.act-list{display:grid;background:var(--surface-2);border-radius:var(--r-lg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.act-list,.pa-list{display:grid;background:var(--surface-2);border-radius:var(--r-lg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
 .act-row{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 16px;background:none;border:0;color:var(--text);font:500 var(--fs-md) var(--f-ui);text-align:left;cursor:pointer;width:100%}
 .act-row + .act-row{box-shadow:inset 0 1px 0 var(--line)}
 button.act-row:hover{background:var(--surface-3)}
@@ -635,12 +635,22 @@ button.act-row:hover{background:var(--surface-3)}
 .act-flag[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface-2),0 0 0 4px var(--text)}
 .act-flag:focus-visible,.act-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .act-flag:focus-visible{outline-offset:3px}
+/* The card panel's actions: Schedule, Card, and Delete kept apart at the bottom (compact rows, one icon each) */
+.pa-group{display:grid;gap:6px}
+.pa-lbl{font-size:var(--fs-sm);color:var(--text-2)}
+.pa-list .act-row{min-height:44px;padding:6px 14px;gap:12px;font-size:var(--fs-base)}
+.pa-list .act-row:disabled{opacity:.5;cursor:not-allowed}
+button.act-row:disabled:hover{background:none}
+.pa-danger{margin-top:var(--s-2)}
+#ceConfirm:empty{display:none}
+.pa-danger .act-row,.pa-danger .act-row > .ico{color:var(--again)}
 .act-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .act-grid .btn{width:100%;justify-content:flex-start;padding:0 var(--s-3);min-height:44px;font-weight:500}
 /* The row of flag colors scrolls sideways inside its own box (not the page) if it is too wide */
-.flags{display:flex;flex-wrap:wrap;gap:6px}
-.flagbtn{min-height:34px;cursor:pointer}
-.flagbtn i{width:12px;height:12px;border-radius:3px}
+.flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(max(44px,4.2em),1fr));gap:4px;font-size:var(--fs-xs)}
+.flags .flagbtn{flex-direction:column;justify-content:center;gap:4px;min-height:48px;padding:6px 1px;font-size:1em;text-align:center;overflow-wrap:anywhere;cursor:pointer;min-width:0}
+.flagbtn i{width:14px;height:14px;border-radius:4px;flex:none}
+.flagbtn i.none{background:none;box-shadow:inset 0 0 0 1.5px var(--text-2)}
 .flagbtn[aria-pressed="true"]{font-weight:700}
 .due-row{align-items:center}
 .due-row input{flex:none;width:80px}
@@ -2589,7 +2599,6 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
   html:not([data-ui="clinical"]) .brand,
   html:not([data-ui="clinical"]) .chip,
   html:not([data-ui="clinical"]) .set-nav a,
-  html:not([data-ui="clinical"]) .flagbtn,
   html:not([data-ui="clinical"]) .tchip,
   html:not([data-ui="clinical"]) .el-tick,
   html:not([data-ui="clinical"]) .seg button,
@@ -2610,7 +2619,6 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
   html:not([data-ui="clinical"]) .pw-show::before,
   html:not([data-ui="clinical"]) .chip::before,
   html:not([data-ui="clinical"]) .set-nav a::before,
-  html:not([data-ui="clinical"]) .flagbtn::before,
   html:not([data-ui="clinical"]) .tchip::before,
   html:not([data-ui="clinical"]) .el-tick::before,
   html:not([data-ui="clinical"]) .seg button::before,
