@@ -32,6 +32,25 @@ The summary contains only aggregate numbers.
 
 The unit test, `tests/realdata.test.js`, runs in `npm test` on tiny made-up users and does not need the dataset.
 
+## Reference fits by fsrs-rs (optional)
+
+`rs-weights.mjs` trains FSRS-6 and FSRS-7 with the official Rust optimizer (npm `@open-spaced-repetition/binding`, tested with 0.6.0-beta.6)
+on the same train half as `run.mjs` and writes `~/fsrs-data/weights/<user>.<scenario>.json` (`{ fsrs6, fsrs7, binding, settings }`; null where
+training failed). `run.mjs` then also scores them as `fsrs6_rs` and `fsrs7_rs`. The package is not a dependency of this repo; install it in any folder:
+
+    mkdir ~/fsrs-binding && cd ~/fsrs-binding && npm init -y
+    npm i @open-spaced-repetition/binding@0.6.0-beta.6 @open-spaced-repetition/binding-linux-x64-gnu@0.6.0-beta.6
+
+The second package is the native build for Linux x64 (npm did not pull it in by itself; without it the slower WASI build loads). The package says it
+needs Node 24; Node 22 only prints an EBADENGINE warning and works. Then:
+
+    FSRS_BINDING_DIR=~/fsrs-binding node tests/realdata/rs-weights.mjs [--users 1,2,3] [--jobs 4]
+    node tests/realdata/run.mjs --out ~/fsrs-data/results/results-rs.jsonl
+    node tests/realdata/summarize.mjs ~/fsrs-data/results/results-rs.jsonl ~/fsrs-data/results/summary-rs.md
+
+Settings: enableShortTerm true, numRelearningSteps 1, default training config; FSRS-7 gets fractional days, FSRS-6 whole days. Existing weight
+files are skipped. Training is single-threaded per fit and takes about 1 s per user for FSRS-6 and FSRS-7 together (300 users in 6 minutes on 4 workers).
+
 ## Things to know
 
 - `long` reviews are the ones the app predicts (a later day than the card's last review). `same` are repeats on the same day.
