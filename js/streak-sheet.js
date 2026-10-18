@@ -33,6 +33,10 @@ export function restDayError(key, future, now = Date.now()) {
 // onChange runs after a day off is added or removed (the caller redraws); returnFocus is the id of the button to focus on close.
 export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } = {}) {
   let first = true;
+  // Every change (a day added, removed, an exam day) runs after the one before it has saved and redrawn, so two quick submits
+  // can never both be checked against the same list of days.
+  let chain = Promise.resolve();
+  const inOrder = task => { const r = chain.then(task); chain = r.catch(() => {}); return r; };
   const draw = async () => {
     const [settings, decks] = await Promise.all([db.getSettings(), db.getDecks()]);
     const streak = await loadStreak(null, { settings });
@@ -40,7 +44,6 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
     const today = keyIn(0, now);
     const rest = restDaySet(settings);
     const upcoming = [...rest].filter(k => k >= today).sort();
-    const future = upcoming.filter(k => k > today);
     // Exam days still ahead (and within reach): one tap makes one a day off.
     const exams = new Map();
     for (const d of decks) {
@@ -98,29 +101,37 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
       onChange();
       await draw();
     };
-    const fail = text => { const e = $('ysErr'); e.textContent = text; e.hidden = false; };
-    $('ysForm').addEventListener('submit', async e => {
+    const fail = text => { const e = $('ysErr'); if (e) { e.textContent = text; e.hidden = false; } };
+    // The planned days as stored right now. A submit that lands before the redraw of the previous save (a fast second add)
+    // would otherwise be checked against the list this draw started with, and could go past the limit.
+    const futureNow = async () => {
+      const s = await db.getSettings();
+      return [...restDaySet(s)].filter(k => k > today).sort();
+    };
+    $('ysForm').addEventListener('submit', e => {
       e.preventDefault();
       const key = $('ysDate').value;
-      const problem = restDayError(key, future);
-      if (problem) { fail(problem); return; }
-      await save(key, true);
-      toast(`Day off added: ${niceDay(key)}`);
-      $('ysDate')?.focus();
+      inOrder(async () => {
+        const problem = restDayError(key, await futureNow());
+        if (problem) { fail(problem); return; }
+        await save(key, true);
+        toast(`Day off added: ${niceDay(key)}`);
+        $('ysDate')?.focus();
+      });
     });
     $('ysDate').addEventListener('input', () => { $('ysErr').hidden = true; });
-    sheet.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
+    sheet.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => inOrder(async () => {
       await save(b.dataset.rm, false);
       toast(`Day off removed: ${niceDay(b.dataset.rm)}`);
       $('ysDate')?.focus();
-    }));
-    sheet.querySelectorAll('[data-exam-day]').forEach(b => b.addEventListener('click', async () => {
+    })));
+    sheet.querySelectorAll('[data-exam-day]').forEach(b => b.addEventListener('click', () => inOrder(async () => {
       const key = b.dataset.examDay;
-      const problem = restDayError(key, future);
+      const problem = restDayError(key, await futureNow());
       if (problem) { fail(problem); return; }
       await save(key, true);
       toast(`Day off added: ${niceDay(key)}`);
-    }));
+    })));
   };
   await draw();
 }

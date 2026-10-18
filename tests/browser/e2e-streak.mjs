@@ -73,30 +73,41 @@ ok(dateIn === await tomorrowPlus(p, 1) && dateMax === await tomorrowPlus(p, 60),
 
 // today is rejected; so is 61 days ahead
 const errText = async () => (await p.isVisible('#ysErr')) ? norm(p, '#ysErr') : '';
+// A refusal is shown once the form has checked the day against what is stored (an async read), so wait for the reason to appear
+// (not a clock) and then return it. If it never comes the text read afterwards is what the check reports as the failure.
+const refusal = async needle => {
+  await p.waitForFunction(n => { const e = document.getElementById('ysErr'); return !!e && !e.hidden && e.textContent.replace(/\s+/g, ' ').includes(n); }, needle, { timeout: 5000 }).catch(() => {});
+  return errText();
+};
 await p.fill('#ysDate', await tomorrowPlus(p, 0)); await p.click('#ysForm button[type=submit]');
-ok((await errText()).includes('start tomorrow') && await p.locator('.ys-list li').count() === 0, 'a day off today is rejected: ' + await errText());
+ok((await refusal('start tomorrow')).includes('start tomorrow') && await p.locator('.ys-list li').count() === 0, 'a day off today is rejected: ' + await errText());
 await p.fill('#ysDate', await tomorrowPlus(p, 61)); await p.click('#ysForm button[type=submit]');
-ok((await errText()).includes('within the next 60 days'), 'a day off 61 days ahead is rejected: ' + await errText());
+ok((await refusal('within the next 60 days')).includes('within the next 60 days'), 'a day off 61 days ahead is rejected: ' + await errText());
 await p.fill('#ysDate', ''); await p.click('#ysForm button[type=submit]');
-ok((await errText()) === 'Pick a date.', 'an empty date asks for one');
+ok((await refusal('Pick a date.')) === 'Pick a date.', 'an empty date asks for one');
 // add two, then remove one
 const d1 = await tomorrowPlus(p, 1), d2 = await tomorrowPlus(p, 2);
 await p.fill('#ysDate', d1); await p.click('#ysForm button[type=submit]'); await p.waitForSelector('.ys-list li');
 await p.fill('#ysDate', d2); await p.click('#ysForm button[type=submit]'); await p.waitForFunction(() => document.querySelectorAll('.ys-list li').length === 2);
 ok(await p.locator('.ys-list li').count() === 2 && !(await p.isVisible('#ysErr')), 'two days off are listed');
 await p.fill('#ysDate', d1); await p.click('#ysForm button[type=submit]');
-ok((await errText()).includes('already a day off'), 'adding the same day twice is refused: ' + await errText());
+ok((await refusal('already a day off')).includes('already a day off'), 'adding the same day twice is refused: ' + await errText());
 await p.screenshot({ path: SP + '/streak-sheet-days-375-dark.png' });
 await p.click(`[data-rm="${d2}"]`); await p.waitForFunction(() => document.querySelectorAll('.ys-list li').length === 1);
 const stored = await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).restDays);
 ok(stored[d1].on === true && stored[d2].on === false && stored[d2].at >= stored[d1].at, 'the setting keeps the removal as on:false with a newer time (so it syncs)');
 // at most 14 days ahead
+// Each add saves, then redraws the whole sheet (the form and its date box are replaced). The next fill and click must wait for that
+// redraw, or they hit the old form (value lost) or race the previous save. So: wait for the list to show the new day, then go on.
+// The one past the limit adds nothing, so there the reason itself is what is waited for.
 for (let n = 3; n <= 16; n++) {
+  const before = await p.locator('.ys-list li').count();
   await p.fill('#ysDate', await tomorrowPlus(p, n)); await p.click('#ysForm button[type=submit]');
-  await p.waitForTimeout(40);
+  if (before < 14) await p.waitForFunction(c => document.querySelectorAll('.ys-list li').length === c, before + 1);
+  else await p.waitForFunction(() => { const e = document.getElementById('ysErr'); return e && !e.hidden && e.textContent.includes('up to 14'); });
 }
 ok(await p.locator('.ys-list li').count() === 14, 'at most 14 days off can be planned: ' + await p.locator('.ys-list li').count());
-ok((await errText()).includes('up to 14'), 'the 15th is refused with a reason: ' + await errText());
+ok((await refusal('up to 14')).includes('up to 14'), 'the 15th is refused with a reason: ' + await errText());
 await p.click('#ysDone'); await p.waitForFunction(() => !document.querySelector('#sheet[open]'));
 await p.waitForFunction(() => document.activeElement?.id === 'streakBtn', null, { timeout: 3000 }).catch(() => {});
 ok(await p.evaluate(() => document.activeElement?.id === 'streakBtn'), 'closing the sheet returns focus to the streak button');

@@ -24,7 +24,7 @@ import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, when
 import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.24';
+const APP_VERSION = '4.25';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -36,6 +36,9 @@ async function renderSettings(el) {
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
   if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
+  // The reads above take a moment. If this box left the page meanwhile (you went to another screen, which drew into a fresh box),
+  // there is nothing to draw into: the wiring below looks elements up on the page and would find none.
+  if (!el.isConnected) return;
   const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>

@@ -17,6 +17,14 @@ async function device(name) {
 }
 const run = (page, fn, arg) => page.evaluate(fn, arg);
 const syncNow = page => run(page, async () => { const s = await import('./js/sync.js'); await s.syncNow(); return s.lastStatus(); });
+// "Synced" can show between two runs: signing in starts a sync while another one is still going, and syncNow() then queues a second run
+// behind it. So wait for the state that matters: keep syncing until a run has nothing left to send or take (everything is on the server).
+const settleRaw = page => run(page, async () => {
+  const s = await import('./js/sync.js');
+  for (let i = 0; i < 10; i++) { await s.syncNow(); const l = s.lastStatus(); if (l.state === 'done' && !l.sent && !l.applied) return l; }
+  return s.lastStatus();
+});
+const settle = async (page, what = 'sign-in') => { const l = await settleRaw(page); ok(l.state === 'done' && !l.sent && !l.applied, `${what}: syncing settled (nothing left to send or take): ${l.state}, sent ${l.sent}, applied ${l.applied}`); };
 const snapshot = page => run(page, async () => {
   const db = await import('./js/db.js');
   const [decks, cards, logs, states, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('reviewLog'), db.getAll('cardStates'), db.getSettings()]);
@@ -147,7 +155,7 @@ await B.screenshot({ path: SP + '/s3-signout.png' });
 await B.click('#soKeep'); await B.waitForSelector('#syncEmail');
 b = await snapshot(B);
 ok(!b.signedIn && b.decks.includes('Biology'), 'sign out, keep: data stays');
-await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
+await signInUI(B, { pw: 'changed789' }); await waitSynced(B); await settle(B);
 fake.setDown(true);
 await run(B, async () => { const db = await import('./js/db.js'); const c = await db.get('cards', 'bio-1'); await db.saveCards([{ ...c, back: 'offline edit' }]); });
 await openSettings(B);
@@ -168,7 +176,7 @@ await A.waitForFunction(() => document.querySelector('#toast')?.textContent.incl
 fake.setDown(false);
 
 // ---- reset everywhere ----
-await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
+await signInUI(B, { pw: 'changed789' }); await waitSynced(B); await settle(B);
 await run(A, async () => (await import('./js/db.js')).setSetting('newPerDay', 40));
 await syncNow(A); await syncNow(B);
 ok((await snapshot(B)).settings.newPerDay === 40, 'B has newPerDay 40 before the reset');
@@ -189,7 +197,7 @@ await openSettings(B);
 await B.click('#delServerBtn'); await B.click('#dsYes'); await B.waitForSelector('#syncEmail');
 b = await snapshot(B);
 ok(fake.userRows('me@example.com').length === 0 && !b.signedIn && b.decks.includes('Geography'), 'delete synced data: server empty, B signed out, B keeps its copy');
-await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
+await signInUI(B, { pw: 'changed789' }); await waitSynced(B); await settle(B);
 ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'geo'), 'signing in again sends this device\'s data back up');
 // A deck that came from another device (A) must be sent again too, not only B's own
 await run(A, async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'hist', name: 'History', color: '#46A758', created: Date.now() }, [{ id: 'hist-0', deckId: 'hist', front: 'Rome', back: 'x', tags: [], created: Date.now() }]); });
@@ -198,7 +206,7 @@ ok((await snapshot(B)).decks.includes('History'), 'B pulled the History deck fro
 await openSettings(B);
 await B.click('#delServerBtn'); await B.click('#dsYes'); await B.waitForSelector('#syncEmail');
 ok(fake.userRows('me@example.com').length === 0, 'server emptied again');
-await signInUI(B, { pw: 'changed789' }); await waitSynced(B);
+await signInUI(B, { pw: 'changed789' }); await waitSynced(B); await settle(B);
 ok(fake.userRows('me@example.com').some(r => r.store === 'decks' && r.id === 'hist') && fake.userRows('me@example.com').some(r => r.store === 'cards' && r.id === 'hist-0'),
   'signing in again also re-sends a deck and card that came from another device');
 await openSettings(B);
@@ -214,7 +222,7 @@ await run(D, async () => {
   window.__progress = [];
   addEventListener('sync', e => { if (e.detail.progress) window.__progress.push(e.detail.progress); });
 });
-await signInUI(D, { pw: 'changed789' }); await waitSynced(D);
+await signInUI(D, { pw: 'changed789' }); await waitSynced(D); await settle(D);
 const progress = await run(D, () => window.__progress);
 ok(progress.some(p => /^Sending \d[\d,]* of 1,2\d\d changes/.test(p)), 'progress shown while sending a big first sync: ' + progress.slice(0, 2).join(' | '));
 
