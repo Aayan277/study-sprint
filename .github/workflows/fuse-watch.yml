@@ -2,7 +2,7 @@
 # about it: docs/sync-setup.md ("Get a warning when space runs low (GitHub)").
 #
 # It reads three totals from the database and compares each with its limit:
-#   data      everyone's synced data, against the 'sync' fuse in the table global_limits (about 420 MB)
+#   data      everyone's synced data, against the 'sync' fuse in the table global_limits (about 300 MB)
 #   pictures  everyone's pictures and sounds, against the 'media' fuse (about 900 MB)
 #   database  the whole database size, against the free plan's 500 MB
 # The first two are counted the same way supabase/limits.sql counts them, so the numbers match what the fuse enforces.
@@ -80,7 +80,7 @@ jobs:
           set default_transaction_read_only = on;
           select
             coalesce((select sum(u.bytes) from public.sync_usage u), 0)::bigint,
-            coalesce((select g.bytes from public.global_limits g where g.name = 'sync'), 440401920)::bigint,
+            coalesce((select g.bytes from public.global_limits g where g.name = 'sync'), 314572800)::bigint,
             coalesce((select sum((o.metadata ->> 'size')::bigint) from storage.objects o where o.bucket_id = 'media'), 0)::bigint,
             coalesce((select g.bytes from public.global_limits g where g.name = 'media'), 943718400)::bigint,
             pg_database_size(current_database())::bigint,

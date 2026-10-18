@@ -20,9 +20,9 @@ test('sizes are shown in plain MB and GB', () => {
   assert.equal(fmtSize(undefined), '0 MB');
 });
 
-test('the default is 180 MB, five accounts fit in the free 1 GB', () => {
-  assert.equal(DEFAULT_MEDIA_LIMIT, 180 * MB);
-  assert.ok(5 * DEFAULT_MEDIA_LIMIT <= 1024 * MB);
+test('the default is 50 MB, eighteen accounts fit in the free 1 GB', () => {
+  assert.equal(DEFAULT_MEDIA_LIMIT, 50 * MB);
+  assert.ok(18 * DEFAULT_MEDIA_LIMIT <= 1024 * MB);
 });
 
 test('my_usage() answers are read safely', () => {
@@ -130,20 +130,28 @@ test('import warnings: media over 200 MB, more than 50,000 reviews', () => {
 test('the SQL files say the same numbers as the app', () => {
   const read = f => fs.readFileSync(new URL('../supabase/' + f, import.meta.url), 'utf8');
   const limits = read('limits.sql'), setup = read('setup.sql'), media = read('media.sql');
-  assert.ok(limits.includes(String(DEFAULT_MEDIA_LIMIT)), 'limits.sql default is 180 MB');
-  assert.match(limits, /media_bytes_limit bigint not null default 188743680/);
+  assert.ok(limits.includes(String(DEFAULT_MEDIA_LIMIT)), 'limits.sql default is 50 MB');
+  assert.match(limits, /media_bytes_limit bigint not null default 52428800/);
   assert.equal(3145728, MAX_OCCLUSION_PICTURE);
   assert.match(limits, /file_size_limit = 3145728/);
   assert.match(media, /3145728/);
   assert.match(limits, /octet_length\(data::text\) < 65536/);
   assert.match(limits, /create or replace function public\.my_usage\(\)/);
-  assert.match(limits, /data_bytes_limit bigint not null default 83886080/);
-  assert.match(limits, /\('media', 943718400\), \('sync', 440401920\)/);           // 900 MB and 420 MB
-  assert.equal(900 * MB, 943718400); assert.equal(420 * MB, 440401920); assert.equal(80 * MB, 83886080);
+  assert.match(limits, /data_bytes_limit bigint not null default 41943040/);
+  assert.match(limits, /\('media', 943718400\), \('sync', 314572800\)/);           // 900 MB and 300 MB
+  assert.equal(900 * MB, 943718400); assert.equal(300 * MB, 314572800); assert.equal(40 * MB, 41943040); assert.equal(50 * MB, 52428800);
   assert.match(limits, /revoke all on public\.quotas from anon, authenticated;\s*grant select on public\.quotas to authenticated/);
   assert.doesNotMatch(limits, /new\.data is not null/);                           // every new row is checked, "deleted" markers too
-  assert.match(limits, /200 \+ 2 \* octet_length\(new\.id\) \+ greatest\(coalesce\(octet_length\(new\.data::text\), 0\), coalesce\(pg_column_size\(new\.data\), 0\)\)/);
-  assert.match(limits, /200 \+ 2 \* octet_length\(s\.id\) \+ greatest\(coalesce\(octet_length\(s\.data::text\), 0\), coalesce\(pg_column_size\(s\.data\), 0\)\)/);   // recount_sync_usage counts the same way
+  // the trigger and recount_sync_usage count a row the same way: private.row_bytes (200 + twice the id + the data)
+  assert.match(limits, /200 \+ 2 \* octet_length\(rid\)\s*\+ case when d is null then 0 else greatest\(octet_length\(d::text\), pg_column_size\(\(d::text\)::jsonb\)\) end/);
+  assert.match(limits, /new_b := private\.row_bytes\(new\.id, new\.data\)/);
+  assert.match(limits, /sum\(private\.row_bytes\(s\.id, s\.data\)\)/);
+  assert.match(limits, /sync_server_full/);                                        // the project total is changed by one conditional update
+  assert.match(limits, /update private\.usage_totals t set bytes = t\.bytes \+ growth\s+where t\.name = 'sync'\s+and t\.bytes \+ growth <=/);
+  assert.doesNotMatch(limits, /create table[^;]*usage_cache|select public\._total_(sync|media)_bytes\(\)/);            // no more cached totals
+  assert.match(limits, /raise exception 'media_left'/);
+  assert.doesNotMatch(limits, /delete from storage\.objects/);                    // deleting file records with SQL would orphan the files
+  assert.match(limits, /create or replace function public\.app_config\(\)/);
   assert.match(limits, /octet_length\(id\) <= 200\) not valid/);
   assert.match(limits, /data_rows_limit bigint not null default 300000/);
   assert.match(limits, /pg_advisory_xact_lock/);
