@@ -7,12 +7,15 @@
 //   saveSound(file)  keep a picked or imported sound as it is (never converted); returns { id, size, type }
 //   cardMediaHTML(card, side, textHTML)   one side of a card: its picture, the text, then its sound buttons (audio.js)
 //   imgHTML(id)      an <img> for a picture; it fills itself in (see the watcher at the bottom), downloading
-//                    the picture from your account first if this device doesn't have it yet
+//                    the picture from your account first if this device doesn't have it yet (lazy-media.js: files are
+//                    fetched when a card first shows them, not while syncing). If it can't, a quiet message sits where it goes
+//   warmCards(cards)  fetch the files of the next few cards in the background
 
 import * as db from './db.js';
 import { pictureTooBig } from './quota.js';
 import { soundsHTML } from './audio.js';
 import { soundType, soundExt, sniffAudioType } from './audio-type.js';
+import { wantedMedia, mediaMessage } from './lazy-media.js';
 
 const MAX_SIDE = 1280;     // pixels: plenty for a phone or laptop screen, and keeps files ~100–250 KB
 export const OCCLUSION_SIDE = 2048;     // image-occlusion pictures are kept larger, so small diagram text stays readable
@@ -106,23 +109,74 @@ export const cardMediaHTML = (card, side, textHTML) =>
   `${imgHTML(card[side + 'Image'])}${textHTML}${soundsHTML(card[side + 'Sounds'])}`;
 
 const urls = new Map();      // media id → a blob: address for <img>, made once per picture
-export async function mediaURL(id) {
-  if (urls.has(id)) return urls.get(id);
+// The picture's address, or { url: null, reason } when it can't be had: this device doesn't hold it and the download didn't work
+// ('offline', 'signed-out', 'missing' or 'error': lazy-media.js). Files this device lacks are downloaded here, the first time a
+// card shows them.
+export async function mediaLoad(id) {
+  if (urls.has(id)) return { url: urls.get(id) };
   let m = await db.getMedia(id);
+  let reason = null;
   if (!m) {
-    // Not on this device yet (added on another device): download it from the account, if signed in.
-    try { m = await (await import('./sync.js')).downloadMedia(id); } catch { m = null; }
+    try { ({ media: m, reason } = await (await import('./sync.js')).loadMedia(id, 'view')); } catch { m = null; reason = 'error'; }
   }
-  if (!m) return null;
+  if (!m) return { url: null, reason: reason || 'error' };
   const url = URL.createObjectURL(new Blob([m.data], { type: m.type }));
   urls.set(id, url);
-  return url;
+  return { url };
+}
+export const mediaURL = async id => (await mediaLoad(id)).url;
+
+// Download the files these cards need in the background (the next cards of a session), so they are there when the card comes up.
+// Never throws, and asks for nothing the device has.
+export async function warmCards(cards) {
+  try {
+    const have = new Set(await db.mediaKeys());
+    const want = wantedMedia(cards, have);
+    const ids = [...want.pictures, ...want.sounds];
+    if (!ids.length) return;
+    const { loadMedia } = await import('./sync.js');
+    for (const id of ids) await loadMedia(id, 'view');
+  } catch { /* the card asks again when it shows */ }
+}
+
+// A picture that can't be shown is replaced by a quiet line of text in its place (the browser's own broken-picture mark is not shown).
+// (Picture-occlusion pictures have their boxes drawn on top, so the line sits inside the frame.)
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const noteOf = img => (img.nextElementSibling?.matches('.img-missing, .occ-missing') ? img.nextElementSibling : null);
+const SMALL = '.hard-thumb, .img-thumb';
+function placeholder(img, text, reason) {
+  img.classList.add('missing');
+  img.hidden = true;
+  let note = noteOf(img);
+  if (!note) {
+    const occ = img.classList.contains('occ-img'), small = img.matches(SMALL);
+    note = Object.assign(document.createElement('span'), { className: occ ? 'occ-missing' : `img-missing${small ? ' img-missing-sm' : ''}` });
+    img.after(note);
+  }
+  // Plain text (not a live region: a card full of pictures would chatter). A small thumbnail keeps the words for screen readers and a tooltip only.
+  note.replaceChildren(Object.assign(document.createElement('span'), { className: img.matches(SMALL) ? 'sr-only' : '', textContent: text }));
+  note.title = text;
+  if (reason === 'offline' || reason === 'error') {
+    note.append(Object.assign(document.createElement('button'), { type: 'button', className: 'img-retry', textContent: 'Try again' }));
+    note.lastChild.setAttribute('aria-label', 'Try again to load this picture');
+  }
+}
+function loaded(img) {
+  img.classList.remove('missing', 'loading');
+  img.hidden = false;
+  img.removeAttribute('data-reason');
+  noteOf(img)?.remove();
 }
 async function fill(img) {
   img.dataset.loading = '1';
-  const url = await mediaURL(img.dataset.media);
-  if (url) img.src = url;
-  else { img.alt = 'Picture not available on this device yet'; img.classList.add('missing'); }
+  const id = img.dataset.media;
+  if (!urls.has(id)) { img.classList.add('loading'); img.src = BLANK; }         // (a calm grey box until it arrives; pictures already here appear at once)
+  const { url, reason } = await mediaLoad(id);
+  img.classList.remove('loading');
+  if (url) { loaded(img); img.src = url; return; }
+  img.removeAttribute('src');
+  img.dataset.reason = reason;
+  placeholder(img, mediaMessage(reason), reason);
 }
 // Fill in every picture as soon as it appears on the page, wherever it is.
 function fillAll(root) {
@@ -131,3 +185,16 @@ function fillAll(root) {
 }
 new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => n.nodeType === 1 && fillAll(n))))
   .observe(document.documentElement, { childList: true, subtree: true });
+
+// A picture that could not be loaded tries again when the connection comes back, and when its message is tapped.
+const retry = img => { if (img.isConnected && img.classList.contains('missing')) { delete img.dataset.loading; fill(img); } };
+addEventListener('online', () => document.querySelectorAll('img[data-media].missing').forEach(img => { if (img.dataset.reason !== 'missing') retry(img); }));
+// (Only the button retries: a tap anywhere else on the card still flips it, online or not.)
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('.img-retry');
+  const img = b?.parentElement?.previousElementSibling;
+  if (!img?.matches?.('img[data-media]')) return;
+  e.stopPropagation();
+  e.preventDefault();
+  retry(img);
+}, true);

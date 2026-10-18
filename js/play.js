@@ -27,7 +27,7 @@ import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { plainText, mathHTML, answerText, answerTargets } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { imgHTML } from './media.js';
+import { imgHTML, warmCards } from './media.js';
 import { soundsHTML, stopSound } from './audio.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
@@ -316,6 +316,7 @@ function showQuestion() {
   if (!card) { finish(); return; }      // every card in the round was suspended, buried or deleted
   const q = questionFor(card, G.qtype);
   Object.assign(G, { card, q, answered: false });
+  warmCards(G.queue.slice(G.i + 1, G.i + 4));        // the next cards' pictures, if this device lacks them
   updateHud();
   $('feedback').innerHTML = '';
   $('pCard').classList.remove('ok', 'no');

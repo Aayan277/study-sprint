@@ -11,7 +11,7 @@ import { canType, checkTyped } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
-import { cardMediaHTML } from './media.js';
+import { cardMediaHTML, warmCards } from './media.js';
 import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
@@ -192,6 +192,7 @@ function nextCard(el) {
     p.then(() => { if (R?.prep?.p === p) R.prep.done = true; });
   }
   renderSession(el, true);
+  warmCards([...R.queue.slice(0, 3), ...R.waiting.slice(0, 1)].map(x => x.card));      // the next cards' pictures and sounds, if this device lacks them
 }
 
 // Cards left, split like Anki: new · learning · review. The current card's kind is underlined.
