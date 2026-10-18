@@ -6,26 +6,33 @@
 // shows up beside the card it follows in the default order, and a corrupt value gives the default.
 
 // The cards, in their default order. size is the default width on a wide screen (a phone always shows every card full width).
-// more: on a phone the cards of this kind that come after the last other card sit under "More stats" (a fold); the default order
-// has Hardest cards before them, so the default phone page keeps its fold.
+// sizes: the widths the card really works at (checked at 1024, 1280, 1440 and 1920 wide, in both styles). A card that lists only
+// 'full' has no size control anywhere and always shows full width: the Study calendar needs the whole row to show its year (a half
+// card drops the older weeks), and Retention vs target is a three-column table whose labels and tracks do not fit in half a row.
+// desc: the line shown in "Add widget". more: on a phone the cards of this kind that come after the last other card sit under
+// "More stats" (a fold); the default order has Hardest cards before them, so the default phone page keeps its fold.
+const BOTH = ['half', 'full'];
 export const CARDS = [
-  { id: 'streak', name: 'Day streak', size: 'half' },
-  { id: 'retention', name: 'Retention', size: 'half' },
-  { id: 'rs', name: 'Retention vs target', size: 'full' },
-  { id: 'cal', name: 'Study calendar', size: 'full' },
-  { id: 'perDay', name: 'Reviews per day', size: 'half' },
-  { id: 'forecast', name: 'Due in the next 7 days', size: 'half' },
-  { id: 'hardest', name: 'Hardest cards', size: 'half' },
-  { id: 'buttons', name: 'Answer buttons', size: 'half', more: true },
-  { id: 'hours', name: 'Time of day', size: 'half', more: true },
-  { id: 'difficulty', name: 'Difficulty', size: 'half', more: true },
-  { id: 'mastery', name: 'Mastery', size: 'full', more: true }
+  { id: 'streak', name: 'Day streak', size: 'half', sizes: BOTH, desc: 'How many days in a row you have studied, with this week.' },
+  { id: 'retention', name: 'Retention', size: 'half', sizes: BOTH, desc: 'How often you remembered cards in the last 30 days.' },
+  { id: 'rs', name: 'Retention vs target', size: 'full', sizes: ['full'], desc: 'Young and mature cards against your retention target.' },
+  { id: 'cal', name: 'Study calendar', size: 'full', sizes: ['full'], desc: 'A year of study days as a grid of squares.' },
+  { id: 'perDay', name: 'Reviews per day', size: 'half', sizes: BOTH, desc: 'Answers per day over the last 30 days.' },
+  { id: 'forecast', name: 'Due in the next 7 days', size: 'half', sizes: BOTH, desc: 'How many cards come due each day this week.' },
+  { id: 'hardest', name: 'Hardest cards', size: 'half', sizes: BOTH, desc: 'The cards you forget most, with a way to review them.' },
+  { id: 'buttons', name: 'Answer buttons', size: 'half', sizes: BOTH, more: true, desc: 'How often you press Again, Hard, Good and Easy.' },
+  { id: 'hours', name: 'Time of day', size: 'half', sizes: BOTH, more: true, desc: 'When in the day you study and how well it goes.' },
+  { id: 'difficulty', name: 'Difficulty', size: 'half', sizes: BOTH, more: true, desc: 'How hard your studied cards are, from easy to hard.' },
+  { id: 'mastery', name: 'Mastery', size: 'full', sizes: BOTH, more: true, desc: 'Every card as a square, coloured by how well you know it.' }
 ];
 export const IDS = CARDS.map(c => c.id);
 const BY_ID = new Map(CARDS.map(c => [c.id, c]));
 export const cardInfo = id => BY_ID.get(id);
 export const SIZES = ['half', 'full'];
 const isSize = v => v === 'half' || v === 'full';
+// Can this card be made half or full width? Only a card that works at both has a size control.
+export const canResize = id => (BY_ID.get(id)?.sizes.length || 0) > 1;
+const allowed = (id, size) => isSize(size) && !!BY_ID.get(id)?.sizes.includes(size);
 
 export function defaultLayout() {
   return { order: [...IDS], hidden: [], size: Object.fromEntries(CARDS.map(c => [c.id, c.size])) };
@@ -49,7 +56,7 @@ export function normaliseLayout(raw) {
   }
   out.order = order;
   if (Array.isArray(raw.hidden)) out.hidden = order.filter(id => raw.hidden.includes(id));
-  if (raw.size && typeof raw.size === 'object') for (const id of IDS) if (isSize(raw.size[id])) out.size[id] = raw.size[id];
+  if (raw.size && typeof raw.size === 'object') for (const id of IDS) if (allowed(id, raw.size[id])) out.size[id] = raw.size[id];
   return out;
 }
 
@@ -76,8 +83,23 @@ export function setHidden(layout, id, hide) {
 }
 export function setSize(layout, id, size) {
   const l = normaliseLayout(layout);
-  return BY_ID.has(id) && isSize(size) ? { ...l, size: { ...l.size, [id]: size } } : l;
+  return allowed(id, size) ? { ...l, size: { ...l.size, [id]: size } } : l;
 }
+// Drag and drop: `ids` is the new order of the cards that are shown. The hidden cards keep their places in the saved order and the
+// shown ones fill the other places in the new order. Anything that is not exactly the shown cards leaves the layout alone.
+export function reorderVisible(layout, ids) {
+  const l = normaliseLayout(layout), shown = l.order.filter(id => !l.hidden.includes(id));
+  if (ids.length !== shown.length || new Set(ids).size !== ids.length || !ids.every(id => shown.includes(id))) return l;
+  let k = 0;
+  return { ...l, order: l.order.map(id => (l.hidden.includes(id) ? id : ids[k++])) };
+}
+// "Add widget": a hidden card comes back at the end of the page.
+export function addWidget(layout, id) {
+  const l = normaliseLayout(layout);
+  if (!BY_ID.has(id)) return l;
+  return { ...l, order: [...l.order.filter(x => x !== id), id], hidden: l.hidden.filter(x => x !== id) };
+}
+export const hiddenCards = layout => normaliseLayout(layout).hidden.map(id => BY_ID.get(id));
 export const resetLayout = () => defaultLayout();
 
 // The cards shown, in order (skip: ids the page places itself).
@@ -102,6 +124,17 @@ export function widths(layout, ids) {
   const w = new Map();
   for (const row of pairRows(layout, ids)) for (const id of row) w.set(id, row.length === 2 ? 'half' : 'full');
   return w;
+}
+
+// The true grid while editing: id → { w: 'half' | 'full', lone }. A half card with no half partner stays half width (lone: true) and the
+// page shows an empty slot beside it, so the size button visibly does something. Outside editing it stretches (see widths()).
+export function editPlan(layout, ids) {
+  const plan = new Map();
+  for (const row of pairRows(layout, ids)) for (const id of row) {
+    const half = row.length === 2 || normaliseLayout(layout).size[id] === 'half';
+    plan.set(id, { w: half ? 'half' : 'full', lone: row.length === 1 && half });
+  }
+  return plan;
 }
 
 // A synced value from outside (sync, backup): { ok, value }. null is the default; anything else that is not an object is junk.

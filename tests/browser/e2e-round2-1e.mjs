@@ -80,11 +80,11 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
   await seed(p);
   await go(p, '#/stats', '#calGrid');
   ok(await p.locator('.eyebrow').count() === 0, `${tag}: Stats has no PROGRESS eyebrow`);
-  const sb = await p.$eval('#sDeckBtn', b => { const r = b.getBoundingClientRect(), c = document.querySelector('#customBtn').getBoundingClientRect();
+  const sb = await p.$eval('#sDeckBtn', b => { const r = b.getBoundingClientRect(), c = document.querySelector('#editBtn').getBoundingClientRect();
     return { search: !!b.querySelector('svg'), w: r.width, h: r.height, rowW: c.right - r.left, sameRow: Math.abs(c.top - r.top) < 4 }; });
   if (w < 600) {
-    // On a phone the box shares its row with the Customise button (added with the Stats layout sheet); together they span the width.
-    ok(sb.search && sb.h >= 44 && sb.sameRow && sb.rowW > w - 40 && sb.w > 150, `${tag}: the deck search is a box with a search icon, beside Customise, filling the row (${Math.round(sb.w)}px of ${Math.round(sb.rowW)}px)`);
+    // On a phone the box shares its row with the Edit button; together they span the width.
+    ok(sb.search && sb.h >= 44 && sb.sameRow && sb.rowW > w - 40 && sb.w > 150, `${tag}: the deck search is a box with a search icon, beside Edit, filling the row (${Math.round(sb.w)}px of ${Math.round(sb.rowW)}px)`);
   } else ok(sb.search && sb.h >= 44 && sb.w > 400, `${tag}: the deck search is a full-size box with a search icon (${Math.round(sb.w)}px)`);
   ok(await p.locator('.info-fold').count() === 1 && !(await p.locator('.info-fold > span').isVisible()), `${tag}: Retention fine print is behind an (i)`);
   await p.click('.info-fold summary');

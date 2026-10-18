@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CARDS, IDS, defaultLayout, normaliseLayout, isDefaultLayout, toSaved, moveCard, setHidden, setSize, resetLayout, visibleOrder, pairRows, widths, acceptStatsLayout } from '../js/stats-layout.js';
+import { CARDS, IDS, defaultLayout, normaliseLayout, isDefaultLayout, toSaved, moveCard, setHidden, setSize, resetLayout, visibleOrder, pairRows, widths, acceptStatsLayout, canResize, reorderVisible, addWidget, hiddenCards, editPlan, cardInfo } from '../js/stats-layout.js';
 import { acceptSetting, SYNCED_SETTINGS } from '../js/sync-data.js';
 
 test('the default layout lists every card, shows all, with the statslayout sizes', () => {
@@ -19,13 +19,13 @@ test('junk falls back to the default', () => {
 });
 
 test('unknown ids are ignored and repeats dropped', () => {
-  const l = normaliseLayout({ order: ['cal', 'nope', 'cal', 7, 'streak'], hidden: ['ghost', 'rs'], size: { cal: 'half', streak: 'wide', zzz: 'half' } });
+  const l = normaliseLayout({ order: ['cal', 'nope', 'cal', 7, 'streak'], hidden: ['ghost', 'rs'], size: { mastery: 'half', streak: 'wide', zzz: 'half' } });
   assert.equal(l.order.indexOf('cal') < l.order.indexOf('streak'), true);
   assert.equal(l.order.length, IDS.length);
   assert.equal(new Set(l.order).size, IDS.length);
   assert.ok(!l.order.includes('nope'));
   assert.deepEqual(l.hidden, ['rs']);
-  assert.equal(l.size.cal, 'half');
+  assert.equal(l.size.mastery, 'half');
   assert.equal(l.size.streak, 'half');      // 'wide' is not a size: the default stays
   assert.ok(!('zzz' in l.size));
 });
@@ -64,15 +64,15 @@ test('hide and show', () => {
 });
 
 test('size', () => {
-  let l = setSize(defaultLayout(), 'cal', 'half');
-  assert.equal(l.size.cal, 'half');
-  assert.equal(setSize(l, 'cal', 'huge').size.cal, 'half');
-  assert.equal(setSize(l, 'cal', 'full').size.cal, 'full');
-  assert.ok(isDefaultLayout(setSize(l, 'cal', 'full')));
+  let l = setSize(defaultLayout(), 'mastery', 'half');
+  assert.equal(l.size.mastery, 'half');
+  assert.equal(setSize(l, 'mastery', 'huge').size.mastery, 'half');
+  assert.equal(setSize(l, 'mastery', 'full').size.mastery, 'full');
+  assert.ok(isDefaultLayout(setSize(l, 'mastery', 'full')));
 });
 
 test('reset gives the default and saves as null', () => {
-  const l = moveCard(setSize(setHidden(defaultLayout(), 'rs', true), 'cal', 'half'), 'cal', -1);
+  const l = moveCard(setSize(setHidden(defaultLayout(), 'rs', true), 'mastery', 'half'), 'cal', -1);
   assert.ok(!isDefaultLayout(l));
   assert.deepEqual(resetLayout(), defaultLayout());
   assert.ok(toSaved(l) && toSaved(l).hidden[0] === 'rs');
@@ -106,9 +106,9 @@ test('the synced setting: listed, and a value from outside is cleaned', () => {
   assert.deepEqual(acceptSetting('statsLayout', 'junk'), { ok: false });
   assert.deepEqual(acceptSetting('statsLayout', [1]), { ok: false });
   assert.deepEqual(acceptSetting('statsLayout', defaultLayout()), { ok: true, value: null });
-  const a = acceptStatsLayout({ order: ['cal', 'zzz', ...IDS.filter(i => i !== 'cal')], hidden: ['rs', 'zzz'], size: { cal: 'half' } });
+  const a = acceptStatsLayout({ order: ['cal', 'zzz', ...IDS.filter(i => i !== 'cal')], hidden: ['rs', 'zzz'], size: { mastery: 'half' } });
   assert.equal(a.ok, true);
-  assert.equal(a.value.order[0], 'cal'); assert.deepEqual(a.value.hidden, ['rs']); assert.equal(a.value.size.cal, 'half');
+  assert.equal(a.value.order[0], 'cal'); assert.deepEqual(a.value.hidden, ['rs']); assert.equal(a.value.size.mastery, 'half');
   assert.equal(CARDS.length, new Set(IDS).size);
 });
 
@@ -117,6 +117,51 @@ test('a backup restores a cleaned layout and leaves junk out', async () => {
   const get = s => Object.fromEntries(restoredSettings(s));
   assert.ok(!('statsLayout' in get({ statsLayout: 'junk' })));
   assert.equal(get({ statsLayout: null }).statsLayout, null);
-  const kept = get({ statsLayout: { order: ['cal', 'zzz'], hidden: ['rs'], size: { cal: 'half' } } }).statsLayout;
+  const kept = get({ statsLayout: { order: ['cal', 'zzz'], hidden: ['rs'], size: { mastery: 'half' } } }).statsLayout;
   assert.equal(kept.hidden[0], 'rs'); assert.ok(!kept.order.includes('zzz'));
+});
+
+// ---------- edit mode (v4.36) ----------
+test('which cards can change size: only those that work at both widths', () => {
+  assert.deepEqual(CARDS.filter(c => !canResize(c.id)).map(c => c.id), ['rs', 'cal']);
+  for (const c of CARDS) { assert.ok(c.sizes.includes(c.size), c.id + ': its default size is one of its sizes'); assert.ok(c.desc.length > 10, c.id + ' has a description'); }
+  assert.equal(canResize('nope'), false);
+});
+test('a fixed-size card ignores a size it cannot have (older saved values still read)', () => {
+  const l = normaliseLayout({ size: { cal: 'half', rs: 'half', perDay: 'full' } });
+  assert.equal(l.size.cal, 'full'); assert.equal(l.size.rs, 'full'); assert.equal(l.size.perDay, 'full');
+  assert.equal(setSize(defaultLayout(), 'cal', 'half').size.cal, 'full');
+  assert.ok(isDefaultLayout({ size: { cal: 'half' } }));
+  assert.equal(widths({ size: { cal: 'half' } }, ['cal', 'perDay']).get('cal'), 'full');
+});
+test('reorderVisible: hidden cards keep their places, shown ones take the new order', () => {
+  let l = setHidden(defaultLayout(), 'rs', true);
+  const shown = visibleOrder(l), next = [...shown]; [next[0], next[1]] = [next[1], next[0]];
+  const r = reorderVisible(l, next);
+  assert.deepEqual(visibleOrder(r), next);
+  assert.equal(r.order.indexOf('rs'), l.order.indexOf('rs'));
+  assert.deepEqual(r.hidden, ['rs']);
+  assert.deepEqual(reorderVisible(l, shown.slice(1)).order, l.order);               // a missing card: unchanged
+  assert.deepEqual(reorderVisible(l, [...shown.slice(1), 'streak', 'streak']).order, l.order);
+  assert.deepEqual(reorderVisible(l, [...shown.slice(1), 'rs']).order, l.order);    // a hidden card is not a shown one
+});
+test('addWidget: a hidden card comes back at the end; hiddenCards lists them', () => {
+  let l = setHidden(setHidden(defaultLayout(), 'hours', true), 'streak', true);
+  assert.deepEqual(hiddenCards(l).map(c => c.id), ['streak', 'hours']);
+  l = addWidget(l, 'streak');
+  assert.equal(l.order.at(-1), 'streak'); assert.deepEqual(l.hidden, ['hours']);
+  assert.equal(l.order.length, IDS.length);
+  assert.deepEqual(addWidget(l, 'nope'), l);
+  assert.deepEqual(hiddenCards(defaultLayout()), []);
+});
+test('editPlan: the true grid. A half card with no half partner stays half and is marked lone', () => {
+  const l = { size: { forecast: 'full' } };             // perDay half, forecast full
+  const plan = editPlan(l, ['rs', 'perDay', 'forecast', 'hardest', 'buttons']);
+  assert.deepEqual(plan.get('rs'), { w: 'full', lone: false });
+  assert.deepEqual(plan.get('perDay'), { w: 'half', lone: true });
+  assert.deepEqual(plan.get('forecast'), { w: 'full', lone: false });
+  assert.deepEqual(plan.get('hardest'), { w: 'half', lone: false }); assert.deepEqual(plan.get('buttons'), { w: 'half', lone: false });
+  // outside editing the lone card stretches (widths), as before
+  assert.equal(widths(l, ['rs', 'perDay', 'forecast']).get('perDay'), 'full');
+  assert.equal(cardInfo('perDay').size, 'half');
 });

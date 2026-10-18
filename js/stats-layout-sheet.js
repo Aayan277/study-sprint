@@ -1,4 +1,4 @@
-// The "Customise Stats" sheet (opened from the Stats page): every Stats card with a show/hide switch, move up and down buttons
+// The "Customise Stats" list sheet (opened from "Edit as a list" in Stats' edit mode, the accessible alternative to dragging): every Stats card with a show/hide switch, move up and down buttons
 // and a Half / Full width choice, and "Reset to default". Loaded when first opened (it is in the service worker's CORE list).
 // Every change is saved at once (the synced setting `statsLayout`, see stats-layout.js) and onChange redraws the page behind the sheet.
 //
@@ -6,7 +6,7 @@
 
 import * as db from './db.js';
 import { openSheet, closeSheet, esc, icon, $ } from './ui.js';
-import { cardInfo, normaliseLayout, moveCard, setHidden, setSize, toSaved, isDefaultLayout, resetLayout } from './stats-layout.js';
+import { cardInfo, canResize, normaliseLayout, moveCard, setHidden, setSize, toSaved, isDefaultLayout, resetLayout } from './stats-layout.js';
 
 export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
   let layout = normaliseLayout((await db.getSettings()).statsLayout);
@@ -37,15 +37,15 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
           <button type="button" class="sl-btn" data-act="down" aria-label="Move ${name} down">${icon('down')}</button>
         </span>
       </div>
-      <div class="sl-size chips" role="radiogroup" aria-label="${name} size on wide screens">
+      ${canResize(id) ? `<div class="sl-size chips" role="radiogroup" aria-label="${name} size on wide screens">
         ${[['half', 'Half'], ['full', 'Full']].map(([v, l]) => `<label class="chip"><input type="radio" name="sz-${id}" value="${v}" data-act="size"><span>${l}</span></label>`).join('')}
-      </div>
+      </div>` : ''}
     </li>`;
   };
 
   openSheet(`
     <h2 id="sheetTitle">Customise Stats</h2>
-    <p class="muted small sl-note">Show or hide a card, move it up or down, and pick its size. Size applies on wider screens: on a phone every card is full width. Two half cards side by side share a row; a half card with no half card next to it shows full width.</p>
+    <p class="muted small sl-note">Show or hide a card, move it up or down, and pick its size. Size applies on wider screens: on a phone every card is full width. Two half cards side by side share a row; a half card with no half card next to it shows full width. A card with no size choice always fills the row.</p>
     <ol class="sl-list" id="slList">${layout.order.map(row).join('')}</ol>
     <div class="sl-confirm" id="slConfirm" role="group" aria-labelledby="slConfirmQ" hidden>
       <p id="slConfirmQ"><b>Reset to the default layout?</b> All cards come back, in their usual order and size.</p>
