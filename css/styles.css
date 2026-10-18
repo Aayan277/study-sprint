@@ -2486,3 +2486,83 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
 .rs-scale{display:flex;justify-content:space-between}
 @media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px 1fr minmax(96px,auto)}}
+
+/* ---- Phone tap targets (< 600px, Original style only): every control gets at least 44x44 px to tap -----------------------
+   Small controls keep their look. Their tap area grows with a see-through box (::before) that reaches past the edges, so
+   nothing looks bigger. The box sits on the control itself, so a tap on it is a tap on the control. Text fields and selects
+   are 44px tall (a small, deliberate change) and so is the slider. Clinical has its own phone section (css/clinical.css), so none
+   of this applies to it. Controls that already use ::before for their look (#claudeBtn's sparkle) get no box. */
+@media (max-width:599.98px){
+  html:not([data-ui="clinical"]) .btn.small,
+  html:not([data-ui="clinical"]) .exam-chip,
+  html:not([data-ui="clinical"]) .deck-sort button,
+  html:not([data-ui="clinical"]) .deck .icon-btn,
+  html:not([data-ui="clinical"]) .deck-go,
+  html:not([data-ui="clinical"]) .link,
+  html:not([data-ui="clinical"]) .back,
+  html:not([data-ui="clinical"]) .brand,
+  html:not([data-ui="clinical"]) .chip,
+  html:not([data-ui="clinical"]) .set-nav a,
+  html:not([data-ui="clinical"]) .flagbtn,
+  html:not([data-ui="clinical"]) .tchip,
+  html:not([data-ui="clinical"]) .el-tick,
+  html:not([data-ui="clinical"]) .seg button,
+  html:not([data-ui="clinical"]) .fmt-tools button,
+  html:not([data-ui="clinical"]) .prow .icon-btn,
+  html:not([data-ui="clinical"]) .browse-all a,
+  html:not([data-ui="clinical"]) .more-btn,
+  html:not([data-ui="clinical"]) summary{position:relative}
+  html:not([data-ui="clinical"]) .btn.small:not(#claudeBtn)::before,
+  html:not([data-ui="clinical"]) .exam-chip::before,
+  html:not([data-ui="clinical"]) .deck-sort button::before,
+  html:not([data-ui="clinical"]) .deck .icon-btn::before,
+  html:not([data-ui="clinical"]) .deck-go::before,
+  html:not([data-ui="clinical"]) .link::before,
+  html:not([data-ui="clinical"]) .back::before,
+  html:not([data-ui="clinical"]) .brand::before,
+  html:not([data-ui="clinical"]) .rv-speak::before,
+  html:not([data-ui="clinical"]) .pw-show::before,
+  html:not([data-ui="clinical"]) .chip::before,
+  html:not([data-ui="clinical"]) .set-nav a::before,
+  html:not([data-ui="clinical"]) .flagbtn::before,
+  html:not([data-ui="clinical"]) .tchip::before,
+  html:not([data-ui="clinical"]) .el-tick::before,
+  html:not([data-ui="clinical"]) .seg button::before,
+  html:not([data-ui="clinical"]) .fmt-tools button::before,
+  html:not([data-ui="clinical"]) .prow .icon-btn::before,
+  html:not([data-ui="clinical"]) .browse-all a::before,
+  html:not([data-ui="clinical"]) summary::before,
+  html:not([data-ui="clinical"]) .more-btn::before{content:"";position:absolute;inset:-5px -3px}
+  html:not([data-ui="clinical"]) .btn.small:not(#claudeBtn)::before{inset:-6px 0}
+  html:not([data-ui="clinical"]) #claudeBtn::after{content:"";position:absolute;inset:-6px 0}
+  html:not([data-ui="clinical"]) #claudeBtn{position:relative}
+  html:not([data-ui="clinical"]) .exam-chip::before,html:not([data-ui="clinical"]) .set-nav a::before{inset:-5px 0}
+  html:not([data-ui="clinical"]) .deck-sort button::before{inset:-4px 0}
+  html:not([data-ui="clinical"]) .seg button::before{inset:-5px 0}
+  html:not([data-ui="clinical"]) .deck .icon-btn::before{inset:-5px}
+  html:not([data-ui="clinical"]) .more-btn::before{inset:-3px}
+  html:not([data-ui="clinical"]) .deck-go::before,html:not([data-ui="clinical"]) .rv-speak::before,html:not([data-ui="clinical"]) .pw-show::before{inset:-2px}
+  html:not([data-ui="clinical"]) .link::before{inset:-6px}
+  html:not([data-ui="clinical"]) .back::before,html:not([data-ui="clinical"]) .brand::before{inset:-6px -4px}
+  html:not([data-ui="clinical"]) .browse-all a::before{inset:-14px -4px}
+  html:not([data-ui="clinical"]) #planRest::before{inset:-10px -6px}
+  html:not([data-ui="clinical"]) #forgotBtn::before{inset:-12px -6px}
+  html:not([data-ui="clinical"]) summary::before{inset:-6px 0}
+  html:not([data-ui="clinical"]) .info-fold summary::before{inset:-12px}
+  html:not([data-ui="clinical"]) .file-btn{overflow:visible}   /* its hidden file picker already fits inside, and the tap box must not be cut off */
+  html:not([data-ui="clinical"]) .exam-add{padding-block:5px;margin-block:-2px calc(var(--s-5) - 2px)}   /* was 3px padding: room for the chips' tap boxes, which this sideways-scrolling row would cut off */
+  /* Review header: round buttons 40px, 4px apart (36px and 3px at 320px), so their tap areas meet without overlapping */
+  html:not([data-ui="clinical"]) .rv-head{gap:4px}
+  html:not([data-ui="clinical"]) .rv-head .link{width:40px;height:40px;min-height:40px}
+  html:not([data-ui="clinical"]) .rv-head .link::before{inset:-2px}
+  /* with Undo there are four controls: End loses its side padding and the counts pill tightens so the row still ends at the card's edge */
+  html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) #endBtn{width:40px;padding:0}
+  html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) .rv-counts span{padding:7px 3px;gap:3px}
+}
+@media (max-width:359px){
+  html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) .rv-counts{gap:1px}
+  html:not([data-ui="clinical"]) .rv-head:has(#undoBtn) .rv-counts span{padding:7px 2px}
+}
+@media (max-width:599.98px){  html:not([data-ui="clinical"]) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),html:not([data-ui="clinical"]) select{min-height:44px}
+  html:not([data-ui="clinical"]) .set-row input[type="range"]{height:44px}
+}
