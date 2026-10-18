@@ -1394,6 +1394,13 @@ img[data-media][hidden]{display:none}
   main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
   main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
   main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
+  /* Retention vs target is a wide table (name, track, figures): it takes the full width instead of half of it with a hole beside it */
+  main[data-route="stats"] .rs-card{grid-column:1 / -1;height:auto}
+  /* The day streak and retention cards are a pair that keeps its own height (they never stretch to match the rows below) */
+  main[data-route="stats"] .pgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3)}
+  main[data-route="stats"] .pgrid .card{padding:var(--s-4) var(--s-5)}
+  main[data-route="stats"] .pgrid .week{justify-content:flex-start;gap:var(--s-4);max-width:320px;margin-top:var(--s-3)}
+  main[data-route="stats"] .pgrid .wd{min-width:24px}
   /* Review: a bigger card, centered while a session runs */
   main[data-route="review"] > .view > *{max-width:780px}
   body.focus main[data-route="review"] > .view{max-width:780px;min-height:calc(100dvh - 88px);display:flex;flex-direction:column;justify-content:center}
@@ -1411,6 +1418,11 @@ img[data-media][hidden]{display:none}
 /* Wide desktop */
 @media (min-width:1200px){
   main[data-route="stats"] .cal-card{--c:16px}
+  /* The streak card is wide enough to put the week of days beside the count, so it is no taller than it needs to be */
+  main[data-route="stats"] .pgrid .card:first-child{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto 1fr;column-gap:var(--s-6);align-content:start}
+  main[data-route="stats"] .pgrid .card:first-child > :is(h2,.big,p){grid-column:1}
+  main[data-route="stats"] .pgrid .card:first-child > .week{grid-column:2;grid-row:1 / span 3;align-self:center;margin:0;padding:0}
+  main[data-route="stats"] .pgrid .card:first-child > .frz-note{grid-column:1 / -1;grid-row:4;align-self:end}
 }
 /* A card's panel next to the card list, from 1200px wide */
 dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:hidden}
@@ -2310,7 +2322,12 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .stats-scope .pick-btn > span{flex:1 1 auto;text-align:left}
 .stats-scope .pick-btn > .ico:last-child{margin-left:auto}
 .stats-scope .pick-hint{display:block;margin:4px 2px 0}
-@media (min-width:1024px){.stats-scope .pick-btn{max-width:560px}}
+@media (min-width:1024px){
+  /* On a computer the picker is a compact control with its hint beside it, not a half-width bar with a line under it */
+  .stats-scope{display:flex;align-items:center;gap:var(--s-3)}
+  .stats-scope .pick-btn{width:auto;min-width:420px;max-width:480px}
+  .stats-scope .pick-hint{margin:0;color:var(--text-2);font-size:var(--fs-xs)}
+}
 /* Retention: the fine print sits behind an (i) */
 .info-fold{margin-top:var(--s-2);font-size:var(--fs-sm)}
 .info-fold summary{list-style:none;display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--text-2);color:var(--text-2);font:700 var(--fs-xs) var(--f-ui);font-style:italic;cursor:pointer;touch-action:manipulation}
@@ -2517,19 +2534,28 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rs-group{display:grid;gap:6px;padding:var(--s-3) 0;border-top:1px solid var(--line)}
 .rs-group:first-of-type{border-top:0;padding-top:0}
 .rs-head{display:flex;justify-content:space-between;align-items:baseline}
-.rs-row,.rs-axis{display:grid;grid-template-columns:minmax(84px,.8fr) 1.4fr minmax(110px,1.1fr);align-items:center;gap:var(--s-2);font-size:var(--fs-sm)}
+.rs-row,.rs-axis{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr) minmax(0,1.1fr);align-items:center;gap:var(--s-2);font-size:var(--fs-sm)}
 .rs-name small{color:var(--text-2)}
-.rs-track{position:relative;height:18px}
-.rs-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--surface-3)}
-.rs-dot{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--surface-1)}
+/* The track, the dots, the target line and the 50/75/100% labels all use --rs-in as their inset, so a dot at 100% sits inside the track end and under its label */
+.rs-track,.rs-scale{--rs-in:9px}
+.rs-track{position:relative;height:22px}
+.rs-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;border-radius:1px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line)}
+.rs-dot,.rs-target{position:absolute;left:calc(var(--rs-in) + (100% - 2 * var(--rs-in)) * var(--p,0))}
+.rs-dot{z-index:1;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--surface-1)}
 .rs-dot.under{background:var(--again)}
 .rs-dot.over{background:var(--easy)}
-.rs-target{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;background:var(--text)}
+/* The target line is taller than the dot and edged, so a dot sitting on it still shows the line above and below */
+.rs-target{top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:var(--text);box-shadow:0 0 0 1px var(--surface-1)}
 .rs-val{font-variant-numeric:tabular-nums;text-align:right}
 .rs-val small{color:var(--text-2)}
 .rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
-.rs-scale{display:flex;justify-content:space-between}
-@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px 1fr minmax(96px,auto)}}
+.rs-scale{position:relative;height:1.3em}
+.rs-scale > span{position:absolute;top:0;transform:translateX(-50%);left:calc(var(--rs-in) + (100% - 2 * var(--rs-in)) * var(--p,0))}
+.rs-scale > span:nth-child(1){--p:0}
+.rs-scale > span:nth-child(2){--p:.5}
+.rs-scale > span:nth-child(3){--p:1}
+@media (min-width:700px){.rs-row,.rs-axis{grid-template-columns:190px minmax(0,1fr) 230px;column-gap:var(--s-4)}}
+@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}}
 
 /* ---- Phone tap targets (< 600px, Original style only): every control gets at least 44x44 px to tap -----------------------
    Small controls keep their look. Their tap area grows with a see-through box (::before) that reaches past the edges, so

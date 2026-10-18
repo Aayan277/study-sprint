@@ -86,7 +86,7 @@ async function loadRetentionLogs(logs) {
 }
 const RS_PERIODS = [7, 30, 90];
 const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
-const rsPos = v => `${(Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN) * 100}%`;
+const rsPos = v => +((Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN)).toFixed(4);   // 0 to 1 along the track; the CSS keeps it inside the track's ends
 const RS_MARK = { on: '✓', under: '▼', over: '▲' };
 function retSplitHTML(res, hasLogs) {
   if (!hasLogs) return '<p class="muted">Shows how often you remember cards when they come due, for cards you know less well (young) and well (mature), against your target. Nothing has come due in the last 90 days yet.</p>';
@@ -98,7 +98,7 @@ function retSplitHTML(res, hasLogs) {
     const pts = v.gap === null ? 0 : Math.round(Math.abs(v.gap) * 100);
     const word = v.verdict === 'few' ? '' : kind === 'on' ? 'on target' : `${pts} ${pts === 1 ? 'point' : 'points'} ${kind === 'under' ? 'under' : 'above'}`;
     return `<div class="rs-row"><span class="rs-name">${label}</span>
-      <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="left:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="left:${rsPos(target)}"></i>` : ''}</span>
+      <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="--p:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="--p:${rsPos(target)}"></i>` : ''}</span>
       <span class="rs-val"><b class="mono">${Math.round(rate * 100)}%</b> <small>of ${b.n}</small>${word ? ` <span class="rs-gap ${kind}"><span aria-hidden="true">${RS_MARK[kind]}</span> ${word}</span>` : ''}</span></div>`;
   };
   return RS_PERIODS.map(d => {
@@ -307,7 +307,7 @@ export async function renderStats(el) {
       </div>
     </div>
 
-    <section class="card section" aria-labelledby="rsTitle">
+    <section class="card section rs-card" aria-labelledby="rsTitle">
       <div class="mhead"><h2 id="rsTitle">Retention vs target</h2><span class="muted small">Young and mature cards</span></div>
       <div id="retSplit"><p class="muted">Working it out…</p></div>
     </section>
