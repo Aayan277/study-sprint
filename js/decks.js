@@ -15,6 +15,7 @@ import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
+import { go as navGo, up } from './nav.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
 export const DECK_COLORS = ['#E5484D', '#F76B15', '#E2A336', '#46A758', '#12A594', '#3E63DD', '#8E4EC6', '#D6409F'];
@@ -240,7 +241,7 @@ export async function renderLibrary(el, showStarters = false) {
   // One listener for all the tiles, so redrawing them needs no re-wiring.
   grid?.addEventListener('click', e => {
     const open = e.target.closest('[data-open]'), study = e.target.closest('[data-study]'), edit = e.target.closest('[data-edit]');
-    if (open) location.hash = `#/deck/${open.dataset.open}`;
+    if (open) navGo(`#/deck/${open.dataset.open}`);
     else if (study) startStudy({ deckIds: [study.dataset.study], deckId: study.dataset.study });
     else if (edit) openDeckEditor(list.find(x => x.deck.id === edit.dataset.edit).deck, () => renderLibrary(el));
   });
@@ -274,7 +275,7 @@ export async function renderLibrary(el, showStarters = false) {
 export async function renderDeck(el, deckId) {
   const today = await loadAll(), list = loadDecks(today);
   const item = list.find(x => x.deck.id === deckId);
-  if (!item) { location.hash = '#/decks'; return; }
+  if (!item) { navGo('#/decks'); return; }
   const { deck, cards, stats: s } = item;
   const counts = countFor(today, [deckId]);              // what Review shows today: the same number as Today and the sidebar
   const decks = list.map(x => x.deck);
@@ -320,15 +321,15 @@ export async function renderDeck(el, deckId) {
   `;
   drawDeckTree(list, deckId, today);
   wireDeckMenu(el);
-  $('back').addEventListener('click', () => { location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; });
-  el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { location.hash = `#/deck/${b.dataset.open}`; }));
-  $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }, { parentId: deckId }));
+  $('back').addEventListener('click', () => { up(parent ? `#/deck/${parent.id}` : '#/decks'); });
+  el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { navGo(`#/deck/${b.dataset.open}`); }));
+  $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }, { parentId: deckId }));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
-    if (saved === 'deleted') location.hash = parent ? `#/deck/${parent.id}` : '#/decks'; else renderDeck(el, deckId);
+    if (saved === 'deleted') navGo(parent ? `#/deck/${parent.id}` : '#/decks'); else renderDeck(el, deckId);
   }));
   // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
   await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
@@ -410,7 +411,7 @@ function drawDeckTree(list, currentId, today) {
     saveFold('tree-' + tw.dataset.tw, tw.getAttribute('aria-expanded') !== 'true');
     draw();
   });
-  $('dtNew').addEventListener('click', () => openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; }));
+  $('dtNew').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }));
   $('dtNav').querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
 }
 

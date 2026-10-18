@@ -16,6 +16,7 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
+import { replace as navReplace, back as navBack } from './nav.js';
 import { importWarnings } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
@@ -140,7 +141,7 @@ export async function renderImport(el, arg) {
       <button class="btn primary" type="button" id="saveBtn">Add cards</button>
     </div>`;
 
-  $('back').addEventListener('click', () => history.length > 1 ? history.back() : (location.hash = '#/decks'));
+  $('back').addEventListener('click', () => navBack('#/decks'));
   wireDeckPicker();
   wireTabs();
   wirePaste();
@@ -770,7 +771,7 @@ async function save() {
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
-    location.replace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
+    navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);
     toast("Couldn't add the cards. Nothing was saved, so you can try again.");

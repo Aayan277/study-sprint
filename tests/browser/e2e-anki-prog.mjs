@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -49,7 +49,7 @@ await page.click('.card-info summary');
 ok((await page.locator('.history tbody tr').count()) === 5 && (await page.textContent('.history')).includes('Anki'), 'card info lists Anki reviews');
 await page.click('.sheet-x');
 // stats screen counts them
-await page.goto('http://localhost:8123/#/stats'); await page.waitForSelector('.stats4, .stat, h1');
+await sheetSettled(page); await page.goto('http://localhost:8123/#/stats'); await page.waitForSelector('.stats4, .stat, h1');
 await page.waitForTimeout(500);
 const statsText = await page.innerText('#screen');
 ok(!/No reviews yet/i.test(statsText), 'stats show the imported reviews');

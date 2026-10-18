@@ -2,7 +2,7 @@
 // Retention vs target rows in Stats. At 375 and 1440 wide, in Original dark and light and in Clinical dark and light.
 // Screenshots: retention-<w>-<look>-{health,helper,stats}.png (helper chart on desktop light, health check on a phone in dark).
 // Run with: node tests/browser/run.mjs e2e-retention
-import { chromium, deckMenu } from './pw.mjs';
+import { chromium, deckMenu, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const URL = 'http://localhost:8123/';
 const browser = await chromium.launch();
@@ -126,7 +126,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   await p.keyboard.press('Escape');
 
   // ---------- the retention helper ----------
-  await p.reload(); await p.waitForSelector('#advanced');
+  await sheetSettled(p); await p.reload(); await p.waitForSelector('#advanced');
   await p.click('#retHelp');
   const t0 = Date.now();
   await p.waitForSelector('#sheet[open] svg.rc-svg', { timeout: 15000 });
@@ -176,7 +176,7 @@ for (const [w, h, ui, mode] of LOOKS) {
 
   // a review limit: the suggestion fits it and says so
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewLimit', 12); });
-  await p.reload(); await p.waitForSelector('#advanced');
+  await sheetSettled(p); await p.reload(); await p.waitForSelector('#advanced');
   await p.click('#retHelp'); await p.waitForSelector('#sheet[open] svg.rc-svg', { timeout: 15000 });
   const limText = await p.textContent('#sheet');
   ok(/your limit of 12/.test(limText), `${tag}: with a review limit the suggestion mentions it (${(limText.match(/[^.]*limit of 12[^.]*\./) || [''])[0].trim().slice(0, 90)})`);
@@ -184,7 +184,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewLimit', null); });
 
   // ---------- the deck editor: the same helper, inline ----------
-  await p.goto(URL + '#/deck/A'); await deckMenu(p); await p.click('#editDeck');
+  await sheetSettled(p); await p.goto(URL + '#/deck/A'); await deckMenu(p); await p.click('#editDeck');
   await p.waitForSelector('#deckOpts');
   await p.evaluate(() => { document.getElementById('deckOpts').open = true; });
   await p.uncheck('#deckOwnOff');
@@ -200,7 +200,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   await p.keyboard.press('Escape');
 
   // ---------- Stats: retention vs target ----------
-  await p.goto(URL + '#/stats'); await p.waitForSelector('#retSplit .rs-group', { timeout: 15000 });
+  await sheetSettled(p); await p.goto(URL + '#/stats'); await p.waitForSelector('#retSplit .rs-group', { timeout: 15000 });
   ok((await p.locator('#retSplit .rs-group').count()) === 3, `${tag}: Stats shows 7, 30 and 90 days`);
   const st = await p.textContent('#retSplit');
   ok(/Last 7 days/.test(st) && /Last 30 days/.test(st) && /Last 90 days/.test(st) && /Young/.test(st) && /Mature/.test(st) && /target \d\d%/.test(st), `${tag}: young and mature against the target, per period`);
