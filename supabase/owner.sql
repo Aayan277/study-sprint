@@ -39,8 +39,13 @@ left join (
 ) m on m.folder = u.id::text
 order by coalesce(d.bytes, 0) + coalesce(m.bytes, 0) desc;
 
--- The project-wide totals against their ceilings (change a ceiling in Table Editor → global_limits).
-select t.name as fuse, round(t.bytes / 1048576.0, 1) as used_mb, round(g.bytes / 1048576.0, 1) as ceiling_mb,
-       round(100.0 * t.bytes / nullif(g.bytes, 0), 1) as pct
-from private.usage_totals t left join public.global_limits g on g.name = t.name
-order by t.name;
+-- The project-wide totals against their ceilings (change a ceiling in Table Editor → global_limits). It adds up the same tables
+-- the totals are made from, so it also works on a project that still has the older scripts.
+select g.name as fuse,
+       round(case g.name when 'sync' then (select coalesce(sum(u.bytes), 0) from public.sync_usage u)
+                         else (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media') end / 1048576.0, 1) as used_mb,
+       round(g.bytes / 1048576.0, 1) as ceiling_mb,
+       round(100.0 * case g.name when 'sync' then (select coalesce(sum(u.bytes), 0) from public.sync_usage u)
+                         else (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media') end / nullif(g.bytes, 0), 1) as pct
+from public.global_limits g
+order by g.name;

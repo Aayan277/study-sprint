@@ -96,8 +96,8 @@ It adds:
 
 **Existing people.** Running the new script lowers the defaults and the data ceiling **only if they are still the old ones**
 (180 MB / 80 MB / 420 MB). The 420 MB data ceiling is lowered to 300 MB only when the data stored today is under 280 MB
-(otherwise lowering it would refuse everybody's new data at once): **run `supabase/owner.sql` first and look at the last table; if the
-data total is over 300 MB, free space or expect the ceiling to stay at 420 MB**, and the status table at the bottom of `limits.sql` says so.
+(otherwise lowering it would refuse everybody's new data at once): **before running the new `limits.sql`, run this in the SQL Editor:
+`select round(coalesce(sum(bytes),0)/1048576.0,1) as sync_used_mb from public.sync_usage;` If it is over 300, free space first or expect the ceiling to stay at 420 MB**, and the status table at the bottom of `limits.sql` says so.
 A default or ceiling you changed yourself is left alone, and anyone with their own row in the
 `quotas` table keeps their own numbers. (A row that was made long ago just to change one thing still holds the old 180 MB / 80 MB
 for the others; look at **Table Editor → quotas** and fix any that should be lower.) People who are over the new limit can still
@@ -170,8 +170,8 @@ Paste these in a new query, one at a time. The status table at the bottom of eac
           (select bytes from private.usage_totals where name = 'media') as media_total,
           (select coalesce(sum((metadata ->> 'size')::bigint), 0) from storage.objects where bucket_id = 'media') as media_real;
    ```
-3. **Before** running `limits.sql` on a live project, run `supabase/owner.sql` and look at the last table: the `sync` fuse's `used_mb` should be under 300
-   (if it is not, the ceiling stays at 420 MB until you free space).
+3. **Before** running the new `limits.sql` on a live project: `select round(coalesce(sum(bytes),0)/1048576.0,1) as sync_used_mb from public.sync_usage;`
+   should be under 300 (if it is not, the ceiling stays at 420 MB until you free space). After `limits.sql`, `supabase/owner.sql` shows the same totals per person and against the ceilings.
 4. The record check covers every stored row (`t` = yes):
    `select convalidated from pg_constraint where conname = 'sync_items_data_object';`
 5. After `ci-roles.sql`: `select rolbypassrls from pg_roles where rolname = 'study_sprint_ci';` should say `t`, and

@@ -507,6 +507,16 @@ await test('the status tables at the end of each script', () => {
   ok(psql(db, `drop owned by study_sprint_ci; drop role study_sprint_ci`));      // (roles belong to the whole server, not one database)
 });
 
+await test('owner.sql runs on a project that still has the old scripts, and on the new one', () => {
+  const db = newDb('owner-old', { old: true });
+  ok(asUser(db, A, rowSql('o1')));
+  addObject(db, A, 'o.png', 1234);
+  const res = ok(psql(db, '', { file: join(SQL, 'owner.sql') }), 'owner.sql on v1');
+  assert.match(res, /sync\|0\.0\|420\.0/);
+  runAll(db);
+  assert.match(ok(psql(db, '', { file: join(SQL, 'owner.sql') }), 'owner.sql on v2'), /sync\|0\.0\|300\.0/);
+});
+
 await test('a change that does not change a record\'s size touches no counter row', () => {
   const db = newDb('nogrowth');
   ok(asUser(db, A, rowSql('g1', 100)));
