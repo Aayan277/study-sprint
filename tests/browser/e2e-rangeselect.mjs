@@ -101,6 +101,24 @@ const count = p => p.textContent('#brSel');
   } else ok(false, 'bulk sheet has a flag button');
   await p.close();
 }
+// ---------- only drawn rows; anchor reset; Ctrl+A from the bar ----------
+{
+  const p = await open(false);
+  await p.click('#brMore');
+  await row(p, 170).click();
+  await p.fill('#brQuery', 'zzz'); await p.fill('#brQuery', '');
+  await p.waitForFunction(() => document.querySelectorAll('.crow').length === 150);
+  await row(p, 5).click({ modifiers: ['Shift'] });
+  ok(same(await sel(p), ['c005']), 'after a search resets the page, the old anchor is gone: Shift+click is a plain click (only c005 drawn-selected)');
+  ok((await count(p)) === '2 selected', 'nothing undrawn was added');
+  await p.focus('#brAll'); await p.keyboard.press('Control+a');
+  ok((await count(p)) === '200 selected', 'Ctrl+A with focus on the bulk bar selects all');
+  await p.focus('#brSelect'); await p.keyboard.press('Control+a');
+  ok((await count(p)) === '200 selected', 'Ctrl+A on the Select/Cancel button selects all');
+  ok((await p.getAttribute('#brList', 'aria-describedby')) === 'brHint', 'list is described by the hint');
+  ok((await p.textContent('#brHint')).includes('Shift+Space'), 'hint mentions the keyboard');
+  await p.close();
+}
 // ---------- keyboard ----------
 {
   const p = await open(false);
@@ -164,6 +182,13 @@ const count = p => p.textContent('#brSel');
   ok(/none$/.test(cs) , 'rows are user-select:none in Select mode (' + cs + ')');
   await press(9, 700, 40);
   ok(!(await sel(p)).includes('c009'), 'a press that moves (scrolling) does nothing');
+  // long-press, then a cancel with no click: a later keyboard Space still selects the row
+  await p.click('#brSelect'); await p.click('#brSelect');
+  await p.evaluate(() => { const b = document.querySelector('.crow[data-id="c012"] .crow-btn'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: 5, clientY: 5 })); });
+  await p.waitForTimeout(600);
+  await p.evaluate(() => { document.querySelector('.crow[data-id="c012"] .crow-btn').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerType: 'touch' })); });
+  await row(p, 14).focus(); await p.keyboard.press('Space');
+  ok((await sel(p)).includes('c014'), 'a long-press that ended in a cancel does not swallow the next keyboard Space');
   await p.close();
 }
 ok(errors.length === 0, 'no page errors ' + errors.join(';'));

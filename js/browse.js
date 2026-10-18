@@ -142,6 +142,10 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     $('brMore').hidden = list.length <= B.shown;
     $('brBulk').hidden = !B.selecting;
     $('brHint').hidden = !B.selecting;
+    if (B.selecting) {      // (chosen each time Select mode is entered or the list is drawn: the device can change, e.g. a tablet's keyboard)
+      $('brHint').textContent = matchMedia('(pointer: coarse)').matches ? 'Tip: press and hold a card to select everything up to it' : 'Tip: Shift-click or Shift+Space to select a range; Ctrl+A for all';
+      $('brList').setAttribute('aria-describedby', 'brHint');
+    } else $('brList').removeAttribute('aria-describedby');
     $('brList').classList.toggle('selecting', B.selecting);
     $('brSelect').textContent = B.selecting ? 'Cancel' : 'Select';
     selCount();
@@ -157,8 +161,8 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
 
   const remember = () => Object.assign(memory, { query: B.query, filter: B.filter, sort: B.sort });
   let typing = 0;      // (the timer checks box.isConnected: leaving Browse within the 150 ms must not draw into a box that is gone)
-  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
-  $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; remember(); draw(); });
+  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; B.anchor = null; remember(); draw(); }, 150); });
+  $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; B.anchor = null; remember(); draw(); });
   $('brSort').addEventListener('change', e => { B.sort = e.target.value; remember(); draw(); });
   $('brMore').addEventListener('click', () => { B.shown += PAGE; draw(); });
   $('brSelect').addEventListener('click', () => { B.selecting = !B.selecting; B.selected.clear(); B.anchor = null; draw(); });
@@ -171,10 +175,10 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
 
   // ----- selecting rows (all of this changes the rows where they stand: a redraw would drop the focus and the screen reader's "checked / not checked") -----
   // "Tip" under the bulk bar: which way to select a range depends on the device.
-  $('brHint').textContent = matchMedia('(pointer: coarse)').matches ? 'Tip: press and hold a card to select everything up to it' : 'Tip: Shift-click to select a range';
   // Make every drawn row match B.selected. (Rows past the drawn page are only in B.selected; "Show more" draws them already ticked.)
   const syncRows = () => $('brList').querySelectorAll('.crow').forEach(r => {
     const on = B.selected.has(r.dataset.id);
+    if (r.classList.contains('selected') === on) return;      // (only the rows that changed)
     r.classList.toggle('selected', on);
     r.querySelector('.crow-btn')?.setAttribute('aria-checked', String(on));
   });
@@ -187,7 +191,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
   };
   // A range: every row between the anchor and `id` (in the order shown, hidden rows not counted) takes the anchor's state.
   const rangeTo = id => {
-    const ids = B.visible.map(x => x.card.id);
+    const ids = B.visible.slice(0, B.shown).map(x => x.card.id);      // (only rows that are drawn: a range never takes in rows you cannot see)
     if (!B.anchor || !ids.includes(B.anchor) || !ids.includes(id)) { toggleRow(id); return; }
     const on = B.selected.has(B.anchor);
     rangeIds(ids, B.anchor, id).forEach(i => (on ? B.selected.add(i) : B.selected.delete(i)));
@@ -219,15 +223,20 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
   });
   // Keyboard: Shift+Space / Shift+Enter on a row = a range; Ctrl/Cmd+A = everything shown. (Modifier combos, so the single-key setting does not apply.)
   list.addEventListener('keydown', e => {
+    held = false;
     if (!B.selecting) return;
     const row = e.target.closest('.crow');
     if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === ' ' || e.key === 'Enter') && row) {
       e.preventDefault(); held = false;
       rangeTo(row.dataset.id);
-    } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') {
-      e.preventDefault();
-      selectAllShown();
     }
+  });
+  // Ctrl/Cmd+A anywhere in the card list area (rows, bulk bar, Select/Cancel) selects everything shown; text boxes keep their own.
+  box.addEventListener('keydown', e => {
+    if (!B.selecting || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'a') return;
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+    e.preventDefault();
+    selectAllShown();
   });
   list.addEventListener('keyup', e => { if (B.selecting && e.shiftKey && e.key === ' ' && e.target.closest('.crow')) e.preventDefault(); });      // (a Space click fires on key-up: Shift+Space was already handled)
   // Touch: hold a row about half a second to select the range from the anchor to it.
@@ -245,8 +254,8 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     }, 450) };
   });
   list.addEventListener('pointermove', e => { if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) endPress(); });
-  list.addEventListener('pointerup', endPress);
-  list.addEventListener('pointercancel', endPress);
+  list.addEventListener('pointerup', () => { endPress(); if (held) setTimeout(() => { held = false; }, 400); });      // (the click that follows the lift comes at once; if it never does, the flag must not stay)
+  list.addEventListener('pointercancel', () => { endPress(); held = false; });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brTags').addEventListener('click', () => openTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
