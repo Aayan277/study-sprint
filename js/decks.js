@@ -13,6 +13,7 @@ import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
+import { leftOutNote } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
@@ -475,8 +476,28 @@ async function openExport(deck, decks, deckCards) {
   $('exApkg').addEventListener('click', async () => {
     const btn = $('exApkg');
     btn.disabled = true;
-    btn.querySelector('b').textContent = 'Making the Anki deck…';
     try {
+      // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) belong in the file: fetch them
+      // first. What can't be fetched is said, and a second tap makes the deck without it.
+      if (btn.dataset.armed !== '1') {
+        const sync = await import('./sync.js');
+        const lack = await sync.missingMedia({ cards });
+        if (lack.pictures.length + lack.sounds.length) {
+          btn.querySelector('b').textContent = 'Downloading pictures and sounds first…';
+          const r = await sync.downloadAllMedia({ ids: [...lack.pictures, ...lack.sounds], onProgress: (n, t) => { btn.querySelector('b').textContent = `Downloading pictures and sounds: ${n} of ${t}…`; } });
+          const n = r.left.length + r.gone.length;
+          if (n) {
+            btn.dataset.armed = '1';
+            $('exErr').textContent = leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to make the deck without them.';
+            $('exErr').hidden = false;
+            btn.disabled = false;
+            btn.querySelector('b').textContent = 'Make it without them';
+            return;
+          }
+        }
+      }
+      btn.querySelector('b').textContent = 'Making the Anki deck…';
+      $('exErr').hidden = true;
       ex.download(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'));
       closeSheet();
       toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);

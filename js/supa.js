@@ -244,16 +244,21 @@ export async function downloadMedia(token, userId, id) {
   }
 }
 export async function deleteMedia(token, userId, ids) {
-  if (!ids.length) return;
-  await storage('object/media', { method: 'DELETE', token, type: 'application/json', body: JSON.stringify({ prefixes: ids.map(id => `${userId}/${id}`) }) });
+  for (let i = 0; i < ids.length; i += 100) {         // a hundred at a time (the server limits how many one call may remove)
+    await storage('object/media', { method: 'DELETE', token, type: 'application/json', body: JSON.stringify({ prefixes: ids.slice(i, i + 100).map(id => `${userId}/${id}`) }) });
+  }
 }
-// The ids of every picture in the account (for Delete my synced data).
+// The ids of every picture in the account (for Delete my synced data, and the held-file check in sync-quota.js). Sorted by name so
+// the pages don't overlap. Stops at a short or empty page. A server that ignores `offset` would repeat the first page for ever, so
+// after MAX_LIST_PAGES pages it gives up with an error (callers fall back to something else).
+const MAX_LIST_PAGES = 200;
 export async function listMedia(token, userId) {
   const ids = [];
-  for (let offset = 0; ; offset += 1000) {
-    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset }) });
+  for (let n = 0; n < MAX_LIST_PAGES; n++) {
+    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset: n * 1000, sortBy: { column: 'name', order: 'asc' } }) });
     const page = await res.json();
     ids.push(...page.map(f => f.name));
     if (page.length < 1000) return ids;
   }
+  throw new SupaError('The list of pictures never ended.', { code: 'list_too_long' });
 }

@@ -380,6 +380,249 @@ test('idleDays is a synced, merged setting: the union of two devices, pruned onl
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeIdleDays(bad, bad, T), {});
 });
 
+// ---------- the overlap when pulling ----------
+import { pullStart, startPull, logPull, pullPages, OVERLAP_MS, MAX_BACK } from '../js/sync-merge.js';
+
+const PAGE = 1000, T0 = 2_000_000_000;
+// A tiny model of the server and of sync.js's pull loop. seq is taken when a transaction writes; rows show up when it commits.
+function fakeServer() {
+  let seq = 0; const visible = [];
+  return {
+    begin(...ids) { return { rows: ids.map(id => ({ id, seq: ++seq })) }; },
+    commit(tx) { visible.push(...tx.rows); },
+    add(n, prefix = 'r') { for (let i = 0; i < n; i++) visible.push({ id: prefix + (seq + 1), seq: ++seq }); },
+    read(after, limit = PAGE) { return visible.filter(r => r.seq > after).sort((a, b) => a.seq - b.seq).slice(0, limit); }
+  };
+}
+// One pull as sync.js does it. clock: { now } advances 1 s per request. maxPages cuts it off midway. Returns the state; stats.downloaded counts rows.
+function pull(server, st, clock, seen = new Set(), { maxPages = Infinity, stats = {} } = {}) {
+  st = startPull(st, clock.now);
+  let from = pullStart(st), pages = 0;
+  const t0 = clock.now, from0 = from;
+  for (;;) {
+    const at = clock.now, after = from;
+    const rows = server.read(from); clock.now += 1000;
+    stats.downloaded = (stats.downloaded || 0) + rows.length;
+    rows.forEach(r => seen.add(r.id));
+    if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
+    const lastSeq = Math.max(st.lastSeq, from);
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: rows.length ? Math.max(...rows.map(r => r.seq)) : after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
+    if (rows.length < PAGE || ++pages >= maxPages) break;
+  }
+  return st;
+}
+const dl = (server, st, clock, opts) => { const stats = {}; const out = pull(server, st, clock, opts?.seen, { ...opts, stats }); return [out, stats.downloaded || 0]; };
+
+test('overlap: no log yet (first sync, or an update from an older version) means no overlap', () => {
+  assert.equal(pullStart({ lastSeq: 500 }), 500);
+  assert.equal(pullStart({ lastSeq: 0, seqLog: [] }), 0);
+  assert.equal(pullStart(undefined), 0);
+  assert.equal(pullStart({ lastSeq: 7, seqLog: [{ t: 'x', seq: 'y' }, null] }), 7);       // junk is ignored
+  assert.equal(pullStart(startPull({ lastSeq: 500 }, T0)), 500);
+});
+
+test('overlap: a pull starts at the bookmark that was current OVERLAP_MS before the previous pull, never above the bookmark', () => {
+  const e = (t, seq) => ({ t, seq, from: seq, n: 0 });
+  let log = logPull([], e(T0, 100));
+  assert.equal(pullStart({ lastSeq: 120, seqLog: log }), 100);              // young history: the oldest entry
+  log = logPull(log, e(T0 + 60_000, 120));
+  assert.equal(pullStart({ lastSeq: 150, seqLog: log }), 100);
+  log = logPull(log, e(T0 + OVERLAP_MS + 1000, 150));
+  assert.equal(pullStart({ lastSeq: 180, seqLog: log }), 100);              // T0 is more than 2 minutes before the latest: 100 is the anchor
+  log = logPull(log, e(T0 + 2 * OVERLAP_MS + 5000, 180));
+  assert.equal(pullStart({ lastSeq: 200, seqLog: log }), 150);
+  assert.equal(pullStart({ lastSeq: 110, seqLog: log }), 110);              // never above the bookmark (e.g. after a reset)
+});
+
+test('overlap: a stale log (the bookmark moved without it, e.g. after a downgrade) is replaced by a fresh start', () => {
+  const st = { lastSeq: 900, seqLog: [{ t: T0, seq: 100, from: 0, n: 100 }, { t: T0 + 1000, seq: 120, from: 100, n: 20 }] };
+  const fresh = startPull(st, T0 + 9_000_000);
+  assert.equal(pullStart(fresh), 900);
+  assert.equal(startPull(fresh, T0 + 9_000_001), fresh);                    // a log that ends at the bookmark is kept
+});
+
+test('overlap: a change numbered below the bookmark that becomes visible late is still picked up', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  let st = { lastSeq: 0 };
+  const a = server.begin('late'), b = server.begin('early');
+  server.commit(b);
+  st = pull(server, st, clock, seen);
+  assert.equal(st.lastSeq, 2); assert.deepEqual([...seen], ['early']);
+  server.commit(a); clock.now += 30_000;
+  st = pull(server, st, clock, seen);
+  assert.ok(seen.has('late'));
+  assert.equal(st.lastSeq, 2);                                              // the bookmark did not move backwards
+});
+
+test('overlap: it is picked up even when the next pull comes much later', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  let st = { lastSeq: 0 };
+  server.add(3);
+  st = pull(server, st, clock, seen); clock.now += 5 * 60_000;
+  st = pull(server, st, clock, seen); clock.now += 5 * 60_000;               // a quiet pull: the log now reaches back over the window
+  const a = server.begin('late'), b = server.begin('early');
+  server.commit(b);
+  st = pull(server, st, clock, seen);
+  server.commit(a); clock.now += 3 * 24 * 3600_000;                          // three days on
+  st = pull(server, st, clock, seen);
+  assert.ok(seen.has('late'));
+});
+
+test('overlap: a multi-page first download where an early page passes a row that is not saved yet', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  server.add(1500);
+  const slow = server.begin('slow');            // numbered 1501, saving
+  server.add(1000);                              // numbered above it, visible
+  let st = pull(server, { lastSeq: 0 }, clock, seen);       // pages 1..3 pass 'slow'
+  assert.ok(!seen.has('slow'));
+  server.commit(slow); clock.now += 10_000;
+  st = pull(server, st, clock, seen);
+  assert.ok(seen.has('slow'), 'the first-sync log has a seed entry, so the next pull covers it');
+});
+
+test('overlap: a pull cut off midway carries on near where it stopped, and the bookmark moves up page by page', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 5 * 60_000;
+  st = pull(server, st, clock); clock.now += 5 * 60_000;
+  server.add(100_000);
+  const marks = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const [next, got] = dl(server, st, clock, { maxPages: 60 });
+    assert.ok(next.lastSeq >= st.lastSeq);
+    st = next; marks.push(st.lastSeq); clock.now += 60_000;
+    assert.ok(got <= 60_000 + 1000);
+  }
+  assert.ok(marks[3] > 90_000 && marks[1] > marks[0] + 20_000, 'progress each attempt: ' + marks);
+});
+
+test('overlap: after a big pull, quick syncs read at most MAX_BACK rows again', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 5 * 60_000;
+  st = pull(server, st, clock); clock.now += 5 * 60_000;
+  server.add(100_000);
+  let got;
+  [st, got] = dl(server, st, clock); assert.equal(got, 100_000);
+  for (let i = 0; i < 6; i++) { clock.now += 10_000; [st, got] = dl(server, st, clock); assert.ok(got <= Math.max(MAX_BACK, 31 * PAGE), `sync ${i}: ${got}`); }   // (1 s per page here: the last 30 s are always read again)
+  // and a device's very first download, then a quick sync
+  let fresh;
+  [fresh, got] = dl(server, { lastSeq: 0 }, { now: T0 }); assert.equal(got, 100_050);
+  [, got] = dl(server, fresh, { now: T0 + 200_000 }); assert.ok(got <= 31 * PAGE, 'quick sync after a first download: ' + got);
+});
+
+test('overlap: steady state at 5-minute spacing reads each new row about twice', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  let st = { lastSeq: 0 }, total = 0, runs = 0;
+  server.add(100); st = pull(server, st, clock);
+  for (let i = 0; i < 20; i++) {
+    clock.now += 5 * 60_000; server.add(100);
+    let got; [st, got] = dl(server, st, clock);
+    if (i >= 3) { total += got; runs++; }
+  }
+  assert.ok(total / runs <= 250, 'rows per sync: ' + total / runs);
+});
+
+test('overlap: a clock that went backwards does not make the re-reads grow', () => {
+  const server = fakeServer(), clock = { now: T0 + 7 * 24 * 3600_000 };
+  server.add(10);
+  let st = pull(server, { lastSeq: 0 }, clock);
+  clock.now -= 7 * 24 * 3600_000;                                            // a week back
+  for (let i = 0; i < 6; i++) {
+    clock.now += 5 * 60_000; server.add(200);
+    let got; [st, got] = dl(server, st, clock);
+    assert.ok(got <= 700, `sync ${i}: ${got}`);
+  }
+  assert.ok(st.seqLog.length <= 4);
+});
+
+test('overlap: the bookmark never moves backwards, and a quiet server stops re-reading', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  let st = { lastSeq: 0 };
+  server.add(5);
+  let prev = 0;
+  for (let i = 0; i < 8; i++) { st = pull(server, st, clock, seen); clock.now += 20_000; assert.ok(st.lastSeq >= prev); prev = st.lastSeq; }
+  assert.equal(st.lastSeq, 5);
+  clock.now += 10 * 60_000; st = pull(server, st, clock, seen);
+  clock.now += 10 * 60_000; st = pull(server, st, clock, seen);
+  assert.equal(pullStart(st), 5);
+  assert.deepEqual(server.read(pullStart(st)), []);
+});
+
+test('overlap: a missed page followed by many full pages in the same pull is still read again (the cap never skips the last 30 s)', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  server.add(500);
+  let st = pull(server, { lastSeq: 0 }, clock, seen); clock.now += 600_000;
+  st = startPull(st, clock.now);
+  let from = pullStart(st);
+  const t0 = clock.now, from0 = from;
+  const late = server.begin('R');                 // numbered 501, still being saved
+  server.add(1000);                                // another device's import commits 1000 rows after it
+  const req = () => {
+    const at = clock.now, after = from, rows = server.read(from); clock.now += 1000;
+    rows.forEach(r => seen.add(r.id));
+    if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
+    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, to: rows.length ? Math.max(...rows.map(r => r.seq)) : after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
+    return rows.length;
+  };
+  req();                                           // the page that passes R
+  for (let k = 0; k < 4; k++) { server.add(1000); req(); }      // the import outpaces the save: 4 more full pages
+  req();
+  server.commit(late); clock.now += 5000;
+  st = pull(server, st, clock, seen);
+  assert.ok(seen.has('R'), 'R must be picked up');
+});
+
+test('overlap: a pull cut off every 20 seconds, attempts 30+ seconds apart, still moves forward and finishes', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 5 * 60_000;
+  st = pull(server, st, clock); clock.now += 5 * 60_000;
+  server.add(100_000);
+  let done = -1;
+  for (let attempt = 0; attempt < 40 && done < 0; attempt++) {
+    const [next, got] = dl(server, st, clock, { maxPages: 20 });
+    assert.ok(next.lastSeq >= st.lastSeq);
+    st = next; clock.now += 31_000;
+    if (st.lastSeq >= 100_050) done = attempt;
+  }
+  assert.ok(done >= 0 && done <= 12, 'finished after attempts: ' + done);
+});
+
+test('overlap: a missed page is not forgotten if the attempt that settles it is itself cut off', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  server.add(100);
+  let st = pull(server, { lastSeq: 0 }, clock, seen); clock.now += 600_000;
+  const late = server.begin('R');
+  server.add(10_000);
+  st = pull(server, st, clock, seen, { maxPages: 6 });          // passes R
+  server.commit(late);
+  for (let i = 0; i < 4; i++) { clock.now += 31_000; st = pull(server, st, clock, seen, { maxPages: 4 }); }
+  assert.ok(seen.has('R'));
+});
+
+test('overlap: fast pages (300 ms) do not lose the entries that liveness needs when the log is trimmed', () => {
+  let log = [];
+  for (let i = 0; i < 400; i++) log = logPull(log, { t: T0 + i * 300, seq: (i + 1) * 1000, from: i * 1000, to: (i + 1) * 1000, n: 1000 });
+  const last = T0 + 399 * 300;
+  assert.ok(log.filter(e => e.t >= last - 30_000).length >= 99, 'the last 30 s are all kept');
+  assert.ok(log.some(e => e.t <= last - 30_000 && e.t > last - 31_000), 'and the newest entry at least 30 s old');
+  assert.ok(log.length < 160);
+});
+
+test('overlap: a pull cut off after a few fast pages each time still finishes', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 600_000;
+  server.add(30_000);
+  let done = -1;
+  for (let a = 0; a < 40 && done < 0; a++) {
+    st = pull(server, st, clock, new Set(), { maxPages: 10 }); clock.now += 31_000;
+    if (st.lastSeq >= 30_050) done = a;
+  }
+  assert.ok(done >= 0 && done <= 12, 'attempts: ' + done);
+});
+
 // ---------- taking turns between tabs, giving up a failing re-upload, trimming days off on push ----------
 // A fake of navigator.locks: one holder at a time; ifAvailable gives null when held; signal aborts the wait.
 function fakeLocks() {
@@ -549,4 +792,120 @@ test('a push batch that times out is sent in halves, down to 50 rows, and a time
   assert.equal(out.sent.length, 400);
   assert.deepEqual(sizes.slice(0, 3), [400, 200, 100]);
   await assert.rejects(pushSafely(async () => { throw Object.assign(new Error('slow'), { code: 'timeout' }); }, rows), { code: 'timeout' });
+});
+
+test('overlap: a page that was asked for again half as big and came back full is a full page, not a short one', async () => {
+  const timeout = () => Object.assign(new Error('slow'), { code: 'timeout' });
+  const rowsOf = (from, n) => Array.from({ length: n }, (_, i) => ({ seq: from + i + 1 }));
+  const get = async (seq, n) => { if (n > 200) throw timeout(); return rowsOf(seq, n); };
+  const server = { top: 5000 };
+  let st = startPull({ lastSeq: 0 }, T0), from = pullStart(st), size = PAGE, pages = 0, short = false;
+  const t0 = T0, from0 = from;
+  for (;;) {
+    const page = await getPageSafely((seq, n) => get(seq, Math.min(n, server.top - seq)), from, size);
+    assert.ok(page.at > 0);
+    size = page.size;
+    if (page.rows.length) from = page.rows.at(-1).seq;
+    const reach = page.rows.length < size ? Infinity : from;
+    if (page.rows.length === size) assert.notEqual(reach, Infinity);        // 200 rows when 200 were asked for: more to come
+    else short = true;
+    st = { ...st, lastSeq: from, seqLog: logPull(st.seqLog, { t: page.at, seq: from, from, to: from, n: page.rows.length }, { t0, from: from0, reach }) };
+    if (page.rows.length < size || ++pages > 50) break;
+  }
+  assert.equal(size, 125);
+  assert.equal(from, 5000); assert.ok(short && pages >= 20);
+});
+
+// ---------- the pull loop asks for the next page while the last one is being saved ----------
+// A server whose answers and saves take (fake) time, so the order of events can be checked. Every event is written to `events`.
+function pipeServer(total, { saveFails = null, size = PAGE, halveAt = null } = {}) {
+  const server = fakeServer(); server.add(total);
+  const events = [], clock = { now: T0 };
+  let n = 0;
+  const get = async (after, want) => {
+    const at = clock.now; clock.now += 1000; n++;
+    const mine = n;
+    events.push(`ask ${after}`);
+    await new Promise(r => setTimeout(r, 2));                         // the network
+    if (halveAt === mine) want = want >> 1;                          // like getPageSafely after a timeout
+    const rows = server.read(after, want);
+    events.push(`got ${rows.length}`);
+    return { rows, size: want, at };
+  };
+  const apply = async rows => {
+    events.push(`save ${rows.length}`);
+    await new Promise(r => setTimeout(r, 8));                         // the database
+    if (saveFails === events.filter(e => e.startsWith('save')).length) throw new Error('disk full');
+  };
+  const saved = [];
+  const save = async st => { saved.push(st.lastSeq); events.push(`mark ${st.lastSeq}`); };
+  return { server, events, clock, get, apply, save, saved, size };
+}
+
+test('pull: the next request is sent when a page arrives, while it is saved; each asks after the page before it', async () => {
+  const p = pipeServer(3500);
+  const { st, pages } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: p.get, apply: p.apply, save: p.save, now: () => p.clock.now });
+  assert.equal(pages, 4);
+  assert.deepEqual(p.events.filter(e => e.startsWith('ask')), ['ask 0', 'ask 1000', 'ask 2000', 'ask 3000'], 'one request per page, each after the highest number of the page before');
+  const at = k => p.events.indexOf(k);
+  assert.ok(at('ask 1000') < at('save 1000'), 'page 2 is asked for before page 1 is saved');
+  assert.ok(at('ask 1000') > at('got 1000'), '...but only after page 1 has arrived');
+  assert.ok(at('mark 1000') < at('mark 2000') && at('save 1000') < at('mark 1000'), 'a page is marked only after it is saved, in order');
+  assert.deepEqual(p.saved, [1000, 2000, 3000, 3500]);
+  assert.equal(st.lastSeq, 3500);
+  assert.equal(p.events.filter(e => e.startsWith('ask')).length, 4, 'no request after the short page');
+});
+
+test('pull: the same state at the end as asking one page at a time (log, bookmark, ok marks)', async () => {
+  for (const total of [0, 1, 999, 1000, 1001, 2500, 5000]) {
+    const a = fakeServer(), b = pipeServer(total), clock = { now: T0 };
+    a.add(total);
+    const expected = pull(a, { lastSeq: 0 }, clock);
+    const { st } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
+    assert.deepEqual(st, expected, 'total ' + total);
+  }
+});
+
+test('pull: a page that fails to save is not marked, nor is the page asked for meanwhile; the next pull starts at the old bookmark', async () => {
+  const p = pipeServer(3500, { saveFails: 2 });
+  await assert.rejects(pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: p.get, apply: p.apply, save: p.save, now: () => p.clock.now }), /disk full/);
+  assert.deepEqual(p.saved, [1000], 'only page 1 was marked');
+  await new Promise(r => setTimeout(r, 30));                         // the request that was already on its way ends quietly
+  assert.equal(p.saved.length, 1);
+});
+
+test('pull: a request that fails while the page before is still being saved is reported after that page is marked', async () => {
+  const p = pipeServer(3500);
+  let calls = 0;
+  const get = async (after, n) => { if (++calls === 2) { await new Promise(r => setTimeout(r, 1)); throw Object.assign(new Error('offline'), { code: 'network' }); } return p.get(after, n); };
+  await assert.rejects(pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get, apply: p.apply, save: p.save, now: () => p.clock.now }), /offline/);
+  assert.deepEqual(p.saved, [1000], 'page 1 is kept: the bookmark is saved with it');
+});
+
+test('pull: after a request had to be made smaller, the next ones are too, and a short page is judged by its own size', async () => {
+  const p = pipeServer(2400, { halveAt: 2 });                         // the second request times out and is sent again at half the size
+  const asked = [];
+  const get = (after, n) => { asked.push([after, n]); return p.get(after, n); };
+  const { st, pages } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get, apply: p.apply, save: p.save, now: () => p.clock.now });
+  assert.deepEqual(asked.slice(0, 3), [[0, 1000], [1000, 1000], [1500, 500]], 'a half page counts as full for its own size, and the size stays smaller');
+  assert.equal(st.lastSeq, 2400);
+  assert.ok(pages >= 4);
+});
+
+test('pull: from an existing log with older, not yet settled entries, the end state is the same as one page at a time', async () => {
+  for (const total of [1500, 3200]) {
+    const a = fakeServer(), b = pipeServer(total), clock = { now: T0 };
+    a.add(total);
+    // a first pull, then a cut-off one, leaving a log with entries that are not ok yet, then more rows arrive
+    let st0 = pull(a, { lastSeq: 0 }, clock, new Set(), { maxPages: 1 });
+    clock.now += 5_000;
+    st0 = pull(a, st0, clock, new Set(), { maxPages: 1 });
+    assert.ok(st0.seqLog.some(e => !e.ok), 'set up: the log holds entries that are not settled');
+    clock.now += 10_000;
+    b.clock.now = clock.now;
+    const expected = pull(a, st0, clock);
+    const start = startPull(st0, b.clock.now);
+    const { st } = await pullPages(start, pullStart(start), PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
+    assert.deepEqual(st, expected, 'total ' + total);
+  }
 });

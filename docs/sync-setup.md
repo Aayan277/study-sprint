@@ -246,8 +246,8 @@ tiny question every day. It needs your two values from step 7 as *secrets* in th
 4. Open the **Actions** tab, click **Keep Supabase awake** in the left list, click **Run workflow → Run workflow**,
    and after a few seconds check the run has a green tick.
 
-GitHub switches scheduled jobs off after 60 days with no activity in the repository. If that happens, the
-Actions tab shows a button to turn it back on.
+GitHub can switch scheduled jobs off after 60 days with no activity in the repository; step 8d is there to stop
+that from happening.
 
 ## 8b. Back up the database (GitHub)
 
@@ -260,9 +260,9 @@ The copy is **encrypted with a password only you know**, so it is safe even if t
 **What is not saved:** pictures and sounds. They live in Supabase Storage, which this job doesn't copy. They are
 still on each person's devices and in their **Export backup** files.
 
-**Good to know:** GitHub switches scheduled jobs off after 60 days with no activity in the repository (any
-commit counts). Then backups stop, and the last copies disappear 30 days later; the Actions tab shows a button to
-turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
+**Good to know:** GitHub can switch scheduled jobs off after 60 days with no activity in the repository. Then
+backups stop, and the last copies disappear 30 days later. Step 8d is there to stop that from happening; if it ever
+did happen, the Actions tab shows a button to turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
 
 ### Turn it on
 
@@ -339,12 +339,103 @@ back. In a new project people sign in again, which resets that bookmark, and eac
 **Test it once, now.** A backup you have never restored is a guess. Make a second, throwaway free project, do the
 steps above in it, check the counts, then delete that project (**Project Settings → General → Delete project**).
 
+## 8c. Get a warning when space runs low (GitHub)
+
+The free plan has hard ceilings, and the app has "fuses" that refuse new data before the ceilings are reached (step 2c:
+about 420 MB of synced data, 900 MB of pictures and sounds). When a fuse trips, people just see "server full". This job
+(`.github/workflows/fuse-watch.yml`) checks every morning and **opens a GitHub issue when anything is at 80% or more**, so you
+hear about it first. GitHub emails you about new issues (check **Watch → Custom → Issues** on the repository if you don't get the email).
+
+**What it checks:** the total of everyone's synced data against its fuse, the total of pictures and sounds against its fuse,
+and the size of the whole database against the free plan's 500 MB. It counts the same way the fuses do, so the numbers match.
+It only reads. The issue holds **totals only**: no emails, no names, nothing about any one person, so it is safe on a public repository.
+
+### Turn it on
+
+1. Make sure the secret `SUPABASE_DB_URL` exists. It is the same one the backup job uses (step 8b, "Turn it on", points 1 and 2).
+   If you haven't made it yet, do those two points now. You don't need `BACKUP_PASSPHRASE` for this.
+2. Open the **Actions** tab, click **Watch free-plan space**, then **Run workflow → Run workflow**. After a few seconds
+   it should show a green tick. Until the secret exists the job does nothing and still shows a green tick (click into
+   the run: "No space check yet"). If the address is wrong the run turns red and says what to fix.
+3. That's all. It then runs by itself every day. (Same note as the other jobs: GitHub can switch scheduled jobs off after 60 days
+   with no activity in the repository; step 8d is there to stop that.)
+
+### What the issue means
+
+The issue is called **Study Sprint: storage is almost full** and has the label `storage-warning`. There is only ever one:
+it is updated each day, not repeated. It shows a small table: what is used, its limit, how full it is.
+
+- **Pictures and sounds near the limit, or data near the limit:** a few people are using most of the shared space. Pick one:
+  1. **Give each person less.** Lower the default limits (step 2c has the one-line change for the per-person defaults; backlog item 20 in `PLAN.md`
+     explains the sums), and give people you know more with the `quotas` table. To see who uses the most, run
+     `supabase/owner.sql` (step 9, "Who uses how much").
+  2. **Move to the Pro plan** (backlog item 7). Then raise the two fuses by editing the two rows in **Table Editor → global_limits** (step 2c).
+- **Whole database near 500 MB:** the same two choices. Nothing is lost at 500 MB, but Supabase makes the project
+  read-only for everybody until you free space or upgrade.
+
+When every total is back under 75%, the job closes the issue by itself with a comment. If it fills again, it opens a new one.
+
+### Downloads ("egress"): look by hand now and then
+
+The free plan also allows **5 GB of downloads a month**. Every time someone signs in on a new device, the device downloads all
+their cards and pictures, so a few new phones with big picture decks add up. The database can't tell the job about this number,
+so check it yourself, say once a month, and the issue reminds you:
+open Supabase, then **Project Settings → Usage**, and look at **Egress** (also called Bandwidth) for the current billing month.
+If it is over about 4 GB (80%) with weeks to go, treat it like the limits above: fewer or smaller pictures per person, or the Pro plan.
+Going over 5 GB on Free can make the project stop serving until the month rolls over, so it is better to act at 80%.
+
+## 8d. Keep the scheduled jobs switched on (GitHub)
+
+**The problem.** The three jobs above run on a timer. GitHub switches timer jobs **off** after **60 days in a row with no
+activity in the repository** (no commits and so on), and only in a **public** repository (in a private one this
+doesn't happen). A switched-off job never runs again until somebody turns it on, and nothing breaks loudly: the backups
+just stop, and the project can pause. GitHub's own words:
+[Disabling and enabling a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows).
+
+**What is already in place.** The job `.github/workflows/keep-workflows-enabled.yml` ("Keep scheduled jobs on") runs
+every Monday. It tells GitHub "enable this workflow" for every job in the repository, itself included, and switches
+back on any that GitHub had already turned off. It makes no commits, needs no secrets, and does nothing you can see
+when all is well. **You have nothing to set up**, except to check it once:
+
+1. Open the repository on github.com and click the **Actions** tab.
+2. Click **Keep scheduled jobs on** in the left list, then **Run workflow → Run workflow**.
+3. After a few seconds open the run. A green tick means it works. Its log lists your jobs, each with "Enabled".
+
+**What isn't guaranteed.** GitHub's documentation doesn't say that this call restarts the 60-day clock, and it
+doesn't define "activity". This is the usual way people solve this problem, but it isn't promised in writing. So
+treat the monthly check below as a backup net, and know the sure fix: **any real change you commit and push to the
+repository (even a one-line edit) restarts the 60 days**, so in months when you work on the app you are covered anyway.
+
+**How you would notice a problem.**
+- **The real alert is a GitHub issue.** If the backup, the space check or Keep scheduled jobs on fails, its last step
+  opens ONE issue called **Study Sprint: a scheduled job failed** (label `scheduled-job-failed`, assigned to you), with
+  just the job's name and a link to the run. Every further failure adds a comment, so you get an email each time. Close
+  the issue once it is fixed. (Check **Watch → Custom → Issues** on the repository if no email arrives.)
+- **GitHub's own failure emails are not reliable for timer jobs.** GitHub sends them to whoever created the job or last
+  edited its schedule, and after a job is switched off and on again, to whoever switched it on. For a job that the
+  automatic job switched on, that is the GitHub robot, so nobody. Don't rely on them.
+- **What the issue can't catch:** a job that GitHub switched off and nobody switched back on doesn't run at all, so it
+  can't report anything. That is why you look at the **Actions** tab once a month (step 9) as a backup net: if a job
+  says it is disabled, or has had no run for days, click it, then **Enable workflow**, then **Run workflow** on
+  **Keep scheduled jobs on**. Supabase also usually emails you before it pauses a free project.
+- **If a run log of Keep scheduled jobs on shows "had been switched off"**, GitHub did switch a job off and the weekly
+  job rescued it. Then do this once yourself on that job (for example **Back up database**): open it in the **Actions**
+  tab, click **Disable workflow**, and then **Enable workflow**. That makes sure the failure emails go to you again.
+  (GitHub's documentation doesn't promise a warning email before it switches a job off.)
+
+**Do not** switch Keep scheduled jobs on off by hand. If you ever want one of the others off, use **Disable workflow**
+on that job: Keep scheduled jobs on leaves jobs that you switched off yourself alone.
+
+**If you make the repository private** the 60-day rule no longer applies, and this job becomes harmless but unneeded.
+
 ## 9. Looking after it
 
+- **Look at the Actions tab once a month.** All jobs should be listed without a "disabled" banner and the last
+  runs should be recent (step 8d).
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
   (the project turns read-only above that), 1 GB of files and 5 GB of downloads a month. Roughly: a light
   user takes 7 MB of database a year, a heavy one 100 MB, and a full 180 MB of pictures and sounds is
-  about 1,000 pictures. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
+  about 1,000 pictures. Step 8c warns you by itself. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
   and when to move to the Pro plan.
 - **Abuse.** To stop new accounts quickly, turn off **Allow new users to sign up** (step 3). Existing people
   keep working. To remove someone, ask them to use **Settings → Sync → Delete my account**. If you must do it

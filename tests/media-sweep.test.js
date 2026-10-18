@@ -110,3 +110,69 @@ test('after a re-upload every kept-back file is checked (cap Infinity), a few at
   assert.ok(most > 4 && most <= 8, 'concurrency ' + most);
   assert.deepEqual(seen.at(-1), [60, 60]);                          // and progress is reported
 });
+
+test('held-file check: one listing answers all files when there are more than the cap; missing ones are remembered', async () => {
+  const held = Array.from({ length: 10 }, (_, i) => ({ id: 'f' + i }));
+  let heads = 0, progress = [];
+  const exists = async id => { heads++; return id === 'f1'; };
+  const checked = new Set();
+  const found = await alreadyOnServer(held, exists, checked, 2, { list: async () => ['f1', 'f4', 'other'], onProgress: (i, n) => progress.push([i, n]) });
+  assert.deepEqual(found.sort(), ['f1', 'f4']);
+  assert.equal(heads, 0);
+  assert.deepEqual(progress[0], [0, 10]);
+  assert.ok(checked.has('f0') && !checked.has('f1'));
+  // at or below the cap the per-file path is used (no listing)
+  let listed = 0;
+  await alreadyOnServer(held.slice(0, 2), exists, new Set(), 25, { list: async () => { listed++; return []; } });
+  assert.equal(listed, 0);
+  // cap Infinity (after a re-upload) always lists
+  await alreadyOnServer(held.slice(0, 2), exists, new Set(), Infinity, { list: async () => { listed++; return ['f0']; } });
+  assert.equal(listed, 1);
+});
+
+test('held-file check: a failing, empty-but-wrong or lying listing falls back to HEAD per file', async () => {
+  const held = Array.from({ length: 10 }, (_, i) => ({ id: 'f' + i }));
+  const mk = () => { const c = { heads: 0 }; c.exists = async id => { c.heads++; return id === 'f0' || id === 'f1'; }; return c; };
+  let c = mk();
+  assert.deepEqual(await alreadyOnServer(held, c.exists, new Set(), Infinity, { list: async () => { throw new Error('403'); } }), ['f0', 'f1']);
+  assert.equal(c.heads, 10);
+  c = mk();                                                           // listing says nothing is there, but f1 is: distrust it
+  assert.deepEqual(await alreadyOnServer(held, c.exists, new Set(), Infinity, { list: async () => [] }), ['f0', 'f1']);
+  assert.equal(c.heads, 11);                                          // one spot check + the 10 fallback checks
+  c = mk();                                                           // really nothing there: the one spot check is enough
+  const none = held.filter(m => m.id > 'f1');
+  assert.deepEqual(await alreadyOnServer(none, c.exists, new Set(), Infinity, { list: async () => [] }), []);
+  assert.equal(c.heads, 1);
+});
+
+test('listMedia pages by 1000 with a stable order until an empty page', async () => {
+  const { listMedia } = await import('../js/supa.js');
+  const bodies = [], real = globalThis.fetch;
+  const pages = [Array.from({ length: 1000 }, (_, i) => ({ name: 'a' + i })), [{ name: 'z' }]];
+  globalThis.fetch = async (url, init) => { bodies.push([url, JSON.parse(init.body), init.headers.Authorization]); return new Response(JSON.stringify(pages[bodies.length - 1]), { status: 200 }); };
+  try {
+    const ids = await listMedia('tok', 'u1');
+    assert.equal(ids.length, 1001);
+    assert.match(bodies[0][0], /\/storage\/v1\/object\/list\/media$/);
+    assert.deepEqual(bodies.map(b => b[1].offset), [0, 1000]);
+    assert.deepEqual(bodies[0][1], { prefix: 'u1/', limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+    assert.equal(bodies[0][2], 'Bearer tok');
+  } finally { globalThis.fetch = real; }
+});
+
+test('listMedia gives up (throws) when the server ignores offset, and deleteMedia removes 100 at a time', async () => {
+  const { listMedia, deleteMedia } = await import('../js/supa.js');
+  const real = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(Array.from({ length: 1000 }, (_, i) => ({ name: 'a' + i }))), { status: 200 }); };
+  try {
+    await assert.rejects(listMedia('tok', 'u1'), { code: 'list_too_long' });
+    assert.equal(calls, 200);
+    const sizes = [];
+    globalThis.fetch = async (url, init) => { assert.equal(init.method, 'DELETE'); sizes.push(JSON.parse(init.body).prefixes.length); return new Response('[]', { status: 200 }); };
+    await deleteMedia('tok', 'u1', Array.from({ length: 250 }, (_, i) => 'p' + i));
+    assert.deepEqual(sizes, [100, 100, 50]);
+    await deleteMedia('tok', 'u1', []);
+    assert.equal(sizes.length, 3);
+  } finally { globalThis.fetch = real; }
+});

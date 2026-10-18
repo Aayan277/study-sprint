@@ -2,7 +2,8 @@
 //
 // One sync does two things:
 //   1. Pull: ask the server for every change since the last one this device saw (by its change number, seq),
-//      and save each one unless this device has a newer version (db.applyRemote).
+//      and save each one unless this device has a newer version (db.applyRemote). The request starts a couple of
+//      minutes behind that bookmark, because a change numbered earlier can become visible later (pullStart).
 //   2. Push: send everything changed here since the last push (db.localChangesSince). The server keeps
 //      whichever version is newest, so sending something old can't overwrite something new.
 // It runs when the app opens, a few seconds after you change something, when you come back online or back
@@ -14,12 +15,13 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { planSweep, markKey, GONE } from './media-sweep.js';
+import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -118,6 +120,7 @@ async function startOverFromHere(userId) {
   const { syncState } = await db.getSettings();
   await db.forgetSyncedMarks();
   await db.forgetUploadedMedia();
+  await db.setSetting('mediaRefs', null);
   await db.setSetting('syncState', { userId, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
   await db.setSetting('resendPending', false);       // only now: if this is cut short, the next sync does it again
 }
@@ -187,9 +190,12 @@ export async function pendingChanges() {
 
 // Delete everything in this account on the server, and sign this device out. Devices keep their own data.
 // (Signing in again later sends this device's data back up, starting from scratch.)
-export async function deleteServerData() {
-  const auth = await session();
+export async function deleteServerData(opts = {}) {
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await keepDeviceWhole(opts);
+  const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
+  if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
   await supa.deleteAllRows(auth.access_token, auth.user.id);
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
@@ -197,9 +203,12 @@ export async function deleteServerData() {
 
 // Delete the account itself: its files, its synced data, and the sign-in. This device keeps its own data and is
 // signed out. (Needs supabase/limits.sql on the project.)
-export async function deleteAccount() {
-  const auth = await session();
+export async function deleteAccount(opts = {}) {
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await keepDeviceWhole(opts);
+  const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
+  if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
   // Files first, through the Storage API (that also frees the space); the server function removes any left.
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await supa.deleteAccount(auth.access_token);
@@ -220,7 +229,7 @@ export async function signOut({ forget = false } = {}) {
   if (syncAuth) await supa.signOut(syncAuth.access_token);
   resetSkips();
   await db.setSetting('syncAuth', null);
-  if (forget) await db.setSetting('syncState', null);
+  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); }
   emit({ state: 'signed-out', error: null });
 }
 
@@ -302,22 +311,24 @@ async function run() {
   if (trimmed) await db.setSetting('restDays', trimmed).catch(err => console.error('Could not trim the days off', err));       // (the rest of the sync goes on)
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
-  // 1. Pull what changed on the server since last time.
+  // 1. Pull what changed on the server since last time. The first request starts a little behind the bookmark
+  //    (pullStart, sync-merge.js): a change numbered below it can have become visible after the bookmark moved past it.
+  //    Those rows come again and are skipped as already applied. The bookmark itself only ever moves forward.
   let applied = 0, pulled = 0, gotNotes = false;
-  let pageSize = PAGE;          // smaller after a timeout, for the rest of this sync (getPageSafely)
-  for (;;) {
-    const page = await getPageSafely((seq, n) => supa.getChanges(token, seq, n), st.lastSeq, pageSize);
-    const rows = page.rows;
-    pageSize = page.size;
-    if (!rows.length) break;
-    applied += await db.applyRemote(rows);
-    if (rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;
-    pulled += rows.length;
-    if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
-    st = { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => Number(r.seq))) };
-    await db.setSetting('syncState', st);
-    if (rows.length < pageSize) break;
-  }
+  st = startPull(st, Date.now());
+  let from = pullStart(st);
+  // (The loop itself, pullPages in sync-merge.js, asks for the next page while the one before is being saved.)
+  ({ st } = await pullPages(st, from, PAGE, {
+    get: (after, n) => getPageSafely((seq, size) => supa.getChanges(token, seq, size), after, n),
+    apply: async rows => {
+      const got = await db.applyRemote(rows);
+      applied += got;
+      if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
+      pulled += rows.length;
+      if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
+    },
+    save: s => db.setSetting('syncState', s)      // (the bookmark only ever moves forward, and the log is saved with it)
+  }));
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.
   if (gotNotes) await healNotes();
@@ -364,6 +375,7 @@ async function run() {
 // ---------- pictures and sounds ----------
 // Both are files in the same bucket. Pictures go first, so a problem with sounds can never hold them up.
 // Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
+const MAX_NEW_AHEAD = 50;
 const checkedOnServer = new Set();      // kept-back files already asked about (sync-quota.js alreadyOnServer); starts empty each time the app opens
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
@@ -400,15 +412,30 @@ async function syncMedia(auth) {
   const blockedKinds = { picture: left.some(m => !isSoundRow(m)), sound: left.some(isSoundRow) };
   upload.failed.forEach(f => console.error('Could not send a file', f.id, f.message));
 
-  // Pictures and sounds that cards here use but this device doesn't have yet. Four at a time.
+  // Pictures and sounds that cards here use but this device doesn't have yet are NOT all downloaded now (backlog 16: a new device
+  // used to fetch the whole account, and the Free plan allows 5 GB of downloads a month). A card fetches its own files when it is
+  // shown (downloadMedia). Here only a few are fetched ahead, for the cards due today and the next new ones, so studying right
+  // after a sync works offline. "Keep all pictures and sounds on this device" (a setting of this device) fetches everything.
   const have = new Set(await db.mediaKeys());
   const cards = await db.getAll('cards');
-  const wantOf = fields => [...new Set(cards.flatMap(c => fields.flatMap(f => (Array.isArray(c[f]) ? c[f] : [c[f]]))).filter(id => id && !have.has(id)))];
-  for (const [kind, ids] of [['pictures', wantOf(['frontImage', 'backImage'])], ['sounds', wantOf(['frontSounds', 'backSounds'])]]) {
-    await runPool(ids, id => fetchMedia(token, uid, id), {
-      onProgress: (n, total) => { if (total > 3) emit({ progress: `Downloading ${kind}: ${n} of ${total}…` }); }
-    });
-  }
+  const settings = await db.getSettings();
+  const keepAll = !!settings.keepAllMedia;
+  const plan = planPrefetch({
+    cards, have, keepAll, now: Date.now(),
+    newAhead: Math.min(MAX_NEW_AHEAD, Number.isFinite(settings.newPerDay) ? settings.newPerDay : NEW_AHEAD),      // as many new cards as a day's limit
+    statesById: keepAll ? undefined : new Map((await db.getAll('cardStates')).map(s => [s.cardId, s])),
+    skip: id => !canTry(failedFetches.get(id), Date.now(), 'prefetch')
+  });
+  let spent = 0;
+  const budget = keepAll ? Infinity : PREFETCH_BYTES;
+  await runPool(plan.ids, async id => {
+    if (spent >= budget) return;
+    const got = await loadMedia(id, 'prefetch');
+    if (got.error && isWholeStorageError(got.error)) throw got.error;      // storage isn't set up: say so (the note), don't try the rest
+    if (got.media) spent += got.media.size;
+  }, {
+    onProgress: (n, total) => { if (total > 3) emit({ progress: keepAll ? `Downloading pictures and sounds: ${n} of ${total}…` : `Getting today's pictures and sounds: ${n} of ${total}…` }); }
+  });
   // Pictures and sounds no card uses any more: remove them here, and mark them for deletion from the account; the account's copy
   // goes 30 days later if still unused (media-sweep.js), in case another device still needs it.
   const removed = await db.cleanMedia();
@@ -419,7 +446,11 @@ async function syncMedia(auth) {
 }
 async function sweepMedia(token, uid, removed, cards) {
   const { marks, gone } = await db.mediaMarks();
-  const plan = planSweep({ marks, gone, removed, used: db.usedMediaIds(cards), held: new Set(await db.mediaKeys()), now: Date.now() });
+  // Files a card used last time and none does now, that this device never held (lazy loading): marked too, or the account would only grow.
+  const used = db.usedMediaIds(cards);
+  const dropped = droppedRefs({ prev: (await db.getSettings()).mediaRefs, used, userId: uid });
+  removed = [...new Set([...removed, ...dropped])];
+  const plan = planSweep({ marks, gone, removed, used, held: new Set(await db.mediaKeys()), now: Date.now() });
   const swept = [];
   for (const ids of chunks(plan.sweep, 100)) {
     try { await supa.deleteMedia(token, uid, ids); swept.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
@@ -428,7 +459,8 @@ async function sweepMedia(token, uid, removed, cards) {
   if (plan.reupload.length) await db.markNotUploaded(plan.reupload);
   const now = Date.now();
   await db.setSettings([...plan.mark.map(id => [markKey(id), now]), ...plan.unmark.map(id => [markKey(id), null]),
-    ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null])]);
+    ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null]),
+    ['mediaRefs', { userId: uid, ids: [...used] }]]);          // (this device only: db.js LOCAL_ONLY)
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);
@@ -437,10 +469,86 @@ async function fetchMedia(token, uid, id) {
   await db.putRemoteMedia(m);
   return m;
 }
-// One picture, straight away (a card on screen needs it). null if signed out or the account doesn't have it.
+
+// ---------- downloading a file when a card needs it ----------
+// The files this device lacks are fetched when they are first needed (lazy-media.js has the reasons and the rules). Everything goes
+// through loadMedia, so one file is never downloaded twice at once (front and back of a card, a sound's check and its play button, a
+// sync's look-ahead), and one that just failed is not asked for again straight away.
+const inflight = new Map();           // id → the download in progress
+const failedFetches = new Map();      // id → { at, reason, tries }; kept while the app is open
+globalThis.addEventListener?.('online', () => { for (const [id, f] of failedFetches) if (f.reason === 'offline') failedFetches.delete(id); });
+// kind: 'view' (a card shows it), 'prefetch' (a sync looks ahead) or 'force' (the person asked: an export)
+// Returns { media, reason, error }: media is the saved file (or null); reason says why not ('offline', 'signed-out', 'missing', 'error').
+export function loadMedia(id, kind = 'view') {
+  const cur = inflight.get(id);
+  if (cur && (kind !== 'force' || cur.real)) return cur.p;          // (a request that was only turned away by the backoff doesn't count for a person's own request)
+  const entry = { real: false };
+  entry.p = loadMediaNow(id, kind, entry).finally(() => { if (inflight.get(id) === entry) inflight.delete(id); });
+  inflight.set(id, entry);
+  return entry.p;
+}
+async function loadMediaNow(id, kind, entry) {
+  const failed = (reason, error) => { failedFetches.set(id, failedAgain(failedFetches.get(id), reason, Date.now())); return { media: null, reason, error }; };
+  const before = failedFetches.get(id);
+  if (before && !canTry(before, Date.now(), kind)) return { media: null, reason: before.reason };
+  if (globalThis.navigator?.onLine === false) return failed('offline');
+  entry.real = true;
+  let auth;
+  try { auth = await session(); } catch (err) { return failed(supa.isSignedOutError(err) ? 'signed-out' : 'offline', err); }
+  if (!auth) return { media: null, reason: 'signed-out' };
+  try {
+    const media = await fetchMedia(auth.access_token, auth.user.id, id);
+    if (!media) return failed('missing');
+    failedFetches.delete(id);
+    return { media, reason: null };
+  } catch (err) {
+    return failed(err.code === 'network' || err.code === 'timeout' ? 'offline' : 'error', err);
+  }
+}
+// One picture or sound, straight away (a card on screen needs it). null if it can't be had (see loadMedia for why).
 export async function downloadMedia(id) {
-  const auth = await session().catch(() => null);
-  return auth ? fetchMedia(auth.access_token, auth.user.id, id) : null;
+  return (await loadMedia(id, 'view')).media;
+}
+
+// The files cards use that this device doesn't have: { pictures: [ids], sounds: [ids] } (sounds: false leaves sounds out; cards: only these).
+export async function missingMedia({ sounds = true, cards } = {}) {
+  const want = wantedMedia(cards || await db.getAll('cards'), new Set(await db.mediaKeys()));
+  return { pictures: want.pictures, sounds: sounds ? want.sounds : [] };
+}
+// Fetch files now, for an export or before signing out (the person asked, so a recent failure doesn't stop it). Four at a time.
+// ids: which files (default: every missing one). Returns { total, got, left, gone, reason }:
+//   left    ids that could not be fetched just now (offline, signed out, a server problem): worth trying again
+//   gone    ids the account doesn't have (nothing to fetch: they were swept or never uploaded)
+//   reason  the first reason a file was not fetched ('offline', 'signed-out', 'missing', 'error'), or null
+export async function downloadAllMedia({ ids, sounds = true, onProgress, signal } = {}) {
+  if (!ids) { const m = await missingMedia({ sounds }); ids = [...m.pictures, ...m.sounds]; }
+  const have = new Set(await db.mediaKeys());
+  ids = [...new Set(ids)].filter(id => !have.has(id));
+  let reason = null, got = 0, offlineRun = 0, stop = false;
+  const gone = new Set();
+  await runPool(ids, async id => {
+    if (stop || signal?.aborted) return;
+    const r = await loadMedia(id, 'force');
+    if (r.media) { got++; offlineRun = 0; return; }
+    reason ||= r.reason;
+    if (r.reason === 'missing') { gone.add(id); offlineRun = 0; }
+    else if (r.reason === 'signed-out' || (r.reason === 'offline' && ++offlineRun >= 2)) stop = true;      // no connection (or a very slow one): the rest would only wait for time-outs
+  }, { onProgress }).catch(err => { if (!isWholeStorageError(err)) throw err; reason ||= 'error'; });
+  const now = new Set(await db.mediaKeys());          // (a storage problem or a stop leaves the rest missing)
+  return { total: ids.length, got, left: ids.filter(id => !now.has(id) && !gone.has(id)), gone: [...gone], reason, cancelled: !!signal?.aborted };
+}
+const cancelled = () => new supa.SupaError('Cancelled. Nothing was deleted.', { code: 'cancelled' });
+// Before something that leaves this device on its own (Delete my synced data, Delete my account): make sure it holds the files its
+// cards use, because afterwards the account can't give them back. Throws a message to show when some could not be fetched
+// (code 'media_left': the person may go on anyway), or 'cancelled'. The caller asks for a fresh sign-in afterwards (a long download
+// can outlast the token).
+async function keepDeviceWhole({ onProgress, signal, anyway, isLive } = {}) {
+  const r = await downloadAllMedia({ onProgress, signal });
+  if (signal?.aborted || isLive?.() === false) throw cancelled();
+  if (r.left.length && !anyway) {
+    const n = r.left.length;
+    throw new supa.SupaError(`${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} your cards use ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} would be lost here. Connect to the internet and try again. Nothing was deleted.`, { code: 'media_left' });
+  }
 }
 
 // ---------- when to sync ----------

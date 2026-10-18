@@ -23,9 +23,10 @@ import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
 import { backupNote } from './backup-nudge.js';
+import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.28';
+const APP_VERSION = '4.32';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -484,7 +485,9 @@ async function fillMediaInfo() {
     if (!$('mediaLine')) return;                       // moved to another screen meanwhile
     const free = est?.quota ? ` · about ${sizeText(Math.max(0, est.quota - (est.usage || 0)))} free` : '';
     const size = n => (n ? sizeText(n) : '0 KB');
-    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.`;
+    const lack = await sync.missingMedia().catch(() => null);
+    if (!$('mediaLine')) return;
+    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.${lack ? ' ' + notDownloadedLine({ pictures: lack.pictures.length, sounds: lack.sounds.length }) : ''}`;
     $('bkSoundsRow').hidden = !totals.sounds;
     if (totals.sounds) {
       $('bkSoundsTitle').textContent = `Include sounds (${sizeText(totals.sounds)})`;
@@ -495,7 +498,29 @@ async function fillMediaInfo() {
 }
 async function exportBackup() {
   // (The switch only shows when there are sounds; without it, everything is included.)
-  const data = await db.exportAll({ sounds: $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked });
+  const withSounds = $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked;
+  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) would be missing from the file:
+  // fetch them first. What can't be fetched is said before saving, and a second tap saves without it.
+  const btn = $('exportBtn');
+  let leftOut = 0;
+  // (A device that never signed in has no account to fetch from: nothing to try and nothing to nag about.)
+  const synced = !!(await sync.account().catch(() => null)) || !!(await db.getSettings()).syncState?.userId;
+  const lack = synced ? await sync.missingMedia({ sounds: withSounds }) : { pictures: [], sounds: [] };
+  if (lack.pictures.length + lack.sounds.length) {
+    btn.disabled = true;
+    let r;
+    try {
+      r = await sync.downloadAllMedia({ sounds: withSounds, onProgress: (n, t) => { if ($('backupNote')) $('backupNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } });
+    } finally { btn.disabled = false; }
+    leftOut = r.left.length + r.gone.length;
+    if (leftOut && btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Export without them';
+      if ($('backupNote')) { $('backupNote').className = 'note usage-line warn'; $('backupNote').textContent = leftOutNote(leftOut, r.reason, r.gone.length); }
+      return;
+    }
+  }
+  const data = await db.exportAll({ sounds: withSounds });
   const d = new Date();
   const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -513,7 +538,7 @@ async function exportBackup() {
   }
   settings.lastBackup = Date.now();
   await db.setSetting('lastBackup', settings.lastBackup);
-  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}`);
+  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
   if (currentRoute === 'settings') renderSettings($('screen'));
 }
 
@@ -584,6 +609,11 @@ async function confirmReset() {
     </div>`);
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
+  // Files this device never downloaded can't be sent from here: say so (another device that holds them has to do its own re-upload).
+  sync.missingMedia().then(l => {
+    const n = l.pictures.length + l.sounds.length;
+    if (n && $('rsLack')) { $('rsLack').hidden = false; $('rsLack').textContent = `${n.toLocaleString()} ${n === 1 ? 'picture or sound isn' : 'pictures and sounds aren'}'t on this device and can't be re-sent from here. If another device holds ${n === 1 ? 'it' : 'them'}, re-upload from that device too.`; }
+  }).catch(() => {});
   $('rsYes').addEventListener('click', async () => {
     await wipeThisDevice();
     closeSheet();
@@ -718,6 +748,9 @@ async function drawSync() {
       <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p></div>
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
+    <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
+      <span>Off: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account's monthly download allowance. On: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi), and it keeps a full copy in case your account ever loses them.</span></span>
+      <input id="keepAllMedia" type="checkbox" class="switch" ${settings.keepAllMedia ? 'checked' : ''}></label>
     <div class="set-row">
       <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
       <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
@@ -741,6 +774,11 @@ async function drawSync() {
   showSyncStatus(acct.lastSync);
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
+  $('keepAllMedia').addEventListener('change', async e => {
+    settings.keepAllMedia = e.target.checked;
+    await db.setSetting('keepAllMedia', e.target.checked);          // this device only (db.js LOCAL_ONLY)
+    if (e.target.checked) sync.syncNow({ retry: true });
+  });
   $('resendBtn').addEventListener('click', confirmResend);
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
@@ -851,7 +889,25 @@ async function confirmSignOut() {
       </div>
     </div>`);
   $('soNo').addEventListener('click', closeSheet);
-  $('soKeep').addEventListener('click', async () => { await sync.signOut(); closeSheet(); toast('Signed out'); drawSync(); });
+  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) can't be had once signed out: get them first.
+  $('soKeep').addEventListener('click', async () => {
+    const btn = $('soKeep');
+    if (btn.dataset.armed !== '1') {
+      const lack = await sync.missingMedia().catch(() => null);
+      if (lack && lack.pictures.length + lack.sounds.length) {
+        btn.disabled = true;
+        let r;
+        try { r = await sync.downloadAllMedia({ onProgress: (n, t) => { if ($('soNote')) $('soNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } }); } finally { btn.disabled = false; }
+        const n = r.left.length + r.gone.length;
+        if (n) {
+          btn.dataset.armed = '1';
+          if ($('soNote')) $('soNote').innerHTML = `<span class="warn">${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} from your cards ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} won't show here after signing out.</span> Tap again to sign out anyway.`;
+          return;
+        }
+      }
+    }
+    await sync.signOut(); closeSheet(); toast('Signed out'); drawSync();
+  });
   let armed = false;
   $('soRemove').addEventListener('click', async () => {
     const pending = await sync.pendingChanges().catch(() => 0);
@@ -880,6 +936,7 @@ function confirmResend() {
     <div class="confirm">
       <p>Use this only if the sync server <b>lost your data</b> or was <b>restored from an older copy</b>, so your cards are missing online even though they are here. Normally you never need it.</p>
       <p class="note">This device sends all of its decks, cards, progress, settings, pictures and sounds again, which can take a while and uses data. Nothing is deleted, and newer changes already on the server are kept. Your other devices don't send anything by themselves: do this on each of your devices, starting with the one you used most recently.</p>
+      <p class="note warn" id="rsLack" hidden></p>
       <p class="err" id="rsErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="rsNo">Cancel</button>
@@ -903,8 +960,9 @@ function confirmDeleteServer() {
   openSheet(`
     <h2 id="sheetTitle">Delete your synced data?</h2>
     <div class="confirm">
-      <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress and settings. It can't be undone.</p>
-      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
+      <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress, settings, pictures and sounds. It can't be undone.</p>
+      <p class="note">This device and your other devices keep their own copy of the cards. Of the pictures and sounds, each device keeps only those it has already downloaded: on a device that doesn't hold them all, turn on <b>Keep all pictures and sounds on this device</b> (Settings > Sync) and let it sync first. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
+      <p class="note" id="dsNote" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="dsNo">Cancel</button>
         <button class="btn danger solid" type="button" id="dsYes">Delete from server</button>
@@ -912,14 +970,51 @@ function confirmDeleteServer() {
     </div>`);
   $('dsNo').focus();
   $('dsNo').addEventListener('click', closeSheet);
-  $('dsYes').addEventListener('click', async () => {
-    $('dsYes').disabled = true;
+  wireSafeDelete({ yes: 'dsYes', note: 'dsNote', label: 'Delete from server', call: o => sync.deleteServerData(o),
+    done: () => { closeSheet(); toast('Your synced data was deleted from the server'); drawSync(); }, fail: msg => toast(msg) });
+}
+
+// Delete my synced data / Delete my account, which leave this device holding its own copy: the pictures and sounds it hasn't downloaded
+// yet (they load when a card needs them) are saved here first, so the account's deletion doesn't lose them. The first tap says how many
+// (when there are any); the second downloads, then deletes. If some can't be downloaded, a further tap deletes anyway. Closing the sheet
+// cancels the download, and nothing is deleted.
+function wireSafeDelete({ yes, note, label, call, done, fail, ready = () => true }) {
+  const ac = new AbortController();
+  const stop = () => ac.abort();
+  document.addEventListener('sheet-closing', stop, { once: true });
+  $('sheet').addEventListener('close', stop, { once: true });
+  const live = () => !!$('sheet')?.open && !ac.signal.aborted;
+  const text = t => { const b = $(yes); if (b) b.textContent = t; };
+  const say = (msg, warn) => { const n = $(note); if (n) { n.hidden = !msg; n.className = warn ? 'note warn' : 'note'; n.textContent = msg || ''; } };
+  let step = 0;                                // 0 first tap, 1 download then delete, 2 delete anyway
+  $(yes).addEventListener('click', async () => {
+    if (!ready()) return;
+    if ($('daErr')) $('daErr').hidden = true;
+    $(yes).disabled = true;
     try {
-      await sync.deleteServerData();
-      closeSheet();
-      toast('Your synced data was deleted from the server');
-      drawSync();
-    } catch (e) { toast(e.message); $('dsYes').disabled = false; }
+      if (step === 0) {
+        const lack = await sync.missingMedia().catch(() => null);
+        const n = lack ? lack.pictures.length + lack.sounds.length : 0;
+        step = 1;
+        if (n) {
+          const { sizeText } = await import('./media.js');
+          say(`This device will first download ${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} (about ${sizeText(estimateBytes({ pictures: lack.pictures.length, sounds: lack.sounds.length }))}) so it keeps ${n === 1 ? 'it' : 'them'}. That can take a while and uses data (best on Wi-Fi).`);
+          text('Download, then delete');
+          $(yes).disabled = false;
+          return;
+        }
+      }
+      await call({ signal: ac.signal, isLive: live, anyway: step === 2, onProgress: (n, t) => text(`Saving pictures here first: ${n} of ${t}`) });
+      done();
+    } catch (e) {
+      if (ac.signal.aborted || e.code === 'cancelled') return;
+      const b = $(yes);
+      if (!b) return;
+      b.disabled = false;
+      if (e.code === 'media_left') { step = 2; say(`${e.message.replace(' Nothing was deleted.', '')} Tap Delete anyway to delete without them.`, true); text('Delete anyway'); return; }
+      text(label);
+      fail(e.message);
+    }
   });
 }
 
@@ -929,9 +1024,10 @@ function confirmDeleteAccount() {
     <h2 id="sheetTitle">Delete your account?</h2>
     <div class="confirm">
       <p>This permanently deletes your <b>account</b> and <b>everything stored in it on the server</b>: decks, cards, progress, settings, pictures and sounds, and your sign-in. It can't be undone, and you'd need to make a new account to sync again.</p>
-      <p class="note"><b>Your data on this device is kept.</b> This device is signed out afterwards. Your other devices keep their own copies too, but can no longer sync.</p>
+      <p class="note"><b>Your data on this device is kept.</b> This device is signed out afterwards. Your other devices keep their own copies of the cards too, but can no longer sync, and keep only the pictures and sounds they have already downloaded (turn on <b>Keep all pictures and sounds on this device</b> in Settings > Sync there first if you want every file).</p>
       <label class="field"><span>Type DELETE to confirm</span>
         <input id="daText" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <p class="note" id="daNote" hidden></p>
       <p class="err" id="daErr" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="daNo">Cancel</button>
@@ -940,17 +1036,10 @@ function confirmDeleteAccount() {
     </div>`);
   $('daText').focus();
   $('daNo').addEventListener('click', closeSheet);
-  $('daText').addEventListener('input', () => { $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
-  $('daYes').addEventListener('click', async () => {
-    if ($('daText').value.trim() !== 'DELETE') return;
-    $('daYes').disabled = true; $('daErr').hidden = true;
-    try {
-      await sync.deleteAccount();
-      closeSheet();
-      toast('Your account was deleted. Your data is still on this device.');
-      drawSync();
-    } catch (e) { $('daErr').textContent = e.message; $('daErr').hidden = false; $('daYes').disabled = false; }
-  });
+  $('daText').addEventListener('input', () => { if ($('daYes').textContent === 'Delete my account') $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
+  wireSafeDelete({ yes: 'daYes', note: 'daNote', label: 'Delete my account', ready: () => $('daText')?.value.trim() === 'DELETE', call: o => sync.deleteAccount(o),
+    done: () => { closeSheet(); toast('Your account was deleted. Your data is still on this device.'); drawSync(); },
+    fail: msg => { const e = $('daErr'); if (e) { e.textContent = msg; e.hidden = false; } } });
 }
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.

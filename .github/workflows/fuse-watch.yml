@@ -1,0 +1,207 @@
+# A daily check that tells you (with a GitHub issue) when the free Supabase plan is getting full. Setup and what to do
+# about it: docs/sync-setup.md ("Get a warning when space runs low (GitHub)").
+#
+# It reads three totals from the database and compares each with its limit:
+#   data      everyone's synced data, against the 'sync' fuse in the table global_limits (about 420 MB)
+#   pictures  everyone's pictures and sounds, against the 'media' fuse (about 900 MB)
+#   database  the whole database size, against the free plan's 500 MB
+# The first two are counted the same way supabase/limits.sql counts them, so the numbers match what the fuse enforces.
+# At 80% or more it opens ONE GitHub issue (titled "Study Sprint: storage is almost full"); on later days it updates that
+# same issue instead of opening more. When every total is back under 75% it closes the issue with a comment.
+# Egress (the 5 GB a month of downloads) can't be read from the database, so the issue only reminds you to look at it by hand.
+#
+# The issue only ever holds totals, never emails or anyone's data (the repository may be public).
+#
+# Needs the repository secret SUPABASE_DB_URL, the same one the backup job uses (docs/sync-setup.md, "Back up the database").
+# Until it exists the job says so and finishes with a green tick. GitHub switches scheduled workflows off after 60 days
+# with no activity in a public repository; the weekly job in keep-workflows-enabled.yml prevents that (docs/sync-setup.md,
+# "Keep the scheduled jobs switched on").
+name: Watch free-plan space
+
+on:
+  schedule:
+    - cron: '17 6 * * *'        # every day at 06:17 UTC
+  workflow_dispatch:            # and a "Run workflow" button, to try it
+
+# Only what this job needs: to open, update and close issues. Nothing else in the repository.
+permissions:
+  issues: write
+
+concurrency:
+  group: fuse-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ISSUE_TITLE: 'Study Sprint: storage is almost full'
+      ISSUE_LABEL: storage-warning
+      WARN_AT: '80'             # open or update the issue at this percent or more
+      CLEAR_BELOW: '75'         # close it when every total is under this percent
+    steps:
+      - name: Check the secret exists
+        id: secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::notice::No space check yet. Add the repository secret SUPABASE_DB_URL (docs/sync-setup.md, 'Get a warning when space runs low')."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Hide the database password in the log before anything else touches the address.
+          rest="${SUPABASE_DB_URL#*://}"; userinfo="${rest%@*}"; pw="${userinfo#*:}"
+          case "$rest" in *@*) [ -n "$pw" ] && [ "$pw" != "$userinfo" ] && echo "::add-mask::$pw" ;; esac
+          # Never print the address itself in these messages.
+          case "$SUPABASE_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::SUPABASE_DB_URL must start with postgresql:// (copy the URI from Connect → Session pooler)."; exit 1 ;;
+          esac
+          case "$SUPABASE_DB_URL" in
+            *YOUR-PASSWORD*) echo "::error::SUPABASE_DB_URL still has [YOUR-PASSWORD] in it. Replace it, brackets too, with your database password."; exit 1 ;;
+            *:6543|*:6543/*) echo "::error::SUPABASE_DB_URL uses port 6543 (transaction pooler). Use the Session pooler address, which ends in :5432/postgres."; exit 1 ;;
+          esac
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Read the totals
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # One read-only query; it prints one line: data_bytes|data_limit|media_bytes|media_limit|db_bytes|bypassrls.
+          # "data" adds up sync_usage, which is what the data fuse counts (limits.sql, _total_sync_bytes). "pictures" adds
+          # up the files in the media bucket (limits.sql, _total_media_bytes). The limits come from global_limits, with the
+          # same fallbacks limits.sql uses. The database limit is the free plan's 500 MB. Only totals, nothing per person.
+          # (postgres:17 image, like the backup job: it has psql. The address is passed as an environment variable.)
+          docker run --rm -i -e SUPABASE_DB_URL postgres:17 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt
+          set default_transaction_read_only = on;
+          select
+            coalesce((select sum(u.bytes) from public.sync_usage u), 0)::bigint,
+            coalesce((select g.bytes from public.global_limits g where g.name = 'sync'), 440401920)::bigint,
+            coalesce((select sum((o.metadata ->> 'size')::bigint) from storage.objects o where o.bucket_id = 'media'), 0)::bigint,
+            coalesce((select g.bytes from public.global_limits g where g.name = 'media'), 943718400)::bigint,
+            pg_database_size(current_database())::bigint,
+            (select r.rolbypassrls from pg_roles r where r.rolname = current_user)::text;
+          SQL
+          # (-q keeps the "SET" line out, so the file holds just the one answer line.) The last value says whether this login
+          # can see every row of the files table; if not, the pictures total would read 0 and the warning would never fire.
+          if grep -q '|false$' totals.txt; then
+            echo "::error::The database login in SUPABASE_DB_URL can't see all rows (it doesn't bypass row security), so the pictures total would read 0. Use the postgres user's Session pooler address (postgres.<project>), as for the backup."
+            exit 1
+          fi
+          sed -i 's/|true$//' totals.txt
+          grep -Eq '^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$' totals.txt || { echo "::error::The space query gave an unexpected answer. Check SUPABASE_DB_URL, and that limits.sql has been run."; exit 1; }
+          echo "Totals read."
+
+      - name: Open, update or close the issue
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          IFS='|' read -r data_b data_l media_b media_l db_b < totals.txt
+          db_l=524288000                                   # the free plan's 500 MB database
+          pct() { echo $(( $2 > 0 ? ($1 * 100) / $2 : 0 )); }           # whole percent (rounded down)
+          pct10() { echo $(( $2 > 0 ? ($1 * 1000) / $2 : 0 )); }        # tenths of a percent, to compare without rounding
+          mb() { echo $(( ($1 + 524288) / 1048576 )); }
+          dp=$(pct "$data_b" "$data_l");   mp=$(pct "$media_b" "$media_l");   bp=$(pct "$db_b" "$db_l")
+          d10=$(pct10 "$data_b" "$data_l"); m10=$(pct10 "$media_b" "$media_l"); b10=$(pct10 "$db_b" "$db_l")
+          echo "data ${dp}%, pictures and sounds ${mp}%, database ${bp}%"
+          highest=$d10; [ "$m10" -gt "$highest" ] && highest=$m10; [ "$b10" -gt "$highest" ] && highest=$b10
+
+          # The open issue we made: found by its label AND its exact title, so no other issue is ever touched.
+          gh label create "$ISSUE_LABEL" --color D93F0B --description "Free-plan space is running low (made by the fuse-watch job)" >/dev/null 2>&1 || true
+          num=$(gh issue list --label "$ISSUE_LABEL" --state open --json number,title --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")
+
+          # Yesterday's percentages, kept in a hidden line at the end of the issue body (totals only), to know what is new.
+          prev_d=0; prev_m=0; prev_b=0
+          if [ -n "$num" ]; then
+            marker=$(gh issue view "$num" --json body --jq .body | grep -o 'fuse-watch:[0-9]*:[0-9]*:[0-9]*' | head -n 1 || true)
+            if [ -n "$marker" ]; then IFS=: read -r _ prev_d prev_m prev_b <<< "$marker"; fi
+          fi
+          prev_high=$prev_d; [ "$prev_m" -gt "$prev_high" ] && prev_high=$prev_m; [ "$prev_b" -gt "$prev_high" ] && prev_high=$prev_b
+          high=$dp; [ "$mp" -gt "$high" ] && high=$mp; [ "$bp" -gt "$high" ] && high=$bp
+
+          write_body() {
+            line() {  # name, used, limit, percent, tenths
+              local mark="ok"
+              [ "$5" -ge $(( WARN_AT * 10 )) ] && mark="**NEAR THE LIMIT**"
+              echo "| $1 | $(mb "$2") MB | $(mb "$3") MB | $4% | $mark |"
+            }
+            {
+              echo "The daily space check watches your free Supabase plan and warns at **${WARN_AT}% or more**. Nothing is broken yet. Here are today's totals (just totals, nothing about any person):"
+              echo
+              echo "| What | Used | Limit | How full | |"
+              echo "|---|---|---|---|---|"
+              line "Synced data (cards, reviews, settings), everyone together" "$data_b" "$data_l" "$dp" "$d10"
+              line "Pictures and sounds, everyone together" "$media_b" "$media_l" "$mp" "$m10"
+              line "Whole database (the free plan stops at 500 MB)" "$db_b" "$db_l" "$bp" "$b10"
+              echo
+              echo "**What happens at 100%:** for data and for pictures and sounds, the app's safety limits (the \"fuses\") refuse anything new, so people see \"server full\" when syncing or adding pictures, until space is freed or you move to Pro. If the whole database passes 500 MB, Supabase makes the project read-only for everyone."
+              echo
+              echo "**What to do** (pick one):"
+              echo "1. **Give each person less space.** Lower the default limits so a few heavy users can't fill everything: backlog item 20 in PLAN.md, and the one-line change in docs/sync-setup.md, step 2c. You can also look at who is using the most with supabase/owner.sql (run it in the Supabase SQL Editor, not here)."
+              echo "2. **Move to the Pro plan** (backlog items 7 and 20 in PLAN.md). Then raise the two fuses by editing the two rows in Table Editor → global_limits (docs/sync-setup.md, step 2c)."
+              echo
+              echo "**Check by hand (the check can't see this):** downloads (\"egress\"). The free plan allows 5 GB a month. In Supabase open **Project Settings → Usage** and look at **Egress**; if it's over about 4 GB before the month is out, treat it like the limits above (backlog item 16)."
+              echo
+              echo "_Last checked $(date -u +%Y-%m-%d) by [this run](${RUN_URL}). This issue is updated each day and closes by itself when everything is under ${CLEAR_BELOW}%._"
+              echo
+              echo "<!-- fuse-watch:${dp}:${mp}:${bp} -->"
+            } > body.md
+          }
+
+          # Does today need a new comment (edits to the body send no notification)?
+          comment=""
+          if [ -n "$num" ]; then
+            if { [ "$dp" -ge "$WARN_AT" ] && [ "$prev_d" -lt "$WARN_AT" ]; } || { [ "$mp" -ge "$WARN_AT" ] && [ "$prev_m" -lt "$WARN_AT" ]; } || { [ "$bp" -ge "$WARN_AT" ] && [ "$prev_b" -lt "$WARN_AT" ]; }; then
+              comment="Another total has reached ${WARN_AT}%: data ${dp}%, pictures and sounds ${mp}%, database ${bp}%. The issue text above is up to date."
+            fi
+            if [ "$high" -ge 95 ] && [ "$prev_high" -lt 95 ]; then
+              comment="Almost full: the highest total is now ${high}% (data ${dp}%, pictures and sounds ${mp}%, database ${bp}%). Please act soon. The issue text above is up to date."
+            fi
+          fi
+
+          if [ "$highest" -ge $(( WARN_AT * 10 )) ] || { [ -n "$num" ] && [ "$highest" -ge $(( CLEAR_BELOW * 10 )) ]; }; then
+            write_body
+            if [ -n "$num" ]; then
+              gh issue edit "$num" --body-file body.md
+              [ -n "$comment" ] && gh issue comment "$num" --body "$comment"
+              echo "Updated issue #$num."
+            elif [ "$highest" -ge $(( WARN_AT * 10 )) ]; then
+              gh issue create --title "$ISSUE_TITLE" --label "$ISSUE_LABEL" --assignee "$GITHUB_REPOSITORY_OWNER" --body-file body.md
+              echo "Opened a new issue."
+            fi
+          elif [ -n "$num" ]; then
+            gh issue comment "$num" --body "Everything is back under ${CLEAR_BELOW}% (data ${dp}%, pictures and sounds ${mp}%, database ${bp}%), so this is closed. It opens again if any total reaches ${WARN_AT}%."
+            gh issue close "$num" --reason completed
+            echo "Closed issue #$num."
+          else
+            echo "Nothing to report."
+          fi
+
+      # If anything above failed, open (or add a comment to) ONE issue, because GitHub's own failure emails of scheduled
+      # jobs may go to nobody (to whoever last edited the schedule, or to the github-actions bot after a re-enable).
+      # Only the job's name and the run's link go in it, never logs or secrets. Same step in every scheduled workflow.
+      - name: Tell the owner this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          JOB_NAME: Watch free-plan space
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Study Sprint: a scheduled job failed'; label=scheduled-job-failed
+          gh label create "$label" --color B60205 --description "A scheduled job failed (made by the jobs themselves)" >/dev/null 2>&1 || true
+          num=$(gh issue list --label "$label" --state open --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty" || true)
+          msg="The scheduled job \"$JOB_NAME\" failed on $(date -u +%Y-%m-%d). Open the run to see why: $RUN_URL . What to do: docs/sync-setup.md, step 8d. Close this issue when it is fixed."
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$msg"
+          else
+            gh issue create --title "$title" --label "$label" --assignee "$GITHUB_REPOSITORY_OWNER" --body "$msg"
+          fi

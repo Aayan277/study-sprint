@@ -177,11 +177,12 @@ export function overLimitDayFlags(value) {
 export const MERGERS = { restDays: [mergeDayFlags, sameDayFlags], idleDays: [mergeIdleDays, sameIdleDays] };
 
 // One page of changes from the server. A page that times out (rows can be 60 KB each: a 1,000-row page may be 20 MB, too much for a slow
-// connection) is asked for again half as big, down to `min`; after that the timeout is thrown. Returns { rows, size }: the size that worked,
+// connection) is asked for again half as big, down to `min`; after that the timeout is thrown. Returns { rows, size, at }: the size that worked and when that request was sent (sync.js logs it),
 // which the caller keeps using for the rest of the sync.
 export async function getPageSafely(get, afterSeq, size, min = 50) {
   for (;;) {
-    try { return { rows: await get(afterSeq, size), size }; } catch (err) {
+    const at = Date.now();
+    try { return { rows: await get(afterSeq, size), size, at }; } catch (err) {
       if (err?.code !== 'timeout' || size <= min) throw err;
       size = Math.max(min, size >> 1);
     }
@@ -267,3 +268,132 @@ export async function runPool(items, work, { size = 4, onProgress } = {}) {
 // The note under Settings → Sync when the server turns sounds away (the owner hasn't re-run supabase/media.sql yet).
 export const SOUNDS_BLOCKED_NOTE = 'Sounds can’t sync yet: run the new supabase/media.sql in your Supabase project (see docs/sync-setup.md). Pictures and everything else are syncing.';
 export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync server doesn’t take that kind of picture (check supabase/media.sql was run, see docs/sync-setup.md). Everything else is syncing.';
+
+// ---------- the overlap when pulling ----------
+// The server numbers a change (seq) when the row is written, not when it is saved for good. With several devices
+// sending at once, a change numbered 100 can become visible after one numbered 101 did. A device that pulled in
+// between has 101 as its bookmark and would never see 100. So every pull starts a little behind the bookmark and
+// reads that stretch again; rows already applied are skipped by decide() (same time = skip), so it costs a few
+// rows of download and nothing else.
+// "A little behind" is measured in time, not in numbers: the numbers are shared by every account on the server, so a
+// count of them means nothing. After EVERY request (each page) we log { t: when it was sent, seq: the bookmark after
+// it, from: what it asked "after", n: rows it got } next to the bookmark, in one save. The next pull starts at the
+// bookmark that was current OVERLAP_MS before the previous pull's last request. A change that request could not see
+// was numbered less than a few seconds before it, so it is numbered above that older bookmark, however much later
+// this pull happens (the app may have been closed for days). A pull cut off midway has logged its pages, so the next
+// one resumes near where it stopped, not from the start.
+// Second limit, so a big download isn't read again: the start is not more than MAX_BACK rows behind the bookmark
+// (counted from the log's n), except that it never skips the requests of the last SAFE_MS (a save can take several
+// seconds, so a change that a request missed was numbered just before it; it is only lost if the pull then goes on
+// to download MAX_BACK more rows, and that must have outrun the save by SAFE_MS). So for up to OVERLAP_MS after a big
+// pull, every quick sync reads again max(MAX_BACK, the rows of the last SAFE_MS) rows. A request stops being protected
+// once it has been read again at least SAFE_MS later (see logPull), so a pull that keeps being cut off moves forward.
+// Not covered: a change that a page of a download longer than OVERLAP_MS could not see yet, numbered below that page's
+// end, on a device with no log (first sync): by the end of such a download the anchor is later than it. The same for
+// a change still unsaved after SAFE_MS while this device downloads more than MAX_BACK rows after the page that missed it.
+// (The "mdel:" picture marks are synced settings like the others, so they are read again the same way.)
+export const OVERLAP_MS = 2 * 60 * 1000;      // far longer than the few seconds one batch of changes needs to be saved
+export const MAX_BACK = 3000;                 // rows (a batch is 500 rows; a few devices at once)
+export const SAFE_MS = 30 * 1000;             // requests this recent are always read again (several times the server's statement timeout)
+const MAX_LOG = 20;                          // entries kept from the older part of the log
+const goodEntry = e => Number.isFinite(e?.t) && Number.isFinite(e?.seq);
+const entries = log => (Array.isArray(log) ? log.filter(goodEntry) : []);
+
+// The change number to ask "after" in the next pull. Never above the bookmark; no log means no overlap.
+export function pullStart(st) {
+  const bookmark = Number(st?.lastSeq) || 0;
+  const log = entries(st?.seqLog);
+  if (!log.length) return bookmark;
+  const limit = log[log.length - 1].t - OVERLAP_MS;
+  const anchor = [...log].reverse().find(e => e.t <= limit) || log[0];      // not enough history yet: the oldest entry we have
+  let start = anchor.seq, rows = 0;
+  for (let i = log.length - 1; i >= 0; i--) {                                // the second limit: MAX_BACK rows...
+    rows += Number(log[i].n) || 0;
+    if (rows >= MAX_BACK && Number.isFinite(log[i].from)) {
+      const recent = log.find(e => !e.ok && e.t >= log[log.length - 1].t - SAFE_MS && Number.isFinite(e.from));   // ...but not past the last SAFE_MS
+      start = Math.max(start, Math.min(log[i].from, recent ? recent.from : Infinity));
+      break;
+    }
+  }
+  return Math.max(0, Math.min(bookmark, start));
+}
+
+// The state to start a pull from. The log always ends at the bookmark (every page saves both together), so a log
+// that is missing (first sync, a reset, an update from an older version) or doesn't end there (the bookmark was moved
+// by an older version after a downgrade) is replaced by a fresh one: no overlap this time.
+export function startPull(st, now) {
+  const log = entries(st.seqLog);
+  const bookmark = Number(st.lastSeq) || 0;
+  if (log.length && log[log.length - 1].seq === bookmark) return st;
+  return { ...st, seqLog: [{ t: now, seq: bookmark, from: bookmark, n: 0 }] };
+}
+
+// Add a request ({ t, seq, from, to, n }) to the log, and forget entries older than the one pullStart() will use.
+// Entries are "ok" (no longer protected by the SAFE_MS rule) when nothing they could have missed is left:
+//   * cover = { t0, from, reach }: this pull started at t0, asked after `from`, and has now read everything up to `reach`
+//     (Infinity once a page came back short). A request that missed a change was sent less than SAFE_MS before the change
+//     was saved, so an entry sent at least SAFE_MS before t0 is settled once this pull has read its whole stretch.
+//   * A request whose stretch ends at or below a bookmark that was already SAFE_MS old when it was sent could not have missed
+//     anything (those changes were all saved): it is ok straight away. So a re-read of settled rows never needs a re-read.
+// That is what lets a pull that is cut off every few seconds still move forward: each attempt settles the one before.
+export function logPull(log, entry, cover) {
+  let list = entries(log).map(e => ({ ...e }));
+  const { t } = entry;
+  if (list.length && t < list[list.length - 1].t) {
+    // The clock went backwards. Start the log over in the new time, keeping the bookmark the old one pointed to.
+    const seq = pullStart({ lastSeq: Infinity, seqLog: list });
+    list = [{ t: t - OVERLAP_MS, seq, from: seq, n: 0 }];
+  }
+  const settled = Math.max(-1, ...list.filter(e => e.t <= t - SAFE_MS).map(e => e.seq));
+  if (cover && cover.t0 <= t) for (const e of list) if (!e.ok && cover.t0 >= e.t + SAFE_MS && cover.from <= e.from && cover.reach >= (Number.isFinite(e.to) ? e.to : e.seq)) e.ok = true;
+  list.push({ ...entry, ok: (Number.isFinite(entry.to) ? entry.to : entry.seq) <= settled });
+  const limit = t - OVERLAP_MS;
+  let keep = 0;
+  list.forEach((e, i) => { if (e.t <= limit) keep = i; });
+  const out = list.slice(keep);
+  // A burst of requests: thin out the old part (keep its oldest entry), but never the last SAFE_MS (still protected) nor the
+  // newest entry at least SAFE_MS old (where "settled" comes from), however fast the pages come.
+  const recentFrom = Math.max(0, out.reduce((k, e, i) => (e.t <= t - SAFE_MS ? i : k), 0));
+  if (recentFrom > MAX_LOG) {
+    const head = out.slice(0, recentFrom), step = head.length / MAX_LOG;
+    return [...Array.from({ length: MAX_LOG }, (_, i) => head[Math.floor(i * step)]), ...out.slice(recentFrom)];
+  }
+  return out;
+}
+
+// ---------- pulling the pages ----------
+// The pull loop of sync.js: page after page until a short one. `st` is the state from startPull(), `from` the number to ask
+// after first (pullStart), `size` the page size to start with.
+//   get(after, size)  one page: { rows, size, at } (getPageSafely: the size that worked, and when that request was sent)
+//   apply(rows)       saves a page here (db.applyRemote, plus sync.js's counting)
+//   save(st)          keeps the bookmark and the log (together, once per page, after the page is saved)
+// The next request is sent as soon as a full page has ARRIVED, while it is being saved (saving 1,000 rows takes about as long as
+// asking for them, so a first download of 200,000 rows takes about the longer of the two instead of both). That changes nothing the
+// invariants above rest on:
+//   * the request asks after the highest number on the page before it (known on arrival, before saving), as it did one by one;
+//   * `at` is still when that request was sent (it is later than the page before it was sent, so the log stays in order);
+//   * a page is logged, and the bookmark moves, only after it is saved, and in order; a page that arrived but whose
+//     saving failed is never logged (its successor's answer is dropped, so the next pull asks after the old bookmark);
+//   * the page size used for a request is the one the page before it ended with (after any halving), and the short-page
+//     check uses the size of the request that page really came from.
+// Returns { st, pages }.
+export async function pullPages(st, from, size, { get, apply, save, now = Date.now }) {
+  const t0 = now(), from0 = from;
+  const fetchPage = after => get(after, size);
+  let upcoming = fetchPage(from), pages = 0;
+  for (;;) {
+    const after = from;
+    const page = await upcoming;
+    const rows = page.rows, at = page.at;
+    size = page.size;
+    const top = rows.length ? Math.max(...rows.map(r => Number(r.seq))) : after;     // (the highest number on this page)
+    const more = rows.length >= size;
+    if (more) { upcoming = fetchPage(Math.max(after, top)); upcoming.catch(() => {}); }     // (if saving below fails, this answer is not used)
+    if (rows.length) { await apply(rows); from = Math.max(from, top); }
+    pages++;
+    const lastSeq = Math.max(st.lastSeq, from);
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: top, n: rows.length }, { t0, from: from0, reach: more ? from : Infinity }) };
+    await save(st);
+    if (!more) return { st, pages };
+  }
+}

@@ -1,0 +1,74 @@
+# Stops GitHub from switching off this repository's scheduled jobs (the Supabase keep-awake, the nightly backup and the
+# storage alert). In a PUBLIC repository GitHub disables scheduled workflows after 60 days with no repository activity.
+# Once a workflow is off it never runs again by itself, so this job asks GitHub, once a week, to "enable" every workflow
+# of the repository, itself included. Enabling one that is already on does nothing visible. It makes no commit, so the
+# history stays clean. Setup and what to do if it ever fails: docs/sync-setup.md ("Keep the scheduled jobs switched on").
+#
+# It needs no secrets: the built-in token with "actions: write" (below) may use the enable call.
+# It leaves alone any workflow YOU switched off by hand (state "disabled_manually"). If it fails, its last step opens a
+# GitHub issue (GitHub's own failure emails for scheduled jobs may go to nobody).
+name: Keep scheduled jobs on
+
+on:
+  schedule:
+    - cron: '29 5 * * 1'        # every Monday at 05:29 UTC
+  workflow_dispatch:            # and a "Run workflow" button, to try it
+
+# Only what this job needs: to switch workflows on. Nothing else in the repository.
+permissions:
+  actions: write
+  issues: write                 # only to report a failure (last step)
+
+jobs:
+  enable:
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable every workflow that is not switched off by hand
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # GitHub's documented states: active, deleted, disabled_fork, disabled_inactivity (the 60-day rule) and
+          # disabled_manually (you pressed Disable). Only the first and the fourth are switched on; the rest are left alone.
+          gh api --paginate "repos/$GH_REPO/actions/workflows" \
+            --jq '.workflows[] | [.id, .state, .path] | @tsv' > "$RUNNER_TEMP/workflows.tsv" </dev/null
+          cat "$RUNNER_TEMP/workflows.tsv"
+          failed=0
+          while IFS=$'\t' read -r id state path; do
+            case "$state" in
+              active|disabled_inactivity) ;;
+              *) echo "Skipping $path ($state)."; continue ;;
+            esac
+            case "$path" in .github/workflows/*) ;; *) echo "Skipping $path (not a workflow file)."; continue ;; esac
+            [ "$state" = "disabled_inactivity" ] && echo "::warning::$path had been switched off by GitHub for inactivity; switching it back on."
+            if gh api --method PUT "repos/$GH_REPO/actions/workflows/$id/enable" </dev/null; then
+              echo "Enabled $path."
+            else
+              echo "::error::Could not enable $path."; failed=$((failed + 1))
+            fi
+          done < "$RUNNER_TEMP/workflows.tsv"
+          [ "$failed" -eq 0 ] || { echo "::error::$failed workflow(s) could not be enabled."; exit 1; }
+
+      # If anything above failed, open (or add a comment to) ONE issue, because GitHub's own failure emails of scheduled
+      # jobs may go to nobody (to whoever last edited the schedule, or to the github-actions bot after a re-enable).
+      # Only the job's name and the run's link go in it, never logs or secrets. Same step in every scheduled workflow.
+      - name: Tell the owner this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          JOB_NAME: Keep scheduled jobs on
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Study Sprint: a scheduled job failed'; label=scheduled-job-failed
+          gh label create "$label" --color B60205 --description "A scheduled job failed (made by the jobs themselves)" >/dev/null 2>&1 || true
+          num=$(gh issue list --label "$label" --state open --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty" || true)
+          msg="The scheduled job \"$JOB_NAME\" failed on $(date -u +%Y-%m-%d). Open the run to see why: $RUN_URL . What to do: docs/sync-setup.md, step 8d. Close this issue when it is fixed."
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$msg"
+          else
+            gh issue create --title "$title" --label "$label" --assignee "$GITHUB_REPOSITORY_OWNER" --body "$msg"
+          fi
