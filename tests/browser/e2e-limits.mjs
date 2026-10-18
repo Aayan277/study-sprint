@@ -249,7 +249,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await run(D, async () => { (await import('./js/sync-config.js')).CAPTCHA.siteKey = 'test-site-key-123'; });
   await signInUI(D, { create: true });
   await D.waitForFunction(() => !document.querySelector('#syncErr')?.hidden);
-  ok(/Couldn’t load the “are you a person\?” check/.test(await D.textContent('#syncErr')), 'if the box cannot load, a clear message appears: ' + await D.textContent('#syncErr'));
+  ok(/The bot check didn’t load\. Try again, or contact the site owner/.test(await D.textContent('#syncErr')), 'if the box cannot load, a clear message appears: ' + await D.textContent('#syncErr'));
   ok(!(await D.$eval('#syncCreate', b => b.disabled)), 'and the buttons work again');
   await D.context().close();
 
