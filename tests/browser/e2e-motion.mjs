@@ -311,7 +311,8 @@ console.log(`INFO rating to next card: effects on median ${on.median.toFixed(1)}
 // (relative to the reduced-motion run measured in the same load, so a slow or throttled machine moves both alike)
 // (the effects do real work on the page, and that work slows down with the machine just like the rest, so the budget is a multiple of
 // the reduced-motion time plus a small constant: it catches effects that hold up the next card, not a slow machine)
-ok(on.median <= off.median * 2 + 20, `rating stays instant: the next card is drawn about as fast with the effects on as without (${on.median.toFixed(1)} ms vs ${off.median.toFixed(1)} ms)`);
+const T = Number(process.env.CPU_THROTTLE) || 1;      // the CPU slowdown the run is under (see pw.mjs)
+ok(on.median < 60 * T && on.median <= off.median * 2 + 20, `rating stays instant: the next card is drawn about as fast with the effects on as without, and under 60 ms x ${T} (${on.median.toFixed(1)} ms vs ${off.median.toFixed(1)} ms)`);
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 2).join(' | ') : ''));
 await browser.close();

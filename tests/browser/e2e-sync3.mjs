@@ -19,11 +19,12 @@ const run = (page, fn, arg) => page.evaluate(fn, arg);
 const syncNow = page => run(page, async () => { const s = await import('./js/sync.js'); await s.syncNow(); return s.lastStatus(); });
 // "Synced" can show between two runs: signing in starts a sync while another one is still going, and syncNow() then queues a second run
 // behind it. So wait for the state that matters: keep syncing until a run has nothing left to send or take (everything is on the server).
-const settle = page => run(page, async () => {
+const settleRaw = page => run(page, async () => {
   const s = await import('./js/sync.js');
   for (let i = 0; i < 10; i++) { await s.syncNow(); const l = s.lastStatus(); if (l.state === 'done' && !l.sent && !l.applied) return l; }
   return s.lastStatus();
 });
+const settle = async (page, what = 'sign-in') => { const l = await settleRaw(page); ok(l.state === 'done' && !l.sent && !l.applied, `${what}: syncing settled (nothing left to send or take): ${l.state}, sent ${l.sent}, applied ${l.applied}`); };
 const snapshot = page => run(page, async () => {
   const db = await import('./js/db.js');
   const [decks, cards, logs, states, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('reviewLog'), db.getAll('cardStates'), db.getSettings()]);
