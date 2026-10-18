@@ -53,6 +53,7 @@ export async function readAnkiFile(file) {
   } catch (err) {
     console.error('Could not read the list of pictures', err);
   }
+  result.mediaBytes = [...members].reduce((n, [name, member]) => n + (sizes.get(name) ?? entrySizes.get(member) ?? 0), 0);   // about how much the deck's pictures and sounds take (for the size warning)
   result.media = {
     has: name => members.has(name),
     // { size, type } of a picture or sound without unpacking it, or null when the file isn't in the package.
