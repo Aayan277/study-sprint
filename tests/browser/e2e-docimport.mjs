@@ -152,7 +152,7 @@ await page.waitForFunction(() => document.querySelector('#found').textContent.in
 ok((await fronts()).join('|') === 'Page 1|Page 2', 'a small paste keeps the text read as pages');
 await page.evaluate(() => { const b = document.getElementById('pasteBox'); b.select(); b.dispatchEvent(new Event('paste')); });
 await page.fill('#pasteBox', 'x - y\nz - w');
-await page.waitForTimeout(600); console.log('   found:', await page.textContent('#found'));
+await page.waitForFunction(() => [...document.querySelectorAll('.prow textarea[data-side=front]')].map(x => x.value).join('|') === 'x|z', null, { timeout: 5000 }).catch(() => {});
 ok((await fronts()).join('|') === 'x|z', 'pasting over everything reads it the usual way');
 
 await ctx.route('https://docs.google.com/**', r => r.fulfill({ status: 200, contentType: 'text/csv', body: 'sun,star\nmoon,rock' }));
@@ -185,7 +185,9 @@ await page.goto('http://localhost:8123/#/import/share'); await page.waitForSelec
 await page.waitForSelector('#preview:not([hidden])');
 ok((await fronts()).join('|') === 'Cell|Atom', 'shared text lands in the paste box and preview');
 ok((await page.evaluate(async () => (await (await caches.open('study-sprint-share')).keys()).length)) === 1, 'the saved share stays until the cards are saved (a reload does not lose it)');
-ok(page.url().endsWith('#/import'), 'the address goes back to #/import, so Back or a reload does not open the share again');
+ok(page.url().endsWith('#/import/share'), 'the address stays #/import/share until the cards are saved');
+await page.reload(); await page.waitForSelector('#preview:not([hidden])');
+ok((await fronts()).join('|') === 'Cell|Atom', 'a reload (an app update, say) finds the share again');
 await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Shared'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
 ok((await page.evaluate(async () => (await (await caches.open('study-sprint-share')).keys()).length)) === 0, 'and it is cleared once the cards are saved');
 const putShare = (name, body, headers = {}) => page.evaluate(async ([name, body, headers]) => { const c = await caches.open('study-sprint-share'); for (const k of await c.keys()) await c.delete(k); await c.put(new URL('share-target/' + name, document.baseURI), new Response(body, { headers })); }, [name, body, headers]);
@@ -194,6 +196,7 @@ const openShare = async () => { await page.goto('http://localhost:8123/#/decks')
 await putShare('text', JSON.stringify({ at: Date.now() - 11 * 60 * 1000, text: 'Old - news' }));
 await openShare();
 ok(await page.isHidden('#preview') && await page.isHidden('#loadErr'), 'a share older than 10 minutes is ignored');
+ok((await page.evaluate(async () => (await (await caches.open('study-sprint-share')).keys()).length)) === 0, 'and is cleared out of storage');
 await putShare('text', JSON.stringify({ at: Date.now(), tooBig: 'huge.pdf' }));
 await openShare();
 ok((await page.textContent('#loadErr')).includes('over 50 MB'), 'a too-big share is explained');

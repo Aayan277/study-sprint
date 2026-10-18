@@ -16,7 +16,7 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
-import { replace as navReplace, back as navBack, rewrite as navRewrite } from './nav.js';
+import { replace as navReplace, back as navBack } from './nav.js';
 import { readDocument, isDocFile, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
 import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
@@ -419,10 +419,12 @@ async function takeShared() {
     const c = await caches.open(SHARE_CACHE);
     const f = await c.match(shareUrl('file'));
     const t = await c.match(shareUrl('text'));
-    if (f && Date.now() - Number(f.headers.get('x-at') || 0) < SHARE_MAX_AGE) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('content-type') || '' });
-    if (t) { const j = await t.json(); if (Date.now() - (j.at || 0) < SHARE_MAX_AGE) said = j; }
+    const old = x => Date.now() - x >= SHARE_MAX_AGE;
+    if ((f && old(Number(f.headers.get('x-at') || 0))) || (t && old((await t.clone().json()).at || 0))) { await clearShare(); return; }      // too old: not used, and not left taking room
+    if (f) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('content-type') || '' });
+    if (t) said = await t.json();
   } catch { /* nothing was kept: just show the screen */ }
-  navRewrite('#/import');                     // a reload or Back doesn't open the share again
+  // (The address stays #/import/share until the cards are saved, so a reload, such as one after an app update, finds the share again.)
   if (said?.tooBig) { showError(tooBigMessage()); return; }
   if (said?.failed) { showError("Couldn't get what you shared. Open Study Sprint and choose the file here instead."); return; }
   if (file) {
