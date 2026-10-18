@@ -200,6 +200,202 @@ for (const style of ['original', 'clinical']) {
   await p.close();
 }
 
+// ====== the review blockers (v4.22 merge): holds released under a sheet, the Play clock, Back skipping entries, late races ======
+const deckPage = async p => {
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
+  await p.evaluate(() => (document.querySelector('[data-open]') || document.querySelector('a[href^="#/deck/"]')).click());
+  await p.waitForSelector('#reviewBtn'); await p.waitForTimeout(300);
+};
+const startReview = async p => { await deckPage(p); await p.click('#reviewBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(400); };
+const navApi = (p, code, arg) => p.evaluate(async ([c, a]) => { const n = await import('./js/nav.js'); return new Function('n', 'a', c)(n, a); }, [code, arg]);
+const kind = p => p.evaluate(() => history.state?.k);
+const startPlay = async (p, fmt, pace) => {
+  await p.goto(URL + '#/play'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(300);
+  await p.evaluate(f => { const r = document.querySelector(`input[name=fmt][value=${f}]`); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }, fmt);
+  await p.waitForTimeout(300);
+  if (pace) await p.evaluate(v => { const e = document.getElementById('pace'); if (e) { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); } }, pace);
+  await p.waitForTimeout(200);
+  await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(300);
+};
+const secs = async p => { const t = await p.textContent('#hudClock'); const m = t.match(/(\d+):(\d+)/); return m ? +m[1] * 60 + +m[2] : parseFloat(t); };
+
+{
+  // Repro A: a hold released while a sheet is over it must not leave a dead Back press.
+  const p = await open();
+  await startPlay(p, 'lightning');
+  await back(p);
+  ok(await sheetOpen(p) && /Quit this round/.test(await sheetTitle(p)), 'blocker A: Back asks "Quit this round?"');
+  await navApi(p, "n.releaseBack('session')");            // the round ends behind the question (the clock used to do this)
+  await p.waitForTimeout(300);
+  await p.click('#keepOn'); await p.waitForTimeout(700);
+  ok(!(await sheetOpen(p)) && await kind(p) === 'page', 'blocker A: after Keep playing the entry underneath is the page, not a dead hold (' + await kind(p) + ')');
+  await back(p);
+  ok(left(p), 'blocker A: the first Back leaves the app (no dead press)');
+  await p.close();
+}
+{
+  // Repro B (desktop): Review, card panel, End, panel closed: the first Back is not dead.
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
+  const p = await ctx.newPage();
+  p.on('pageerror', e => errors.push('pageerror ' + e.message));
+  await p.goto('about:blank');
+  await startReview(p);
+  await p.keyboard.press('i'); await p.waitForTimeout(800);
+  const side = await p.evaluate(() => document.getElementById('sheet').open && document.getElementById('sheet').classList.contains('side'));
+  ok(side, 'blocker B: the card panel opens at the side on a wide screen');
+  await p.click('#endBtn'); await p.waitForTimeout(900);
+  ok(/Session ended/.test(await p.textContent('#screen h1')) && !(await sheetOpen(p)), 'blocker B: ending the session closes the open panel');
+  await back(p);
+  ok(/^#\/deck\//.test(await hash(p)), 'blocker B: the first Back returns to the deck page: ' + await hash(p));
+  await back(p);
+  ok(await hash(p) === '#/decks', 'blocker B: then Decks');
+  // the same with the panel closed by hand after the hold was let go (the order that used to leave a dead entry)
+  await startReview(p);
+  await p.keyboard.press('i'); await p.waitForTimeout(800);
+  await navApi(p, "n.releaseBack('session')"); await p.waitForTimeout(300);
+  await p.click('.sheet-x'); await p.waitForTimeout(900);
+  ok(await kind(p) === 'page' && /^#\/review/.test(await hash(p)), 'blocker B: closing the panel after the hold was released lands on a real page entry (' + await kind(p) + ')');
+  await back(p);
+  ok(/^#\/deck\//.test(await hash(p)), 'blocker B: and one Back goes to the deck page');
+  await ctx.close();
+}
+{
+  // Back skipping several entries (history.go(-2), the long-press Back menu): the hold is let go and the move counts as leaving.
+  const p = await open();
+  await startReview(p);
+  await p.evaluate(() => history.go(-2)); await p.waitForTimeout(1000);
+  ok(/^#\/deck\//.test(await hash(p)) && !(await sheetOpen(p)), 'skipping: Back over two entries shows the deck page and no question: ' + await hash(p));
+  ok(await navApi(p, 'return n.isHolding()') === false, 'skipping: the session no longer holds the back gesture');
+  ok(await p.evaluate(() => !history.state || history.state.ss <= 1), 'skipping: no hold entry was pushed back at the wrong address');
+  await back(p);
+  ok(await hash(p) === '#/decks', 'skipping: Back goes to Decks');
+  await back(p);
+  ok(left(p), 'skipping: and then leaves the app');
+  // a sheet over a hold, Back skipping both: nothing is left open
+  await startReview(p);
+  await back(p);
+  ok(await sheetOpen(p), 'skipping: (setup) the question is open over the review');
+  await p.evaluate(() => history.go(-3)); await p.waitForTimeout(1000);
+  ok(!(await sheetOpen(p)) && await navApi(p, 'return n.isHolding()') === false, 'skipping: Back over the question and the session closes both');
+  await p.close();
+}
+for (const [fmt, what] of [['lightning', 'Lightning'], ['survival', 'Survival'], ['classic', 'Classic']]) {
+  // The Play clock waits while "Quit this round?" is up, and nothing is lost for the time it took.
+  const p = await open();
+  await startPlay(p, fmt, fmt === 'lightning' ? 0 : 3);
+  const prompt0 = await p.textContent('#pPrompt');
+  const t0 = fmt === 'lightning' ? await secs(p) : 0;
+  const hud0 = await p.textContent('#hudA');
+  await back(p);
+  ok(await sheetOpen(p) && /Quit this round/.test(await sheetTitle(p)), `play clock (${what}): Back asks`);
+  await p.waitForTimeout(fmt === 'lightning' ? 4000 : 4500);          // longer than a Survival / Classic question's 3 s
+  const t1 = fmt === 'lightning' ? await secs(p) : 0;
+  await p.click('#keepOn'); await p.waitForTimeout(500);
+  const t2 = fmt === 'lightning' ? await secs(p) : 0;
+  const still = await p.evaluate(() => ({ fb: document.getElementById('feedback')?.textContent || '', prompt: document.getElementById('pPrompt')?.textContent, hud: document.getElementById('hudA')?.textContent, over: !!document.querySelector('.fb.no') }));
+  if (fmt === 'lightning') ok(t1 === t0 && t0 - t2 <= 1, `play clock (Lightning): the clock stood still while asking (${t0}s, ${t1}s while asking, ${t2}s after Keep playing)`);
+  ok(still.fb === '' && still.prompt === prompt0 && still.hud === hud0, `play clock (${what}): same question, no answer, no life lost, the HUD is unchanged after Keep playing (${hud0} -> ${still.hud})`);
+  await p.waitForTimeout(fmt === 'lightning' ? 1200 : 1800);
+  if (fmt === 'lightning') ok(await secs(p) < t2, 'play clock (Lightning): and it runs again after Keep playing');
+  else ok(await p.evaluate(() => { const t = document.getElementById('pTimer'); return !!t && getComputedStyle(t).transform !== 'none'; }), `play clock (${what}): the question timer runs again`);
+  await p.close();
+}
+{
+  // close-and-navigate in the same tick (the side panel's x, then a sidebar link)
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
+  const p = await ctx.newPage();
+  p.on('pageerror', e => errors.push('pageerror ' + e.message));
+  await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(800);
+  await p.evaluate(async () => (await import('./js/ui.js')).openSheet('<h2 id="sheetTitle">T</h2>', { side: true })); await p.waitForTimeout(300);
+  ok(await sheetOpen(p), 'race: the side panel is open');
+  await p.evaluate(() => { document.querySelector('.sheet-x').click(); document.querySelector('a.side-deck').click(); });
+  await p.waitForTimeout(1200);
+  const st = await p.evaluate(() => ({ h: location.hash, k: history.state?.k, ss: history.state?.ss, h1: document.querySelector('#screen h1')?.textContent }));
+  ok(/^#\/deck\//.test(st.h) && st.k === 'page' && st.ss === 1, 'race: closing the panel and clicking a deck in one tick opens the deck, one page entry deep: ' + JSON.stringify(st));
+  await back(p);
+  ok(await hash(p) === '#/today', 'race: and Back returns to Today');
+  await ctx.close();
+}
+{
+  // The occlusion editor: Back asks "Discard your changes?" (like Esc), Back with nothing drawn just closes.
+  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, serviceWorkers: 'block' });
+  const p = await ctx.newPage();
+  p.on('pageerror', e => errors.push('pageerror ' + e.message));
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
+  const openEd = async () => {
+    await p.evaluate(async () => { const m = await import('./js/occlusion-editor.js'); window.__edResult = 'open'; m.openOcclusionEditor({ image: 'nav-test', w: 300, h: 200, masks: [] }).then(r => { window.__edResult = r === null ? 'null' : 'done'; }); });
+    await p.waitForSelector('dialog.occ-ed[open]'); await p.waitForTimeout(300);
+  };
+  await openEd();
+  await back(p);
+  ok(await p.evaluate(() => !document.querySelector('dialog.occ-ed')) && await hash(p) === '#/decks', 'occlusion editor: Back with no changes closes it and stays on the page');
+  await back(p);
+  ok(left(p), 'occlusion editor: and the next Back leaves the app');
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
+  await openEd();
+  const box = await p.locator('.occ-ed-stage').boundingBox();
+  await p.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4); await p.mouse.down();
+  await p.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5, { steps: 6 }); await p.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 6 }); await p.mouse.up();
+  await p.waitForTimeout(200);
+  await back(p);
+  ok(await p.locator('.occ-ed-confirm').isVisible() && (await p.textContent('#occEdCfT')) === 'Discard your changes?', 'occlusion editor: Back with changes asks "Discard your changes?"');
+  await p.click('[data-act=keep]'); await p.waitForTimeout(300);
+  await back(p);
+  ok(await p.locator('.occ-ed-confirm').isVisible(), 'occlusion editor: and asks again after Keep editing');
+  await p.click('[data-act=discard]'); await p.waitForFunction(() => !document.querySelector('dialog.occ-ed')); await p.waitForTimeout(500);
+  await back(p);
+  ok(left(p), 'occlusion editor: after Discard, one Back leaves the app (the hold left nothing behind)');
+  await ctx.close();
+}
+{
+  // The zoom viewer: Back closes it
+  const p = await open();
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
+  await p.evaluate(async () => (await import('./js/occlusion-view.js')).openZoom('<figure class="occ" style="--ar:1.5"><img class="card-img" alt="Pic" data-media="nav-test"></figure>', 'Pic'));
+  await p.waitForSelector('dialog.occ-view[open]'); await p.waitForTimeout(300);
+  await back(p);
+  ok(await p.evaluate(() => !document.querySelector('dialog.occ-view')) && await hash(p) === '#/decks', 'zoom viewer: Back closes it and stays on the page');
+  await back(p);
+  ok(left(p), 'zoom viewer: and the next Back leaves the app');
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
+  await p.evaluate(async () => (await import('./js/occlusion-view.js')).openZoom('<figure class="occ" style="--ar:1.5"><img class="card-img" alt="Pic" data-media="nav-test"></figure>', 'Pic'));
+  await p.waitForSelector('dialog.occ-view[open]'); await p.waitForTimeout(300);
+  await p.click('dialog.occ-view [data-close]'); await p.waitForTimeout(600);
+  await back(p);
+  ok(left(p), 'zoom viewer: after closing with its button, Back leaves the app');
+  await p.close();
+}
+{
+  // Import's back button: step back when there is somewhere in the app, else go to Decks
+  const p = await open();
+  await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);
+  await navApi(p, "n.go('#/import')"); await p.waitForSelector('#back'); await p.waitForTimeout(400);
+  const L = await len(p);
+  await p.click('#back'); await p.waitForSelector('.deck'); await p.waitForTimeout(500);
+  ok(await hash(p) === '#/decks' && await len(p) === L, 'import: the back button returns to Decks without adding an entry');
+  await back(p);
+  ok(left(p), 'import: and Back then leaves the app');
+  const q = await open();
+  await q.goto(URL + '#/import'); await q.waitForSelector('#back'); await q.waitForTimeout(400);
+  await q.click('#back'); await q.waitForSelector('.deck'); await q.waitForTimeout(500);
+  ok(await hash(q) === '#/decks' && await q.evaluate(() => history.state?.ss) === 0, 'import: opened directly, its back button goes to Decks as the bottom entry');
+  await q.close();
+  await p.close();
+}
+{
+  // go / up / back run in order with the other history changes: a Back button pressed in the same tick as a sheet closing
+  const p = await open();
+  await deckPage(p);
+  await p.evaluate(async () => { const ui = await import('./js/ui.js'); ui.openSheet('<h2 id="sheetTitle">T</h2>'); });
+  await p.waitForTimeout(300);
+  await p.evaluate(async () => { const ui = await import('./js/ui.js'); ui.closeSheet(); document.getElementById('back').click(); });
+  await p.waitForTimeout(1200);
+  ok(await hash(p) === '#/decks' && !(await sheetOpen(p)), 'queue: closing a sheet and pressing the page\'s back button together lands on Decks: ' + await hash(p));
+  await back(p);
+  ok(left(p), 'queue: and Back then leaves the app');
+  await p.close();
+}
+
 // Android: the hardware back button from Today must exit, not loop. (Today is the first and only entry.)
 {
   const p = await open();

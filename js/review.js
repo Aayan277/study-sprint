@@ -31,7 +31,7 @@ import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
 import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
-import { go, replace as navReplace, holdBack, releaseBack } from './nav.js';
+import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -779,6 +779,7 @@ function askEnd() {
 }
 
 async function finish(el) {
+  closeSheet();                 // a card panel or a question that was open belongs to the session that just ended
   releaseBack('session');
   destroyPad();
   stopSound();
@@ -830,7 +831,7 @@ async function finish(el) {
     <section class="finish-next" aria-label="What's next">
       ${streakHTML(streak)}
     </section>`;
-  $('againBtn').addEventListener('click', () => { R = null; publishLive(); go('#/today'); });
+  $('againBtn').addEventListener('click', () => { R = null; publishLive(); navGo('#/today'); });
   $('keepBtn')?.addEventListener('click', async () => {
     R = null; publishLive();
     const { startStudy } = await import('./today.js');

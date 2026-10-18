@@ -45,7 +45,7 @@ to the bottom, then `history.replaceState` there.
 
 - `go(hash)`: a tab destination replaces (`toTab`), anything else is one new entry. All former `location.hash = x` sites use it.
   When nothing is in flight it changes the address synchronously, like the old code (some callers compare `location.hash` right after).
-- `up(hash)`: for a Back button with a known parent; if the entry below is that parent it really goes back, so no loop of entries.
+- `up(hash)`: (like `back` and `go`, it runs through the queue) for a Back button with a known parent; if the entry below is that parent it really goes back, so no loop of entries.
 - `back(fallback)`: Import's back button.
 - `replace(hash)`: redirects (the old `location.replace`).
 - `openOverlay(dismiss)` / `closeOverlay(id)`: sheets and dialogs. Opening pushes an entry; Back calls `dismiss`; closing by code
@@ -57,7 +57,12 @@ to the bottom, then `history.replaceState` there.
   browser made it: one more entry, tagged one level deeper. Nothing in the app does that any more, and keeping it simple means a
   reload straight after it behaves. A tab tap afterwards still goes down to the root.
 - Entries whose owner is gone (a sheet closed while something else navigated, a finished session) are "stale": landing on one
-  during Back keeps going, so there is never a Back press that appears to do nothing.
+  during Back keeps going (`unwind` loops past them after every pop nav makes itself), so there is never a Back press that appears to do nothing.
+  A hold released while a sheet is over it (a Review that ends with its card panel open) leaves such an entry; closing the sheet takes both off.
+  Review's finish also closes any open panel or sheet.
+- Overlay ids start from `Date.now()` per load, so an entry left by an earlier load can never match a live overlay.
+- Every `a[href^="#/"]` click goes through `go()`, so a link clicked in the same tick as a sheet closing waits its turn in the queue.
+- Waiting for a history move gives up after 1.5 s; a popstate that still arrives later (within 5 s, at the depth we asked for) is recognised as ours and is not treated as a press of Back.
 - All history changes run one after another (a small queue): `history.back()` is asynchronous, and a push issued before it
   lands would end up in the wrong place (closing one sheet and opening another in the same tick is the common case).
 - If a `hashchange` arrives while nav is moving through history on its own, it is held back and `reconcile()` shows the address afterwards.
@@ -66,7 +71,8 @@ to the bottom, then `history.replaceState` there.
 
 ## Known limits
 
-- A session confirm is a modal sheet. A Play round's clock (Lightning, Survival) keeps running while it is open.
+- The Play clock pauses while "Quit this round?" is open (Classic, Survival and Lightning): the question timer and the Lightning clock stop, an automatic "Next" waits, and on Keep playing (or any other way the question closes) the time spent asking is added back to the question's start. Review has no clock.
+- When Back skips several entries at once (the long-press Back menu, `history.go(-2)`), a held session is let go and the move counts as leaving. Only a single step back onto the address the hold was made on puts the hold's entry back (and asks), which is also the only push nav makes from a popstate (Chrome on Android can mark an entry pushed without a tap as skippable).
 - A sheet left open while a link inside it navigates leaves one dead entry under the new page; Back then passes over it
   (stale-entry rule), costing no extra press.
 - Opening Settings from a drill-down and closing it with the gear goes to that page as a new entry, not back to it.

@@ -384,7 +384,14 @@ function timeUp() {
   document.querySelectorAll('#options .opt').forEach(b => { b.disabled = true; b.classList.add('dim'); });
   updateHud();
   $('feedback').innerHTML = `<div class="fb no"><span class="fb-mark">Time's up</span></div><p class="fb-info">${G.log.filter(l => l.ok).length} right in 60 seconds.</p>`;
-  G.autoTimer = setTimeout(finish, 1100);
+  later(finish, 1100);
+}
+
+// Run fn after ms, unless the round is paused meanwhile (askQuit puts the wait back when you keep playing).
+function later(fn, ms) {
+  clearTimeout(G.autoTimer);
+  G.autoFn = fn; G.autoAt = performance.now() + ms;
+  G.autoTimer = setTimeout(() => { if (G) G.autoFn = null; fn(); }, ms);
 }
 
 function reveal() {
@@ -476,8 +483,8 @@ function answer(choice) {
     btn.outerHTML = acc;
     $('acceptBtn')?.addEventListener('click', async e2 => { e2.currentTarget.disabled = true; if (await acceptTyped(round, fixed)) $('acceptBtn')?.remove(); else $('acceptBtn') && ($('acceptBtn').disabled = false); });
   });
-  if (lightning) G.autoTimer = setTimeout(next, ok ? 280 : 900);
-  else if (ok) G.autoTimer = setTimeout(next, G.over ? 900 : diff ? 1600 : 750);
+  if (lightning) later(next, ok ? 280 : 900);
+  else if (ok) later(next, G.over ? 900 : diff ? 1600 : 750);
   else {
     $('nextBtn').focus({ preventScroll: true });
     // Long answers can push the Next button below the screen, so bring it into view.
@@ -824,6 +831,10 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
 // The back gesture during a round: ask, and keep playing unless they say Quit.
 function askQuit() {
   if (!G || !$('pCard') || document.getElementById('sheet')?.open) return;
+  // The round waits while the question is up: the clock (and a question's timer) stop, and so does an automatic "Next".
+  const round = G, t0 = performance.now();
+  cancelAnimationFrame(round.raf); clearTimeout(round.autoTimer);
+  const wait = round.autoFn ? Math.max(0, round.autoAt - t0) : 0, fn = round.autoFn;
   openSheet(`
     <h2 id="sheetTitle">Quit this round?</h2>
     <p>Your score so far will be lost.</p>
@@ -831,6 +842,14 @@ function askQuit() {
       <button class="btn ghost" type="button" id="keepOn">Keep playing</button>
       <button class="btn primary" type="button" id="quitNow">Quit round</button>
     </div>`);
+  // However the question closes (Keep playing, ×, Back, Esc), the round carries on from where it stopped.
+  $('sheet').addEventListener('close', () => {
+    if (G !== round || !$('pCard')) return;
+    if (!round.answered) {
+      round.qStart += performance.now() - t0;           // the time spent asking doesn't count
+      round.raf = requestAnimationFrame(tick);
+    } else if (fn) later(fn, wait);
+  }, { once: true });
   $('keepOn').addEventListener('click', closeSheet);
   $('quitNow').addEventListener('click', () => { closeSheet(); if (G) { const el = G.el; stopRound(); renderPlay(el); } });
 }

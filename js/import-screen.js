@@ -16,7 +16,7 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
-import { go, replace as navReplace, back as navBack } from './nav.js';
+import { replace as navReplace, back as navBack } from './nav.js';
 import { importWarnings } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.

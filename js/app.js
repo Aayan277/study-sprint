@@ -20,7 +20,7 @@ import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
-import { go, replace as navReplace, initNav, rewrite, releaseBack } from './nav.js';
+import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack } from './nav.js';
 import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
@@ -559,7 +559,7 @@ async function confirmRestore(file) {
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     drawSidebar();
-    go('#/decks');
+    navGo('#/decks');
   });
 }
 
@@ -581,7 +581,7 @@ async function confirmReset() {
     closeSheet();
     toast('All data reset');
     drawSidebar();
-    go('#/decks');
+    navGo('#/decks');
   });
 }
 
@@ -610,7 +610,7 @@ function confirmResetSynced() {
     closeSheet();
     toast('Everything deleted on all your devices');
     drawSidebar();
-    go('#/decks');
+    navGo('#/decks');
   });
   $('rsHere').addEventListener('click', async () => {
     await sync.signOut({ forget: true });
@@ -618,7 +618,7 @@ function confirmResetSynced() {
     closeSheet();
     toast('This device was reset and signed out');
     drawSidebar();
-    go('#/decks');
+    navGo('#/decks');
   });
 }
 
@@ -841,7 +841,7 @@ async function confirmSignOut() {
     closeSheet();
     toast('Signed out and removed from this device');
     drawSidebar();
-    go('#/decks');
+    navGo('#/decks');
   });
   // Send anything waiting first, so signing out loses nothing.
   await sync.syncNow();
@@ -1121,7 +1121,7 @@ function wireGear() {
     if (!e.target.closest('a[data-tab="settings"]') || e.defaultPrevented) return;
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
     e.preventDefault();
-    go(beforeSettings || '#/today');                    // back to the screen you opened Settings from (or home)
+    navGo(beforeSettings || '#/today');                    // back to the screen you opened Settings from (or home)
   });
 }
 
