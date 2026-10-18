@@ -14,11 +14,22 @@ export function esc(s) {
 // appears and fills in one step is often skipped, so it is cleared first and filled on the next tick. The visible toast is not
 // a live region itself (it comes and goes, and its Undo link must stay a normal link: it is the last stop in the tab order).
 let liveTimer = 0;
+// A modal dialog (showModal) makes everything outside it inert, and that includes the live region, so while one is open the
+// region moves inside it; it goes back to <body> when the dialog closes (or at the next toast, if the dialog was removed).
+let liveEl = null;
 function announceToast(msg) {
-  const live = document.getElementById('toastLive');
+  liveEl = liveEl || document.getElementById('toastLive');
+  const live = liveEl;
   if (!live) return;
-  live.textContent = '';
   clearTimeout(liveTimer);
+  live.textContent = '';
+  const modals = document.querySelectorAll('dialog:modal');
+  const host = modals[modals.length - 1] || document.body;
+  if (live.parentNode !== host) {
+    host.append(live);
+    if (host !== document.body) host.addEventListener('close', () => { if (live.parentNode === host) document.body.append(live); }, { once: true });
+  }
+  if (!msg) return;
   liveTimer = setTimeout(() => { live.textContent = msg; }, 60);
 }
 
@@ -27,21 +38,26 @@ let toastTimer = 0, toastLeave = null;      // toastLeave: the hashchange listen
 // `link` ({ href, label, onClick }) adds a link after the message and keeps the toast up longer, so it can be tapped.
 // With onClick the link does that instead of going to href, and the toast closes.
 // `hold` keeps the toast up until you leave the screen (or 10 minutes, or the next toast): for an Undo.
+// Hiding the toast also empties the live region, so it never keeps (or re-reads) a message that is no longer on screen.
+function hideToast() {
+  $('toast').hidden = true;
+  announceToast('');
+}
 export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   const t = $('toast');
   if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one
   t.textContent = msg;
-  announceToast(msg);
+  announceToast(link ? `${msg} ${link.label}` : msg);
   if (link) {
     const a = document.createElement('a');
     a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
-    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); t.hidden = true; clearTimeout(toastTimer); link.onClick(); });
+    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); clearTimeout(toastTimer); hideToast(); link.onClick(); });
     t.append(' ', a);
   }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, hold ? 600000 : ms || (link ? 7000 : 2600));
-  if (hold) { toastLeave = () => { t.hidden = true; toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
+  toastTimer = setTimeout(hideToast, hold ? 600000 : ms || (link ? 7000 : 2600));
+  if (hold) { toastLeave = () => { hideToast(); toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones

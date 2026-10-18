@@ -25,6 +25,28 @@ ok(page.url() === deckUrl, 'gear closes settings and returns to the deck page');
   ok(p2.url().endsWith('#/today'), 'gear from a direct settings link goes to Today'); await p2.close(); }
 await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
 
+// The toast live region: it says the Undo label too, it follows a modal sheet (a modal makes the rest of the page inert, so a region
+// left in <body> would be silent), it goes home when the sheet closes, and it is emptied when the toast hides.
+{
+  const say = (msg, opts) => page.evaluate(async ([m, o]) => { (await import('./js/ui.js')).toast(m, o); }, [msg, opts]);
+  const live = () => page.evaluate(() => { const e = document.getElementById('toastLive'); return { text: e.textContent, inDialog: !!e.closest('dialog:modal'), inert: !!e.closest('[inert]'), parent: e.parentElement.tagName }; });
+  await say('Card moved', { link: { href: '#/decks', label: 'Undo' } }); await page.waitForTimeout(150);
+  ok((await live()).text === 'Card moved Undo' && (await live()).parent === 'BODY', 'the live region reads the message and the Undo label: ' + (await live()).text);
+  await page.click('.deck-open'); await page.waitForSelector('.crow'); await page.locator('.crow').first().click(); await page.waitForSelector('#sheet:modal');
+  await say('Saved while the sheet is open'); await page.waitForTimeout(150);
+  const inSheet = await live();
+  ok(inSheet.inDialog && !inSheet.inert && inSheet.text === 'Saved while the sheet is open', 'with #sheet open the live region sits inside it, outside the inert part, and holds the text: ' + JSON.stringify(inSheet));
+  ok(await page.evaluate(() => !!document.querySelector('#sheet #toastLive')), 'the region is a child of #sheet');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('#sheet')?.open);
+  await page.waitForFunction(() => document.getElementById('toastLive').parentElement === document.body);
+  ok(true, 'the region moves back to <body> when the sheet closes');
+  await say('After the sheet'); await page.waitForTimeout(150);
+  ok((await live()).text === 'After the sheet' && (await live()).parent === 'BODY', 'and it still announces afterwards');
+  await page.waitForFunction(() => document.getElementById('toast').hidden, null, { timeout: 5000 });
+  ok((await live()).text === '', 'the region is emptied when the toast hides');
+  await page.goBack().catch(() => {}); await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+}
+
 // review setup
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
 ok((await page.textContent('#startBtn')).includes('12 cards'), 'setup: 12 new cards from the sample deck');

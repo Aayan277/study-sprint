@@ -493,7 +493,8 @@ function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
   const peak = rows.reduce((best, r, i) => (value(r) > value(rows[best]) ? i : best), 0);
   const ticks = Number.isInteger(max / 2) ? [max, max / 2, 0] : [max, 0];   // counts are whole numbers, so no "2.5" line
   return `
-    <div class="chart" id="${id}" role="group" aria-label="${esc(label)}">
+    <div class="chart" id="${id}" role="group" aria-label="${esc(label)}" aria-describedby="${id}-hint">
+      <span class="sr-only" id="${id}-hint">Use the arrow keys to move between bars</span>
       <div class="chart-plot">
         ${ticks.map(t => `<div class="chart-line" style="bottom:${(t / max) * 100}%"><span class="mono">${t.toLocaleString()}</span></div>`).join('')}
         <div class="chart-cols">${rows.map((r, i) => {
@@ -504,7 +505,7 @@ function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
         }).join('')}</div>
       </div>
       <div class="chart-x" aria-hidden="true">${rows.map((r, i) => `<span>${esc(x(r, i, rows))}</span>`).join('')}</div>
-      <div class="chart-tip" role="status" hidden><b></b><span></span></div>
+      <div class="chart-tip" aria-hidden="true" hidden><b></b><span></span></div>
     </div>
     <details class="chart-table"><summary>Show as table</summary>
       <table><thead><tr>${tableHead.map(h => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead>

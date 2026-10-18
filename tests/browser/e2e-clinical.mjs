@@ -454,6 +454,28 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920,
   await ctx.close();
 }
 
+// Clinical dark: white text on a hovered primary button (--accent-hover) is at least 4.5:1 in all five skins.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage(); watch(p, 'hover');
+  await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
+  const r = await p.evaluate(() => {
+    const root = document.documentElement, keep = ['data-ui', 'data-skin', 'data-theme'].map(a => [a, root.getAttribute(a)]), out = {};
+    const cv = document.createElement('canvas'); cv.width = cv.height = 1; const g = cv.getContext('2d', { willReadFrequently: true });
+    const lum = c => { const [r, gr, b] = c.map(v => v / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * r + .7152 * gr + .0722 * b; };
+    root.setAttribute('data-ui', 'clinical'); root.setAttribute('data-theme', 'dark');
+    for (const skin of ['violet', 'ocean', 'forest', 'ember', 'rose']) {
+      root.setAttribute('data-skin', skin);
+      const s = document.createElement('i'); s.style.color = 'var(--accent-hover)'; document.body.append(s); const col = getComputedStyle(s).color; s.remove();
+      g.clearRect(0, 0, 1, 1); g.fillStyle = '#000'; g.fillStyle = col; g.fillRect(0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data;
+      out[skin] = +(1.05 / (lum([d[0], d[1], d[2]]) + .05)).toFixed(2);
+    }
+    for (const [a, v] of keep) if (v === null) root.removeAttribute(a); else root.setAttribute(a, v);
+    return out;
+  });
+  ok(Object.values(r).every(v => v >= 4.5), 'Clinical dark: white on the hovered primary button is 4.5:1 or more in every skin: ' + JSON.stringify(r));
+  await ctx.close();
+}
+
 console.log(`info: the contrast audit left out ${skippedText} text nodes that are hidden from users (aria-hidden, disabled, KaTeX); all other visible text was measured, faded text included`);
 ok(!errors.length, 'no console errors on any screen' + (errors.length ? ': ' + [...new Set(errors)].slice(0, 5).join(' | ') : ''));
 await browser.close();
