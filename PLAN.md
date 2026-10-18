@@ -344,7 +344,7 @@ Where things stand, for the next session. Every item below is on main; the versi
 2. Ideas 6 and 7 from `docs/design/student-research.md` (listening cloze, reading to cards), which the owner said to do later.
 3. The backend backlog below, highest first. The owner said to build only the important ones for now.
 
-**How to work here:** see `CLAUDE.md` (owner's preferences, release steps, test rules).
+**How to work here:** `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
 ## Backend backlog (from the audit, not built in v4.21; effort S = under half a day, M = a day or two)
 
