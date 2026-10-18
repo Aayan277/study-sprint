@@ -340,7 +340,8 @@ Where things stand, for the next session. Every item below is on main; the versi
 2. Checks only a real device can do: Back, Back, Back in Review and Play on an Android phone (Chrome can skip history entries added without a tap); sounds on an iPhone; an exported occlusion or sound deck opened in real Anki; the captcha frame against real Turnstile.
 
 **Next work, in order:**
-1. **Real-data FSRS check** (a new session with `HF_TOKEN`; the owner has access to HuggingFace `open-spaced-repetition/anki-revlogs-10k`). Sample 100-300 users; compare FSRS-6 default, our tuned FSRS-6 (`js/fsrs-fit.js`) and FSRS-7 default on held-out log loss and RMSE; keep the data out of the repo. Plan: `docs/design/fsrs-research.md`. Only after this decide whether FSRS-7 should become the default.
+1. ~~Real-data FSRS check~~ **Done (18 Oct 2026):** `docs/design/fsrs-realdata.md`. Keep FSRS-6 as the default; our FSRS-6 optimizer matches the official one; tuned FSRS-7 beats it, FSRS-7 with default weights does not. Harness: `tests/realdata/`.
+   - **Later: FSRS-7 optimizer**, then make FSRS-7 the default. Start once ts-fsrs 6.0 is out of beta. Plan: `docs/design/fsrs7-optimizer-plan.md`.
 2. Ideas 6 and 7 from `docs/design/student-research.md` (listening cloze, reading to cards), which the owner said to do later.
 3. The backend backlog below, highest first. The owner said to build only the important ones for now.
 
