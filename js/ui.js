@@ -17,20 +17,26 @@ let liveTimer = 0;
 // A modal dialog (showModal) makes everything outside it inert, and that includes the live region, so while one is open the
 // region moves inside it; it goes back to <body> when the dialog closes (or at the next toast, if the dialog was removed).
 let liveEl = null;
-function announceToast(msg) {
+// Puts the region in the topmost modal dialog if there is one, else in <body>. Called when a toast is announced, again just before
+// its text goes in (a sheet may have opened or closed in between), and whenever any dialog closes. A region whose dialog was
+// removed from the page is still held here, so it is simply attached again.
+function placeLive() {
   liveEl = liveEl || document.getElementById('toastLive');
   const live = liveEl;
-  if (!live) return;
-  clearTimeout(liveTimer);
-  live.textContent = '';
+  if (!live) return null;
   const modals = document.querySelectorAll('dialog:modal');
   const host = modals[modals.length - 1] || document.body;
-  if (live.parentNode !== host) {
-    host.append(live);
-    if (host !== document.body) host.addEventListener('close', () => { if (live.parentNode === host) document.body.append(live); }, { once: true });
-  }
+  if (live.parentNode !== host || !live.isConnected) host.append(live);
+  return live;
+}
+if (typeof document !== 'undefined') document.addEventListener('close', placeLive, true);      // 'close' does not bubble; the capture phase still sees every dialog's
+function announceToast(msg) {
+  clearTimeout(liveTimer);
+  const live = placeLive();
+  if (!live) return;
+  live.textContent = '';
   if (!msg) return;
-  liveTimer = setTimeout(() => { live.textContent = msg; }, 60);
+  liveTimer = setTimeout(() => { placeLive().textContent = msg; }, 60);
 }
 
 // A short message that pops up above the tab bar for a few seconds.
@@ -190,7 +196,8 @@ export function openSheet(html, { side = false } = {}) {
   const body = document.createElement('div');
   body.className = 'sheet-in';
   body.appendChild(t.content);
-  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []));
+  const live = d.querySelector('#toastLive');      // the toast's live region may be in here: re-drawing the sheet must not throw it away
+  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []), ...(live ? [live] : []));
   d.setAttribute('aria-labelledby', 'sheetTitle');
   d.querySelector('.sheet-x').addEventListener('click', closeSheet);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }

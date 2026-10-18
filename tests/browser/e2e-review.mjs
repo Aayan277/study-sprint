@@ -42,6 +42,15 @@ await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
   ok(true, 'the region moves back to <body> when the sheet closes');
   await say('After the sheet'); await page.waitForTimeout(150);
   ok((await live()).text === 'After the sheet' && (await live()).parent === 'BODY', 'and it still announces afterwards');
+  // a toast, then a sheet opens before the 60 ms are up: the text still lands in a region that is on the page, and inside the sheet
+  await say('Just before a sheet'); await page.evaluate(async () => { (await import('./js/ui.js')).openSheet('<h2 id="sheetTitle">T</h2><p>x</p>'); });
+  await page.waitForTimeout(200);
+  const mid = await live();
+  ok(await page.evaluate(() => document.getElementById('toastLive').isConnected) && mid.text === 'Just before a sheet' && mid.inDialog, 'a toast followed at once by a sheet: the text is in a connected region inside the sheet: ' + JSON.stringify(mid));
+  await page.evaluate(async () => { (await import('./js/ui.js')).openSheet('<h2 id="sheetTitle">Again</h2><p>y</p>'); });      // drawing the sheet again keeps the region
+  ok(await page.evaluate(() => !!document.querySelector('#sheet #toastLive')), 're-drawing the open sheet keeps the live region');
+  await page.evaluate(async () => { (await import('./js/ui.js')).closeSheet(); });
+  await page.waitForFunction(() => document.getElementById('toastLive').parentElement === document.body);
   await page.waitForFunction(() => document.getElementById('toast').hidden, null, { timeout: 5000 });
   ok((await live()).text === '', 'the region is emptied when the toast hides');
   await page.goBack().catch(() => {}); await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');

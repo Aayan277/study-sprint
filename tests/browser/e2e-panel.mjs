@@ -159,6 +159,7 @@ await p.locator(`.crow[data-id="${src.id}"]`).click(); await p.waitForSelector('
 ok(await p.isVisible('#sheet [data-act=duplicate]'), 'the card panel has Duplicate');
 await p.click('#sheet [data-act=duplicate]');
 await p.waitForFunction(n => document.querySelectorAll('.crow').length === n, total0 + 1);
+await p.waitForFunction(() => /^Duplicated\. Editing the copy\./.test(document.querySelector('#toast').textContent) && !document.querySelector('#toast').hidden);
 ok((await p.textContent('#toast')).startsWith('Duplicated. Editing the copy.') && (await p.locator('#toast .toast-link').textContent()) === 'Undo', 'toast says "Duplicated. Editing the copy." with Undo');
 let all = await cards(p);
 const copy = all.find(c => c.id !== src.id && c.front === src.front && c.back === src.back);

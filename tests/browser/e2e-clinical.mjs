@@ -472,6 +472,21 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920,
     for (const [a, v] of keep) if (v === null) root.removeAttribute(a); else root.setAttribute(a, v);
     return out;
   });
+  const heat = await p.evaluate(() => {
+    const root = document.documentElement, keep = ['data-ui', 'data-skin', 'data-theme'].map(a => [a, root.getAttribute(a)]), out = {};
+    const cv = document.createElement('canvas'); cv.width = cv.height = 1; const g = cv.getContext('2d', { willReadFrequently: true });
+    const rgb = v => { const s = document.createElement('i'); s.style.color = `var(${v})`; document.body.append(s); const col = getComputedStyle(s).color; s.remove(); g.clearRect(0, 0, 1, 1); g.fillStyle = '#000'; g.fillStyle = col; g.fillRect(0, 0, 1, 1); return [...g.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+    const lum = c => { const [r, gr, b] = c.map(v => v / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * r + .7152 * gr + .0722 * b; };
+    root.setAttribute('data-ui', 'clinical'); root.setAttribute('data-theme', 'dark');
+    for (const skin of ['violet', 'ocean', 'forest', 'ember', 'rose']) {
+      root.setAttribute('data-skin', skin);
+      const a = lum(rgb('--heat-3')), b = lum(rgb('--heat-4'));
+      out[skin] = +((Math.max(a, b) + .05) / (Math.min(a, b) + .05)).toFixed(2);
+    }
+    for (const [a, v] of keep) if (v === null) root.removeAttribute(a); else root.setAttribute(a, v);
+    return out;
+  });
+  ok(Object.values(heat).every(v => v >= 1.4), 'Clinical dark: the heatmap top step stands apart from the one below it in every skin (contrast): ' + JSON.stringify(heat));
   ok(Object.values(r).every(v => v >= 4.5), 'Clinical dark: white on the hovered primary button is 4.5:1 or more in every skin: ' + JSON.stringify(r));
   await ctx.close();
 }

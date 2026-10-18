@@ -292,6 +292,8 @@
 :root[data-ui="clinical"][data-theme="dark"][data-skin="forest"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="forest"]{--accent:#3A8454; --accent-text:#8AD6A5; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:58 132 84}
 :root[data-ui="clinical"][data-theme="dark"][data-skin="ember"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ember"] {--accent:#B75D27; --accent-text:#E8A683; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:183 93 39}
 :root[data-ui="clinical"][data-theme="dark"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="rose"]  {--accent:#B45689; --accent-text:#E29EC0; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:180 86 137}
+/* The heatmap's top step used to be the hover tone; that is now darker than the step below it, so it is a lighter mix instead */
+:root[data-ui="clinical"][data-theme="dark"]{--heat-4:color-mix(in srgb,var(--accent) 88%,white)}
 
 /* ======================================================================
    4. Style-specific

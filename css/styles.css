@@ -284,10 +284,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 @media (forced-colors:active){
   .field input:focus,.field select:focus,.field textarea:focus,.br-controls input:focus,.br-controls select:focus,.row-form input:focus,
   #pasteBox:focus,.typeform input:focus,.rich:focus,.adv-row input:focus,.pcells textarea:focus,.switch.switch:focus-visible{outline:2px solid Highlight;outline-offset:2px}
-  /* an on switch must differ from an off one without colour fills: the knob and track swap system colours */
-  .switch::after{background:CanvasText}
-  .switch:checked{background:Highlight}
-  .switch:checked::after{background:HighlightText}
 }
 .field{display:grid;gap:6px}
 .field > span{font-size:var(--fs-xs);font-weight:500;color:var(--text-2)}
@@ -1173,6 +1169,15 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .switch:checked{background:var(--accent);border-color:var(--accent);box-shadow:0 0 12px -2px var(--glow)}
 .switch:checked::after{transform:translateX(20px);background:var(--on-accent)}
 .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* High-contrast mode: an on switch must differ from an off one. This sits after the rules above on purpose (same specificity, later wins),
+   and forced-color-adjust:none keeps the browser from repainting the track and knob itself. */
+@media (forced-colors:active){
+  .switch,.switch::after{forced-color-adjust:none}
+  .switch{background:Canvas;border-color:CanvasText}
+  .switch::after{background:CanvasText}
+  .switch:checked{background:Highlight;border-color:Highlight}
+  .switch:checked::after{background:HighlightText}
+}
 .advanced #schedReset{margin-top:12px}
 .opt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2) var(--s-3)}
 .opt-row .confirm{margin-top:4px}
