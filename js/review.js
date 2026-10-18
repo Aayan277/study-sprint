@@ -29,6 +29,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
+import { refreshBadge } from './badge.js';
 import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav.js';
@@ -788,6 +789,7 @@ async function finish(el) {
   publishLive();
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   if (el.isConnected) drawSidebar();            // the sidebar's counts and ring, now the round is done
+  refreshBadge();                               // and the number on the app icon (badge.js)
   const { reviewed, again, spent } = R.stats;
   const cardsDone = R.answered.size;          // distinct cards: a card answered twice (Again, then Good) is one card, two answers
   const endedEarly = !!R.current;

@@ -227,6 +227,7 @@
 :root[data-ui="clinical"] :is(.fr-next,.wl-opt.fr-first){background:var(--surface-1)}
 :root[data-ui="clinical"] .wl-bar i.on,:root[data-ui="clinical"] .wl-done{box-shadow:none}
 :root[data-ui="clinical"] .inst-icon{box-shadow:0 0 0 1px var(--line-strong)}
+:root[data-ui="clinical"] .remind-icon{border-radius:var(--r-md)}
 
 /* ======================================================================
    2. Neutral tokens per style and mode

@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS = {
   restDays: {},      // days off for the streak: { 'YYYY-MM-DD': { on, at } }, merged per day when syncing (sync-merge.js)
   rescue: null,      // catch-up plan after a break: { start, days, backlog, pauseNew, at } (queue.js rescueToday). Synced, newest wins; Today clears it when it is over
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
+  appBadge: false,       // Settings → Study → Reminders: show the due count on the app icon (badge.js). This device only
+  reminderTime: '19:00', // the time last used for the daily calendar reminder (reminders.js). This device only
   seeded: false,     // true once the sample deck has been added on first open
   onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped (kept in backups)
 };
@@ -715,8 +717,9 @@ export async function deleteEverything() {
 //   lastBackup  when this device last saved a backup file (it never synced). Listed here so it stays out of backup files and a restore leaves this device's own date alone
 //   mediaRefs  { userId, ids }: the files cards used at the last sweep, so a card deleted before this device held its picture still gets that file marked (media-sweep.js droppedRefs)
 //   keepAllMedia  "Keep all pictures and sounds on this device" (Settings → Sync): sync downloads every file, not only what is needed soon (lazy-media.js)
+//   appBadge, reminderTime, reminderUid  "Cards due on the app icon" and the daily reminder's time (Settings → Study → Reminders): a badge and a calendar belong to one device (badge.js, reminders.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'lastBackup', 'keepAllMedia', 'mediaRefs'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'lastBackup', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 

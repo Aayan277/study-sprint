@@ -73,9 +73,9 @@ await p.context().close();
 p = await open(browser);
 await p.goto(URL); await p.waitForSelector('.today-hero');
 await fireInstallEvent(p); await p.waitForTimeout(150);
-ok(await p.locator('.inst').count() === 0, 'install card: not on first paint, even when the browser says the app can be installed');
+ok(await p.locator('.inst:not(.remind)').count() === 0, 'install card: not on first paint, even when the browser says the app can be installed');
 await finishSession(p);
-ok(await p.locator('.inst').isVisible() && (await p.textContent('.inst')).includes('Install Study Sprint'), 'install card: shows on Today after the first finished Review session');
+ok(await p.locator('.inst:not(.remind)').isVisible() && (await p.textContent('.inst')).includes('Install Study Sprint'), 'install card: shows on Today after the first finished Review session');
 ok(await p.locator('.inst [data-inst=go]').isVisible() && (await p.textContent('.inst')).includes('Not now'), 'install card: Install and Not now');
 ok((await p.getAttribute('.inst-icon', 'src')) === 'icons/icon-192.png', 'install card: uses the app icon');
 // the settings row
@@ -92,21 +92,21 @@ await p.goto(URL); await p.waitForSelector('.today-hero'); await fireInstallEven
 await finishSession(p);
 await p.waitForSelector('.inst');
 await p.click('.inst [data-inst=no] >> nth=0');
-ok(await p.locator('.inst').count() === 0, 'install card: Not now closes it');
+ok(await p.locator('.inst:not(.remind)').count() === 0, 'install card: Not now closes it');
 await p.reload(); await p.waitForSelector('.today-hero'); await fireInstallEvent(p); await p.waitForTimeout(200);
-ok(await p.locator('.inst').count() === 0 && await p.evaluate(() => localStorage.getItem('study-sprint-install-dismissed')) === '1', 'install card: stays closed after a reload (remembered on this device)');
+ok(await p.locator('.inst:not(.remind)').count() === 0 && await p.evaluate(() => localStorage.getItem('study-sprint-install-dismissed')) === '1', 'install card: stays closed after a reload (remembered on this device)');
 await p.context().close();
 // Install button
 p = await open(browser);
 await p.goto(URL); await p.waitForSelector('.today-hero'); await fireInstallEvent(p);
 await finishSession(p); await p.waitForSelector('.inst');
 await p.click('.inst [data-inst=go]'); await p.waitForTimeout(200);
-ok(await p.evaluate(() => window.__prompted) === 1 && await p.locator('.inst').count() === 0, 'install card: Install starts the browser install and closes the card');
+ok(await p.evaluate(() => window.__prompted) === 1 && await p.locator('.inst:not(.remind)').count() === 0, 'install card: Install starts the browser install and closes the card');
 await p.context().close();
 // iPhone Safari: the steps
 p = await open(browser, { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1' });
 await p.goto(URL); await p.waitForSelector('.today-hero');
-ok(await p.locator('.inst').count() === 0, 'iOS: no card on first paint');
+ok(await p.locator('.inst:not(.remind)').count() === 0, 'iOS: no card on first paint');
 await finishSession(p); await p.waitForSelector('.inst');
 const ios = await p.textContent('.inst');
 ok(/Add to Home Screen/.test(ios) && /Share/.test(ios) && await p.locator('.inst .inst-share svg').count() === 1 && await p.locator('.inst [data-inst=go]').count() === 0, 'iOS Safari: "Add to Home Screen" steps with the Share icon, no Install button');
@@ -114,7 +114,7 @@ await p.context().close();
 // iPhone Chrome: nothing to offer
 p = await open(browser, { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/124.0 Mobile/15E148 Safari/604.1' });
 await p.goto(URL); await p.waitForSelector('.today-hero'); await finishSession(p);
-ok(await p.locator('.inst').count() === 0, 'iOS Chrome: no card (only Safari can add to the Home Screen)');
+ok(await p.locator('.inst:not(.remind)').count() === 0, 'iOS Chrome: no card (only Safari can add to the Home Screen)');
 await p.context().close();
 // already installed: hidden, in both ways the browser says so
 for (const [how, init] of [['navigator.standalone', () => Object.defineProperty(navigator, 'standalone', { value: true })],
@@ -122,7 +122,7 @@ for (const [how, init] of [['navigator.standalone', () => Object.defineProperty(
   p = await open(browser, { init });
   await p.goto(URL); await p.waitForSelector('.today-hero'); await fireInstallEvent(p);
   await finishSession(p); await p.waitForTimeout(200);
-  ok(await p.locator('.inst').count() === 0, 'installed (' + how + '): no install card');
+  ok(await p.locator('.inst:not(.remind)').count() === 0, 'installed (' + how + '): no install card');
   await p.click('#gearBtn'); await p.waitForSelector('#installRow');
   ok(/installed app/.test(await p.textContent('#installRow')) && await p.locator('#installBtn').count() === 0, 'installed (' + how + '): Settings says so, with no Install button');
   await p.context().close();

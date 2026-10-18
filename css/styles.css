@@ -662,6 +662,13 @@ main[data-route="import"] > .view > .savebar{order:5}
 .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .drop .mono{font-size:var(--fs-sm);color:var(--accent-text);overflow-wrap:anywhere}
 .row-form{display:flex;gap:var(--s-2)}
+.doc-box{margin-top:var(--s-3)}
+.doc-box .btn{min-height:44px}
+.doc-h{margin:var(--s-4) 0 0;font-size:var(--fs-md)}
+.doc-parts{list-style:none;margin:var(--s-2) 0 0;padding:0;display:grid;gap:var(--s-2)}
+.doc-parts li{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.doc-parts li>span{min-width:0;display:flex;flex-direction:column;font-size:var(--fs-sm)}
+.doc-parts .muted{font-size:var(--fs-sm)}
 .row-form input{flex:1;min-width:0;font-size:var(--fs-md);padding:10px 12px}
 #claudeBtn{background:linear-gradient(90deg,var(--accent-tint),rgb(var(--acc) / .06));border-color:var(--accent-line);color:var(--text);box-shadow:0 0 20px -8px var(--glow)}
 #claudeBtn::before{content:"";width:15px;height:15px;background:var(--accent);
@@ -1741,6 +1748,17 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .inst-btns .ico{width:16px;height:16px}
 .inst-x{position:absolute;top:8px;right:8px;width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:50%;background:none;color:var(--text-3);cursor:pointer}
 .inst-x .ico{width:16px;height:16px}
+/* "Remind me to study?" card on Today and the Reminders rows in Settings (js/reminders.js) */
+.remind-icon{width:48px;height:48px;border-radius:12px;flex:none;display:grid;place-items:center;background:var(--accent-tint);color:var(--accent-text)}
+.remind-icon .ico{width:24px;height:24px}
+.remind .inst-btns{flex-wrap:wrap;align-items:center}
+.remind-pick{display:flex;margin-top:10px}
+@media (max-width:480px){.remind-icon{display:none}.remind{padding-left:16px}}
+.remind-time{font:600 var(--fs-md) var(--f-num);color:var(--text);padding:8px 10px;min-height:36px;border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color-scheme:inherit}
+.remind-time:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+.rem-actions{flex-wrap:wrap;align-items:center}
+.rem-actions .ico{width:16px;height:16px}
+#examAdd .ico{width:16px;height:16px}
 
 /* ---------- 20. Image occlusion (js/occlusion.js draws it, js/occlusion-view.js zooms it) ----------
    A picture with boxes over the parts to learn. The box (.occ) has the picture's own shape (aspect-ratio, set inline),

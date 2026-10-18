@@ -9,12 +9,12 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v109';
-// files-hash: 91d12f8bcb637a83
+const CACHE = 'study-sprint-v110';
+// files-hash: 83538de3c2ddf1b6
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'css/clinical.css',
-  'js/app.js', 'js/note-fields.js', 'js/reverse.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/fsrs-data.js', 'js/fsrs-fit.js', 'js/fit-health.js', 'js/health-sheet.js', 'js/retention-sim.js', 'js/retention-sheet.js', 'js/worker-job.js', 'js/fsrs7-model.js', 'js/fsrs7-sched.js', 'js/srs7.js', 'js/fsrs-optimize-worker.js', 'js/optimize-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/panel-resize.js', 'js/audio.js', 'js/audio-type.js', 'js/backup-nudge.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js', 'js/tag-tree.js', 'js/tag-study-sheet.js', 'js/postpone.js', 'js/postpone-sheet.js', 'js/accept.js', 'js/glossary.js', 'js/glossary-view.js', 'js/glossary-sheet.js', 'js/glossary-list.js',
-  'js/fx.js', 'js/captcha.js', 'js/captcha-frame.html', 'js/quota.js', 'js/sync-push.js', 'js/sync-quota.js', 'js/media-sweep.js', 'js/lazy-media.js', 'js/play.js', 'js/queue.js', 'js/review.js', 'js/today.js', 'js/study-data.js', 'js/onboarding.js', 'js/install.js', 'js/sample.js', 'js/sched-settings.js', 'js/srs.js', 'js/stats.js', 'js/stats-calc.js', 'js/streak-sheet.js', 'js/rescue-sheet.js', 'js/empty-state.js', 'js/finish-extras.js', 'js/themes.js', 'js/ui.js', 'js/nav.js', 'js/compare-sheet.js', 'js/leech-coach.js', 'js/leech-logic.js',
+  'js/app.js', 'js/note-fields.js', 'js/reverse.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/fsrs-data.js', 'js/fsrs-fit.js', 'js/fit-health.js', 'js/health-sheet.js', 'js/retention-sim.js', 'js/retention-sheet.js', 'js/worker-job.js', 'js/fsrs7-model.js', 'js/fsrs7-sched.js', 'js/srs7.js', 'js/fsrs-optimize-worker.js', 'js/optimize-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/panel-resize.js', 'js/audio.js', 'js/audio-type.js', 'js/backup-nudge.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/doc-import.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js', 'js/tag-tree.js', 'js/tag-study-sheet.js', 'js/postpone.js', 'js/postpone-sheet.js', 'js/accept.js', 'js/glossary.js', 'js/glossary-view.js', 'js/glossary-sheet.js', 'js/glossary-list.js',
+  'js/fx.js', 'js/captcha.js', 'js/captcha-frame.html', 'js/quota.js', 'js/sync-push.js', 'js/sync-quota.js', 'js/media-sweep.js', 'js/lazy-media.js', 'js/play.js', 'js/queue.js', 'js/review.js', 'js/today.js', 'js/study-data.js', 'js/onboarding.js', 'js/install.js', 'js/reminders.js', 'js/badge.js', 'js/badge-logic.js', 'js/ics.js', 'js/sample.js', 'js/sched-settings.js', 'js/srs.js', 'js/stats.js', 'js/stats-calc.js', 'js/streak-sheet.js', 'js/rescue-sheet.js', 'js/empty-state.js', 'js/finish-extras.js', 'js/themes.js', 'js/ui.js', 'js/nav.js', 'js/compare-sheet.js', 'js/leech-coach.js', 'js/leech-logic.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/icon-monochrome-512.png', 'icons/icon.svg', 'icons/favicon.svg', 'icons/apple-touch-icon.png'
 ];
 // The scheduling library, saved at install so reviews work offline from the first launch.
@@ -26,9 +26,13 @@ const PRELOAD = ['https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs'];
 const KATEX_BASE = 'https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/';
 const PINNED = [
   ...PRELOAD, KATEX_BASE,
-  'https://cdn.jsdelivr.net/npm/fflate@0.8.2/', 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/', 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/',
+  'https://cdn.jsdelivr.net/npm/fflate@0.8.2/', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/', 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/', 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/',
   'https://cdn.sheetjs.com/xlsx-0.20.3/'
 ];
+// What was shared to the app (Android's Share menu) waits here for a moment, between the worker and the Add cards screen. Not a copy of
+// any app file, so it is kept when the app updates (see activate) and emptied when the cards are saved, or replaced by the next share.
+const SHARE_CACHE = 'study-sprint-share';
+const MAX_SHARE_BYTES = 50 * 1024 * 1024;      // as the Add cards screen's limit for a file
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const CACHE_FIRST_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'cdn.sheetjs.com'];
 
@@ -67,13 +71,35 @@ async function keepLibraries(into) {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== SHARE_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
+// Share → Study Sprint: Android sends the shared file or text as a form (POST). It is kept in SHARE_CACHE (the first file, and the
+// text/link as a small JSON note) and the person is sent on to the Add cards screen (a 303 turns the POST into a GET), which reads it.
+// Anything unexpected still ends on that screen, just without the shared content, so a share never lands on an error page.
+async function takeShare(req) {
+  try {
+    const form = await req.formData();
+    const c = await caches.open(SHARE_CACHE);
+    for (const k of await c.keys()) await c.delete(k);
+    const at = Date.now();                    // the screen ignores a share older than 10 minutes
+    const file = form.getAll('files').find(f => typeof f === 'object' && f && typeof f.name === 'string' && f.size > 0);
+    const note = body => c.put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify({ at, ...body }), { headers: { 'content-type': 'application/json' } }));
+    if (file && file.size > MAX_SHARE_BYTES) await note({ tooBig: file.name });                   // not kept: the screen says it is too big
+    else if (file) await c.put(new URL('share-target/file', self.registration.scope), new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name), 'x-at': String(at) } }));
+    else await note({ title: String(form.get('title') || ''), text: String(form.get('text') || ''), url: String(form.get('url') || '') });
+  } catch {
+    // The form couldn't be read or kept (storage full…): the screen says so instead of showing nothing.
+    try { await (await caches.open(SHARE_CACHE)).put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify({ at: Date.now(), failed: true }), { headers: { 'content-type': 'application/json' } })); } catch { /* the screen opens without it */ }
+  }
+  return Response.redirect(new URL('./#/import/share', self.registration.scope).href, 303);
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
+  if (req.method === 'POST' && new URL(req.url).href === new URL('share-target', self.registration.scope).href) { e.respondWith(takeShare(req)); return; }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const save = res => {

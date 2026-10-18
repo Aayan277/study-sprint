@@ -31,6 +31,7 @@ import { imgHTML, warmCards } from './media.js';
 import { soundsHTML, stopSound } from './audio.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
+import { refreshBadge } from './badge.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { holdBack, releaseBack } from './nav.js';
 import { $, esc, plural, toast, onControl, setFocusMode, openSheet, closeSheet, icon, foldOpen, saveFold } from './ui.js';
@@ -721,6 +722,7 @@ async function finish() {
   releaseBack('session');
   setFocusMode(false);
   drawSidebar();          // the sidebar's counts and ring, now the round is done
+  refreshBadge();         // and the number on the app icon (badge.js)
   let isBest = false, firstScore = false;
   if (!round.drill && round.log.length) {
     const settings = await db.getSettings();
