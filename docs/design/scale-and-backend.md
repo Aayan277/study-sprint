@@ -43,16 +43,16 @@ A text-only account could hold about 300,000 cards before the database is full. 
 | Picture | Shrunk to 1280/2048px; bucket allows 5 MB | Keep the shrink. Refuse anything still over 1.5 MB after it (3 MB for occlusion). Lower the bucket limit to 3 MB. |
 | Sound | 1 MB (about 1 minute at 128 kbps), bucket allows 5 MB | Keep 1 MB. The bucket limit above (3 MB) is the backstop. |
 | Deck | none | No hard limit. At import, warn above 200 MB: "This deck's pictures and sounds take 340 MB. That's a lot for a phone and your account. Import without sounds?" (the switch already exists). |
-| Media per account | none | 180 MB by default (five accounts fit in the free 1 GB); for open sign-ups lower it with one SQL line (`docs/sync-setup.md`), raise it per person in `quotas`. 2 GB on Pro. |
+| Media per account | none | 50 MB by default (eighteen accounts fit in the free 1 GB); for open sign-ups lower it with one SQL line (`docs/sync-setup.md`), raise it per person in `quotas`. 2 GB on Pro. |
 | Synced data per account | none | 80 MB by default (`quotas.data_bytes_limit`), kept by a trigger with a per-person byte and row counter. Deleting and "deleted" markers are always allowed. |
-| Whole project | none | Safety ceilings in `global_limits`: new pictures and sounds are refused when the bucket passes 900 MB, new synced data when everyone's data passes 420 MB (totals re-counted at most once a minute). Reviews and cards are never blocked by the picture ceiling. |
+| Whole project | none | Safety ceilings in `global_limits`: new pictures and sounds are refused when the bucket passes 900 MB, new synced data when everyone's data passes 300 MB (the totals are exact, kept by the database). Reviews and cards are never blocked by the picture ceiling. |
 | Cards per account | none | Warn at 50,000; don't block. |
 | One record on the server | unlimited | Hard cap of 64 KB (stops abuse; real cards are under 1 KB). |
 | Review history | kept forever | Keep it all. The optimizer needs each card's full history from "new" (rule 4 in `js/fsrs-data.js`), and stats use it too. Add a size warning when an Anki import has more than 50,000 reviews. |
 
-**What happens at the limit:** reviews, cards and progress **always** keep syncing. Only new pictures and sounds wait on the device. The message: *"Your account is full: pictures and sounds use 180 MB of 180 MB. New ones are saved on this device and will sync when there's room. Remove some, or ask the account owner for more space."* At 80% the bar turns amber: *"Pictures and sounds: 150 MB of 180 MB."* Synced data has its own message: *"Your account's synced data is full (X of Y MB)…"*, and a full project says *"The sync server is full right now. Everything is safe on this device and will sync when there's room."*
+**What happens at the limit:** reviews, cards and progress **always** keep syncing. Only new pictures and sounds wait on the device. The message: *"Your account is full: pictures and sounds use 50 MB of 50 MB. New ones are saved on this device and will sync when there's room. Remove some, or ask the account owner for more space."* At 80% the bar turns amber: *"Pictures and sounds: 40 MB of 50 MB."* Synced data has its own message: *"Your account's synced data is full (X of Y MB)…"*, and a full project says *"The sync server is full right now. Everything is safe on this device and will sync when there's room."*
 
-**Showing usage:** Settings → Your data already has "On this device: pictures … · sounds …" on the sounds branch. Add a line: "In your account: data 34 MB of 80 MB · pictures and sounds 150 MB of 180 MB". It comes from a small server function, `my_usage()`.
+**Showing usage:** Settings → Your data already has "On this device: pictures … · sounds …" on the sounds branch. Add a line: "In your account: data 34 MB of 40 MB · pictures and sounds 40 MB of 50 MB". It comes from a small server function, `my_usage()`.
 
 **How it's enforced:**
 - The app checks before upload and at import.
@@ -79,7 +79,7 @@ Checked and fine: the rules on rows and files (each account only reaches its own
 ## Decisions for you (recommended defaults)
 
 1. **Who can join:** keep sign-ups off and add people by hand. *(Default: yes, until items 1–2 are done.)*
-2. **Media quota per account:** *(Default: 180 MB; lower it for open sign-ups, 2 GB on Pro.)*
+2. **Media quota per account:** *(Default: 50 MB; lower it for open sign-ups, 2 GB on Pro.)*
 3. **When to go Pro:** *(Default: when the database passes 300 MB, or before you invite more than about 10 regular users or anyone importing big Anki decks with audio.)*
 4. **Review history:** *(Default: keep all of it. Warn on big Anki history imports.)*
 

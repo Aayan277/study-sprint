@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "test:browser": "node tests/browser/run.mjs"
+    "test:browser": "node tests/browser/run.mjs",
+    "test:sql": "node tests/sql/run.mjs"
   },
   "devDependencies": {
     "ts-fsrs": "5.4.2",

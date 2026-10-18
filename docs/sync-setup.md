@@ -5,8 +5,9 @@ It uses a free Supabase project that belongs to you. Anyone can make an account 
 ever sees its own data), so it also needs a few protections. This takes about an hour, once. Steps 1 to 4
 are the basics; steps 5 to 9 are what makes it safe to let other people in.
 
-**Already set up before the limits update?** Do steps 2, 2b and 2c again (they are safe to repeat: run
-`setup.sql`, then `media.sql`, then `limits.sql`), then steps 3 to 9.
+**Already set up before an update?** Do steps 2, 2b and 2c again, **in that order** (they are safe to repeat and lose nothing: run
+`setup.sql`, then `media.sql`, then `limits.sql`), then steps 3 to 9. The newest changes (exact space totals, lower defaults, the
+version check) are listed under "SQL changes log" at the bottom. Step 8e (a read-only login for the GitHub jobs) is optional.
 
 What you'll need: a Supabase account (free), a new Gmail account just for this app (free), a free Cloudflare
 account, and your GitHub repository for this app.
@@ -56,63 +57,126 @@ Because anyone can join, one account must not be able to fill the whole project.
 
 1. **SQL Editor → New query**, paste in everything from [`supabase/limits.sql`](../supabase/limits.sql), and click **Run**.
 
+The three scripts go **in this order**: `setup.sql`, then `media.sql`, then `limits.sql`. `media.sql` puts back the plain
+picture rules, so **whenever you run `media.sql` again, run `limits.sql` again straight after it**. All of them are safe
+to run again on a project that already has an older copy: nothing is deleted, and your own settings are kept
+(see "SQL changes log" at the bottom for what each version changed).
+
 > **Read this if anyone can sign up.** The free plan has 1 GB of files and a 500 MB database for the whole
 > project, and when either is full the project stops working for everybody. Out of the box each account may
-> use **180 MB of pictures and sounds** and **80 MB of synced data**, and the project as a whole stops taking
-> new pictures at 900 MB and new data at 420 MB (so it never reaches the free plan's own limits). Five people
-> at full size fill the project. **If you will let strangers in, lower the default first** (one line, below)
-> and give more space by hand to the people you know.
-> To make 50 MB the default for pictures and sounds, run this once in the SQL Editor (**New query**, paste, **Run**):
->
-> ```sql
-> create or replace function public.default_media_limit() returns bigint
-> language sql immutable as 'select 52428800::bigint';
-> ```
->
-> (For synced data it is `default_data_limit()`. Running `limits.sql` again does not undo either.)
+> use **50 MB of pictures and sounds** and **40 MB of synced data**, and the project as a whole stops taking
+> new pictures at 900 MB and new data at **300 MB**. The data ceiling is that low on purpose: the app counts
+> about 500 bytes per record, but what Postgres really stores is 1.1 to 1.6 times that (plus indexes and the
+> sign-in tables), so 300 MB counted is about 350 to 500 MB of the free 500 MB. Seven people at full size fill the
+> data ceiling. Give more space by hand to the people you know (below).
 
 It adds:
 
-- **Space for pictures and sounds: 180 MB per account.** A new picture or sound is accepted only if it fits.
+- **Space for pictures and sounds: 50 MB per account.** A new picture or sound is accepted only if it fits.
   When an account is full, its new pictures and sounds wait on the person's device and **everything else keeps
-  syncing**. The app tells them. (If Supabase doesn't tell the server a file's size until after it is stored,
-  the check falls back to "is the account under its limit", which can let one 3 MB file over.)
-- **Space for synced data (cards, reviews, settings): 80 MB per account.** Going over is refused, and the app
+  syncing**. The app tells them. (Supabase's own check often doesn't know a file's size yet. Then the per-person check is only "is the account
+  under its limit?", which can let one file of up to 3 MB go over; the exact total, kept by the database, catches it on the next upload.
+  The project-wide ceiling assumes the full 3 MB in that case.)
+- **Space for synced data (cards, reviews, settings): 40 MB per account.** Going over is refused, and the app
   keeps the changes on the device and says so. Deleting is always allowed.
-- **Project-wide ceilings** (table `global_limits`: 900 MB of files, 420 MB of data; totals re-counted at most
-  once a minute). When one is hit, everybody's new files or data wait, and the app says "The sync server is full
+- **Project-wide ceilings** (table `global_limits`: 900 MB of files, 300 MB of data). The totals are kept **exact**
+  in a private table (`private.usage_totals`): every added, changed or deleted record or file adds or takes off its
+  bytes in the same moment, and one that would pass the ceiling is refused on the spot, even when many people sync at
+  once. When one is hit, everybody's new files or data wait, and the app says "The sync server is full
   right now. Everything is safe on this device and will sync when there's room." On the Pro plan, raise them.
-- **3 MB per file** and **64 KB per card or other record**.
-- The check behind the picture rule lives in its own `private` schema so it can't be called from outside the app's rules. Please don't add `private` to the API's "Exposed schemas" in the Supabase settings.
+- **3 MB per file** and **64 KB per card or other record**. Every record must be a JSON object (or a "deleted" marker): anything else is refused.
+- The checks live in their own `private` schema so they can't be called from outside the app's rules. Please don't add `private` to the API's "Exposed schemas" in the Supabase settings.
 - A **usage line** in the app (Settings → Your data → *In your account: …*).
-- The **Delete my account** button in Settings → Sync (it needs this script).
+- The **Delete my account** button in Settings → Sync (it needs this script). The app deletes the person's pictures and sounds
+  first, through Supabase Storage, then asks the server to delete the account. If any files are left the server answers
+  `media_left` and changes nothing (deleting file records with SQL would leave the files themselves behind, still using up space).
+  **Delete my synced data** deletes the person's records (their bytes are given back to the project total) and their files through Storage.
+- Only signed-in people can touch the tables, and only what the app needs: nothing for visitors who aren't signed in, and nobody can
+  truncate a table. The only thing a visitor can call is `app_config()` (next section).
 
-**Giving one person more (or less) space.** Everyone gets 180 MB unless they have a row in the `quotas` table:
+**Existing people.** Running the new script lowers the defaults and the data ceiling **only if they are still the old ones**
+(180 MB / 80 MB / 420 MB). The 420 MB data ceiling is lowered to 300 MB only when the data stored today is under 280 MB
+(otherwise lowering it would refuse everybody's new data at once): **before running the new `limits.sql`, run this in the SQL Editor:
+`select round(coalesce(sum(bytes),0)/1048576.0,1) as sync_used_mb from public.sync_usage;` If it is over 300, free space first or expect the ceiling to stay at 420 MB**, and the status table at the bottom of `limits.sql` says so.
+A default or ceiling you changed yourself is left alone, and anyone with their own row in the
+`quotas` table keeps their own numbers. (A row that was made long ago just to change one thing still holds the old 180 MB / 80 MB
+for the others; look at **Table Editor → quotas** and fix any that should be lower.) People who are over the new limit can still
+read, change smaller and delete; they just can't add more until they are under.
 
-1. Open **Authentication → Users** and copy the person's **User UID**.
-2. Open **Table Editor → quotas → Insert → Insert row**. Paste the UID into `user_id`, and type the space in
-   **bytes** into `media_bytes_limit` (pictures and sounds) and, if you like, `data_bytes_limit` (synced data,
-   default 83886080 = 80 MB). Click **Save**. Useful numbers:
+**Giving one named person more (or less) space.** Everyone gets the default unless they have a row in the `quotas` table.
+The quickest way is one query (change the email and the numbers, which are bytes; this one gives 200 MB of pictures and 100 MB of data):
 
-   | Space | Bytes |
-   |---|---|
-   | 180 MB (the default) | 188743680 |
-   | 500 MB | 524288000 |
-   | 1 GB | 1073741824 |
-   | 2 GB (a sensible limit if you move to the Pro plan) | 2147483648 |
+```sql
+insert into public.quotas (user_id, media_bytes_limit, data_bytes_limit)
+select id, 209715200, 104857600 from auth.users where email = 'friend@example.com'
+on conflict (user_id) do update
+  set media_bytes_limit = excluded.media_bytes_limit, data_bytes_limit = excluded.data_bytes_limit
+returning user_id;
+```
 
-3. To go back to the default, delete that row.
+It shows the person's `user_id` when it worked. **If no row comes back, the email was not found** (check for a typo).
 
-**If you move to the Pro plan** ($25 a month: 100 GB of files, 8 GB database), run this once in the SQL
-Editor (**New query**, paste, **Run**) to make 2 GB everyone's new default, and raise the project-wide
-ceilings in `global_limits` to match your plan (Table Editor → global_limits):
+Or by hand: open **Authentication → Users** and copy the person's **User UID**, open **Table Editor → quotas → Insert →
+Insert row**, paste the UID into `user_id`, type the space in bytes into `media_bytes_limit` and `data_bytes_limit`, and click **Save**.
+To go back to the default, delete that row. Useful numbers:
+
+| Space | Bytes |
+|---|---|
+| 40 MB (the data default) | 41943040 |
+| 50 MB (the pictures default) | 52428800 |
+| 100 MB | 104857600 |
+| 200 MB | 209715200 |
+| 500 MB | 524288000 |
+| 1 GB | 1073741824 |
+| 2 GB (a sensible limit if you move to the Pro plan) | 2147483648 |
+
+Someone's extra space still has to fit inside the project-wide ceilings, so don't hand out more than the project can hold.
+
+**Changing the default for everybody.** For example, to make 30 MB the default for pictures and sounds, run this once in the SQL Editor
+(for synced data the function is `default_data_limit()`). Running `limits.sql` again does not undo it:
 
 ```sql
 create or replace function public.default_media_limit() returns bigint
-language sql immutable as 'select 2147483648::bigint';
+language sql immutable as 'select 31457280::bigint';
 ```
 
-Running `limits.sql` again later does not undo this. (Anyone who has a row in `quotas` keeps their own number.)
+**If you move to the Pro plan** ($25 a month: 100 GB of files, 8 GB database), run the line above with `2147483648` to make 2 GB
+everyone's new default, and raise the project-wide ceilings in `global_limits` to match your plan (Table Editor → global_limits).
+Anyone who has a row in `quotas` keeps their own number.
+
+### Forcing an update: `app_config()`
+
+`limits.sql` also adds a tiny function the app asks when it starts: `app_config()`. It answers `{"min_client": "4.36", "schema": 2}`.
+`min_client` is the oldest version of the app that may sync (an older app is asked to update first); `schema` is the SQL version
+your project has (the lowest of what `setup.sql`, `media.sql` and `limits.sql` last recorded; 0 means one of them was never run).
+A project without the function means "no minimum", so nothing breaks if you never run it. To change the minimum, run (SQL Editor):
+
+```sql
+update private.app_config_values set value = '4.40' where key = 'min_client';
+```
+
+Running the scripts again never changes that value back. Only raise it to a version that is already released, or people can't sync.
+
+### After running the scripts: check it yourself
+
+Paste these in a new query, one at a time. The status table at the bottom of each script covers most of this already.
+
+1. The pictures-total trigger exists (one row = yes, no row = no):
+   `select tgname from pg_trigger where tgrelid = 'storage.objects'::regclass and tgname = 'media_total_track';`
+2. The totals match the real sums (both lines should be equal):
+   ```sql
+   select (select bytes from private.usage_totals where name = 'sync') as sync_total,
+          (select coalesce(sum(private.row_bytes(id, data)), 0) from public.sync_items) as sync_real,
+          (select bytes from private.usage_totals where name = 'media') as media_total,
+          (select coalesce(sum((metadata ->> 'size')::bigint), 0) from storage.objects where bucket_id = 'media') as media_real;
+   ```
+3. **Before** running the new `limits.sql` on a live project: `select round(coalesce(sum(bytes),0)/1048576.0,1) as sync_used_mb from public.sync_usage;`
+   should be under 300 (if it is not, the ceiling stays at 420 MB until you free space). After `limits.sql`, `supabase/owner.sql` shows the same totals per person and against the ceilings.
+4. The record check covers every stored row (`t` = yes):
+   `select convalidated from pg_constraint where conname = 'sync_items_data_object';`
+5. After `ci-roles.sql`: `select rolbypassrls from pg_roles where rolname = 'study_sprint_ci';` should say `t`, and
+   `select has_table_privilege('study_sprint_ci', 'auth.users', 'select'), has_table_privilege('study_sprint_ci', 'auth.identities', 'select'), has_column_privilege('study_sprint_ci', 'storage.objects', 'metadata', 'select');`
+   should say `t, t, t`.
 
 ## 3. Let people sign up, with email confirmation
 
@@ -325,11 +389,14 @@ back. In a new project people sign in again, which resets that bookmark, and eac
 4. Fix the counters. In the new project's **SQL Editor → New query** paste and click **Run**:
 
    ```sql
-   select public.recount_sync_usage();
+   select public.recount_sync_usage();    -- also sets the project's exact data total
+   select public.recount_media_usage();   -- and the pictures total (it is 0 in a new project)
    select setval('public.sync_seq', greatest(
      coalesce((select max(seq) from public.sync_items), 0),
      (select last_value from public.sync_seq)) + 1000);
    ```
+   Also set the app's minimum version again if you had changed it (the backup doesn't contain it; `limits.sql` made it `4.36`):
+   `update private.app_config_values set value = '4.40' where key = 'min_client';`
 5. Check it. Run `select count(*) from public.sync_items;` (should be about what the old project had) and
    `select user_id, count(*) from public.sync_items group by user_id order by 2 desc;` (one line per person). In **Authentication → Users** you should see everyone.
    When it looks right, put the new values in `js/sync-config.js` and commit them.
@@ -342,7 +409,7 @@ steps above in it, check the counts, then delete that project (**Project Setting
 ## 8c. Get a warning when space runs low (GitHub)
 
 The free plan has hard ceilings, and the app has "fuses" that refuse new data before the ceilings are reached (step 2c:
-about 420 MB of synced data, 900 MB of pictures and sounds). When a fuse trips, people just see "server full". This job
+about 300 MB of synced data, 900 MB of pictures and sounds). When a fuse trips, people just see "server full". This job
 (`.github/workflows/fuse-watch.yml`) checks every morning and **opens a GitHub issue when anything is at 80% or more**, so you
 hear about it first. GitHub emails you about new issues (check **Watch → Custom → Issues** on the repository if you don't get the email).
 
@@ -428,19 +495,46 @@ on that job: Keep scheduled jobs on leaves jobs that you switched off yourself a
 
 **If you make the repository private** the 60-day rule no longer applies, and this job becomes harmless but unneeded.
 
+## 8e. A read-only login for the GitHub jobs (optional)
+
+The backup and the space check use the secret `SUPABASE_DB_URL`. By default that holds the **postgres** password, which can do
+anything to your project. If that secret ever leaked, so would the power to change or delete everything. [`supabase/ci-roles.sql`](../supabase/ci-roles.sql)
+makes a second login, `study_sprint_ci`, that can **only read**, and only what the two jobs read: every table in `public` (the
+backup), `auth.users` and `auth.identities` (the backup), and the size columns of `storage.objects`, `public.sync_usage`
+and `public.global_limits` (the space check). It cannot write, delete, truncate or create anything, and it starts every session read-only.
+(It can read your data and the sign-in accounts, because the backup does; so keep the password as private as the old one.)
+
+1. Open `supabase/ci-roles.sql` (copy it somewhere private, not into the repository) and, in the line `declare pw text := 'PASTE-A-LONG-PASSWORD-HERE';`, replace the placeholder with a long password
+   you make up (at least 20 letters and digits, no symbols; save it in your password manager). The script refuses the placeholder.
+2. **SQL Editor → New query**, paste the whole edited script, **Run**. (Running it again is safe and does not change the password; to change it
+   later: `alter role study_sprint_ci password 'new-long-password';`.) Do not commit the edited file anywhere, and **afterwards delete the saved query in the SQL Editor** (it contains the password). The last table the script
+   shows should say `ok` on every line; a missing right shows as `NO`.
+3. Build the new address from the one in step 8b ("Turn it on", point 1): in the Session pooler URI, change the user from `postgres.abcdefgh`
+   to `study_sprint_ci.abcdefgh` (the same project code after the dot) and the password to the new one:
+   `postgresql://study_sprint_ci.abcdefgh:THE-NEW-PASSWORD@aws-0-….pooler.supabase.com:5432/postgres`
+4. On GitHub: **Settings → Secrets and variables → Actions**, click `SUPABASE_DB_URL`, **Update secret**, paste the new address. Then run
+   **Back up database** and **Watch free-plan space** once from the Actions tab (**Run workflow**); both should show a green tick.
+5. Optional but wise: now change the database password of the **postgres** user (**Project Settings → Database → Reset database password**), since the
+   old one was in GitHub. Nothing else uses it.
+
+To go back, put the postgres address in the secret again. To remove the login: `drop owned by study_sprint_ci; drop role study_sprint_ci;`.
+It is only for these two jobs; restoring a backup (step 8b) still needs the postgres login.
+
 ## 9. Looking after it
 
 - **Look at the Actions tab once a month.** All jobs should be listed without a "disabled" banner and the last
   runs should be recent (step 8d).
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
   (the project turns read-only above that), 1 GB of files and 5 GB of downloads a month. Roughly: a light
-  user takes 7 MB of database a year, a heavy one 100 MB, and a full 180 MB of pictures and sounds is
-  about 1,000 pictures. Step 8c warns you by itself. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
+  user takes 7 MB of database a year, a heavy one 100 MB, and a full 50 MB of pictures and sounds is
+  about 300 pictures. Step 8c warns you by itself. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
   and when to move to the Pro plan.
 - **Abuse.** To stop new accounts quickly, turn off **Allow new users to sign up** (step 3). Existing people
   keep working. To remove someone, ask them to use **Settings → Sync → Delete my account**. If you must do it
-  yourself: first open **Storage → media**, open the folder named with their User UID and delete its files,
-  then delete the user in **Authentication → Users**.
+  yourself: first open **Storage → media**, open the folder named with their User UID and delete its files
+  (with the Storage screen, not with SQL, so the space is really freed), then delete the user in **Authentication → Users**.
+- **Counters look wrong?** Run `select public.recount_sync_usage(); select public.recount_media_usage();` in the SQL Editor. It recounts
+  from the stored records and files. **Who uses how much** (below) also shows the two project-wide totals against their ceilings.
 - **Who uses how much.** Open **SQL Editor → New query**, paste in everything from [`supabase/owner.sql`](../supabase/owner.sql)
   and click **Run** (after `limits.sql` has been run). You get one line per person: email, number of synced
   records, data space and picture/sound space with each limit and how full it is, biggest users first. It only
@@ -454,7 +548,33 @@ on that job: Keep scheduled jobs on leaves jobs that you switched off yourself a
 - **Project paused?** Open the project in Supabase and click **Restore**. The app keeps working offline meanwhile and catches up afterwards.
 - **Forgot your password?** On the Sync sign-in form, type your email and tap **Forgot password?**. Open the link in the email: it opens Study Sprint in your browser, where you set a new one. Then sign in with it on your other devices.
 - **Friends:** they open the app, tap **Settings → Sync → Create account**, open the link in the confirmation email, and sign in. Everyone's data stays separate.
-- **Delete my account** (Settings → Sync) removes the account, everything stored in it and its pictures from the server. The device keeps its own copy of the cards. **Delete my synced data** removes the data but keeps the account.
-- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB database. Pictures are shrunk to about 100–250 KB each and are stored separately (180 MB per account).
+- **Delete my account** (Settings → Sync) removes the account, everything stored in it and its pictures from the server (the app deletes the pictures through Supabase Storage first; if some can't be deleted the server refuses with `media_left` and nothing is removed). The device keeps its own copy of the cards. **Delete my synced data** removes the data but keeps the account.
+- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB database. Pictures are shrunk to about 100–250 KB each and are stored separately (50 MB per account by default).
 - **Very large collections:** at 50,000 cards or more in one account the app says so in plain words (once after an import, and under Settings → Your data). Nothing is blocked; syncing just gets slow, and a new device takes a long time to download everything.
 - **Big Anki imports:** the app warns before importing a deck whose pictures and sounds are over 200 MB, or that carries more than 50,000 reviews of history.
+
+## SQL changes log
+
+Every script adds a line to a private table, `private.schema_log` (file, version, time), each time it runs, so you can see what ran:
+`select * from private.schema_log order by id;` (SQL Editor). The version below is the same number the app sees as `schema` in `app_config()`.
+Always run the files in this order: `setup.sql`, `media.sql`, `limits.sql` (then `ci-roles.sql` if you want it). Each is safe to run again.
+
+- **Version 2 (app 4.36; not yet released: you must run the SQL).** Run `setup.sql`, `media.sql` and `limits.sql` again.
+  - *Exact space totals.* The project-wide totals were cached for 60 seconds, so a burst of writes could go far past the ceiling. They are now exact
+    (`private.usage_totals`, one row per ceiling) and the check is atomic. They are set from what is really stored the first time (and
+    checked again every time) the script runs. Deleting records, deleting an account and deleting files all give their bytes back.
+    The old cache table `usage_cache` is removed.
+  - *Lower defaults:* 50 MB pictures and sounds, 40 MB data per person (were 180 / 80), and the data ceiling 300 MB (was 420). Only
+    defaults that were still the old ones change; custom `quotas` rows and numbers you chose yourself are kept.
+  - *Record checks:* `data` must be a JSON object unless the record is deleted, and a record that isn't deleted must have data
+    (constraint `sync_items_data_object`; if some old stored row breaks it you get a warning and the note in the script says how to fix it).
+  - *Delete my account* no longer deletes file records with SQL; it answers `media_left` until the person's files are gone (the app deletes them first).
+  - *Locked down:* nothing for visitors who aren't signed in on the data tables, and no TRUNCATE, TRIGGER or REFERENCES for anyone.
+  - *New:* `app_config()` (minimum app version), `private.schema_log`, `supabase/ci-roles.sql` (optional read-only login for the GitHub jobs, step 8e).
+  - Each script ends with a small **status table** (every line should say `ok` in the last column). If a line says `NO`, tell whoever helps you;
+    for example, `NO` for the trigger on `storage.objects` means that table wouldn't let this account add it, so uploads are checked against a live count instead.
+  - For the project-wide pictures ceiling an unknown upload size is treated as 3 MB.
+  - The sync ceiling is lowered to 300 MB only when the stored data is under 280 MB (the status table says if it was not).
+- **Version 1.** The first limits (per-person limits, 60-second cached totals, `delete_my_account()`).
+
+To check the SQL yourself on your own computer (needs PostgreSQL installed; never touches Supabase): `npm run test:sql`.

@@ -1,14 +1,14 @@
 // Limits on what one account can hold, and the plain-words messages about them. Pure logic, no network:
 // sync-quota.js fetches the numbers (supabase/limits.sql my_usage()), this decides what to do and say.
 //
-//   - Pictures and sounds: each account has a space limit (180 MB unless the owner raised it). At the limit,
+//   - Pictures and sounds: each account has a space limit (50 MB unless the owner raised it). At the limit,
 //     new pictures and sounds wait on the device and everything else keeps syncing.
 //   - One picture: refused if it is still over 1.5 MB after being shrunk (3 MB for image occlusion).
 //   - A very large collection (50,000 cards or more): a warning, never a block.
 //   - Imports: warn on a deck whose media is over 200 MB, or an Anki history of more than 50,000 reviews.
 
 export const MB = 1024 * 1024;
-export const DEFAULT_MEDIA_LIMIT = 180 * MB;        // keep in step with supabase/limits.sql
+export const DEFAULT_MEDIA_LIMIT = 50 * MB;         // keep in step with supabase/limits.sql
 export const WARN_AT = 0.8;                         // the bar turns amber from here
 export const MAX_PICTURE = 1.5 * MB;
 export const MAX_OCCLUSION_PICTURE = 3 * MB;        // also the bucket's file size limit

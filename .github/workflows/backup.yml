@@ -76,10 +76,10 @@ jobs:
           # password is masked above.
           # One pg_dump call = one consistent snapshot. "--table" decides what is dumped (a --schema is ignored next to it),
           # so public.* lists every table (and sequence) of the app, plus the two sign-in tables the app's rows point at.
-          # The two usage tables are left out: public.recount_sync_usage() rebuilds them after a restore.
+          # The usage table is left out: public.recount_sync_usage() rebuilds it (and the exact totals) after a restore.
           { echo "-- Study Sprint database backup, $(date -u +%Y-%m-%dT%H:%MZ). Restore: docs/sync-setup.md"
             docker run --rm -e SUPABASE_DB_URL postgres:17 sh -c \
-              'pg_dump "$SUPABASE_DB_URL" --data-only --no-owner --table="auth.users" --table="auth.identities" --table="public.*" --exclude-table-data="public.sync_usage" --exclude-table-data="public.usage_cache"'
+              'pg_dump "$SUPABASE_DB_URL" --data-only --no-owner --table="auth.users" --table="auth.identities" --table="public.*" --exclude-table-data="public.sync_usage"'
           } | gzip -9 > "out/$name.sql.gz"
           # A dump that is tiny or lacks the app's table means something went wrong: stop rather than keep a useless file.
           [ "$(gunzip -c "out/$name.sql.gz" | grep -c '^COPY public.sync_items ')" -gt 0 ] || { echo "::error::The dump has no sync_items data. Check SUPABASE_DB_URL."; exit 1; }

@@ -12,7 +12,9 @@
 --   media_mb / media_limit_mb         how much their pictures and sounds take, and their limit
 --   data_pct / media_pct              how full each of the two is, in percent
 -- (Data rows and bytes come from the sync_usage table that limits.sql keeps up to date; if a number ever looks wrong,
--- run select public.recount_sync_usage(); once to recount everybody.)
+-- run select public.recount_sync_usage(); once to recount everybody, and select public.recount_media_usage(); for pictures.)
+-- At the very bottom is a second small question: the two project-wide totals against their ceilings (the "fuses").
+-- (This file only asks questions, so unlike the other scripts it doesn't add a line to the SQL log.)
 -- The limits are the default unless you gave that person a row in the quotas table (docs/sync-setup.md).
 select
   u.email,
@@ -36,3 +38,14 @@ left join (
   group by 1
 ) m on m.folder = u.id::text
 order by coalesce(d.bytes, 0) + coalesce(m.bytes, 0) desc;
+
+-- The project-wide totals against their ceilings (change a ceiling in Table Editor → global_limits). It adds up the same tables
+-- the totals are made from, so it also works on a project that still has the older scripts.
+select g.name as fuse,
+       round(case g.name when 'sync' then (select coalesce(sum(u.bytes), 0) from public.sync_usage u)
+                         else (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media') end / 1048576.0, 1) as used_mb,
+       round(g.bytes / 1048576.0, 1) as ceiling_mb,
+       round(100.0 * case g.name when 'sync' then (select coalesce(sum(u.bytes), 0) from public.sync_usage u)
+                         else (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media') end / nullif(g.bytes, 0), 1) as pct
+from public.global_limits g
+order by g.name;
