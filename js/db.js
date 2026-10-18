@@ -21,9 +21,9 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
-import { cleanFsrsParams, cleanFsrsVersion } from './sched-settings.js';
+import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
-import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { decide, MERGERS, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { validFields, cleanFields } from './note-fields.js';
@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS = {
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
+  ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
   fsrsVersion: 6,            // which FSRS schedules cards: 6 (standard) or 7 (beta, off by default); see sched-settings.js and docs/design/fsrs7-plan.md. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
@@ -433,7 +434,7 @@ export async function getSettings() {
   const os = await store('settings');
   const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
   const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !String(k).startsWith(PENDING)));
-  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), fsrsVersion: cleanFsrsVersion(saved.fsrsVersion) };
+  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore), fsrsVersion: cleanFsrsVersion(saved.fsrsVersion) };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
@@ -583,6 +584,7 @@ export function restoredSettings(settings) {
   return Object.entries(settings || {})
     .filter(([k]) => !isLocalOnly(k))
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
+    .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
     .filter(([k, v]) => k !== 'fsrsVersion' || v === 6 || v === 7)       // junk is left out, not stored as 6 (a stamped 6 would switch other devices back)
     .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
 }
@@ -786,9 +788,10 @@ export async function applyRemote(rows) {
           // Merged, not replaced: keep this device's days off and add the server's (per day, the later decision wins).
           const local = await done(settingsStore.get(row.id));
           const remote = row.data?.value;
-          const merged = mergeDayFlags(local, remote);
-          const changed = !sameDayFlags(merged, local);
-          const sameAsRemote = sameDayFlags(merged, remote);
+          const [mergeFlags, sameFlags] = MERGERS[row.id];
+          const merged = mergeFlags(local, remote);
+          const changed = !sameFlags(merged, local);
+          const sameAsRemote = sameFlags(merged, remote);
           if (changed) { settingsStore.put(merged, row.id); applied++; }
           if (changed || !sameAsRemote) {
             // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.

@@ -19,7 +19,7 @@ export function dayName(days, now = Date.now()) {
 
 export function openPostponeSheet({ data, cards, onChange = () => {} }) {
   let days = 2, count = 0;
-  let list = [];
+  let list = [], leftAlone = 0;          // leftAlone: due reviews that an exam rules out
   const examNear = new Map();           // deck id → days left of the exam it has (or inherits)
   for (const d of data.decks) examNear.set(d.id, examInfo(effectiveDeck(data.decks, d.id))?.daysLeft);
 
@@ -29,6 +29,7 @@ export function openPostponeSheet({ data, cards, onChange = () => {} }) {
       // A deck with an exam within `days` + the final pass's 3 days is left alone, and so is a card the final pass brought forward.
       skip: card => data.exam.caps.has(card.id) || examNear.get(card.deckId) <= days + FINAL_DAYS
     });
+    leftAlone = postponeCandidates(cards, data.statesById, { days, recallAt }).length - list.length;
     count = defaultCount(list);
   };
 
@@ -58,7 +59,7 @@ export function openPostponeSheet({ data, cards, onChange = () => {} }) {
     $('ppCount').value = count; $('ppCount').max = list.length;
     $('ppNote').textContent = `Decks with an exam in the next ${days + FINAL_DAYS} days are left out.`;
     const avg = averages(list, count);
-    $('ppLine').innerHTML = !list.length ? 'Nothing to postpone: no reviews are due.'
+    $('ppLine').innerHTML = !list.length ? (leftAlone > 0 ? `Your due reviews are in decks with an exam in the next ${days + FINAL_DAYS} days, so they're left alone.` : 'Nothing to postpone: no reviews are due.')
       : `Moves <b>${count}</b> of ${list.length} due reviews to ${dayName(days)}.${avg ? ` Expected recall on them: ${pct(avg.before)} now, ${pct(avg.after)} then.` : ''}`;
     $('ppGo').textContent = count ? `Postpone ${plural(count, 'review')}` : 'Postpone';
     $('ppGo').disabled = !count;

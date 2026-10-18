@@ -73,7 +73,8 @@ await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.
 for (let t = Date.now(); loads < 1 && Date.now() - t < 15000; ) await new Promise(r => setTimeout(r, 100));
 await page.waitForLoadState('load');
 await page.waitForFunction(() => caches.keys().then(k => k.length === 1 && k[0] === 'study-sprint-v999'), null, { timeout: 15000 }).catch(() => {});
-await settle(1500);
+for (let i = 0; i < 150 && !loads; i++) await settle(100);      // wait for the reload itself (how long the install takes depends on how busy the computer is)
+await settle(300);
 ok(JSON.stringify(await cacheNames()) === '["study-sprint-v999"]', 'new worker: only the new cache is left ' + (await cacheNames()));
 ok(loads === 1, 'the app reloaded once to pick up the update (' + loads + ')');
 await page.waitForSelector('.tdeck, .empty');

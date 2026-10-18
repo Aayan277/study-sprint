@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { dayStart } from './days.js';
 import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
 import { examInfo, countdown, badgeClass, readiness } from './exam.js';
-import { personalW20, cleanFsrsParams } from './sched-settings.js';
+import { personalW20, cleanFsrsParams, deckSchedulerOptions } from './sched-settings.js';
 import { openDeckPicker } from './deck-picker.js';
 import { startStudy } from './today.js';
 import { openExamSheet } from './exam-sheet.js';
@@ -16,7 +16,7 @@ import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { isOcclusion, occLabel } from './occlusion.js';
 import { imgHTML } from './media.js';
 import { isHidden } from './browse-logic.js';
-import { readyEstimateText, streakFromDays, restDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands } from './stats-calc.js';
+import { readyEstimateText, streakFromDays, restDaySet, idleDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, retentionVerdict, YOUNG_DAYS } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
@@ -60,6 +60,47 @@ async function loadLogs(needAll) {
     needAll ? keep('full', () => db.getAll('reviewLog')) : null
   ]);
   return { days, recent, full };
+}
+
+// ---------- true retention against the target ----------
+// Young and mature cards for the last 7, 30 and 90 days. The split needs each answer's previous answer, so the log is read
+// from 21 days before the 90-day window (a card with no earlier answer in that stretch had its last one 21 days or more before,
+// which is "mature"). It is read after the page is drawn and kept until the data changes, like the other logs.
+let retCache = null;     // { day, version, promise }
+function loadRetentionLogs() {
+  if (retCache && (retCache.day !== dayStart() || retCache.version !== db.dataVersion())) retCache = null;
+  if (!retCache) {
+    const mine = retCache = { day: dayStart(), version: db.dataVersion(), promise: null };
+    mine.promise = db.getLogsSince(daysAgoStart(89) - YOUNG_DAYS * 86400000).catch(err => { if (retCache === mine) retCache = null; throw err; });
+  }
+  return retCache.promise;
+}
+const RS_PERIODS = [7, 30, 90];
+const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
+const rsPos = v => `${(Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN) * 100}%`;
+const RS_MARK = { on: '✓', under: '▼', over: '▲' };
+function retSplitHTML(res, hasLogs) {
+  if (!hasLogs) return '<p class="muted">Shows how often you remember cards when they come due, for cards you know less well (young) and well (mature), against your target. Nothing has come due in the last 90 days yet.</p>';
+  const rowHTML = (label, b, target) => {
+    if (!b.n) return `<div class="rs-row"><span class="rs-name">${label}</span><span class="rs-track" aria-hidden="true"></span><span class="rs-val muted">No reviews</span></div>`;
+    const rate = b.ok / b.n;
+    const v = retentionVerdict(b, target);            // the same verdict as the health check
+    const kind = v.verdict === 'few' ? 'on' : v.verdict;
+    const pts = v.gap === null ? 0 : Math.round(Math.abs(v.gap) * 100);
+    const word = v.verdict === 'few' ? '' : kind === 'on' ? 'on target' : `${pts} ${pts === 1 ? 'point' : 'points'} ${kind === 'under' ? 'under' : 'above'}`;
+    return `<div class="rs-row"><span class="rs-name">${label}</span>
+      <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="left:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="left:${rsPos(target)}"></i>` : ''}</span>
+      <span class="rs-val"><b class="mono">${Math.round(rate * 100)}%</b> <small>of ${b.n}</small>${word ? ` <span class="rs-gap ${kind}"><span aria-hidden="true">${RS_MARK[kind]}</span> ${word}</span>` : ''}</span></div>`;
+  };
+  return RS_PERIODS.map(d => {
+    const r = res[d];
+    return `<div class="rs-group" role="group" aria-label="Last ${d} days">
+      <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
+      ${rowHTML(`Young <small>(under ${YOUNG_DAYS} days)</small>`, r.young, r.target)}
+      ${rowHTML(`Mature <small>(${YOUNG_DAYS}+ days)</small>`, r.mature, r.target)}
+    </div>`;
+  }).join('') + `<div class="rs-axis muted small" aria-hidden="true"><span class="rs-name"></span><span class="rs-scale"><span>50%</span><span>75%</span><span>100%</span></span><span class="rs-val"></span></div>
+    <p class="note">The dot is how often you remembered; the line is your target. Young cards had a gap of under ${YOUNG_DAYS} days since their last review, mature ones ${YOUNG_DAYS} days or more. Multiple choice answers aren’t counted.</p>`;
 }
 
 // The mastery grid draws at most this many squares up front; "Show more" adds the rest of a deck.
@@ -162,8 +203,9 @@ export async function renderStats(el) {
   const allDays = logs.days;
   const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
   const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
-  const rest = restDaySet(settings);
-  const streak = streakFromDays(allDays, now, { rest });
+  const planned = restDaySet(settings), idle = idleDaySet(settings);
+  const rest = new Set([...planned, ...idle]);          // (a day with nothing due is as safe as a day off)
+  const streak = streakFromDays(allDays, now, { rest: planned, idle });
   const ret = retention(recent, now);
   const perDay = reviewsPerDay(recent, now);
   const cardStates = cards.map(c => statesById.get(c.id));
@@ -241,7 +283,7 @@ export async function renderStats(el) {
       <div class="card">
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
-        <p>${streak.days === 0 ? 'Review or play today to start a streak.' : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
+        <p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
         ${weekDotsHTML(streak.week)}
         <p class="frz-note">One freeze a week covers a missed day. It doesn’t add to the count. <button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>
@@ -253,6 +295,11 @@ export async function renderStats(el) {
           <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></details>
       </div>
     </div>
+
+    <section class="card section" aria-labelledby="rsTitle">
+      <div class="mhead"><h2 id="rsTitle">Retention vs target</h2><span class="muted small">Young and mature cards</span></div>
+      <div id="retSplit"><p class="muted">Working it out…</p></div>
+    </section>
 
     ${calendarHTML(cal, now)}
 
@@ -359,6 +406,20 @@ export async function renderStats(el) {
   q('readyPrep')?.addEventListener('click', () => startStudy({ deckIds: [course.id], deckId: course.id, kind: 'prep' }));
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
+  // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).
+  loadRetentionLogs().then(rows => {
+    const box = q('retSplit');
+    if (!box || !el.isConnected) return;
+    const mine = ids ? rows.filter(l => ids.has(l.cardId)) : rows;
+    const deckOf = new Map(allCards.map(c => [c.id, c.deckId]));
+    const byDeck = new Map();
+    const targetOf = id => {
+      const deckId = deckOf.get(id);
+      if (!byDeck.has(deckId)) byDeck.set(deckId, deckSchedulerOptions(settings, effectiveDeck(decks, deckId)).retention);
+      return byDeck.get(deckId);
+    };
+    box.innerHTML = retSplitHTML(retentionByAge(mine, Date.now(), RS_PERIODS, { targetOf }), mine.some(l => l.timestamp >= daysAgoStart(89) && l.state === 2));
+  }).catch(err => { console.error(err); const box = q('retSplit'); if (box) box.innerHTML = '<p class="muted">Couldn’t work this out.</p>'; });
   wireCalendar(el);
   q('planRest')?.addEventListener('click', async () => {
     (await import('./streak-sheet.js')).openStreakSheet({ onChange: () => renderStats(el), returnFocus: 'planRest' });

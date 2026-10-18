@@ -242,7 +242,7 @@ function renderSession(el, enter = false) {
     ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
     : cardMediaHTML(card, 'front', cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front));
   const answerHTML = occ
-    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'No label'}</p>
+    ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'Hidden area'}</p>
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
     : cloze
       ? cardMediaHTML(card, 'back', renderCloze(card.noteText, card.cloze, 'back'))
@@ -250,6 +250,10 @@ function renderSession(el, enter = false) {
         ? cardMediaHTML(card, 'back', stepsHTML(sp))
         : cardMediaHTML(card, 'back', formatHTML(card.back));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
+
+  // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.
+  // Z is undo (on a picture card Z zooms the picture instead).
+  const keyLine = keyLineFor(sp, occ);
 
   const head = `
     <div class="rv-head">
@@ -289,7 +293,7 @@ function renderSession(el, enter = false) {
       </form>` : ''}
     ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" aria-hidden="true">Space to flip · 1–4 rate · D scratchpad${sp?.kind === 'elements' ? ' · X marks a miss' : ''}</p>`;
+    <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? TYPING_KEYS : keyLine)}</p>`;
   drawSessionPage(el, head, body);
   glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
@@ -304,8 +308,10 @@ function renderSession(el, enter = false) {
   autoSpeak(card);
   wireRatebar(el);
   mountPad(kept);
+  $('flash').addEventListener('pointerdown', () => { selAtPress = selectedNow(); }, true);
   $('flash').addEventListener('click', e => {
     if (e.target.closest('.scratch, .scratch-tools')) return;      // drawing (or choosing a tool) is not a tap on the card
+    if (selectionEndedHere()) return;      // a click that ends selecting some words is not a tap to flip
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
@@ -313,6 +319,7 @@ function renderSession(el, enter = false) {
     if (e.target.closest('.gl-term, .gl-pop')) return;      // a tap on an underlined term opens its definition; it never flips the card
     const tick = e.target.closest('[data-tick]');
     if (tick) { toggleMissed(el, +tick.dataset.tick); return; }
+    if (e.detail > 1) return;      // a double-click (to select a word) is not a tap to flip
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
@@ -320,10 +327,26 @@ function renderSession(el, enter = false) {
   $('flash').addEventListener('toggle', e => { const d = e.target.closest?.('.note-field'); if (d) saveFold('field:' + d.dataset.field, d.open); }, true);
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
-  if (typeThis && !R.flipped) $('typeIn').focus();
+  if (typeThis && !R.flipped) {
+    $('typeIn').focus();
+    // The shortcut keys work again once the cursor leaves the box.
+    $('typeIn').addEventListener('focus', () => { $('keyLine').textContent = TYPING_KEYS; });
+    $('typeIn').addEventListener('blur', () => { $('keyLine').textContent = $('keyLine').dataset.normal; });
+  }
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else $('flash').focus({ preventScroll: true });
   publishLive();
+}
+
+// Did this click end selecting some words of the card? (Then it must not flip the card.) A selection that was already there when
+// the press began is old: tapping the card again just flips it (and drops the old selection).
+let selAtPress = '';
+const selectedNow = () => { const sel = getSelection?.(); return sel && !sel.isCollapsed && $('flash')?.contains(sel.anchorNode) ? String(sel).trim() : ''; };
+function selectionEndedHere() {
+  const now = selectedNow();
+  if (!now) return false;
+  if (now === selAtPress) { getSelection().removeAllRanges(); return false; }
+  return true;
 }
 
 // Your own glossary (item 12): the terms on the card get a dotted underline and a definition popover. The module is only loaded
@@ -470,6 +493,8 @@ const tickHTML = i => {
   const missed = R.elMissed.has(i);
   return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
+// The shortcut line under the card. On a step-by-step card, once the last step is on screen Space no longer does anything: it says "1–4 to rate".
+const keyLineFor = (sp, occ) => `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() {
@@ -507,6 +532,8 @@ function revealStep(el, all = false) {
   if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
+  const kl = $('keyLine');
+  if (kl) { kl.dataset.normal = keyLineFor(sp, false); kl.textContent = kl.dataset.normal; }
   const final = flash.querySelector('.steps-final');
   if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
   else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)
@@ -760,11 +787,13 @@ async function finish(el) {
   if (el.isConnected) setFocusMode(false);      // a late finish must not end focus mode on another screen (e.g. a Play round)
   if (el.isConnected) drawSidebar();            // the sidebar's counts and ring, now the round is done
   const { reviewed, again, spent } = R.stats;
+  const cardsDone = R.answered.size;          // distinct cards: a card answered twice (Again, then Good) is one card, two answers
   const endedEarly = !!R.current;
   // What "Keep going" would start: exactly Today's Start session (the decks chosen on Today, otherwise all of them).
   const data = await loadAll();
   const allIds = data.decks.map(d => d.id);
-  const chosen = data.settings.reviewDecks.filter(id => allIds.includes(id));
+  // A session started from a deck (or Today's one chosen deck) keeps going in that deck and its subdecks, not in all decks.
+  const chosen = allIds.includes(R.deckId) ? [R.deckId] : data.settings.reviewDecks.filter(id => allIds.includes(id));
   const scope = chosen.length ? chosen : allIds;
   const rest = countFor(data, scope);
   // Reviews due by the end of tomorrow (already studied, not suspended or buried), in the same decks.
@@ -784,12 +813,12 @@ async function finish(el) {
   el.innerHTML = `
     <div class="screen-head"><div><span class="eyebrow mono">${endedEarly ? 'ENDED EARLY' : 'DONE FOR NOW'}</span><h1>${title}</h1></div></div>
     <div class="stats4">
-      <div><div class="v">${reviewed}</div><div class="l">Cards reviewed</div></div>
+      <div><div class="v">${cardsDone}</div><div class="l">Cards reviewed</div></div>
       <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
       <div><div class="v">${mins}:${String(secs).padStart(2, '0')}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
-    <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}Accuracy counts every rating except Again.</p>
+    <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}. ` : ''}Accuracy counts every rating except Again.</p>
     <div class="res-actions">
       ${rest.total
         ? `<button class="btn primary" type="button" id="keepBtn" aria-label="Keep going: ${plural(rest.total, 'card')}">Keep going · ${plural(rest.total, 'card')}</button>
@@ -817,6 +846,7 @@ async function finish(el) {
   fx.finished(el, { complete: !R.current, reviewed });
 }
 
+const TYPING_KEYS = 'Enter to check · Esc to leave the box for shortcuts';
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
 // Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.
@@ -826,6 +856,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest?.('.gl-pop')) return;      // a glossary popover has its own keys (Escape, Space and Enter close it)
   const inInput = e.target.matches('input, textarea, select');
+  if (e.key === 'Escape' && e.target.id === 'typeIn') { e.preventDefault(); e.target.blur(); return; }      // out of the answer box: the single keys work again
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
   if (!inInput) {
     const k = e.key.toLowerCase();
@@ -837,6 +868,7 @@ document.addEventListener('keydown', e => {
     if (k === 'x' && R.flipped && R.stepShown && stepsOf(R.current.card)?.kind === 'elements') { e.preventDefault(); toggleMissed(R.el, R.stepShown - 1); return; }
     // Image occlusion: Z zooms the picture, M shows the whole picture (on the back).
     const face = $('flash').querySelector('.rv-face:not([inert])');
+    if (k === 'z' && !face?.querySelector('.occ-zoom')) { e.preventDefault(); undo(R.el); return; }
     if (k === 'z' && face?.querySelector('.occ-zoom')) {
       e.preventDefault();
       // Opened with the key: focus goes back to the card (not the Zoom button), so Space still flips it afterwards.
@@ -852,5 +884,11 @@ document.addEventListener('keydown', e => {
   }
   if (stepsLeft() && !inInput && ((!onButton && (e.key === ' ' || e.key === 'Enter')) || e.key === 'ArrowRight')) { e.preventDefault(); revealStep(R.el); return; }
   if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
-  else if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); answer(R.el, R.suggest || Rating.Good); }
+  else if (!onButton && (e.key === ' ' || e.key === 'Enter')) {
+    e.preventDefault();
+    // A step-by-step card: Space only reveals (the last step shows the final answer). Rating it is 1–4 or a rating button, so a Space
+    // pressed to see the final answer (or held down) can't rate the card by accident.
+    if (stepsOf(R.current.card)?.kind !== 'elements' && stepsOf(R.current.card)) return;      // (an elements card suggests its rating, so Space takes that)
+    answer(R.el, R.suggest || Rating.Good);
+  }
 });

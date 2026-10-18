@@ -36,7 +36,7 @@ await p.click('#endBtn');
 await p.evaluate(async () => {
   const db = await import('./js/db.js'); const cs = await db.getCardsInDeck('sample');
   const byFront = f => cs.find(c => c.front === f);
-  await db.saveCards([{ ...byFront('Placebo effect'), tags: ['exam1', 'research'] }, { ...byFront('Neuroplasticity'), tags: ['exam1'] }, { ...byFront('Working memory'), tags: ['memory', 'Exam 1'.toLowerCase()] }]);
+  await db.saveCards([{ ...byFront('Placebo effect'), tags: ['exam1', 'research'] }, { ...byFront('Neuroplasticity'), tags: ['exam1'] }, { ...byFront('Working memory'), tags: ['memory', 'exam-1'] }]);
   await db.saveCards([{ id: 'dupe', deckId: 'sample', front: 'placebo  EFFECT!', back: 'duplicate', tags: [], created: Date.now() }]);
 });
 await p.goto('http://localhost:8123/#/deck/sample'); await p.waitForSelector('.crow');
@@ -44,12 +44,12 @@ await p.selectOption('#brFilter', 'dupes'); await p.waitForFunction(() => docume
 ok((await p.$$eval('.crow .f', f => f.map(x => x.textContent))).join('|') === 'Placebo effect|placebo  EFFECT!', 'Duplicates filter finds the same front written differently');
 await p.selectOption('#brFilter', 'all');
 await p.click('#brTags'); await p.waitForSelector('.tag-list');
-ok((await p.$$eval('.tag-name', t => t.map(x => x.textContent))).join('|') === 'exam1|exam 1|memory|research', 'Tags lists every tag, most used first');
+ok((await p.$$eval('.tag-name', t => t.map(x => x.textContent))).join('|') === 'exam1|exam-1|memory|research', 'Tags lists every tag, most used first');
 await p.screenshot({ path: SP + '/A-tags.png' });
-await p.click('.tag-list li[data-tag="exam1"] [data-tag-rename]'); await p.fill('#tagNew', 'Exam 1'); await p.click('#tagForm [type=submit]');
+await p.click('.tag-list li[data-tag="exam1"] [data-tag-rename]'); await p.fill('#tagNew', 'Exam-1'); await p.click('#tagForm [type=submit]');
 await p.waitForFunction(() => /Renamed/.test(document.querySelector('#toast')?.textContent || ''));
 let tags = await p.evaluate(async () => (await (await import('./js/db.js')).getCardsInDeck('sample')).flatMap(c => c.tags));
-ok(!tags.includes('exam1') && tags.filter(t => t === 'exam 1').length === 3, 'renaming merges into an existing tag');
+ok(!tags.includes('exam1') && tags.filter(t => t === 'exam-1').length === 3, 'renaming merges into an existing tag');
 await p.click('#brTags'); await p.waitForSelector('.tag-list');
 await p.click('.tag-list li[data-tag="memory"] [data-tag-remove]'); await p.click('#cfYes');
 await p.waitForFunction(() => /Removed/.test(document.querySelector('#toast')?.textContent || ''));

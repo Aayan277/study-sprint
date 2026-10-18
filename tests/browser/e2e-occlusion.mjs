@@ -117,7 +117,7 @@ await page.waitForFunction(() => document.querySelector('#flash').classList.cont
 const back = await page.evaluate(() => { const b = document.querySelector('.rv-back'); return { reveal: b.querySelectorAll('.occ-reveal').length, covered: b.querySelectorAll('.occ-mask:not(.occ-reveal)').length, label: b.querySelector('.occ-label').textContent, extra: b.querySelector('.flash-extra')?.textContent, inert: document.querySelector('.rv-front').inert, aria: b.querySelector('.occ-reveal')?.getAttribute('aria-label') }; });
 ok(back.reveal >= 1 && back.reveal + back.covered === 4 && back.covered >= 1, 'back: only the asked box is uncovered, the others stay covered');
 ok(back.extra === 'Blood leaves here' && back.inert === true, 'back: the note\'s Extra shows, and the front is inert');
-ok(back.label === (nowN === 1 ? 'Aorta' : nowN === 2 ? 'Left ventricle' : 'No label') && /^(Answer: |Uncovered part)/.test(back.aria), 'back: the label (or "No label") and the box\'s accessible name: ' + back.label + ' / ' + back.aria);
+ok(back.label === (nowN === 1 ? 'Aorta' : nowN === 2 ? 'Left ventricle' : 'Hidden area') && /^(Answer: |Uncovered part)/.test(back.aria), 'back: the label (or "Hidden area") and the box\'s accessible name: ' + back.label + ' / ' + back.aria);
 await page.waitForTimeout(500);
 await page.screenshot({ path: SP + '/occ-review-back-375.png' });
 await noSideways(page, 'in Review (back)');
@@ -155,7 +155,7 @@ for (let i = 0; i < 3; i++) {
   if (i < 2) await page.waitForSelector('#flash:not([data-rated])');
 }
 const seenList = [...seen].sort();
-ok(seenList.join(' / ') === ['Aorta|true|', 'Left ventricle|true|', 'No label|false|No label on this box: say it in your head, then flip.'].sort().join(' / '), 'typed answer: offered for labelled boxes only; the unlabelled one says so: ' + seenList.join(' / '));
+ok(seenList.join(' / ') === ['Aorta|true|', 'Left ventricle|true|', 'Hidden area|false|No label on this box: say it in your head, then flip.'].sort().join(' / '), 'typed answer: offered for labelled boxes only; the unlabelled one says so: ' + seenList.join(' / '));
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', false); });
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
 

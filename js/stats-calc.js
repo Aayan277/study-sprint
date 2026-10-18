@@ -61,6 +61,17 @@ export function restDaySet(settings) {
   return out;
 }
 
+// "Nothing due" days: days when nothing was due and nothing was left from earlier, so there was nothing to study. They never
+// break the streak or use a freeze (they act like days off, but nobody planned them). The app notes them on this device as it
+// finds them (study-data.js idleDaysToMark) in the setting `idleDays: { 'YYYY-MM-DD': true }`. Ignores junk.
+export function idleDaySet(settings) {
+  const out = new Set();
+  const flags = settings && settings.idleDays;
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
+  for (const [k, v] of Object.entries(flags)) if (v === true && /^\d{4}-\d{2}-\d{2}$/.test(k)) out.add(k);
+  return out;
+}
+
 // The key of the Monday of a day's week, e.g. weekOf('2026-10-14') is '2026-10-12'.
 // Built at noon so a daylight-saving change can't move it to another date.
 export function weekOf(key) {
@@ -134,11 +145,13 @@ export function dayStreak(logs, now = Date.now(), opts) {
 }
 // The same, from days already worked out: anything with .has(dayKey), e.g. a Set or the Map from answerDays().
 //   rest     a Set of day keys that are days off      freezes  false = no streak freeze (the old rules)
-// Returns { days, studiedToday, restToday, week: [{ time, on, today, frozen, rest }], frozen: [keys, newest first],
+//   idle     a Set of day keys when nothing was due (they never break the streak)
+// Returns { days, studiedToday, restToday, idleToday, week: [{ time, on, today, frozen, rest }], frozen: [keys, newest first],
 //   freeze: { ready (no freeze used this week), usedOn (key of the one used this week, or null) }, span }.
-export function streakFromDays(days, now = Date.now(), { rest = EMPTY_SET, freezes = true } = {}) {
+export function streakFromDays(days, now = Date.now(), { rest: planned = EMPTY_SET, freezes = true, idle = EMPTY_SET } = {}) {
   const todayKey = dayKey(now);
   const studiedToday = days.has(todayKey);
+  const rest = idle.size ? new Set([...planned, ...idle]) : planned;          // a nothing-due day is as safe as a day off
   const w = walk(days, rest, now, freezes, MAX_DAYS, false);
   const frozen = new Set(w.frozen);
   const thisWeek = weekOf(todayKey);
@@ -147,9 +160,9 @@ export function streakFromDays(days, now = Date.now(), { rest = EMPTY_SET, freez
   const week = [];
   for (let i = 6; i >= 0; i--) {
     const t = daysAgoStart(i, now), k = dayKey(t);
-    week.push({ time: t, on: days.has(k), today: i === 0, frozen: frozen.has(k), rest: rest.has(k) && !days.has(k) });
+    week.push({ time: t, on: days.has(k), today: i === 0, frozen: frozen.has(k), rest: rest.has(k) && !days.has(k), idle: idle.has(k) && !days.has(k) && !planned.has(k) });
   }
-  return { days: w.first, studiedToday, restToday: rest.has(todayKey) && !studiedToday, week, frozen: w.frozen,
+  return { days: w.first, studiedToday, restToday: planned.has(todayKey) && !studiedToday, idleToday: idle.has(todayKey) && !studiedToday && !planned.has(todayKey), week, frozen: w.frozen,
     freeze: { ready: !usedOn, usedOn }, span: w.span };
 }
 
@@ -161,6 +174,7 @@ export function streakText(streak, now = Date.now()) {
   let line;
   if (streak.studiedToday) line = 'Kept for today';
   else if (streak.days && streak.restToday) line = 'Rest day · your streak is safe';
+  else if (streak.days && streak.idleToday) line = 'Nothing due today: your streak is safe';
   else if (streak.days && streak.frozen[0] === yesterday) line = 'Freeze used yesterday · study today to keep it';
   else if (streak.days) line = 'Study today to keep it';
   else line = 'Study today to start one';
@@ -280,6 +294,56 @@ export function retention(logs, now = Date.now(), days = 30) {
   const due = logs.filter(l => l.timestamp >= since && isRecallReview(l));
   const remembered = due.filter(l => l.correct).length;
   return { total: due.length, remembered, rate: due.length ? remembered / due.length : null };
+}
+
+// ---------- true retention, young and mature, against the target ----------
+// For each period (7, 30 and 90 days by default): of the due reviews where you had to recall the answer (isRecallReview), how many
+// you remembered, split by how long the card had waited since its previous review: under `youngDays` (21) = young, otherwise mature.
+// The gap comes from the card's previous answer that changed its schedule (a Review or Anki answer, or a Play answer that was applied),
+// so `logs` must reach `youngDays` further back than the longest period: a card with no earlier answer in `logs` last
+// had one at least that long ago, so it counts as mature. Pure, tested by tests/retention-sim.test.js.
+//   targetOf(cardId)  the target retention that card was scheduled with (optional): the result then has each period's mean target
+// Returns { [days]: { days, young: { n, ok }, mature: { n, ok }, all: { n, ok }, target } } (target null when not asked for or no reviews).
+export const YOUNG_DAYS = 21;
+export function retentionByAge(logs, now = Date.now(), periods = [7, 30, 90], { targetOf = null, youngDays = YOUNG_DAYS } = {}) {
+  const DAYMS = 86400000;
+  const since = periods.map(d => daysAgoStart(d - 1, now));
+  const start = Math.min(...since);
+  const out = {};
+  const sums = {};
+  for (const d of periods) { out[d] = { days: d, young: { n: 0, ok: 0 }, mature: { n: 0, ok: 0 }, all: { n: 0, ok: 0 }, target: null }; sums[d] = 0; }
+  const sorted = logs.slice().sort((a, b) => a.timestamp - b.timestamp);
+  const last = new Map();                                   // card -> time of its previous schedule-changing answer
+  for (const l of sorted) {
+    if (l.timestamp >= start && l.timestamp <= now && isRecallReview(l)) {
+      const prev = last.get(l.cardId);
+      const kind = prev !== undefined && (l.timestamp - prev) / DAYMS < youngDays ? 'young' : 'mature';
+      const target = targetOf ? targetOf(l.cardId) : null;
+      periods.forEach((d, i) => {
+        if (l.timestamp < since[i]) return;
+        const o = out[d];
+        o[kind].n++; o.all.n++;
+        if (l.correct) { o[kind].ok++; o.all.ok++; }
+        if (Number.isFinite(target)) sums[d] += target;
+      });
+    }
+    if (l.source === 'review' || l.source === 'anki' || (l.source === 'play' && l.applied)) last.set(l.cardId, l.timestamp);
+  }
+  if (targetOf) for (const d of periods) out[d].target = out[d].all.n ? sums[d] / out[d].all.n : null;
+  return out;
+}
+
+// The one verdict on "how far from the target", shared by Stats and the health check so they never disagree.
+//   bucket { n, ok } from retentionByAge (all, young or mature), target 0 to 1
+// 'few' (under RET_MIN_N reviews), or 'under' / 'over' / 'on': the gap has to be at least 3 points AND at least 1.64 standard
+// errors (a one-sided 95% test), so a handful of reviews cannot cry wolf. gap = remembered share minus target.
+export const RET_MIN_N = 30, RET_MARGIN = 0.03;
+export function retentionVerdict(bucket, target) {
+  if (!bucket || bucket.n < RET_MIN_N || !Number.isFinite(target)) return { verdict: 'few', gap: null, rate: bucket && bucket.n ? bucket.ok / bucket.n : null };
+  const rate = bucket.ok / bucket.n;
+  const gap = rate - target;
+  const margin = Math.max(RET_MARGIN, 1.64 * Math.sqrt(Math.max(rate * (1 - rate), 0.01) / bucket.n));
+  return { verdict: gap < -margin ? 'under' : gap > margin ? 'over' : 'on', gap, rate };
 }
 
 // ---------- reviews per day ----------

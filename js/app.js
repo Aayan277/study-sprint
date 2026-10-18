@@ -9,7 +9,8 @@ import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
+import { initPanelResize } from './panel-resize.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -20,9 +21,10 @@ import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWo
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go, replace as navReplace, initNav, rewrite, releaseBack } from './nav.js';
+import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.17';
+const APP_VERSION = '4.22';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -100,7 +102,8 @@ async function renderSettings(el) {
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
-        <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
       </div>
       <div class="set-row">
         <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
@@ -150,6 +153,7 @@ async function renderSettings(el) {
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
             <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
+            <button class="btn ghost small" type="button" id="healthOpen">Check how well it fits you</button>
             ${personal.using ? '<button class="link" type="button" id="optReset">Reset to default</button>' : ''}
           </div>
           ${personal.canOptimize ? '' : `<span class="steps-hint" id="optWhy">${esc(personal.why)}</span>`}
@@ -158,6 +162,13 @@ async function renderSettings(el) {
             <div class="sheet-actions"><button class="btn ghost small" type="button" id="optNo">Cancel</button><button class="btn danger solid small" type="button" id="optYes">Reset</button></div>
           </div>
         </div>
+        <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
+          <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
+          <div class="steps-input">
+            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
+            <button class="btn ghost small" type="button" id="ignoreClear" ${settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
+          </div>
+          <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
           <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
           <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
@@ -203,6 +214,9 @@ async function renderSettings(el) {
           ? 'Saved permanently on this device.'
           : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p>
           <p class="note" id="mediaLine"></p></div>
+      </div>
+      <div class="set-row" id="usageRow" hidden>
+        <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p></div>
       </div>
       <div class="set-row">
         <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
@@ -328,6 +342,20 @@ async function renderSettings(el) {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
   });
+  $('retHelp').addEventListener('click', async () => {
+    try {
+      (await import('./retention-sheet.js')).openRetentionSheet({
+        deckId: '',
+        current: () => Math.round(settings.targetRetention * 100),
+        onPick: pct => {
+          settings.targetRetention = pct / 100;
+          db.setSetting('targetRetention', settings.targetRetention);
+          $('ret').value = pct; $('retOut').textContent = `${pct}%`;
+          toast(`Target retention is now ${pct}%`);
+        }
+      });
+    } catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
   rememberFold($('advanced'), 'settings-advanced');
   wireAdvanced(el);
 }
@@ -398,6 +426,23 @@ function wireAdvanced(el) {
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('healthOpen').addEventListener('click', async () => {
+    try { (await import('./health-sheet.js')).openHealthSheet(); }
+    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('ignoreBefore').addEventListener('change', e => {
+    const v = cleanIgnoreBefore(e.target.value);
+    e.target.value = v || '';
+    settings.ignoreBefore = v;
+    $('ignoreClear').hidden = !v;
+    db.setSetting('ignoreBefore', v);
+    toast(v ? `Reviews before ${v} are ignored when tuning` : 'Using all your reviews');
+  });
+  $('ignoreClear').addEventListener('click', () => {
+    $('ignoreBefore').value = ''; settings.ignoreBefore = null; $('ignoreClear').hidden = true;
+    db.setSetting('ignoreBefore', null);
+    toast('Using all your reviews');
   });
   $('optReset')?.addEventListener('click', () => {
     $('optConfirm').hidden = false;
@@ -586,22 +631,24 @@ async function drawSync() {
   if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
   $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
     : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
+  drawUsage();
   if (!acct) {
     box.innerHTML = `
-      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one.</p>
+      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one. Anyone can make an account; each account only ever sees its own data.</p>
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
           <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
         ${passwordField('syncPw', 'Password', 'current-password')}
         <p class="pw-rules-title">New accounts need:</p>
         ${rulesList('syncRules')}
+        <div id="captchaBox" hidden></div>
         <p class="err" id="syncErr" hidden></p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="syncCreate">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">First time? Use <b>Create account</b> once, then <b>Sign in</b> on your other devices.
+      <p class="note">First time? Use <b>Create account</b> once (we email you a link to confirm it), then <b>Sign in</b> on your other devices.
         <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
@@ -613,7 +660,19 @@ async function drawSync() {
       if (create && !passwordOk(pw)) { err.textContent = `Your password needs ${passwordMissing(pw)}.`; err.hidden = false; return; }
       box.querySelectorAll('button').forEach(b => { b.disabled = true; });
       try {
-        await (create ? sync.createAccount(email, pw) : sync.signIn(email, pw));
+        // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
+        const captcha = await captchaToken();
+        const made = await (create ? sync.createAccount(email, pw, captcha) : sync.signIn(email, pw, captcha));
+        if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
+          box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          openSheet(`
+            <h2 id="sheetTitle">Check your email</h2>
+            <p>We sent a link to <b>${esc(email)}</b>. Open it to confirm your account, then come back here and <b>sign in</b> with your email and password.</p>
+            <p class="note">No email after a few minutes? Look in your spam folder, or tap Create account again to send it again.</p>
+            <div class="sheet-actions"><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
+          $('pendOk').addEventListener('click', closeSheet);
+          return;
+        }
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
       } catch (e) {
@@ -628,8 +687,8 @@ async function drawSync() {
       const email = $('syncEmail').value.trim(), err = $('syncErr');
       if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type your email above first, then tap Forgot password.'; err.hidden = false; $('syncEmail').focus(); return; }
       try {
-        await sync.sendPasswordReset(email);
         err.hidden = true;
+        await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
           <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
@@ -654,6 +713,10 @@ async function drawSync() {
       <button class="btn ghost small" type="button" id="signOutBtn">Sign out…</button>
     </div>
     <div class="set-row">
+      <div><b>Delete my account</b><p>Permanently deletes your account and everything stored in it on the server. Your devices keep their own copy.</p></div>
+      <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
+    </div>
+    <div class="set-row">
       <div><b>Delete my synced data</b><p>Removes everything stored in your account on the server. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
@@ -662,6 +725,30 @@ async function drawSync() {
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
+  $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
+}
+
+// Settings → Your data → "In your account: data … · pictures and sounds … of …" (only when signed in, and the
+// server has supabase/limits.sql). Amber from 80%, with the full message once the account is full.
+async function drawUsage() {
+  const row = $('usageRow');
+  if (!row) return;
+  const u = (await sync.account()) ? usageLine(await sync.usage()) : null;
+  if (!row.isConnected) return;
+  row.hidden = !u;
+  if (!u) return;
+  $('usageLine').textContent = u.text;
+  $('usageLine').className = 'usage-line ' + u.level;
+  $('usageNote').hidden = !u.detail;
+  $('usageNote').textContent = u.detail;
+  $('usageNote').className = 'note usage-line ' + u.level;
+}
+
+// A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads
+// when it's needed.)
+async function captchaToken() {
+  const { captchaOn, askCaptcha } = await import('./captcha.js');
+  return captchaOn() ? askCaptcha($('captchaBox')) : undefined;
 }
 
 // A password box with a Show / Hide button (handy on phones).
@@ -768,7 +855,7 @@ function confirmDeleteServer() {
     <h2 id="sheetTitle">Delete your synced data?</h2>
     <div class="confirm">
       <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress and settings. It can't be undone.</p>
-      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, delete the user in Supabase → Authentication → Users.)</p>
+      <p class="note">This device and your other devices keep their own copy. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="dsNo">Cancel</button>
         <button class="btn danger solid" type="button" id="dsYes">Delete from server</button>
@@ -784,6 +871,36 @@ function confirmDeleteServer() {
       toast('Your synced data was deleted from the server');
       drawSync();
     } catch (e) { toast(e.message); $('dsYes').disabled = false; }
+  });
+}
+
+// Delete the account itself. A typed confirmation: the button stays off until the box says DELETE.
+function confirmDeleteAccount() {
+  openSheet(`
+    <h2 id="sheetTitle">Delete your account?</h2>
+    <div class="confirm">
+      <p>This permanently deletes your <b>account</b> and <b>everything stored in it on the server</b>: decks, cards, progress, settings, pictures and sounds, and your sign-in. It can't be undone, and you'd need to make a new account to sync again.</p>
+      <p class="note"><b>Your data on this device is kept.</b> This device is signed out afterwards. Your other devices keep their own copies too, but can no longer sync.</p>
+      <label class="field"><span>Type DELETE to confirm</span>
+        <input id="daText" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <p class="err" id="daErr" hidden></p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="daNo">Cancel</button>
+        <button class="btn danger solid" type="button" id="daYes" disabled>Delete my account</button>
+      </div>
+    </div>`);
+  $('daText').focus();
+  $('daNo').addEventListener('click', closeSheet);
+  $('daText').addEventListener('input', () => { $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
+  $('daYes').addEventListener('click', async () => {
+    if ($('daText').value.trim() !== 'DELETE') return;
+    $('daYes').disabled = true; $('daErr').hidden = true;
+    try {
+      await sync.deleteAccount();
+      closeSheet();
+      toast('Your account was deleted. Your data is still on this device.');
+      drawSync();
+    } catch (e) { $('daErr').textContent = e.message; $('daErr').hidden = false; $('daYes').disabled = false; }
   });
 }
 
@@ -830,7 +947,7 @@ let warnedStale = false;
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
-  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else showSyncStatus(); }
+  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') drawUsage(); } }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.
@@ -888,19 +1005,23 @@ async function seedSampleDeck(again = false) {
 }
 
 // ---------- navigation ----------
+// Loads a screen's file. A failed import() is remembered by the browser until the page reloads (even once you are back online), so after a
+// failure the file is asked for again under a new address (?r=...) the next time: the screen can load without pressing Reload.
+const busted = new Map();
+const lazy = path => import(busted.has(path) ? `${path}?r=${busted.get(path)}` : path).catch(err => { busted.set(path, Date.now()); throw err; });
 const ROUTES = {
   // Today is the home screen, so it loads with the app. Every other screen is loaded the first time it is
   // opened (the service worker has them saved, so that is quick), which keeps the first load small.
   // Review also needs the FSRS library from the internet (saved for offline after the first time).
   today: el => renderToday(el),
-  welcome: async (el, arg) => (await import('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
-  review: async (el, deckId) => (await import('./review.js')).renderReview(el, deckId),
-  play: async el => (await import('./play.js')).renderPlay(el),
-  decks: async (el, arg) => (await import('./decks.js')).renderLibrary(el, arg === 'starters'),
-  deck: async (el, id) => (await import('./decks.js')).renderDeck(el, id),
-  browse: async (el, arg) => (await import('./browse.js')).renderBrowseAll(el, arg),
-  import: async (el, deckId) => (await import('./import-screen.js')).renderImport(el, deckId),
-  stats: async el => (await import('./stats.js')).renderStats(el),
+  welcome: async (el, arg) => (await lazy('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
+  review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
+  play: async el => (await lazy('./play.js')).renderPlay(el),
+  decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
+  deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
+  browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
+  import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),
+  stats: async el => (await lazy('./stats.js')).renderStats(el),
   settings: el => renderSettings(el)
 };
 
@@ -959,6 +1080,8 @@ async function route() {
     if (/dynamically imported module|importing a module script/i.test(err.message)) {
       el.innerHTML = `<div class="empty"><b>Couldn't load this screen.</b><br>Check your connection and reload.<br><button class="btn" type="button" data-reload>Reload</button></div>`;
       el.querySelector('[data-reload]').onclick = () => location.reload();
+      // Back online while this message is still showing: load the screen again by itself.
+      addEventListener('online', () => { if (el.isConnected) route(); }, { once: true });
       return;
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
@@ -1020,6 +1143,7 @@ async function showResetLink(link) {
   resetShown = true;
   const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
   if (link.error) { forget(); toast(link.error); return; }
+  if (link.confirmed) { toast('Email confirmed. Now sign in with your email and password.'); return; }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
   let user;
   try { user = await sync.lookUpResetLink(link.session); } catch (err) {
@@ -1042,6 +1166,7 @@ async function showResetLink(link) {
 // ---------- start up ----------
 async function start() {
   initSheet();
+  initPanelResize();
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });

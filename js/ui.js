@@ -98,8 +98,8 @@ export function weekDotsHTML(week, label = 'Last 7 days') {
   // A list for screen readers: each day says what happened ("Tue 13 Oct: streak freeze used"); the squares are only pictures.
   return `<div class="week" role="list" aria-label="${esc(label)}">${week.map(d => {
     const kind = d.on ? 'on' : d.frozen ? 'frz' : d.rest ? 'rest' : '';
-    const note = d.on ? ', studied' : d.frozen ? ', streak freeze used' : d.rest ? ', day off' : '';
-    const said = `${dotSaid(d.time)}: ${(d.on ? 'studied' : d.frozen ? 'streak freeze used' : d.rest ? 'day off' : d.today ? 'not studied yet' : 'not studied')}${d.today && d.on ? ' (today)' : ''}`;
+    const note = d.on ? ', studied' : d.frozen ? ', streak freeze used' : d.rest ? (d.idle ? ', nothing due' : ', day off') : '';
+    const said = `${dotSaid(d.time)}: ${(d.on ? 'studied' : d.frozen ? 'streak freeze used' : d.rest ? (d.idle ? 'nothing due' : 'day off') : d.today ? 'not studied yet' : 'not studied')}${d.today && d.on ? ' (today)' : ''}`;
     return `<div class="wd${kind ? ' ' + kind : ''}${d.today ? ' today' : ''}" role="listitem" title="${esc(DOT_DAY.format(d.time) + note)}"><span class="sr-only">${esc(said)}</span>
       <i aria-hidden="true">${d.frozen && !d.on ? icon('snow') : d.rest && !d.on ? icon('moon') : ''}</i><span aria-hidden="true">${esc(DOT_NAME.format(d.time).slice(0, 2))}</span></div>`;
   }).join('')}</div>`;

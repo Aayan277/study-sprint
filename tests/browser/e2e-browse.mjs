@@ -38,7 +38,7 @@ await page.screenshot({ path: SP + '/b-panel.png', fullPage: true });
 await page.fill('#ceBack', 'Getting better because you believe you were treated'); await page.fill('#ceTags', 'Research, Exam 1');
 await page.click('button[type=submit][form=ceForm]'); await page.waitForTimeout(400);
 let c = await card('Placebo effect');
-ok(c.back === 'Getting better because you believe you were treated' && c.tags.join() === 'research,exam 1', 'edit back and tags');
+ok(c.back === 'Getting better because you believe you were treated' && c.tags.join() === 'research,exam,1', 'edit back and tags (spaces and commas both separate tags)');
 await page.click('[data-flag="1"]'); await page.waitForTimeout(400);
 ok((await card('Placebo effect')).flag === 1, 'red flag set');
 await page.click('[data-act="suspend"]'); await page.waitForTimeout(400);

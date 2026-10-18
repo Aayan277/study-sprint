@@ -1,0 +1,39 @@
+# Keeps the free Supabase project from pausing. Free projects pause after about a week with no use; this asks
+# the database a tiny question once a day, which counts as use. Setup: docs/sync-setup.md ("Keep the project awake").
+#
+# GitHub switches scheduled workflows off after 60 days with no activity in the repository (any commit counts); if that
+# happens, the Actions tab shows a button to turn it back on.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions → New repository secret):
+#   SUPABASE_URL       the Project URL, e.g. https://abcdefgh.supabase.co
+#   SUPABASE_ANON_KEY  the anon / publishable key (the same public key that is in js/sync-config.js)
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 6 * * *'        # every day at 06:17 UTC
+  workflow_dispatch:            # and a "Run workflow" button, to try it
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask the database one cheap question
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Add the repository secrets SUPABASE_URL and SUPABASE_ANON_KEY (docs/sync-setup.md)."
+            exit 1
+          fi
+          # Without a signed-in user the table's privacy rules return an empty list ([]): that is the right answer.
+          # Any 2xx means the database woke up and answered.
+          curl --fail --silent --show-error --retry 3 --retry-delay 10 --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            "${SUPABASE_URL%/}/rest/v1/sync_items?select=id&limit=1"
+          echo
+          echo "Supabase answered."

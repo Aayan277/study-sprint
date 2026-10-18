@@ -133,6 +133,16 @@ test('a right multiple-choice answer on a due card counts at most as Hard; typin
   assert.equal(appliedRating({ decision: 'first', rating: GOOD, mc: true }), GOOD);
 });
 
+test('"I was right" never records more than Good', () => {
+  for (const decision of ['due', 'first', 'again']) for (const mc of [true, false]) {
+    assert.ok(appliedRating({ decision, rating: EASY, mc, overridden: true }) <= GOOD, `${decision} mc=${mc}`);
+    assert.equal(appliedRating({ decision, rating: EASY, mc, overridden: false }), decision === 'due' && mc ? HARD : EASY);
+  }
+  assert.equal(appliedRating({ decision: 'due', rating: EASY, mc: false, overridden: true }), GOOD);
+  assert.equal(appliedRating({ decision: 'due', rating: GOOD, mc: false, overridden: true }), GOOD);
+  assert.equal(appliedRating({ decision: 'due', rating: HARD, mc: false, overridden: true }), HARD);      // lower ratings stay
+});
+
 // ---------- v4.10: Play is practice only unless "Count Play answers as reviews" is on ----------
 import { playCountsAsReviews } from '../js/autograde.js';
 import { isAnswerLog, answerDays, isDueReview, reviewsPerDay } from '../js/stats-calc.js';
