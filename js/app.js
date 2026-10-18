@@ -24,7 +24,7 @@ import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack } fro
 import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.22';
+const APP_VERSION = '4.23';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
