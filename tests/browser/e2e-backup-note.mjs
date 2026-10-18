@@ -6,7 +6,7 @@ const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, se
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(e.stack));
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
-const note = async () => { await page.goto('http://localhost:8123/#/decks'); await page.goto('http://localhost:8123/#/settings'); await page.reload(); await page.waitForSelector('#backupNote'); return { text: await page.textContent('#backupNote'), warn: await page.$eval('#backupNote', e => e.classList.contains('warn')) }; };
+const note = async () => { await page.goto('about:blank'); await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#backupNote'); return { text: await page.textContent('#backupNote'), warn: await page.$eval('#backupNote', e => e.classList.contains('warn')) }; };
 // few cards (the sample deck is under 50): a plain line, no nudge
 let n = await note();
 ok(n.text === 'No backup yet on this device.' && !n.warn, 'few cards, no backup: plain line: ' + n.text);
