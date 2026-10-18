@@ -5,13 +5,17 @@
 // Errors are thrown as SupaError with a plain-words message.
 
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
-import { readUsage } from './quota.js';
+import { readUsage, SERVER_FULL_MESSAGE } from './quota.js';
 
 // No request is allowed to hang for ever: a frozen or stalled connection would hold the sync lock (and every other tab) with it.
 // The timeout has its own code, so it isn't taken for anything else.
 const REQUEST_TIMEOUT = 180000;          // (a page of 1,000 changes can be many MB; sync.js asks for smaller pages after a timeout)
 const timeoutSignal = ms => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return { signal: c.signal, done: () => clearTimeout(t) }; };
 const timedOut = () => new SupaError("The sync server took too long to answer. It will be tried again.", { code: 'timeout' });
+
+// Shown when pictures or sounds are still on the server after we tried to remove them (Delete account / Delete my synced data).
+// Also what the server's delete_my_account() raises as 'media_left' when files remain.
+export const MEDIA_LEFT = 'Couldn’t remove your pictures from the server. Nothing was deleted. Try again.';
 
 export class SupaError extends Error {
   constructor(message, { status = 0, code = '' } = {}) {
@@ -41,7 +45,7 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
     if (limit.signal.aborted) throw timedOut();
     throw new SupaError(navigator.onLine === false
       ? "You're offline. Sync will catch up when you're back online."
-      : "Couldn't reach the sync server. If you haven't used the app for a week, your Supabase project may be paused: open it on supabase.com and click Restore.",
+      : "Couldn't reach the sync server. Your cards are safe on this device and will sync when it's back.",
     { code: 'network' });
   }
   let text;
@@ -50,7 +54,7 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
     // (The server's own refusals, supabase/limits.sql: a person's synced data is full, or the whole project is.)
-    const code = (/sync_data_full|sync_server_full/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
+    const code = (/sync_data_full|sync_server_full|media_left/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
     throw new SupaError(explain(res.status, code, json?.msg || json?.message || json?.error_description || text), { status: res.status, code });
   }
   return json;
@@ -63,12 +67,14 @@ function explain(status, code, raw) {
     invalid_grant: 'Wrong email or password.',
     user_already_exists: 'There’s already an account with that email. Sign in instead.',
     email_exists: 'There’s already an account with that email. Sign in instead.',
-    signup_disabled: 'New accounts are turned off for this project. Sign in with your existing account.',
+    signup_disabled: 'New accounts can’t be made right now. Sign in with your existing account.',
     captcha_failed: 'Couldn’t confirm you’re not a robot. Try again.',
     sync_items_data_size: 'One of your cards is too big to sync (over 64 KB). Shorten its text and try again.',
     sync_data_full: 'Your account’s synced data is full. New changes are kept on this device and will sync when there’s room.',
     sync_server_full: 'The sync server is full right now. Everything is safe on this device and will sync when there’s room.',
-    PGRST202: 'This part isn’t set up on the server yet. The owner needs to run supabase/limits.sql (see docs/sync-setup.md).',
+    PGRST202: 'This isn’t available on the sync server yet. Nothing was changed. Try again later.',
+    '25006': 'The sync server is full right now. Everything is safe on this device and will sync when there’s room.',
+    media_left: MEDIA_LEFT,
     weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',
     validation_failed: 'Check the email and password.',
@@ -82,8 +88,8 @@ function explain(status, code, raw) {
     refresh_token_not_found: 'You’ve been signed out. Sign in again to keep syncing.',
     refresh_token_already_used: 'You’ve been signed out. Sign in again to keep syncing.',
     session_not_found: 'You’ve been signed out. Sign in again to keep syncing.',
-    PGRST205: 'The sync table is missing. Run supabase/setup.sql in your Supabase project (see docs/sync-setup.md).',
-    '42P01': 'The sync table is missing. Run supabase/setup.sql in your Supabase project (see docs/sync-setup.md).'
+    PGRST205: 'The sync server isn’t ready yet. Your cards are safe on this device and will sync when it is.',
+    '42P01': 'The sync server isn’t ready yet. Your cards are safe on this device and will sync when it is.'
   };
   if (known[code]) return known[code];
   if (status === 401 || code === 'PGRST301' || code === 'PGRST303') return 'You’ve been signed out. Sign in again to keep syncing.';
@@ -141,7 +147,8 @@ export async function getUser(accessToken) {
   return { id: u.id, email: u.email };
 }
 export async function signOut(accessToken) {
-  try { await call('/auth/v1/logout', { method: 'POST', token: accessToken }); } catch { /* signed out here either way */ }
+  // (scope=local: only this device's sign-in ends. The default, global, would sign the person out of all their other devices.)
+  try { await call('/auth/v1/logout?scope=local', { method: 'POST', token: accessToken }); } catch { /* signed out here either way */ }
 }
 
 // ---------- data ----------
@@ -167,8 +174,15 @@ export async function myUsage(token) {
   }
 }
 // Delete the signed-in account itself, with its files and data (supabase/limits.sql delete_my_account()).
+// The server refuses ('media_left') while any file is still in the account's folder: nothing is deleted then.
+// (Its own code, so it isn't taken for sync.js's "pictures on this device are missing", which offers Delete anyway.)
 export async function deleteAccount(token) {
-  await call('/rest/v1/rpc/delete_my_account', { method: 'POST', token, body: {} });
+  try {
+    await call('/rest/v1/rpc/delete_my_account', { method: 'POST', token, body: {} });
+  } catch (err) {
+    if (err?.code === 'media_left') throw new SupaError(MEDIA_LEFT, { status: err.status, code: 'server_media_left' });
+    throw err;
+  }
 }
 // Delete every row of this account (Settings → Sync → delete my data on the server).
 export function deleteAllRows(token, userId) {
@@ -177,7 +191,7 @@ export function deleteAllRows(token, userId) {
 
 // ---------- pictures (Supabase Storage: bucket "media", one folder per account) ----------
 // Set up by supabase/media.sql. Pictures are files, so these send and receive bytes, not JSON.
-const MEDIA_MISSING = 'Pictures can’t sync yet: run supabase/media.sql in your Supabase project (see docs/sync-setup.md). Everything else is syncing.';
+const MEDIA_MISSING = 'Pictures can’t sync yet because the sync server isn’t ready for them. Everything else is syncing.';
 // ms: how long the request may take (until the answer starts; with keepTimer, until the caller has read it and calls res.limit.done()).
 async function storage(path, { method = 'GET', token, body, type, ms = 60000, keepTimer = false } = {}) {
   let res;
@@ -196,9 +210,12 @@ async function storage(path, { method = 'GET', token, body, type, ms = 60000, ke
   res.limit = limit;
   if (!res.ok) {
     limit.done();
-    let json = null;
-    try { json = await res.json(); } catch { /* not JSON */ }
+    let json = null, raw = '';
+    try { raw = await res.text(); json = JSON.parse(raw); } catch { /* not JSON */ }
     const msg = String(json?.message || json?.error || '');
+    // The project is over its ceiling for files: a trigger on storage.objects raises media_server_full, and the Storage API passes
+    // it on as a 400 or a 500 (so look for it whatever the status, in the body however it is shaped).
+    if (/media_server_full/.test(raw)) throw new SupaError(SERVER_FULL_MESSAGE, { status: res.status, code: 'media_server_full' });
     // The bucket turns away a kind of file it isn't set up for (a sound, before supabase/media.sql was run again).
     if (String(json?.statusCode) === '415' || /invalid_mime_type|mime type/i.test(`${json?.error} ${msg}`)) throw new SupaError('The sync server doesn’t take this kind of file yet.', { status: res.status, code: 'media_type' });
     if (/bucket not found/i.test(msg)) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'bucket_missing' });
@@ -249,16 +266,22 @@ export async function deleteMedia(token, userId, ids) {
   }
 }
 // The ids of every picture in the account (for Delete my synced data, and the held-file check in sync-quota.js). Sorted by name so
-// the pages don't overlap. Stops at a short or empty page. A server that ignores `offset` would repeat the first page for ever, so
-// after MAX_LIST_PAGES pages it gives up with an error (callers fall back to something else).
-const MAX_LIST_PAGES = 200;
-export async function listMedia(token, userId) {
+// the pages don't overlap. Paging stops only at an empty page, because a server may cap a page below the limit asked for (100, say),
+// and it moves on by the number of entries it got. A server that ignores `offset` would repeat the first page for ever, so after
+// MAX_LIST_PAGES pages it gives up with an error (callers fall back to something else). A sub-folder (an entry with id null) is listed
+// inside, so files in it count (and are removed with their path), instead of being missed.
+const MAX_LIST_PAGES = 500;
+export async function listMedia(token, userId, folder = '', depth = 0) {
   const ids = [];
-  for (let n = 0; n < MAX_LIST_PAGES; n++) {
-    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset: n * 1000, sortBy: { column: 'name', order: 'asc' } }) });
+  for (let n = 0, offset = 0; n < MAX_LIST_PAGES; n++) {
+    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/${folder}`, limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } }) });
     const page = await res.json();
-    ids.push(...page.map(f => f.name));
-    if (page.length < 1000) return ids;
+    if (!page.length) return ids;
+    for (const f of page) {
+      if (f.id === null) { if (depth < 3) ids.push(...await listMedia(token, userId, `${folder}${f.name}/`, depth + 1)); }
+      else ids.push(folder + f.name);
+    }
+    offset += page.length;
   }
   throw new SupaError('The list of pictures never ended.', { code: 'list_too_long' });
 }

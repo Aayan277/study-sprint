@@ -4,7 +4,7 @@
 import { chromium } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ autoAddCards: true })      // builds devices with cards, then signs in on purpose to merge them (pw.mjs);
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
 const APP = 'http://localhost:8123/';
@@ -175,7 +175,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await signInUI(B, { create: true }); await waitSynced(B);
   await B.click('#delAcctBtn'); await B.fill('#daText', 'DELETE'); await B.click('#daYes');
   await B.waitForSelector('#daErr:not([hidden])');
-  ok(/limits\.sql/.test(await B.textContent('#daErr')) && fake2.users.has('me@example.com'), 'if limits.sql has not been run, it says so and deletes nothing: ' + await B.textContent('#daErr'));
+  ok(/isn.t available on the sync server yet/.test(await B.textContent("#daErr")) && fake2.users.has('me@example.com'), 'if limits.sql has not been run, it says so and deletes nothing: ' + await B.textContent('#daErr'));
   await A.context().close(); await B.context().close();
 }
 

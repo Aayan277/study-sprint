@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, badRow, addDamaged, damagedNote } from '../js/sync-merge.js';
 import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { splitOversized } from '../js/quota.js';
@@ -258,7 +258,7 @@ test('days off: keys beyond what can be planned are dropped and the number of fu
 });
 
 // ---------- pictures and sounds (files in Supabase Storage) ----------
-import { uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE } from '../js/sync-merge.js';
+import { uploadMediaFiles, isWholeStorageError, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE } from '../js/sync-merge.js';
 import * as supa from '../js/supa.js';
 
 const file = (id, type = 'image/jpeg') => ({ id, type });
@@ -908,4 +908,137 @@ test('pull: from an existing log with older, not yet settled entries, the end st
     const { st } = await pullPages(start, pullStart(start), PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
     assert.deepEqual(st, expected, 'total ' + total);
   }
+});
+
+// ---------- rows from the server that can't be records ----------
+const srow = (store, id, data, extra = {}) => ({ store, id, data, deleted: false, updated_at: 5, seq: 1, ...extra });
+
+test('badRow: the audit cases (no id inside the data, no cardId, data a string, data null while not deleted) are all bad', () => {
+  assert.ok(badRow(srow('cards', 'x1', { deckId: 'd', front: 'a' })));
+  assert.ok(badRow(srow('cardStates', 'x2', { due: 1 })));
+  assert.ok(badRow(srow('cards', 'x3', 'oops')));
+  assert.ok(badRow(srow('decks', 'x4', null)));
+  assert.ok(badRow(srow('cards', 'x5', [1, 2])));
+  assert.ok(badRow(srow('reviewLog', 'x6', { cardId: 'c' })), 'a review needs its uid');
+  assert.ok(badRow(srow('cards', '', { id: 'a' })), 'no id on the row');
+  assert.ok(badRow(srow('settings', 'newPerDay', 'x')));
+  assert.ok(badRow(null));
+});
+
+test('badRow: good rows, deletes, and stores this app does not know are not damaged', () => {
+  assert.equal(badRow(srow('cards', 'c1', { id: 'c1', front: 'a' })), null);
+  assert.equal(badRow(srow('cardStates', 'c1', { cardId: 'c1' })), null);
+  assert.equal(badRow(srow('reviewLog', 'u1', { uid: 'u1', cardId: 'c' })), null);
+  assert.equal(badRow(srow('settings', 'newPerDay', { value: 30 })), null);
+  assert.equal(badRow(srow('cards', 'gone', null, { deleted: true })), null);
+  assert.equal(badRow(srow('flashmobs', 'f1', 'whatever')), null, 'a store from a newer app is ignored elsewhere, not counted as damage');
+});
+
+test('recordFromRow: the key always comes from the row id, so data naming another record cannot overwrite it', () => {
+  assert.equal(recordFromRow(srow('cards', 'mine', { id: 'victim', front: 'a' })).id, 'mine');
+  assert.equal(recordFromRow(srow('cardStates', 'mine', { cardId: 'victim', due: 1 })).cardId, 'mine');
+  assert.equal(recordFromRow(srow('reviewLog', 'u9', { uid: 'u1' })).uid, 'u9');
+  const r = recordFromRow(srow('decks', 'd1', { id: 'd1', name: 'N' }));
+  assert.deepEqual(r, { id: 'd1', name: 'N', updatedAt: 5, syncedAt: 5 });
+});
+
+test('recordFromRow keeps a number id as a number (backups allow them) and only replaces a key that does not match', () => {
+  assert.equal(recordFromRow(srow('cards', '123', { id: 123, deckId: 'd' })).id, 123);
+  assert.equal(recordFromRow(srow('cardStates', '77', { cardId: 77 })).cardId, 77);
+  assert.equal(recordFromRow(srow('cards', '123', { id: 124, deckId: 'd' })).id, '123');
+  assert.equal(badRow(srow('cards', '123', { id: 123 })), null);
+});
+
+test('the skipped-rows log counts every row, keeps the last 20, and tells the person once until more arrive', () => {
+  let log = addDamaged(null, [{ store: 'cards', id: 'a', why: 'x' }], 10);
+  assert.equal(log.count, 1);
+  assert.match(damagedNote(log), /^1 synced record was damaged and skipped/);
+  log = addDamaged(log, Array.from({ length: 30 }, (_, i) => ({ store: 'cards', id: 'b' + i, why: 'x' })), 11);
+  assert.equal(log.count, 31);
+  assert.equal(log.items.length, 20);
+  assert.match(damagedNote(log), /^31 synced records were damaged and skipped/);
+  assert.equal(damagedNote({ ...log, seen: 31 }), null, 'after Dismiss nothing is shown');
+  assert.match(damagedNote(addDamaged({ ...log, seen: 31 }, [{ id: 'z' }])), /^1 synced record was damaged/);
+  assert.equal(damagedNote(undefined), null);
+  // the same row read again by the next sync's overlap is not counted twice
+  const once = addDamaged(null, [{ store: 'cards', id: 'a', seq: 7, why: 'x' }]);
+  assert.equal(addDamaged(once, [{ store: 'cards', id: 'a', seq: 7, why: 'x' }]).count, 1);
+  assert.equal(addDamaged(once, [{ store: 'cards', id: 'a', seq: 9, why: 'x' }]).count, 2, 'a new version of it is a new row');
+});
+
+// ---------- wording for end users ----------
+test('server errors use neutral wording: nothing about the owner, a project, SQL or a dashboard', async () => {
+  const supa = await import('../js/supa.js');
+  const realFetch = globalThis.fetch;
+  const ask = async (res) => {
+    globalThis.fetch = async () => { if (res instanceof Error) throw res; return { ok: false, status: res.status, text: async () => JSON.stringify(res.body) }; };
+    try { await supa.putRows('t', []); } catch (e) { return e; } finally { globalThis.fetch = realFetch; }
+  };
+  const net = await ask(new TypeError('Failed to fetch'));
+  assert.equal(net.message, "Couldn't reach the sync server. Your cards are safe on this device and will sync when it's back.");
+  const ro = await ask({ status: 400, body: { code: '25006', message: 'cannot execute INSERT in a read-only transaction' } });
+  assert.equal(ro.message, SERVER_FULL_MESSAGE_TEXT);
+  assert.equal(ro.code, '25006');
+  for (const body of [{ code: 'PGRST202' }, { code: 'PGRST205' }, { code: '42P01' }, { error_code: 'signup_disabled' }, { message: 'media_left' }]) {
+    const e = await ask({ status: 404, body });
+    assert.doesNotMatch(e.message, /supabase|project|\bSQL\b|\.sql|dashboard|owner|Restore/i, e.message);
+  }
+  const left = await ask({ status: 400, body: { code: 'P0001', message: 'media_left' } });
+  assert.equal(left.code, 'media_left');
+});
+const SERVER_FULL_MESSAGE_TEXT = "The sync server is full right now. Everything is safe on this device and will sync when there’s room.";
+
+// ---------- storage: a full project, the sign-out scope, listing ----------
+const withFetch = async (handler, fn) => {
+  const real = globalThis.fetch; const seen = [];
+  globalThis.fetch = async (url, init = {}) => { seen.push({ url: String(url), init }); return handler(String(url), init); };
+  try { return await fn(seen); } finally { globalThis.fetch = real; }
+};
+const reply = (status, body) => ({ ok: status < 400, status, headers: new Headers(), json: async () => (typeof body === 'string' ? JSON.parse(body) : body), text: async () => (typeof body === 'string' ? body : JSON.stringify(body)), arrayBuffer: async () => new ArrayBuffer(0) });
+
+test('media_server_full from the Storage API (as a 400 or a 500) has its own code, the server-full wording, and counts as a whole-storage problem', async () => {
+  const supa = await import('../js/supa.js');
+  for (const status of [400, 500]) {
+    const err = await withFetch(() => reply(status, { statusCode: String(status), error: 'x', message: 'media_server_full' }), () => supa.uploadMedia('t', 'u', 'p1', 'image/jpeg', new ArrayBuffer(3)).then(() => null, e => e));
+    assert.equal(err.code, 'media_server_full');
+    assert.equal(err.message, "The sync server is full right now. Everything is safe on this device and will sync when there's room.");
+    assert.ok(isWholeStorageError(err));
+  }
+  const nested = await withFetch(() => reply(500, '{"message":"new row violates ... ","error":{"hint":"media_server_full"}}'), () => supa.uploadMedia('t', 'u', 'p1', 'image/jpeg', new ArrayBuffer(3)).then(() => null, e => e));
+  assert.equal(nested.code, 'media_server_full', 'found wherever it is in the body');
+  const { explainRefusal } = await import('../js/sync-quota.js');
+  assert.match(await explainRefusal({ access_token: 't' }, err0()), /sync server is full/);
+  function err0() { return Object.assign(new Error('x'), { code: 'media_server_full' }); }
+});
+
+test('uploading stops after two server errors in a row, and a good upload in between starts the count again', async () => {
+  const files = Array.from({ length: 8 }, (_, i) => ({ id: 'f' + i, type: 'image/jpeg' }));
+  const boom = () => Object.assign(new Error('bad gateway'), { status: 502, code: 'x' });
+  let tried = 0;
+  await assert.rejects(uploadMediaFiles(files, async () => { tried++; throw boom(); }), /bad gateway/);
+  assert.equal(tried, 2);
+  tried = 0;
+  const out = await uploadMediaFiles(files, async m => { tried++; if (['f0', 'f2', 'f4'].includes(m.id)) throw boom(); });
+  assert.equal(tried, 8, 'single errors with a success between never trip it');
+  assert.equal(out.failed.length, 3);
+});
+
+test('signing out ends only this device\'s sign-in (scope=local), not the person\'s other devices', async () => {
+  const supa = await import('../js/supa.js');
+  const seen = await withFetch(() => reply(204, ''), async seen => { await supa.signOut('tok'); return seen; });
+  assert.match(seen[0].url, /\/auth\/v1\/logout\?scope=local$/);
+});
+
+test('listing the account\'s files: a page cap below the limit asked for does not end the list early, and sub-folders are listed inside', async () => {
+  const supa = await import('../js/supa.js');
+  const all = Array.from({ length: 250 }, (_, i) => ({ id: 'i' + i, name: 'f' + String(i).padStart(3, '0') }));
+  const handler = (url, init) => {
+    const b = JSON.parse(init.body);
+    if (b.prefix === 'u/') return reply(200, [...all, { id: null, name: 'sub' }].slice(b.offset, b.offset + 100));
+    if (b.prefix === 'u/sub/') return reply(200, b.offset ? [] : [{ id: 'z', name: 'deep.png' }]);
+    return reply(200, []);
+  };
+  const ids = await withFetch(handler, () => supa.listMedia('t', 'u'));
+  assert.equal(ids.length, 251);
+  assert.ok(ids.includes('sub/deep.png') && ids.includes('f249'));
 });

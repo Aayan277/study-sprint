@@ -241,7 +241,7 @@ function idNote(list) {
 export function pushErrorKind(err) {
   const text = `${err?.code || ''} ${err?.message || ''} ${err?.details || ''}`;
   if (/sync_data_full/.test(text)) return 'data';
-  if (/sync_server_full/.test(text)) return 'server';
+  if (/sync_server_full|\b25006\b/.test(text)) return 'server';          // 25006: the project went read-only (Supabase does that when it is over its limits)
   if (/sync_items_id_size/.test(text)) return 'id';
   if (/\b23514\b|sync_items_data_size/.test(text)) return 'size';
   return null;

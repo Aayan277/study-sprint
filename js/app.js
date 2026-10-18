@@ -27,6 +27,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
+import { damagedNote } from './sync-merge.js';
 import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 
@@ -719,7 +720,8 @@ async function drawSync() {
       try {
         // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
         const captcha = await captchaToken();
-        const made = await (create ? sync.createAccount(email, pw, captcha) : sync.signIn(email, pw, captcha));
+        const opts = { onConflict: askAboutDevice };      // cards here from someone else (or from no account) are never merged without a choice
+        const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
           box.querySelectorAll('button').forEach(b => { b.disabled = false; });
           openSheet(`
@@ -734,6 +736,7 @@ async function drawSync() {
         drawSync();
       } catch (e) {
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        if (e.code === 'cancelled') return;           // (the person chose Cancel when asked about the cards on this device)
         showFieldError(pwF, err, e.message);          // (a refused sign-in: the password is the likeliest thing to fix)
       }
     };
@@ -753,7 +756,7 @@ async function drawSync() {
         await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
-          <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
+          <p>If there's an account for <b>${esc(email)}</b>, we've sent it a password reset link.</p>
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
           <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
@@ -763,7 +766,8 @@ async function drawSync() {
   }
   box.innerHTML = `
     <div class="set-row">
-      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p></div>
+      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p>
+        <p class="note" id="damagedNote" hidden></p></div>
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
     <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
@@ -790,6 +794,7 @@ async function drawSync() {
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
   showSyncStatus(acct.lastSync);
+  drawDamaged();
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
   $('keepAllMedia').addEventListener('change', async e => {
@@ -801,6 +806,60 @@ async function drawSync() {
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
   $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
+}
+
+// Records from the server that were damaged are skipped, not fatal (sync-merge.js badRow). Say so quietly, once: the note stays
+// under "Signed in" until Dismiss, and comes back only for records skipped after that.
+async function drawDamaged() {
+  const el = $('damagedNote');
+  if (!el) return;
+  const log = (await db.getSettings()).syncDamaged;
+  if (!el.isConnected) return;
+  const text = damagedNote(log);
+  el.hidden = !text;
+  if (!text) return;
+  el.innerHTML = `${esc(text)} <button class="link" type="button" id="damagedOk" style="padding:0 2px;min-height:0">Dismiss</button>`;
+  $('damagedOk').addEventListener('click', async () => { await db.setSetting('syncDamaged', { ...log, seen: log.count }); drawDamaged(); });
+}
+
+// Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
+// Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
+function askAboutDevice(v) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
+    const things = v.cards ? plural(v.cards, 'card') : v.decks ? plural(v.decks, 'deck') : 'progress and settings';
+    openSheet(v.kind === 'other' ? `
+      <h2 id="sheetTitle">This device has cards from another account</h2>
+      <div class="confirm">
+        <p>The ${esc(things)} on this device belong to someone else's account. To sign in here, they have to be removed from this device first. They stay safe in their own account.</p>
+        ${v.pending ? `<p class="note warn">${esc(plural(v.pending, 'change'))} on this device ${v.pending === 1 ? "hasn't" : "haven't"} synced yet and would be lost.</p>` : ''}
+        <div class="sheet-actions stack">
+          <button class="btn danger solid" type="button" id="devRemove">Remove them and sign in</button>
+          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
+        </div>
+      </div>` : `
+      <h2 id="sheetTitle">This device has cards that aren't in an account</h2>
+      <div class="confirm">
+        <p>You have ${esc(things)} on this device that were never synced. You can add them to the account you're signing in to, or start fresh with what is already in that account.</p>
+        <div class="sheet-actions stack">
+          <button class="btn primary" type="button" id="devAdd">Add these ${esc(things)} to your account</button>
+          <button class="btn danger" type="button" id="devFresh">Start fresh (remove them)</button>
+          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
+        </div>
+      </div>`);
+    $('sheet').addEventListener('close', () => finish('cancel'), { once: true });
+    const wipeThen = async () => {
+      // (wipeThisDevice clears first and sets up again after: if it fails, some of the data may already be gone.)
+      try { await wipeThisDevice(); } catch (e) { console.error(e); toast("Couldn't finish clearing this device. Some local data may have been cleared. You are not signed in."); finish('cancel'); closeSheet(); drawSidebar(); return; }
+      drawSidebar();
+      finish('go'); closeSheet();
+    };
+    $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
+    $('devRemove')?.addEventListener('click', wipeThen);
+    $('devFresh')?.addEventListener('click', wipeThen);
+    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
+  });
 }
 
 // Settings → Your data → "In your account: data … · pictures and sounds … of …" (only when signed in, and the
@@ -1114,7 +1173,7 @@ let warnedStale = false;
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
-  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') drawUsage(); } }
+  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') { drawUsage(); drawDamaged(); } } }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.

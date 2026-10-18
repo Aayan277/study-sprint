@@ -39,15 +39,27 @@ export const realChromium = { launch: launchMapped };
 // gives every new browser window the "skip onboarding" flag in localStorage (the app also accepts
 // ?skipOnboarding in the address). e2e-onboarding.mjs uses `realChromium` to see the real first run.
 const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } };
+// Signing in on a device that has cards of its own asks first ("Add these N cards to your account" / "Start fresh" / "Cancel"), and a
+// test that meets that question unexpectedly should fail, not have it tapped away. A test that builds a device with cards and then
+// signs in on purpose to merge them opts in: `chromium.launch({ autoAddCards: true })` (all its windows) or
+// `browser.newContext({ autoAddCards: true })` (one). Then "Add these cards" is tapped when the question appears.
+// e2e-devices.mjs tests the question itself and never opts in.
+const ADD_WHEN_ASKED = () => {
+  const tap = () => document.getElementById('devAdd')?.click();
+  document.addEventListener('DOMContentLoaded', () => new MutationObserver(tap).observe(document.documentElement, { childList: true, subtree: true }));
+};
 export const chromium = {
-  launch: async (...args) => {
-    const browser = await realChromium.launch(...args);
+  launch: async (opts = {}, ...rest) => {
+    const { autoAddCards: allAuto = false, ...launchOpts } = opts || {};
+    const browser = await realChromium.launch(launchOpts, ...rest);
     const newContext = browser.newContext.bind(browser);
     // Reduced motion is on by default in the tests (the motion code skips its effects, so screens, sheets and counts settle at
     // once and the checks are deterministic). e2e-motion.mjs asks for 'no-preference' to test the effects themselves.
     browser.newContext = async (opts = {}, ...rest) => {
-      const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest);
+      const { autoAddCards = allAuto, ...ctxOpts } = opts || {};
+      const ctx = await newContext({ reducedMotion: 'reduce', ...ctxOpts }, ...rest);
       await ctx.addInitScript(SKIP);
+      if (autoAddCards) await ctx.addInitScript(ADD_WHEN_ASKED);
       cpuThrottle(ctx);
       return ctx;
     };

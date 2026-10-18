@@ -79,6 +79,8 @@ It adds:
   The project-wide ceiling assumes the full 3 MB in that case.)
 - **Space for synced data (cards, reviews, settings): 40 MB per account.** Going over is refused, and the app
   keeps the changes on the device and says so. Deleting is always allowed.
+  The app then stops pushing for 15 minutes (doubling up to 6 hours while it keeps being refused) so a full account or
+  server costs one request per sync, not hundreds; reading carries on, and **Sync now** tries once anyway.
 - **Project-wide ceilings** (table `global_limits`: 900 MB of files, 300 MB of data). The totals are kept **exact**
   in a private table (`private.usage_totals`): every added, changed or deleted record or file adds or takes off its
   bytes in the same moment, and one that would pass the ceiling is refused on the spot, even when many people sync at
@@ -88,7 +90,7 @@ It adds:
 - The checks live in their own `private` schema so they can't be called from outside the app's rules. Please don't add `private` to the API's "Exposed schemas" in the Supabase settings.
 - A **usage line** in the app (Settings → Your data → *In your account: …*).
 - The **Delete my account** button in Settings → Sync (it needs this script). The app deletes the person's pictures and sounds
-  first, through Supabase Storage, then asks the server to delete the account. If any files are left the server answers
+  first, through Supabase Storage, then asks the server to delete the account. It checks the folder is empty; if any files are left the server answers
   `media_left` and changes nothing (deleting file records with SQL would leave the files themselves behind, still using up space).
   **Delete my synced data** deletes the person's records (their bytes are given back to the project total) and their files through Storage.
 - Only signed-in people can touch the tables, and only what the app needs: nothing for visitors who aren't signed in, and nobody can

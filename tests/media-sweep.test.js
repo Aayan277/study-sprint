@@ -148,13 +148,13 @@ test('held-file check: a failing, empty-but-wrong or lying listing falls back to
 test('listMedia pages by 1000 with a stable order until an empty page', async () => {
   const { listMedia } = await import('../js/supa.js');
   const bodies = [], real = globalThis.fetch;
-  const pages = [Array.from({ length: 1000 }, (_, i) => ({ name: 'a' + i })), [{ name: 'z' }]];
+  const pages = [Array.from({ length: 1000 }, (_, i) => ({ id: 'i' + i, name: 'a' + i })), [{ id: 'iz', name: 'z' }], []];
   globalThis.fetch = async (url, init) => { bodies.push([url, JSON.parse(init.body), init.headers.Authorization]); return new Response(JSON.stringify(pages[bodies.length - 1]), { status: 200 }); };
   try {
     const ids = await listMedia('tok', 'u1');
     assert.equal(ids.length, 1001);
     assert.match(bodies[0][0], /\/storage\/v1\/object\/list\/media$/);
-    assert.deepEqual(bodies.map(b => b[1].offset), [0, 1000]);
+    assert.deepEqual(bodies.map(b => b[1].offset), [0, 1000, 1001]);          // (stops only at an empty page: a server may cap a page below the limit)
     assert.deepEqual(bodies[0][1], { prefix: 'u1/', limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
     assert.equal(bodies[0][2], 'Bearer tok');
   } finally { globalThis.fetch = real; }
@@ -164,10 +164,10 @@ test('listMedia gives up (throws) when the server ignores offset, and deleteMedi
   const { listMedia, deleteMedia } = await import('../js/supa.js');
   const real = globalThis.fetch;
   let calls = 0;
-  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(Array.from({ length: 1000 }, (_, i) => ({ name: 'a' + i }))), { status: 200 }); };
+  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(Array.from({ length: 1000 }, (_, i) => ({ id: 'i' + i, name: 'a' + i }))), { status: 200 }); };
   try {
     await assert.rejects(listMedia('tok', 'u1'), { code: 'list_too_long' });
-    assert.equal(calls, 200);
+    assert.equal(calls, 500);
     const sizes = [];
     globalThis.fetch = async (url, init) => { assert.equal(init.method, 'DELETE'); sizes.push(JSON.parse(init.body).prefixes.length); return new Response('[]', { status: 200 }); };
     await deleteMedia('tok', 'u1', Array.from({ length: 250 }, (_, i) => 'p' + i));
