@@ -1,0 +1,1 @@
+Owner is new to coding: explain in plain language. Opus agents plan and review, Sonnet agents write code (`.claude/agents`). Code Reviewer before every merge; then merge without asking. Never `pkill` by pattern. Before a release or merge, use the `release` skill.

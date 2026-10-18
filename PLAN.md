@@ -345,14 +345,7 @@ Where things stand, for the next session. Every item below is on main; the versi
 2. Ideas 6 and 7 from `docs/design/student-research.md` (listening cloze, reading to cards), which the owner said to do later.
 3. The backend backlog below, highest first. The owner said to build only the important ones for now.
 
-**How to work here (owner's preferences):**
-- Opus agents plan, review and research; Sonnet agents write code; use the agents in `.claude/agents`.
-- A Code Reviewer check before every merge. Merge without asking once tests and the review pass.
-- Explain things in plain language; the owner is new to coding.
-- Pacing: early in the weekly usage cycle run about 3-5 agents at once, later in the week 6-8 is fine. When the owner gives usage numbers, stop near them and save everything to GitHub.
-- Every release that changes an app file bumps `APP_VERSION` and `CACHE` in `sw.js`, then `node tests/update-sw-hash.mjs`; `npm test` and the full `node tests/browser/run.mjs` before merging. `tests/browser/pw.mjs` has `CPU_THROTTLE=4` for proving a test isn't flaky, and `sheetSettled(page)` for tests that reload right after closing a sheet.
-- Two `run.mjs` runs from one checkout share `tests/browser/out` and collide; use separate worktrees. Never `pkill` by pattern (it has killed other runs and the shell itself); kill only your own PIDs.
-- Tests to watch: `e2e-selection` timed out once at its first tap while the machine was busy (passed 3 of 3 alone); if it repeats, wait for the review screen before tapping.
+**How to work here:** `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 
 ## Backend backlog (from the audit, not built in v4.21; effort S = under half a day, M = a day or two)
 
