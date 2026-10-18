@@ -3,9 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags } from '../js/sync-merge.js';
 import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
+import { splitOversized } from '../js/quota.js';
+import { pushSafely } from '../js/sync-push.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
 const NOW = 1_800_000_000_000;
@@ -619,4 +621,197 @@ test('overlap: a pull cut off after a few fast pages each time still finishes', 
     if (st.lastSeq >= 30_050) done = a;
   }
   assert.ok(done >= 0 && done <= 12, 'attempts: ' + done);
+});
+
+// ---------- taking turns between tabs, giving up a failing re-upload, trimming days off on push ----------
+// A fake of navigator.locks: one holder at a time; ifAvailable gives null when held; signal aborts the wait.
+function fakeLocks() {
+  let held = null; const waiting = [];
+  const grant = async (fn) => { const p = (async () => fn({})) (); held = p.catch(() => {}).finally(() => { held = null; const next = waiting.shift(); if (next) next(); }); return p; };
+  return {
+    request(name, opts, fn) {
+      if (opts.ifAvailable) return held ? Promise.resolve(fn(null)) : grant(fn);
+      if (!held) return grant(fn);
+      return new Promise((resolve, reject) => {
+        const go = () => resolve(grant(fn));
+        waiting.push(go);
+        opts.signal?.addEventListener('abort', () => { const i = waiting.indexOf(go); if (i >= 0) waiting.splice(i, 1); reject(Object.assign(new Error('aborted'), { name: 'AbortError' })); });
+      });
+    }
+  };
+}
+
+test('sync lock: a routine sync is skipped while another tab syncs, and runs when nobody does', async () => {
+  const locks = fakeLocks(); let release; const ran = [];
+  const frozen = withSyncLock(() => new Promise(r => { release = r; ran.push('other tab'); }), { locks });
+  assert.equal(await withSyncLock(() => { ran.push('routine'); return 'x'; }, { skipIfBusy: true, locks }), SKIPPED);
+  assert.deepEqual(ran, ['other tab']);
+  release(); await frozen;
+  assert.equal(await withSyncLock(() => { ran.push('routine'); return 'x'; }, { skipIfBusy: true, locks }), 'x');
+});
+
+test('sync lock: a sync that must run waits its turn, but not for ever (a frozen tab), and the timeout has its own code', async () => {
+  const locks = fakeLocks(); let release;
+  const frozen = withSyncLock(() => new Promise(r => { release = r; }), { locks });
+  let ran = false;
+  await assert.rejects(withSyncLock(() => { ran = true; }, { waitMs: 20, locks }), { code: 'lock-timeout' });
+  assert.equal(ran, false);
+  const waiter = withSyncLock(() => 'second', { waitMs: 1000, locks });
+  release(); await frozen;
+  assert.equal(await waiter, 'second');
+});
+
+test('sync lock: a database AbortError from the sync itself (disk full) is not taken for a lock timeout', async () => {
+  const idb = Object.assign(new Error('QuotaExceededError'), { name: 'AbortError' });
+  await assert.rejects(withSyncLock(async () => { throw idb; }, { locks: fakeLocks() }), err => err === idb && err.code !== 'lock-timeout');
+  await assert.rejects(withSyncLock(async () => { throw idb; }, { locks: fakeLocks(), skipIfBusy: true }), err => err === idb);
+});
+
+test('sync lock: without Web Locks the sync just runs', async () => {
+  assert.equal(await withSyncLock(() => 'ran', { locks: undefined, skipIfBusy: true }), 'ran');
+  assert.equal(await withSyncLock(() => 'ran', { locks: null }), 'ran');
+});
+
+// syncNow itself, with a fake navigator.locks. (There is no database in node: a sync that does get the lock fails at once, which is fine here.)
+async function withFakeLocks(fn) {
+  const locks = fakeLocks();
+  Object.defineProperty(globalThis.navigator, 'locks', { value: locks, configurable: true });
+  try { return await fn(locks); } finally { delete globalThis.navigator.locks; }
+}
+const holdLock = locks => { let release; const held = locks.request('x', {}, () => new Promise(r => { release = r; })); return async () => { release(); await held; }; };
+
+test('syncNow: a routine sync that finds the lock taken says "skipped", tries again later, and tells after a long run of skips', async () => {
+  const sync = await import('../js/sync.js');
+  const old = { ...sync.timing };
+  Object.assign(sync.timing, { skipRetry: 15, busyNoteAfter: 40 });
+  try {
+    await withFakeLocks(async locks => {
+      const free = holdLock(locks);
+      assert.deepEqual(await sync.syncNow({ skipIfBusy: true }), { ok: false, reason: 'skipped' });
+      await new Promise(r => setTimeout(r, 150));                       // it came back by itself, found the lock taken again, and finally said so
+      assert.equal(sync.lastStatus().state, 'syncing');           // (not an error: it is waiting)
+      assert.match(sync.lastStatus().progress, /another window of the app, which is syncing or paused/);
+      await free();
+      await new Promise(r => setTimeout(r, 100));                       // the next retry gets the lock (and then fails at once: no database here)
+      assert.match(sync.lastStatus().error || '', /indexedDB/);          // it ran this time (and failed: no database in node)
+    });
+  } finally { Object.assign(sync.timing, old); }
+});
+
+test('syncNow: a sync that must run and waits too long says "busy" (for the callers that must not go on)', async () => {
+  const sync = await import('../js/sync.js');
+  const old = sync.timing.lockWait; sync.timing.lockWait = 20;
+  try {
+    await withFakeLocks(async locks => {
+      const free = holdLock(locks);
+      assert.deepEqual(await sync.syncNow(), { ok: false, reason: 'busy' });
+      assert.match(sync.lastStatus().error, /Another window is still syncing/);
+      await free();
+    });
+  } finally { sync.timing.lockWait = old; }
+});
+
+test('re-upload start-over: counting, giving up, and the note', async () => {
+  const sync = await import('../js/sync.js');
+  const failing = async () => { throw new Error('QuotaExceededError'); };
+  sync.forgetResendFailures();
+  await assert.rejects(sync.tryStartOver('u1', failing), /QuotaExceeded/);
+  await assert.rejects(sync.tryStartOver('u1', failing), /QuotaExceeded/);
+  assert.equal(sync.resendGivenUp(), false);
+  assert.match(await sync.tryStartOver('u1', failing), /re-upload couldn’t finish/);          // the third failure in a row
+  assert.equal(sync.resendGivenUp(), true);
+
+  // the note outlives a sync that fails right after: it is in that error too
+  await sync.syncNow().catch(() => {});                              // (no database in node: this sync fails)
+  assert.match(sync.lastStatus().error, /re-upload couldn’t finish/);
+
+  // pressing the button starts the counting again
+  sync.forgetResendFailures();                                       // (what resendEverything does first; it can't run here: no sign-in or database in node)
+  assert.equal(sync.resendGivenUp(), false);
+
+  // fail, fail, success, fail: the success clears the count, so this is no give-up
+  await assert.rejects(sync.tryStartOver('u1', failing));
+  await assert.rejects(sync.tryStartOver('u1', failing));
+  assert.equal(await sync.tryStartOver('u1', async () => {}), null);
+  await assert.rejects(sync.tryStartOver('u1', failing), /QuotaExceeded/);
+  assert.equal(sync.resendGivenUp(), false);
+  sync.forgetResendFailures();
+});
+
+// n real day keys ending yesterday (junk keys would be cleaned away)
+const dayKeys = n => Array.from({ length: n }, (_, i) => { const d = new Date(Date.now() - (i + 1) * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+test('days off: a stored value over the limit is found and trimmed (the stuck case: its change was already marked as sent)', () => {
+  const big = {};
+  dayKeys(1100).forEach((k, i) => { big[k] = { on: i % 2 === 0, at: 5 }; });
+  const trimmed = overLimitDayFlags(big);
+  assert.equal(Object.keys(trimmed).length, MAX_FLAG_ENTRIES);
+  assert.equal(Object.keys(big).length, 1100);
+  assert.equal(overLimitDayFlags({ '2026-01-01': { on: true, at: 5 } }), null);
+  assert.equal(overLimitDayFlags(undefined), null);
+  // the trimmed copy is a row that fits, so saving it (a new change) gets it sent and clears the set-aside entry
+  assert.equal(splitOversized([rowFromSetting('restDays', trimmed, 7)]).big.length, 0);
+});
+
+test('days off: an oversized stored value is trimmed on the way out; other settings are untouched', () => {
+  const big = {};
+  dayKeys(1200).forEach((k, i) => { big[k] = { on: i % 2 === 0, at: 5 }; });
+  const out = trimForPush('restDays', big);
+  assert.equal(Object.keys(out).length, MAX_FLAG_ENTRIES);
+  assert.equal(Object.keys(big).length, 1200);                         // the stored value itself is not changed
+  const small = { '2026-01-01': { on: true, at: 5 } };
+  assert.deepEqual(trimForPush('restDays', small), small);
+  assert.equal(trimForPush('newPerDay', 30), 30);
+  assert.equal(trimForPush('restDays', null), null);
+});
+
+test('days off: a junk entry next to an oversized stored value does not break the trim', () => {
+  const big = { '2024-01-bad': null, 'x': 5 };
+  dayKeys(1100).forEach(k => { big[k] = { on: false, at: 5 }; });
+  const stored = { ...big, '2026-01-01': { on: true, at: 5 }, '2026-01-02': null, '2026-01-03': 'junk' };
+  const trimmed = overLimitDayFlags(stored);
+  assert.ok(trimmed && Object.keys(trimmed).length <= MAX_FLAG_ENTRIES);
+  assert.ok(!('2026-01-02' in trimmed) && !('2026-01-03' in trimmed) && !('x' in trimmed));
+  assert.doesNotThrow(() => trimForPush('restDays', stored));
+  assert.ok(Object.keys(trimForPush('restDays', stored)).length <= MAX_FLAG_ENTRIES);
+});
+
+test('a page of changes that times out is asked for again half as big, down to 50 rows', async () => {
+  const timeout = () => Object.assign(new Error('slow'), { code: 'timeout' });
+  const asked = [];
+  const out = await getPageSafely(async (seq, n) => { asked.push(n); if (n > 200) throw timeout(); return ['row']; }, 7, 1000);
+  assert.deepEqual(asked, [1000, 500, 250, 125]);
+  assert.equal(out.size, 125);                                     // kept for the rest of the sync
+  await assert.rejects(getPageSafely(async () => { throw timeout(); }, 0, 1000), { code: 'timeout' });      // gives up at 50
+  await assert.rejects(getPageSafely(async () => { throw Object.assign(new Error('x'), { code: 'network' }); }, 0, 1000), { code: 'network' });     // other errors are not retried
+});
+
+test('a push batch that times out is sent in halves, down to 50 rows, and a timeout at the bottom is thrown', async () => {
+  const rows = Array.from({ length: 400 }, (_, i) => ({ store: 'cards', id: 'c' + i, data: { id: 'c' + i }, deleted: false, updated_at: 1 }));
+  const sizes = [];
+  const out = await pushSafely(async part => { sizes.push(part.length); if (part.length > 100) throw Object.assign(new Error('slow'), { code: 'timeout' }); }, rows);
+  assert.equal(out.sent.length, 400);
+  assert.deepEqual(sizes.slice(0, 3), [400, 200, 100]);
+  await assert.rejects(pushSafely(async () => { throw Object.assign(new Error('slow'), { code: 'timeout' }); }, rows), { code: 'timeout' });
+});
+
+test('overlap: a page that was asked for again half as big and came back full is a full page, not a short one', async () => {
+  const timeout = () => Object.assign(new Error('slow'), { code: 'timeout' });
+  const rowsOf = (from, n) => Array.from({ length: n }, (_, i) => ({ seq: from + i + 1 }));
+  const get = async (seq, n) => { if (n > 200) throw timeout(); return rowsOf(seq, n); };
+  const server = { top: 5000 };
+  let st = startPull({ lastSeq: 0 }, T0), from = pullStart(st), size = PAGE, pages = 0, short = false;
+  const t0 = T0, from0 = from;
+  for (;;) {
+    const page = await getPageSafely((seq, n) => get(seq, Math.min(n, server.top - seq)), from, size);
+    assert.ok(page.at > 0);
+    size = page.size;
+    if (page.rows.length) from = page.rows.at(-1).seq;
+    const reach = page.rows.length < size ? Infinity : from;
+    if (page.rows.length === size) assert.notEqual(reach, Infinity);        // 200 rows when 200 were asked for: more to come
+    else short = true;
+    st = { ...st, lastSeq: from, seqLog: logPull(st.seqLog, { t: page.at, seq: from, from, to: from, n: page.rows.length }, { t0, from: from0, reach }) };
+    if (page.rows.length < size || ++pages > 50) break;
+  }
+  assert.equal(size, 125);
+  assert.equal(from, 5000); assert.ok(short && pages >= 20);
 });

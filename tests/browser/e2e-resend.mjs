@@ -92,6 +92,22 @@ await A.fill('#acBack', 'short'); await A.click('button[type=submit][form=acForm
 await A.waitForFunction(() => document.getElementById('acFront').value === '');
 ok(await run(A, async () => (await (await import('./js/db.js')).getAll('cards')).some(c => c.front === 'Big one')), 'shortened, it saves');
 
+// ---- Find and replace leaves a card that would become too large unchanged, and says so ----
+await run(A, async () => {
+  const db = await import('./js/db.js');
+  await db.saveCards([
+    { id: 'fr-big', deckId: 'sample', front: 'Zebra big', back: 'a'.repeat(59900) + ' zebra', tags: [], created: Date.now() },
+    { id: 'fr-ok', deckId: 'sample', front: 'Zebra small', back: 'a zebra', tags: [], created: Date.now() }
+  ]);
+});
+await A.goto(APP + '#/decks'); await A.goto(APP + '#/browse'); await A.waitForSelector('#brAdd'); await A.waitForFunction(() => !document.getElementById('sheet')?.open);
+await A.click('#brSelect'); await A.click('#brAll'); await A.click('#brActions'); await A.waitForSelector('#frBox');
+await A.click('#frBox summary'); await A.fill('#frFind', 'zebra'); await A.fill('#frWith', 'okapi okapi okapi okapi okapi okapi');
+await A.waitForFunction(() => /Changes \d+ cards?/.test(document.querySelector('#frCount')?.textContent || ''));
+await A.click('#frGo'); await A.waitForFunction(() => /Replaced in/.test(document.querySelector('#toast')?.textContent || ''));
+ok(/1 card was too large and was left unchanged/.test(await A.textContent('#toast')), 'Find & replace says one card was left unchanged: ' + await A.textContent('#toast'));
+ok((await myCard(A, 'fr-big')).back.endsWith(' zebra') && /okapi/.test((await myCard(A, 'fr-ok')).back), 'the big card is unchanged and the small one is replaced');
+
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 if (errors.length) process.exitCode = 1;
 await browser.close();

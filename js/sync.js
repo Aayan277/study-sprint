@@ -20,20 +20,28 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
 const PAGE = 1000;                    // rows per request when pulling
 const BATCH = 500;                    // rows per request when pushing
+const RESEND_TRIES = 3;               // a re-upload whose start-over keeps failing is given up after this many syncs
+const RESEND_FAILED_NOTE = 'The re-upload couldn’t finish, maybe because this device is short of space. Syncing carries on as normal; you can try Re-upload everything again later.';
 
-let running = null, again = false, timer = 0, started = false;
+let running = null, again = false, againSkip = false, timer = 0, started = false;
+let resendTries = 0, resendGaveUp = false, resendFailed = false, justResent = false;   // the start-over failing (see run), and a re-upload that has just run
 let retrySounds = true;       // sounds the server turned away are tried again once each time the app opens, and on Sync now
+// Routine syncs that find another tab holding the lock try again a little later (nothing tells this tab what the other one saw);
+// a long run of those is said out loud, since the other window may be frozen. (timing: changed by the tests.)
+export const timing = { skipRetry: 45000, busyNoteAfter: 120000, lockWait: 60000 };
+const BUSY_NOTE = 'Waiting for another window of the app, which is syncing or paused. Close other windows if this stays.';
+let skips = 0, firstSkip = 0, skipTimer = 0;
 let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
 
 function emit(detail) {
   last = { ...last, ...detail };
-  dispatchEvent(new CustomEvent('sync', { detail: last }));
+  globalThis.dispatchEvent?.(new CustomEvent('sync', { detail: last }));
 }
 export const lastStatus = () => last;
 
@@ -79,9 +87,34 @@ async function signedIn(session) {
 // Progress and problems show in the normal sync status.
 export async function resendEverything() {
   if (!(await session())) throw new supa.SupaError('Sign in first.');
-  await db.setSetting('resendPending', true);
+  forgetResendFailures();          // a new ask starts the counting (and the telling) again
+  await db.setSettings([['resendPending', true], ['resendTries', 0], ['resendFailed', false]]);
   syncNow({ retry: true });
 }
+// The start-over, run because resendPending is set. If it keeps failing (storage full, say), every sync would fail with it:
+// after RESEND_TRIES failures in a row (counted on this device only) the flag is cleared, the person is told once, and syncing
+// carries on as normal. Until then the error ends this sync as before, and the next one tries again.
+export async function tryStartOver(userId, start = startOverFromHere) {
+  try {
+    await start(userId);
+    resendTries = 0; justResent = true;
+    await db.setSetting('resendTries', 0).catch(() => {});
+    return null;
+  } catch (err) {
+    resendTries = Math.max(resendTries, Number((await db.getSettings().catch(() => ({}))).resendTries) || 0) + 1;
+    console.error('Re-upload could not start over', resendTries, err);
+    if (resendTries < RESEND_TRIES) { await db.setSetting('resendTries', resendTries).catch(() => {}); throw err; }
+    resendGaveUp = resendFailed = true;                       // (also when clearing the flag fails too: no more tries until the app is opened again)
+    resendTries = 0;
+    await db.setSettings([['resendPending', false], ['resendTries', 0], ['resendFailed', true]]).catch(() => {});
+    return RESEND_FAILED_NOTE;
+  }
+}
+export function forgetResendFailures() { resendGaveUp = false; resendTries = 0; resendFailed = false; }
+export const resendGivenUp = () => resendGaveUp;
+// The give-up is told in the next 'done' note (and in an error that comes first), and then forgotten. Kept in a local-only setting
+// meanwhile, so a sync that fails right after it doesn't lose it.
+const failedNote = () => (resendFailed ? RESEND_FAILED_NOTE : null);
 async function startOverFromHere(userId) {
   const { syncState } = await db.getSettings();
   await db.forgetSyncedMarks();
@@ -186,6 +219,7 @@ export async function usage() {
 export async function signOut({ forget = false } = {}) {
   const { syncAuth } = await db.getSettings();
   if (syncAuth) await supa.signOut(syncAuth.access_token);
+  resetSkips();
   await db.setSetting('syncAuth', null);
   if (forget) await db.setSetting('syncState', null);
   emit({ state: 'signed-out', error: null });
@@ -220,20 +254,39 @@ export async function healNotes() {
 
 // ---------- syncing ----------
 // Sync now. If a sync is already running, one more runs straight after it (so nothing is missed).
-export function syncNow({ retry = false } = {}) {
+// skipIfBusy: for the syncs that start by themselves; if another tab is syncing, that tab does the work (withSyncLock).
+// The others (the buttons, sign-in, "catch up first" in app.js) wait for the other tab, for a while.
+// Returns { ok: true }, or { ok: false, reason } when it didn't happen: 'skipped' (a routine sync, another window is syncing), 'busy'
+// (waited a minute for another window, in vain) or 'error' (anything else, already announced in the status). Callers that must not
+// go on without a sync (app.js: Replace everywhere, Delete everywhere) stop on 'busy'.
+export function syncNow({ retry = false, skipIfBusy = false } = {}) {
   if (retry) retrySounds = true;
-  if (running) { again = true; return running; }
+  if (running) { againSkip = again ? againSkip && skipIfBusy : skipIfBusy; again = true; return running; }
   // (Two tabs of the app take turns, where the browser has Web Locks, so they can't mix up the bookmarks.)
-  running = (navigator.locks ? navigator.locks.request('study-sprint-sync', run) : run())
-    .catch(err => {
+  const onWait = () => emit({ state: 'syncing', progress: 'Waiting for another window to finish syncing…' });
+  running = Promise.resolve(withSyncLock(run, { skipIfBusy, onWait, waitMs: timing.lockWait }))
+    .then(r => (r === SKIPPED ? skipped() : (resetSkips(), { ok: true })), err => {
       console.error('Sync failed', err);
-      emit(supa.isSignedOutError(err) ? { state: 'signed-out', error: err.message } : { state: 'error', error: err.message });
+      resetSkips();
+      const extra = failedNote();
+      if (err?.code === 'lock-timeout') { emit({ state: 'error', error: err.message }); return { ok: false, reason: 'busy' }; }
+      emit(supa.isSignedOutError(err) ? { state: 'signed-out', error: err.message } : { state: 'error', error: extra ? `${err.message} ${extra}` : err.message });
+      return { ok: false, reason: 'error', error: err };
     })
     .finally(() => {
       running = null;
-      if (again) { again = false; syncNow(); }
+      if (again) { again = false; syncNow({ skipIfBusy: againSkip }); }
     });
   return running;
+}
+const resetSkips = () => { skips = 0; clearTimeout(skipTimer); };
+// A routine sync that found the lock taken: look again soon, and after a couple of minutes of that, say so.
+function skipped() {
+  if (!skips++) firstSkip = Date.now();
+  if (Date.now() - firstSkip >= timing.busyNoteAfter) emit({ state: 'syncing', error: null, progress: BUSY_NOTE });
+  clearTimeout(skipTimer);
+  skipTimer = setTimeout(() => syncNow({ skipIfBusy: true }), timing.skipRetry);
+  return { ok: false, reason: 'skipped' };
 }
 
 async function run() {
@@ -241,7 +294,13 @@ async function run() {
   if (!auth) return;
   emit({ state: 'syncing', error: null, progress: null });
   const token = auth.access_token;
-  if ((await db.getSettings()).resendPending) await startOverFromHere(auth.user.id);
+  const settings0 = await db.getSettings();
+  if (settings0.resendFailed) resendFailed = true;
+  if (settings0.resendPending && !resendGaveUp) await tryStartOver(auth.user.id);
+  // Days off stored over the entry limit (a single device that got there before the limit existed): the row was set aside as too large
+  // and counted as sent, so nothing would send it until the next change. Saving the trimmed copy is that change.
+  const trimmed = overLimitDayFlags(settings0.restDays);
+  if (trimmed) await db.setSetting('restDays', trimmed).catch(err => console.error('Could not trim the days off', err));       // (the rest of the sync goes on)
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time. The first request starts a little behind the bookmark
@@ -251,9 +310,12 @@ async function run() {
   st = startPull(st, Date.now());
   let from = pullStart(st);
   const t0 = Date.now(), from0 = from;
+  let pageSize = PAGE;          // smaller after a timeout, for the rest of this sync (getPageSafely)
   for (;;) {
-    const at = Date.now(), after = from;
-    const rows = await supa.getChanges(token, from, PAGE);
+    const after = from;
+    const page = await getPageSafely((seq, n) => supa.getChanges(token, seq, n), after, pageSize);
+    const rows = page.rows, at = page.at;       // (the send time of the request that worked: an earlier time would be the unsafe direction)
+    pageSize = page.size;
     if (rows.length) {
       const got = await db.applyRemote(rows);
       applied += got;
@@ -265,9 +327,9 @@ async function run() {
     // The bookmark (only ever forward) and the log of requests are saved together, page by page, so a pull cut off
     // midway carries on near where it stopped.
     const lastSeq = Math.max(st.lastSeq, from);
-    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: rows.length ? Math.max(...rows.map(r => Number(r.seq))) : after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: rows.length ? Math.max(...rows.map(r => Number(r.seq))) : after, n: rows.length }, { t0, from: from0, reach: rows.length < pageSize ? Infinity : from }) };
     await db.setSetting('syncState', st);
-    if (rows.length < PAGE) break;
+    if (rows.length < pageSize) break;
   }
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.
@@ -287,7 +349,7 @@ async function run() {
   const { ok: rows, big } = splitOversized(capTimes(newestOnly([
     ...Object.entries(changes.records).flatMap(([name, list]) => list.map(r => rowFromRecord(name, r))),
     ...changes.tombstones.map(rowFromTombstone),
-    ...changes.settings.map(s => rowFromSetting(s.key, s.value, s.time))
+    ...changes.settings.map(s => rowFromSetting(s.key, trimForPush(s.key, s.value), s.time))
   ])));
   const pushed = await pushSafely(part => supa.putRows(token, part), rows, {
     onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
@@ -306,8 +368,10 @@ async function run() {
 
   st = { ...st, pushedUntil: pushed.held.length ? st.pushedUntil : pushStart - 1, lastSync: Date.now(), tooBig: stillBig };
   await db.setSetting('syncState', st);
-  const note = [spaceNote, bigRowsNote(stillBig), mediaNote].filter(Boolean).join(' ') || null;
+  const note = [failedNote(), spaceNote, bigRowsNote(stillBig), mediaNote].filter(Boolean).join(' ') || null;
+  const told = resendFailed;
   emit({ state: 'done', at: st.lastSync, applied, sent: pushed.sent.length, error: null, progress: null, note });
+  if (told) { resendFailed = false; await db.setSetting('resendFailed', false).catch(() => {}); }
 }
 
 // ---------- pictures and sounds ----------
@@ -320,7 +384,13 @@ async function syncMedia(auth) {
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
   const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
   // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
-  const gate = await planMedia(auth, pending, checkedOnServer);
+  // Right after a re-upload every file is waiting, and on a nearly full account many are still on the server: ask about all of them
+  // now (a few at a time), not 25 a sync, so the "account full" note doesn't stay for hours.
+  // (The "missing" answers kept from before the reset are out of date: the account may have had the files since.)
+  if (justResent) checkedOnServer.clear();
+  const gate = await planMedia(auth, pending, checkedOnServer, justResent ? {
+    cap: Infinity, size: 8, onProgress: (i, n) => { if (n > 3) emit({ progress: `Checking pictures already in your account: ${i} of ${n}…` }); }
+  } : {});
   if (gate.done.length) await db.markUploaded(gate.done);         // the account already had them
   let upload;
   try {
@@ -336,6 +406,7 @@ async function syncMedia(auth) {
   }
   if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
   retrySounds = false;
+  justResent = false;
   // What to tell the person: only files that are turned away now (this run), or were left out of it because they were before.
   // (A file that was blocked, tried again and went up is no longer a problem.)
   const left = [...upload.blocked.map(id => pending.find(m => m.id === id)), ...rows.filter(m => !pending.includes(m))].filter(Boolean);
@@ -391,10 +462,10 @@ export function startAutoSync() {
   started = true;
   db.onLocalChange(() => {
     clearTimeout(timer);
-    timer = setTimeout(syncNow, AFTER_CHANGE);
+    timer = setTimeout(() => syncNow({ skipIfBusy: true }), AFTER_CHANGE);
   });
-  addEventListener('online', () => syncNow());
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
-  setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, EVERY);
-  syncNow();
+  addEventListener('online', () => syncNow({ skipIfBusy: true }));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow({ skipIfBusy: true }); });
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow({ skipIfBusy: true }); }, EVERY);
+  syncNow({ skipIfBusy: true });
 }

@@ -13,6 +13,7 @@
 import { pushErrorKind } from './quota.js';
 
 const BATCH = 500;           // rows per request
+const MIN_PART = 50;         // a batch that keeps timing out is split down to this many rows
 const BUDGET = 150;          // extra requests allowed per sync for splitting; what's left over waits for the next sync
 
 export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, onProgress } = {}) {
@@ -24,6 +25,14 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       out.sent.push(...part);
       return;
     } catch (err) {
+      // A slow connection: the batch didn't get through in time. Send it in halves (rows already there are ignored by the server).
+      if (err?.code === 'timeout' && part.length > MIN_PART && spare > 0) {
+        spare--;
+        const mid = part.length >> 1;
+        await attempt(part.slice(0, mid));
+        await attempt(part.slice(mid));
+        return;
+      }
       const kind = pushErrorKind(err);
       if (!kind) throw err;
       const rowProblem = kind === 'size' || kind === 'id';

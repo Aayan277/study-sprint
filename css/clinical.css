@@ -813,7 +813,6 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .subdecks-page{grid-column:2;grid-row:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view:has(> .subdecks-page) > #browser{grid-row:2 / -1}
 }
-=======
 
 /* ---- Retention helper, health check and Stats retention rows: square, flat, hairlines (js/retention-sheet.js, health-sheet.js) ---- */
 :root[data-ui="clinical"] .rc-inline,:root[data-ui="clinical"] .rc-detail{border-radius:var(--r-sm);background:var(--surface-sunken)}
@@ -823,3 +822,75 @@
 /* ---- Browse / deck page: the draggable divider between the list and the card editor (js/panel-resize.js). Flat: a thin rule that is always there, accent on hover and while dragging ---- */
 :root[data-ui="clinical"] #panelResizer::before{left:5px;width:1px;border-radius:0;background:var(--line-strong)}
 :root[data-ui="clinical"] #panelResizer:hover::before,:root[data-ui="clinical"] #panelResizer:focus-visible::before,:root[data-ui="clinical"] body.panel-resizing #panelResizer::before{left:4px;width:3px;background:var(--accent)}
+
+/* ======================================================================
+   7. Phones (under 600px): fewer boxes (audit 2026-10, prototype)
+   On a white page the hairline panels, the outlined buttons inside them and the outlined chips inside those all looked the
+   same, so phones showed a stack of boxes in boxes. Here the page's panels and grouped lists run edge to edge as ruled
+   bands (a rule above and below, no side borders, no corners), so the only outlined things left are things you can tap.
+   Desktop and tablet (600px and up) are untouched.
+   ====================================================================== */
+:root[data-ui="clinical"]{--c-bleed:calc(-1 * var(--s-4))} /* assumes main's phone gutter is var(--s-4) */
+/* the streak line's hairline is a straight rule at every width (it inherited the button's rounded corners) */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .streak{border-radius:0}
+/* the streak's icons are hidden in Clinical, so its lines no longer indent to make room for them (the streak sheet) */
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak span{padding-left:0}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill{margin-left:0}
+@media (max-width:599.98px){
+  /* 1. panels and grouped lists: edge-to-edge ruled bands */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.today-hero,.exams,.tdecks,.decks,.crows,.deck-summary,.card:not(.pgrid .card),.pgrid,.fold-toggle){
+    margin-inline:var(--c-bleed);border-radius:0;box-shadow:none!important;border-block:1px solid var(--line)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .fold-toggle{width:calc(100% + 2 * var(--s-4))}
+  /* list rows keep their text on the page's 16px line, with the same 16px at the right edge */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .deck{padding-right:var(--s-4)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.today-hero,.deck-summary,.card:not(.pgrid .card),.fold-toggle){padding-inline:var(--s-4)}
+  /* the two figure tiles on Stats share one band, split by a rule */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .pgrid{gap:0;background:var(--surface-1)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .pgrid .card{box-shadow:none;border-radius:0;padding:var(--s-4)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .pgrid .card + .card{box-shadow:inset 1px 0 0 var(--line)}
+  /* one band per section: a little more air between them than between rows */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid,.today-hero){margin-bottom:var(--s-4)}
+  /* bands that follow each other (Stats) share one rule instead of two rules with a strip of page between */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid):has(+ :is(.card,.pgrid)){margin-bottom:0;border-bottom:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.card,.pgrid):is(.card,.pgrid):has(+ :is(.card,.pgrid)){border-bottom:0}
+
+  /* 2. nothing outlined inside a row: status tags and the row's own buttons are coloured words */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.st-due,.st-new,.st-learning,.st-buried,.st-review,.st-suspended){box-shadow:none;background:none;padding:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go:not(.lead){box-shadow:none!important;background:none;color:var(--accent-text);padding:0 4px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go{height:44px;min-width:56px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go.lead{height:44px;margin-block:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .deck .icon-btn{min-width:44px;min-height:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row .btn.ghost{border-color:transparent;background:none;color:var(--accent-text);padding-inline:var(--s-2);min-height:44px}
+
+  /* 3. controls that were a box around boxes become one shape */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-sort{box-shadow:none;background:var(--surface-2)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-sort button[aria-pressed="true"]{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-counts{box-shadow:none;background:none;padding-inline:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-head .link{box-shadow:none;background:none;min-height:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rv-head .link:not(#endBtn){min-width:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:focus-visible{outline-offset:-2px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .fold-toggle:focus-visible{outline-offset:-2px}
+  /* Settings' section menu: words with a rule under the bar, not four outlined boxes running off the edge */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav{gap:0;padding-block:0;border-bottom:1px solid var(--line)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{border:0;border-radius:0;background:none;min-height:44px;padding:0 12px;color:var(--text-2)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:first-child{padding-left:0}
+
+  /* 4. Play: Start round is the full width, its note under it, and the Customise row is not glued to it */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .start-row{flex-direction:column;align-items:stretch;gap:var(--s-2);margin-bottom:var(--s-4)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .start-row .btn{width:100%}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .start-row .mode-best{text-align:center;font-size:var(--fs-sm)}
+
+  /* 5. Stats retention rows: the age note goes under the name instead of wrapping beside a tiny track */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rs-row,
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .rs-axis{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);row-gap:2px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.rs-row,.rs-axis) > .rs-name{grid-column:1 / -1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.rs-row,.rs-axis) > .rs-val{text-align:right}
+
+  /* 6. buttons in page headers and toolbars: a full 44px to tap */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main :is(.screen-head,.br-head) .btn{min-height:44px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main .screen-head :is(.icon-btn,.more-btn){min-width:44px;min-height:44px}
+
+  /* 7. the streak sheet and Today: no stray "·" starting a line */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill{flex-basis:100%}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill::before{content:none}
+}

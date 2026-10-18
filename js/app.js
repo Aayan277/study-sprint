@@ -22,9 +22,10 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
+import { backupNote } from './backup-nudge.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.27';
+const APP_VERSION = '4.28';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -33,6 +34,8 @@ initInstall();       // listens for the browser saying the app can be installed 
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
+  // "Last backup: 12 days ago", and a quiet nudge when it has been a month and there is a lot to lose (js/backup-nudge.js).
+  const backup = backupNote({ lastBackup: settings.lastBackup, cards: await db.count('cards'), synced: !!(await sync.account()) });
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
   if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
@@ -222,8 +225,8 @@ async function renderSettings(el) {
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
       <div class="set-row">
-        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
-          ${settings.lastBackup ? `Last backup: ${esc(new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}.` : 'No backup yet.'}</p></div>
+        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.</p>
+          <p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
         <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
       </div>
       <label class="adv-row switch-row" id="bkSoundsRow" hidden><span><b id="bkSoundsTitle">Include sounds</b>
@@ -546,7 +549,9 @@ async function confirmRestore(file) {
   $('rbNo').addEventListener('click', closeSheet);
   $('rbYes').addEventListener('click', async () => {
     try {
-      if (synced) await sync.syncNow();          // catch up first, so everything in the account gets replaced
+      // Catch up first, so everything in the account gets replaced. If another window holds the sync, stop: going on could lose its changes.
+      // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
+      if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
       await db.importAll(data, { everywhere: synced });
     } catch (e) {
       console.error(e);
@@ -604,7 +609,13 @@ function confirmResetSynced() {
   $('rsNo').focus();
   $('rsNo').addEventListener('click', closeSheet);
   $('rsAll').addEventListener('click', async () => {
-    await sync.syncNow();                 // first catch up, so nothing from another device is missed
+    // First catch up, so nothing from another device is missed. Stops if another window holds the sync (as with restore).
+    const caught = await sync.syncNow();
+    if (!caught.ok) {
+      closeSheet();
+      toast(caught.reason === 'error' ? "Couldn't sync first, so cards from your other devices might be missed. Connect to the internet and try again. Nothing was deleted." : 'Another window is syncing. Try again in a moment. Nothing was deleted.');
+      return;
+    }
     await db.deleteEverything();
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
@@ -857,9 +868,9 @@ async function confirmSignOut() {
     navGo('#/decks');
   });
   // Send anything waiting first, so signing out loses nothing.
-  await sync.syncNow();
+  const caught = await sync.syncNow();
   const pending = await sync.pendingChanges().catch(() => 0);
-  if ($('soNote') && !armed) $('soNote').textContent = pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
+  if ($('soNote') && !armed) $('soNote').textContent = caught.reason === 'busy' ? 'Another window is syncing. Close it, or try again in a moment, before signing out.' : pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
 }
 
 // Send everything on this device to the server again (sync.resendEverything). Safe: it never deletes anything or replaces newer data.
