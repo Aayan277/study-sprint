@@ -761,6 +761,12 @@ async function save() {
     const countBefore = cards.length;
     if (bigIds.size) cards = cards.filter(c => !bigIds.has(c.id) && !(c.noteId && bigNotes.has(c.noteId)));
     const tooLarge = countBefore - cards.length;
+    if (!cards.length) {         // nothing fits: no deck, no empty import (pictures and sounds saved for these cards are cleaned up later as unused)
+      toast(`Nothing was added. ${tooLargeNote(tooLarge, 'out')}.`, { ms: 6000 });
+      saveBtn.disabled = false;
+      if (saveBtn.isConnected) refreshFlags();
+      return;
+    }
     let withHistory = 0;
     const states = [], logs = [];
     if (replay) {

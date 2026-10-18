@@ -139,7 +139,7 @@ function openHook(card, done) {
       const cards = [{ ...unleeched(fresh), noteExtra: text }, ...sibs.map(c => ({ ...c, noteExtra: text }))];
       // A hook that makes the card too large to sync is refused, like in the card editor.
       const big = savedTooBigNote(cards);
-      if (big) { busy = false; btn.disabled = false; $('hookErr').textContent = big; $('hookErr').hidden = false; return; }
+      if (big) { busy = false; btn.disabled = false; $('hookErr').textContent = big.replace(/Shorten the text.*$/, 'Shorten the hook, or edit the card to make it smaller.'); $('hookErr').hidden = false; return; }
       await db.saveCards(cards);
       closeSheet();
       done('Hook saved. It’s back in your reviews.');

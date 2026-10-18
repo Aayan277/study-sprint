@@ -653,7 +653,8 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     // A card that would end up too large to sync is left as it was (and so is its reverse card, so a pair never disagrees).
     const big = splitTooBig(all).big, bigNotes = new Set(big.filter(isPair).map(c => c.noteId));
     const changed = all.filter(c => !big.includes(c) && !(isPair(c) && bigNotes.has(c.noteId)));
-    const left = tooLargeNote(all.length - changed.length);
+    const dropped = all.length - changed.length;
+    const left = dropped > big.length ? `${plural(dropped, 'card')} ${dropped === 1 ? 'was' : 'were'} left unchanged, because a card or its reverse card was too large` : tooLargeNote(dropped);
     if (!changed.length) { $('frCount').textContent = `${left}.`; return; }
     await db.saveCards(changed);
     done(`Replaced in ${plural(changed.length, 'card')}${left ? `. ${left}` : ''}`);
@@ -790,6 +791,7 @@ function wireLinkTool(cards, { scope, refresh }) {
         });
       });
       // A note whose cards would be too large to sync stays as separate cards.
+      if (!changed.length) { toast('Nothing was linked: those cards changed since the preview.'); await refresh(); closeSheet(); return; }
       const bigNotes = new Set(splitTooBig(changed).big.map(c => c.noteId));
       const fits = changed.filter(c => !bigNotes.has(c.noteId));
       if (fits.length) await db.saveCards(fits);

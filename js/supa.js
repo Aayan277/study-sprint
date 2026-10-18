@@ -7,6 +7,12 @@
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
 import { readUsage } from './quota.js';
 
+// No request is allowed to hang for ever: a frozen or stalled connection would hold the sync lock (and every other tab) with it.
+// The timeout has its own code, so it isn't taken for anything else.
+const REQUEST_TIMEOUT = 60000;
+const timeoutSignal = ms => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return { signal: c.signal, done: () => clearTimeout(t) }; };
+const timedOut = () => new SupaError("The sync server took too long to answer. It will be tried again.", { code: 'timeout' });
+
 export class SupaError extends Error {
   constructor(message, { status = 0, code = '' } = {}) {
     super(message);
@@ -17,8 +23,10 @@ export class SupaError extends Error {
 
 async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   let res;
+  const limit = timeoutSignal(REQUEST_TIMEOUT);
   try {
     res = await fetch(SUPABASE_URL + path, {
+      signal: limit.signal,
       method,
       headers: {
         apikey: SUPABASE_KEY,
@@ -29,12 +37,15 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body)
     });
   } catch (err) {
+    limit.done();
+    if (limit.signal.aborted) throw timedOut();
     throw new SupaError(navigator.onLine === false
       ? "You're offline. Sync will catch up when you're back online."
       : "Couldn't reach the sync server. If you haven't used the app for a week, your Supabase project may be paused: open it on supabase.com and click Restore.",
     { code: 'network' });
   }
-  const text = await res.text();
+  let text;
+  try { text = await res.text(); } catch { if (limit.signal.aborted) throw timedOut(); throw new SupaError("Couldn't reach the sync server.", { code: 'network' }); } finally { limit.done(); }
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
@@ -169,15 +180,18 @@ export function deleteAllRows(token, userId) {
 const MEDIA_MISSING = 'Pictures can’t sync yet: run supabase/media.sql in your Supabase project (see docs/sync-setup.md). Everything else is syncing.';
 async function storage(path, { method = 'GET', token, body, type } = {}) {
   let res;
+  const limit = timeoutSignal(REQUEST_TIMEOUT * 2);       // (until the answer starts: a big file may take longer to arrive)
   try {
     res = await fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
+      signal: limit.signal,
       method,
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, ...(type ? { 'Content-Type': type } : {}), ...(method === 'POST' && type && !type.includes('json') ? { 'x-upsert': 'true' } : {}) },
       body
     });
   } catch {
+    if (limit.signal.aborted) throw timedOut();
     throw new SupaError("Couldn't reach the sync server.", { code: 'network' });
-  }
+  } finally { limit.done(); }
   if (!res.ok) {
     let json = null;
     try { json = await res.json(); } catch { /* not JSON */ }

@@ -22,14 +22,15 @@ export async function fetchUsage(token) {
 // Which of the pictures and sounds waiting on this device to send now (pictures first, like uploadMediaFiles does),
 // given how much room the account has. Returns { send, full }: full is the usage numbers when some are kept back
 // (the account is full), else null. The ones kept back stay on the device and go when there's room.
+// size, onProgress: how many are asked at once, and a callback (done, total).
 // cap: how many kept-back files to ask the account about (default 25; sync.js asks about every one right after a re-upload).
 // done: the kept-back ones the account turned out to hold already (an earlier try got there but the answer was lost, and the
 // account's usage already counts them): the caller marks them uploaded.
-export async function planMedia(auth, pending, checked = new Set(), { cap } = {}) {
+export async function planMedia(auth, pending, checked = new Set(), { cap, size, onProgress } = {}) {
   if (!pending.length) return { send: [], full: null, done: [] };
   const ordered = [...pending.filter(m => !isSoundRow(m)), ...pending.filter(isSoundRow)];
   const plan = planUploads(ordered, await fetchUsage(auth.access_token));
-  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap);
+  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap, { size, onProgress });
   const stillHeld = plan.held.length - done.length;
   return { send: plan.send, full: stillHeld ? plan.usage : null, done };
 }
@@ -37,12 +38,12 @@ export async function planMedia(auth, pending, checked = new Set(), { cap } = {}
 // Of the files kept back for lack of room, the ids the account already has. Looks at no more than `cap` files per call,
 // and remembers (in `checked`, for as long as the app is open) the ones it found missing, so the next sync looks at the next few
 // instead of asking about thousands of files every time. A check that fails is skipped, not remembered.
-export async function alreadyOnServer(held, exists, checked = new Set(), cap = 25) {
+export async function alreadyOnServer(held, exists, checked = new Set(), cap = 25, { size, onProgress } = {}) {
   const todo = held.filter(m => !checked.has(m.id)).slice(0, cap);
   const found = [];
   await runPool(todo, async m => {
     if (await exists(m.id)) found.push(m.id); else checked.add(m.id);
-  }).catch(err => { if (supa.isSignedOutError(err)) throw err; });
+  }, { size, onProgress }).catch(err => { if (supa.isSignedOutError(err)) throw err; });
   return found;
 }
 

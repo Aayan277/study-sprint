@@ -116,7 +116,7 @@ function cleanDayFlags(flags, cutoff, now, latest) {
 // "off" means the same as no entry), then the oldest days that are on (a streak that long is hardly ever running through
 // them). "Off" entries are never dropped for their age alone: the newer "off" must still beat an older "on" from a device
 // that was offline for a long time. Done on the merged result, so the limit holds for what is stored and sent.
-function capDayFlags(out) {
+export function capDayFlags(out) {
   const keys = Object.keys(out);
   let extra = keys.length - MAX_FLAG_ENTRIES;
   if (extra <= 0) return out;
@@ -168,28 +168,42 @@ export function sameIdleDays(a, b, now = Date.now()) {
 export function trimForPush(key, value) {
   return key === 'restDays' && value && typeof value === 'object' && !Array.isArray(value) ? capDayFlags({ ...value }) : value;
 }
+// The stored days off, trimmed, if there are more than the limit; else null (nothing to do). A value that big was set aside as too large
+// and its change is already marked as sent, so sync.js saves the trimmed copy: that makes it a new change, which is sent.
+export function overLimitDayFlags(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > MAX_FLAG_ENTRIES ? capDayFlags({ ...value }) : null;
+}
 // The merge and the comparison for each merged setting.
 export const MERGERS = { restDays: [mergeDayFlags, sameDayFlags], idleDays: [mergeIdleDays, sameIdleDays] };
 
 // ---------- taking turns between tabs ----------
 // Runs fn() while holding the sync lock, so two tabs can't mix up the bookmarks. A tab frozen while it holds the lock (a backgrounded
 // iPhone app, mid-request) would block the others for good, so nobody waits for ever:
-//   skipIfBusy  a routine sync does nothing when another tab is syncing (that tab does the work): fn is not run, and undefined comes back
-//   otherwise   wait up to waitMs for the lock, then give up with an AbortError (the caller says so; the work stays pending)
+//   skipIfBusy  a routine sync does nothing when another tab is syncing: fn is not run and SKIPPED comes back (the caller tries again later)
+//   otherwise   wait up to waitMs for the lock, then give up with an error whose code is 'lock-timeout' (and not an AbortError: a
+//               database transaction that is cut short, such as a full disk, also ends in one). onWait() is called if the wait lasts over a second.
 // Where the browser has no Web Locks, fn just runs.
 export const LOCK_NAME = 'study-sprint-sync';
-export const LOCK_WAIT = 30000;
-export function withSyncLock(fn, { skipIfBusy = false, waitMs = LOCK_WAIT, locks = globalThis.navigator?.locks } = {}) {
+export const LOCK_WAIT = 60000;
+export const SKIPPED = Symbol('skipped');
+export function withSyncLock(fn, { skipIfBusy = false, waitMs = LOCK_WAIT, onWait, locks = globalThis.navigator?.locks } = {}) {
   if (!locks) return fn();
-  if (skipIfBusy) return locks.request(LOCK_NAME, { ifAvailable: true }, lock => (lock ? fn() : undefined));
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), waitMs);
-  return locks.request(LOCK_NAME, { signal: ctl.signal }, () => { clearTimeout(timer); return fn(); }).finally(() => clearTimeout(timer));
+  if (skipIfBusy) return locks.request(LOCK_NAME, { ifAvailable: true }, lock => (lock ? fn() : SKIPPED));
+  const ctl = new AbortController();
+  let granted = false;
+  const timer = setTimeout(() => ctl.abort(), waitMs), hint = onWait && setTimeout(onWait, 1000);
+  return locks.request(LOCK_NAME, { signal: ctl.signal }, () => { granted = true; clearTimeout(timer); clearTimeout(hint); return fn(); })
+    .catch(err => {
+      if (!granted && ctl.signal.aborted) throw Object.assign(new Error('Another window is still syncing. Try again in a moment.'), { code: 'lock-timeout' });
+      throw err;
+    })
+    .finally(() => { clearTimeout(timer); clearTimeout(hint); });
 }
 
 // ---------- pictures and sounds (files in Supabase Storage) ----------
 export const isSoundRow = m => String(m?.type || '').startsWith('audio/');
 // Problems with the whole storage setup (not one file): sending more files would only fail the same way.
-const WHOLE_STORAGE_ERRORS = ['bucket_missing', 'media_policy', 'network'];
+const WHOLE_STORAGE_ERRORS = ['bucket_missing', 'media_policy', 'network', 'timeout'];
 export const isWholeStorageError = err => WHOLE_STORAGE_ERRORS.includes(err?.code) || err?.status === 401;
 
 // Send files one at a time, pictures first and then sounds. A file that fails on its own never stops the others.
