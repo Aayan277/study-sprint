@@ -2629,6 +2629,10 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .sl-row.off .sl-name{color:var(--text-2);text-decoration:line-through}
 .sl-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
 .sl-show{display:flex;align-items:center;gap:var(--s-3);min-height:44px;min-width:0;flex:1 1 auto;cursor:pointer}
+.sl-grip{display:grid;place-items:center;flex:none;width:32px;height:44px;margin-left:-6px;font-size:1.4rem;line-height:1;color:var(--text-2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.sl-list.dragging{user-select:none}
+.sl-list.dragging .sl-row:not(.lifted){transition:transform var(--t-fast)}
+.sl-row.lifted{position:relative;z-index:2;background:var(--surface-2);border-color:var(--accent);box-shadow:var(--e-3,0 8px 24px rgb(0 0 0 / .35));cursor:grabbing}
 .sl-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .sl-moves{display:flex;gap:6px;flex:none}
 .sl-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);cursor:pointer;padding:0}

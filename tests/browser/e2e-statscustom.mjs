@@ -132,6 +132,81 @@ for (const ui of ['original', 'clinical']) {
   await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
   ok((await dom(p)).join() === d.join(), `${tag} 390: kept after a reload`);
   await p.context().close();
+
+  // ---------------- drag to reorder ----------------
+  const ids = p => p.$$eval('#slList .sl-row', r => r.map(x => x.dataset.id));
+  const centre = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const stay = (p, n) => p.evaluate(n => new Promise(r => setTimeout(r, n)), n);
+  p = await open(ui, 1280, 900);
+  await stats(p);
+  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  ok(await p.$eval('.sl-grip', e => e.getBoundingClientRect().height >= 44 && getComputedStyle(e).touchAction === 'none'), `${tag}: each row has a grip at least 44px tall with touch-action none`);
+  ok(await p.$eval('#slList', e => getComputedStyle(e).touchAction !== 'none'), `${tag}: the rest of the list still scrolls by touch`);
+  // mouse: drag Time of day up three rows, above Reviews per day
+  await p.$eval('.sl-row[data-id=hours]', e => e.scrollIntoView({ block: 'center' }));
+  let from = await centre(p, '.sl-row[data-id=hours] .sl-grip'), to = await centre(p, '.sl-row[data-id=perDay]');
+  await p.mouse.move(from.x, from.y); await p.mouse.down();
+  await p.mouse.move(from.x, from.y - 20, { steps: 3 });
+  ok(await p.$eval('.sl-row[data-id=hours]', e => e.classList.contains('lifted')), `${tag}: the dragged row is lifted`);
+  await p.mouse.move(to.x, to.y - 60, { steps: 12 });
+  ok((await ids(p))[4] === 'hours', `${tag}: the list opens a gap where it will land`);
+  ok((await saved(p)) === null, `${tag}: nothing is saved until the drop`);
+  await p.mouse.up();
+  await p.waitForFunction(() => document.querySelector('#slLive').textContent.includes('Moved Time of day to position 5 of 11'));
+  ok(true, `${tag}: announced "Moved Time of day to position 5 of 11"`);
+  await p.waitForFunction(() => document.querySelector('main[data-route=stats] .view .card h2')?.textContent !== 'Day streak' || true);
+  await p.waitForTimeout(200);
+  ok((await seen(p)).indexOf('Time of day') === 4, `${tag}: the dragged order shows on Stats`);
+  // Escape puts it back
+  await p.$eval('.sl-row[data-id=hardest]', e => e.scrollIntoView({ block: 'center' }));
+  from = await centre(p, '.sl-row[data-id=hardest] .sl-grip'); to = await centre(p, '.sl-row[data-id=hours]');
+  await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(to.x, to.y, { steps: 10 });
+  await p.keyboard.press('Escape'); await p.mouse.up();
+  ok((await ids(p))[9] === 'hardest' && await p.evaluate(() => document.querySelector('#sheet').open), `${tag}: Escape while dragging puts the row back and keeps the sheet open`);
+  await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
+  ok((await seen(p)).indexOf('Time of day') === 4, `${tag}: the dragged order persists after a reload`);
+  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('statsLayout', null); });
+  await p.context().close();
+  // touch (pointer events of type touch on the grip)
+  p = await open(ui, 390, 800);
+  await stats(p);
+  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await p.$eval('.sl-row[data-id=perDay]', e => e.scrollIntoView({ block: 'center' }));
+  await p.evaluate(async () => {
+    const grip = document.querySelector('.sl-row[data-id=perDay] .sl-grip'), r = grip.getBoundingClientRect(), tgt = document.querySelector('.sl-row[data-id=rs]').getBoundingClientRect();
+    const ev = (type, y) => grip.dispatchEvent(new PointerEvent(type, { pointerId: 41, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1, bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: y }));
+    const y0 = r.top + r.height / 2;
+    ev('pointerdown', y0);
+    for (let k = 1; k <= 12; k++) { ev('pointermove', y0 + (tgt.top - y0) * k / 12); await new Promise(r => setTimeout(r, 20)); }
+    ev('pointerup', tgt.top);
+  });
+  await p.waitForFunction(() => /Moved Reviews per day to position \d+ of 11/.test(document.querySelector('#slLive').textContent));
+  const t = await ids(p);
+  ok(t.indexOf('perDay') <= 2, `${tag} 390: a touch drag moves the row (${t.slice(0, 4)})`);
+  // a cancelled pointer puts it back
+  await p.$eval('.sl-row[data-id=hardest]', e => e.scrollIntoView({ block: 'center' }));
+  const before = (await ids(p)).join();
+  await p.evaluate(async () => {
+    const grip = document.querySelector('.sl-row[data-id=hardest] .sl-grip'), r = grip.getBoundingClientRect(), tgt = document.querySelector('.sl-row[data-id=hours]').getBoundingClientRect();
+    const ev = (type, y) => grip.dispatchEvent(new PointerEvent(type, { pointerId: 42, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true, cancelable: true, clientX: r.left + 10, clientY: y }));
+    ev('pointerdown', r.top + 20); ev('pointermove', tgt.top); ev('pointercancel', tgt.top);
+  });
+  ok((await ids(p)).join() === before, `${tag} 390: pointercancel puts the row back`);
+  await p.click('#slDone'); await p.waitForTimeout(200);
+  await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
+  ok((await dom(p)).indexOf('Reviews per day') <= 2, `${tag} 390: the touch-dragged order persists after a reload`);
+  await p.context().close();
+
+  // ---------------- the streak card around 1200px ----------------
+  for (const w of [1200, 1279, 1280]) {
+    p = await open(ui, w, 900);
+    await stats(p);
+    await p.evaluate(async () => { const db = await import('./js/db.js'); const DAY = 86400000, now = Date.now(); const cs = await db.getAll('cards'); await db.putMany('reviewLog', Array.from({ length: 1400 }, (_, d) => ({ cardId: cs[0].id, timestamp: now - Math.floor(d / 1.0) * DAY - 1000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true, reason: 'due' }))); });
+    await stats(p);
+    const o = await p.$eval('.pc-streak', c => { const cr = c.getBoundingClientRect(); const big = c.querySelector('.big').getBoundingClientRect(); const lines = c.querySelector('p').getBoundingClientRect().height / parseFloat(getComputedStyle(c.querySelector('p')).lineHeight); return { inside: big.right <= cr.right, lines: Math.round(lines), digits: c.querySelector('.big').textContent.trim() }; });
+    ok(o.inside && o.lines <= 3, `${tag} ${w}: the streak card keeps its count (${o.digits}) and text (${o.lines} lines) inside`);
+    await p.context().close();
+  }
 }
 ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' / ') : ''));
 await browser.close();

@@ -22,6 +22,7 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
     const c = cardInfo(id), name = esc(c.name);
     return `<li class="sl-row" data-id="${id}">
       <div class="sl-top">
+        <span class="sl-grip" aria-hidden="true" title="Drag to move">⠿</span>
         <label class="sl-show"><input type="checkbox" class="switch" data-act="show" aria-label="Show ${name}"><span class="sl-name">${name}</span></label>
         <span class="sl-moves">
           <button type="button" class="sl-btn" data-act="up" aria-label="Move ${name} up">${icon('down', 'sl-up')}</button>
@@ -90,6 +91,66 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
     } else return;
     paint();
     save();
+  });
+
+  // Drag to reorder (Pointer Events, so it works with a mouse, a pen and touch). The grip is for pointers only; the arrow buttons
+  // stay the way to do it from the keyboard or a screen reader. The row follows the pointer and the list opens a gap where it will
+  // land; the order is saved on drop. Escape or a cancelled pointer puts the row back.
+  let drag = null;
+  const scroller = list.closest('.sheet-in') || list.parentElement;
+  const endDrag = commit => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    cancelAnimationFrame(d.raf);
+    document.removeEventListener('keydown', d.onKey, true);
+    for (const [t, f] of [['pointermove', d.move], ['pointerup', d.up], ['pointercancel', d.cancel]]) document.removeEventListener(t, f);
+    d.row.classList.remove('lifted'); d.row.style.transform = '';
+    list.classList.remove('dragging');
+    const ids = [...list.children].map(r => r.dataset.id);
+    if (commit && ids.join() !== d.before.join()) {
+      layout = { ...layout, order: ids };
+      paint();
+      say(`Moved ${cardInfo(d.id).name} to position ${ids.indexOf(d.id) + 1} of ${ids.length}.`);
+      save();
+    } else { d.before.forEach(id => list.appendChild(rowOf(id))); paint(); }
+  };
+  list.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.sl-grip');
+    if (!grip || drag || (e.pointerType === 'mouse' && e.button !== 0) || e.isPrimary === false) return;
+    e.preventDefault();
+    const row = grip.closest('.sl-row');
+    const d = drag = { grip, row, id: row.dataset.id, pid: e.pointerId, y: e.clientY, before: [...list.children].map(r => r.dataset.id), grab: e.clientY - row.getBoundingClientRect().top };
+    row.classList.add('lifted'); list.classList.add('dragging');
+    const follow = () => {
+      // Swap with a neighbour once the row's middle passes the neighbour's middle.
+      row.style.transform = '';
+      for (;;) {
+        const r = row.getBoundingClientRect(), mid = d.y - d.grab + r.height / 2;
+        const prev = row.previousElementSibling, next = row.nextElementSibling;
+        const pr = prev?.getBoundingClientRect(), nr = next?.getBoundingClientRect();
+        if (prev && mid < pr.top + pr.height / 2) list.insertBefore(row, prev);
+        else if (next && mid > nr.top + nr.height / 2) list.insertBefore(next, row);
+        else break;
+      }
+      row.style.transform = `translateY(${d.y - d.grab - row.getBoundingClientRect().top}px)`;
+    };
+    // Near the top or bottom edge of the sheet's list the sheet scrolls by itself.
+    const auto = () => {
+      const sr = scroller.getBoundingClientRect();
+      const dy = d.y < sr.top + 48 ? -10 : d.y > sr.bottom - 48 ? 10 : 0;
+      if (dy) { const was = scroller.scrollTop; scroller.scrollTop += dy; if (scroller.scrollTop !== was) follow(); }
+      d.raf = requestAnimationFrame(auto);
+    };
+    // (Listened for on the document: moving the row in the list drops a pointer capture, so the grip cannot be relied on.)
+    const mine = ev => ev.pointerId === d.pid;
+    d.move = ev => { if (mine(ev)) { d.y = ev.clientY; follow(); } };
+    d.up = ev => { if (mine(ev)) endDrag(true); };
+    d.cancel = ev => { if (mine(ev)) endDrag(false); };
+    d.onKey = ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); endDrag(false); say('Move cancelled.'); } };
+    for (const [t, f] of [['pointermove', d.move], ['pointerup', d.up], ['pointercancel', d.cancel]]) document.addEventListener(t, f);
+    document.addEventListener('keydown', d.onKey, true);
+    d.raf = requestAnimationFrame(auto);
+    follow();
   });
 
   // Reset asks first.
