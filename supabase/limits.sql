@@ -172,7 +172,7 @@ update storage.buckets set file_size_limit = 3145728 where id = 'media';
 
 -- May the signed-in person store this file (name, and its size when the server already knows it)?
 -- Yes if the person exists, the file fits in their space (their other files + this one <= their limit; when the size
--- isn't known yet, a full 3 MB is assumed), and the whole bucket stays under its ceiling (read from the exact
+-- isn't known yet, they need to be under the limit; for the project ceiling a full 3 MB is assumed), and the whole bucket stays under its ceiling (read from the exact
 -- total). Runs under a per-person lock, so parallel uploads are checked one after another. The storage rules call it
 -- as the person who is uploading, so that person must be allowed to run it (that is why it is in "private").
 -- The last word is the trigger on storage.objects below: it adds each file's bytes to the exact total and refuses
@@ -187,13 +187,18 @@ begin
   lim := public._media_limit(uid);
   used := public._media_used(uid, objname);
   sz := case when size_text ~ '^[0-9]{1,12}$' then size_text::bigint end;
-  -- Storage's own check often runs before it knows the size: then assume the worst, a full 3 MB file (the bucket's limit).
+  -- Per person: when the size isn't known yet, they need to be under their limit (a file can then go over by up to 3 MB).
+  if sz is null then
+    if used >= lim then return false; end if;
+  elsif used + sz > lim then
+    return false;
+  end if;
+  -- Project ceiling: Storage's own check often runs before it knows the size, so assume the worst, a full 3 MB file.
   eff := coalesce(sz, 3145728);
-  if used + eff > lim then return false; end if;
   select g.bytes into cap from public.global_limits g where g.name = 'media';
   -- The exact total is kept by the trigger on storage.objects. If that trigger isn't there (it needs rights on Supabase's own
   -- table), fall back to adding the files up now.
-  if exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then
+  if exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal and tg.tgenabled <> 'D') then
     select t.bytes into tot from private.usage_totals t where t.name = 'media';
   else
     select coalesce(sum((o.metadata ->> 'size')::bigint), 0)::bigint into tot from storage.objects o where o.bucket_id = 'media';
@@ -480,8 +485,8 @@ insert into private.schema_log (file, version) values ('limits.sql', 2);
 select * from (values
   (1, 'script finished (version 2)', 'yes', 'ok'),
   (2, 'media total kept by a trigger on storage.objects',
-      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then 'yes' else 'NO' end,
-      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then 'ok'
+      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal and tg.tgenabled <> 'D') then 'yes' else 'NO' end,
+      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal and tg.tgenabled <> 'D') then 'ok'
            else 'NO: uploads are checked against a live count instead; ask for help' end),
   (3, 'records checked as JSON objects (all stored rows too)',
       coalesce((select case when c.convalidated then 'yes' else 'NO' end from pg_constraint c where c.conname = 'sync_items_data_object' and c.conrelid = 'public.sync_items'::regclass), 'missing'),

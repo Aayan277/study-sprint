@@ -432,15 +432,18 @@ await test('pictures and sounds: per-person limit, project fuse, exact total, re
   assertExact(db);
 });
 
-await test('uploads whose size is not known yet are assumed to be the largest file (3 MB)', () => {
+await test('uploads whose size is not known yet: fine for the person under their limit, 3 MB assumed for the project ceiling', () => {
   const db = newDb('nullsize');
   const chk = (uid, size) => asUser(db, uid, `select private.media_may_store('${uid}/n.png', ${size})`).out;
   assert.equal(chk(A, 'null'), 't');
-  // per person: 2 MB left is not enough for an unknown file, 3 MB left is
-  addObject(db, A, 'big.png', 50 * 1048576 - 2 * 1048576);
+  // per person: an unknown size is allowed while under the limit (48 of 50 MB), and refused only when they are at it
+  addObject(db, A, 'big.png', 48 * 1048576);
+  assert.equal(chk(A, 'null'), 't');
+  assert.equal(chk(A, `'3145728'`), 'f');                                 // a known 3 MB would not fit
+  assert.equal(chk(A, `'1048576'`), 't');
+  addObject(db, A, 'more.png', 2 * 1048576);
   assert.equal(chk(A, 'null'), 'f');
-  assert.equal(chk(A, `'1048576'`), 't');                                 // a known 1 MB still fits
-  // project: the same for the pictures ceiling
+  // project: the pictures ceiling assumes 3 MB for an unknown size
   ok(psql(db, `update public.global_limits set bytes = ${total(db, 'media') + 3 * 1048576 - 1} where name = 'media'`));
   assert.equal(chk(B, 'null'), 'f');
   assert.equal(chk(B, `'3145000'`), 't');

@@ -74,8 +74,9 @@ It adds:
 
 - **Space for pictures and sounds: 50 MB per account.** A new picture or sound is accepted only if it fits.
   When an account is full, its new pictures and sounds wait on the person's device and **everything else keeps
-  syncing**. The app tells them. (If Supabase doesn't tell the server a file's size until after it is stored,
-  the check falls back to "is the account under its limit", which can let one 3 MB file over.)
+  syncing**. The app tells them. (Supabase's own check often doesn't know a file's size yet. Then the per-person check is only "is the account
+  under its limit?", which can let one file of up to 3 MB go over; the exact total, kept by the database, catches it on the next upload.
+  The project-wide ceiling assumes the full 3 MB in that case.)
 - **Space for synced data (cards, reviews, settings): 40 MB per account.** Going over is refused, and the app
   keeps the changes on the device and says so. Deleting is always allowed.
 - **Project-wide ceilings** (table `global_limits`: 900 MB of files, 300 MB of data). The totals are kept **exact**
@@ -572,7 +573,7 @@ Always run the files in this order: `setup.sql`, `media.sql`, `limits.sql` (then
   - *New:* `app_config()` (minimum app version), `private.schema_log`, `supabase/ci-roles.sql` (optional read-only login for the GitHub jobs, step 8e).
   - Each script ends with a small **status table** (every line should say `ok` in the last column). If a line says `NO`, tell whoever helps you;
     for example, `NO` for the trigger on `storage.objects` means that table wouldn't let this account add it, so uploads are checked against a live count instead.
-  - The pictures check no longer lets a file through just because its size isn't known yet: an unknown size is treated as 3 MB.
+  - For the project-wide pictures ceiling an unknown upload size is treated as 3 MB.
   - The sync ceiling is lowered to 300 MB only when the stored data is under 280 MB (the status table says if it was not).
 - **Version 1.** The first limits (per-person limits, 60-second cached totals, `delete_my_account()`).
 
