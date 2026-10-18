@@ -9,8 +9,10 @@
 //
 // Other apps' music: starting any sound that isn't muted takes the phone's audio session and pauses Spotify / Apple Music. So nothing here
 // touches audio until a card with sounds is on screen: the "unlock" listeners are armed only while a ▶ is on the page, and the silent
-// unlock clip is played in an 'ambient' audio session (mixes with other audio) where the browser has navigator.audioSession (Safari 16.4+).
-// A real card sound switches the session to 'transient' while it plays and back to 'ambient' afterwards.
+// unlock clip is played in an 'ambient' audio session (mixes with other audio) where the browser has navigator.audioSession (Safari 16.4+),
+// and the session goes straight back to 'auto' after it. The page sits on 'auto' the rest of the time, including for real card sounds:
+// WebKit's 'ambient' and 'transient' obey the ring/silent switch (bug 264473), which would make every card sound silent, whereas
+// media elements under 'auto' ignore it (bug 251532). A real card sound may pause the person's music, which is fine: they chose a sound card.
 //
 // One shared <audio> element plays everything. iOS only lets a page start a sound inside a tap, and then lets that element play
 // later without one. So the element is "unlocked" with a silent clip inside the first tap (pointer, touch, click or key: whichever
@@ -93,7 +95,7 @@ function setPlaying(id) {
 
 export function stopSound() {
   run++;
-  if (el) setSession('ambient');
+  if (el) setSession('auto');
   if (el) { try { el.pause(); } catch { /* fine */ } }
   finishCurrent?.();
   finishCurrent = null;
@@ -130,7 +132,7 @@ export async function playSounds(ids, { onBlocked } = {}) {
   const mine = run;
   if (unlocked) await unlocked.catch(() => {});
   if (mine !== run) return false;
-  try { return await playList(ids, mine, onBlocked); } finally { if (mine === run) setSession('ambient'); }
+  try { return await playList(ids, mine, onBlocked); } finally { if (mine === run) setSession('auto'); }
 }
 async function playList(ids, mine, onBlocked) {
   for (const id of ids || []) {
@@ -138,7 +140,7 @@ async function playList(ids, mine, onBlocked) {
     if (mine !== run) return false;
     if (!url) { markMissing(id); continue; }
     try {
-      setSession('transient');
+      setSession('auto');
       await playOne(url, id, mine);
     } catch (err) {
       if (err?.name === 'NotAllowedError') onBlocked?.();
@@ -199,6 +201,7 @@ function unlock() {
     unlocked = null;
     // Only pause: taking the src away would raise an error event later, which would land on whatever sound started in the meantime.
     if (!finishCurrent) { try { a.pause(); } catch { /* fine */ } a.muted = false; }
+    setSession('auto');                  // the silent clip is done: back to the normal session (real sounds ignore the silent switch there)
   });
 }
 // The listeners are only on while a ▶ is on the page (a card with sounds), so opening the app never starts any audio.
