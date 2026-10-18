@@ -50,4 +50,4 @@ export async function deckMenu(page) {
 
 // After a sheet closes, nav takes its history entry off with history.go(-1), which lands a moment later. A raw reload() or
 // goto(hash) in that moment is aborted (net::ERR_ABORTED) or lands on the wrong entry, so tests wait for the entry to go first.
-export const sheetSettled = (page, timeout = 8000) => page.waitForFunction(() => history.state?.k !== 'ov', null, { timeout }).catch(() => {});
+export const sheetSettled = (page, timeout = 8000) => page.waitForFunction(() => history.state?.k !== 'ov', null, { timeout });
