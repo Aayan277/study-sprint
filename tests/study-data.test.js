@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rescueState, rescueClearAt, clearDismissals, RESCUE_DISMISS, countFor, deckCounts, hasReviewLimit, todayRing, typicalCardMs, DEFAULT_CARD_MS, scopeKey } from '../js/study-data.js';
+import { rescueState, rescueClearAt, clearDismissals, RESCUE_DISMISS, countFor, deckCounts, hasReviewLimit, todayRing, typicalCardMs, DEFAULT_CARD_MS, scopeKey, minutesText, sessionMs } from '../js/study-data.js';
 import { buildQueue, splitCards, newLimits, reviewLimits } from '../js/queue.js';
 import { chainMap } from '../js/deck-tree.js';
 import { dayStart } from '../js/days.js';
@@ -448,4 +448,47 @@ test('ring: a card answered today that is now suspended still counts as done, ev
   d.split = splitCards(d.cards, d.statesById, now);
   const r = ringOf(d);
   assert.deepEqual([r.done, r.left, r.total], [1, 2, 3]);        // out of the queue, so not left; it stays done
+});
+
+// ---------- the time estimate ----------
+test('fast clicker: gaps under 2 s are ignored, so 102 cards are not "~1 min"', () => {
+  const fast = session(now - DAY, 200, 600, 400);                  // 0.6 to 1 second between answers
+  assert.equal(typicalCardMs(fast, now), DEFAULT_CARD_MS);        // nothing usable: the default
+  const mixed = [...fast, ...session(now - 3 * DAY, 30, 5000, 3000)];
+  const ms = typicalCardMs(mixed, now);
+  assert.ok(ms >= 5000 && ms <= 8000, `got ${ms}`);
+  assert.ok(minutesText(102, typicalCardMs(fast, now), 20) !== '~1 min');
+  assert.equal(minutesText(102, typicalCardMs(fast, now), 20, 2), '~19 min');      // the exact text: default 8 s, 82 + 20 * 3 views
+});
+
+test('only learning steps under a day add time today', async () => {
+  const { sameDayStep } = await import('../js/study-data.js');
+  assert.deepEqual(['1m', '10m', '90m', '23h', '1d', '2d', '24h', '1440m'].map(sameDayStep), [true, true, true, true, false, false, false, false]);
+});
+
+test('time per card never goes below 4 seconds', () => {
+  const quick = session(now - DAY, 40, 2000, 1000);                // 2 to 3 seconds a card
+  assert.equal(typicalCardMs(quick, now), 4000);
+});
+
+test('no logs: the default time, new cards cost steps + 1 views', () => {
+  assert.equal(typicalCardMs([], now), DEFAULT_CARD_MS);
+  assert.equal(sessionMs(10, 0, 8000), 80000);
+  assert.equal(sessionMs(0, 10, 8000, 2), 10 * 3 * 8000);
+  assert.equal(sessionMs(0, 10, 8000, 0), 10 * 8000);              // no learning steps: seen once
+  assert.equal(sessionMs(5, 0, 100), 5 * 4000);                    // a tiny cardMs is floored
+});
+
+test('minutesText: 82 due + 20 new at 8 s a card, and hours', () => {
+  assert.equal(minutesText(102, 8000, 20, 2), '~19 min');         // (82 + 20*3) * 8 s = 1136 s
+  assert.equal(minutesText(1, 8000), '~1 min');
+  assert.equal(minutesText(3, 1000), '~1 min');
+  assert.equal(minutesText(450, 8000), '~1 h');                    // 3600 s
+  assert.equal(minutesText(600, 8000), '~1 h 20 min');             // 4800 s
+  assert.equal(minutesText(0, 8000, 0), '~1 min');
+});
+
+test('new-card-heavy queue takes much longer than the same number of reviews', () => {
+  assert.equal(minutesText(100, 8000, 0, 2), '~13 min');
+  assert.equal(minutesText(100, 8000, 100, 2), '~40 min');
 });

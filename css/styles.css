@@ -362,6 +362,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-new .small:not(.on-track){display:block;margin-top:4px}
 .exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
+/* Upcoming exams and "Add exam date" share a wrapper (js/today.js) so the Clinical style can put them in a side column; here it adds no box */
+.today-side{display:contents}
 .exam-add{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .exam-add::-webkit-scrollbar{display:none}
 .exam-add > *{flex:none;white-space:nowrap}
@@ -1372,7 +1374,9 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
    Below 1200px, nothing changes. */
 .deck-tree{display:none}
 @media (min-width:1200px){
-  :root:has(main[data-route="deck"]){--panel:400px}
+  /* --panel-user is the width the person dragged the divider to (js/panel-resize.js); 360px to 70% of the window, whatever it holds */
+  :root:has(main[data-route="deck"]){--panel:clamp(360px,var(--panel-user,400px),70vw)}
+  :root:has(main[data-route="browse"]){--panel:clamp(360px,var(--panel-user,440px),70vw)}
   main[data-route="deck"]{padding:28px 32px 56px}
   html[data-rail="on"] main[data-route="deck"]{margin-left:calc(var(--side) + 240px)}
   main[data-route="deck"] > .view{max-width:none}
@@ -1404,6 +1408,17 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   .dt-all:hover{color:var(--text)}
   .dt-all .ico{width:14px;height:14px}
   :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
+
+  /* The draggable divider between the card list and the editor panel (js/panel-resize.js). Only on Browse and a deck's page,
+     and only while the panel is beside the list; on a phone (the sheet) it does not exist. */
+  #panelResizer{display:none}
+  :root:has(main[data-route="deck"]) body.has-side #panelResizer,
+  :root:has(main[data-route="browse"]) body.has-side #panelResizer{display:block;position:fixed;top:0;bottom:0;right:calc(var(--panel) - 6px);width:12px;z-index:7;cursor:col-resize;touch-action:none}
+  #panelResizer::before{content:"";position:absolute;top:0;bottom:0;left:5px;width:2px;border-radius:2px;background:transparent;transition:background var(--t-fast)}
+  #panelResizer:hover::before,#panelResizer:focus-visible::before,body.panel-resizing #panelResizer::before{background:var(--accent)}
+  #panelResizer:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:var(--r-xs)}
+  body.panel-resizing{user-select:none;-webkit-user-select:none;cursor:col-resize}
+  body.panel-resizing dialog.sheet.side{pointer-events:none}
 }
 
 /* ---------- 16. First-run start (js/onboarding.js) ---------- */
@@ -2373,3 +2388,73 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .partner-pick:hover{background:var(--surface-2)}
 .hard-fix{margin:var(--s-3) 0 0;font-size:var(--fs-sm)}
 .hard-fix .link{color:var(--accent-text);text-decoration:underline}
+
+/* ---- Retention helper ("Help me choose", js/retention-sheet.js) ---- */
+.rc{display:grid;gap:var(--s-3);min-width:0}
+.rc p{margin:0}
+.rc-inline{border:1px solid var(--line);border-radius:var(--r-md);padding:var(--s-3);background:var(--surface-2)}
+.rc-fig{margin:0;display:grid;gap:var(--s-2);min-width:0}
+.rc-cap{font-size:var(--fs-sm);font-weight:600;color:var(--text)}
+.rc-note{font-size:var(--fs-xs);line-height:1.55;color:var(--text-2)}
+.rc-detail{display:grid;gap:var(--s-2);padding:12px 14px;border-radius:var(--r-md);background:var(--surface-2);border:1px solid var(--line);font-size:var(--fs-base);line-height:1.55}
+.rc-detail .mono{font-variant-numeric:tabular-nums}
+.rc-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.rc-sugg{display:grid;gap:6px}
+.rc-exam-pick{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-sm);color:var(--text-2)}
+.rc-svg{width:100%;height:auto;display:block;touch-action:manipulation;cursor:pointer;border-radius:var(--r-sm);-webkit-tap-highlight-color:transparent}
+.rc-svg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rc-grid{stroke:var(--line);stroke-width:1}
+.rc-axis{stroke:var(--line-strong);stroke-width:1}
+.rc-tick{fill:var(--text-2);font:500 12px var(--f-num);font-variant-numeric:tabular-nums}
+.rc-axis-title{fill:var(--text-2);font:500 12px var(--f-ui)}
+.rc-line{stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.rc-dot{fill:var(--accent)}
+.rc-guide{stroke:var(--line-strong);stroke-width:1;stroke-dasharray:3 3}
+.rc-lab{fill:var(--text);font:600 12px var(--f-ui)}
+.rc-ring{fill:var(--surface-1);stroke:var(--text);stroke-width:2}
+.rc-diamond{fill:var(--surface-1);stroke:var(--text);stroke-width:2;stroke-linejoin:round}
+.rc-pick-line{stroke:var(--accent);stroke-width:1.5}
+.rc-pick{fill:var(--accent);stroke:var(--surface-1);stroke-width:2}
+.rc-table-wrap{overflow-x:auto;margin-top:6px}
+.rc-table{border-collapse:collapse;width:100%;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.rc-table th,.rc-table td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+.rc-table thead th{color:var(--text-2);font-weight:600;font-size:var(--fs-xs)}
+.rc-table tbody th{text-align:left;font-weight:600}
+.rc-table tr.sel{background:var(--accent-tint)}
+
+/* ---- Health check (js/health-sheet.js) ---- */
+.hc{display:grid;gap:var(--s-4);min-width:0}
+.hc p{margin:0}
+.hc-sec{display:grid;gap:var(--s-2);padding-top:var(--s-3);border-top:1px solid var(--line);font-size:var(--fs-base);line-height:1.55}
+.hc-sec:first-child{border-top:0;padding-top:0}
+.hc-sec h3{margin:0;font-size:var(--fs-md);display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.hc-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:700;color:var(--text);border:1px solid var(--line-strong);background:var(--surface-2)}
+.hc-badge.good,.hc-badge.on{background:var(--good-tint);border-color:var(--good-line)}
+.hc-badge.ok{background:var(--hard-tint);border-color:var(--hard-line)}
+.hc-badge.poor,.hc-badge.under{background:var(--again-tint);border-color:var(--again-line)}
+.hc-badge.over{background:var(--easy-tint);border-color:var(--easy-line)}
+.hc-sug{font-weight:600}
+.hc-rough{font-size:var(--fs-sm);color:var(--text-2)}
+.hc-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.hc-list li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px var(--s-3)}
+.hc-name small{color:var(--text-2)}
+.hc-val{font-variant-numeric:tabular-nums}
+.hc-gap{font-size:var(--fs-sm);font-weight:600;white-space:nowrap}
+
+/* ---- Stats: retention vs target ---- */
+.rs-group{display:grid;gap:6px;padding:var(--s-3) 0;border-top:1px solid var(--line)}
+.rs-group:first-of-type{border-top:0;padding-top:0}
+.rs-head{display:flex;justify-content:space-between;align-items:baseline}
+.rs-row,.rs-axis{display:grid;grid-template-columns:minmax(84px,.8fr) 1.4fr minmax(110px,1.1fr);align-items:center;gap:var(--s-2);font-size:var(--fs-sm)}
+.rs-name small{color:var(--text-2)}
+.rs-track{position:relative;height:18px}
+.rs-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--surface-3)}
+.rs-dot{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--surface-1)}
+.rs-dot.under{background:var(--again)}
+.rs-dot.over{background:var(--easy)}
+.rs-target{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;background:var(--text)}
+.rs-val{font-variant-numeric:tabular-nums;text-align:right}
+.rs-val small{color:var(--text-2)}
+.rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+.rs-scale{display:flex;justify-content:space-between}
+@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px 1fr minmax(96px,auto)}}
