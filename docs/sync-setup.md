@@ -246,8 +246,8 @@ tiny question every day. It needs your two values from step 7 as *secrets* in th
 4. Open the **Actions** tab, click **Keep Supabase awake** in the left list, click **Run workflow → Run workflow**,
    and after a few seconds check the run has a green tick.
 
-GitHub switches scheduled jobs off after 60 days with no activity in the repository. If that happens, the
-Actions tab shows a button to turn it back on.
+GitHub can switch scheduled jobs off after 60 days with no activity in the repository; the job in step 8d stops
+that from happening.
 
 ## 8b. Back up the database (GitHub)
 
@@ -260,9 +260,9 @@ The copy is **encrypted with a password only you know**, so it is safe even if t
 **What is not saved:** pictures and sounds. They live in Supabase Storage, which this job doesn't copy. They are
 still on each person's devices and in their **Export backup** files.
 
-**Good to know:** GitHub switches scheduled jobs off after 60 days with no activity in the repository (any
-commit counts). Then backups stop, and the last copies disappear 30 days later; the Actions tab shows a button to
-turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
+**Good to know:** GitHub can switch scheduled jobs off after 60 days with no activity in the repository. Then
+backups stop, and the last copies disappear 30 days later. The job in step 8d stops that from happening; if it ever
+did happen, the Actions tab shows a button to turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
 
 ### Turn it on
 
@@ -357,8 +357,8 @@ It only reads. The issue holds **totals only**: no emails, no names, nothing abo
 2. Open the **Actions** tab, click **Watch free-plan space**, then **Run workflow → Run workflow**. After a few seconds
    it should show a green tick. Until the secret exists the job does nothing and still shows a green tick (click into
    the run: "No space check yet"). If the address is wrong the run turns red and says what to fix.
-3. That's all. It then runs by itself every day. (Same note as the other jobs: GitHub switches scheduled jobs off after 60 days
-   with no activity in the repository; the Actions tab shows a button to turn it back on.)
+3. That's all. It then runs by itself every day. (Same note as the other jobs: GitHub can switch scheduled jobs off after 60 days
+   with no activity in the repository; step 8d stops that.)
 
 ### What the issue means
 
@@ -384,8 +384,47 @@ open Supabase, then **Project Settings → Usage**, and look at **Egress** (also
 If it is over about 4 GB (80%) with weeks to go, treat it like the limits above: fewer or smaller pictures per person, or the Pro plan.
 Going over 5 GB on Free can make the project stop serving until the month rolls over, so it is better to act at 80%.
 
+## 8d. Keep the scheduled jobs switched on (GitHub)
+
+**The problem.** The three jobs above run on a timer. GitHub switches timer jobs **off** after **60 days in a row with no
+activity in the repository** (no commits and so on), and only in a **public** repository (in a private one this
+doesn't happen). A switched-off job never runs again until somebody turns it on, and nothing breaks loudly: the backups
+just stop, and the project can pause. GitHub's own words:
+[Disabling and enabling a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows).
+
+**What is already in place.** The job `.github/workflows/keep-workflows-enabled.yml` ("Keep scheduled jobs on") runs
+every Monday. It tells GitHub "enable this workflow" for every job in the repository, itself included, and switches
+back on any that GitHub had already turned off. It makes no commits, needs no secrets, and does nothing you can see
+when all is well. **You have nothing to set up**, except to check it once:
+
+1. Open the repository on github.com and click the **Actions** tab.
+2. Click **Keep scheduled jobs on** in the left list, then **Run workflow → Run workflow**.
+3. After a few seconds open the run. A green tick means it works. Its log lists your jobs, each with "Enabled".
+
+**Be honest about the limit.** GitHub's documentation doesn't say that this call restarts the 60-day clock, and it
+doesn't define "activity". This is the usual way people solve this problem, but it isn't promised in writing. So
+treat step 9's monthly check as the safety net, and know the sure fix: **any real change you commit and push to the
+repository (even a one-line edit) restarts the 60 days**, so in months when you work on the app you are covered anyway.
+
+**How you would notice a problem.**
+- If Keep scheduled jobs on fails, the run turns red and GitHub emails you (to the address of whoever last edited that
+  job's file, normally you).
+- Supabase usually emails you before it pauses a free project, and the backups would be missing in **Actions → Back up
+  database** (no new run for days). (GitHub's documentation doesn't promise a warning email before it switches a job
+  off, so don't count on one.)
+- Each month, open the **Actions** tab. If a job in the list says it is disabled (a banner on its page, or no recent runs),
+  click it and then **Enable workflow**. Then
+  also click **Run workflow** on **Keep scheduled jobs on**.
+
+**Do not** switch Keep scheduled jobs on off by hand. If you ever want one of the others off, use **Disable workflow**
+on that job: Keep scheduled jobs on leaves jobs that you switched off yourself alone.
+
+**If you make the repository private** the 60-day rule no longer applies, and this job becomes harmless but unneeded.
+
 ## 9. Looking after it
 
+- **Look at the Actions tab once a month.** All jobs should be listed without a "disabled" banner and the last
+  runs should be recent (step 8d).
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
   (the project turns read-only above that), 1 GB of files and 5 GB of downloads a month. Roughly: a light
   user takes 7 MB of database a year, a heavy one 100 MB, and a full 180 MB of pictures and sounds is

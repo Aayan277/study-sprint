@@ -14,8 +14,9 @@
 #   BACKUP_PASSPHRASE   a long password you make up and keep somewhere safe (a password manager). Lose it and the backups can't be opened.
 # Until both exist, the job says so and finishes with a green tick (so no failure emails before you set it up).
 #
-# Backups are kept 30 days. GitHub switches scheduled workflows off after 60 days with no activity in the repository (any commit
-# counts); the backups then stop, and the last copies expire 30 days later. On a private repository, artifacts count toward
+# Backups are kept 30 days. GitHub switches scheduled workflows off after 60 days with no activity in a public repository;
+# the backups then stop, and the last copies expire 30 days later. The weekly job in keep-workflows-enabled.yml prevents
+# that (docs/sync-setup.md, "Keep the scheduled jobs switched on"). On a private repository, artifacts count toward
 # the GitHub storage allowance (a few MB a night is fine).
 name: Back up database
 

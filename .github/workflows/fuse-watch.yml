@@ -14,7 +14,8 @@
 #
 # Needs the repository secret SUPABASE_DB_URL, the same one the backup job uses (docs/sync-setup.md, "Back up the database").
 # Until it exists the job says so and finishes with a green tick. GitHub switches scheduled workflows off after 60 days
-# with no activity in the repository (any commit counts).
+# with no activity in a public repository; the weekly job in keep-workflows-enabled.yml prevents that (docs/sync-setup.md,
+# "Keep the scheduled jobs switched on").
 name: Watch free-plan space
 
 on:

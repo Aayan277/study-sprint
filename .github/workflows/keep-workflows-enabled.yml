@@ -1,0 +1,45 @@
+# Stops GitHub from switching off this repository's scheduled jobs (the Supabase keep-awake, the nightly backup and the
+# storage alert). In a PUBLIC repository GitHub disables scheduled workflows after 60 days with no repository activity.
+# Once a workflow is off it never runs again by itself, so this job asks GitHub, once a week, to "enable" every workflow
+# of the repository, itself included. Enabling one that is already on does nothing visible. It makes no commit, so the
+# history stays clean. Setup and what to do if it ever fails: docs/sync-setup.md ("Keep the scheduled jobs switched on").
+#
+# It needs no secrets: the built-in token with "actions: write" (below) may use the enable call.
+# It leaves alone any workflow YOU switched off by hand (state "disabled_manually").
+name: Keep scheduled jobs on
+
+on:
+  schedule:
+    - cron: '29 5 * * 1'        # every Monday at 05:29 UTC
+  workflow_dispatch:            # and a "Run workflow" button, to try it
+
+# Only what this job needs: to switch workflows on. Nothing else in the repository.
+permissions:
+  actions: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable every workflow that is not switched off by hand
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # id, state and file of every workflow. state is "active", "disabled_inactivity" (the 60-day rule),
+          # "disabled_manually" (you pressed Disable) or similar.
+          gh api --paginate "repos/$GH_REPO/actions/workflows" \
+            --jq '.workflows[] | [.id, .state, .path] | @tsv' > workflows.tsv
+          cat workflows.tsv
+          while IFS=$'\t' read -r id state path; do
+            case "$state" in
+              disabled_manually) echo "Skipping $path (you switched it off yourself)."; continue ;;
+              disabled_fork|deleted) echo "Skipping $path ($state)."; continue ;;
+            esac
+            case "$path" in .github/workflows/*) ;; *) echo "Skipping $path (not a workflow file)."; continue ;; esac
+            [ "$state" = "disabled_inactivity" ] && echo "::warning::$path had been switched off by GitHub for inactivity; switching it back on."
+            gh api --method PUT "repos/$GH_REPO/actions/workflows/$id/enable"
+            echo "Enabled $path."
+          done < workflows.tsv
