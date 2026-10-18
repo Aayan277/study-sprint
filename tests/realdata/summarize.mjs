@@ -6,13 +6,17 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { mulberry32 } from '../../js/fsrs-fit.js';
+import { refuseInsideRepo } from './lib.mjs';
 
 const ROOT = process.env.FSRS_DATA || join(homedir(), 'fsrs-data');
 const inFile = process.argv[2] || join(ROOT, 'results', 'results.jsonl');
 const outFile = process.argv[3] || join(ROOT, 'results', 'summary.md');
-const MODELS = ['fsrs6_default', 'fsrs6_tuned', 'fsrs6_app', 'fsrs7_default', 'fsrs6_rs', 'fsrs7_rs'];
+refuseInsideRepo('the data folder (FSRS_DATA)', ROOT);
+refuseInsideRepo('the summary output path', outFile);
+const MODELS = ['base_rate', 'fsrs6_default', 'fsrs6_tuned', 'fsrs6_app', 'fsrs7_default', 'fsrs6_rs', 'fsrs7_rs'];
 const PAIRS = [['fsrs7_default', 'fsrs6_default'], ['fsrs7_default', 'fsrs6_app'], ['fsrs7_default', 'fsrs6_tuned'], ['fsrs6_tuned', 'fsrs6_default'],
-  ['fsrs6_app', 'fsrs6_default'], ['fsrs6_rs', 'fsrs6_tuned'], ['fsrs6_rs', 'fsrs6_default'], ['fsrs7_rs', 'fsrs7_default'], ['fsrs7_rs', 'fsrs6_rs']];
+  ['fsrs6_app', 'fsrs6_default'], ['fsrs6_rs', 'fsrs6_tuned'], ['fsrs6_rs', 'fsrs6_default'], ['fsrs7_rs', 'fsrs7_default'], ['fsrs7_rs', 'fsrs6_rs'],
+  ['fsrs7_rs', 'fsrs6_tuned'], ['fsrs7_rs', 'fsrs6_app'], ['fsrs7_default', 'base_rate'], ['fsrs7_rs', 'base_rate'], ['fsrs6_app', 'base_rate']];
 const METRICS = [['logLoss', 'log loss', false], ['rmse', 'RMSE (bins)', false], ['auc', 'AUC', true]];     // [key, label, higherIsBetter]
 const MIN_N = 30;                       // a user needs this many scored reviews in a set to count (a handful gives a meaningless average)
 
@@ -20,6 +24,8 @@ const MIN_N = 30;                       // a user needs this many scored reviews
 const byUser = new Map();
 for (const l of readFileSync(inFile, 'utf8').split('\n')) { if (!l.trim()) continue; try { const r = JSON.parse(l); byUser.set(r.user, r); } catch { /* half-written line */ } }
 const users = [...byUser.values()];
+const stamps = new Map();
+for (const u of users) stamps.set(u.stamp || 'none', (stamps.get(u.stamp || 'none') || 0) + 1);
 const errors = users.filter(u => u.error);
 const ok = users.filter(u => !u.error);
 
@@ -51,8 +57,13 @@ out('# FSRS real-data check');
 out('');
 out(`Users in the file: ${users.length} (${ok.length} scored, ${errors.length} with an error). A user counts in a set only with at least ${MIN_N} scored reviews there.`);
 out('`long` = reviews on a later day than the card\'s previous review (what the app predicts). `same` = repeats on the same Anki day;');
-out('FSRS-6 gets the fractional gap there, which the real app never does, so FSRS-6 is flattered in that table.');
+out('FSRS-6 has no real same-day prediction (the app uses learning steps); its number there uses the fractional gap on a curve made for days used at minutes, and is kept only for reference.');
+out('`base_rate` is a constant: the recall rate of the user\'s train half (separately for long and same-day reviews), so AUC is 0.5 by construction.');
 out('Lower is better for log loss and RMSE, higher for AUC. Difference = first model minus second.');
+out(`Code version of the results: ${[...stamps].map(([k, v]) => `${k} (${v} users)`).join(', ')}`);
+if (stamps.size > 1) { out(''); out('**WARNING: this file mixes results from different code versions. Do not compare its numbers; rerun into a fresh file.**'); console.error('WARNING: results file mixes code versions: ' + [...stamps.keys()].join(', ')); }
+const warned = ok.filter(u => u.warnings?.length).length;
+if (warned) { out(''); out(`**WARNING: ${warned} users had fsrs-rs weights for another split, which were skipped (first: ${ok.find(u => u.warnings?.length).warnings[0]})**`); console.error(`WARNING: ${warned} users had stale fsrs-rs weights`); }
 out('');
 const rowsAll = ok.reduce((a, u) => a + (u.rawRows || 0), 0);
 out(`Reviews in the scored users' logs: ${rowsAll.toLocaleString('en')}. Cards skipped (history did not start at new): ${ok.reduce((a, u) => a + (u.scenarios?.full?.skipped || 0), 0).toLocaleString('en')}. Users capped: ${ok.filter(u => u.scenarios?.full?.capped).length}.`);
@@ -71,6 +82,7 @@ for (const scn of ['full', 'first1000', 'first5000']) {
   const tr = new Map();
   for (const u of have) { const m = u.scenarios[scn].models.fsrs6_tuned; if (m) tr.set(m.status, (tr.get(m.status) || 0) + 1); }
   out(`fsrs6_tuned status: ${[...tr].map(([k, v]) => `${k} ${v}`).join(', ') || '-'}`);
+  out(`Users dropped by the >= ${MIN_N} scored-reviews filter: ${['long', 'same'].map(set => `${set} ${have.filter(u => !(u.scenarios[scn].models.fsrs6_default?.[set]?.n >= MIN_N)).length}`).join(', ')}`);
   out('');
   for (const set of ['long', 'same']) {
     out(`### ${scn} / ${set}`);
@@ -86,17 +98,17 @@ for (const scn of ['full', 'first1000', 'first5000']) {
       }
     }
     out('');
-    out('| first vs second | metric | users | mean diff | 95% CI (bootstrap over users) | relative | first better |');
-    out('|---|---|---:|---:|---|---:|---:|');
+    out('| first vs second | metric | users | mean diff | 95% CI (bootstrap over users) | relative | first better | tied |');
+    out('|---|---|---:|---:|---|---:|---:|---:|');
     for (const [a, b] of PAIRS) {
       for (const [key, label, higher] of METRICS) {
         const ca = column(scn, set, a, key), cb = column(scn, set, b, key);
         const diffs = [], base = [];
-        let better = 0;
-        for (const [user, x] of ca) { const y = cb.get(user); if (!y) continue; diffs.push(x.v - y.v); base.push(y.v); if (higher ? x.v > y.v : x.v < y.v) better++; }
+        let better = 0, tied = 0;
+        for (const [user, x] of ca) { const y = cb.get(user); if (!y) continue; diffs.push(x.v - y.v); base.push(y.v); if (Math.abs(x.v - y.v) < 1e-12) tied++; else if (higher ? x.v > y.v : x.v < y.v) better++; }
         if (diffs.length < 2) continue;
         const [lo, hi] = bootstrapCI(diffs);
-        out(`| ${a} vs ${b} | ${label} | ${diffs.length} | ${f(mean(diffs), 5)} | [${f(lo, 5)}, ${f(hi, 5)}] | ${pct(100 * mean(diffs) / mean(base))} | ${(100 * better / diffs.length).toFixed(1)}% |`);
+        out(`| ${a} vs ${b} | ${label} | ${diffs.length} | ${f(mean(diffs), 5)} | [${f(lo, 5)}, ${f(hi, 5)}] | ${pct(100 * mean(diffs) / mean(base))} | ${(100 * better / diffs.length).toFixed(1)}% | ${(100 * tied / diffs.length).toFixed(1)}% |`);
       }
     }
     out('');

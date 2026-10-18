@@ -54,5 +54,6 @@ files are skipped. Training is single-threaded per fit and takes about 1 s per u
 ## Things to know
 
 - `long` reviews are the ones the app predicts (a later day than the card's last review). `same` are repeats on the same day.
-  FSRS-6 has no same-day curve; here it gets the fractional gap anyway, which flatters it.
+  FSRS-6 has no real same-day prediction (the app uses learning steps); its `same` number uses the fractional gap on a curve made for days used at minutes, kept only for reference. The honest same-day yardstick is `base_rate`, a constant (the train half's recall rate for that set; AUC 0.5).
+- Every results line is stamped with the code version (`git rev-parse --short HEAD`, `+dirty` if js/ or tests/realdata have uncommitted changes); summarize warns if a file mixes stamps. `run.mjs` only scores fsrs-rs weights whose `cutoff` and `headRows` match the current split. Results/weights paths inside the repo are refused.
 - FSRS-7 sees fractional days between reviews (from `elapsed_seconds`), as the app does; FSRS-6 sees whole days.

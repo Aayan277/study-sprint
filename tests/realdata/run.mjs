@@ -11,7 +11,8 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { fit, fitChecked, splitHistories, clipWeights, mulberry32 } from '../../js/fsrs-fit.js';
 import { W7_DEFAULT, clipWeights7 } from '../../js/fsrs7-model.js';
-import { toHistories, truncate, eval6, eval7 } from './lib.mjs';
+import { execSync } from 'node:child_process';
+import { toHistories, truncate, eval6, eval7, headRates, evalConst, refuseInsideRepo } from './lib.mjs';
 
 const ROOT = process.env.FSRS_DATA || join(homedir(), 'fsrs-data');
 const SCENARIOS = [['full', Infinity], ['first1000', 1000], ['first5000', 5000]];
@@ -40,8 +41,8 @@ function capCards(cards, cap, user) {
 
 function readWeights(user, scenario) {
   const file = join(ROOT, 'weights', `${user}.${scenario}.json`);
-  if (!existsSync(file)) return {};
-  try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return {}; }
+  if (!existsSync(file)) return null;
+  try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
 }
 
 function scoreScenario(user, scenario, cards, skipped, cap) {
@@ -62,9 +63,15 @@ function scoreScenario(user, scenario, cards, skipped, cap) {
     return score6(clip6(r.status === 'better' ? r.w : DEFAULT_W), { status: r.status, reason: r.reason });
   });
   add('fsrs7_default', () => eval7(split.test, W7_DEFAULT));
-  const rs = readWeights(user, scenario);                   // reference fits by fsrs-rs, written by another script
-  if (Array.isArray(rs.fsrs6) && rs.fsrs6.length === 21) add('fsrs6_rs', () => score6(clip6(rs.fsrs6)));
-  if (Array.isArray(rs.fsrs7) && rs.fsrs7.length === 34) add('fsrs7_rs', () => eval7(split.test, clipWeights7(rs.fsrs7)));
+  add('base_rate', () => ({ ...evalConst(split.test, headRates(split.head)), rates: headRates(split.head) }));   // constant recall rate of the train half
+  const rs = readWeights(user, scenario);                   // reference fits by fsrs-rs (rs-weights.mjs); used only for the very same split
+  if (rs) {
+    if (rs.cutoff !== split.cutoff || rs.headRows !== out.headRows) out.warnings = [`user ${user} ${scenario}: fsrs-rs weights are for another split (file cutoff ${rs.cutoff}, headRows ${rs.headRows}; now ${split.cutoff}, ${out.headRows}); skipped`];
+    else {
+      if (Array.isArray(rs.fsrs6) && rs.fsrs6.length === 21) add('fsrs6_rs', () => score6(clip6(rs.fsrs6)));
+      if (Array.isArray(rs.fsrs7) && rs.fsrs7.length === 34) add('fsrs7_rs', () => eval7(split.test, clipWeights7(rs.fsrs7)));
+    }
+  }
   return out;
 }
 
@@ -78,20 +85,29 @@ function scoreUser(user, cap) {
     let capped = 0;
     if (rows(cards) > cap) { cards = capCards(cards, cap, user); capped = cap; }
     res.scenarios[name] = scoreScenario(user, name, cards, skipped, capped);
+    if (res.scenarios[name].warnings) (res.warnings ||= []).push(...res.scenarios[name].warnings);
   }
   return res;
 }
 
 if (!isMainThread) {
-  parentPort.on('message', ({ user, cap }) => {
+  parentPort.on('message', ({ user, cap, stamp }) => {
     const t0 = performance.now();
     let res;
-    try { res = scoreUser(user, cap); res.seconds = seconds(t0); } catch (e) { res = { user, error: String(e?.stack || e).slice(0, 600) }; }
+    try { res = scoreUser(user, cap); res.stamp = stamp; res.seconds = seconds(t0); } catch (e) { res = { user, stamp, error: String(e?.stack || e).slice(0, 600) }; }
     parentPort.postMessage(res);
   });
 } else {
   const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
+  refuseInsideRepo('the data folder (FSRS_DATA)', ROOT);
   const out = arg('out', join(ROOT, 'results', 'results.jsonl'));
+  refuseInsideRepo('--out', out);
+  // The code version the numbers come from: short commit hash, +dirty when js/ or tests/realdata have uncommitted changes.
+  let stamp = 'unknown';
+  try {
+    const sh = c => execSync(c, { cwd: new URL('../..', import.meta.url), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    stamp = sh('git rev-parse --short HEAD') + (sh('git status --porcelain -- js tests/realdata') ? '+dirty' : '');
+  } catch { /* not a git checkout */ }
   const jobs = Math.max(1, +arg('jobs', cpus().length));
   const cap = +arg('cap', DEFAULT_CAP);
   mkdirSync(dirname(out), { recursive: true });
@@ -102,9 +118,10 @@ if (!isMainThread) {
   users = users.filter(u => !done.has(u));
   if (arg('limit')) users = users.slice(0, +arg('limit'));
   console.log(`${users.length} users to do (${done.size} already done), ${jobs} workers, results -> ${out}`);
+  console.log(`code version ${stamp}`);
   let next = 0, finished = 0;
   const pool = [];
-  const feed = w => { if (next < users.length) w.postMessage({ user: users[next++], cap }); else { w.terminate(); } };
+  const feed = w => { if (next < users.length) w.postMessage({ user: users[next++], cap, stamp }); else { w.terminate(); } };
   const total = users.length;
   if (!total) process.exit(0);
   for (let k = 0; k < Math.min(jobs, total); k++) {
@@ -115,6 +132,7 @@ if (!isMainThread) {
       finished++;
       const sc = res.scenarios?.full;
       console.log(`${finished}/${total} user ${res.user}: ${res.error ? 'ERROR ' + res.error.split('\n')[0] : `${res.rawRows} rows${sc?.capped ? ' (capped)' : ''}, ${res.seconds}s`}`);
+      for (const m of res.warnings || []) console.warn('WARNING ' + m);
       feed(w);
     });
     w.on('error', e => { console.error('worker crashed', e); process.exit(1); });

@@ -1,6 +1,8 @@
 // Pure helpers for scoring FSRS models on real Anki review logs (see README.md). No file access and no ts-fsrs here, so the
 // unit test (tests/realdata.test.js) can run them on tiny made-up users.
 
+import { resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initState, nextState, forgettingCurve } from '../../js/fsrs-fit.js';
 import { initState7, nextState7, forgettingCurve7 } from '../../js/fsrs7-model.js';
 
@@ -112,7 +114,7 @@ export function auc(ps, ys) {
 
 // FSRS-6 exactly as evaluate() in js/fsrs-fit.js walks it (whole-day gaps, round = true), so the memory state matches the app.
 // `same` rows are predicted with the fractional gap tFrac. The app never makes such a prediction (FSRS-6 has no same-day
-// forgetting curve), so that column is generous to FSRS-6: it gets a free guess it would not make in real use.
+// forgetting curve): the fractional-gap number is a curve made for days used at minutes, kept only for reference.
 export function eval6(cards, w) {
   const long = new Metrics(), same = new Metrics();
   for (const c of cards) {
@@ -147,4 +149,35 @@ export function eval7(cards, w) {
     }
   }
   return { long: long.result(), same: same.result() };
+}
+
+// ---------- baseline: a constant recall probability ----------
+// The recall rate of the train half (cards from splitHistories().head), separately for later-day reviews (long) and same-day
+// repeats (same). Falls back to the overall rate when a set is empty. Clamped to [0.01, 0.99].
+export function headRates(head) {
+  let ly = 0, ln = 0, sy = 0, sn = 0;
+  for (const c of head) for (let i = 1; i < c.ratings.length; i++) {
+    if (!c.scored[i]) continue;
+    const y = c.ratings[i] > 1 ? 1 : 0;
+    if (c.deltas[i] > 0) { ln++; ly += y; } else { sn++; sy += y; }
+  }
+  const cl = v => clamp(v, 0.01, 0.99), all = ln + sn ? (ly + sy) / (ln + sn) : 0.9;
+  return { long: cl(ln ? ly / ln : all), same: cl(sn ? sy / sn : all) };
+}
+// Score the constant: pLong on later-day reviews, pSame on same-day ones.
+export function evalConst(cards, rates) {
+  const long = new Metrics(), same = new Metrics();
+  for (const c of cards) for (let i = 1; i < c.ratings.length; i++) {
+    if (!c.scored[i]) continue;
+    const y = c.ratings[i] > 1 ? 1 : 0;
+    if (c.deltas[i] > 0) long.add(rates.long, y); else same.add(rates.same, y);
+  }
+  return { long: long.result(), same: same.result() };
+}
+
+// ---------- guard: never write results/weights into the repo ----------
+export const REPO = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+export const insideRepo = p => { const r = resolve(p); return r === REPO || r.startsWith(REPO + sep); };
+export function refuseInsideRepo(label, p) {
+  if (insideRepo(p)) { console.error(`Refusing: ${label} (${resolve(p)}) is inside the repo ${REPO}. Real review data and results must stay outside it.`); process.exit(2); }
 }

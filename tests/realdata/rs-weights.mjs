@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { splitHistories } from '../../js/fsrs-fit.js';
-import { toHistories, truncate } from './lib.mjs';
+import { toHistories, truncate, refuseInsideRepo } from './lib.mjs';
 
 const ROOT = process.env.FSRS_DATA || join(homedir(), 'fsrs-data');
 const SCENARIOS = [['full', Infinity], ['first1000', 1000], ['first5000', 5000]];
@@ -52,18 +52,20 @@ async function train(b, cards, model) {
 
 async function doUser(b, user) {
   const file = s => join(ROOT, 'weights', `${user}.${s}.json`);
-  if (SCENARIOS.every(([s]) => existsSync(file(s)))) return { user, skipped: true };
+  // done = file exists and carries the split it was trained for (older files without cutoff are redone, run.mjs would not trust them)
+  const done = s => { try { return JSON.parse(readFileSync(file(s), 'utf8')).cutoff !== undefined; } catch { return false; } };
+  if (SCENARIOS.every(([s]) => done(s))) return { user, skipped: true };
   const data = JSON.parse(readFileSync(join(ROOT, 'users', `${user}.json`), 'utf8'));
   const { cards: all } = toHistories(data);
   const log = [];
   for (const [name, limit] of SCENARIOS) {
-    if (existsSync(file(name))) continue;
+    if (done(name)) continue;
     if (limit !== Infinity && rows(all) < limit) continue;           // run.mjs skips these scenarios too
     const cards = limit === Infinity ? all : truncate(all, limit);
-    const { head } = splitHistories(cards, 0.8);
+    const { head, cutoff } = splitHistories(cards, 0.8);
     const t0 = performance.now();
     const r6 = await train(b, head, 'fsrs6'), r7 = await train(b, head, 'fsrs7');
-    const doc = { fsrs6: r6.w, fsrs7: r7.w, binding: b.version, settings: SETTINGS, headRows: rows(head), seconds: Math.round(performance.now() - t0) / 1000 };
+    const doc = { fsrs6: r6.w, fsrs7: r7.w, binding: b.version, settings: SETTINGS, headRows: rows(head), cutoff, seconds: Math.round(performance.now() - t0) / 1000 };
     if (r6.why) doc.fsrs6_error = r6.why;
     if (r7.why) doc.fsrs7_error = r7.why;
     mkdirSync(join(ROOT, 'weights'), { recursive: true });
@@ -84,6 +86,7 @@ if (!isMainThread) {
   parentPort.postMessage({ ready: true });
 } else {
   const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
+  refuseInsideRepo('the data folder (FSRS_DATA)', ROOT);
   const jobs = Math.max(1, +arg('jobs', Math.min(4, cpus().length)));
   let users = readdirSync(join(ROOT, 'users')).filter(f => /^\d+\.json$/.test(f)).map(f => parseInt(f)).sort((a, b) => a - b);
   if (arg('users')) { const want = new Set(arg('users').split(',').map(Number)); users = users.filter(u => want.has(u)); }
