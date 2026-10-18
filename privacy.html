@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- If you edit this page, also bump CACHE in sw.js, or phones that already saved it keep showing the old text. -->
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
@@ -6,6 +7,7 @@
 <title>Privacy · Study Sprint</title>
 <meta name="description" content="What Study Sprint stores, where, and who can see it.">
 <meta name="color-scheme" content="dark light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; object-src 'none'; base-uri 'self'">
 <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
 <style>
   :root{--bg:#08090C;--surface:#11131A;--text:#ECEDF2;--text-2:#B4B8C6;--line:rgb(255 255 255 / .12);--link:#A99BFF;--note:#1A1D28}
@@ -29,15 +31,7 @@
   th{color:var(--text);font-weight:600}
   @media (max-width:520px){main{padding:16px 16px 24px}th,td{display:block;padding:2px 0;border:0}tr{display:block;padding:8px 0;border-bottom:1px solid var(--line)}thead{display:none}}
 </style>
-<script>
-  // Use the same light or dark choice as the app (saved in this browser by the app); otherwise follow the device.
-  try {
-    var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}'), m = t.mode;
-    if (m !== 'light' && m !== 'dark') m = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-    if (['neon', 'onyx', 'kuro'].indexOf(t.skin) >= 0) m = 'dark';
-    document.documentElement.setAttribute('data-theme', m);
-  } catch (e) { /* stays dark */ }
-</script>
+<script src="js/legal-theme.js"></script>
 </head>
 <body>
 <main>
@@ -48,7 +42,7 @@
 <div class="tldr">
   <p><b>The short version.</b></p>
   <ul>
-    <li>Without an account, nothing leaves your device.</li>
+    <li>Without an account, your cards and progress never leave your device.</li>
     <li>With an account, your cards and progress are stored on a server so they match on all your devices.</li>
     <li>There is no tracking, no advertising, and your data is never sold.</li>
   </ul>
@@ -62,8 +56,8 @@
   <thead><tr><th>Where</th><th>What</th></tr></thead>
   <tbody>
     <tr><th>On your device</th><td>Your decks, cards, review history and settings, in your browser's own storage. This is all that exists if you never make an account. Clearing your browser's site data for Study Sprint removes it, so use <b>Export backup</b> now and then.</td></tr>
-    <tr><th>On the server, if you make an account</th><td>Your email address; a scrambled version of your password (a "hash", handled by Supabase Auth, so nobody can read your actual password); your cards; your review history with the time of each review; your settings; and your pictures and sounds. Supabase holds all of this. The project region is chosen by the developer when the project is created and is not promised here.</td></tr>
-    <tr><th>Backups</th><td>The developer makes an encrypted backup of the database every night. Backups are kept for up to 30 days and then expire automatically.</td></tr>
+    <tr><th>On the server, if you make an account</th><td>Your email address; a scrambled version of your password (a "hash", handled by Supabase Auth, so nobody can read your actual password); your cards; your review history with the time of each review; your settings; and your pictures and sounds. Supabase holds all of this (Supabase region: to be confirmed, ask me).</td></tr>
+    <tr><th>Backups</th><td>The developer makes a backup of the database every night. Backups are stored encrypted, as GitHub Actions artifacts, and expire automatically within 30 days. They do not include pictures or sounds.</td></tr>
     <tr><th>Server logs</th><td>The services involved keep ordinary technical logs, which include IP addresses and the time of each request. They are used to keep the service running and to deal with abuse.</td></tr>
   </tbody>
 </table>
@@ -74,11 +68,12 @@
 
 <h2>Other services involved</h2>
 <ul>
-  <li><b>Supabase</b>: stores accounts and synced data (only if you make an account).</li>
-  <li><b>Cloudflare Turnstile</b>: a "are you a person?" check when you sign up or sign in. It may look at things like your browser and IP address to tell people from bots.</li>
+  <li><b>Supabase</b> (region to be confirmed, ask me): stores accounts and synced data (only if you make an account).</li>
+  <li><b>Google (Gmail)</b>: sends the sign-up confirmation and password-reset emails, so Google handles your email address and those messages.</li>
+  <li><b>Cloudflare Turnstile</b>: an "are you a person?" check when you sign up, sign in or reset your password (once it is switched on). It may look at things like your browser and IP address to tell people from bots.</li>
   <li><b>GitHub Pages</b>: hosts the app itself, so GitHub sees ordinary web requests (IP address, page requested) when you open it.</li>
-  <li><b>jsDelivr and the SheetJS download site</b>: deliver the free code libraries the app uses (for scheduling, maths, Anki and Excel import). They see ordinary web requests when a library is first downloaded. After that your device keeps a copy.</li>
-  <li><b>Google Docs and AI websites</b>: only if you choose to open one from the app, for example to import a document or paste cards from an AI chat. Nothing is sent unless you do it yourself, and what happens there is covered by their own policies.</li>
+  <li><b>jsDelivr (a code delivery network) and the SheetJS download site (cdn.sheetjs.com)</b>: deliver the free code libraries the app uses (for scheduling, maths, Anki, PDF and Excel import). They see ordinary web requests (such as your IP address) when a library is first downloaded. After that your device keeps a copy.</li>
+  <li><b>Google Sheets (when you import a sheet by its link) and AI websites (only if you open one)</b>: when you import a Google Sheet, your device asks Google for that sheet, so Google sees the request. AI websites are only opened if you tap a link to one, for example to paste cards from an AI chat. Nothing is sent to them unless you do it yourself, and what happens there is covered by their own policies.</li>
   <li>Fonts are stored with the app, so no font service is contacted.</li>
 </ul>
 <p>There are <b>no analytics, no advertising and no selling of data</b>. Your data is not shared with anyone else.</p>
@@ -86,7 +81,7 @@
 <h2>Your choices</h2>
 <ul>
   <li><b>Export everything.</b> Settings → Your data → <b>Export backup</b> saves all your decks, cards, progress and settings to one file.</li>
-  <li><b>Delete your synced data.</b> Settings → Sync → <b>Delete my synced data</b> removes everything stored on the server. Your devices keep their own copy.</li>
+  <li><b>Delete your synced data.</b> Settings → Sync → <b>Delete my synced data</b> removes your cards, progress, settings, pictures and sounds from the server. Your account (and its email address) stays until you use <b>Delete my account</b>. Your devices keep their own copy.</li>
   <li><b>Delete your account.</b> Settings → Sync → <b>Delete my account</b> removes the account and everything in it from the server.</li>
   <li><b>Backups.</b> Copies of your data in nightly backups expire within 30 days of deletion.</li>
   <li><b>Anything else</b> (a question, or a request to see or correct your data): contact me, see below.</li>
@@ -96,19 +91,13 @@
 <p>Study Sprint is meant for people 13 and over. If you're under 16 (or the age of digital consent where you live), ask a parent or guardian first.</p>
 
 <h2>Contact</h2>
-<p id="contact">Contact: <a href="https://github.com/aayan277/study-sprint" target="_blank" rel="noopener">see the project page</a></p>
+<p id="contact">Contact: open an issue on the <a href="https://github.com/aayan277/study-sprint" target="_blank" rel="noopener">project page</a> (please don’t post personal details there)</p>
 
 <h2>Changes to this page</h2>
 <p>If this policy changes in a way that matters, I will update the date at the top, and where I can, say so in the app. Older versions stay in the project's history on GitHub.</p>
 
 <a class="back" href="./">← Back to Study Sprint</a>
 </main>
-<script type="module">
-  // The contact address is set in one place (js/sync-config.js). If it can't be loaded, the line above stays as written.
-  try {
-    const { contactHTML } = await import('./js/legal.js');
-    document.getElementById('contact').innerHTML = 'Contact: ' + contactHTML();
-  } catch (e) { /* keep the fallback */ }
-</script>
+<script type="module" src="js/legal-page.js"></script>
 </body>
 </html>

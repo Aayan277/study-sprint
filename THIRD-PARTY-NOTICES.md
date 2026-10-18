@@ -1,6 +1,6 @@
 # Third-party notices
 
-Study Sprint uses the free, open-source libraries below. They are not copied into this repository: the app loads them from a CDN at the pinned versions listed here (see the import map in `index.html` and `sw.js`). Each library keeps its own licence; the licence text is in the library's own package and on the linked page.
+Study Sprint uses the free, open-source libraries below. They are not copied into this repository: the app loads them at the pinned versions listed here, from jsDelivr (a code delivery network) and, for SheetJS, from its own download site, cdn.sheetjs.com (see the import map in `index.html` and `sw.js`). Each library keeps its own licence; the licence text is in the library's own package and on the linked page.
 
 This list does not choose a licence for Study Sprint's own code. That decision is still open (see "Licence" in the [README](README.md)).
 
@@ -24,7 +24,7 @@ This list does not choose a licence for Study Sprint's own code. That decision i
 ## Fonts and services
 
 - **Geist** (the app's font, stored with the app): SIL Open Font License 1.1, https://github.com/vercel/geist-font
-- **Cloudflare Turnstile** and **Supabase** are online services, not code that is part of this repository. Their terms apply to the developer's accounts with them. See [privacy.html](privacy.html) for how they are used.
+- **Cloudflare Turnstile**, **Supabase**, **GitHub** (Pages hosts the app; Actions makes the nightly backup) and **Google** (Gmail sends the sign-up emails) are online services, not code that is part of this repository. Their terms apply to the developer's accounts with them. See [privacy.html](privacy.html) for how they are used.
 
 ## A note on accuracy
 
