@@ -5,7 +5,7 @@
 **Don't make FSRS-7 the default yet. Make it the default when we have an FSRS-7 optimizer.**
 
 - With the weights tuned to each person, FSRS-7 is the best model we tested. It beats our tuned FSRS-6 for about 7 people in 10.
-- But the app can only tune FSRS-6. FSRS-7 with its default weights is *worse* than our tuned FSRS-6 for about 2 people in 3. So switching now would make predictions worse for everyone who has pressed Optimize.
+- But the app can only tune FSRS-6. On full review histories, FSRS-7 with its default weights is *worse* than what the app does today with FSRS-6 for about 2 people in 3. So switching now would make predictions worse on average, mostly for people whose Optimize found better weights.
 - For someone who has never tuned, FSRS-7 default is a little better than FSRS-6 default (about 2%). That alone is not worth a switch while FSRS-7 is still in beta (ts-fsrs 6.0 beta, fsrs-rs beta, Anki has not shipped it).
 - Good news on the way: **our own FSRS-6 optimizer is as good as the official one** (fsrs-rs). No need to change it.
 
@@ -13,7 +13,7 @@ The FSRS-7 optimizer is planned for later (`docs/design/fsrs7-optimizer-plan.md`
 
 ## What was tested
 
-- **Data:** 300 people picked at random (fixed seed) from the HuggingFace dataset `open-spaced-repetition/anki-revlogs-10k`: 22.9 million reviews. Each person in the dataset has at least 5,000 reviews. The data was kept outside the repository (the licence forbids sharing it).
+- **Data:** 300 people picked at random (fixed seed) from the HuggingFace dataset `open-spaced-repetition/anki-revlogs-10k`: 22.9 million reviews. Almost everyone in it has at least 5,000 reviews (298 of our 300). The data was kept outside the repository (the licence forbids sharing it).
 - **The test, per person:** train on the first 80% of their days, then predict the last 20%, which no model saw. This is the same split the app's Optimize sheet uses.
 - **Three sizes:** the whole history; only the first ~1,000 reviews (like a new student); only the first ~5,000.
 - **Two kinds of review:**
@@ -55,14 +55,14 @@ The comparisons that decide the question (difference in log loss, with a 95% ran
 |---|---|---|---|
 | FSRS-7 default vs FSRS-6 default | −0.009 (−0.013 to −0.005), wins 62% | −0.006 (−0.012 to −0.001), wins 58% | −0.005 (−0.011 to +0.001), wins 56% |
 | FSRS-7 default vs FSRS-6 app | **+0.011** (+0.005 to +0.016), wins 35% | −0.001 (−0.008 to +0.006), wins 51% | **+0.010** (+0.002 to +0.018), wins 38% |
-| FSRS-7 official vs FSRS-6 app | **−0.010** (−0.015 to −0.006), wins 72% | **−0.018** (−0.027 to −0.009), wins 67% | **−0.012**, wins 63% |
-| FSRS-6 official vs FSRS-6 tuned | +0.002 (−0.001 to +0.006) | −0.002 (−0.007 to +0.003) | −0.001 |
+| FSRS-7 official vs FSRS-6 app | **−0.010** (−0.015 to −0.006), wins 72% | **−0.017** (−0.027 to −0.009), wins 64% | **−0.012** (−0.020 to −0.004), wins 65% |
+| FSRS-6 official vs FSRS-6 tuned | +0.002 (−0.001 to +0.006) | −0.002 (−0.007 to +0.003) | −0.001 (−0.005 to +0.003) |
 | FSRS-6 app vs FSRS-6 default | −0.020, wins 61% (kept the defaults for 25%) | −0.005 | −0.015 |
 
 What this says, in plain words:
 - **Tuning matters more than the model.** Tuning FSRS-6 gains about 5%. Switching from FSRS-6 to FSRS-7 with default weights gains about 2%.
-- **FSRS-7 default loses to our tuned FSRS-6** on whole histories (about 2.6% worse; better for only 35% of people). For small collections they are even.
-- **Tuned FSRS-7 wins everywhere:** about 2.6% better than the app's FSRS-6 on whole histories, about 5% better on small ones.
+- **FSRS-7 default loses to our tuned FSRS-6** on whole histories (about 2.6% worse; better for only 35% of people). They are even only in the "first ~1,000" test, where the app's keep rule kept the default weights for most people (65%). At "first ~5,000" FSRS-7 default is again worse (+0.010, better for 38%).
+- **Tuned FSRS-7 wins everywhere:** about 2.6% better than the app's FSRS-6 on whole histories, about 5% better on the first ~1,000 reviews and about 3% better on the first ~5,000.
 - **Our optimizer matches the official one.** The log loss differences are within noise in every test. The official one ranks cards very slightly better (AUC +0.006); ours is very slightly better calibrated (RMSE −0.0025).
 - The app's keep rule works as meant: on whole histories it kept new weights for 224 of 300 people, and the result is almost as good as always keeping them (0.397 against 0.396).
 
@@ -70,26 +70,26 @@ AUC tells the same story (whole history): FSRS-6 default 0.685, FSRS-7 default 0
 
 ## Results: same-day repeats
 
-FSRS-6 cannot really predict these: the app uses learning steps instead, and its forgetting curve is made for days, not minutes. On same-day repeats it does worse than the constant guess (log loss 0.670 against 0.366). So the large "FSRS-7 beats FSRS-6" numbers here (about −0.35) mostly show that FSRS-6 doesn't try.
+FSRS-6 cannot really predict these: the app uses learning steps instead, and its forgetting curve is made for days, not minutes. On same-day repeats it does worse than the constant guess (log loss 0.670 against 0.366). So the large "FSRS-7 beats FSRS-6" numbers here (about −0.35, in the full summary file; 293 people, as 7 had too few same-day reviews) mostly show that FSRS-6 doesn't try.
 
-The fairer check is FSRS-7 against the constant guess: FSRS-7 default 0.323 and FSRS-7 official 0.309, against 0.366 (AUC 0.70 against 0.50). So FSRS-7 does tell something useful about same-day repeats. This matters for students who cram, and it is a second reason to want FSRS-7 once it can be tuned.
+The fairer check is FSRS-7 against the constant guess: FSRS-7 default 0.323 and FSRS-7 official 0.309, against 0.366 (AUC 0.70 against 0.50). So FSRS-7 does tell something useful about same-day repeats. This matters for students who cram, and it is a second reason to want FSRS-7 (most of this gain comes even with its default weights).
 
 ## Caveats
 
-- **Everyone in the dataset has 5,000+ reviews.** The "first ~1,000" test imitates a new student, but these are people who went on to study a lot.
-- **The default weights may have seen some of these people.** FSRS-7's defaults were tuned by its authors, probably on this same dataset, and FSRS-6's were pretrained on users 1 to 500 (16 of our 300). That flatters both default models slightly, by the same small amount.
+- **Almost everyone here has 5,000+ reviews (298 of 300).** The "first ~1,000" test imitates a new student, but these are people who went on to study a lot.
+- **The default weights may have seen some of these people.** FSRS-7's defaults were tuned by its authors, probably on this same dataset, and FSRS-6's were pretrained on users 1 to 500 (16 of our 300). That may flatter both default models slightly; we did not measure by how much.
 - **RMSE is measured our way** (20 equal bins, as on the Optimize sheet), not with the official benchmark's bins, so it doesn't match the benchmark's published RMSE numbers. Log loss is the main score for that reason.
 - **Rows marked "state 4"** (1.7%, most likely reviews in filtered decks) were kept, as the official benchmark does.
 - **The FSRS-7 official weights come from a beta** (`@open-spaced-repetition/binding` 0.6.0-beta.6, default training settings).
 
-These agree with the official benchmark's direction: there, FSRS-7 default (0.362) is also behind tuned FSRS-6 (0.346), and tuned FSRS-7 (0.340) is ahead.
+These agree with the official benchmark's direction (srs-benchmark README, read 17 Oct 2026, see `fsrs-research.md`): there, FSRS-7 default (0.362) is also behind tuned FSRS-6 (0.346), and tuned FSRS-7 (0.340) is ahead.
 
 ## What to do
 
 1. **Keep FSRS-6 as the default.** Keep the FSRS-7 switch as it is (opt-in).
 2. **Later: build the FSRS-7 optimizer** (plan saved, `docs/design/fsrs7-optimizer-plan.md`). Start once ts-fsrs 6.0 is out of beta. It must match the official FSRS-7 weights on this test before it ships (the harness and the reference weights are ready).
 3. **Then make FSRS-7 the default.**
-4. No change is needed to our FSRS-6 optimizer, the 400-review unlock or gamma: they hold up on real data.
+4. No change is needed to our FSRS-6 optimizer: with its current settings it matches the official optimizer on real data, and tuning still helps a little even on the first ~1,000 reviews. (The 400-review unlock and gamma were not tested on their own.)
 
 ## How to repeat this
 
