@@ -19,7 +19,7 @@ import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlu
 import { plainText, mathHTML, spokenRow } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
 
@@ -150,11 +150,11 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
   };
 
   // Something changed: reload from the database and redraw.
-  const refresh = async () => { await load(); draw(); onChange(); };
+  const refresh = async () => { await load(); if (!box.isConnected) return; draw(); onChange(); };
 
   const remember = () => Object.assign(memory, { query: B.query, filter: B.filter, sort: B.sort });
-  let typing = 0;
-  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
+  let typing = 0;      // (the timer checks box.isConnected: leaving Browse within the 150 ms must not draw into a box that is gone)
+  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
   $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; remember(); draw(); });
   $('brSort').addEventListener('change', e => { B.sort = e.target.value; remember(); draw(); });
   $('brMore').addEventListener('click', () => { B.shown += PAGE; draw(); });
@@ -176,7 +176,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
       selCount();
       return;
     }
-    openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
+    guardedGo(() => openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh }));      // (asks first if the open panel holds unsaved edits)
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
@@ -259,21 +259,22 @@ export async function openCardPanel(card, ctx) {
 
   const { save, again } = cardOps(card, ctx);
   wireCardForm(card, ctx, 'Saved', partner);
-  $('revOpen')?.addEventListener('click', () => openCardPanel(partner, ctx));
+  $('revOpen')?.addEventListener('click', () => guardedGo(() => openCardPanel(partner, ctx)));
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
-    if (act === 'suspend') toggleSuspend(card, save);
-    if (act === 'bury') toggleBury(card, save);
-    if (act === 'duplicate') duplicateAndEdit(card, ctx);
-    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
+    // Each of these ends by showing the panel again, which would throw away unsaved edits: with some, they ask first (guardedGo).
+    if (act === 'suspend') guardedGo(() => toggleSuspend(card, save));
+    if (act === 'bury') guardedGo(() => toggleBury(card, save));
+    if (act === 'duplicate') guardedGo(() => duplicateAndEdit(card, ctx));
+    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => guardedGo(() => db.clearStates([card.id]).then(() => again('Reset to new', 'reset'))));
     if (act === 'delete' && partner) askDeletePair(card, partner, again);
     else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
-      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete'))));
   }));
-  wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
-  wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
+  wireFlags(f => guardedGo(() => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag')));
+  wireMove(deckId => guardedGo(() => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move')));
   showMixedWith(card);
-  if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
+  if (studied) wireDue(days => guardedGo(() => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due'))));
 }
 
 // "Often mixed up with: X (3×) · Compare": the cards this one is confused with (see confusion.js), filled in a moment
@@ -291,10 +292,10 @@ async function showMixedWith(card) {
     box.hidden = false;
     box.addEventListener('click', async e => {
       const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;
-      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {
+      if (id) { const m = await import('./compare-sheet.js'); guardedGo(() => m.openCompare(card, cardsById.get(id), { onDismiss: () => {
         box.querySelector(`[data-mix-with="${CSS.escape(id)}"]`)?.closest('.mixed-line')?.remove();         // no longer mixed up: drop its line
         if (!box.querySelector('.mixed-line')) box.hidden = true;
-      } });
+      } })); }
     });
   } catch (err) { console.warn('mixed up with:', err); }     // the panel is fine without it
 }
@@ -444,6 +445,46 @@ function wireCardForm(card, ctx, msg, pair = null) {
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
+  // Back, ×, a tap outside or Esc with edits not saved asks "Discard changes?" (nothing changed: it just closes).
+  const base = formSnapshot($('ceForm'));
+  $('ceForm').dataset.cardId = card.id;
+  formBase = { id: card.id, vals: fieldVals($('ceForm')) };
+  guardSheet(() => !!$('ceForm') && formSnapshot($('ceForm')) !== base);
+  restoreDraft(card);
+}
+
+// Changing screen closes the card panel. Edits that were not saved are kept (not asked about: the screen has already changed)
+// and put back if that card's panel is opened again, for up to 30 minutes. Only the fields that were edited come back, and only
+// where the card has not changed meanwhile (a sync, another device): those are left out, and the toast says so.
+let draft = null, formBase = null;      // formBase: the form's field values as the panel opened
+const fieldVals = form => Object.fromEntries([...form.querySelectorAll('input, textarea, select, [contenteditable="true"]')]
+  .filter(el => el.id && !['file', 'button', 'submit', 'hidden'].includes(el.type))
+  .map(el => [el.id, el.isContentEditable ? el.innerHTML : (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value]));
+setDraftStasher(what => (what === 'clear' ? (draft = null) : stashCardDraft()));
+function stashCardDraft() {
+  const f = $('ceForm');
+  if (!f || !sheetDirty() || !formBase || formBase.id !== f.dataset.cardId) return;
+  const cur = fieldVals(f);
+  const fields = Object.keys(cur).filter(id => cur[id] !== formBase.vals[id]).map(id => ({ id, v: cur[id], base: formBase.vals[id], rich: $(id).isContentEditable }));
+  if (fields.length) draft = { id: f.dataset.cardId, at: Date.now(), fields };
+}
+function restoreDraft(card) {
+  const d = draft;
+  if (!d) return;
+  if (Date.now() - d.at > 30 * 60000) { draft = null; return; }
+  if (d.id !== card.id) return;                // another card: it waits for its own card
+  draft = null;
+  const now = fieldVals($('ceForm'));          // the form was just built from the card as it is now
+  let back = 0, left = 0;
+  for (const x of d.fields) {
+    const el = $(x.id);
+    if (!el || !$('ceForm').contains(el)) continue;
+    if (now[x.id] !== x.base) { left++; continue; }       // this field changed elsewhere since: keep the card's newer value
+    if (x.rich) el.innerHTML = x.v; else if (typeof x.v === 'boolean') el.checked = x.v; else el.value = x.v;
+    back++;
+  }
+  if (left) toast(back ? 'Your unsaved edits are back, but some were left out because this card changed on another device' : 'Your unsaved edits were left out because this card changed on another device');
+  else if (back) toast('Your unsaved edits to this card are back');
 }
 
 // ---------- cards that work in both directions (reverse.js) ----------
@@ -496,8 +537,8 @@ function askDeletePair(card, partner, again) {
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
-  $('cfBoth').addEventListener('click', () => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete')));
-  $('cfOnly').addEventListener('click', async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); });
+  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete'))));
+  $('cfOnly').addEventListener('click', () => guardedGo(async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); }));
   $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 
@@ -865,8 +906,10 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
-  $('acDone').addEventListener('click', closeSheet);
+  $('acDone').addEventListener('click', askClose);        // Close with a typed card not added asks "Discard changes?" (as do ×, Back and Esc)
   wireRevSwitch('ac', $('acForm'));
+  let typed = formSnapshot($('acForm'), { textOnly: true });
+  guardSheet(() => !!$('acForm') && formSnapshot($('acForm'), { textOnly: true }) !== typed);
   const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
@@ -924,6 +967,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
     else { clearBasic('ac'); setCardSounds('acFront', []); setCardSounds('acBack', []); $('acFront').focus(); }
     updateAdd();
+    typed = formSnapshot($('acForm'), { textOnly: true });      // what is left (the tags stay for the next card) is not unsaved work
     toast(kindNow === 'basic' && !pairAdded ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();
   });

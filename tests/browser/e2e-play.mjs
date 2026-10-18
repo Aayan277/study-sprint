@@ -118,6 +118,14 @@ await page.keyboard.press('Enter');             // (focus is on "End round")
 ok(await page.waitForSelector('#menuBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button asks, and Enter ends the round with its results');
 await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 ok((await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).timer)) === 3, 'timer setting saved');
+// Back (a swipe or the Back key) asks like Quit; Back again while it is showing ends the round, like Esc again (a way out with no Esc key)
+await page.click('#startBtn'); await page.waitForSelector('#pCard');
+await page.keyboard.press('1'); await page.waitForSelector('.fb');
+await page.evaluate(() => history.back());
+await page.waitForSelector('#endAsk', { state: 'visible', timeout: 3000 });
+await page.evaluate(() => history.back());
+ok(await page.waitForSelector('#menuBtn', { timeout: 3000 }).then(() => true, () => false), 'Back again while "End this round?" is showing ends the round and shows its results');
+await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 
 // Lightning: wrong answer costs 3s
 await setup(['input[name=fmt][value=lightning]']);

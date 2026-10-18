@@ -548,10 +548,10 @@ function revealStep(el, all = false) {
 }
 
 // ---------- scratchpad (B4) ----------
-// A pen icon in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
+// A scribble icon (not a pencil: that would look like Edit) in the top bar (or D) draws over the card with a pen, finger or mouse (scratchpad.js). On or off is remembered
 // on this device. The drawing is never saved: a new card starts clean, a flip keeps it, leaving Review throws it away.
 const SCRATCH_KEY = 'study-sprint-scratch';
-const PEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5l3.5 3.5L8 19.5l-4.5 1 1-4.5z"/><path d="M14.5 6l3.5 3.5"/></svg>';
+const PEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 13.5c2-6.5 4.5-7.5 5-3.5s2 5.5 4 .5 3.5-7 5-2 1.5 3 2.5 2.5"/><path d="M4 19.5h16"/></svg>';
 const scratchPref = () => { try { return localStorage.getItem(SCRATCH_KEY) === '1'; } catch { return false; } };
 const setScratchPref = on => { try { localStorage.setItem(SCRATCH_KEY, on ? '1' : '0'); } catch { /* fine: it just isn't remembered */ } };
 let pad = null, padKey = 0, zoomWatch = null;

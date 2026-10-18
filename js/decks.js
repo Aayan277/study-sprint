@@ -289,7 +289,7 @@ export async function renderDeck(el, deckId) {
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   el.innerHTML = `
-    <button class="back" type="button" id="back">‹ ${parent ? esc(parent.name) : 'Decks'}</button>
+    <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
@@ -464,14 +464,15 @@ async function openExport(deck, decks, deckCards) {
     })()}</p>
     ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
-      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint (cloze cards stay one note; image occlusion cards come back as plain cards, so use .apkg for those).</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
     </div>
     <p class="err" id="exErr" role="alert" hidden></p>`);
   $('exCsv').addEventListener('click', () => {
     ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
     closeSheet();
-    toast(`Exported ${plural(cards.length, 'card')} as a spreadsheet`);
+    const rows = ex.csvRowCount(cards);      // (a card with its reverse card is one row)
+    toast(`Exported ${plural(rows, 'row')} as a spreadsheet`);
   });
   $('exApkg').addEventListener('click', async () => {
     const btn = $('exApkg');

@@ -257,7 +257,7 @@ export function withClozeLines(text, parse) {
     let notes = 0;
     plain.rows.forEach((r, i) => {
       const nums = hasClozeLines(r[0]) ? clozeNumbers(r[0]) : [];
-      if (!nums.length) { rows.push(r); clozes.push(null); tags.push(plain.tags?.[i] || []); extras.push(null); return; }
+      if (!nums.length) { rows.push(r); clozes.push(plain.clozes?.[i] ?? null); tags.push(plain.tags?.[i] || []); extras.push(plain.noteExtras?.[i] ?? null); return; }
       notes++;
       for (const n of nums) {
         const { front, back } = clozeCard(r[0], n);

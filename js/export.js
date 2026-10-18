@@ -5,7 +5,7 @@
 // makeApkg() packs the Anki file in the browser, with the same libraries the Anki import uses.
 
 import { formatHTML, plainText } from './format.js';
-import { hasBlank } from './cloze.js';
+import { hasBlank, clozeCard } from './cloze.js';
 import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './occlusion.js';
 import { isPair } from './reverse.js';
 import { toDetails } from './note-fields.js';
@@ -16,6 +16,7 @@ import { ancestors } from './deck-tree.js';
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
 // A card with its reverse card (see reverse.js) is one row, the forward card, and a "Both directions" column says "yes" for it:
 // import makes the reverse card again. (Only added when some card has one.)
+// A cloze card is a row of its own (see clozeRowOf below). Image occlusion cards go out as plain cards.
 // A cell that starts with = + - @ (or a tab or line break) would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
   let s = String(v ?? '');
@@ -27,16 +28,28 @@ const fullPairs = cards => {
   const f = new Set(cards.filter(c => isPair(c) && !c.reverse).map(c => c.noteId));
   return new Set(cards.filter(c => isPair(c) && c.reverse && f.has(c.noteId)).map(c => c.noteId));
 };
-export function toCSV(cards) {
+// A cloze card goes out as its own readable row: Front with the blank shown as […], Back with the answer. That is what a
+// spreadsheet or Quizlet can use. A "Cloze note" column holds the note's full {{c1::…}} text, so Study Sprint can put the rows
+// of one note back together (import.js). Only the blanks that still have a card are written: a card you deleted stays deleted.
+// A "Cloze extra" column (only when some note has an extra line) holds the note's extra line.
+const clozeRowOf = c => (hasBlank(c) ? { ...c, ...clozeCard(c.noteText, c.cloze), isCloze: true } : c);
+// The rows of the file, header first, as lists of cells. csvRows(cards).length - 1 is what the file holds.
+export function csvRows(cards) {
+  cards = cards.map(clozeRowOf);
   const pairs = fullPairs(cards);
   cards = cards.filter(c => !(isPair(c) && c.reverse && pairs.has(c.noteId)));
   const several = new Set(cards.map(c => c.deckName)).size > 1;
   const both = c => isPair(c) && !c.reverse && pairs.has(c.noteId);
   const anyBoth = cards.some(both);
-  const rows = [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : []), ...(anyBoth ? ['Both directions'] : [])],
-    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : []), ...(anyBoth ? [both(c) ? 'yes' : ''] : [])])];
+  const anyCloze = cards.some(c => c.isCloze), anyExtra = cards.some(c => c.isCloze && c.noteExtra);
+  return [['Front', 'Back', 'Tags', ...(several ? ['Deck'] : []), ...(anyBoth ? ['Both directions'] : []), ...(anyCloze ? ['Cloze note'] : []), ...(anyExtra ? ['Cloze extra'] : [])],
+    ...cards.map(c => [c.front, c.back, (c.tags || []).join(', '), ...(several ? [c.deckName] : []), ...(anyBoth ? [both(c) ? 'yes' : ''] : []),
+      ...(anyCloze ? [c.isCloze ? c.noteText : ''] : []), ...(anyExtra ? [c.isCloze ? c.noteExtra || '' : ''] : [])])];
+}
+export const csvRowCount = cards => csvRows(cards).length - 1;
+export function toCSV(cards) {
   // The invisible mark at the start (a "BOM") tells Excel the file is UTF-8, so accents and emoji survive.
-  return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
+  return '\uFEFF' + csvRows(cards).map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
 
 // A safe file name from a deck name: "Cell Biology / Unit 2" → "Cell Biology - Unit 2".

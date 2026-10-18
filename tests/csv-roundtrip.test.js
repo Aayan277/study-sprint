@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseText, buildCards, stripMarker } from '../js/import.js';
-import { toCSV } from '../js/export.js';
+import { toCSV, csvRowCount } from '../js/export.js';
 
 const roundTrip = cards => buildCards(parseText(toCSV(cards)));
 const pairs = list => list.map(c => [c.front, c.back]);
@@ -136,4 +136,60 @@ test('the Both directions column is only read in a file with the export\'s own h
   assert.equal(r.both, undefined);
   assert.ok(buildCards(r).every(c => !c.reversed));
   assert.equal(parseText(toCSV([{ id: 'a', front: 'x', back: 'y', tags: [] }])).both, undefined, 'and not when no card has one');
+});
+
+// ---- QA item 7: cloze notes round trip through CSV as one row each ----
+import { clozeCard } from '../js/cloze.js';
+// ---- review fix 7: one readable row per cloze card, a "Cloze note" column, deleted blanks stay deleted ----
+test('CSV export: one front/back row per cloze card with a Cloze note column; import groups them into one note', () => {
+  const text = '{{c1::DNA}} carries {{c2::genes}}';
+  const mk = n => ({ id: 'k' + n, noteId: 'n1', noteText: text, noteExtra: 'Extra, line', cloze: n, ...clozeCard(text, n), tags: ['bio'], deckName: 'D' });
+  const cards = [mk(1), mk(2), { id: 'p', front: 'plain', back: 'card', tags: [], deckName: 'D' }];
+  const csv = toCSV(cards);
+  assert.equal(csv.trim().split('\r\n').length, 4, 'header + a row per cloze card + the plain row');
+  assert.ok(csv.startsWith('﻿Front,Back,Tags,Cloze note,Cloze extra\r\n'));
+  assert.ok(csv.includes('[…] carries genes,DNA,bio,{{c1::DNA}} carries {{c2::genes}},"Extra, line"'));
+  const { result, notes } = withClozeLines(csv, parseText);
+  assert.equal(notes, 0, 'the rows are already per card');
+  const list = buildCards(result);
+  assert.deepEqual(pairs(list), [['[…] carries genes', 'DNA'], ['DNA carries […]', 'genes'], ['plain', 'card']]);
+  assert.equal(list[0].cloze.noteKey, list[1].cloze.noteKey, 'one note');
+  assert.deepEqual(list.map(c => c.cloze?.n), [1, 2, undefined]);
+  assert.equal(list[0].cloze.text, text);
+  assert.equal(list[1].noteExtra, 'Extra, line');
+  assert.equal(list[2].cloze, undefined);
+  assert.equal(list[2].noteExtra, undefined);
+  assert.deepEqual(list[0].tags, ['bio']);
+});
+test('CSV export: a cloze blank whose card was deleted is not written, and does not come back', () => {
+  const text = 'A {{c1::one}} B {{c2::two}} C {{c3::three}}';
+  const mk = n => ({ id: 'k' + n, noteId: 'n1', noteText: text, cloze: n, ...clozeCard(text, n), tags: [] });
+  const csv = toCSV([mk(1), mk(3)]);       // the card for c2 was deleted
+  assert.equal(csv.trim().split('\r\n').length, 3);
+  assert.ok(!csv.includes('two,'));
+  const list = buildCards(withClozeLines(csv, parseText).result);
+  assert.deepEqual(list.map(c => c.cloze.n), [1, 3]);
+  assert.equal(csvRowCount([mk(1), mk(3)]), 2);
+});
+test('a Cloze note column only counts with the export header; a changed front is an ordinary card', () => {
+  const r = parseText('Term,Definition,Cloze note\r\n[…] x,a,{{c1::a}} x\r\n');
+  assert.equal(r.clozes, undefined);
+  const edited = parseText('Front,Back,Tags,Cloze note\r\nMy own front,a,,{{c1::a}} x\r\n[…] x,a,,{{c1::a}} x\r\n');
+  assert.deepEqual(edited.clozes.map(c => !!c), [false, true]);
+  assert.deepEqual(edited.columns, ['Front', 'Back']);
+});
+
+test('an exported CSV plus one hand-added {{c1::x}} row still groups the exported cloze cards', () => {
+  const text = '{{c1::DNA}} carries {{c2::genes}}';
+  const mk = n => ({ id: 'k' + n, noteId: 'n1', noteText: text, noteExtra: 'Ex', cloze: n, ...clozeCard(text, n), tags: ['bio'] });
+  const csv = toCSV([mk(1), mk(2), { id: 'p', front: 'plain', back: 'card', tags: [] }]) + 'The {{c1::heart}} pumps,,,,\r\n';
+  const { result, notes } = withClozeLines(csv, parseText);
+  assert.equal(notes, 1);
+  const list = buildCards(result);
+  assert.equal(list.length, 4);
+  assert.equal(list[0].cloze.noteKey, list[1].cloze.noteKey);
+  assert.equal(list[0].cloze.text, text);
+  assert.equal(list[0].noteExtra, 'Ex');
+  assert.equal(list[2].cloze, undefined);
+  assert.equal(list[3].cloze.text, 'The {{c1::heart}} pumps');
 });

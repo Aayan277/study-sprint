@@ -309,8 +309,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .screen-head > div{min-width:0}
 .screen-head .lede{margin-top:6px;max-width:60ch}
 .head-actions{display:flex;gap:var(--s-2);flex-wrap:wrap}
-.back{display:inline-flex;align-items:center;gap:4px;background:none;border:0;color:var(--text-2);font-weight:500;font-size:var(--fs-sm);padding:6px 0;margin-bottom:var(--s-1);cursor:pointer}
+.back{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;background:none;border:0;color:var(--text-2);font-weight:500;font-size:var(--fs-sm);padding:6px 0;margin-bottom:var(--s-1);cursor:pointer}
 .back:hover{color:var(--text)}
+.back-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}      /* a long unbroken parent name shortens with … instead of stretching the button */
 .crumbs a{color:var(--text-2);text-decoration:none}
 .crumbs a:hover{color:var(--accent-text)}
 
@@ -2191,6 +2192,9 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .tex{font-style:normal;font-weight:400;letter-spacing:0;text-indent:0}
 .tex .katex{font-size:1.08em;letter-spacing:0;font-weight:400;text-align:left}
 .tex:not([data-done]){opacity:.75}
+/* Play: the options and the question wait for KaTeX instead of showing the raw LaTeX for a moment (they keep their room, so nothing jumps).
+   A formula KaTeX could not load (data-done="raw") shows as typed. */
+.opt .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw),.play-card .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw){opacity:0}
 /* The raw text, until KaTeX has drawn it or if it can't (offline on the first visit) */
 .tex-raw{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-decoration:underline dotted var(--text-3);text-underline-offset:.2em;overflow-wrap:anywhere;white-space:pre-wrap}
 /* Display maths sits on its own line and scrolls sideways inside its own box, never the page */
@@ -2419,10 +2423,10 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}
 .mixups > h2{margin:0 0 var(--s-2)}
-.mix-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
-.mix-row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md)}
+.mix-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-2)}
+.mix-row{min-width:0;display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md)}
 .mix-pair{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--s-2)}
-.mix-card{min-width:0;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.mix-card{min-width:0;flex:1 1 0;overflow-wrap:anywhere;word-break:break-word;font-weight:550}
 .mix-vs{flex:none;color:var(--text-2);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.06em}
 .mix-n{flex:none;color:var(--text-2);font-size:var(--fs-sm)}
 .mix-row .btn{flex:none}
