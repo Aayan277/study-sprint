@@ -246,7 +246,7 @@ tiny question every day. It needs your two values from step 7 as *secrets* in th
 4. Open the **Actions** tab, click **Keep Supabase awake** in the left list, click **Run workflow → Run workflow**,
    and after a few seconds check the run has a green tick.
 
-GitHub can switch scheduled jobs off after 60 days with no activity in the repository; the job in step 8d stops
+GitHub can switch scheduled jobs off after 60 days with no activity in the repository; step 8d is there to stop
 that from happening.
 
 ## 8b. Back up the database (GitHub)
@@ -261,7 +261,7 @@ The copy is **encrypted with a password only you know**, so it is safe even if t
 still on each person's devices and in their **Export backup** files.
 
 **Good to know:** GitHub can switch scheduled jobs off after 60 days with no activity in the repository. Then
-backups stop, and the last copies disappear 30 days later. The job in step 8d stops that from happening; if it ever
+backups stop, and the last copies disappear 30 days later. Step 8d is there to stop that from happening; if it ever
 did happen, the Actions tab shows a button to turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
 
 ### Turn it on
@@ -358,7 +358,7 @@ It only reads. The issue holds **totals only**: no emails, no names, nothing abo
    it should show a green tick. Until the secret exists the job does nothing and still shows a green tick (click into
    the run: "No space check yet"). If the address is wrong the run turns red and says what to fix.
 3. That's all. It then runs by itself every day. (Same note as the other jobs: GitHub can switch scheduled jobs off after 60 days
-   with no activity in the repository; step 8d stops that.)
+   with no activity in the repository; step 8d is there to stop that.)
 
 ### What the issue means
 
@@ -401,20 +401,27 @@ when all is well. **You have nothing to set up**, except to check it once:
 2. Click **Keep scheduled jobs on** in the left list, then **Run workflow → Run workflow**.
 3. After a few seconds open the run. A green tick means it works. Its log lists your jobs, each with "Enabled".
 
-**Be honest about the limit.** GitHub's documentation doesn't say that this call restarts the 60-day clock, and it
+**What isn't guaranteed.** GitHub's documentation doesn't say that this call restarts the 60-day clock, and it
 doesn't define "activity". This is the usual way people solve this problem, but it isn't promised in writing. So
-treat step 9's monthly check as the safety net, and know the sure fix: **any real change you commit and push to the
+treat the monthly check below as a backup net, and know the sure fix: **any real change you commit and push to the
 repository (even a one-line edit) restarts the 60 days**, so in months when you work on the app you are covered anyway.
 
 **How you would notice a problem.**
-- If Keep scheduled jobs on fails, the run turns red and GitHub emails you (to the address of whoever last edited that
-  job's file, normally you).
-- Supabase usually emails you before it pauses a free project, and the backups would be missing in **Actions → Back up
-  database** (no new run for days). (GitHub's documentation doesn't promise a warning email before it switches a job
-  off, so don't count on one.)
-- Each month, open the **Actions** tab. If a job in the list says it is disabled (a banner on its page, or no recent runs),
-  click it and then **Enable workflow**. Then
-  also click **Run workflow** on **Keep scheduled jobs on**.
+- **The real alert is a GitHub issue.** If the backup, the space check or Keep scheduled jobs on fails, its last step
+  opens ONE issue called **Study Sprint: a scheduled job failed** (label `scheduled-job-failed`, assigned to you), with
+  just the job's name and a link to the run. Every further failure adds a comment, so you get an email each time. Close
+  the issue once it is fixed. (Check **Watch → Custom → Issues** on the repository if no email arrives.)
+- **GitHub's own failure emails are not reliable for timer jobs.** GitHub sends them to whoever created the job or last
+  edited its schedule, and after a job is switched off and on again, to whoever switched it on. For a job that the
+  automatic job switched on, that is the GitHub robot, so nobody. Don't rely on them.
+- **What the issue can't catch:** a job that GitHub switched off and nobody switched back on doesn't run at all, so it
+  can't report anything. That is why you look at the **Actions** tab once a month (step 9) as a backup net: if a job
+  says it is disabled, or has had no run for days, click it, then **Enable workflow**, then **Run workflow** on
+  **Keep scheduled jobs on**. Supabase also usually emails you before it pauses a free project.
+- **If a run log of Keep scheduled jobs on shows "had been switched off"**, GitHub did switch a job off and the weekly
+  job rescued it. Then do this once yourself on that job (for example **Back up database**): open it in the **Actions**
+  tab, click **Disable workflow**, and then **Enable workflow**. That makes sure the failure emails go to you again.
+  (GitHub's documentation doesn't promise a warning email before it switches a job off.)
 
 **Do not** switch Keep scheduled jobs on off by hand. If you ever want one of the others off, use **Disable workflow**
 on that job: Keep scheduled jobs on leaves jobs that you switched off yourself alone.
