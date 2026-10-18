@@ -66,6 +66,29 @@ async function signedIn(session) {
   return syncNow();
 }
 
+// ---------- starting over from this device ----------
+// For a lost or restored server: this device thinks the server already has its data, so it never sends it again.
+// This makes it send everything: every deck, card, review, setting and deleted marker, and every picture and sound.
+// It only re-sends, never deletes or overwrites newer data on the server: every row goes with its own change time,
+// and the server keeps whichever copy is newer (supabase/setup.sql, the "new.updated_at <= old.updated_at" check), so a
+// newer copy from another device stays. The same goes the other way: pulled rows only replace things here when they are newer (db.applyRemote).
+// Pulling starts over too (lastSeq 0), because a restored server numbers its changes from an earlier point.
+// This only asks: a flag is saved and a sync is started. The reset itself happens at the start of the next sync run
+// (startOverFromHere), so a sync that is running or waiting right now can't write its old bookmarks over it.
+// Progress and problems show in the normal sync status.
+export async function resendEverything() {
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await db.setSetting('resendPending', true);
+  syncNow({ retry: true });
+}
+async function startOverFromHere(userId) {
+  const { syncState } = await db.getSettings();
+  await db.forgetSyncedMarks();
+  await db.forgetUploadedMedia();
+  await db.setSetting('syncState', { userId, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
+  await db.setSetting('resendPending', false);       // only now: if this is cut short, the next sync does it again
+}
+
 // ---------- passwords ----------
 // The app's own address, which the reset email links back to.
 const appUrl = () => location.origin + location.pathname;
@@ -199,7 +222,8 @@ export async function healNotes() {
 export function syncNow({ retry = false } = {}) {
   if (retry) retrySounds = true;
   if (running) { again = true; return running; }
-  running = run()
+  // (Two tabs of the app take turns, where the browser has Web Locks, so they can't mix up the bookmarks.)
+  running = (navigator.locks ? navigator.locks.request('study-sprint-sync', run) : run())
     .catch(err => {
       console.error('Sync failed', err);
       emit(supa.isSignedOutError(err) ? { state: 'signed-out', error: err.message } : { state: 'error', error: err.message });
@@ -216,6 +240,7 @@ async function run() {
   if (!auth) return;
   emit({ state: 'syncing', error: null, progress: null });
   const token = auth.access_token;
+  if ((await db.getSettings()).resendPending) await startOverFromHere(auth.user.id);
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time.
@@ -257,7 +282,7 @@ async function run() {
   // Records too big to send, kept until they are shortened (editing one makes it a new change, which is tried again)
   // or deleted. Anything that went through now is no longer a problem.
   const wentKeys = new Set(pushed.sent.map(r => `${r.store}|${r.id}`));
-  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row) }))];
+  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row), ...(b.kind === 'id' ? { reason: 'id' } : {}) }))];
   const stillBig = [...new Map(tooBig.map(r => [`${r.store}|${r.id}`, r])).values()].filter(r => !wentKeys.has(`${r.store}|${r.id}`));
   // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
   // (What did go is sent again too; the server ignores a copy it already has.)
@@ -278,7 +303,7 @@ async function run() {
 const checkedOnServer = new Set();      // kept-back files already asked about (sync-quota.js alreadyOnServer); starts empty each time the app opens
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
-  const rows = await db.mediaToUpload();
+  const rows = await db.mediaToUpload();         // without their bytes; each file is loaded just before it is sent
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
   const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
   // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
@@ -286,7 +311,7 @@ async function syncMedia(auth) {
   if (gate.done.length) await db.markUploaded(gate.done);         // the account already had them
   let upload;
   try {
-    upload = await uploadMediaFiles(gate.send, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
+    upload = await uploadMediaFiles(gate.send, async m => supa.uploadMedia(token, uid, m.id, m.type, (await db.getMedia(m.id)).data), {
       onSent: m => db.markUploaded([m.id]),
       onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
     });

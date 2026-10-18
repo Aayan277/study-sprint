@@ -706,8 +706,9 @@ export async function deleteEverything() {
 // Settings that belong to this device only: never synced, never in backups.
 //   syncAuth   who's signed in (and their sign-in tokens)
 //   syncState  sync bookmarks: the last server change seen, and when this device last sent its changes
+//   resendPending  "Re-upload everything" was asked for; the next sync starts over from this device first (sync.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 
@@ -895,7 +896,8 @@ export async function putMedia(m) {
 }
 // Pictures that came from the server (not reported as a change, so they aren't sent back).
 export async function putRemoteMedia(m) { await writeMedia({ ...m, uploaded: true }); }
-// Files not uploaded yet. The marker list is built once (a pass over the files) for a device that had files before it existed.
+// Files not uploaded yet, without their bytes ({ id, type, size, blocked? }; getMedia(id) loads one just before it is sent), so a big
+// library never sits in memory at once. The marker list is built once (a pass over the files) for a device that had files before it existed.
 export async function mediaToUpload() {
   const db = await openDB();
   const tx = db.transaction(['media', 'settings'], 'readwrite');
@@ -909,7 +911,7 @@ export async function mediaToUpload() {
     const ids = (await done(s.getAllKeys(IDBKeyRange.bound(PENDING, PENDING + '\uffff')))).map(k => k.slice(PENDING.length));
     for (const id of ids) {
       const m = await done(tx.objectStore('media').get(id));
-      if (m && !m.uploaded) rows.push(m); else s.delete(PENDING + id);
+      if (m && !m.uploaded) rows.push({ id: m.id, type: m.type, size: m.size || m.data?.byteLength || 0, ...(m.blocked ? { blocked: m.blocked } : {}) }); else s.delete(PENDING + id);
     }
   });
   return rows;
@@ -923,6 +925,27 @@ export async function markUploaded(ids) {
     tx.objectStore('settings').delete(PENDING + id);
   };
   return finished(tx);
+}
+// Mark every picture and sound as not uploaded, so the next sync sends them all again (a lost or restored server has none of
+// them). Their bytes and the totals stay as they are. Each file is a record with its bytes, so this is done in small batches
+// (one transaction each) rather than one huge one. Safe to run again if it is cut short.
+export async function forgetUploadedMedia() {
+  const db = await openDB();
+  const ids = await done(db.transaction('media').objectStore('media').getAllKeys());
+  for (let i = 0; i < ids.length; i += 25) {
+    const tx = db.transaction(['media', 'settings'], 'readwrite');
+    await inTx(tx, async () => {
+      for (const id of ids.slice(i, i + 25)) {
+        const m = await done(tx.objectStore('media').get(id));
+        if (!m) continue;
+        if (m.uploaded) tx.objectStore('media').put({ ...m, uploaded: false });
+        tx.objectStore('settings').put(true, PENDING + id);
+      }
+    });
+  }
+  const tx = db.transaction('settings', 'readwrite');
+  tx.objectStore('settings').put(true, 'mediaIndexed');      // the pending markers are complete now, so mediaToUpload needn't build them again
+  await finished(tx);
 }
 // Files the server turned away for their type (not reported as a change). They stay not-uploaded; sync tries them again later.
 export async function markBlocked(ids, reason) {

@@ -132,6 +132,7 @@ export function tooBigNotes({ pictures = 0, sounds = 0 } = {}) {
 }
 
 // ---------- records too big for the server, and what to do when a push is refused ----------
+export const MAX_ID_BYTES = 200;                    // the server's id check (sync_items_id_size in supabase/limits.sql)
 export const MAX_ROW_BYTES = 60000;                 // the server's own limit is 64 KB (supabase/limits.sql); this leaves room for how it counts
 export const DAY_MS = 86400000;
 
@@ -156,33 +157,69 @@ export function rowLabel(row) {
   return text.length > 40 ? text.slice(0, 40).trimEnd() + '…' : text;
 }
 
-// Rows that fit, and rows that are too big to send (each as { store, id, label, bytes }).
+// Rows that fit, and rows that can't be sent (each as { store, id, label, bytes, reason? }). reason is 'id' when the
+// row's id is longer than the server allows; otherwise the record is too big.
 export function splitOversized(rows, max = MAX_ROW_BYTES) {
   const ok = [], big = [];
   for (const r of rows) {
     const bytes = r.deleted ? 0 : rowBytes(r);
-    if (bytes > max) big.push({ store: r.store, id: r.id, label: rowLabel(r), bytes }); else ok.push(r);
+    if (enc.encode(String(r.id)).length > MAX_ID_BYTES) big.push({ store: r.store, id: r.id, label: rowLabel(r), bytes, reason: 'id' });
+    else if (bytes > max) big.push({ store: r.store, id: r.id, label: rowLabel(r), bytes });
+    else ok.push(r);
   }
   return { ok, big };
 }
 
-// "1 card is too large to sync: “Cell…”. Shorten it to sync."
+// Used when saving in the editor: '' if these cards (or whatever records) will sync fine, else a plain sentence saying
+// the first one is too large. extra: fields saved with every one of them (tags, the extra note), which replace what the
+// record has, and are taken off it when undefined or '' (as db.saveNote does). Same size count as above.
+export function savedTooBigNote(records, extra = {}, max = MAX_ROW_BYTES) {
+  for (const r of records) {
+    const { updatedAt, syncedAt, ...data } = { ...r, ...extra };
+    for (const [k, v] of Object.entries(extra)) if (v === undefined || v === '') delete data[k];
+    const bytes = rowBytes({ data });
+    if (bytes > max) return `This card is too large to save: it is about ${Math.round(bytes / 1000)} KB and the limit is ${Math.round(max / 1000)} KB. Shorten the text, or use smaller pictures, then save again.`;
+  }
+  return '';
+}
+
+// "1 card is too large to sync: “Cell…”. Shorten it to sync." Rows whose id is too long get their own sentence, since
+// shortening the text doesn't help them.
 export function bigRowsNote(list) {
   if (!list?.length) return '';
+  const longId = list.filter(r => r.reason === 'id'), big = list.filter(r => r.reason !== 'id');
+  return [sizeNote(big), idNote(longId)].filter(Boolean).join(' ');
+}
+const kindOf = list => {
   const kinds = new Set(list.map(r => r.store));
-  const one = kinds.size === 1 && kinds.has('cards') ? 'card' : kinds.size === 1 && kinds.has('decks') ? 'deck' : 'item';
-  const label = list[0].label ? `“${list[0].label}”` : `a ${one}`;
+  return kinds.size === 1 && kinds.has('cards') ? 'card' : kinds.size === 1 && kinds.has('decks') ? 'deck' : 'item';
+};
+const labelOf = (list, one) => (list[0].label ? `“${list[0].label}”` : `a ${one}`);
+function sizeNote(list) {
+  if (!list.length) return '';
+  const one = kindOf(list), label = labelOf(list, one);
   return list.length === 1
     ? `1 ${one} is too large to sync: ${label}. Shorten it to sync.`
     : `${list.length} ${one}s are too large to sync, for example ${label}. Shorten them to sync.`;
 }
+function idNote(list) {
+  if (!list.length) return '';
+  const one = kindOf(list), label = labelOf(list, one);
+  return list.length === 1
+    ? `1 ${one} can't sync because its internal ID is too long: ${label}. Deleting it, and adding it again if you still need it, fixes that.`
+    : `${list.length} ${one}s can't sync because their internal IDs are too long, for example ${label}. Deleting them, and adding them again if you still need them, fixes that.`;
+}
 
-// Why a push failed, if it's one we can work around: 'size' (a record over the server's size limit), 'data' (the
-// account's synced-data limit), 'server' (the whole project is full). null = any other error.
+// Why a push failed, if it's one we can work around: 'size' (a record over the server's size limit), 'id' (an id over
+// the server's length limit), 'data' (the account's synced-data limit), 'server' (the whole project is full).
+// null = any other error. Both record checks fail with error 23514, so the constraint's name tells them apart;
+// a 23514 that names neither is treated as a size problem, as before. (supa.js keeps the server's own wording for the
+// id check, so its name is still in the message; the size check's message is replaced there, but its code stays.)
 export function pushErrorKind(err) {
-  const text = `${err?.code || ''} ${err?.message || ''}`;
+  const text = `${err?.code || ''} ${err?.message || ''} ${err?.details || ''}`;
   if (/sync_data_full/.test(text)) return 'data';
   if (/sync_server_full/.test(text)) return 'server';
+  if (/sync_items_id_size/.test(text)) return 'id';
   if (/\b23514\b|sync_items_data_size/.test(text)) return 'size';
   return null;
 }

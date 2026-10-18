@@ -1,12 +1,12 @@
 // Sending rows to the server so that one bad row can't hold up the rest.
 //
 // The server takes a batch in one go: if one row in it is refused, the whole batch is. Rows can be refused because
-// the record is over the server's size limit ('size'), the account's synced-data space is full ('data'), or the
+// the record is over the server's size limit ('size'), its id is too long ('id'), the account's synced-data space is full ('data'), or the
 // whole project is full ('server') (supabase/limits.sql). pushSafely() sends batches, and when one is refused for
 // one of those reasons it splits it in halves, and again, until the rows that were refused are alone. The rest go.
 //
 //   put(rows)   sends one batch (supa.putRows); throws on a refusal
-// Returns { sent: [rows that went], held: [rows to try again next time], bad: [{ row, message }] (over the size limit),
+// Returns { sent: [rows that went], held: [rows to try again next time], bad: [{ row, kind: 'size' | 'id', message }] (over the size or id limit),
 //           full: 'data' | 'server' | null (why rows were held) }.
 // Other errors (offline, signed out, a server problem) are thrown, as before.
 
@@ -26,9 +26,10 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
     } catch (err) {
       const kind = pushErrorKind(err);
       if (!kind) throw err;
-      if (kind !== 'size') out.full = out.full === 'server' ? 'server' : kind;
+      const rowProblem = kind === 'size' || kind === 'id';
+      if (!rowProblem) out.full = out.full === 'server' ? 'server' : kind;
       if (part.length === 1) {
-        if (kind === 'size') out.bad.push({ row: part[0], message: err.message });
+        if (rowProblem) out.bad.push({ row: part[0], kind, message: err.message });
         else out.held.push(part[0]);
         return;
       }

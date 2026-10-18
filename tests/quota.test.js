@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES } from '../js/quota.js';
+import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES, MAX_ID_BYTES, savedTooBigNote } from '../js/quota.js';
 import { pushSafely } from '../js/sync-push.js';
 
 const usage = (media, limit = 180 * MB, data = 3 * MB) => ({ data, media, limit });
@@ -237,4 +237,59 @@ test('50,000 cards: a plain warning from the mark on, never before, and passing 
   assert.equal(passedCardsWarning(0, 60000), true);
   assert.equal(passedCardsWarning(50000, 51000), false);                 // already past it: not "just passed"
   assert.equal(passedCardsWarning(10, 49999), false);
+});
+
+test('an over-long id is told apart from an over-big record', () => {
+  const sizeErr = { code: '23514', message: 'new row for relation "sync_items" violates check constraint "sync_items_data_size"' };
+  const idErr = { code: '23514', message: 'new row for relation "sync_items" violates check constraint "sync_items_id_size"' };
+  assert.equal(pushErrorKind(sizeErr), 'size');
+  assert.equal(pushErrorKind(idErr), 'id');
+  assert.equal(pushErrorKind({ code: '23514', message: 'check' }), 'size');                // no name: treated as size, as before
+  assert.equal(pushErrorKind({ code: '400', message: 'x', details: 'violates check constraint "sync_items_id_size"' }), 'id');
+  const card = (id, front) => ({ store: 'cards', id, data: { front, back: 'b' }, deleted: false, updated_at: 1 });
+  const { ok, big } = splitOversized([card('fine', 'Fine'), card('x'.repeat(MAX_ID_BYTES + 1), 'Long id card'), card('é'.repeat(101), 'Two-byte id')]);
+  assert.deepEqual(ok.map(r => r.id), ['fine']);
+  assert.deepEqual(big.map(r => r.reason), ['id', 'id']);                                   // 202 bytes in 101 characters still counts
+  assert.equal(bigRowsNote([big[0]]), "1 card can't sync because its internal ID is too long: “Long id card”. Deleting it, and adding it again if you still need it, fixes that.");
+  const sizeRow = { store: 'cards', id: 's', label: 'Huge' };
+  assert.equal(bigRowsNote([sizeRow, big[0]]), '1 card is too large to sync: “Huge”. Shorten it to sync. 1 card can\'t sync because its internal ID is too long: “Long id card”. Deleting it, and adding it again if you still need it, fixes that.');
+  assert.match(bigRowsNote(big), /^2 cards can't sync because their internal IDs are too long, for example/);
+  assert.ok(!/too large/.test(bigRowsNote(big)), 'the id wording never says "too large"');
+});
+
+test('pushSafely sets aside a row with a bad id, with its kind, and sends the rest', async () => {
+  const put = async rows => {
+    const bad = rows.find(r => r.id === 'r4' || r.id === 'r9');
+    if (bad) throw Object.assign(new Error(`violates check constraint "${bad.id === 'r4' ? 'sync_items_id_size' : 'sync_items_data_size'}"`), { code: '23514' });
+  };
+  const out = await pushSafely(put, ids(12));
+  assert.equal(out.sent.length, 10);
+  assert.deepEqual(out.bad.map(b => [b.row.id, b.kind]).sort(), [['r4', 'id'], ['r9', 'size']]);
+  assert.equal(out.full, null);                                                              // neither of them means "account full"
+  assert.equal(out.held.length, 0);
+});
+
+test('pushSafely tries a refused batch again in smaller pieces down to single rows', async () => {
+  const sizes = [];
+  const out = await pushSafely(async rows => { sizes.push(rows.length); if (rows.some(r => r.id === 'r2')) throw Object.assign(new Error('x'), { code: '23514' }); }, ids(4));
+  assert.deepEqual(out.bad.map(b => b.row.id), ['r2']);
+  assert.equal(out.sent.length, 3);
+  assert.ok(sizes.includes(1), 'the bad row was narrowed down to a request of its own');
+});
+
+test('the editor refuses a card that would be too large to sync', () => {
+  assert.equal(savedTooBigNote([{ id: 'a', front: 'Small', back: 'card' }], { tags: ['x'] }), '');
+  const note = savedTooBigNote([{ id: 'a', front: 'Small', back: 'card' }, { id: 'b', front: 'Huge', back: 'x'.repeat(70000) }]);
+  assert.match(note, /^This card is too large to save: it is about 70 KB and the limit is 60 KB\./);
+  assert.match(savedTooBigNote([{ front: 'f', back: 'b' }], { noteExtra: 'y'.repeat(61000) }), /too large to save/);    // note-wide fields count too
+  assert.match(savedTooBigNote([{ front: 'f', back: 'x'.repeat(100) }], {}, 50), /^This card is too large to save/);          // a smaller limit can be passed
+  assert.equal(savedTooBigNote([{ front: 'f', back: 'b', updatedAt: 5, syncedAt: 5 }]), '');
+});
+
+test('editing a note: the new shared fields count, not the old ones', () => {
+  const old = { id: 'a', front: 'f', back: 'b', noteExtra: 'short old note' };
+  assert.equal(savedTooBigNote([old], { noteExtra: 'short' }), '');
+  assert.match(savedTooBigNote([old], { noteExtra: 'y'.repeat(70000) }), /too large to save/);            // new long note replaces the old short one
+  assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: '' }), '');       // emptied: taken off, as saveNote does
+  assert.equal(savedTooBigNote([{ ...old, noteExtra: 'y'.repeat(70000) }], { noteExtra: undefined }), '');
 });

@@ -24,7 +24,7 @@ import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, when
 import { usageLine, cardsWarning } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.26';
+const APP_VERSION = '4.27';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -708,6 +708,10 @@ async function drawSync() {
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
     <div class="set-row">
+      <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
+      <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
+    </div>
+    <div class="set-row">
       <div><b>Password</b><p>Change the password you sign in with.</p></div>
       <button class="btn ghost small" type="button" id="pwBtn">Change…</button>
     </div>
@@ -726,6 +730,7 @@ async function drawSync() {
   showSyncStatus(acct.lastSync);
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
+  $('resendBtn').addEventListener('click', confirmResend);
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
   $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
@@ -855,6 +860,31 @@ async function confirmSignOut() {
   await sync.syncNow();
   const pending = await sync.pendingChanges().catch(() => 0);
   if ($('soNote') && !armed) $('soNote').textContent = pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
+}
+
+// Send everything on this device to the server again (sync.resendEverything). Safe: it never deletes anything or replaces newer data.
+function confirmResend() {
+  openSheet(`
+    <h2 id="sheetTitle">Re-upload everything from this device?</h2>
+    <div class="confirm">
+      <p>Use this only if the sync server <b>lost your data</b> or was <b>restored from an older copy</b>, so your cards are missing online even though they are here. Normally you never need it.</p>
+      <p class="note">This device sends all of its decks, cards, progress, settings, pictures and sounds again, which can take a while and uses data. Nothing is deleted, and newer changes already on the server are kept. Your other devices don't send anything by themselves: do this on each of your devices, starting with the one you used most recently.</p>
+      <p class="err" id="rsErr" hidden></p>
+      <div class="sheet-actions">
+        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
+        <button class="btn primary" type="button" id="rsYes">Re-upload everything</button>
+      </div>
+    </div>`);
+  $('rsNo').focus();
+  $('rsNo').addEventListener('click', closeSheet);
+  $('rsYes').addEventListener('click', async () => {
+    $('rsYes').disabled = true; $('rsErr').hidden = true;
+    try {
+      await sync.resendEverything();        // only starts it; the sync line under Settings → Sync shows progress and any problem
+      closeSheet();
+      toast('Re-uploading everything from this device…');
+    } catch (e) { $('rsErr').textContent = e.message; $('rsErr').hidden = false; $('rsYes').disabled = false; }
+  });
 }
 
 // Delete everything in the account on the server (devices keep their copy). Signs this device out.
