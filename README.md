@@ -182,6 +182,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/install.js` | The Install card on Today and the Install app row in Settings |
 | `js/review.js` | The Review session (flip, rate, finish) |
 | `js/srs.js` | FSRS-6 scheduling (wraps ts-fsrs) |
+| `js/fsrs7-model.js`, `js/fsrs7-sched.js`, `js/srs7.js` | FSRS-7 (beta, off by default): the memory model, the scheduler rules and the card-state glue (our own port, checked against ts-fsrs 6 beta) |
 | `js/sched-settings.js` | Checking and applying the advanced scheduling settings |
 | `js/queue.js`, `js/days.js` | Which cards are due today (a study day starts at 4am) |
 | `js/match.js` | Checking typed answers (typos, alternates, articles, spaces) |
