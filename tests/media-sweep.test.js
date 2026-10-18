@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planSweep, markKey, isMarkKey, markId, validMark, WAIT_MS } from '../js/media-sweep.js';
+import { planSweep, markKey, isMarkKey, isSeenKey, markId, validMark, WAIT_MS, GONE } from '../js/media-sweep.js';
 import { acceptSetting, isSyncedSetting } from '../js/sync-data.js';
 import { isLocalOnly } from '../js/db.js';
 import { alreadyOnServer } from '../js/sync-quota.js';
@@ -13,12 +13,12 @@ const NOW = Date.UTC(2026, 5, 1);
 const DAY = 86400000;
 
 test('a file nobody uses is marked with today, not deleted', () => {
-  assert.deepEqual(planSweep({ removed: ['a', 'b'], now: NOW }), { mark: ['a', 'b'], unmark: [], sweep: [] });
+  assert.deepEqual(planSweep({ removed: ['a', 'b'], now: NOW }), { mark: ['a', 'b'], unmark: [], sweep: [], reupload: [] });
 });
 
 test('an already marked file keeps its first date', () => {
   const p = planSweep({ marks: { a: NOW - 5 * DAY }, removed: ['a'], now: NOW });
-  assert.deepEqual(p, { mark: [], unmark: [], sweep: [] });
+  assert.deepEqual(p, { mark: [], unmark: [], sweep: [], reupload: [] });
 });
 
 test('a marked file is swept only once 30 days have passed', () => {
@@ -30,7 +30,7 @@ test('a marked file is swept only once 30 days have passed', () => {
 
 test('a marked file that a card uses again is un-marked, even after 30 days', () => {
   const p = planSweep({ marks: { a: NOW - 40 * DAY, b: NOW - DAY }, used: new Set(['a', 'b']), now: NOW });
-  assert.deepEqual(p, { mark: [], unmark: ['a', 'b'], sweep: [] });
+  assert.deepEqual(p, { mark: [], unmark: ['a', 'b'], sweep: [], reupload: [] });
 });
 
 test('a used file is never marked, and a mark for a file this device never had is still swept', () => {
@@ -58,7 +58,9 @@ test('marks are synced settings, checked on the way in, and left out of backups'
   assert.deepEqual(acceptSetting('mdel:x1', NOW), { ok: true, value: NOW });
   assert.deepEqual(acceptSetting('mdel:x1', null), { ok: true, value: null });
   for (const junk of ['yesterday', -5, 0, NaN, {}, true]) assert.equal(acceptSetting('mdel:x1', junk).ok, false);
-  assert.ok(validMark(null) && validMark(1) && !validMark(undefined));
+  assert.ok(validMark(null) && validMark(1) && validMark(GONE) && !validMark(undefined) && !validMark('other'));
+  assert.deepEqual(acceptSetting('mdel:x1', GONE), { ok: true, value: GONE });
+  assert.ok(isLocalOnly('mseen:x1') && isSeenKey('mseen:x1') && !isSyncedSetting('mseen:x1'));
 });
 
 test('too big pictures and sounds are counted in plain words', () => {
@@ -86,4 +88,10 @@ test('a kept-back file the account already holds is found, and the asking is lim
   await alreadyOnServer(held, exists, checked, 25);
   assert.ok(!asked.includes('a'));                                                // one found missing is not asked again
   assert.ok(asked.includes('c') && asked.includes('d'));
+});
+
+test('a swept file that a card here still uses, and this device has, is sent again', () => {
+  const p = planSweep({ gone: ['a', 'b', 'c', 'd'], used: new Set(['a', 'b', 'c']), held: new Set(['a', 'b', 'd']), now: NOW });
+  assert.deepEqual(p.reupload, ['a', 'b']);                       // c: used but not held here; d: held but unused
+  assert.deepEqual(planSweep({ gone: ['a'], used: new Set(['a']), now: NOW }).reupload, []);
 });

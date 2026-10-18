@@ -14,7 +14,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { planSweep, markKey } from './media-sweep.js';
+import { planSweep, markKey, GONE } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
@@ -322,13 +322,17 @@ async function syncMedia(auth) {
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
 }
 async function sweepMedia(token, uid, removed, cards) {
-  const plan = planSweep({ marks: await db.mediaMarks(), removed, used: db.usedMediaIds(cards), now: Date.now() });
-  if (plan.mark.length || plan.unmark.length) await db.setSettings([...plan.mark.map(id => [markKey(id), Date.now()]), ...plan.unmark.map(id => [markKey(id), null])]);
-  const gone = [];
+  const { marks, gone } = await db.mediaMarks();
+  const plan = planSweep({ marks, gone, removed, used: db.usedMediaIds(cards), held: new Set(await db.mediaKeys()), now: Date.now() });
+  const swept = [];
   for (const ids of chunks(plan.sweep, 100)) {
-    try { await supa.deleteMedia(token, uid, ids); gone.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
+    try { await supa.deleteMedia(token, uid, ids); swept.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
   }
-  if (gone.length) await db.setSettings(gone.map(id => [markKey(id), null]));
+  // Files the account lost but a card here still uses: back to "not uploaded" (they go up on the next pass), and the mark is cleared.
+  if (plan.reupload.length) await db.markNotUploaded(plan.reupload);
+  const now = Date.now();
+  await db.setSettings([...plan.mark.map(id => [markKey(id), now]), ...plan.unmark.map(id => [markKey(id), null]),
+    ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null])]);
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);
