@@ -107,6 +107,8 @@ const ICON_PATHS = {
   down: '<path d="M6 9l6 6 6-6"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
   snow: '<path d="M12.0 3.0L12.0 21.0M4.2 7.5L19.8 16.5M4.2 16.5L19.8 7.5"/><path d="M12.0 5.6L10.5 7.4M12.0 5.6L13.5 7.4M6.5 8.8L7.3 11.1M6.5 8.8L8.8 8.4M6.5 15.2L8.8 15.6M6.5 15.2L7.3 12.9M12.0 18.4L13.5 16.6M12.0 18.4L10.5 16.6M17.5 15.2L16.7 12.9M17.5 15.2L15.2 15.6M17.5 8.8L15.2 8.4M17.5 8.8L16.7 11.1"/>',
+  flag: '<path d="M6 21V4.5M6 5h11.5l-2.2 3.8 2.2 3.7H6"/>',
+  grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 export const icon = (name, cls = '') =>

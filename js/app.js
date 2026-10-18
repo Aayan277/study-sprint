@@ -1184,6 +1184,7 @@ const ROUTES = {
   welcome: async (el, arg) => (await lazy('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
   review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
   play: async el => (await lazy('./play.js')).renderPlay(el),
+  test: async (el, deckId) => (await lazy('./mock-exam.js')).renderTest(el, deckId),
   decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
   deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
@@ -1216,7 +1217,7 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name === 'review' ? 'today' : name;
+  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -1224,7 +1225,7 @@ async function route() {
   // After a Review or Play round, or an import, the sidebar's counts are out of date (Today hands over its own fresh data).
   // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
   const sidebarStale = name !== prevRoute && name !== 'today'
-    && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
+    && (prevRoute === 'import' || (['review', 'play', 'test'].includes(prevRoute) && document.body.classList.contains('focus')));
   releaseBack();                // a session's hold on the back gesture ends when you leave it (a running one asks again as it redraws)
   stashDraft();             // unsaved edits in a card panel are kept for when it is opened again
   closeSheet();
@@ -1260,7 +1261,7 @@ async function route() {
 
 // Tell screen readers the screen changed: the page title follows the screen (a deck shows its own name) and
 // focus moves to the screen's main heading.
-const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
+const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', test: 'Practice test', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
 let firstScreen = true;
 function announceScreen(el, name) {
   const h1 = el.querySelector('h1');

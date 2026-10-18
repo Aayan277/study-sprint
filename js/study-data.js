@@ -3,7 +3,7 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, newRoomFor, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, newRoomFor, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, isPracticeSource, NEW, LEARNING, RELEARNING } from './queue.js';
 import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
@@ -162,7 +162,7 @@ export function todayRing(data, deckIds, counts, now = Date.now()) {
   const all = data.allCards || data.cards;
   const cardOf = new Map(all.map(c => [c.id, c]));
   for (const l of data.logs) {
-    if (!(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    if (!(l.source === 'review' || (isPracticeSource(l.source) && l.applied))) continue;
     if (ids && !ids.has(data.deckOf.get(l.cardId))) continue;
     const st = data.statesById.get(l.cardId);
     // Still to come back today: part of `left`. But a card suspended or buried since is out of the queue (so not in

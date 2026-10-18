@@ -15,14 +15,12 @@ import {
 } from './game.js';
 import { questionAnnouncement, spokenPrompt } from './game.js';
 import { singleKeysOn, keyHint } from './shortcuts.js';
-import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
-import { deckSchedulerOptions, usesFsrs7 } from './sched-settings.js';
-import { loadByDay } from './balance.js';
+import { speedProfiles, playCountsAsReviews } from './autograde.js';
+import { savePracticeAnswer, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
 import { loadAll } from './study-data.js';
-import { examOptions, examInfo, pickPlayDeck } from './exam.js';
-import { newRoomFor, takeNewFor, giveBackNewFor } from './queue.js';
-import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
-import { isNewLeechCounted, markLeech } from './browse-logic.js';
+import { pickPlayDeck } from './exam.js';
+import { giveBackNewFor } from './queue.js';
+import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
 import { openCardPanel } from './browse.js';
 import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
@@ -123,7 +121,7 @@ export async function renderPlay(el) {
     // Cards that an exam's final pass brings forward count as due today (see exam.js).
     examCaps: exam.caps,
     // Cards whose schedule Play already changed today (Play only changes each card once a day).
-    playedToday: new Set(logs.filter(l => l.source === 'play' && l.applied).map(l => l.cardId)),
+    playedToday: practicedToday(logs),
     // New cards still allowed today (overall and per deck), for decks with an exam, where Play starts new cards.
     // Only new cards really started today count (newLimits ignores Play answers that were only logged).
     newLeft,
@@ -568,59 +566,9 @@ async function record(round, entry) {
   // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
   // The round's own score, bests and results come from the round itself, not from the log.
   if (!countsAsReviews()) { entry.decision = 'practice'; return; }
-  const id = entry.card.id;
-  const now = Date.now();
-  const chars = entry.chars ?? 0;
-  const untimed = !!round.untimed && round.fmt !== 'lightning';
-  let rating = autoRating({ ok: entry.ok, ms: entry.ms, limitMs: entry.limitMs, typing: round.qtype === 'typing',
-    speed: data.speed.get(speedKey(round.qtype, round.hard)), chars, untimed });
-  const prev = data.statesById.get(id);
-  // A new card in a deck with an exam coming up (its own or a parent's) is started by Play: this answer is its
-  // first review. That uses up one of today's new cards. Over the deck's new-card limit (overall, the deck's own
-  // and its parents'), it's only logged and starts in Review as before.
-  const examDeck = !!examInfo(effectiveDeck(data.decks, entry.card.deckId), now);
-  const newRoom = newRoomFor(data.newLeft, entry.card.deckId);
-  const cap = data.examCaps.get(id);
-  const dueState = prev && cap !== undefined ? { ...prev, due: Math.min(prev.due, cap) } : prev;
-  // Out of time (not a wrong answer) with Survival's timer at under 3 seconds is logged only.
-  let decision = scheduleDecision({ state: dueState, rating, alreadyToday: data.playedToday.has(id), now, examDeck, newRoom,
-    timedOut: entry.given === null, limitMs: entry.limitMs, fmt: round.fmt });
-  rating = appliedRating({ decision, rating, mc: round.qtype !== 'typing', overridden: !!entry.overridden });
-  if (decision === 'first') takeNewFor(data.newLeft, entry.card.deckId);
-  const log = playLogRow({ cardId: id, now, qtype: round.qtype, fmt: round.fmt, hard: round.hard, ok: entry.ok, ms: entry.ms, rating, chars,
-    prevState: prev ? prev.state : 0, decision, mixedWith: entry.mixedWith, overridden: entry.overridden, untimed });
-  entry.prev = prev;                      // kept with the log row's id, so "I was right" can take this answer back (see rerecord)
-  if (applies(decision)) {
-    let next = null;
-    try {
-      const { rate, prepare7 } = await import('./srs.js');     // the FSRS library, loaded on demand
-      if (usesFsrs7(data.settings)) await prepare7([prev], db.getCardLogs);     // FSRS-7 (beta): the card's memory, rebuilt from its history the first time
-      const deck = effectiveDeck(data.decks, entry.card.deckId);     // with what it inherits from its parent decks
-      // The deck's own settings (or the overall ones), its exam limits, and evening out the reviews.
-      data.balance ||= { load: loadByDay([...data.statesById.values()]), easyDays: data.settings.easyDays };
-      next = rate(id, prev, rating, { ...examOptions(deckSchedulerOptions(data.settings, deck), deck, now), balance: data.balance }, now);
-    } catch (err) {
-      // Scheduling library not available (e.g. offline before it was ever downloaded): keep the answer for stats.
-      console.error(err);
-      if (decision === 'first') { giveBackNewFor(data.newLeft, entry.card.deckId); decision = 'new'; }    // not started: slot back
-      else decision = 'not-due';
-      log.reason = decision;
-      entry.logId = await db.addLog(log);
-    }
-    // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
-    if (next) {
-      log.applied = true;
-      entry.logId = await db.saveReview(next, log);
-      entry.applied = true;
-      data.statesById.set(id, next);
-      data.playedToday.add(id);
-      entry.leeched = await checkLeech(round, entry.card, prev, next, log);       // what it changed, so "I was right" can undo a leech
-    }
-  } else {
-    entry.logId = await db.addLog(log);
-  }
-  entry.rating = rating;
-  entry.decision = decision;
+  // The rest is shared with the Practice test (practice-save.js).
+  await savePracticeAnswer(data, entry, { source: 'play', qtype: round.qtype, fmt: round.fmt, hard: round.hard,
+    untimed: !!round.untimed && round.fmt !== 'lightning', afterApply: (card, prev, next, log) => checkLeech(round, card, prev, next, log) });
 }
 
 // ---------- "I was right" and "Accept this answer from now on" ----------
@@ -698,12 +646,9 @@ async function acceptTyped(round, entry) {
 
 // Forgotten too many times? Same as Review: tag it "leech", and suspend it unless Settings says tag only.
 async function checkLeech(round, card, prev, next, log) {
-  // A miss on a card that wasn't due still brings it back, but doesn't count toward the leech limit.
-  if (log.reason === 'again' || next.lapses <= (prev?.lapses || 0)) return null;
-  if (!isNewLeechCounted(prev?.lapses || 0, next.lapses, await db.getCardLogs(card.id), data.settings.leechThreshold)) return null;
-  const before = (await db.get('cards', card.id)) || card;
-  const leech = markLeech(before, data.settings.leechAction);
-  await db.saveCards([leech]);
+  const hit = await markLeechIfDue(data.settings, card, prev, next, log);
+  if (!hit) return null;
+  const { leech, before } = hit;
   const wasListed = round.leeches.includes(card.id);
   if (!wasListed) round.leeches.push(card.id);
   if (leech.suspended) dropFromRound(round, card.id); else replaceInRound(round, playCopy(leech));
@@ -754,21 +699,9 @@ function next() {
 // One line on the results screen saying how the round changed the review schedule.
 async function scheduleSummary(round) {
   await round.saving;                          // wait for the last answers to finish saving
-  const count = d => new Set(round.log.filter(l => l.decision === d).map(l => l.card.id)).size;
-  const graded = count('due'), sentBack = count('again'), started = count('first'), fresh = count('new'), over = count('new-limit');
   if (!round.log.length) return '';
   if (!countsAsReviews()) return '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>';
-  const parts = [];
-  if (graded) parts.push(`<b>${plural(graded, 'due card')}</b> graded`);
-  if (sentBack) parts.push(`<b>${plural(sentBack, 'missed card')}</b> brought back`);
-  // New cards in a deck with an exam are started by Play (autograde.js).
-  if (started) parts.push(`<b>${plural(started, 'new card')}</b> started (exam deck)`);
-  const text = parts.length
-    ? `Schedule updated: ${parts.join(', ')}.`
-    : 'No cards were due: schedule unchanged.';
-  const extra = (fresh ? ` ${plural(fresh, 'new card')} ${fresh === 1 ? 'starts' : 'start'} in Review.` : '')
-    + (over ? ` ${plural(over, 'new card')} over today’s new-card limit ${over === 1 ? 'starts' : 'start'} in Review.` : '');
-  return `<p class="sched-note">${text}${extra}</p>`;
+  return scheduleSummaryHTML(round.log);
 }
 
 async function finish() {

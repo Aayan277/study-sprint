@@ -4,7 +4,7 @@
 // The rules, in short:
 //   1. Real reviews are rows with source 'review' (rated in Review) or 'anki' (imported history), with a rating of 1 to 4.
 //      These are the only rows that are ever scored (a prediction is checked against them).
-//   2. A Play answer that changed the schedule (source 'play', applied === true) is replayed, so the card's memory
+//   2. A Play or Practice test answer that changed the schedule (source 'play' or 'test', applied === true) is replayed, so the card's memory
 //      state and the gap to its next real review are right, but it is never scored and does not count.
 //      PLAY_POLICY 'truncate' instead cuts the card's history at its first such row.
 //   3. Any other Play row, and any unknown source, is ignored. A new kind of answer gets its own `source` and has to be
@@ -29,7 +29,7 @@ const validRating = r => Number.isInteger(r) && r >= 1 && r <= 4;
 export function rowKind(row) {
   if (!row || typeof row !== 'object' || !validCard(row.cardId) || !Number.isFinite(row.timestamp) || !validRating(row.rating)) return null;
   if (TRAIN_SOURCES.includes(row.source)) return 'train';
-  if (row.source === 'play' && row.applied === true) return 'replay';
+  if ((row.source === 'play' || row.source === 'test') && row.applied === true) return 'replay';
   return null;
 }
 

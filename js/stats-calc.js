@@ -284,7 +284,7 @@ export function calendarFromDays(perDay, now = Date.now(), weeks = 53, opts = {}
 }
 
 // An answer from Review, Play, or a review history imported from Anki.
-export const isAnswerLog = l => l.source === 'review' || l.source === 'play' || l.source === 'anki';
+export const isAnswerLog = l => l.source === 'review' || l.source === 'play' || l.source === 'test' || l.source === 'anki';
 
 // Answers per study day (a Map of dayKey -> count), counted in one pass over the log.
 // `all` counts every deck (for the streak); `picked` only the cards in `cardIds` (the Stats deck filter).
@@ -307,13 +307,13 @@ export function answerDays(logs, cardIds = null) {
 export function isDueReview(log) {
   if (log.state !== REVIEW) return false;
   if (log.source === 'review' || log.source === 'anki') return true;     // anki: imported with an Anki deck
-  if (log.source === 'play') return log.reason ? log.reason === 'due' : !!log.applied;
+  if (log.source === 'play' || log.source === 'test') return log.reason ? log.reason === 'due' : !!log.applied;
   return false;
 }
 // Retention counts recall only: flipping a card and rating it, typing the answer (in Review or Play) and Anki
 // history. A multiple choice answer in Play is left out: with four options you can guess right, so it would
 // make you look better than you are.
-export const isRecallReview = log => isDueReview(log) && !(log.source === 'play' && log.mode !== 'typing');
+export const isRecallReview = log => isDueReview(log) && !((log.source === 'play' || log.source === 'test') && log.mode !== 'typing');
 export function retention(logs, now = Date.now(), days = 30) {
   const since = daysAgoStart(days - 1, now);
   const due = logs.filter(l => l.timestamp >= since && isRecallReview(l));
@@ -352,7 +352,7 @@ export function retentionByAge(logs, now = Date.now(), periods = [7, 30, 90], { 
         if (Number.isFinite(target)) sums[d] += target;
       });
     }
-    if (l.source === 'review' || l.source === 'anki' || (l.source === 'play' && l.applied)) last.set(l.cardId, l.timestamp);
+    if (l.source === 'review' || l.source === 'anki' || ((l.source === 'play' || l.source === 'test') && l.applied)) last.set(l.cardId, l.timestamp);
   }
   if (targetOf) for (const d of periods) out[d].target = out[d].all.n ? sums[d] / out[d].all.n : null;
   return out;
@@ -384,7 +384,7 @@ export function reviewsPerDay(logs, now = Date.now(), days = 30) {
   }
   for (const l of logs) {
     const row = index.get(dayKey(l.timestamp));
-    const src = l.source === 'anki' ? 'review' : l.source;    // reviews done in Anki count as reviews
+    const src = l.source === 'anki' ? 'review' : l.source === 'test' ? 'play' : l.source;    // reviews done in Anki count as reviews; a practice test counts with Play
     if (!row || (src !== 'review' && src !== 'play')) continue;
     row[src]++;
     row.total++;
