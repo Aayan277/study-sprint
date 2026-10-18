@@ -51,6 +51,7 @@ export const hasBlank = card => !!card?.noteId && typeof card.noteText === 'stri
 // Private characters stand in for the tags while formatHTML (which escapes everything) does its work, and are
 // swapped for the real tags afterwards. So the card's text can never bring in a tag of its own.
 const BLANK_OPEN = '', BLANK_CLOSE = '', ANS_OPEN = '', ANS_CLOSE = '';
+const HID_OPEN = '\uE004', HID_CLOSE = '\uE005';      // the visible […] is hidden from a screen reader, which hears "blank" instead
 const STRAY = /[-]/g;
 
 // The text as HTML for one card.
@@ -62,10 +63,11 @@ export function renderCloze(text, n, side = 'front') {
     if (side === 'all') return ANS_OPEN + answer + ANS_CLOSE;
     if (+num !== n) return answer;
     if (side === 'back') return ANS_OPEN + answer + ANS_CLOSE;
-    return BLANK_OPEN + (hint ? `[${hint}]` : '[…]') + BLANK_CLOSE;
+    return BLANK_OPEN + (hint ? `[${hint}]` : `${HID_OPEN}[…]${HID_CLOSE}`) + BLANK_CLOSE;
   })));
   return formatHTML(marked)
-    .split(BLANK_OPEN).join('<span class="cloze-blank">').split(BLANK_CLOSE).join('</span>')
+    .split(BLANK_OPEN).join('<span class="cloze-blank"><span class="sr-only">blank </span>').split(BLANK_CLOSE).join('</span>')
+    .split(HID_OPEN).join('<span aria-hidden="true">').split(HID_CLOSE).join('</span>')
     .split(ANS_OPEN).join('<mark class="cloze-ans">').split(ANS_CLOSE).join('</mark>');
 }
 
@@ -255,7 +257,7 @@ export function withClozeLines(text, parse) {
     let notes = 0;
     plain.rows.forEach((r, i) => {
       const nums = hasClozeLines(r[0]) ? clozeNumbers(r[0]) : [];
-      if (!nums.length) { rows.push(r); clozes.push(null); tags.push(plain.tags?.[i] || []); extras.push(null); return; }
+      if (!nums.length) { rows.push(r); clozes.push(plain.clozes?.[i] ?? null); tags.push(plain.tags?.[i] || []); extras.push(plain.noteExtras?.[i] ?? null); return; }
       notes++;
       for (const n of nums) {
         const { front, back } = clozeCard(r[0], n);

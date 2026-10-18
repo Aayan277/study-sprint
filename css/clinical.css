@@ -72,6 +72,7 @@
 :root[data-ui="clinical"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"],.mode:has(input:checked),.skin[aria-pressed="true"]){box-shadow:none}
 :root[data-ui="clinical"] .switch:checked{box-shadow:none}
 :root[data-ui="clinical"] .switch::after{box-shadow:0 1px 2px rgb(0 0 0 / .2)}
+:root[data-ui="clinical"] .switch.switch:focus-visible{box-shadow:none}   /* the ring is the outline; the soft halo of the text-box rule above would sit on the switch */
 :root[data-ui="clinical"] :is(.field input,.field select,.field textarea,.br-controls input,.br-controls select,.row-form input,#pasteBox,.typeform input,.rich,.adv-row input,.pcells textarea):focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 :root[data-ui="clinical"] .set-nav{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
 :root[data-ui="clinical"] .set-nav a{border-radius:var(--r-sm);background:var(--surface-1);font-weight:500}
@@ -166,8 +167,8 @@
 :root[data-ui="clinical"] .bar{background:color-mix(in srgb,var(--accent) 72%,var(--surface-1));border-radius:2px 2px 0 0}
 :root[data-ui="clinical"] .col:last-child .bar,
 :root[data-ui="clinical"] .col:hover .bar{background:var(--accent);box-shadow:none}
-:root[data-ui="clinical"] .pgrid .card:first-child{background:var(--surface-1)}
-:root[data-ui="clinical"] .pgrid .card:first-child .big{text-shadow:none}
+:root[data-ui="clinical"] .pgrid .pc-streak{background:var(--surface-1)}
+:root[data-ui="clinical"] .pgrid .pc-streak .big{text-shadow:none}
 :root[data-ui="clinical"] .pgrid .card h2{letter-spacing:.02em;font-weight:600}
 :root[data-ui="clinical"] .pgrid .big{font-weight:600;letter-spacing:-.03em}
 :root[data-ui="clinical"] .wd.on i{box-shadow:none}
@@ -284,12 +285,15 @@
 :root[data-ui="clinical"][data-theme="light"][data-skin="forest"],:root[data-ui="clinical"][data-theme="light"] .pv[data-skin="forest"]{--accent:#1E6B3A; --accent-text:#18592F; --accent-hover:#18592F; --on-accent:#FFFFFF; --acc:30 107 58}
 :root[data-ui="clinical"][data-theme="light"][data-skin="ember"], :root[data-ui="clinical"][data-theme="light"] .pv[data-skin="ember"] {--accent:#A94A1C; --accent-text:#963F15; --accent-hover:#963F15; --on-accent:#FFFFFF; --acc:169 74 28}
 :root[data-ui="clinical"][data-theme="light"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="light"] .pv[data-skin="rose"]  {--accent:#97366A; --accent-text:#852D5C; --accent-hover:#852D5C; --on-accent:#FFFFFF; --acc:151 54 106}
-/* Dark: a mid tone for fills and rings (white text on it, 4.5:1+; 3:1+ against the card), a light tone for links and small text */
-:root[data-ui="clinical"][data-theme="dark"][data-skin="violet"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="violet"]{--accent:#5F66DC; --accent-text:#ADA8F0; --accent-hover:#6E75E2; --on-accent:#FFFFFF; --acc:95 102 220}
-:root[data-ui="clinical"][data-theme="dark"][data-skin="ocean"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ocean"] {--accent:#3B6FD4; --accent-text:#93B6F0; --accent-hover:#4A7CDB; --on-accent:#FFFFFF; --acc:59 111 212}
-:root[data-ui="clinical"][data-theme="dark"][data-skin="forest"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="forest"]{--accent:#2E7D4A; --accent-text:#8AD6A5; --accent-hover:#378A55; --on-accent:#FFFFFF; --acc:46 125 74}
-:root[data-ui="clinical"][data-theme="dark"][data-skin="ember"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ember"] {--accent:#B4571F; --accent-text:#E8A683; --accent-hover:#BF6229; --on-accent:#FFFFFF; --acc:180 87 31}
-:root[data-ui="clinical"][data-theme="dark"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="rose"]  {--accent:#B04C82; --accent-text:#E29EC0; --accent-hover:#BA578C; --on-accent:#FFFFFF; --acc:176 76 130}
+/* Dark: a mid tone for fills and rings (white text on it, 4.5:1+; 3:1+ against the card), a light tone for links and small text.
+   The hover fill is the fill mixed 12% toward black: white on it is 5.6:1 in all five skins (a lighter hover fell under 4.5:1). */
+:root[data-ui="clinical"][data-theme="dark"][data-skin="violet"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="violet"]{--accent:#636ADD; --accent-text:#ADA8F0; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:99 106 221}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="ocean"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ocean"] {--accent:#4073D5; --accent-text:#93B6F0; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:64 115 213}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="forest"],:root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="forest"]{--accent:#3A8454; --accent-text:#8AD6A5; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:58 132 84}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="ember"], :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="ember"] {--accent:#B75D27; --accent-text:#E8A683; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:183 93 39}
+:root[data-ui="clinical"][data-theme="dark"][data-skin="rose"],  :root[data-ui="clinical"][data-theme="dark"] .pv[data-skin="rose"]  {--accent:#B45689; --accent-text:#E29EC0; --accent-hover:color-mix(in srgb,var(--accent) 88%,black); --on-accent:#FFFFFF; --acc:180 86 137}
+/* The heatmap's top step used to be the hover tone; that is now darker than the step below it, so it is a lighter mix instead */
+:root[data-ui="clinical"][data-theme="dark"]{--heat-4:color-mix(in srgb,var(--accent) 88%,white)}
 
 /* ======================================================================
    4. Style-specific
@@ -794,12 +798,6 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / span 999;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;margin-left:-12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
-}
-@media (min-width:1440px){
-  /* Stats: the streak and retention figures and the study calendar share the first row (the calendar filled a quarter of a
-     full-width card) */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .pgrid{grid-column:1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .cal-card{grid-column:2}
 }
 @media (min-width:1600px){
   /* the deck page on a wide screen: the deck's name and buttons in a column on the left, with the counts panel under them

@@ -19,6 +19,7 @@ import { isHidden } from './browse-logic.js';
 import { readyEstimateText, streakFromDays, restDaySet, idleDaySet, calendarFromDays, firstAnswerTime, answerDays, daysAgoStart, retention, reviewsPerDay, dueForecast, hardestCards, niceMax, dayKey, isAnswerLog, buttonCounts, hourly, difficultyBands, retentionByAge, retentionVerdict, YOUNG_DAYS } from './stats-calc.js';
 import { formatInterval } from './queue.js';
 import { plainText, mathHTML } from './format.js';
+import { normaliseLayout, visibleOrder, pairRows, widths, cardInfo } from './stats-layout.js';
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
 
 // Where an answer came from, for tooltips.
@@ -42,42 +43,51 @@ let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
 
 // The review log is big, so Stats avoids reading all of it. The streak and calendar only need how many answers
-// each day had (counted by the database, no rows read), and the charts only need the last 30 days.
-// The whole log is read only when a deck is picked (to know which answers belong to its cards).
+// each day had (counted by the database, no rows read: only the last year's days are counted, older days only need to say
+// whether they had an answer), and the charts only need the last 30 days.
+// With a deck picked, only that deck's cards' answers are read (a lookup for each card, not the whole log): the best streak and the
+// freeze days in the calendar need that deck's studied days over its whole history.
 // What was read is kept until the data changes (db.dataVersion goes up: an answer here, or changes from sync).
-let cache = null;       // { day, version, days, recent, full }: each a promise, filled in as needed
-async function loadLogs(needAll) {
+let cache = null;       // { day, version, days, recent, older, decks }: each a promise, filled in as needed
+const CALENDAR_DAYS = 53 * 7 + 7;       // the calendar shows 53 weeks (at most 371 days back); older days only need to say they had answers
+async function loadLogs() {
   // A new day moves "the last 30 days"; a new data version means the log changed.
   if (cache && (cache.day !== dayStart() || cache.version !== db.dataVersion())) cache = null;
-  const mine = cache = cache || { day: dayStart(), version: db.dataVersion() };
+  const mine = cache = cache || { day: dayStart(), version: db.dataVersion(), decks: new Map() };
   const keep = (name, read) => {
     if (!mine[name]) mine[name] = read().catch(err => { mine[name] = null; throw err; });
     return mine[name];
   };
-  const [days, recent, full] = await Promise.all([
-    keep('days', async () => new Map((await db.getDayCounts()).map(([t, n]) => [dayKey(t), n]))),
-    keep('recent', () => db.getLogsSince(daysAgoStart(29))),
-    needAll ? keep('full', () => db.getAll('reviewLog')) : null
+  const [days, recent] = await Promise.all([
+    keep('days', async () => new Map((await db.getDayCounts({ exactSince: daysAgoStart(CALENDAR_DAYS) })).map(([t, n]) => [dayKey(t), n]))),
+    keep('recent', () => db.getLogsSince(daysAgoStart(29)))
   ]);
-  return { days, recent, full };
+  // The answers of the cards in `ids`, as answers per day (the Stats deck filter). A small deck is read card by card; a deck that holds
+  // most of the cards reads the whole log, which is then cheaper.
+  const deckDays = (ids, allCount) => {
+    const key = [...ids].sort().join('\n');
+    if (!mine.decks.has(key)) {
+      const rows = ids.size * 3 <= allCount ? db.getLogsForCards(ids) : db.getAll('reviewLog');
+      mine.decks.set(key, rows.then(r => answerDays(r, ids).picked).catch(err => { mine.decks.delete(key); throw err; }));
+    }
+    return mine.decks.get(key);
+  };
+  // The last 30 days are already here: the retention split only reads the 80 days before them.
+  const older = () => keep('older', () => db.getLogsBetween(daysAgoStart(89) - YOUNG_DAYS * 86400000, daysAgoStart(29)));
+  return { days, recent, deckDays, older };
 }
 
 // ---------- true retention against the target ----------
 // Young and mature cards for the last 7, 30 and 90 days. The split needs each answer's previous answer, so the log is read
 // from 21 days before the 90-day window (a card with no earlier answer in that stretch had its last one 21 days or more before,
-// which is "mature"). It is read after the page is drawn and kept until the data changes, like the other logs.
-let retCache = null;     // { day, version, promise }
-function loadRetentionLogs() {
-  if (retCache && (retCache.day !== dayStart() || retCache.version !== db.dataVersion())) retCache = null;
-  if (!retCache) {
-    const mine = retCache = { day: dayStart(), version: db.dataVersion(), promise: null };
-    mine.promise = db.getLogsSince(daysAgoStart(89) - YOUNG_DAYS * 86400000).catch(err => { if (retCache === mine) retCache = null; throw err; });
-  }
-  return retCache.promise;
+// which is "mature"). The last 30 days of that are the ones the page already read; only the days before them are read here, after
+// the page is drawn, and kept until the data changes, like the other logs.
+async function loadRetentionLogs(logs) {
+  return (await logs.older()).concat(logs.recent);
 }
 const RS_PERIODS = [7, 30, 90];
 const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
-const rsPos = v => `${(Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN) * 100}%`;
+const rsPos = v => +((Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN)).toFixed(4);   // 0 to 1 along the track; the CSS keeps it inside the track's ends
 const RS_MARK = { on: '✓', under: '▼', over: '▲' };
 function retSplitHTML(res, hasLogs) {
   if (!hasLogs) return '<p class="muted">Shows how often you remember cards when they come due, for cards you know less well (young) and well (mature), against your target. Nothing has come due in the last 90 days yet.</p>';
@@ -89,7 +99,7 @@ function retSplitHTML(res, hasLogs) {
     const pts = v.gap === null ? 0 : Math.round(Math.abs(v.gap) * 100);
     const word = v.verdict === 'few' ? '' : kind === 'on' ? 'on target' : `${pts} ${pts === 1 ? 'point' : 'points'} ${kind === 'under' ? 'under' : 'above'}`;
     return `<div class="rs-row"><span class="rs-name">${label}</span>
-      <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="left:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="left:${rsPos(target)}"></i>` : ''}</span>
+      <span class="rs-track" aria-hidden="true"><i class="rs-dot ${kind}" style="--p:${rsPos(rate)}"></i>${Number.isFinite(target) ? `<i class="rs-target" style="--p:${rsPos(target)}"></i>` : ''}</span>
       <span class="rs-val"><b class="mono">${Math.round(rate * 100)}%</b> <small>of ${b.n}</small>${word ? ` <span class="rs-gap ${kind}"><span aria-hidden="true">${RS_MARK[kind]}</span> ${word}</span>` : ''}</span></div>`;
   };
   return RS_PERIODS.map(d => {
@@ -121,6 +131,7 @@ const longDate = t => LONG.format(t);
 const dayText = d => `${longDate(d.time)}: ${d.count ? plural(d.count, 'answer') : 'no studying'}${d.frozen ? ' · streak freeze' : d.rest ? ' · day off' : ''}`;
 function calendarHTML(cal, now) {
   const todayKey = dayKey(now);
+  const shown = cal.weeks.flat().filter(d => !d.future);      // (the squares are mouse and touch only; the date box under them is the keyboard way in)
   let lastMonth = -1;
   const cols = cal.weeks.map((week, wi) => {
     // A month's name over the first week that starts in it.
@@ -143,7 +154,8 @@ function calendarHTML(cal, now) {
         </div>
       </div>
       <div class="cal-foot">
-        <span class="muted small" id="calInfo" aria-live="polite">Tap a day to see it.</span>
+        <label class="cal-pick muted small">Pick a day <input type="date" id="calPick" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></label>
+        <span class="muted small" id="calInfo" aria-live="polite">Tap a day, or pick one, to see it.</span>
         <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
         <span class="cal-key cal-key2 muted small" aria-hidden="true"><i class="lv0 frz"></i> Streak freeze <i class="lv0 rest"></i> Day off</span>
       </div>
@@ -159,12 +171,22 @@ function wireCalendar(el) {
   box.scrollLeft = box.scrollWidth;
   hideCutLabels();
   box.addEventListener('scroll', hideCutLabels, { passive: true });
-  grid.addEventListener('click', e => {
-    const cell = e.target.closest('i[data-t]');
-    if (!cell) return;
+  const showCell = cell => {
     grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
     cell.classList.add('sel');
     el.querySelector('#calInfo').textContent = dayText({ time: +cell.dataset.t, count: +cell.dataset.n, frozen: !!cell.dataset.f, rest: !!cell.dataset.r });
+  };
+  grid.addEventListener('click', e => {
+    const cell = e.target.closest('i[data-t]');
+    if (cell) showCell(cell);
+  });
+  // The keyboard way (WCAG 2.1.1): the "Pick a day" date box shows the same line, and the square is marked and scrolled into view.
+  const pick = el.querySelector('#calPick');
+  pick?.addEventListener('change', () => {
+    const cell = [...grid.querySelectorAll('i[data-t]')].find(c => dayKey(+c.dataset.t) === pick.value);
+    if (!cell) { if (pick.value) el.querySelector('#calInfo').textContent = 'No calendar square for that day.'; return; }
+    showCell(cell);
+    cell.scrollIntoView({ inline: 'center', block: 'nearest' });
   });
 }
 
@@ -186,8 +208,19 @@ function masteryGridHTML(decks, inside, cards, statesById) {
   }).join('');
 }
 
+// A figure worked out the first time it is read (and not at all if no card shows it).
+function lazyValues(defs) {
+  const out = {};
+  for (const [k, f] of Object.entries(defs)) {
+    let v, done = false;
+    Object.defineProperty(out, k, { get() { if (!done) { v = f(); done = true; } return v; } });
+  }
+  return out;
+}
+
 export async function renderStats(el) {
-  const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs(deckFilter !== 'all'), db.getSettings()]);
+  // (The kept reads of the cards and schedules are only read here, never sorted or changed.)
+  const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAllCached('cards', { shared: true }), db.getAllCached('cardStates', { shared: true }), loadLogs(), db.getSettings()]);
   if (!el.isConnected) return;
   decks.sort((a, b) => a.created - b.created);
   if (deckFilter !== 'all' && !decks.some(d => d.id === deckFilter)) deckFilter = 'all';
@@ -201,25 +234,29 @@ export async function renderStats(el) {
   const ids = inside ? new Set(cards.map(c => c.id)) : null;
   // The streak counts every deck. The calendar and charts use the chosen deck's answers.
   const allDays = logs.days;
-  const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
+  const pickedDays = inside ? await logs.deckDays(ids, allCards.length) : allDays;
+  if (!el.isConnected) return;
   const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
   const planned = restDaySet(settings), idle = idleDaySet(settings);
   const rest = new Set([...planned, ...idle]);          // (a day with nothing due is as safe as a day off)
   const streak = streakFromDays(allDays, now, { rest: planned, idle });
-  const ret = retention(recent, now);
-  const perDay = reviewsPerDay(recent, now);
+  // Each card's figures are worked out only when the card is shown (Customise Stats can hide any of them).
+  const D = lazyValues({
+    ret: () => retention(recent, now),
+    perDay: () => reviewsPerDay(recent, now),
+    forecast: () => dueForecast(cardStates, now),
+    hardest: () => hardestCards(cards, statesById, recent, now),
+    reviewable: () => D.hardest.filter(h => !isHidden(h.card, now)),       // "Review these" skips suspended and buried cards
+    leechCount: () => cards.filter(c => (c.tags || []).includes('leech')).length,
+    total30: () => D.perDay.reduce((n, d) => n + d.total, 0),
+    cal: () => calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) }),
+    buttons: () => buttonCounts(recent, now),
+    hours: () => hourly(recent, now),
+    bands: () => difficultyBands(cardStates)
+  });
   const cardStates = cards.map(c => statesById.get(c.id));
-  const forecast = dueForecast(cardStates, now);
-  const hardest = hardestCards(cards, statesById, recent, now);
-  const reviewable = hardest.filter(h => !isHidden(h.card, now));       // "Review these" skips suspended and buried cards
-  const leechCount = cards.filter(c => (c.tags || []).includes('leech')).length;
   const counts = { new: 0, learning: 0, young: 0, mature: 0 };
   cards.forEach(c => counts[cardLevel(statesById.get(c.id))]++);
-  const total30 = perDay.reduce((n, d) => n + d.total, 0);
-  const cal = calendarFromDays(pickedDays, now, 53, { rest, from: firstAnswerTime(pickedDays) });
-  const buttons = buttonCounts(recent, now);
-  const hours = hourly(recent, now);
-  const bands = difficultyBands(cardStates);
   // "More stats" is folded on phones; computers show everything (styles.css), so this only matters under 1024px.
   const moreOpen = foldOpen('stats-more');
   const hourName = h => HOUR.format(new Date(2000, 0, 1, h));
@@ -227,8 +264,8 @@ export async function renderStats(el) {
   // when one course is picked, a readiness header with Mastery right below it. Off: the plain deck list and no header.
   const scoped = settings.statsReadiness !== false;
   const course = scoped && deckFilter !== 'all' ? decks.find(d => d.id === deckFilter) : null;
-  const masteryHTML = `
-    <section class="card section stats-mastery${course ? ' up' : ''}" aria-labelledby="mTitle">
+  const masteryHTML = up => `
+    <section class="card section stats-mastery${up ? ' up' : ''}" aria-labelledby="mTitle">
       <div class="mhead"><h2 id="mTitle">Mastery</h2><span class="muted small">${counts.mature} of ${plural(cards.length, 'card')} mature</span></div>
       <div class="mbar" aria-hidden="true">${LEVELS.map(([k]) => counts[k] ? `<span class="lv-${k}" style="width:${(counts[k] / cards.length * 100).toFixed(2)}%"></span>` : '').join('')}</div>
       <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
@@ -260,10 +297,12 @@ export async function renderStats(el) {
       </div>
     </section>`;
   };
+  const customBtn = `<button type="button" class="btn ghost stats-custom" id="customBtn" aria-haspopup="dialog">${icon('sliders')}<span>Customise</span></button>`;
   const scopeHTML = scoped ? `
     <div class="stats-scope">
       <button type="button" class="pick-btn" id="sDeckBtn" aria-haspopup="dialog" aria-label="Show stats for: ${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}. Change deck">
         ${icon('search')}${course ? `<i class="dot" style="background:${esc(course.color)}"></i>` : ''}<span>${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}</span>${icon('down')}</button>
+      ${customBtn}
       <span class="pick-hint">Search ${plural(decks.length, 'deck')}</span>
     </div>` : `
     <div class="filter-row">
@@ -271,93 +310,86 @@ export async function renderStats(el) {
         <option value="all">All decks</option>
         ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === deckFilter ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
       </select>
+      ${customBtn}
     </div>`;
 
-  el.innerHTML = `
-    <div class="screen-head"><div><h1>Stats</h1></div></div>
-    ${!allCards.length ? emptyStartHTML({ courseId: decks.length === 1 ? decks[0].id : '' }) : `
-    ${scopeHTML}
-    ${course ? readyHTML() + masteryHTML : ''}
-
-    <div class="pgrid">
-      <div class="card">
+  // The cards, each drawn only when it is shown (Customise Stats: js/stats-layout.js). Their order and widths come from the
+  // saved layout; the markup of each card is unchanged.
+  const parts = {
+    streak: () => `
+      <div class="card pc-streak">
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
         <p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
         ${weekDotsHTML(streak.week)}
         <p class="frz-note">One freeze a week covers a missed day. It doesn’t add to the count. <button class="link" type="button" id="planRest">Plan a day off</button></p>
-      </div>
-      <div class="card">
+      </div>`,
+    retention: () => `
+      <div class="card pc-ret">
         <h2>Retention</h2>
-        <div class="big">${ret.rate === null ? '–' : Math.round(ret.rate * 100)}<small>${ret.rate === null ? '' : '%'}</small></div>
-        <p>${ret.total ? `You remembered ${ret.remembered} of ${plural(ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
+        <div class="big">${D.ret.rate === null ? '–' : Math.round(D.ret.rate * 100)}<small>${D.ret.rate === null ? '' : '%'}</small></div>
+        <p>${D.ret.total ? `You remembered ${D.ret.remembered} of ${plural(D.ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
         <details class="info-fold"><summary aria-label="What counts as a review"><span aria-hidden="true">i</span></summary>
           <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></details>
-      </div>
-    </div>
-
-    <section class="card section" aria-labelledby="rsTitle">
+      </div>`,
+    rs: () => `
+    <section class="card section rs-card" aria-labelledby="rsTitle">
       <div class="mhead"><h2 id="rsTitle">Retention vs target</h2><span class="muted small">Young and mature cards</span></div>
       <div id="retSplit"><p class="muted">Working it out…</p></div>
-    </section>
-
-    ${calendarHTML(cal, now)}
-
+    </section>`,
+    cal: () => calendarHTML(D.cal, now),
+    perDay: () => `
     <section class="card section">
-      <div class="mhead"><h2>Reviews per day</h2><span class="muted small">${plural(total30, 'answer')} in 30 days</span></div>
+      <div class="mhead"><h2>Reviews per day</h2><span class="muted small">${plural(D.total30, 'answer')} in 30 days</span></div>
       ${columnChart({
-        id: 'perDay', rows: perDay, value: d => d.total,
+        id: 'perDay', rows: D.perDay, value: d => d.total,
         x: (d, i, all) => i === 0 ? shortDate(d.time) : i === all.length - 1 ? 'Today' : i === Math.floor(all.length / 2) ? shortDate(d.time) : '',
         tip: d => [`${plural(d.total, 'answer')}`, `${dayKey(d.time) === dayKey(now) ? 'Today' : shortDate(d.time)} · ${d.review} review, ${d.play} play`],
         tableHead: ['Day', 'Review', 'Play', 'Total'],
         tableRow: d => [shortDate(d.time), d.review, d.play, d.total],
         label: 'Answers per day for the last 30 days, from Review and Play'
       })}
-    </section>
-
+    </section>`,
+    forecast: () => `
     <section class="card section">
-      <div class="mhead"><h2>Due in the next 7 days</h2><span class="muted small">${plural(forecast.reduce((n, d) => n + d.count, 0), 'card')}</span></div>
+      <div class="mhead"><h2>Due in the next 7 days</h2><span class="muted small">${plural(D.forecast.reduce((n, d) => n + d.count, 0), 'card')}</span></div>
       ${columnChart({
-        id: 'forecast', rows: forecast, value: d => d.count,
+        id: 'forecast', rows: D.forecast, value: d => d.count,
         x: (d, i) => i === 0 ? 'Today' : weekday(d.time),
         tip: (d, i) => [plural(d.count, 'card'), i === 0 ? 'Scheduled for today (before daily limits)' : `Due ${weekday(d.time)} ${shortDate(d.time)}`],
         tableHead: ['Day', 'Cards due'],
         tableRow: (d, i) => [i === 0 ? 'Today' : `${weekday(d.time)} ${shortDate(d.time)}`, d.count],
         label: 'Cards due on each of the next 7 days'
       })}
-    </section>
-
+    </section>`,
+    hardest: () => `
     <section class="card section stats-hardest" aria-labelledby="hardTitle">
       <div class="mhead"><h2 id="hardTitle">Hardest cards</h2>
-        ${reviewable.length ? '<button class="btn ghost small" type="button" id="drillBtn">Review these</button>' : ''}</div>
-      ${hardest.length ? `<ol class="hard-list" id="hardList">${hardest.map((h, i) => `
+        ${D.reviewable.length ? '<button class="btn ghost small" type="button" id="drillBtn">Review these</button>' : ''}</div>
+      ${D.hardest.length ? `<ol class="hard-list" id="hardList">${D.hardest.map((h, i) => `
         <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}>${hardRow(h.card)}
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
-        ${hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${hardest.length}</button>` : ''}`
+        ${D.hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${D.hardest.length}</button>` : ''}`
       : '<p class="muted">Cards you forget or miss show up here, so you can go over them again.</p>'}
-      ${leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(leechCount, 'card')} to fix</a> <span class="muted small">cards you keep forgetting</span></p>` : ''}
-    </section>
-
-    <section class="more-stats">
-      <button class="more-toggle" type="button" id="moreBtn" aria-expanded="${moreOpen}" aria-controls="moreBody">
-        <span>More stats</span><span class="muted small">Answer buttons, time of day, difficulty${course ? '' : ', mastery'}</span>${icon('chevron')}</button>
-      <div class="more-body" id="moreBody" ${moreOpen || !PHONE.matches ? '' : 'hidden'}>
+      ${D.leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(D.leechCount, 'card')} to fix</a> <span class="muted small">cards you keep forgetting</span></p>` : ''}
+    </section>`,
+    buttons: () => `
     <section class="card section" aria-labelledby="btnTitle">
       <div class="mhead"><h2 id="btnTitle">Answer buttons</h2><span class="muted small">Last 30 days</span></div>
-      ${[['learning', 'Learning', buttons.learningRight], ['review', 'Reviews', buttons.reviewRight]].map(([k, name, right]) => {
-        const row = buttons[k], n = row.reduce((a, b) => a + b, 0);
+      ${[['learning', 'Learning', D.buttons.learningRight], ['review', 'Reviews', D.buttons.reviewRight]].map(([k, name, right]) => {
+        const row = D.buttons[k], n = row.reduce((a, b) => a + b, 0);
         return `<div class="btn-row"><div class="btn-row-head"><b>${name}</b><span class="muted small">${n ? `${right}% right · ${plural(n, 'answer')}` : 'No answers yet'}</span></div>
           <div class="btn-bar" role="img" aria-label="${esc(`${name}: ${['Again', 'Hard', 'Good', 'Easy'].map((b, i) => `${b} ${row[i]}`).join(', ')}`)}">
             ${n ? row.map((c, i) => c ? `<span class="b${i + 1}" style="width:${(c / n * 100).toFixed(2)}%" title="${['Again', 'Hard', 'Good', 'Easy'][i]}: ${c}">${c / n >= 0.12 ? c : ''}</span>` : '').join('') : ''}</div></div>`;
       }).join('')}
       <div class="legend"><span><i class="sw b1"></i>Again</span><span><i class="sw b2"></i>Hard</span><span><i class="sw b3"></i>Good</span><span><i class="sw b4"></i>Easy</span></div>
       <p class="note">Mostly Good is normal. Lots of Again on reviews means cards are coming back too late: try a higher retention in Settings.</p>
-    </section>
-
+    </section>`,
+    hours: () => `
     <section class="card section">
       <div class="mhead"><h2>Time of day</h2><span class="muted small">Last 30 days</span></div>
       ${columnChart({
-        id: 'hours', rows: hours, value: d => d.total,
+        id: 'hours', rows: D.hours, value: d => d.total,
         x: d => (d.hour % 6 === 0 ? hourName(d.hour) : ''),
         tip: d => [plural(d.total, 'answer'), `${hourName(d.hour)}${d.total ? ` · ${Math.round(d.right / d.total * 100)}% right` : ''}`],
         tableHead: ['Hour', 'Answers', 'Right'],
@@ -365,15 +397,15 @@ export async function renderStats(el) {
         label: 'Answers in each hour of the day over the last 30 days'
       })}
       ${(() => {
-        const best = hours.filter(h => h.total >= 10).sort((a, b) => b.right / b.total - a.right / a.total)[0];
+        const best = D.hours.filter(h => h.total >= 10).sort((a, b) => b.right / b.total - a.right / a.total)[0];
         return best ? `<p class="note">You remember most around <b>${hourName(best.hour)}</b> (${Math.round(best.right / best.total * 100)}% right).</p>` : '';
       })()}
-    </section>
-
+    </section>`,
+    difficulty: () => `
     <section class="card section">
-      <div class="mhead"><h2>Difficulty</h2><span class="muted small">${plural(bands.reduce((n, b) => n + b.count, 0), 'studied card')}</span></div>
+      <div class="mhead"><h2>Difficulty</h2><span class="muted small">${plural(D.bands.reduce((n, b) => n + b.count, 0), 'studied card')}</span></div>
       ${columnChart({
-        id: 'difficulty', rows: bands, value: d => d.count,
+        id: 'difficulty', rows: D.bands, value: d => d.count,
         x: d => (d.band === 1 ? 'Easy' : d.band === 10 ? 'Hard' : d.band === 5 ? '5' : ''),
         tip: d => [plural(d.count, 'card'), `Difficulty ${d.band} of 10`],
         tableHead: ['Difficulty', 'Cards'],
@@ -381,23 +413,62 @@ export async function renderStats(el) {
         label: 'How many studied cards are at each FSRS difficulty, from 1 (easiest) to 10 (hardest)'
       })}
       <p class="note">FSRS's difficulty for each card you've studied. Hard cards come back more often.</p>
-    </section>
-
-    ${course ? '' : masteryHTML}
+    </section>`,
+    mastery: () => masteryHTML(false)
+  };
+  const layout = normaliseLayout(settings.statsLayout);
+  // With one course picked, its readiness card and Mastery sit side by side at the top, as long as Mastery is still last.
+  const masteryUp = !!course && !layout.hidden.includes('mastery') && layout.order[layout.order.length - 1] === 'mastery';
+  const shown = visibleOrder(layout, masteryUp ? ['mastery'] : []);
+  const rows = pairRows(layout, shown);
+  const width = widths(layout, shown);
+  const tag = (html, attrs) => html.replace(/^\s*<(\w+)/, `<$1 ${attrs}`);
+  const place = id => `data-card="${id}" data-w="${width.get(id)}"`;
+  // Day streak and Retention that share a row stay one block (a joined band on phones); alone, each gets its own.
+  const pair = rows.some(r => r[0] === 'streak' && r[1] === 'retention');
+  const html = id => {
+    if (id === 'streak' && pair) return `<div class="pgrid" data-w="full">${tag(parts.streak(), 'data-card="streak"')}${tag(parts.retention(), 'data-card="retention"')}</div>`;
+    if (id === 'retention' && pair) return '';
+    if (id === 'streak' || id === 'retention') return `<div class="pgrid one" data-w="${width.get(id)}">${tag(parts[id](), `data-card="${id}"`)}</div>`;
+    return tag(parts[id](), place(id));
+  };
+  // The page is built in exactly the order it shows (so Tab follows the eye). On a phone the "More stats" cards that come after
+  // the last other card sit in a fold; the page is drawn again when the window crosses 1024px.
+  let cut = shown.length;
+  if (PHONE.matches) while (cut > 0 && cardInfo(shown[cut - 1]).more) cut--;
+  const foldIds = shown.slice(cut);
+  const moreNames = foldIds.map(id => cardInfo(id).name).map((n, i) => (i ? n.toLowerCase() : n)).join(', ');
+  const body = shown.slice(0, cut).map(html).join('\n') + (foldIds.length ? `
+    <section class="more-stats">
+      <button class="more-toggle" type="button" id="moreBtn" aria-expanded="${moreOpen}" aria-controls="moreBody">
+        <span>More stats</span><span class="muted small">${esc(moreNames)}</span>${icon('chevron')}</button>
+      <div class="more-body" id="moreBody" ${moreOpen ? '' : 'hidden'}>
+        ${foldIds.map(html).join('\n')}
       </div>
-    </section>`}`;
+    </section>` : '');
+
+  el.innerHTML = `
+    <div class="screen-head"><div><h1>Stats</h1></div></div>
+    ${!allCards.length ? emptyStartHTML({ courseId: decks.length === 1 ? decks[0].id : '' }) : `
+    ${scopeHTML}
+    ${course ? (masteryUp ? readyHTML() + masteryHTML(true) : tag(readyHTML(), 'data-w="full"')) : ''}
+    ${shown.length ? body : `<div class="card stats-none"><h2>No stats shown</h2><p class="muted">You hid every card. Bring some back to see your stats.</p><button type="button" class="btn primary" id="customEmpty">${icon('sliders')} Customise</button></div>`}`}`;
 
   if (!allCards.length) { wireEmptyStart(el); return; }
   const q = id => el.querySelector('#' + id);
-  q('moreBtn').addEventListener('click', () => {
+  q('moreBtn')?.addEventListener('click', () => {
     const open = q('moreBtn').getAttribute('aria-expanded') !== 'true';
     q('moreBtn').setAttribute('aria-expanded', String(open));
     q('moreBody').hidden = !open;
     saveFold('stats-more', open);
   });
-  // Resizing across 1024px: show everything on a computer, and go back to the saved choice on a phone.
-  const syncMore = () => { if (!q('moreBody')) return; q('moreBody').hidden = PHONE.matches && q('moreBtn').getAttribute('aria-expanded') !== 'true'; };
-  onPhoneChange = syncMore;
+  // Resizing across 1024px: the fold exists only on a phone, so the page is drawn again.
+  onPhoneChange = () => renderStats(el);
+  // Customise Stats: the sheet saves each change and the page redraws behind it.
+  el.querySelectorAll('#customBtn, #customEmpty').forEach(b => b.addEventListener('click', async () => {
+    const { openStatsLayoutSheet } = await import('./stats-layout-sheet.js');
+    openStatsLayoutSheet({ onChange: () => renderStats(el) });      // (the sheet draws once its saves are done, never one redraw behind another)
+  }));
   q('sDeck')?.addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   q('sDeckBtn')?.addEventListener('click', () => openDeckPicker({
     decks, selected: deckFilter === 'all' ? '' : deckFilter, title: 'Show stats for',
@@ -407,7 +478,7 @@ export async function renderStats(el) {
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).
-  loadRetentionLogs().then(rows => {
+  if (q('retSplit')) loadRetentionLogs(logs).then(rows => {      // (not read at all when the card is hidden)
     const box = q('retSplit');
     if (!box || !el.isConnected) return;
     const mine = ids ? rows.filter(l => ids.has(l.cardId)) : rows;
@@ -428,12 +499,13 @@ export async function renderStats(el) {
     const open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
     el.querySelectorAll('#hardList [data-more]').forEach(li => { li.hidden = !open; });
     e.currentTarget.setAttribute('aria-expanded', String(open));
-    e.currentTarget.textContent = open ? 'Show fewer' : `Show all ${hardest.length}`;
+    e.currentTarget.textContent = open ? 'Show fewer' : `Show all ${D.hardest.length}`;
   });
-  q('drillBtn')?.addEventListener('click', async () => (await import('./today.js')).startStudy({ kind: 'ids', cardIds: reviewable.map(h => h.card.id) }));
+  q('drillBtn')?.addEventListener('click', async () => (await import('./today.js')).startStudy({ kind: 'ids', cardIds: D.reviewable.map(h => h.card.id) }));
 
   // Mastery grid: tap a card to see its details and recent answers.
   const showDetail = async () => {
+    if (!q('mDetail')) return;                         // Mastery is hidden
     const c = selected && cards.find(x => x.id === selected);
     if (!c) { q('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
     const st = statesById.get(c.id);
@@ -449,7 +521,7 @@ export async function renderStats(el) {
       <div class="meta">${last10.length ? `<span aria-label="Last ${last10.length} answers, oldest first: ${last10.map(l => l.correct ? 'right' : 'wrong').join(', ')}">Last answers ${last10.map(l =>
         `<i class="hd ${l.correct ? 'y' : 'n'}" title="${SOURCE_NAMES[l.source] || 'Review'}, ${l.correct ? 'right' : 'wrong'}"></i>`).join('')}</span>` : '<span>No answers yet</span>'}</div>`;
   };
-  q('mGrid').addEventListener('click', e => {
+  q('mGrid')?.addEventListener('click', e => {
     const more = e.target.closest('.mmore');
     if (more) {                                       // draw the next part of a deck
       const box = more.closest('.mdeck');
@@ -493,7 +565,8 @@ function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
   const peak = rows.reduce((best, r, i) => (value(r) > value(rows[best]) ? i : best), 0);
   const ticks = Number.isInteger(max / 2) ? [max, max / 2, 0] : [max, 0];   // counts are whole numbers, so no "2.5" line
   return `
-    <div class="chart" id="${id}" role="group" aria-label="${esc(label)}">
+    <div class="chart" id="${id}" role="group" aria-label="${esc(label)}" aria-describedby="${id}-hint">
+      <span class="sr-only" id="${id}-hint">Use the arrow keys to move between bars</span>
       <div class="chart-plot">
         ${ticks.map(t => `<div class="chart-line" style="bottom:${(t / max) * 100}%"><span class="mono">${t.toLocaleString()}</span></div>`).join('')}
         <div class="chart-cols">${rows.map((r, i) => {
@@ -504,7 +577,7 @@ function columnChart({ id, rows, value, x, tip, tableHead, tableRow, label }) {
         }).join('')}</div>
       </div>
       <div class="chart-x" aria-hidden="true">${rows.map((r, i) => `<span>${esc(x(r, i, rows))}</span>`).join('')}</div>
-      <div class="chart-tip" role="status" hidden><b></b><span></span></div>
+      <div class="chart-tip" aria-hidden="true" hidden><b></b><span></span></div>
     </div>
     <details class="chart-table"><summary>Show as table</summary>
       <table><thead><tr>${tableHead.map(h => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead>
@@ -526,9 +599,21 @@ function wireChart(chart) {
     tipEl.style.top = `${Math.max(bar.top - c.top - tipEl.offsetHeight - 6, 0)}px`;
   };
   const hide = () => { tipEl.hidden = true; };
-  chart.querySelectorAll('.col').forEach(col => {
+  // One tab stop for the whole chart (the newest bar to start with); the arrow keys, Home and End move between bars.
+  const cols = [...chart.querySelectorAll('.col')];
+  const rove = col => cols.forEach(c => { c.tabIndex = c === col ? 0 : -1; });
+  rove(cols[cols.length - 1]);
+  chart.addEventListener('keydown', e => {
+    const i = cols.indexOf(document.activeElement);
+    if (i < 0 || e.altKey || e.ctrlKey || e.metaKey) return;
+    const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: cols.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    cols[Math.min(Math.max(to, 0), cols.length - 1)].focus();
+  });
+  cols.forEach(col => {
     col.addEventListener('pointerenter', () => show(col));
-    col.addEventListener('focus', () => show(col));
+    col.addEventListener('focus', () => { rove(col); show(col); });
     col.addEventListener('click', () => show(col));
     col.addEventListener('blur', hide);
   });

@@ -10,6 +10,7 @@ import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } fro
 import { hasMath, wrapMath, maskMath } from './math.js';
 import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
 import { esc, toast } from './ui.js';
+import { toolbarTarget } from './a11y.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
 import { canPlayType } from './audio.js';
 import * as db from './db.js';
@@ -31,11 +32,11 @@ export function cardTextField(id, label, value = '', { rows = 2, placeholder = '
       <input type="file" id="${id}SndFile" accept="audio/*" multiple hidden data-snd-file="${id}">`;
   const tools = `<span class="fmt-tools" role="toolbar" aria-label="Formatting">
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
-      <button type="button" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
-      <button type="button" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
-      <button type="button" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
-      ${!images ? '' : `<button type="button" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>
-      <button type="button" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>`}</span>`;
+      <button type="button" tabindex="-1" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button type="button" tabindex="-1" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
+      <button type="button" tabindex="-1" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
+      ${!images ? '' : `<button type="button" tabindex="-1" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>
+      <button type="button" tabindex="-1" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>`}</span>`;
   // Said once, under the Back box: maths goes between $ signs.
   const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
@@ -198,6 +199,21 @@ function showMathPreview(box) {
   prev.hidden = !has;
   if (has && prev.dataset.src !== text) { prev.dataset.src = text; prev.innerHTML = formatHTML(text); }
 }
+// The formatting toolbar is one Tab stop (WCAG 2.1.1 / the ARIA toolbar pattern): ← → Home End move between its buttons, and the one
+// focused last is the one Tab returns to. (The markup starts with only the first button in the Tab order.)
+document.addEventListener('keydown', e => {
+  const bar = e.target.closest?.('[role="toolbar"]');
+  if (!bar || !e.target.matches('button') || e.ctrlKey || e.metaKey || e.altKey) return;
+  const items = [...bar.querySelectorAll('button:not([disabled])')];
+  const to = toolbarTarget(e.key, items.indexOf(e.target), items.length);
+  if (to === null) return;
+  e.preventDefault();
+  items[to].focus();
+});
+document.addEventListener('focusin', e => {
+  const bar = e.target.closest?.('[role="toolbar"]');
+  if (bar && e.target.matches('button')) bar.querySelectorAll('button').forEach(b => { b.tabIndex = b === e.target ? 0 : -1; });
+});
 // Ctrl/⌘+B and Ctrl/⌘+I in either kind of box.
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
@@ -532,13 +548,17 @@ export const lastKind = () => { try { const k = localStorage.getItem('study-spri
 const occForms = new Map();       // p → { masks, image, w, h, maxN, n }: the form's state (n = the card being edited)
 const CAMERA = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg>';
 
+// A short fingerprint of the picture and boxes (they live in occForms, not in a field), kept on the form as data-occ-sig so that
+// formSnapshot (ui.js) notices a box that was moved, added or removed.
+const occSig = st => `${st.image || ''}|${st.w}x${st.h}|` + st.masks.map(m => JSON.stringify(m)).join(';');
+
 export function occlusionFields(p, card = null, extra = '', { hidden = false, maxN = 0 } = {}) {
   const o = card?.occlusion;
   const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, maxN, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
   occForms.set(p, st);
   const parts = occParts(p, st, o?.header || '');
   const desk = RICH.matches;
-  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}" ${hidden ? 'hidden' : ''}>
+  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}" data-occ-sig="${esc(occSig(st))}" ${hidden ? 'hidden' : ''}>
       <div class="occ-pick" id="${p}OccPick" data-occ-pick="${p}" ${st.image ? 'hidden' : ''}>
         <button type="button" class="occ-pick-btn" id="${p}OccChoose" data-occ-choose="${p}">${CAMERA}<b>Choose a picture</b><span>${desk ? 'or drop one here, or paste a screenshot (Ctrl/⌘+V)' : 'A photo or screenshot of a diagram'}</span></button>
         <input type="file" id="${p}OccFile" accept="image/*" hidden data-occ-file="${p}">
@@ -571,6 +591,8 @@ export function drawOcclusion(p) {
   if (!st || !prev) return;
   const parts = occParts(p, st, document.getElementById(p + 'OccHead')?.value ?? '');
   prev.innerHTML = parts.preview;
+  const occ = document.getElementById(p + 'Occ');
+  if (occ) occ.dataset.occSig = occSig(st);
   document.getElementById(p + 'OccPick').hidden = !!st.image;
   document.getElementById(p + 'OccBody').hidden = !st.image;
   const makes = document.getElementById(p + 'OccMakes');

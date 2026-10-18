@@ -158,7 +158,7 @@ ok(await p.evaluate(() => document.activeElement.id) === 'editDeck', 'focus move
 await p.keyboard.press('ArrowDown'); ok(await p.evaluate(() => document.activeElement.id) === 'addSub', 'arrow keys move between items');
 await p.screenshot({ path: SP + '/c-deck-menu-1440-light.png' });
 ok(await p.evaluate(() => [...document.querySelectorAll('#deckMenu [role=menuitem]')].every(b => b.getAttribute('tabindex') === '-1')), 'menu items use roving focus (tabindex -1)');
-await p.keyboard.press('End'); ok(await p.evaluate(() => document.activeElement.id) === 'exportDeck', 'End goes to the last item');
+await p.keyboard.press('End'); ok(await p.evaluate(() => document.activeElement.id) === 'shareDeck', 'End goes to the last item (Share, added in 4.35 after Export)');
 await p.keyboard.press('Home'); ok(await p.evaluate(() => document.activeElement.id) === 'editDeck', 'Home goes to the first item');
 await p.keyboard.press('Escape');
 ok(!(await p.isVisible('#deckMenu')) && await p.evaluate(() => document.activeElement.id) === 'deckMore', 'Esc closes it and puts focus back on ⋯');

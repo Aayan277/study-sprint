@@ -36,7 +36,7 @@ export const playCountsAsReviews = settings => settings?.playCountsAsReviews ===
 
 // The review-log row for one Play answer (only written when Play counts as reviews). Always source 'play'; `applied` starts
 // false and the caller sets it once the schedule really changed. `decision` is scheduleDecision()'s verdict, saved as `reason`.
-export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, chars = 0, prevState = 0, decision, mixedWith, overridden = false }) {
+export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, chars = 0, prevState = 0, decision, mixedWith, overridden = false, untimed = false }) {
   const log = {
     cardId, timestamp: now, source: 'play',
     mode: qtype, format: fmt,
@@ -46,6 +46,7 @@ export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, char
     reason: decision       // why or why not: 'due', 'again', 'first', 'not-due', 'new', 'new-limit', 'already' or 'short-time'
   };
   if (mixedWith) log.mixedWith = mixedWith;     // the card whose answer was given instead (confusion.js)
+  if (untimed) log.untimed = true;              // Play's "No time limit": the time says nothing about how well it is known, so speedProfiles skips it
   if (overridden) log.overridden = true;        // "I was right": the answer was wrong as typed and the person corrected it (play.js)
   return log;
 }
@@ -59,8 +60,9 @@ export const LIGHTNING_REF_MS = 6000;
 //   limitMs the time allowed (Infinity in Lightning)
 //   typing  typed answer (true) or multiple choice (false)
 //   speed   optional: your usual time for this mode (from speedProfiles), per unit of text; chars: the text read
-export function autoRating({ ok, ms, limitMs, typing, speed = null, chars = 0 }) {
+export function autoRating({ ok, ms, limitMs, typing, speed = null, chars = 0, untimed = false }) {
   if (!ok) return AGAIN;
+  if (untimed) return GOOD;      // no clock and no timer to be slow against: a right answer is Good
   if (speed) {            // compared with your own usual time for this much text, not with the timer
     const expected = speed * (SPEED.c0 + chars);
     if (ms > SPEED.hardX * expected) return HARD;
@@ -117,7 +119,7 @@ export function speedProfiles(logs) {
   const by = new Map();
   for (let i = logs.length - 1; i >= 0; i--) {          // newest first
     const l = logs[i];
-    if (l.source !== 'play' || !l.correct || !(l.ms > 0) || !(l.chars >= 0)) continue;
+    if (l.source !== 'play' || l.untimed || !l.correct || !(l.ms > 0) || !(l.chars >= 0)) continue;
     const k = speedKey(l.mode, l.hard), a = by.get(k) || [];
     if (a.length < SPEED.window) { a.push(l.ms / (SPEED.c0 + l.chars)); by.set(k, a); }
   }

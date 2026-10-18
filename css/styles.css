@@ -274,7 +274,17 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
   border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color:var(--text);transition:border-color var(--t-fast),box-shadow var(--t-fast)}
 .field input:focus,.field select:focus,.field textarea:focus,.br-controls input:focus,.br-controls select:focus,.row-form input:focus,
 #pasteBox:focus,.typeform input:focus,.rich:focus,.adv-row input:focus,.pcells textarea:focus{
-  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+  outline:2px solid transparent;outline-offset:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+/* The ring itself (1.4.11, 2.4.7): a 2px accent outline, drawn for keyboard focus and in text boxes. The transparent outline above
+   is what Windows high-contrast mode turns into a visible line. */
+.field input:focus-visible,.field select:focus-visible,.field textarea:focus-visible,.br-controls input:focus-visible,.br-controls select:focus-visible,.row-form input:focus-visible,
+#pasteBox:focus-visible,.typeform input:focus-visible,.rich:focus-visible,.adv-row input:focus-visible,.pcells textarea:focus-visible{outline-color:var(--accent)}
+/* A switch has no text box to light up: the ring sits 2px outside it (an "on" switch is accent-on-accent otherwise) */
+.switch.switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px;box-shadow:none}   /* doubled class: it must beat the text-box rule above, which also matches inputs inside .adv-row and .field */
+@media (forced-colors:active){
+  .field input:focus,.field select:focus,.field textarea:focus,.br-controls input:focus,.br-controls select:focus,.row-form input:focus,
+  #pasteBox:focus,.typeform input:focus,.rich:focus,.adv-row input:focus,.pcells textarea:focus,.switch.switch:focus-visible{outline:2px solid Highlight;outline-offset:2px}
+}
 .field{display:grid;gap:6px}
 .field > span{font-size:var(--fs-xs);font-weight:500;color:var(--text-2)}
 .field input{width:100%;min-width:0;font-size:var(--fs-md);padding:11px 13px}
@@ -299,8 +309,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .screen-head > div{min-width:0}
 .screen-head .lede{margin-top:6px;max-width:60ch}
 .head-actions{display:flex;gap:var(--s-2);flex-wrap:wrap}
-.back{display:inline-flex;align-items:center;gap:4px;background:none;border:0;color:var(--text-2);font-weight:500;font-size:var(--fs-sm);padding:6px 0;margin-bottom:var(--s-1);cursor:pointer}
+.back{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;background:none;border:0;color:var(--text-2);font-weight:500;font-size:var(--fs-sm);padding:6px 0;margin-bottom:var(--s-1);cursor:pointer}
 .back:hover{color:var(--text)}
+.back-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}      /* a long unbroken parent name shortens with … instead of stretching the button */
 .crumbs a{color:var(--text-2);text-decoration:none}
 .crumbs a:hover{color:var(--accent-text)}
 
@@ -575,7 +586,7 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .gl-row-t .gl-alias{color:var(--text-3);font-size:var(--fs-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gl-del{color:var(--again)}
 .sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
-.sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;opacity:.7;margin-left:4px}
+.sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;margin-left:4px}
 @media (pointer:coarse){.sheet-foot kbd{display:none}}
 .swatches{display:flex;flex-wrap:wrap;gap:10px}
 .swatch{width:40px;height:40px;border-radius:50%;border:3px solid var(--surface-1);box-shadow:0 0 0 1.5px var(--control);cursor:pointer;padding:0;background:var(--c)}
@@ -688,6 +699,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .pnum{font:var(--fs-2xs) var(--f-num);color:var(--text-2);padding-top:9px;min-width:1.6em;text-align:right}
 .pcells{display:grid;gap:4px;min-width:0}
 .pcells textarea{display:block;width:100%;min-width:0;resize:none;overflow:hidden;border:1px solid transparent;border-radius:var(--r-xs);background:transparent;color:var(--text);padding:5px 7px;font-size:var(--fs-base);line-height:1.4}
+@supports (field-sizing:content){.pcells textarea{field-sizing:content}}
 .pcells textarea[data-side="front"]{font-weight:550}
 .pcells textarea[data-side="back"]{color:var(--text-2)}
 .pcells textarea:focus{background:var(--surface-sunken);color:var(--text)}
@@ -1013,12 +1025,13 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2);margin-bottom:var(--s-2)}
 @media (max-width:560px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pgrid.one{grid-template-columns:minmax(0,1fr)}
 .pgrid .card{height:100%;padding:var(--s-3) var(--s-3) var(--s-4);display:flex;flex-direction:column}
-.pgrid .card:first-child{background:var(--hero)}
+.pgrid .pc-streak{background:var(--hero)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
 .pgrid .card p{margin:var(--s-2) 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-2)}
 .pgrid .big{font:600 2.5rem/1 var(--f-num);letter-spacing:-.06em;margin-top:var(--s-3);color:var(--text)}
-.pgrid .card:first-child .big{text-shadow:0 0 24px var(--glow)}
+.pgrid .pc-streak .big{text-shadow:0 0 24px var(--glow)}
 .pgrid .big small{font:500 var(--fs-sm) var(--f-ui);letter-spacing:0;color:var(--text-2);margin-left:5px}
 /* The last 7 days: a check mark in a filled square means studied (not only a color) */
 .week{display:flex;gap:4px;justify-content:space-between;margin-top:auto;padding-top:var(--s-3)}
@@ -1093,7 +1106,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .hd.n{background:var(--again)}
 .mdeck{margin-bottom:var(--s-3)}
 .mdeck h3{margin-bottom:var(--s-2);font:500 var(--fs-2xs) var(--f-num);letter-spacing:.04em;color:var(--text-2)}
-.mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(18px,1fr));gap:3px}
+.mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(21px,1fr));gap:3px}   /* 21px + 3px gap: every tile is at least 24px from the next (2.5.8) */
 .mtile{aspect-ratio:1;border-radius:4px;border:0;padding:0;cursor:pointer;min-width:0}
 .mtile[aria-pressed="true"]{outline:2px solid var(--text);outline-offset:1px}
 .mtile.lv-mature{box-shadow:0 0 8px var(--glow-soft)}
@@ -1159,6 +1172,15 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .switch:checked{background:var(--accent);border-color:var(--accent);box-shadow:0 0 12px -2px var(--glow)}
 .switch:checked::after{transform:translateX(20px);background:var(--on-accent)}
 .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* High-contrast mode: an on switch must differ from an off one. This sits after the rules above on purpose (same specificity, later wins),
+   and forced-color-adjust:none keeps the browser from repainting the track and knob itself. */
+@media (forced-colors:active){
+  .switch,.switch::after{forced-color-adjust:none}
+  .switch{background:Canvas;border-color:CanvasText}
+  .switch::after{background:CanvasText}
+  .switch:checked{background:Highlight;border-color:Highlight}
+  .switch:checked::after{background:HighlightText}
+}
 .advanced #schedReset{margin-top:12px}
 .opt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2) var(--s-3)}
 .opt-row .confirm{margin-top:4px}
@@ -1185,6 +1207,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 /* Export (deck page) */
 .export-opts{display:grid;gap:10px}
 .export-opt{flex-direction:column;align-items:flex-start;text-align:left;gap:3px;padding:14px var(--s-4)}
+#shNow{width:100%;margin-top:var(--s-3)}
 .export-opt span{font-weight:400;font-size:var(--fs-base);color:var(--text-2)}
 
 /* Card formatting (format.js, card-editor.js) */
@@ -1314,6 +1337,8 @@ img[data-media][hidden]{display:none}
    From 1024px wide the tabs become a sidebar and pages get more room. Phones are unchanged.
    (JS side: openSheet's side panels in ui.js, data-route in app.js.) */
 :root{--panel:440px}
+/* The panel divider (js/panel-resize.js) is a keyboard stop, so it must not exist where there is no side panel: phones and tablets under 1024px */
+#panelResizer{display:none}
 @media (min-width:1024px){
   :root{--side:232px}
   /* The sidebar: logo and gear at the top, the four sections below */
@@ -1363,14 +1388,24 @@ img[data-media][hidden]{display:none}
   /* Cards in a row are one height: the gap replaces the cards' bottom margin, and each card's footer note sits at its bottom */
   main[data-route="stats"] .card.section,main[data-route="stats"] .ready-card{margin-bottom:0;height:100%}
   main[data-route="stats"] .pgrid{margin-bottom:0}
-  main[data-route="stats"] > .view > :not(.card):not(.more-stats){grid-column:1 / -1}
-  /* "More stats" is only a fold on phones: here its cards join the grid, in the order they always had */
-  main[data-route="stats"] .stats-hardest{order:2}
-  main[data-route="stats"] .stats-mastery{order:3;grid-column:1 / -1}
+  main[data-route="stats"] > .view > :not(.card):not(.more-stats):not([data-w]){grid-column:1 / -1}
+  /* "More stats" is only a fold on phones: here its cards join the grid. Each card says its place (order) and width (data-w) in the
+     page: Customise Stats (js/stats-layout.js) chooses them, and pairs half cards so a row never has a hole */
+  main[data-route="stats"] [data-w="full"]{grid-column:1 / -1}
+  main[data-route="stats"] .stats-none,main[data-route="stats"] .ready-card[data-w="full"]{grid-column:1 / -1}
   /* One course picked: the readiness header and Mastery sit side by side at the top */
   main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
   main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
-  main[data-route="stats"] .cal-card{grid-column:1 / -1;--c:13px}
+  main[data-route="stats"] .cal-card{--c:13px}
+  /* Retention vs target is a wide table (name, track, figures): it is full width by default, and its columns give way when it is made half */
+  main[data-route="stats"] .rs-card{height:auto}
+  main[data-route="stats"] .rs-card[data-w="half"] :is(.rs-row,.rs-axis){grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr) minmax(0,1.1fr)}
+  /* The day streak and retention cards are a pair that keeps its own height (they never stretch to match the rows below) */
+  main[data-route="stats"] .pgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3)}
+  main[data-route="stats"] .pgrid.one{grid-template-columns:minmax(0,1fr)}
+  main[data-route="stats"] .pgrid .card{padding:var(--s-4) var(--s-5)}
+  main[data-route="stats"] .pgrid .week{justify-content:flex-start;gap:var(--s-4);max-width:320px;margin-top:var(--s-3)}
+  main[data-route="stats"] .pgrid .wd{min-width:24px}
   /* Review: a bigger card, centered while a session runs */
   main[data-route="review"] > .view > *{max-width:780px}
   body.focus main[data-route="review"] > .view{max-width:780px;min-height:calc(100dvh - 88px);display:flex;flex-direction:column;justify-content:center}
@@ -1388,6 +1423,14 @@ img[data-media][hidden]{display:none}
 /* Wide desktop */
 @media (min-width:1200px){
   main[data-route="stats"] .cal-card{--c:16px}
+}
+/* From 1280px the streak card is wide enough for this (at 1200 to 1279 its text column was about 106px) */
+@media (min-width:1280px){
+  /* The streak card is wide enough to put the week of days beside the count, so it is no taller than it needs to be */
+  main[data-route="stats"] .pgrid .pc-streak{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto 1fr;column-gap:var(--s-6);align-content:start}
+  main[data-route="stats"] .pgrid .pc-streak > :is(h2,.big,p){grid-column:1}
+  main[data-route="stats"] .pgrid .pc-streak > .week{grid-column:2;grid-row:1 / span 3;align-self:center;margin:0;padding:0}
+  main[data-route="stats"] .pgrid .pc-streak > .frz-note{grid-column:1 / -1;grid-row:4;align-self:end}
 }
 /* A card's panel next to the card list, from 1200px wide */
 dialog.sheet.side{position:fixed;inset:0 0 0 auto;margin:0;width:var(--panel);max-width:none;height:100dvh;max-height:none;border-radius:0;border-left:1px solid var(--line-strong);box-shadow:-12px 0 32px rgb(0 0 0 / .25);z-index:6;overflow:hidden}
@@ -1755,7 +1798,10 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .remind-pick{display:flex;margin-top:10px}
 @media (max-width:480px){.remind-icon{display:none}.remind{padding-left:16px}}
 .remind-time{font:600 var(--fs-md) var(--f-num);color:var(--text);padding:8px 10px;min-height:36px;border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color-scheme:inherit}
-.remind-time:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+.remind-time:focus{outline:2px solid transparent;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+/* After the rule above on purpose: same specificity, so the later one wins and the keyboard ring keeps its colour */
+.remind-time:focus-visible{outline-color:var(--accent)}
+@media (forced-colors:active){.remind-time:focus{outline:2px solid Highlight;outline-offset:2px}}
 .rem-actions{flex-wrap:wrap;align-items:center}
 .rem-actions .ico{width:16px;height:16px}
 #examAdd .ico{width:16px;height:16px}
@@ -2153,6 +2199,9 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .tex{font-style:normal;font-weight:400;letter-spacing:0;text-indent:0}
 .tex .katex{font-size:1.08em;letter-spacing:0;font-weight:400;text-align:left}
 .tex:not([data-done]){opacity:.75}
+/* Play: the options and the question wait for KaTeX instead of showing the raw LaTeX for a moment (they keep their room, so nothing jumps).
+   A formula KaTeX could not load (data-done="raw") shows as typed. */
+.opt .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw),.play-card .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw){opacity:0}
 /* The raw text, until KaTeX has drawn it or if it can't (offline on the first visit) */
 .tex-raw{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-decoration:underline dotted var(--text-3);text-underline-offset:.2em;overflow-wrap:anywhere;white-space:pre-wrap}
 /* Display maths sits on its own line and scrolls sideways inside its own box, never the page */
@@ -2279,12 +2328,21 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 }
 
 /* Stats: the deck search is a box (with the search hint inside it) */
-.stats-scope{display:block}
-.stats-scope .pick-btn{position:relative;display:flex;width:100%;background:var(--surface-sunken);border-color:var(--control);box-shadow:none;font-weight:550}
+.stats-scope{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
+.stats-scope .pick-btn{position:relative;display:flex;flex:1 1 0;min-width:0;width:auto;background:var(--surface-sunken);border-color:var(--control);box-shadow:none;font-weight:550}
 .stats-scope .pick-btn > span{flex:1 1 auto;text-align:left}
 .stats-scope .pick-btn > .ico:last-child{margin-left:auto}
-.stats-scope .pick-hint{display:block;margin:4px 2px 0}
-@media (min-width:1024px){.stats-scope .pick-btn{max-width:560px}}
+.stats-scope .pick-hint{display:block;flex:1 0 100%;margin:0 2px}
+/* Customise (opens the sheet that shows, hides, moves and resizes the cards) sits beside the deck picker */
+.stats-custom{flex:none;min-height:44px;gap:8px}
+.filter-row .stats-custom{margin-left:auto}
+@media (min-width:1024px){
+  /* On a computer the picker is a compact control with its hint beside it, not a half-width bar with a line under it */
+  .stats-scope{display:flex;align-items:center;gap:var(--s-3)}
+  .stats-scope .pick-btn{flex:0 1 auto;width:auto;min-width:420px;max-width:480px}
+  .stats-scope .pick-hint{flex:0 1 auto;order:1;margin:0;color:var(--text-2);font-size:var(--fs-xs)}
+  .stats-scope .stats-custom{order:2;margin-left:auto}
+}
 /* Retention: the fine print sits behind an (i) */
 .info-fold{margin-top:var(--s-2);font-size:var(--fs-sm)}
 .info-fold summary{list-style:none;display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--text-2);color:var(--text-2);font:700 var(--fs-xs) var(--f-ui);font-style:italic;cursor:pointer;touch-action:manipulation}
@@ -2376,10 +2434,10 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}
 .mixups > h2{margin:0 0 var(--s-2)}
-.mix-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
-.mix-row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md)}
+.mix-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-2)}
+.mix-row{min-width:0;display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md)}
 .mix-pair{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--s-2)}
-.mix-card{min-width:0;flex:1 1 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.mix-card{min-width:0;flex:1 1 0;overflow-wrap:anywhere;word-break:break-word;font-weight:550}
 .mix-vs{flex:none;color:var(--text-2);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.06em}
 .mix-n{flex:none;color:var(--text-2);font-size:var(--fs-sm)}
 .mix-row .btn{flex:none}
@@ -2491,19 +2549,28 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rs-group{display:grid;gap:6px;padding:var(--s-3) 0;border-top:1px solid var(--line)}
 .rs-group:first-of-type{border-top:0;padding-top:0}
 .rs-head{display:flex;justify-content:space-between;align-items:baseline}
-.rs-row,.rs-axis{display:grid;grid-template-columns:minmax(84px,.8fr) 1.4fr minmax(110px,1.1fr);align-items:center;gap:var(--s-2);font-size:var(--fs-sm)}
+.rs-row,.rs-axis{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr) minmax(0,1.1fr);align-items:center;gap:var(--s-2);font-size:var(--fs-sm)}
 .rs-name small{color:var(--text-2)}
-.rs-track{position:relative;height:18px}
-.rs-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--surface-3)}
-.rs-dot{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--surface-1)}
+/* The track, the dots, the target line and the 50/75/100% labels all use --rs-in as their inset, so a dot at 100% sits inside the track end and under its label */
+.rs-track,.rs-scale{--rs-in:9px}
+.rs-track{position:relative;height:22px}
+.rs-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;border-radius:1px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line)}
+.rs-dot,.rs-target{position:absolute;left:calc(var(--rs-in) + (100% - 2 * var(--rs-in)) * var(--p,0))}
+.rs-dot{z-index:1;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--surface-1)}
 .rs-dot.under{background:var(--again)}
 .rs-dot.over{background:var(--easy)}
-.rs-target{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;background:var(--text)}
+/* The target line is taller than the dot and edged, so a dot sitting on it still shows the line above and below */
+.rs-target{top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:var(--text);box-shadow:0 0 0 1px var(--surface-1)}
 .rs-val{font-variant-numeric:tabular-nums;text-align:right}
 .rs-val small{color:var(--text-2)}
 .rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
-.rs-scale{display:flex;justify-content:space-between}
-@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px 1fr minmax(96px,auto)}}
+.rs-scale{position:relative;height:1.3em}
+.rs-scale > span{position:absolute;top:0;transform:translateX(-50%);left:calc(var(--rs-in) + (100% - 2 * var(--rs-in)) * var(--p,0))}
+.rs-scale > span:nth-child(1){--p:0;transform:none}
+.rs-scale > span:nth-child(2){--p:.5}
+.rs-scale > span:nth-child(3){--p:1;transform:translateX(-100%)}
+@media (min-width:700px){.rs-row,.rs-axis{grid-template-columns:190px minmax(0,1fr) 230px;column-gap:var(--s-4)}}
+@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}}
 
 /* ---- Phone tap targets (< 600px, Original style only): every control gets at least 44x44 px to tap -----------------------
    Small controls keep their look. Their tap area grows with a see-through box (::before) that reaches past the edges, so
@@ -2584,3 +2651,46 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 @media (max-width:599.98px){  html:not([data-ui="clinical"]) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),html:not([data-ui="clinical"]) select{min-height:44px}
   html:not([data-ui="clinical"]) .set-row input[type="range"]{height:44px}
 }
+
+/* ---------- Zoomed in to 400% (a 320x256 window), or any window 260px tall or less (1.4.10, 2.4.11) ----------
+   Fixed and sticky bars would take most of the screen and cover what has focus, so they scroll with the page instead, and a sheet
+   scrolls as a whole. 260px sits under a 360dp Android phone held sideways (about 280px with the toolbar showing, which comes and goes), so the layout does not flip while the toolbar hides;
+   400% of a 1280x1024 window is 256px tall. */
+@media (max-height:260px) and (max-width:1023px){
+  .top{position:static}
+  .tabs{position:static}
+  main{padding-bottom:var(--s-4)}
+  .ratebar,body.focus .ratebar{position:static}
+  .set-nav,.savebar,.bulkbar{position:static}
+  dialog.sheet{max-height:100dvh;overflow-y:auto}
+  dialog.sheet > .sheet-in{flex:none;overflow:visible}
+  .sheet-head::before{display:none}
+  .sheet-head{padding-top:8px}
+  .sheet-in,dialog.sheet > .sheet-in{padding-bottom:var(--s-3)}
+}
+/* ---------- Customise Stats sheet (js/stats-layout-sheet.js) ---------- */
+.sl-note{margin:0 0 var(--s-3)}
+.sl-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
+.sl-row{display:grid;gap:var(--s-2);padding:var(--s-3);border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface-1)}
+.sl-row.off{background:transparent}
+.sl-row.off .sl-name{color:var(--text-2);text-decoration:line-through}
+.sl-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
+.sl-show{display:flex;align-items:center;gap:var(--s-3);min-height:44px;min-width:0;flex:1 1 auto;cursor:pointer}
+.sl-grip{display:grid;place-items:center;flex:none;width:44px;height:44px;margin-left:-10px;font-size:1.4rem;line-height:1;color:var(--text-2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.sl-list.dragging{user-select:none}
+.sl-row.lifted{position:relative;z-index:2;background:var(--surface-2);border-color:var(--accent);box-shadow:var(--e-3,0 8px 24px rgb(0 0 0 / .35));cursor:grabbing}
+.sl-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.sl-moves{display:flex;gap:6px;flex:none}
+.sl-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);cursor:pointer;padding:0}
+.sl-btn:hover{background:var(--surface-3)}
+.sl-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sl-btn[aria-disabled="true"],#slReset[aria-disabled="true"]{opacity:.4;cursor:default}
+.sl-btn .ico{width:20px;height:20px}
+.sl-btn .sl-up{transform:rotate(180deg)}
+.sl-size{margin:0}
+.sl-size .chip span{display:inline-flex;align-items:center;min-height:44px;min-width:64px;justify-content:center}
+.sl-confirm{margin-top:var(--s-3);padding:var(--s-3);border:1px solid var(--again);border-radius:var(--r-md);background:var(--surface-2)}
+.sl-confirm p{margin:0 0 var(--s-3)}
+.sl-confirm-btns{display:flex;gap:var(--s-2);flex-wrap:wrap}
+.stats-none{display:grid;gap:var(--s-3);justify-items:start;padding:var(--s-5)}
+.stats-none h2,.stats-none p{margin:0}

@@ -155,7 +155,8 @@ const todayRow = async id => (await page.locator(`[data-start="${bio}"]`).textCo
 ok(/\b0\s*due.*1\s*new/s.test(await todayRow()), 'Today counts the 3-blank note as 1 new card: ' + (await todayRow()).replace(/\s+/g, ' ').trim());
 await page.locator(`[data-start="${bio}"]`).click(); await page.waitForSelector('#flash');
 ok((await page.textContent('.rv-counts .c-new')) === '1', 'Review has the same 1 new card');
-ok((await page.locator('.rv-front .cloze-blank').count()) === 1 && (await page.textContent('.rv-front .flash-front')).includes('The […] makes ATP for the cell'), 'front: the blank is […], the other answers are shown');
+ok((await page.locator('.rv-front .cloze-blank').count()) === 1 && (await page.textContent('.rv-front .flash-front')).replace('blank […]', '[…]').includes('The […] makes ATP for the cell'), 'front: the blank is […], the other answers are shown');
+ok((await page.textContent('.rv-front .cloze-blank .sr-only')).trim() === 'blank' && (await page.getAttribute('.rv-front .cloze-blank [aria-hidden=true]', 'aria-hidden')) === 'true', 'front: a screen reader hears "blank" instead of […]');
 ok((await page.locator('.rv-front').getAttribute('aria-hidden')) === null && (await page.locator('.rv-back').getAttribute('aria-hidden')) === 'true' && await page.locator('.rv-back').evaluate(e => e.inert), 'front face is live, back face is hidden and inert');
 await page.waitForFunction(() => document.getElementById('toast').hidden); await page.screenshot({ path: SP + '/cloze-review-front-375.png' });
 await page.click('#flash');
@@ -202,7 +203,7 @@ ok(susLeft === 0, 'a sibling answered today and then suspended still holds the o
 const geo = await mk('Geography', 'The capital of France is {{c1::Paris}}');
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', true); });
 await page.goto('http://localhost:8123/#/review/' + geo); await page.waitForSelector('#typeIn');
-ok((await page.textContent('.rv-front .flash-front')).includes('The capital of France is […]'), 'typed answer: the sentence is the prompt');
+ok((await page.textContent('.rv-front .flash-front')).replace('blank […]', '[…]').includes('The capital of France is […]'), 'typed answer: the sentence is the prompt');
 await page.fill('#typeIn', 'paris'); await page.click('#typeForm button[type=submit]'); await page.waitForSelector('.typed.ok');
 ok((await page.textContent('.rv-back .typed')).includes('Correct') && (await page.textContent('.rv-back mark.cloze-ans')) === 'Paris', 'typing the answer is checked against the hidden words');
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', false); });

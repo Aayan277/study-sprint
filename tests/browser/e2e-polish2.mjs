@@ -10,7 +10,9 @@ const open = async (w, h, { touch = w < 800 } = {}) => {
   const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.stack)); p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   return { ctx, p };
 };
-const go = async (p, hash, sel) => { await p.evaluate(h => { location.hash = h; }, hash); await p.waitForSelector(sel); await p.waitForTimeout(250); };
+// A closed sheet takes its history entry off with a short, asynchronous history.back(); a bare `location.hash = ...` set while that is
+// still in flight gets undone by it (the page lands back where it was). So wait for the app's navigation to be idle first.
+const go = async (p, hash, sel) => { await p.evaluate(async h => { await (await import('./js/nav.js')).whenIdle(); location.hash = h; }, hash); await p.waitForSelector(sel); await p.waitForTimeout(250); };
 const box = (p, sel) => p.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom }; });
 const card = (p, id) => p.evaluate(async i => (await import('./js/db.js')).get('cards', i), id);
 const state = (p, id) => p.evaluate(async i => (await import('./js/db.js')).get('cardStates', i), id);

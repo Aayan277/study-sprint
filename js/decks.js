@@ -1,7 +1,7 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold, showFieldError, clearFieldError } from './ui.js';
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
@@ -13,7 +13,7 @@ import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
-import { leftOutNote } from './lazy-media.js';
+import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
@@ -289,7 +289,7 @@ export async function renderDeck(el, deckId) {
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   el.innerHTML = `
-    <button class="back" type="button" id="back">‹ ${parent ? esc(parent.name) : 'Decks'}</button>
+    <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
@@ -305,6 +305,7 @@ export async function renderDeck(el, deckId) {
             <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
             <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
+            ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
           </div>
         </div>
       </div>
@@ -326,6 +327,7 @@ export async function renderDeck(el, deckId) {
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { navGo(`#/deck/${b.dataset.open}`); }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }, { parentId: deckId }));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
+  $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
@@ -333,7 +335,7 @@ export async function renderDeck(el, deckId) {
     if (saved === 'deleted') navGo(parent ? `#/deck/${parent.id}` : '#/decks'); else renderDeck(el, deckId);
   }));
   // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
-  await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
+  await mountBrowser($('browser'), { deckId, data: today, onChange: () => refreshCounts(el, deckId) });
 }
 
 // "Daily limits are shared, so the subdecks can add up to more than Course's 20 due." (or '' when they don't).
@@ -453,9 +455,7 @@ function summaryHTML(s, c) {
 async function openExport(deck, decks, deckCards) {
   // Loaded before the sheet opens: a button that is on screen must already work (a tap before the import finished did nothing).
   const ex = await import('./export.js');
-  // Each card's deck, named from the exported deck down: "Unit 1::Lecture 3" when exporting Unit 1.
-  const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
-  const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
+  const cards = ex.cardsForExport(deck, decks, deckCards);
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
     <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${(() => {
@@ -464,14 +464,15 @@ async function openExport(deck, decks, deckCards) {
     })()}</p>
     ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
-      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint (cloze cards stay one note; image occlusion cards come back as plain cards, so use .apkg for those).</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
     </div>
-    <p class="err" id="exErr" hidden></p>`);
+    <p class="err" id="exErr" role="alert" hidden></p>`);
   $('exCsv').addEventListener('click', () => {
     ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
     closeSheet();
-    toast(`Exported ${plural(cards.length, 'card')} as a spreadsheet`);
+    const rows = ex.csvRowCount(cards);      // (a card with its reverse card is one row)
+    toast(`Exported ${plural(rows, 'row')} as a spreadsheet`);
   });
   $('exApkg').addEventListener('click', async () => {
     const btn = $('exApkg');
@@ -480,31 +481,23 @@ async function openExport(deck, decks, deckCards) {
       // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) belong in the file: fetch them
       // first. What can't be fetched is said, and a second tap makes the deck without it.
       if (btn.dataset.armed !== '1') {
-        const sync = await import('./sync.js');
-        const lack = await sync.missingMedia({ cards });
-        if (lack.pictures.length + lack.sounds.length) {
-          btn.querySelector('b').textContent = 'Downloading pictures and sounds first…';
-          const r = await sync.downloadAllMedia({ ids: [...lack.pictures, ...lack.sounds], onProgress: (n, t) => { btn.querySelector('b').textContent = `Downloading pictures and sounds: ${n} of ${t}…`; } });
-          const n = r.left.length + r.gone.length;
-          if (n) {
-            btn.dataset.armed = '1';
-            $('exErr').textContent = leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to make the deck without them.';
-            $('exErr').hidden = false;
-            btn.disabled = false;
-            btn.querySelector('b').textContent = 'Make it without them';
-            return;
-          }
+        const r = await fetchMissingFor(cards, (n, t) => { btn.querySelector('b').textContent = n ? `Downloading pictures and sounds: ${n} of ${t}…` : 'Downloading pictures and sounds first…'; });
+        if (r.n) {
+          btn.dataset.armed = '1';
+          showFieldError(null, $('exErr'), leftOutNote(r.n, r.reason, r.gone) + ' Tap the button again to make the deck without them.');
+          btn.disabled = false;
+          btn.querySelector('b').textContent = 'Make it without them';
+          return;
         }
       }
       btn.querySelector('b').textContent = 'Making the Anki deck…';
-      $('exErr').hidden = true;
+      clearFieldError(null, $('exErr'));
       ex.download(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'));
       closeSheet();
       toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
     } catch (err) {
       console.error(err);
-      $('exErr').textContent = navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.';
-      $('exErr').hidden = false;
+      showFieldError(null, $('exErr'), navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
       btn.disabled = false;
       btn.querySelector('b').textContent = 'Anki deck (.apkg)';
     }
@@ -575,10 +568,10 @@ function readStudyOptions() {
   const reviewPerDay = rev ? Math.max(1, Math.min(9999, Math.round(Number(rev) || 1))) : null;
   if ($('deckOwnOff').checked) return { reviewPerDay, options: null };
   const ls = parseSteps($('deckLs').value || SCHED_DEFAULTS.learningSteps), rs = parseSteps($('deckRs').value || SCHED_DEFAULTS.relearningSteps);
-  if (ls.error) return { error: `Learning steps: ${ls.error}` };
-  if (rs.error) return { error: `Relearning steps: ${rs.error}` };
+  if (ls.error) return { error: `Learning steps: ${ls.error}`, field: 'deckLs' };
+  if (rs.error) return { error: `Relearning steps: ${rs.error}`, field: 'deckRs' };
   const mi = parseMaxInterval($('deckMax').value || 36500);
-  if (mi.error) return { error: `Maximum interval: ${mi.error}` };
+  if (mi.error) return { error: `Maximum interval: ${mi.error}`, field: 'deckMax' };
   return { reviewPerDay, options: {
     targetRetention: +$('deckRet').value / 100,
     learningSteps: formatSteps(ls.steps), relearningSteps: formatSteps(rs.steps), maxInterval: mi.days
@@ -622,7 +615,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b>
         <span>In Review: the front's sounds when a card appears, the back's when you flip.</span></span>
         <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>`}
-      <p class="err" id="deckErr" hidden></p>
+      <p class="err" id="deckErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
         <button class="btn primary" type="submit">${isNew ? 'Create deck' : 'Save'}</button>
@@ -647,11 +640,12 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
   $('deckForm').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('deckName').value.trim();
-    if (!name) { $('deckErr').textContent = 'Give the deck a name.'; $('deckErr').hidden = false; $('deckName').focus(); return; }
+    for (const f of ['deckName', 'deckExam', 'deckLs', 'deckRs', 'deckMax']) if ($(f)) clearFieldError($(f), $('deckErr'));
+    if (!name) { showFieldError($('deckName'), $('deckErr'), 'Give the deck a name.'); return; }
     // A date that was already saved is left alone; a new one is checked (blank clears it).
     const newExam = $('deckExam').value;
     const examProblem = newExam !== (deck?.examDate || '') ? examDateError(newExam) : '';
-    if (examProblem) { $('deckErr').textContent = examProblem; $('deckErr').hidden = false; $('deckExam').focus(); return; }
+    if (examProblem) { showFieldError($('deckExam'), $('deckErr'), examProblem); return; }
     const course = $('deckCourse').value.trim();
     const parentId = $('deckParent').value;
     // Read aloud automatically: a subdeck only stores it when it differs from the deck it's inside.
@@ -665,7 +659,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     let options = null;
     if (!isNew) {
       const read = readStudyOptions();
-      if (read.error) { $('deckErr').textContent = read.error; $('deckErr').hidden = false; $('deckOpts').open = true; return; }
+      if (read.error) { $('deckOpts').open = true; showFieldError($(read.field), $('deckErr'), read.error); return; }
       options = read;
     }
     if (saving) return;                // a double-click or a second Enter: the first save is already running

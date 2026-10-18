@@ -12,6 +12,7 @@
 
 import { cleanFsrsParams, cleanIgnoreBefore } from './sched-settings.js';
 import { isMarkKey, validMark } from './media-sweep.js';
+import { acceptStatsLayout } from './stats-layout.js';
 
 // The stores that sync, and which field is each record's id across devices.
 export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewLog: 'uid' };
@@ -22,6 +23,7 @@ export const SYNCED_SETTINGS = [
   'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'idleDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
   'fsrsParams',         // your own FSRS weights from the optimizer (null = the standard ones); newest wins
   'ignoreBefore',       // 'YYYY-MM-DD' or null: the optimizer and health check ignore reviews before this day; newest wins
+  'statsLayout',        // which Stats cards show, their order and width (js/stats-layout.js); null = the default; newest wins
   'fsrsVersion'         // 6 (FSRS-6, standard) or 7 (FSRS-7, beta); newest wins. Older app versions ignore it (docs/design/fsrs7-plan.md)
 ];
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off
@@ -37,6 +39,7 @@ export const SETTING_TIMES = '_times';
 // { ok: false } when it is junk and must be ignored. fsrsParams is checked; null is a real value (the standard settings).
 export function acceptSetting(key, value) {
   if (key === 'ignoreBefore') return value === null || value === undefined ? { ok: true, value: null } : cleanIgnoreBefore(value) ? { ok: true, value } : { ok: false };
+  if (key === 'statsLayout') return acceptStatsLayout(value);
   if (key === 'fsrsVersion') return value === 6 || value === 7 ? { ok: true, value } : { ok: false };
   if (isMarkKey(key)) return validMark(value) ? { ok: true, value } : { ok: false };
   if (key !== 'fsrsParams') return { ok: true, value };

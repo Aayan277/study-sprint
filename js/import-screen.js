@@ -6,6 +6,7 @@ import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFiel
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
+import { keepDraft, takeDraft } from './import-draft.js';
 import { formatHTML } from './format.js';
 import { hasMath } from './math.js';
 import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
@@ -17,6 +18,7 @@ import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
+import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
 import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
@@ -29,6 +31,10 @@ const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make
 const LAST_DECK = 'study-sprint-import-last';
 const lastDeck = () => { try { localStorage.removeItem('study-sprint-import-deck'); return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
 const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
+
+// The pasted text is kept for this tab (with how it is read: pages, AI answer, plain cards) while it is on the screen, so Back (or a swipe)
+// and then returning to Import finds it again. It goes when the cards are saved or Clear is pressed (js/import-draft.js).
+const saveDraft = text => keepDraft({ text, blocks: S?.blocks, aiMade: S?.aiMade, noCloze: S?.noCloze });
 
 // Everything the screen is working with.
 let S = null;
@@ -181,6 +187,15 @@ export async function renderImport(el, arg) {
   if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
   if (shared) await takeShared();
+  else if (firstTab !== 'file' && $('pasteBox')) {
+    const d = takeDraft();
+    if (!d) return;
+    Object.assign(S, { blocks: d.blocks, aiMade: d.aiMade, noCloze: d.noCloze });      // read the way it was before
+    $('aiNote').hidden = !d.aiMade;
+    $('pasteBox').value = d.text;
+    showText(d.text);
+    toast('Brought back the text you pasted');
+  }
 }
 
 // ---------- choosing the deck ----------
@@ -219,18 +234,20 @@ function wirePaste() {
   $('pasteBox').addEventListener('input', () => {
     clearTimeout(timer);
     S.noCloze = false;                 // new text: cloze lines count again
+    saveDraft($('pasteBox').value);
     timer = setTimeout(() => showText($('pasteBox').value), 250);
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
   $('pasteBox').addEventListener('paste', () => {
     const b = $('pasteBox');
-    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) S.blocks = false;
+    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) { S.blocks = false; saveDraft(b.value); }
   });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(timer);
     S.blocks = false; S.aiMade = false; $('aiNote').hidden = true;
     $('pasteBox').value = '';
+    keepDraft(null);
     showResult(null);
     $('pasteBox').focus();
   });
@@ -245,8 +262,10 @@ function wirePaste() {
 // "Keep … as plain cards" link was pressed.
 function showText(text) {
   S.pasted = text;
+  saveDraft(text);          // however the text got here (typed, a file, a sheet, shared, read as pages), with how it is read
   const parse = S.blocks ? parseBlocks : parseText;
   let result = S.noCloze ? parse(text) : withClozeLines(text, parse).result;
+  if (S.noCloze && result.clozes) { const { clozes, noteExtras, ...rest } = result; result = rest; }      // a spreadsheet's "Cloze note" column too
   // Cards from an AI's answer carry the ai-made tag (same tag for every row; the preview says "Tags come along too").
   if (S.aiMade && result.rows.length) result = { ...result, tags: result.rows.map((_, i) => [...new Set([...(result.tags?.[i] || []), 'ai-made'])]) };
   showResult(result, false, text);
@@ -277,13 +296,7 @@ function wireFile() {
       if (isDocFile(file)) { await readDoc(file); return; }
       if (/\.xlsx?$/i.test(file.name)) await readExcel(file);
       else if (/\.(apkg|colpkg)$/i.test(file.name)) await readAnki(file);
-      else if (/\.json$/i.test(file.name)) {
-        // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
-        let data = null;
-        try { data = JSON.parse(await file.text()); } catch (e) { /* not JSON */ }
-        showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
-          : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
-      }
+      else if (/\.json$/i.test(file.name)) await explainJson(file);
       else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
       console.error(err);
@@ -293,6 +306,14 @@ function wireFile() {
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
     }
   });
+}
+
+// A whole-app backup is restored from Settings (it replaces everything), not added as cards.
+async function explainJson(file) {
+  let data = null;
+  try { data = JSON.parse(await file.text()); } catch (e) { /* not JSON */ }
+  showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
+    : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
 }
 
 // ---------- PDF and slides ----------
@@ -386,6 +407,7 @@ let aiParts = [];
 function showAiView() {
   aiParts = splitParts(S.doc.pages, undefined, S.withNotes);
   S.aiMade = true; S.blocks = false;
+  saveDraft($('pasteBox').value);
   $('aiNote').hidden = false;
   S.part = Math.min(S.part, aiParts.length - 1);
   $('aiHow').textContent = aiParts.length > 1
@@ -433,7 +455,15 @@ async function takeShared() {
     suggestName(file.name.replace(/\.[^.]+$/, ''));
     if (isDocFile(file)) { await readDoc(file); return; }
     if (file.size > MAX_BYTES) { showError(tooBigMessage()); return; }
-    S.noCloze = false; showText(await file.text());
+    // The Share target also takes zip and generic files (so a deck file can arrive): decide what this one is.
+    const kind = sharedKind(file, new Uint8Array(await file.slice(0, 4).arrayBuffer()));
+    try {
+      if (kind === 'anki') await readAnki(file);               // a deck file from a friend (Share a deck), the same import as choosing it here
+      else if (kind === 'excel') await readExcel(file);
+      else if (kind === 'json') await explainJson(file);
+      else if (kind === 'unknown') showError("Study Sprint can't read that kind of file. Share a deck file (.apkg), PDF, PowerPoint or text.");
+      else { S.noCloze = false; showText(await file.text()); }
+    } catch (err) { console.error(err); $('fileName').textContent = file.name; showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
     return;
   }
   // Text, a link, or only a title (some apps put what they share in the title).
@@ -650,14 +680,25 @@ function renderList() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </li>`).join('');
-  $('plist').querySelectorAll('textarea').forEach(autosize);
+  autosizeAll($('plist').querySelectorAll('textarea'));
   $('moreNote').hidden = S.cards.length <= MAX_SHOWN;
   $('moreNote').textContent = `Showing the first ${MAX_SHOWN} to edit. All ${S.cards.length} will be added.`;
   refreshFlags();
 }
 
 // Grow a text box to fit its text, so long definitions are fully visible.
-function autosize(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+// Browsers with CSS `field-sizing: content` (see styles.css) do this themselves, so nothing is measured here.
+const SELF_SIZING = typeof CSS !== 'undefined' && !!CSS.supports?.('field-sizing', 'content');
+function autosize(t) { if (SELF_SIZING) return; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+// Many boxes at once: all the writes, then all the reads, then all the writes, so the browser lays the page out once
+// instead of once per box (5,000 boxes took ~3 s one at a time).
+function autosizeAll(boxes) {
+  if (SELF_SIZING) return;
+  const list = [...boxes];
+  for (const t of list) t.style.height = 'auto';
+  const heights = list.map(t => t.scrollHeight);
+  list.forEach((t, i) => { t.style.height = heights[i] + 'px'; });
+}
 
 // Update the "Found N cards" line, duplicate badges and the save button.
 function refreshFlags() {
@@ -994,6 +1035,7 @@ async function save() {
     let first = null;
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
     clearShare();                               // what was shared has been turned into cards
+    keepDraft(null);                            // and so has the pasted text
     navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);

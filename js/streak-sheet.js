@@ -10,7 +10,7 @@ import { loadStreak } from './study-data.js';
 import { daysAgoStart, dayKey, restDaySet } from './stats-calc.js';
 import { mergeDayFlags, MAX_AHEAD_DAYS } from './sync-merge.js';
 import { examInfo } from './exam.js';
-import { openSheet, closeSheet, esc, icon, streakHTML, weekDotsHTML, $, toast } from './ui.js';
+import { openSheet, closeSheet, esc, icon, streakHTML, weekDotsHTML, $, toast, showFieldError, clearFieldError } from './ui.js';
 
 export { MAX_AHEAD_DAYS };             // how far ahead a day off can be planned (defined in sync-merge.js)
 export const MAX_FUTURE_DAYS = 14;     // how many planned days off there can be at once
@@ -101,7 +101,7 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
       onChange();
       await draw();
     };
-    const fail = text => { const e = $('ysErr'); if (e) { e.textContent = text; e.hidden = false; } };
+    const fail = text => { const e = $('ysErr'); if (e) showFieldError($('ysDate'), e, text); };
     // The planned days as stored right now. A submit that lands before the redraw of the previous save (a fast second add)
     // would otherwise be checked against the list this draw started with, and could go past the limit.
     const futureNow = async () => {
@@ -119,7 +119,7 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
         $('ysDate')?.focus();
       });
     });
-    $('ysDate').addEventListener('input', () => { $('ysErr').hidden = true; });
+    $('ysDate').addEventListener('input', () => clearFieldError($('ysDate'), $('ysErr')));
     sheet.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => inOrder(async () => {
       await save(b.dataset.rm, false);
       toast(`Day off removed: ${niceDay(b.dataset.rm)}`);

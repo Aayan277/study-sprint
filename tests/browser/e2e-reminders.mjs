@@ -39,6 +39,17 @@ const badgeCalls = page => page.evaluate(() => window.__badge);
   ok(text.split('\r\n').every(l => new TextEncoder().encode(l).length <= 75), 'every line is 75 bytes or less');
   ok(await page.inputValue('#remTime') === '07:45' && (await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).reminderTime)) === '07:45', 'the time is remembered');
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll (desktop)');
+  // keyboard focus on the time box draws the 2px accent ring (the later :focus rule must not turn it transparent)
+  await page.keyboard.press('Tab'); await page.focus('#remTime');
+  const ring = await page.evaluate(() => { const e = document.querySelector('#remTime'), s = document.createElement('i'); s.style.color = 'var(--accent)'; document.body.append(s);
+    const accent = getComputedStyle(s).color; s.remove(); const c = getComputedStyle(e); return { fv: e.matches(':focus-visible'), color: c.outlineColor, accent, width: c.outlineWidth, style: c.outlineStyle }; });
+  // high-contrast mode: an on switch and an off switch must not compute to the same track and knob
+  await page.emulateMedia({ forcedColors: 'active' });
+  const sw = await page.evaluate(() => { const e = document.querySelector('#appBadge'), was = e.checked, one = () => [getComputedStyle(e).backgroundColor, getComputedStyle(e, '::after').backgroundColor];
+    e.checked = false; const off = one(); e.checked = true; const on = one(); e.checked = was; return { off, on }; });
+  await page.emulateMedia({ forcedColors: 'none' });
+  ok(sw.off[0] !== sw.on[0] && sw.off[1] !== sw.on[1], 'forced colors: an on switch and an off switch look different: ' + JSON.stringify(sw));
+  ok(ring.fv && ring.color === ring.accent && ring.width === '2px' && ring.style === 'solid', 'the reminder time box shows the accent focus ring from the keyboard: ' + JSON.stringify(ring));
   await page.screenshot({ path: SP + '/rem-settings-desktop.png', fullPage: true });
 
   // The badge: off until switched on, then the due count, then cleared when switched off.

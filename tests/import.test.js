@@ -299,3 +299,63 @@ test('comma-separated lines: a comma inside a formula does not split', () => {
   // no formulas: as before
   assert.deepEqual(cards('Paris, France\nRome, Italy'), [['Paris', 'France'], ['Rome', 'Italy']]);
 });
+
+// ---------- Q: / A: labelled pairs (QA item 5) ----------
+test('labelled: Q:/A: pairs with blank lines become one card per pair', () => {
+  const text = 'Q: What is mitosis?\nA: Cell division\n\nQ: What is meiosis?\nA: Makes gametes';
+  assert.deepEqual(cards(text), [['What is mitosis?', 'Cell division'], ['What is meiosis?', 'Makes gametes']]);
+  assert.equal(formatOf(text).id, 'labelled');
+});
+test('labelled: no blank lines, and a lower-case q:/a:', () => {
+  assert.deepEqual(cards('q: one?\na: 1\nq: two?\na: 2'), [['one?', '1'], ['two?', '2']]);
+});
+test('labelled: Question:/Answer: and Front:/Back:, any case, bullets', () => {
+  assert.deepEqual(cards('QUESTION: Capital of France?\nANSWER: Paris\n\nQuestion: Capital of Peru?\nAnswer: Lima'), [['Capital of France?', 'Paris'], ['Capital of Peru?', 'Lima']]);
+  assert.deepEqual(cards('Front: cat\nBack: gato\n\nFront: dog\nBack: perro'), [['cat', 'gato'], ['dog', 'perro']]);
+  assert.deepEqual(cards('- Q: a?\n- A: b\n- Q: c?\n- A: d'), [['a?', 'b'], ['c?', 'd']]);
+});
+test('labelled: colons inside the text stay, and an answer can run over several lines', () => {
+  const text = 'Q: Ratio: what is it?\nA: A comparison: a to b\nsecond line of the answer\n\nQ: Next?\nA: Yes';
+  assert.deepEqual(cards(text), [['Ratio: what is it?', 'A comparison: a to b\nsecond line of the answer'], ['Next?', 'Yes']]);
+});
+test('labelled: a single pair is one card, not two', () => {
+  assert.deepEqual(cards('Q: Only one?\nA: Yes'), [['Only one?', 'Yes']]);
+});
+test('labelled: not triggered by ordinary term: definition lists or unanswered questions', () => {
+  assert.deepEqual(cards('Quartz: a mineral\nAmber: fossil resin'), [['Quartz', 'a mineral'], ['Amber', 'fossil resin']]);
+  assert.deepEqual(cards('Mitosis: cell division\nMeiosis: makes gametes'), [['Mitosis', 'cell division'], ['Meiosis', 'makes gametes']]);
+  assert.notEqual(formatOf('Q: lonely question\nQ: another').id, 'labelled');
+});
+test('labelled: tab-separated Quizlet and dash lists still work', () => {
+  assert.deepEqual(cards('apple\tmanzana\nbread\tpan'), [['apple', 'manzana'], ['bread', 'pan']]);
+  assert.deepEqual(cards('a - b\nc - d'), [['a', 'b'], ['c', 'd']]);
+});
+
+// ---------- review fix 9: labelled pairs, false positives, leading titles, Ans: ----------
+test('labelled: a list of term: definition lines that start with Front: and Back: stays four cards', () => {
+  const text = 'Front: anterior surface\nBack: posterior surface\nSide: lateral\nTop: superior';
+  assert.deepEqual(cards(text), [['Front', 'anterior surface'], ['Back', 'posterior surface'], ['Side', 'lateral'], ['Top', 'superior']]);
+  assert.notEqual(formatOf(text).id, 'labelled');
+});
+test('labelled: answers that run on into as many "Word: text" lines as there are pairs are not Q/A', () => {
+  const text = 'Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two\nSee: page 4';
+  assert.notEqual(formatOf(text).id, 'labelled');
+});
+test('labelled: up to 2 title lines before the first Q: are skipped', () => {
+  assert.deepEqual(cards('Quiz 1\nHere are your flashcards:\nQ: a?\nA: b\nQ: c?\nA: d'), [['a?', 'b'], ['c?', 'd']]);
+  assert.deepEqual(cards('Quiz 1\nQ: a?\nA: b'), [['a?', 'b']]);
+  assert.notEqual(formatOf('One\nTwo\nThree\nQ: a?\nA: b\nQ: c?\nA: d').id, 'labelled', 'three is too many');
+});
+test('labelled: Ans: is an answer label', () => {
+  assert.deepEqual(cards('Q1: What is ATP?\nAns: Energy currency\nQ2: What is DNA?\nAns: Genetic material'), [['What is ATP?', 'Energy currency'], ['What is DNA?', 'Genetic material']]);
+});
+
+test('labelled: one "Note:" line inside an answer of a 3-pair paste stays Q/A', () => {
+  const text = 'Q: A?\nA: one\nNote: see page 3\nQ: B?\nA: two\nQ: C?\nA: three';
+  assert.equal(formatOf(text).id, 'labelled');
+  assert.deepEqual(cards(text), [['A?', 'one\nNote: see page 3'], ['B?', 'two'], ['C?', 'three']]);
+});
+test('labelled: the anatomy list (one Front/Back pair, then terms) still goes to the separator rules', () => {
+  assert.equal(formatOf('Front: anterior surface\nBack: posterior surface\nSide: lateral\nTop: superior').id !== 'labelled', true);
+  assert.equal(formatOf('Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two').id, 'labelled', 'one note among two pairs stays Q/A');
+});

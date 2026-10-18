@@ -2,6 +2,7 @@
 
 import { streakText } from './stats-calc.js';
 import { openOverlay, closeOverlay } from './nav.js';
+import { toggleToken } from './a11y.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -10,25 +11,60 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Screen readers hear a toast through a live region that is always in the page (#toastLive, visually hidden). A region that
+// appears and fills in one step is often skipped, so it is cleared first and filled on the next tick. The visible toast is not
+// a live region itself (it comes and goes, and its Undo link must stay a normal link: it is the last stop in the tab order).
+let liveTimer = 0;
+// A modal dialog (showModal) makes everything outside it inert, and that includes the live region, so while one is open the
+// region moves inside it; it goes back to <body> when the dialog closes (or at the next toast, if the dialog was removed).
+let liveEl = null;
+// Puts the region in the topmost modal dialog if there is one, else in <body>. Called when a toast is announced, again just before
+// its text goes in (a sheet may have opened or closed in between), and whenever any dialog closes. A region whose dialog was
+// removed from the page is still held here, so it is simply attached again.
+function placeLive() {
+  liveEl = liveEl || document.getElementById('toastLive');
+  const live = liveEl;
+  if (!live) return null;
+  const modals = document.querySelectorAll('dialog:modal');
+  const host = modals[modals.length - 1] || document.body;
+  if (live.parentNode !== host || !live.isConnected) host.append(live);
+  return live;
+}
+if (typeof document !== 'undefined') document.addEventListener('close', placeLive, true);      // 'close' does not bubble; the capture phase still sees every dialog's
+function announceToast(msg) {
+  clearTimeout(liveTimer);
+  const live = placeLive();
+  if (!live) return;
+  live.textContent = '';
+  if (!msg) return;
+  liveTimer = setTimeout(() => { placeLive().textContent = msg; }, 60);
+}
+
 // A short message that pops up above the tab bar for a few seconds.
 let toastTimer = 0, toastLeave = null;      // toastLeave: the hashchange listener of a held toast
 // `link` ({ href, label, onClick }) adds a link after the message and keeps the toast up longer, so it can be tapped.
 // With onClick the link does that instead of going to href, and the toast closes.
 // `hold` keeps the toast up until you leave the screen (or 10 minutes, or the next toast): for an Undo.
+// Hiding the toast also empties the live region, so it never keeps (or re-reads) a message that is no longer on screen.
+function hideToast() {
+  $('toast').hidden = true;
+  announceToast('');
+}
 export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   const t = $('toast');
   if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one
   t.textContent = msg;
+  announceToast(link ? `${msg} ${link.label}` : msg);
   if (link) {
     const a = document.createElement('a');
     a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
-    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); t.hidden = true; clearTimeout(toastTimer); link.onClick(); });
+    if (link.onClick) a.addEventListener('click', e => { e.preventDefault(); clearTimeout(toastTimer); hideToast(); link.onClick(); });
     t.append(' ', a);
   }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, hold ? 600000 : ms || (link ? 7000 : 2600));
-  if (hold) { toastLeave = () => { t.hidden = true; toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
+  toastTimer = setTimeout(hideToast, hold ? 600000 : ms || (link ? 7000 : 2600));
+  if (hold) { toastLeave = () => { hideToast(); toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
@@ -131,8 +167,73 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 // On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
 let sheetOverlay = 0;    // the sheet's entry in the history (js/nav.js), while it is open
 let opener = null;       // what had the focus when a side panel opened (the button that opened it)
+let sheetGuard = null;   // () => true while the open sheet holds changes that were not saved (see guardSheet)
+
+// A sheet with a form in it can say when it holds unsaved work: guardSheet(() => changed). Then the × , a tap outside, a swipe down,
+// Esc, Back (and a sheet's own Close button, if it uses askClose) ask "Discard changes?" instead of throwing the work away.
+// Nothing changed: no question. It lasts until the sheet closes or is replaced by another one.
+export const guardSheet = fn => { sheetGuard = fn; };
+// What a form holds right now, as one string, to compare with the string taken when it opened. With `textOnly`, choices (radios, ticks,
+// drop-downs) are left out, so only typed text and attached pictures and sounds count (Add card: the note type you switched to is not work).
+export function formSnapshot(root, { textOnly = false } = {}) {
+  const part = [];
+  for (const el of root.querySelectorAll('input, textarea, select, [contenteditable="true"], [data-media-id], [data-sound-ids], [data-occ-sig]')) {
+    if (el.isContentEditable && el.getAttribute('contenteditable') === 'true') part.push(el.id + '=' + el.textContent.replace(/\s+/g, ' ').trim() + '|' + el.innerHTML);
+    else if (el.matches('[data-occ-sig]')) part.push((el.id || '') + '~' + el.dataset.occSig);
+    else if (el.matches('[data-media-id], [data-sound-ids]')) part.push((el.id || '') + '#' + (el.dataset.mediaId || '') + '#' + (el.dataset.soundIds || ''));
+    else if (el.type === 'file' || el.type === 'button' || el.type === 'submit' || el.type === 'hidden') continue;
+    else if (el.type === 'checkbox' || el.type === 'radio') { if (!textOnly) part.push((el.id || el.name) + ':' + el.value + '=' + el.checked); }
+    else if (el.tagName === 'SELECT') { if (!textOnly) part.push((el.id || el.name) + '=' + el.value); }
+    else part.push((el.id || el.name) + '=' + (textOnly ? el.value.trim() : el.value));
+  }
+  return part.join('\u0001');
+}
+// Close the open sheet, unless it holds unsaved work: then ask first. Returns true when it closed.
+export function askClose() {
+  if (!sheetGuard || !sheetGuard()) { closeSheet(); return true; }
+  askDiscard();
+  return false;
+}
+// Is there unsaved work in the open sheet right now?
+export const sheetDirty = () => !!sheetGuard?.();
+// Run `go` (something that replaces what the sheet shows, or changes the card in it) unless the sheet holds unsaved work:
+// then ask "Discard changes?" first, and run it only after Discard. Returns true when it ran at once.
+export function guardedGo(go) {
+  if (!sheetDirty()) { go(); return true; }
+  askDiscard(go);
+  return false;
+}
+// A screen that keeps drafts (the card panel) says how to stash one; the router calls stashDraft() before it closes the sheet.
+let stasher = null;
+export const setDraftStasher = fn => { stasher = fn; };
+export const stashDraft = () => stasher?.('stash');
+export const clearStashedDraft = () => stasher?.('clear');
+let discardThen = null;      // what to do after Discard (instead of just closing the sheet)
+function askDiscard(then = null) {
+  const d = $('sheet'), body = d.querySelector('.sheet-in');
+  if (!d.open || !body) { if (then) then(); else closeSheet(); return; }
+  const had = $('discardAsk');
+  if (had) { if (then) discardThen = then; $('discardKeep').focus({ preventScroll: true }); return; }      // (already asking: a plain request does not replace the pending action)
+  discardThen = then;
+  const back = document.activeElement;
+  const box = document.createElement('div');
+  box.className = 'confirm'; box.id = 'discardAsk'; box.setAttribute('role', 'alertdialog'); box.setAttribute('aria-labelledby', 'discardT');
+  box.innerHTML = `<p id="discardT">Discard changes?</p><div class="sheet-actions"><button class="btn ghost" type="button" id="discardKeep">Keep editing</button><button class="btn danger solid" type="button" id="discardYes">Discard</button></div>`;
+  body.prepend(box);
+  box.scrollIntoView({ block: 'nearest' });
+  $('discardKeep').addEventListener('click', () => { discardThen = null; box.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); });
+  $('discardYes').addEventListener('click', () => { const then = discardThen; discardThen = null; sheetGuard = null; if (then) then(); else closeSheet(); });
+  $('discardKeep').focus({ preventScroll: true });
+}
+// Back (or an edge swipe) closed the sheet's history entry: with unsaved work, the entry is put back and the question is asked.
+function backDismiss() {
+  sheetOverlay = 0;
+  if (sheetGuard && sheetGuard()) { sheetOverlay = openOverlay(backDismiss); askDiscard(); return; }
+  closeSheet();
+}
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
+  sheetGuard = null; discardThen = null;       // a new sheet (or a replaced one) starts with nothing to protect
   const asSide = side && WIDE.matches;
   if (asSide && !d.open) opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
@@ -161,11 +262,12 @@ export function openSheet(html, { side = false } = {}) {
   const body = document.createElement('div');
   body.className = 'sheet-in';
   body.appendChild(t.content);
-  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []));
+  const live = d.querySelector('#toastLive');      // the toast's live region may be in here: re-drawing the sheet must not throw it away
+  d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []), ...(live ? [live] : []));
   d.setAttribute('aria-labelledby', 'sheetTitle');
-  d.querySelector('.sheet-x').addEventListener('click', closeSheet);
+  d.querySelector('.sheet-x').addEventListener('click', askClose);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }
-  if (!sheetOverlay) sheetOverlay = openOverlay(() => { sheetOverlay = 0; closeSheet(); });      // Back (or an edge swipe) closes the sheet
+  if (!sheetOverlay) sheetOverlay = openOverlay(backDismiss);      // Back (or an edge swipe) closes the sheet (or asks, with unsaved work)
   // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
   // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
   if (document.activeElement?.classList.contains('sheet-x')) d.focus();
@@ -178,6 +280,7 @@ export function closeSheet() {
   // that was open (or the button that opened the panel) instead of being lost on the page.
   const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) { document.dispatchEvent(new Event('sheet-closing')); d.close(); }      // (the event: so work tied to the sheet stops now, not a task later)
+  sheetGuard = null; discardThen = null;
   releaseSheet();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
   back?.focus({ preventScroll: true });
@@ -202,11 +305,12 @@ export function initSheet() {
     if (e.target !== d) return;
     const r = d.getBoundingClientRect();
     const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-    if (!inside) closeSheet();
+    if (!inside) askClose();
   });
-  d.addEventListener('close', () => { if (!d.open) releaseSheet(); afterClose(); });          // closed another way (e.g. Escape on a pop-up)
+  d.addEventListener('close', () => { if (!d.open) { sheetGuard = null; releaseSheet(); } afterClose(); });          // closed another way (e.g. Escape on a pop-up)
+  d.addEventListener('cancel', e => { if (sheetGuard?.()) { e.preventDefault(); askClose(); } });      // Esc on a pop-up with unsaved work asks first
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
+    if (e.key === 'Escape' && d.open && d.classList.contains('side')) askClose();
   });
   let drag = null;
   d.addEventListener('pointerdown', e => {
@@ -227,7 +331,10 @@ export function initSheet() {
     d.style.transition = 'transform 160ms ease';
     if (e.type !== 'pointercancel' && (dy > Math.min(120, d.offsetHeight / 3) || fast)) {
       d.style.transform = 'translateY(100%)';
-      setTimeout(() => { closeSheet(); d.style.transform = d.style.transition = ''; }, 160);
+      setTimeout(() => {
+        d.style.transform = d.style.transition = '';
+        askClose();
+      }, 160);
     } else d.style.transform = '';
   };
   d.addEventListener('pointerup', release);
@@ -281,4 +388,38 @@ export function keepFocusOnPress(root, selector = 'button') {
   const stop = e => { if (e.target.closest?.(selector)) e.preventDefault(); };
   root.addEventListener('pointerdown', stop);
   root.addEventListener('mousedown', stop);
+}
+
+// ---------- form errors (WCAG 3.3.1 Error Identification, 4.1.3 Status Messages) ----------
+let errSeq = 0;
+// Show a problem with a form field. errEl is the error paragraph (role="alert" is set here if the markup forgot, but give it in the markup:
+// an alert that exists before its text appears is announced most reliably). The field gets aria-invalid and aria-describedby pointing at the
+// message, and the cursor moves to it. The error clears itself when the person edits the field. field may be null (an error about the whole form).
+// When the cursor moves to the field, the field's aria-describedby makes the screen reader read the message, so the message is NOT also an alert
+// (it would be spoken twice). Without a field, or without moving focus, it is an alert, the only thing that tells the person.
+// clearOnInput false keeps the message until the caller clears it (for boxes that check the value again themselves as you type).
+export function showFieldError(field, errEl, text, { focus = true, clearOnInput = true } = {}) {
+  if (!errEl) return;
+  if (!errEl.id) errEl.id = `err${++errSeq}`;
+  const moving = field && focus && document.activeElement !== field;      // (focus already there: nothing new is read, so the alert must speak)
+  if (moving) errEl.removeAttribute('role'); else errEl.setAttribute('role', 'alert');
+  errEl.textContent = text;
+  errEl.hidden = false;
+  if (!field) return;
+  field.setAttribute('aria-invalid', 'true');
+  field.setAttribute('aria-describedby', toggleToken(field.getAttribute('aria-describedby'), errEl.id, true));
+  if (focus) field.focus();
+  if (clearOnInput && !field._errClear) {
+    field._errClear = () => { field._errClear = null; clearFieldError(field, errEl); };
+    field.addEventListener('input', field._errClear, { once: true });
+  }
+}
+// The problem is fixed: hide the message and remove aria-invalid / the describedby link.
+export function clearFieldError(field, errEl) {
+  if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+  if (!field) return;
+  field.removeAttribute('aria-invalid');
+  const d = toggleToken(field.getAttribute('aria-describedby'), errEl?.id || '', false);
+  if (d) field.setAttribute('aria-describedby', d); else field.removeAttribute('aria-describedby');
+  if (field._errClear) { field.removeEventListener('input', field._errClear); field._errClear = null; }
 }

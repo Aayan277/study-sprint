@@ -71,16 +71,24 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">
+<!-- The font stylesheet does not hold up the first paint: it loads as "print" and is switched to "all" when it arrives
+     (the page shows in the fallback font meanwhile, as font-display: swap would anyway). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap"></noscript>
 <link rel="stylesheet" href="css/styles.css">
-<!-- The Clinical style (Settings → Appearance → Style). Every rule in it is scoped to html[data-ui="clinical"]. -->
-<link rel="stylesheet" href="css/clinical.css">
+<!-- The Clinical style (Settings → Appearance → Style) is only loaded when it is on: written in here before the first paint when the saved
+     style is Clinical (so no flash of the Original look), and added by js/themes.js (applyTheme) when it is switched on later.
+     Every rule in it is scoped to html[data-ui="clinical"]. -->
+<script>
+  if (document.documentElement.getAttribute('data-ui') === 'clinical') document.write('<link rel="stylesheet" href="css/clinical.css" id="clinicalCss">');
+</script>
 <!-- The files the app needs to start. Without these the browser finds them one import level at a time
      (app.js, then what it imports, then what those import...). Listing them lets it fetch them all at once.
      Keep in step with the imports of js/app.js (screens opened later, like Play and Stats, load on demand). -->
 <link rel="modulepreload" href="js/app.js">
 <link rel="modulepreload" href="js/db.js">
 <link rel="modulepreload" href="js/sync-data.js">
+<link rel="modulepreload" href="js/stats-layout.js">
 <link rel="modulepreload" href="js/media-sweep.js">
 <link rel="modulepreload" href="js/lazy-media.js">
 <link rel="modulepreload" href="js/glossary.js">
@@ -100,6 +108,9 @@
 <link rel="modulepreload" href="js/queue.js">
 <link rel="modulepreload" href="js/browse-logic.js">
 <link rel="modulepreload" href="js/import.js">
+<link rel="modulepreload" href="js/import-draft.js">
+<link rel="modulepreload" href="js/cloze.js">
+<link rel="modulepreload" href="js/format.js">
 <link rel="modulepreload" href="js/match.js">
 <link rel="modulepreload" href="js/deck-tree.js">
 <link rel="modulepreload" href="js/exam.js">
@@ -108,6 +119,8 @@
 <link rel="modulepreload" href="js/balance.js">
 <link rel="modulepreload" href="js/stats-calc.js">
 <link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/shortcuts.js">
+<link rel="modulepreload" href="js/a11y.js">
 <link rel="modulepreload" href="js/nav.js">
 <link rel="modulepreload" href="js/fx.js">
 <link rel="modulepreload" href="js/sample.js">
@@ -161,7 +174,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</a>
   </div>
   <section class="side-decks" aria-labelledby="sideDecksH">
-    <button class="side-head" type="button" id="sideDecksH" aria-label="Your decks" aria-expanded="true" aria-controls="sideList"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>Decks</button>
+    <button class="side-head" type="button" id="sideDecksH" aria-label="Decks list" aria-expanded="true" aria-controls="sideList"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>Decks</button>
     <div class="side-list" id="sideList"></div>
   </section>
   <div class="side-foot" id="sideFoot">
@@ -177,6 +190,7 @@
 </nav>
 
 <dialog class="sheet" id="sheet" tabindex="-1"></dialog>
-<div class="toast" id="toast" role="status" hidden></div>
+<div class="toast" id="toast" hidden></div>
+<div class="sr-only" id="toastLive" role="status" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

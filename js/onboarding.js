@@ -24,7 +24,8 @@ import { formatInterval } from './queue.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { hasMasks, occlusionHTML, occLabel } from './occlusion.js';
-import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
+import { $, esc, plural, toast, icon, setFocusMode, onControl, showFieldError } from './ui.js';
+import { singleKeysOn } from './shortcuts.js';
 import { go as navGo, replace as navReplace } from './nav.js';
 
 const GUIDE_CARDS = 3;
@@ -134,7 +135,7 @@ function drawName(el, api) {
     e.preventDefault();
     const name = $('wlName').value.trim(), exam = $('wlExam').value;
     const err = $('wlErr');
-    const fail = (msg, field) => { err.textContent = msg; err.hidden = false; $(field).focus(); };
+    const fail = (msg, field) => showFieldError($(field), err, msg);
     if (!name) return fail('Give the course a name, or tap Skip.', 'wlName');
     if (exam && exam < todayISO()) return fail('That exam date has already passed.', 'wlExam');
     Object.assign(flow, { name, course: $('wlCourse').value.trim(), exam });
@@ -282,8 +283,8 @@ document.addEventListener('keydown', e => {
   if (document.querySelector('dialog.occ-view[open], dialog.occ-ed[open]')) return;      // the picture viewer has its own keys
   if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches('input, textarea, select')) return;
   if (!G.flipped) {
-    if (!onControl(e, 'flash') && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flipGuide(); }
-  } else if (['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); rateGuide(+e.key); }
+    if (!onControl(e, 'flash') && (singleKeysOn() || e.target.closest?.('#flash')) && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flipGuide(); }
+  } else if (singleKeysOn() && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); rateGuide(+e.key); }
 });
 
 async function rateGuide(rating) {

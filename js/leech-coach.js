@@ -9,7 +9,7 @@
 // Cards that are gone (deleted, synced away) are skipped.
 
 import * as db from './db.js';
-import { openSheet, closeSheet, esc, toast, $ } from './ui.js';
+import { openSheet, closeSheet, esc, toast, $, showFieldError, clearFieldError } from './ui.js';
 import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
@@ -82,7 +82,7 @@ export function wireCoach(slot) {
     const card = await cardOf(id);
     const done = msg => { if (msg) toast(msg); dropRow(row, slot); };
     if (!card) return done('That card is gone');
-    if (act === 'later') { dropRow(row, slot); return toast('Okay. You’ll find it under Leeches in All cards.', { link: { href: '#/browse/leech', label: 'Open Leeches' } }); }
+    if (act === 'later') { dropRow(row, slot); return toast('Okay. You’ll find it under Leeches in All cards.', { link: { href: '#/browse/leech', label: 'Open Leeches' }, hold: true }); }      // (stays until you leave the screen: 7 seconds is too short to reach the link with a keyboard or switch; WCAG 2.2.1)
     if (act === 'park') { await db.saveCards([parked(card)]); return done('Kept suspended. It’s under Suspended in All cards.'); }
     if (act === 'delete') return askDelete(row, card, done, btn);
     if (act === 'hook') return openHook(card, done);
@@ -117,7 +117,7 @@ function openHook(card, done) {
       <label class="field"><span>A trick to remember it</span>
         <textarea id="hookText" rows="3" placeholder="A picture, a rhyme, what it sounds like…">${esc(card.noteExtra || '')}</textarea></label>
       <p class="note">It shows under the answer. The card goes back into your reviews with its schedule as it is.</p>
-      <p class="err" id="hookErr" hidden></p>
+      <p class="err" id="hookErr" role="alert" hidden></p>
       <div class="sheet-actions"><button class="btn ghost" type="button" id="hookCancel">Cancel</button><button class="btn primary" type="submit">Save hook</button></div>
     </form>`);
   $('hookCancel').addEventListener('click', closeSheet);
@@ -127,7 +127,7 @@ function openHook(card, done) {
     e.preventDefault();
     if (busy) return;
     const text = $('hookText').value.trim();
-    if (!text) { $('hookErr').textContent = 'Write a hook first, or cancel.'; $('hookErr').hidden = false; return; }
+    if (!text) { showFieldError($('hookText'), $('hookErr'), 'Write a hook first, or cancel.'); return; }
     busy = true;
     const btn = document.querySelector('#sheet button[form=hookForm], #hookForm [type=submit]');       // (the sheet moves the buttons to its footer)
     btn.disabled = true;
@@ -139,14 +139,14 @@ function openHook(card, done) {
       const cards = [{ ...unleeched(fresh), noteExtra: text }, ...sibs.map(c => ({ ...c, noteExtra: text }))];
       // A hook that makes the card too large to sync is refused, like in the card editor.
       const big = savedTooBigNote(cards);
-      if (big) { busy = false; btn.disabled = false; $('hookErr').textContent = big.replace(/Shorten the text.*$/, 'Shorten the hook, or edit the card to make it smaller.'); $('hookErr').hidden = false; return; }
+      if (big) { busy = false; btn.disabled = false; showFieldError($('hookText'), $('hookErr'), big.replace(/Shorten the text.*$/, 'Shorten the hook, or edit the card to make it smaller.')); return; }
       await db.saveCards(cards);
       closeSheet();
       done('Hook saved. It’s back in your reviews.');
     } catch (err) {
       console.error(err);
       busy = false; btn.disabled = false;
-      $('hookErr').textContent = "Couldn't save the hook. Try again."; $('hookErr').hidden = false;
+      showFieldError(null, $('hookErr'), "Couldn't save the hook. Try again.");
     }
   });
 }
@@ -169,7 +169,7 @@ function openSplit(card, done) {
         <label class="radio-row"><input type="radio" name="splitOrig" value="keep" checked> Keep it, suspended</label>
         <label class="radio-row"><input type="radio" name="splitOrig" value="delete"> Delete it</label></fieldset>
       <div id="splitConfirm"></div>
-      <p class="err" id="splitErr" hidden></p>
+      <p class="err" id="splitErr" role="alert" hidden></p>
       <div class="sheet-actions"><button class="btn ghost" type="button" id="splitCancel">Cancel</button><button class="btn primary" type="submit">Split</button></div>
     </form>`);
   $('splitCancel').addEventListener('click', closeSheet);
@@ -199,14 +199,18 @@ function openSplit(card, done) {
     } catch (err) {
       console.error(err);
       busy = false; buttons().forEach(b => { b.disabled = false; });
-      $('splitErr').textContent = "Couldn't split the card. Try again."; $('splitErr').hidden = false;
+      showFieldError(null, $('splitErr'), "Couldn't split the card. Try again.");
     }
   };
   $('splitForm').addEventListener('submit', e => {
     e.preventDefault();
     if (busy) return;
-    if (read().filter(r => r.front.trim() && r.back.trim()).length < 2) { $('splitErr').textContent = 'Fill in at least two cards (a front and a back each).'; $('splitErr').hidden = false; return; }
-    $('splitErr').hidden = true;
+    if (read().filter(r => r.front.trim() && r.back.trim()).length < 2) {
+      const empty = [...document.querySelectorAll('.split-f, .split-b')].find(x => !x.value.trim());      // the first box still empty
+      showFieldError(empty || null, $('splitErr'), 'Fill in at least two cards (a front and a back each).');
+      return;
+    }
+    clearFieldError(null, $('splitErr'));
     if (document.querySelector('input[name=splitOrig]:checked')?.value !== 'delete') return go();
     $('splitConfirm').innerHTML = `<div class="confirm"><p>Delete the original card and its history? This can’t be undone.</p><div class="sheet-actions">
       <button class="btn ghost small" type="button" id="cfNo">Cancel</button><button class="btn danger solid small" type="button" id="cfYes">Split and delete it</button></div></div>`;

@@ -8,19 +8,44 @@ import { isHidden } from './browse-logic.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { personalW20 } from './sched-settings.js';
-import { lazyStreak, daysAgoStart, restDaySet, idleDaySet, dayKey } from './stats-calc.js';
+import { lazyStreakBack, daysAgoStart, restDaySet, idleDaySet, dayKey } from './stats-calc.js';
 import { mergeIdleDays } from './sync-merge.js';
 import { go as navGo } from './nav.js';
 
-// How far back Today looks for the time estimate and the streak.
+// How far back Today looks for the time estimate (and, if the last two weeks say too little, the catch-up banner).
 const HISTORY_DAYS = 60;
+const DAY = 86400000;
+// Recent habits count most (see typicalCardMs): the last 2 weeks hold what the estimate and the banner use, when they hold enough.
+const RECENT_DAYS = 14, MIN_GAPS = 5, MIN_RECENT_GAPS = 20;
+// Two reviews further apart than this are not "one card after another" (see typicalCardMs).
+const SAME_SESSION_MS = 45 * 1000;
+const FAST_GAP_MS = 2000, MIN_CARD_MS = 4000;
+
+// Is the review log of the last two weeks (plus a margin) all that Today's time estimate and the catch-up banner look at? True
+// when it holds 20 gaps between answers (typicalCardMs then uses only the last 2 weeks) and 14 study days before today (rescueState
+// then uses only the last 14 study days), so reading the other 46 of the 60 days would change neither.
+export function recentHistoryEnough(rows, now = Date.now()) {
+  if (cardGaps(rows, now).recent.length < MIN_RECENT_GAPS) return false;
+  const today = dayStart(now), days = new Set();
+  const from = recentHistoryFrom(now);
+  // (A study day that began before the read started is only partly in `rows`, so it is not counted: it could be one of the 14 with more
+  // answers than we have seen, or not one at all.)
+  for (const l of rows) if (l.source === 'review' && l.timestamp < today && l.timestamp > 0 && dayStart(l.timestamp) >= from) days.add(dayStart(l.timestamp));
+  return days.size >= RECENT_DAYS;
+}
+// Where the first read of the review log starts: two weeks back, with a margin so the gap across the edge is still there.
+export const recentHistoryFrom = (now = Date.now()) => Math.min(daysAgoStart(RECENT_DAYS, now), now - RECENT_DAYS * DAY - 3600000);
 
 // Load everything today's queue is built from.
-//   history  also keep the last 60 days of the review log (data.history), for Today's time estimate and streak
-export async function loadAll({ history = false } = {}) {
-  const [settings, decks, cards, states, recent] = await Promise.all([
-    db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), db.getLogsSince(history ? daysAgoStart(HISTORY_DAYS) : dayStart())
+//   history  also keep the review log of the last weeks (data.history), for Today's time estimate and the catch-up banner:
+//            the last two weeks when they say enough (recentHistoryEnough), else the last 60 days
+//   fullHistory  with `history`: always the last 60 days (Play's speed profile reads them all)
+export async function loadAll({ history = false, fullHistory = false } = {}) {
+  const [settings, decks, cards, states, first] = await Promise.all([
+    db.getSettings(), db.getDecks(), db.getAllCached('cards'), db.getAllCached('cardStates'), db.getLogsSince(history ? recentHistoryFrom() : dayStart())
   ]);
+  let recent = first;
+  if (history && (fullHistory || !recentHistoryEnough(first))) recent = (await db.getLogsBetween(daysAgoStart(HISTORY_DAYS), recentHistoryFrom())).concat(first);
   const logs = history ? recent.filter(l => l.timestamp >= dayStart()) : recent;
   decks.sort((a, b) => a.created - b.created);
   const tree = treeOrder(decks);
@@ -228,28 +253,28 @@ export function rescueState(data, now = Date.now(), dismissedDay = null) {
 
 // ---------- how long a session takes ----------
 export const DEFAULT_CARD_MS = 8000;       // used until there are enough answers to go by
-// Two reviews further apart than this are not "one card after another": the person looked away, took a break,
+// Two reviews further apart than this (SAME_SESSION_MS above) are not "one card after another": the person looked away, took a break,
 // or the log rows are not a real session (an import, or a different day). 45 s covers a slow, careful card.
-const SAME_SESSION_MS = 45 * 1000;
-// A gap under this is a double-tap, a click-through or test data, not a card that was read and rated. The typical time
+// A gap under FAST_GAP_MS is a double-tap, a click-through or test data, not a card that was read and rated. The typical time
 // per card never goes below MIN_CARD_MS, whatever the log says (nobody reads, recalls and rates a card in 1 second).
-const FAST_GAP_MS = 2000, MIN_CARD_MS = 4000;
-// Recent habits count most: use the last 2 weeks when they hold enough gaps, else the whole history.
-const RECENT_DAYS = 14, MIN_GAPS = 5, MIN_RECENT_GAPS = 20;
-// Your usual time per card: the median time between one review and the next in the same session, or 8 seconds
-// until there are enough. The log's own `ms` is only the time to turn the card over, so it leaves out thinking
-// about the rating and the next card; the gap between answers covers all of it.
-// Only Review's own log rows are used: Play rounds are quicker, and imported Anki history has made-up times.
-// (A gap of a minute or more used to count as "a minute a card", which turned 76 cards into a 76-minute estimate.)
-export function typicalCardMs(logs, now = Date.now()) {
-  const since = now - HISTORY_DAYS * 86400000;
+// The time between each review and the next in the same session over the last 60 days: all of them, and those in the last 2 weeks.
+function cardGaps(logs, now) {
+  const since = now - HISTORY_DAYS * DAY;
   const reviews = logs.filter(l => l.source === 'review' && l.timestamp >= since && l.timestamp <= now).sort((a, b) => a.timestamp - b.timestamp);
   const gaps = [];                                  // [when, how long] for each pair of reviews in one session
   for (let i = 1; i < reviews.length; i++) {
     const gap = reviews[i].timestamp - reviews[i - 1].timestamp;
     if (gap >= FAST_GAP_MS && gap <= SAME_SESSION_MS) gaps.push([reviews[i].timestamp, gap]);
   }
-  const recent = gaps.filter(g => g[0] >= now - RECENT_DAYS * 86400000);
+  return { gaps, recent: gaps.filter(g => g[0] >= now - RECENT_DAYS * DAY) };
+}
+// Your usual time per card: the median time between one review and the next in the same session, or 8 seconds
+// until there are enough. The log's own `ms` is only the time to turn the card over, so it leaves out thinking
+// about the rating and the next card; the gap between answers covers all of it.
+// Only Review's own log rows are used: Play rounds are quicker, and imported Anki history has made-up times.
+// (A gap of a minute or more used to count as "a minute a card", which turned 76 cards into a 76-minute estimate.)
+export function typicalCardMs(logs, now = Date.now()) {
+  const { gaps, recent } = cardGaps(logs, now);
   const times = (recent.length >= MIN_RECENT_GAPS ? recent : gaps).map(g => g[1]);
   if (times.length < MIN_GAPS) return DEFAULT_CARD_MS;
   times.sort((a, b) => a - b);
@@ -297,8 +322,30 @@ export function takeLaunch() { const l = launch; launch = null; return l; }
 //   { left, deckId, day, version } or null
 export const live = { resume: null };
 
-// The day streak for Today and the end of a Review session. Uses the 60 days Today already loaded (`history`)
-// if it has them, and reads further back only while the streak does.
+// Which study days had an answer, asked about the database once per stretch of days and kept until the data changes (dataVersion) or
+// the day or time zone does, so Today, the sidebar and a finished Review session share one reading of the log.
+let studyDays = null;      // { version, day, zone, known, present }: the days 0 .. known - 1 back are read; `present` lists the ones with answers
+const zoneNow = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+async function readStudyDays(from, to, now) {
+  const version = db.dataVersion(), day = dayStart(now), zone = zoneNow();
+  if (!studyDays || studyDays.version !== version || studyDays.day !== day || studyDays.zone !== zone) studyDays = { version, day, zone, known: 0, present: [] };
+  const mine = studyDays;
+  const out = mine.present.filter(n => n >= from && n < to);
+  if (mine.known >= to) return out;
+  const start = Math.max(from, mine.known), ranges = [];
+  for (let n = start; n < to; n++) ranges.push([daysAgoStart(n, now), daysAgoStart(n - 1, now)]);       // day n back: its start up to the next day's start
+  const has = await db.hasLogsIn(ranges);
+  const found = [];
+  has.forEach((yes, i) => { if (yes) found.push(start + i); });
+  // Kept only if the data did not change while it was read and the days before it are kept too.
+  if (studyDays === mine && db.dataVersion() === version && mine.known === start) { mine.present.push(...found); mine.known = to; }
+  return out.concat(found);
+}
+
+// The day streak for Today and the end of a Review session. Asks the database which days had answers, walking back from today
+// and stopping where the streak does (stats-calc.js lazyStreakBack).
+// `history` (the log rows Today loaded) is not needed any more: asking about a day costs next to nothing, and Today now loads only
+// two weeks of the log, which is not enough to find where a long streak ends.
 // ctx = { settings } (for the days off, settings.restDays); without it no days off are counted.
 // With the whole of loadAll()'s data (Today and the sidebar), today is noted when the ring says "Nothing due today" (idleDaysToMark): it never breaks the streak.
 export async function loadStreak(history = null, ctx = null) {
@@ -313,7 +360,8 @@ export async function loadStreak(history = null, ctx = null) {
       db.setSetting('idleDays', flags).catch(err => console.warn('idle days not saved:', err));      // (a synced setting, merged as a union: sync-merge.js)
     }
   }
-  const streak = await lazyStreak(t => db.getStudyDayTimes(t), Date.now(), history, 60, { rest: restDaySet(settings), idle });
+  const now = Date.now();
+  const streak = await lazyStreakBack((from, to) => readStudyDays(from, to, now), now, null, 60, { rest: restDaySet(settings), idle });
   // A day noted as quiet earlier today (cards were added since, or came due) no longer says "Nothing due today".
   if (streak.idleToday && settings && ctx.split && ctx.statesById && todayRing(ctx, [], countFor(ctx, ctx.decks.map(d => d.id))).state !== 'nothing') streak.idleToday = false;
   return streak;

@@ -55,6 +55,9 @@ ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#
 ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column is labeled');
 await noHScroll('stats');
 await page.screenshot({ path: SP + '/s-top.png' });
+// the tooltip is not a second announcement (the bar's own label says it), and the arrow-key hint is linked to each chart
+ok((await page.locator('.chart-tip[role]').count()) === 0 && (await page.locator('.chart-tip[aria-hidden="true"]').count()) === (await page.locator('.chart').count()), 'chart tooltips are hidden from screen readers');
+ok(await page.evaluate(() => [...document.querySelectorAll('.chart')].every(c => { const h = document.getElementById(c.getAttribute('aria-describedby')); return h && h.classList.contains('sr-only') && /arrow keys/i.test(h.textContent); })), 'each chart is described by "Use the arrow keys to move between bars"');
 // tooltip by tap
 await page.locator('#forecast .col').first().tap();
 ok(!(await page.isHidden('#forecast .chart-tip')) && (await page.textContent('#forecast .chart-tip')).includes('Scheduled for today'), 'tapping a column shows its tooltip: ' + await page.textContent('#forecast .chart-tip'));

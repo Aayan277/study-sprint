@@ -272,3 +272,34 @@ test('renameTagExact: one tag, matched ignoring capitals and empty pieces; tags 
   assert.deepEqual(renameTagExact(cs, 'a::b', '').map(c => c.tags), [['a::b::c'], []]);
   assert.deepEqual(renameTagExact(cs, '', 'x'), []);
 });
+
+// ---- search speed-ups must not change what comes back ----
+import { searchMatcher, cardMatcher } from '../js/browse-logic.js';
+
+// The old way, written out: status for all, then tag and text filters, then a sort of what is left.
+test('cached search and presorted lists give the same cards in the same order as a plain filter + sort', () => {
+  const names = ['Café au lait', 'cafe', 'ΣΊΣΥΦΟΣ', 'C++ pointers', 'c language', 'Zebra 10', 'Zebra 9', 'zebra 2', '🧠 brain', 'か kana', 'が kana'];
+  const cards = names.map((f, i) => card(`c${i}`, { front: f, back: `back ${i % 3}`, created: (i * 7) % 5, tags: i % 2 ? ['#a::b', 'x'] : ['y'] }));
+  const states = new Map(cards.filter((_, i) => i % 3 === 0).map((c, i) => [c.id, { cardId: c.id, state: 2, due: NOW + i * DAY, lapses: i, difficulty: 5 - i }]));
+  const plain = (q, sort) => {
+    const m = searchMatcher(q);
+    const by = { 'added-new': (a, b) => b.created - a.created, 'added-old': (a, b) => a.created - b.created, az: (a, b) => new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }).compare(a.front, b.front) }[sort];
+    return cards.filter(c => !m || m(`${c.front} ${c.back} ${(c.tags || []).join(' ')}`)).sort(by).map(c => c.id);
+  };
+  for (const sort of ['added-new', 'added-old', 'az'])
+    for (const q of ['', 'c', 'caf', 'cafe', 'c++', '+', '🧠', 'kana', 'か', 'zebra', 'σισυφοσ', 'back 1', 'nothing here', 'y'])
+      for (let again = 0; again < 2; again++)     // second pass uses the remembered text and order
+        assert.deepEqual(ids(browseCards(cards, states, { query: q, sort, now: NOW })), plain(q, sort), `${sort} / ${q}`);
+});
+
+test('cardMatcher agrees with searchMatcher and notices a card edited in place', () => {
+  const c = card('e', { front: 'Mitosis', back: 'Cell division', tags: ['bio'] });
+  const m = cardMatcher('mitosis'), m2 = cardMatcher('osmosis');
+  assert.equal(m(c), true); assert.equal(m2(c), false);
+  c.front = 'Osmosis';
+  assert.equal(m(c), false); assert.equal(m2(c), true);
+  c.tags.push('chem'); c.tags = [...c.tags];
+  assert.equal(cardMatcher('chem')(c), true);
+  assert.equal(cardMatcher('   '), null);
+  assert.equal(cardMatcher('?!')(card('q', { front: 'what?!' })), true);
+});
