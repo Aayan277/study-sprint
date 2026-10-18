@@ -248,7 +248,7 @@ export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync s
 export const OVERLAP_MS = 2 * 60 * 1000;      // far longer than the few seconds one batch of changes needs to be saved
 export const MAX_BACK = 3000;                 // rows (a batch is 500 rows; a few devices at once)
 export const SAFE_MS = 30 * 1000;             // requests this recent are always read again (several times the server's statement timeout)
-const MAX_LOG = 60;
+const MAX_LOG = 20;                          // entries kept from the older part of the log
 const goodEntry = e => Number.isFinite(e?.t) && Number.isFinite(e?.seq);
 const entries = log => (Array.isArray(log) ? log.filter(goodEntry) : []);
 
@@ -281,7 +281,7 @@ export function startPull(st, now) {
   return { ...st, seqLog: [{ t: now, seq: bookmark, from: bookmark, n: 0 }] };
 }
 
-// Add a request ({ t, seq, from, n }) to the log, and forget entries older than the one pullStart() will use.
+// Add a request ({ t, seq, from, to, n }) to the log, and forget entries older than the one pullStart() will use.
 // Entries are "ok" (no longer protected by the SAFE_MS rule) when nothing they could have missed is left:
 //   * cover = { t0, from, reach }: this pull started at t0, asked after `from`, and has now read everything up to `reach`
 //     (Infinity once a page came back short). A request that missed a change was sent less than SAFE_MS before the change
@@ -298,12 +298,18 @@ export function logPull(log, entry, cover) {
     list = [{ t: t - OVERLAP_MS, seq, from: seq, n: 0 }];
   }
   const settled = Math.max(-1, ...list.filter(e => e.t <= t - SAFE_MS).map(e => e.seq));
-  if (cover) for (const e of list) if (!e.ok && cover.t0 >= e.t + SAFE_MS && cover.from <= e.from && cover.reach >= e.seq) e.ok = true;
-  list.push({ ...entry, ok: entry.seq <= settled });
+  if (cover && cover.t0 <= t) for (const e of list) if (!e.ok && cover.t0 >= e.t + SAFE_MS && cover.from <= e.from && cover.reach >= (Number.isFinite(e.to) ? e.to : e.seq)) e.ok = true;
+  list.push({ ...entry, ok: (Number.isFinite(entry.to) ? entry.to : entry.seq) <= settled });
   const limit = t - OVERLAP_MS;
   let keep = 0;
   list.forEach((e, i) => { if (e.t <= limit) keep = i; });
   const out = list.slice(keep);
-  if (out.length > MAX_LOG) out.splice(1, out.length - MAX_LOG);   // a burst of requests: thin out the middle, keep the oldest and the newest
+  // A burst of requests: thin out the old part (keep its oldest entry), but never the last SAFE_MS (still protected) nor the
+  // newest entry at least SAFE_MS old (where "settled" comes from), however fast the pages come.
+  const recentFrom = Math.max(0, out.reduce((k, e, i) => (e.t <= t - SAFE_MS ? i : k), 0));
+  if (recentFrom > MAX_LOG) {
+    const head = out.slice(0, recentFrom), step = head.length / MAX_LOG;
+    return [...Array.from({ length: MAX_LOG }, (_, i) => head[Math.floor(i * step)]), ...out.slice(recentFrom)];
+  }
   return out;
 }

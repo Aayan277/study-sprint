@@ -404,7 +404,7 @@ function pull(server, st, clock, seen = new Set(), { maxPages = Infinity, stats 
     rows.forEach(r => seen.add(r.id));
     if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
     const lastSeq = Math.max(st.lastSeq, from);
-    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: rows.length ? Math.max(...rows.map(r => r.seq)) : after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
     if (rows.length < PAGE || ++pages >= maxPages) break;
   }
   return st;
@@ -560,7 +560,7 @@ test('overlap: a missed page followed by many full pages in the same pull is sti
     const at = clock.now, after = from, rows = server.read(from); clock.now += 1000;
     rows.forEach(r => seen.add(r.id));
     if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
-    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
+    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, to: rows.length ? Math.max(...rows.map(r => r.seq)) : after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
     return rows.length;
   };
   req();                                           // the page that passes R
@@ -597,4 +597,26 @@ test('overlap: a missed page is not forgotten if the attempt that settles it is 
   server.commit(late);
   for (let i = 0; i < 4; i++) { clock.now += 31_000; st = pull(server, st, clock, seen, { maxPages: 4 }); }
   assert.ok(seen.has('R'));
+});
+
+test('overlap: fast pages (300 ms) do not lose the entries that liveness needs when the log is trimmed', () => {
+  let log = [];
+  for (let i = 0; i < 400; i++) log = logPull(log, { t: T0 + i * 300, seq: (i + 1) * 1000, from: i * 1000, to: (i + 1) * 1000, n: 1000 });
+  const last = T0 + 399 * 300;
+  assert.ok(log.filter(e => e.t >= last - 30_000).length >= 99, 'the last 30 s are all kept');
+  assert.ok(log.some(e => e.t <= last - 30_000 && e.t > last - 31_000), 'and the newest entry at least 30 s old');
+  assert.ok(log.length < 160);
+});
+
+test('overlap: a pull cut off after a few fast pages each time still finishes', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 600_000;
+  server.add(30_000);
+  let done = -1;
+  for (let a = 0; a < 40 && done < 0; a++) {
+    st = pull(server, st, clock, new Set(), { maxPages: 10 }); clock.now += 31_000;
+    if (st.lastSeq >= 30_050) done = a;
+  }
+  assert.ok(done >= 0 && done <= 12, 'attempts: ' + done);
 });
