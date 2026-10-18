@@ -31,7 +31,7 @@ import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.35';
+const APP_VERSION = '4.36';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
