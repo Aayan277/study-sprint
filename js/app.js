@@ -1319,6 +1319,25 @@ async function showResetLink(link) {
 }
 
 // ---------- start up ----------
+// Pictures and sounds no card uses any more are removed once a day, when the browser has nothing else to do, after the first screen is up.
+// (Signed in, syncing does this, and removes them from the account too.) Nothing to do with no pictures or sounds on the device. The
+// one-hour wait for new files (db.cleanMedia) is unchanged. The time of the last tidy is kept on this device only (db.LOCAL_ONLY).
+const MEDIA_TIDY_EVERY = 24 * 3600 * 1000;
+async function tidyMedia(now = Date.now()) {
+  if (Number.isFinite(settings.mediaCleanedAt) && now - settings.mediaCleanedAt < MEDIA_TIDY_EVERY && now >= settings.mediaCleanedAt) return false;
+  if (await sync.account()) return false;
+  if (!(await db.count('media'))) return false;       // (not noted: the first picture added is looked at on the next start)
+  await db.cleanMedia(now);
+  settings.mediaCleanedAt = now;
+  await db.setSetting('mediaCleanedAt', now);
+  return true;
+}
+function tidyMediaWhenIdle() {
+  const run = () => tidyMedia().catch(() => {});
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 15000 });
+  else setTimeout(run, 3000);
+}
+
 async function start() {
   initSheet();
   initPanelResize();
@@ -1349,8 +1368,6 @@ async function start() {
   fx.configure(settings);
   const firstRun = await checkFirstRun();
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
-  // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
-  sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
@@ -1362,6 +1379,7 @@ async function start() {
   await route();
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
+  tidyMediaWhenIdle();
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
 

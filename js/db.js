@@ -164,6 +164,58 @@ export async function getAllInPieces(name, size = 3000) {
     await new Promise(r => setTimeout(r, 0));
   }
 }
+// ---------- cached reads of the cards and the schedules ----------
+// Today, Decks, a deck's page, Review, Play, Stats and Browse all start by reading every card and every schedule, which is
+// most of their time on a big account. This keeps the last read of each, until the data changes (dataVersion() goes up: every save
+// below, changes from sync, an import, and another open tab all raise it, so a kept read is never older than the data).
+//   getAllCached(name)                a copy of the rows that nobody else holds, so callers may sort or change them
+//   getAllCached(name, { shared })    the kept rows themselves, for a caller that only reads (never sorts or changes them). Note that
+//                                     saveReview/undoReview may later patch such an array in place (rows inserted, replaced or removed).
+// The kept arrays stay in memory for the whole session. A save in another tab is only seen here when its BroadcastChannel message
+// arrives, so for a few milliseconds after it a kept read can still be the old one.
+// Only 'cards' and 'cardStates' are kept; any other store is read fresh.
+const KEPT = ['cards', 'cardStates'];
+const KEY_OF = { cards: 'id', cardStates: 'cardId' };
+const kept = new Map();      // name -> { version, rows (once read), promise }
+export async function getAllCached(name, { shared = false } = {}) {
+  if (!KEPT.includes(name)) return getAll(name);
+  let e = kept.get(name);
+  if (!e || e.version !== dataChanges) {
+    const mine = e = { version: dataChanges, rows: null, promise: null };
+    mine.promise = getAll(name).then(rows => { mine.rows = rows; return rows; }, err => { if (kept.get(name) === mine) kept.delete(name); throw err; });
+    kept.set(name, mine);
+  }
+  const rows = e.rows || await e.promise;
+  return shared ? rows : rows.map(r => ({ ...r }));
+}
+// A save that changed only what the caller says: the kept reads that are still right stay (the version moves on with them).
+//   patches  { cardStates: { put: [row, ...], del: [key, ...] } }: kept rows to change in step with the save
+// Anything not named in `patches` or `unchanged` is dropped by the new version number, as for every other save.
+function keptStill(patches = {}, unchanged = []) {
+  try { return keptStillUnsafe(patches, unchanged); } catch (err) { console.warn('kept reads dropped:', err); return []; }       // (a save that is already committed must never fail because of this)
+}
+const cloneRow = row => (typeof structuredClone === 'function' ? structuredClone(row) : JSON.parse(JSON.stringify(row)));       // (Safari before 15.4 has no structuredClone)
+function keptStillUnsafe(patches, unchanged) {
+  const keep = [];
+  for (const name of KEPT) {
+    const e = kept.get(name);
+    if (!e || e.version !== dataChanges) continue;            // already out of date (or never read)
+    const patch = patches[name];
+    if (patch) {
+      if (!e.rows) continue;                                  // still being read: it may or may not hold this save
+      const key = KEY_OF[name];
+      const rows = e.rows;
+      const find = k => { let lo = 0, hi = rows.length; while (lo < hi) { const m = (lo + hi) >> 1; if (rows[m][key] < k) lo = m + 1; else hi = m; } return lo; };
+      const ok = [...(patch.put || []), ...(patch.del || [])].every(x => typeof (x[key] ?? x) === 'string');
+      if (!ok || rows.some((r, i) => i && !(rows[i - 1][key] < r[key]))) continue;       // keys that are not text, or rows not in key order: drop the read instead
+      for (const k of patch.del || []) { const i = find(k); if (rows[i]?.[key] === k) rows.splice(i, 1); }
+      for (const row of patch.put || []) { const i = find(row[key]); const c = cloneRow(row); if (rows[i]?.[key] === row[key]) rows[i] = c; else rows.splice(i, 0, c); }
+      keep.push(e);
+    } else if (unchanged.includes(name)) keep.push(e);
+  }
+  return keep;
+}
+
 // How many records a store holds, without reading them (Settings uses it for the review log).
 export async function count(name) { return done((await store(name)).count()); }
 export async function get(name, key) { return done((await store(name)).get(key)); }
@@ -281,18 +333,19 @@ export async function saveReview(state, log) {
   const db = await openDB();
   const tx = db.transaction(['cardStates', 'reviewLog'], 'readwrite');
   const now = Date.now();
-  tx.objectStore('cardStates').put(stamp('cardStates', state, now));
+  const saved = stamp('cardStates', state, now);
+  tx.objectStore('cardStates').put(saved);
   const req = tx.objectStore('reviewLog').add(stamp('reviewLog', log, now));
   await finished(tx);
   scheduleChanges++;
-  changed();
+  changed(keptStill({ cardStates: { put: [saved] } }, ['cards']));      // (the kept cards and schedules stay right: this answer is added to them)
   return req.result;
 }
 
 // Save a review-log row without changing any schedule (e.g. a Play answer on a card that isn't due).
 export async function addLog(log) {
   const id = await done((await store('reviewLog', 'readwrite')).add(stamp('reviewLog', log)));
-  changed();
+  changed(keptStill({}, KEPT));       // (no card or schedule changed)
   return id;
 }
 
@@ -301,7 +354,8 @@ export async function undoReview(cardId, prevState, logId) {
   const db = await openDB();
   const tx = db.transaction(['cardStates', 'reviewLog', 'deleted'], 'readwrite');
   const now = Date.now();
-  if (prevState) tx.objectStore('cardStates').put(stamp('cardStates', prevState, now));
+  const restored = prevState ? stamp('cardStates', prevState, now) : null;
+  if (restored) tx.objectStore('cardStates').put(restored);
   else deleteStateIn(tx, cardId, now);
   const logs = tx.objectStore('reviewLog');
   logs.get(logId).onsuccess = e => {
@@ -310,7 +364,7 @@ export async function undoReview(cardId, prevState, logId) {
   };
   await finished(tx);
   scheduleChanges++;
-  changed();
+  changed(keptStill({ cardStates: restored ? { put: [restored] } : { del: [cardId] } }, ['cards']));
 }
 
 // Delete one review-log row and nothing else (Play's "I was right" on an answer that was only logged).
@@ -324,7 +378,7 @@ export async function deleteLogRow(logId) {
     logs.delete(logId);
   };
   await finished(tx);
-  changed();
+  changed(keptStill({}, KEPT));       // (no card or schedule changed)
 }
 
 // Every review-log row since a moment in time (e.g. since the start of today).
@@ -332,40 +386,70 @@ export async function getLogsSince(timestamp) {
   return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.lowerBound(timestamp)));
 }
 
-// One answer time for each study day that has any answer since a moment ([time, …], oldest first). Uses a key cursor on
-// the timestamp index and jumps to the next day each time, so no rows are read and the work follows the days studied
-// (not the 300k rows of a heavy user). The streak uses this.
-export async function getStudyDayTimes(timestamp) {
-  const index = (await store('reviewLog')).index('timestamp');
+// Every review-log row in a stretch of time: from `from` up to, not including, `to` (oldest first).
+export async function getLogsBetween(from, to) {
+  return done((await store('reviewLog')).index('timestamp').getAll(IDBKeyRange.bound(from, to, false, true)));
+}
+
+// Every review-log row of some cards (their cardIds), in no particular order: one small lookup in the cardId index for each card,
+// all sent at once, so a deck's answers are read without reading the rest of the (much bigger) log.
+export async function getLogsForCards(cardIds) {
+  const ids = [...cardIds];
   const out = [];
-  let t = timestamp;
-  for (;;) {    // only IndexedDB requests are awaited in this loop, so the transaction stays open
-    const next = await done(index.openKeyCursor(IDBKeyRange.lowerBound(t)));
-    if (!next) break;
-    out.push(next.key);
-    t = dayEnd(next.key);
+  const tx = (await openDB()).transaction('reviewLog');
+  const index = tx.objectStore('reviewLog').index('cardId');
+  for (let i = 0; i < ids.length; i += 2000) {
+    const parts = await Promise.all(ids.slice(i, i + 2000).map(id => done(index.getAll(id))));
+    for (const rows of parts) for (const r of rows) out.push(r);
   }
   return out;
 }
 
-// How many answers were logged on each study day, as [[start of the day, count], …] for days that have any.
+// For each stretch [from, to) in `ranges`, whether any answer was logged in it: [true, false, ...]. Every stretch is asked at once
+// (a key cursor each, which reads no rows), so a hundred study days cost about what one did when they were asked one after another.
+// The streak asks it for one study day per stretch.
+export async function hasLogsIn(ranges) {
+  if (!ranges.length) return [];
+  const index = (await store('reviewLog')).index('timestamp');
+  // (Only IndexedDB requests are made here, all in the same turn, so the transaction stays open.)
+  const asks = ranges.map(([from, to]) => new Promise((resolve, reject) => {
+    const req = index.openKeyCursor(IDBKeyRange.bound(from, to, false, true));
+    req.onsuccess = () => resolve(!!req.result);
+    req.onerror = () => reject(req.error);
+  }));
+  return Promise.all(asks);
+}
+
+// How many answers were logged on each study day, as [[start of the day, count], ...] (oldest first) for days that have any.
 // Counts with the timestamp index, so none of the (many) rows are read. Stats uses it for the streak and calendar.
 // Every row in the log is an answer (review, play or anki: see isAnswerLog), so none are filtered out here:
 // filtering by source would mean reading every row, or a new index (a data format change).
-// Days without answers are jumped over with a key cursor, so the work follows the days studied, not the years passed.
-export async function getDayCounts() {
+// The days are found by asking about every study day in turn at once (a day's count, or a key cursor for the days further
+// back, which only says whether there is an answer), not one after another: ~700 days take about the time of 30 asked singly.
+//   exactSince  a time: days from then on get their real count; older days only say that they have answers (a count of 1), which is
+//               all the streak and best streak need. Without it every day is counted exactly.
+// Days before 2000 and days that start in the future are left out.
+export async function getDayCounts({ exactSince = -Infinity } = {}) {
   const index = (await store('reviewLog')).index('timestamp');
-  const days = [];
-  let t = Date.UTC(2000, 0, 1);
-  // Only IndexedDB requests are awaited in this loop, so the transaction stays open.
-  for (;;) {
-    const next = await done(index.openKeyCursor(IDBKeyRange.lowerBound(t)));
-    if (!next || dayStart(next.key) > Date.now()) break;
-    t = dayStart(next.key);
-    days.push([t, await done(index.count(IDBKeyRange.bound(t, dayEnd(t), false, true)))]);
-    t = dayEnd(t);
+  const first = await done(index.openKeyCursor(IDBKeyRange.lowerBound(Date.UTC(2000, 0, 1))));
+  if (!first) return [];
+  const now = Date.now();
+  // The study days from the first answer's day to today, oldest first, as [start, end).
+  const spans = [];
+  for (let t = dayStart(first.key); t <= now; t = dayEnd(t)) spans.push([t, dayEnd(t)]);
+  const exact = spans.filter(([t]) => t >= exactSince), rest = spans.filter(([t]) => t < exactSince);
+  const out = [];
+  // (Only IndexedDB requests are made here, in batches that are each sent in one turn, so the transaction stays open.)
+  const ask = (list, one) => Promise.all(list.map(([from, to]) => one(IDBKeyRange.bound(from, to, false, true))));
+  const counts = await ask(exact, range => done(index.count(range)));
+  exact.forEach(([t], i) => { if (counts[i]) out.push([t, counts[i]]); });
+  // Days before the exact stretch: only whether there is an answer. Asked in batches, so a very long history stays steady.
+  for (let i = 0; i < rest.length; i += 500) {
+    const part = rest.slice(i, i + 500);
+    const has = await ask(part, range => new Promise((resolve, reject) => { const req = index.openKeyCursor(range); req.onsuccess = () => resolve(!!req.result); req.onerror = () => reject(req.error); }));
+    part.forEach(([t], j) => { if (has[j]) out.push([t, 1]); });
   }
-  return days;
+  return out.sort((x, y) => x[0] - y[0]);
 }
 
 // ---------- card list actions ----------
@@ -457,7 +541,7 @@ export async function setSetting(key, value, { at: given } = {}) {
   }
   await finished(tx);
   if (key === 'fsrsParams' || key === 'fsrsVersion') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
-  if (isSyncedSetting(key)) changed();
+  if (isSyncedSetting(key)) changed(keptStill({}, KEPT));       // (settings are not part of the kept cards and schedules; they are applied to them when read)
 }
 
 // Several settings in one go (one transaction, one change report): Paste a list in the glossary. pairs: [[key, value], ...]
@@ -486,7 +570,8 @@ export async function resetAll() {
   const names = ['decks', 'cards', 'cardStates', 'reviewLog', 'settings', 'deleted', 'media'];
   const tx = db.transaction(names, 'readwrite');
   names.forEach(n => tx.objectStore(n).clear());
-  return finished(tx);
+  await finished(tx);
+  bumpVersion();        // (nothing is left: what was kept of the cards and schedules is out of date, and so are Stats' reads)
 }
 
 // ---------- backup ----------
@@ -792,20 +877,21 @@ export async function deleteEverything() {
 //   resendPending  "Re-upload everything" was asked for; the next sync starts over from this device first (sync.js)
 //   resendTries    how many times in a row that start-over failed (sync.js gives up after a few)
 //   resendFailed   the start-over was given up; the sync note says so once (sync.js)
+//   mediaCleanedAt  when this device last removed pictures and sounds no card uses (app.js tidyMedia: once a day)
 //   lastBackup  when this device last saved a backup file (it never synced). Listed here so it stays out of backup files and a restore leaves this device's own date alone
 //   mediaRefs  { userId, ids }: the files cards used at the last sweep, so a card deleted before this device held its picture still gets that file marked (media-sweep.js droppedRefs)
 //   keepAllMedia  "Keep all pictures and sounds on this device" (Settings → Sync): sync downloads every file, not only what is needed soon (lazy-media.js)
 //   appBadge, reminderTime, reminderUid  "Cards due on the app icon" and the daily reminder's time (Settings → Study → Reminders): a badge and a calendar belong to one device (badge.js, reminders.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'lastBackup', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 
 // Tell sync.js when something changed on this device, so it can send it.
 const listeners = new Set();
 export const onLocalChange = fn => { listeners.add(fn); };
-function changed() {
-  bumpVersion();
+function changed(still) {
+  bumpVersion(still);
   listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
 }
 
@@ -816,8 +902,10 @@ let dataChanges = 0;
 export const dataVersion = () => dataChanges;
 const tabs = typeof BroadcastChannel === 'function' ? new BroadcastChannel('study-sprint-db') : null;
 if (tabs) { tabs.onmessage = () => { dataChanges++; }; tabs.unref?.(); }   // unref: lets Node tests exit
-function bumpVersion() {
+// `still`: kept reads (see getAllCached) that this change left right, which move on to the new version instead of being dropped.
+function bumpVersion(still = []) {
   dataChanges++;
+  for (const e of still) e.version = dataChanges;
   tabs?.postMessage('changed');
 }
 
@@ -858,6 +946,7 @@ export async function forgetSyncedMarks() {
     const deleted = tx.objectStore('deleted');
     for (const t of await done(deleted.getAll())) if (t.synced) deleted.put({ ...t, synced: false });
   });
+  bumpVersion();       // (the rows were rewritten, so what was kept of them is out of date)
 }
 
 // Save changes that came from the server. Each row only wins if it's newer than this device's version
