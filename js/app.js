@@ -1253,7 +1253,12 @@ function announceScreen(el, name) {
   h1.tabIndex = -1;
   // Next frame, not now: focusing makes the browser work out the whole new screen's layout on the spot (50-130 ms on a phone);
   // a frame later it has done that for the paint anyway. (Skipped if the screen was already replaced.)
-  requestAnimationFrame(() => { if (h1.isConnected) h1.focus({ preventScroll: true }); });
+  // Only if nothing has taken focus in the meantime (the person tapped or typed, a sheet opened) and Review/Play haven't started.
+  const before = document.activeElement;
+  requestAnimationFrame(() => {
+    const now = document.activeElement;
+    if (h1.isConnected && (now === before || now === document.body) && !document.body.classList.contains('focus')) h1.focus({ preventScroll: true });
+  });
 }
 
 let lastHash = '#/today';

@@ -57,19 +57,31 @@ let current = null;
 
 // css/clinical.css is only fetched when the Clinical style is on (index.html writes the link in before the first paint when the
 // saved style is Clinical; this adds it when the style is switched on later, or when the saved settings turn out to say Clinical).
-function ensureClinicalCss() {
-  if (document.getElementById('clinicalCss')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = 'css/clinical.css'; link.id = 'clinicalCss';
-  link.addEventListener('load', () => { syncBrowserBar(); dispatchEvent(new CustomEvent('themechange', { detail: { ...current } })); });   // (its colours count once it is in)
-  document.head.appendChild(link);
+// Calls `whenIn` once the file is in (or failed to load: the style is switched on anyway, so the app never waits on it).
+function ensureClinicalCss(whenIn) {
+  let link = document.getElementById('clinicalCss');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = 'css/clinical.css'; link.id = 'clinicalCss';
+    document.head.appendChild(link);
+  }
+  if (link.sheet) { whenIn(); return; }
+  link.addEventListener('load', whenIn, { once: true });
+  link.addEventListener('error', whenIn, { once: true });
 }
 
 export function applyTheme(theme) {
   current = cleanTheme(theme);
   const root = document.documentElement;
-  if (current.ui === 'clinical') ensureClinicalCss();
-  root.setAttribute('data-ui', current.ui);
+  // Switching to Clinical waits for its stylesheet before data-ui changes, so there is no mixed look in between.
+  const ui = current.ui;
+  if (ui === 'clinical' && root.getAttribute('data-ui') !== 'clinical') {
+    ensureClinicalCss(() => {
+      if (current.ui !== ui) return;                 // switched again meanwhile
+      root.setAttribute('data-ui', ui); syncBrowserBar();
+      dispatchEvent(new CustomEvent('themechange', { detail: { ...current } }));
+    });
+  } else root.setAttribute('data-ui', ui);
   root.setAttribute('data-skin', current.skin);
   root.setAttribute('data-theme', resolvedMode(current.mode));
   if (current.oled) root.setAttribute('data-oled', 'on'); else root.removeAttribute('data-oled');

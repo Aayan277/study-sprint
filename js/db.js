@@ -496,6 +496,7 @@ export async function resetAll() {
 export const BACKUP_FORMAT = 'study-sprint-backup';
 export const BACKUP_VERSION = 2;
 
+// (Kept as the plain reference: the tests compare the streamed file, exportAllBlob, with this.)
 export async function exportAll({ sounds = true } = {}) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'settings'], 'readonly');
@@ -524,12 +525,24 @@ export async function exportAll({ sounds = true } = {}) {
 // The same backup as exportAll, but built as a file (a Blob) a piece at a time: each store is read about 5,000 rows at a time, written
 // out as text straight away (the browser keeps the pieces outside the page's memory) and the page gets a breather in between.
 // So the whole backup is never in memory as objects, as one giant string and as a File all at once.
+// The pieces are read in separate transactions, so a change made while it runs (a review answer, a sync) could land half in the
+// file. dataVersion() is noted at the start and checked after the settings are written; if it moved, the file is built again
+// (at most twice more; after that it is saved as it is, which is still a usable backup).
 // The file is exactly what JSON.stringify(await exportAll(opts)) would give (same keys, same order), apart from the time in "exported".
 // Returns { blob, cards, reviews } (the two counts are for the "Backup saved" message).
 const EXPORT_ROWS = 5000;
 const EXPORT_CHARS = 4e6;
 const breathe = () => new Promise(r => setTimeout(r, 0));
 export async function exportAllBlob({ sounds = true } = {}) {
+  let out;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    out = await buildBackupBlob(sounds, attempt === 2);
+    if (out.stable) break;
+  }
+  return { blob: out.blob, cards: out.cards, reviews: out.reviews };
+}
+async function buildBackupBlob(sounds, last) {
+  const version0 = dataVersion();
   const parts = ['{"format":' + JSON.stringify(BACKUP_FORMAT) + ',"version":', '1', ',"exported":' + JSON.stringify(new Date().toISOString())];
   const skip = new Set();
   const counts = {};
@@ -564,6 +577,8 @@ export async function exportAllBlob({ sounds = true } = {}) {
   const tx = db.transaction('settings', 'readonly');
   const [keys, values] = await Promise.all([done(tx.objectStore('settings').getAllKeys()), done(tx.objectStore('settings').getAll())]);
   parts.push(',"settings":' + JSON.stringify(Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !isLocalOnly(k)))));
+  const stable = dataVersion() === version0;
+  if (!stable && !last) return { stable };      // changed while reading: the caller starts again
   // Pictures and sounds, one at a time.
   parts.push(',"media":[');
   let hasSounds = false, first = true, pending = [], chars = 0;
@@ -581,7 +596,7 @@ export async function exportAllBlob({ sounds = true } = {}) {
   flush();
   parts.push(']}');
   parts[1] = hasSounds ? '2' : '1';
-  return { blob: new Blob(parts, { type: 'application/json' }), cards: counts.cards, reviews: counts.reviewLog };
+  return { stable, blob: new Blob(parts, { type: 'application/json' }), cards: counts.cards, reviews: counts.reviewLog };
 }
 
 // A card's other fields (note-fields.js) are cleaned to their limits on the way out, so a backup always passes checkBackup.

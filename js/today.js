@@ -446,9 +446,10 @@ export async function renderToday(el) {
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant. Not while this screen is
   // still being drawn and made ready: when the browser is idle (at the latest after 4 s), or as soon as a finger or the pointer is on Start.
   let warmed = false;
-  const warm = () => { if (warmed) return; warmed = true; el.removeEventListener('pointerover', onNear); el.removeEventListener('pointerdown', onNear); import('./review.js').catch(() => {}); };
+  const warm = () => { if (warmed) return; warmed = true; el.removeEventListener('pointerover', onNear); el.removeEventListener('pointerdown', onNear); el.removeEventListener('focusin', onNear); import('./review.js').catch(() => {}); };
   const onNear = e => { if (e.target.closest?.('#startBtn')) warm(); };
   el.addEventListener('pointerover', onNear);
   el.addEventListener('pointerdown', onNear);
+  el.addEventListener('focusin', onNear);
   if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 2000);
 }

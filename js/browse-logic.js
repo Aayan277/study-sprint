@@ -89,13 +89,13 @@ export function searchMatcher(query) {
 
 // The text search looks in for one card (front, back and tags), folded once and remembered per card object, so typing
 // another letter only does a substring check per card instead of re-folding every card's text. A card that was edited
-// in place (new front, back or tags list) is folded again. Cards are normally replaced by copies when they change.
+// in place (new front, back or tags) is folded again. Cards are normally replaced by copies when they change.
 const foldCache = { fold: new WeakMap(), raw: new WeakMap() };
 function foldedCard(card, kind, fold) {
-  const tags = card.tags, n = tags ? tags.length : 0;
+  const tags = (card.tags || []).join(' ');
   let e = foldCache[kind].get(card);
-  if (!e || e.front !== card.front || e.back !== card.back || e.tags !== tags || e.n !== n) {
-    e = { front: card.front, back: card.back, tags, n, text: fold(`${card.front} ${card.back} ${(tags || []).join(' ')}`) };
+  if (!e || e.front !== card.front || e.back !== card.back || e.tags !== tags) {
+    e = { front: card.front, back: card.back, tags, text: fold(`${card.front} ${card.back} ${tags}`) };
     foldCache[kind].set(card, e);
   }
   return e.text;
@@ -129,6 +129,8 @@ function sortedCards(cards, sort) {
 //   opts       { query, filter, sort, now }
 // Search matches the front, back and tags, ignoring capitals and accents.
 // `tag:<path>` (for example tag:#uworld::step) keeps the cards with that tag or any tag below it; it combines with other words.
+// The cards array and the cards in it are treated as unchanging while a list is on screen (callers pass a fresh array after a change):
+// the sorted order is remembered per array.
 export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now() } = {}) {
   const { text, tags: tagTerms } = parseTagSearch(query);
   const match = cardMatcher(text);
