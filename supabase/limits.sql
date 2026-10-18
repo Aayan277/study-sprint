@@ -70,6 +70,7 @@ drop policy if exists "media: add own" on storage.objects;
 drop policy if exists "media: change own" on storage.objects;
 drop function if exists public.media_limit(uuid);
 drop function if exists public.media_used(uuid);
+drop function if exists public.media_may_store(text, text);       -- (older copies had it in the public schema, see the note at its new home below)
 
 -- Helpers. They work on whoever is calling and can't be called by the app directly.
 create or replace function public._media_limit(uid uuid) returns bigint
@@ -126,11 +127,21 @@ $$;
 -- ---------- 2 + 5. media space and file size ----------
 update storage.buckets set file_size_limit = 3145728 where id = 'media';
 
+-- The "may store" check lives in its own schema, "private", on purpose. The storage rules below call it as the person
+-- who is uploading, so that person must be allowed to run it: revoking "execute" (as the helpers above do) would
+-- make every upload fail. But anything in the "public" schema can also be called straight from the internet as an
+-- RPC, and then a signed-in person could keep asking "would this size fit?" and work out how full the project's
+-- picture storage is. The API only serves the "public" schema, so a function in "private" can be used by the rules
+-- but not called from outside. (Do not add "private" to the API's exposed schemas in the Supabase settings.)
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
 -- May the signed-in person store this file (name, and its size when the server already knows it)?
 -- Yes if the person exists, the file fits in their space (their other files + this one <= their limit; when the size
 -- isn't known yet, they need to be under the limit), and the whole bucket stays under its ceiling. Runs under a
 -- per-person lock, so parallel uploads are checked one after another.
-create or replace function public.media_may_store(objname text, size_text text) returns boolean
+create or replace function private.media_may_store(objname text, size_text text) returns boolean
 language plpgsql volatile security definer set search_path = '' as $$
 declare uid uuid := auth.uid(); lim bigint; used bigint; sz bigint; cap bigint;
 begin
@@ -153,14 +164,14 @@ $$;
 
 revoke all on function public.default_media_limit(), public.default_data_limit(), public._media_limit(uuid), public._data_limit(uuid),
   public._rows_limit(uuid), public._media_used(uuid, text), public._total_media_bytes(), public._total_sync_bytes() from public, anon, authenticated;
-revoke all on function public.media_may_store(text, text) from public, anon;
-grant execute on function public.media_may_store(text, text) to authenticated;
+revoke all on function private.media_may_store(text, text) from public, anon;
+grant execute on function private.media_may_store(text, text) to authenticated;
 
 create policy "media: add own" on storage.objects for insert to authenticated
   with check (
     bucket_id = 'media'
     and (storage.foldername(name))[1] = (select auth.uid())::text
-    and public.media_may_store(name, metadata ->> 'size')
+    and private.media_may_store(name, metadata ->> 'size')
   );
 
 -- Replacing a file counts too (a small file can't be swapped for a 3 MB one to get round the limit).
@@ -169,7 +180,7 @@ create policy "media: change own" on storage.objects for update to authenticated
   with check (
     bucket_id = 'media'
     and (storage.foldername(name))[1] = (select auth.uid())::text
-    and public.media_may_store(name, metadata ->> 'size')
+    and private.media_may_store(name, metadata ->> 'size')
   );
 
 -- ---------- 3 + 4 + 5. synced data space ----------

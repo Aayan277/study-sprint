@@ -21,7 +21,7 @@ import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWo
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
-import { usageLine } from './quota.js';
+import { usageLine, cardsWarning } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.25';
@@ -219,7 +219,7 @@ async function renderSettings(el) {
           <p class="note" id="mediaLine"></p></div>
       </div>
       <div class="set-row" id="usageRow" hidden>
-        <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p></div>
+        <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
       <div class="set-row">
         <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
@@ -745,6 +745,11 @@ async function drawUsage() {
   $('usageNote').hidden = !u.detail;
   $('usageNote').textContent = u.detail;
   $('usageNote').className = 'note usage-line ' + u.level;
+  // 50,000 cards or more: a heads-up that stays here (nothing is blocked).
+  const big = cardsWarning(await db.count('cards'));
+  if (!row.isConnected) return;
+  $('cardsNote').hidden = !big;
+  $('cardsNote').textContent = big || '';
 }
 
 // A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads

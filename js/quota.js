@@ -4,6 +4,7 @@
 //   - Pictures and sounds: each account has a space limit (180 MB unless the owner raised it). At the limit,
 //     new pictures and sounds wait on the device and everything else keeps syncing.
 //   - One picture: refused if it is still over 1.5 MB after being shrunk (3 MB for image occlusion).
+//   - A very large collection (50,000 cards or more): a warning, never a block.
 //   - Imports: warn on a deck whose media is over 200 MB, or an Anki history of more than 50,000 reviews.
 
 export const MB = 1024 * 1024;
@@ -13,6 +14,7 @@ export const MAX_PICTURE = 1.5 * MB;
 export const MAX_OCCLUSION_PICTURE = 3 * MB;        // also the bucket's file size limit
 export const IMPORT_MEDIA_WARN = 200 * MB;
 export const IMPORT_REVIEWS_WARN = 50000;
+export const CARDS_WARN = 50000;                    // cards in one account: a warning, never a block
 export const REVIEW_BYTES = 530;                    // about what one review takes on the server (docs/design/scale-and-backend.md)
 
 // "12 MB", "0.4 MB", "2 GB": whole numbers from 10 up, one decimal below that.
@@ -112,6 +114,14 @@ export function importWarnings({ mediaBytes = 0, reviews = 0 } = {}) {
   }
   return out;
 }
+
+// ---------- a very large collection ----------
+// Said in plain words when an account holds 50,000 cards or more. Nothing is blocked: it is only a heads-up.
+export const cardsWarning = count => count >= CARDS_WARN
+  ? `You have ${count.toLocaleString()} cards. That still works, but syncing gets slow, a new device takes a long time to download everything, and your account space fills up faster. Deleting decks you no longer use helps.`
+  : null;
+// Did adding cards just take the account past the mark? (Used once, right after an import.)
+export const passedCardsWarning = (before, after) => before < CARDS_WARN && after >= CARDS_WARN;
 
 // ---------- records too big for the server, and what to do when a push is refused ----------
 export const MAX_ROW_BYTES = 60000;                 // the server's own limit is 64 KB (supabase/limits.sql); this leaves room for how it counts
