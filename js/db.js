@@ -638,6 +638,8 @@ export async function importAll(data, { everywhere = false } = {}) {
     }
     const oldKeys = await done(tx.objectStore('settings').getAllKeys());
     ['decks', 'cards', 'cardStates', 'reviewLog'].forEach(n => tx.objectStore(n).clear());
+    // The cards are replaced without delete markers: the files the old cards used are not "dropped" (sync.js sweepMedia), so start that list again.
+    if (!everywhere) tx.objectStore('settings').delete('mediaRefs');
     // Backups from before sync existed are filled in the same way as the version 2 upgrade.
     const kept = {};
     for (const name of Object.keys(SYNC_ID)) {

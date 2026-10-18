@@ -980,12 +980,16 @@ function confirmDeleteServer() {
 // cancels the download, and nothing is deleted.
 function wireSafeDelete({ yes, note, label, call, done, fail, ready = () => true }) {
   const ac = new AbortController();
-  $('sheet').addEventListener('close', () => ac.abort(), { once: true });
+  const stop = () => ac.abort();
+  document.addEventListener('sheet-closing', stop, { once: true });
+  $('sheet').addEventListener('close', stop, { once: true });
+  const live = () => !!$('sheet')?.open && !ac.signal.aborted;
   const text = t => { const b = $(yes); if (b) b.textContent = t; };
   const say = (msg, warn) => { const n = $(note); if (n) { n.hidden = !msg; n.className = warn ? 'note warn' : 'note'; n.textContent = msg || ''; } };
   let step = 0;                                // 0 first tap, 1 download then delete, 2 delete anyway
   $(yes).addEventListener('click', async () => {
     if (!ready()) return;
+    if ($('daErr')) $('daErr').hidden = true;
     $(yes).disabled = true;
     try {
       if (step === 0) {
@@ -1000,7 +1004,7 @@ function wireSafeDelete({ yes, note, label, call, done, fail, ready = () => true
           return;
         }
       }
-      await call({ signal: ac.signal, anyway: step === 2, onProgress: (n, t) => text(`Saving pictures here first: ${n} of ${t}`) });
+      await call({ signal: ac.signal, isLive: live, anyway: step === 2, onProgress: (n, t) => text(`Saving pictures here first: ${n} of ${t}`) });
       done();
     } catch (e) {
       if (ac.signal.aborted || e.code === 'cancelled') return;

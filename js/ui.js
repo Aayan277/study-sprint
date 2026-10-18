@@ -177,7 +177,7 @@ export function closeSheet() {
   // A pop-up gives the focus back to where it came from by itself; a side panel does not, so the focus goes to the card
   // that was open (or the button that opened the panel) instead of being lost on the page.
   const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
-  if (d.open) d.close();
+  if (d.open) { document.dispatchEvent(new Event('sheet-closing')); d.close(); }      // (the event: so work tied to the sheet stops now, not a task later)
   releaseSheet();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
   back?.focus({ preventScroll: true });

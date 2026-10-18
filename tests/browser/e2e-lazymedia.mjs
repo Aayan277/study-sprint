@@ -179,10 +179,14 @@ await dl.saveAs(SP + '/lazy.apkg');
 const names = JSON.parse(execFileSync('unzip', ['-p', SP + '/lazy.apkg', 'media']).toString());
 ok(Object.keys(names).length === 60, `Anki export fetched the missing pictures first (C held ${cHeld}, the file has ${Object.keys(names).length})`);
 
+// a restore from a backup replaces the cards without delete markers: the list of files cards used is started again
+await run(B, async () => { const db = await import('./js/db.js'); await db.setSetting('mediaRefs', { userId: 'x', ids: ['pic-1', 'old-pic'] }); await db.importAll(await db.exportAll()); });
+ok(await run(B, async () => (await (await import('./js/db.js')).getSettings()).mediaRefs === undefined), 'a restore (without "everywhere") forgets the list of files cards used, so no file is marked for it');
 const D = await device('D');
 await run(D, async () => (await import('./js/db.js')).deleteDeck('sample'));
 await signIn(D, false);
 const dHeld = (await held(D)).length;
+const rowsLeftNow = () => fake.userRows('me@example.com').length;
 const marksD = () => run(D, async () => (await import('./js/db.js')).mediaMarks());
 // ---- a lazy device deletes a card whose picture it never held: the file is still marked, then swept ----
 const dHeld0 = await held(D);
@@ -203,6 +207,22 @@ const dl2 = await run(D, async () => { const r = await (await import('./js/sync.
 await D.context().unroute(SUPA, refuse);
 ok(dl2.got === 0 && dl2.left > 20 && dl2.reason === 'offline', `no connection: it reports ${dl2.left} files left`);
 ok(refused > 0 && refused < 12, `and gave up after ${refused} tries, not one per file`);
+
+// ---- Delete my account: Cancel during its download deletes nothing too ----
+const E = await device('E');
+await run(E, async () => (await import('./js/db.js')).deleteDeck('sample'));
+await signIn(E, false);
+const slowE = async r => { await new Promise(ok => setTimeout(ok, 400)); return r.fallback(); };
+await E.context().route(SUPA, slowE);
+await E.goto(APP + '#/decks'); await E.goto(APP + '#/settings'); await E.waitForSelector('#delAcctBtn'); await E.click('#delAcctBtn'); await E.waitForSelector('#daYes');
+await E.fill('#daText', 'DELETE'); await E.click('#daYes');
+await E.waitForFunction(() => /Download, then delete/.test(document.querySelector('#daYes')?.textContent || ''));
+await E.click('#daYes');
+await E.waitForFunction(() => /Saving pictures here first/.test(document.querySelector('#daYes')?.textContent || ''));
+await E.click('#daNo');
+await E.waitForTimeout(4000);
+ok(rowsLeftNow() > 0 && fake.users.has('me@example.com') && (await run(E, async () => !!(await (await import('./js/db.js')).getSettings()).syncAuth)), 'Delete my account: Cancel during the download deletes nothing and stays signed in');
+await E.context().unroute(SUPA, slowE);
 
 // ---- Delete my synced data: says what it will do, can be cancelled, offers "anyway", and saves the pictures first ----
 const openDelete = async () => { await D.goto(APP + '#/decks'); await D.goto(APP + '#/settings'); await D.waitForSelector('#delServerBtn'); await D.click('#delServerBtn'); await D.waitForSelector('#dsYes'); };

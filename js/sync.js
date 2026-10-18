@@ -195,7 +195,7 @@ export async function deleteServerData(opts = {}) {
   await keepDeviceWhole(opts);
   const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
-  if (opts.signal?.aborted) throw cancelled();
+  if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
   await supa.deleteAllRows(auth.access_token, auth.user.id);
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
@@ -208,7 +208,7 @@ export async function deleteAccount(opts = {}) {
   await keepDeviceWhole(opts);
   const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
-  if (opts.signal?.aborted) throw cancelled();
+  if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
   // Files first, through the Storage API (that also frees the space); the server function removes any left.
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await supa.deleteAccount(auth.access_token);
@@ -552,9 +552,9 @@ const cancelled = () => new supa.SupaError('Cancelled. Nothing was deleted.', { 
 // cards use, because afterwards the account can't give them back. Throws a message to show when some could not be fetched
 // (code 'media_left': the person may go on anyway), or 'cancelled'. The caller asks for a fresh sign-in afterwards (a long download
 // can outlast the token).
-async function keepDeviceWhole({ onProgress, signal, anyway } = {}) {
+async function keepDeviceWhole({ onProgress, signal, anyway, isLive } = {}) {
   const r = await downloadAllMedia({ onProgress, signal });
-  if (signal?.aborted) throw cancelled();
+  if (signal?.aborted || isLive?.() === false) throw cancelled();
   if (r.left.length && !anyway) {
     const n = r.left.length;
     throw new supa.SupaError(`${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} your cards use ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} would be lost here. Connect to the internet and try again. Nothing was deleted.`, { code: 'media_left' });
