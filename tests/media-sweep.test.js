@@ -110,3 +110,32 @@ test('after a re-upload every kept-back file is checked (cap Infinity), a few at
   assert.ok(most > 4 && most <= 8, 'concurrency ' + most);
   assert.deepEqual(seen.at(-1), [60, 60]);                          // and progress is reported
 });
+
+test('held-file check: one listing answers all files; missing ones are remembered; a failing listing falls back to HEAD', async () => {
+  const held = Array.from({ length: 10 }, (_, i) => ({ id: 'f' + i }));
+  let heads = 0;
+  const exists = async id => { heads++; return id === 'f1'; };
+  const checked = new Set();
+  const found = await alreadyOnServer(held, exists, checked, 2, { list: async () => ['f1', 'f4', 'other'] });
+  assert.deepEqual(found.sort(), ['f1', 'f4']);
+  assert.equal(heads, 0);
+  assert.ok(checked.has('f0') && !checked.has('f1'));
+  const fb = await alreadyOnServer(held, exists, new Set(), Infinity, { list: async () => { throw new Error('403'); } });
+  assert.deepEqual(fb, ['f1']);                                     // fell back to one HEAD per file
+  assert.equal(heads, 10);
+});
+
+test('listMedia pages by 1000 with a stable order until an empty page', async () => {
+  const { listMedia } = await import('../js/supa.js');
+  const bodies = [], real = globalThis.fetch;
+  const pages = [Array.from({ length: 1000 }, (_, i) => ({ name: 'a' + i })), [{ name: 'z' }], []];
+  globalThis.fetch = async (url, init) => { bodies.push([url, JSON.parse(init.body), init.headers.Authorization]); return new Response(JSON.stringify(pages[bodies.length - 1]), { status: 200 }); };
+  try {
+    const ids = await listMedia('tok', 'u1');
+    assert.equal(ids.length, 1001);
+    assert.match(bodies[0][0], /\/storage\/v1\/object\/list\/media$/);
+    assert.deepEqual(bodies.map(b => b[1].offset), [0, 1000, 2000]);
+    assert.deepEqual(bodies[0][1], { prefix: 'u1/', limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+    assert.equal(bodies[0][2], 'Bearer tok');
+  } finally { globalThis.fetch = real; }
+});

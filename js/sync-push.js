@@ -16,19 +16,26 @@ const BATCH = 500;           // rows per request
 const MIN_PART = 50;         // a batch that keeps timing out is split down to this many rows
 const BUDGET = 150;          // extra requests allowed per sync for splitting; what's left over waits for the next sync
 
+const GROW_AFTER = 3;        // this many requests in a row that went through before the batch size is doubled again (up to the full size)
+
 export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, onProgress } = {}) {
   const out = { sent: [], held: [], bad: [], full: null };
   let spare = budget;
+  // The batch size for the rest of this sync: halved when a request times out (a slow connection), so the next batches don't each
+  // wait out the full timeout first; doubled again, cautiously, after GROW_AFTER requests in a row went through.
+  let size = batch, streak = 0;
   const attempt = async part => {
     try {
       await put(part);
       out.sent.push(...part);
+      if (size < batch && ++streak >= GROW_AFTER) { size = Math.min(batch, size * 2); streak = 0; }
       return;
     } catch (err) {
       // A slow connection: the batch didn't get through in time. Send it in halves (rows already there are ignored by the server).
       if (err?.code === 'timeout' && part.length > MIN_PART && spare > 0) {
         spare--;
         const mid = part.length >> 1;
+        size = Math.max(MIN_PART, Math.min(size, mid)); streak = 0;
         await attempt(part.slice(0, mid));
         await attempt(part.slice(mid));
         return;
@@ -49,9 +56,11 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       await attempt(part.slice(mid));
     }
   };
-  for (let i = 0; i < rows.length; i += batch) {
+  for (let i = 0; i < rows.length;) {
     onProgress?.(i, rows.length);
-    await attempt(rows.slice(i, i + batch));
+    const n = size;                  // (size may change while this batch is sent)
+    await attempt(rows.slice(i, i + n));
+    i += n;
   }
   return out;
 }

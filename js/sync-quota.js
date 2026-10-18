@@ -30,7 +30,7 @@ export async function planMedia(auth, pending, checked = new Set(), { cap, size,
   if (!pending.length) return { send: [], full: null, done: [] };
   const ordered = [...pending.filter(m => !isSoundRow(m)), ...pending.filter(isSoundRow)];
   const plan = planUploads(ordered, await fetchUsage(auth.access_token));
-  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap, { size, onProgress });
+  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap, { size, onProgress, list: () => supa.listMedia(auth.access_token, auth.user.id) });
   const stillHeld = plan.held.length - done.length;
   return { send: plan.send, full: stillHeld ? plan.usage : null, done };
 }
@@ -38,7 +38,23 @@ export async function planMedia(auth, pending, checked = new Set(), { cap, size,
 // Of the files kept back for lack of room, the ids the account already has. Looks at no more than `cap` files per call,
 // and remembers (in `checked`, for as long as the app is open) the ones it found missing, so the next sync looks at the next few
 // instead of asking about thousands of files every time. A check that fails is skipped, not remembered.
-export async function alreadyOnServer(held, exists, checked = new Set(), cap = 25, { size, onProgress } = {}) {
+// list (optional): () => the ids of every file the account has (a few paged requests, storage list API; the account's own
+// "read own" rule allows it). When it works, all the unchecked held files are answered at once (cap doesn't apply: one list instead
+// of a request per file) and the missing ones are remembered. If it fails (older server, no permission, offline), it falls back to asking per file.
+export async function alreadyOnServer(held, exists, checked = new Set(), cap = 25, { size, onProgress, list } = {}) {
+  if (list) {
+    const unchecked = held.filter(m => !checked.has(m.id));
+    if (!unchecked.length) return [];
+    try {
+      const have = new Set(await list());
+      const found = [];
+      for (const m of unchecked) { if (have.has(m.id)) found.push(m.id); else checked.add(m.id); }
+      return found;
+    } catch (err) {
+      if (supa.isSignedOutError(err)) throw err;
+      console.warn('Listing the account\u2019s files failed; asking about each file', err);
+    }
+  }
   const todo = held.filter(m => !checked.has(m.id)).slice(0, cap);
   const found = [];
   await runPool(todo, async m => {

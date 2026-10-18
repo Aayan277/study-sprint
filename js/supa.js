@@ -247,13 +247,14 @@ export async function deleteMedia(token, userId, ids) {
   if (!ids.length) return;
   await storage('object/media', { method: 'DELETE', token, type: 'application/json', body: JSON.stringify({ prefixes: ids.map(id => `${userId}/${id}`) }) });
 }
-// The ids of every picture in the account (for Delete my synced data).
+// The ids of every picture in the account (for Delete my synced data, and the held-file check in sync-quota.js). Sorted by name so
+// the pages don't overlap. Keeps asking until a page comes back empty (the server may give fewer than `limit` per page).
 export async function listMedia(token, userId) {
   const ids = [];
   for (let offset = 0; ; offset += 1000) {
-    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset }) });
+    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } }) });
     const page = await res.json();
+    if (!page.length) return ids;
     ids.push(...page.map(f => f.name));
-    if (page.length < 1000) return ids;
   }
 }

@@ -310,3 +310,28 @@ test('the words for cards left out of a bulk save', () => {
   assert.equal(tooLargeNote(2), '2 cards were too large and were left unchanged');
   assert.equal(tooLargeNote(3, 'out'), '3 cards were too large and were left out');
 });
+
+// ---- batch size carried forward after a timeout ----
+test('pushSafely: after one timeout the next batches start smaller, and no row is marked sent wrongly', async () => {
+  const sizes = [], stored = new Set();
+  let first = true;
+  const put = async rows => {
+    sizes.push(rows.length);
+    if (first && rows.length === 500) { first = false; const e = new Error('slow'); e.code = 'timeout'; throw e; }
+    rows.forEach(r => stored.add(r.id));
+  };
+  const rows = ids(2000);
+  const out = await pushSafely(put, rows);
+  assert.deepEqual(sizes.slice(0, 4), [500, 250, 250, 250]);       // timed out at 500, halves, then the next batch is 250 (not 500)
+  assert.equal(out.sent.length, 2000);
+  assert.deepEqual(new Set(out.sent.map(r => r.id)), stored);       // sent == what the server really got
+  assert.ok(sizes.includes(500) && sizes.lastIndexOf(500) > 0);     // grew back to full size after a few successes
+});
+
+test('pushSafely: a timeout at the bottom still throws, and size refusals do not shrink later batches', async () => {
+  const slow = async () => { const e = new Error('slow'); e.code = 'timeout'; throw e; };
+  await assert.rejects(pushSafely(slow, ids(60)), { code: 'timeout' });
+  const sizes = [];
+  await pushSafely(fakePut({ bad: ['r7'], onCall: r => sizes.push(r.length) }), ids(1000));
+  assert.equal(sizes.filter(n => n === 500).length, 2);             // the second batch is still 500 long
+});
