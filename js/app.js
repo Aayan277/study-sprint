@@ -12,7 +12,7 @@ const termCount = s => entriesFrom(s).length;      // (Settings → Study → Gl
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
 import { clearDraft } from './import-draft.js';
-import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
@@ -1052,6 +1052,7 @@ function confirmDeleteAccount() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
+  clearStashedDraft();            // unsaved card edits kept from leaving a screen
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime } = settings;
   await db.resetAll();

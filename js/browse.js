@@ -418,31 +418,43 @@ function wireCardForm(card, ctx, msg, pair = null) {
   // Back, ×, a tap outside or Esc with edits not saved asks "Discard changes?" (nothing changed: it just closes).
   const base = formSnapshot($('ceForm'));
   $('ceForm').dataset.cardId = card.id;
+  formBase = { id: card.id, vals: fieldVals($('ceForm')) };
   guardSheet(() => !!$('ceForm') && formSnapshot($('ceForm')) !== base);
   restoreDraft(card);
 }
 
 // Changing screen closes the card panel. Edits that were not saved are kept (not asked about: the screen has already changed)
-// and put back if that card's panel is opened again.
-let draft = null;
-setDraftStasher(() => stashCardDraft());
+// and put back if that card's panel is opened again, for up to 30 minutes. Only the fields that were edited come back, and only
+// where the card has not changed meanwhile (a sync, another device): those are left out, and the toast says so.
+let draft = null, formBase = null;      // formBase: the form's field values as the panel opened
+const fieldVals = form => Object.fromEntries([...form.querySelectorAll('input, textarea, select, [contenteditable="true"]')]
+  .filter(el => el.id && !['file', 'button', 'submit', 'hidden'].includes(el.type))
+  .map(el => [el.id, el.isContentEditable ? el.innerHTML : (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value]));
+setDraftStasher(what => (what === 'clear' ? (draft = null) : stashCardDraft()));
 function stashCardDraft() {
   const f = $('ceForm');
-  if (!f || !sheetDirty()) return;
-  draft = { id: f.dataset.cardId, at: Date.now(), fields: [...f.querySelectorAll('input, textarea, select, [contenteditable="true"]')].filter(el => el.id && !['file', 'button', 'submit', 'hidden'].includes(el.type)).map(el => ({
-    id: el.id, rich: el.isContentEditable, v: el.isContentEditable ? el.innerHTML : (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value })) };
+  if (!f || !sheetDirty() || !formBase || formBase.id !== f.dataset.cardId) return;
+  const cur = fieldVals(f);
+  const fields = Object.keys(cur).filter(id => cur[id] !== formBase.vals[id]).map(id => ({ id, v: cur[id], base: formBase.vals[id], rich: $(id).isContentEditable }));
+  if (fields.length) draft = { id: f.dataset.cardId, at: Date.now(), fields };
 }
 function restoreDraft(card) {
   const d = draft;
   if (!d) return;
-  if (d.id !== card.id) { if (Date.now() - d.at > 30 * 60000) draft = null; return; }      // (another card: it waits for its own card, for a while)
+  if (Date.now() - d.at > 30 * 60000) { draft = null; return; }
+  if (d.id !== card.id) return;                // another card: it waits for its own card
   draft = null;
+  const now = fieldVals($('ceForm'));          // the form was just built from the card as it is now
+  let back = 0, left = 0;
   for (const x of d.fields) {
     const el = $(x.id);
     if (!el || !$('ceForm').contains(el)) continue;
+    if (now[x.id] !== x.base) { left++; continue; }       // this field changed elsewhere since: keep the card's newer value
     if (x.rich) el.innerHTML = x.v; else if (typeof x.v === 'boolean') el.checked = x.v; else el.value = x.v;
+    back++;
   }
-  toast('Your unsaved edits to this card are back');
+  if (left) toast(back ? 'Your unsaved edits are back, but some were left out because this card changed on another device' : 'Your unsaved edits were left out because this card changed on another device');
+  else if (back) toast('Your unsaved edits to this card are back');
 }
 
 // ---------- cards that work in both directions (reverse.js) ----------

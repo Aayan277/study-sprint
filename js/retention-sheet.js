@@ -12,6 +12,7 @@
 import * as db from './db.js';
 import { runJob } from './worker-job.js';
 import { ratingProbs, HORIZONS, RETENTION_MIN, RETENTION_MAX, SIM_CAP, suggestion, marginalCost, pickSelected, KNEE_MIN, EXAM_TOLERANCE, EXAM_LOAD_TOLERANCE } from './retention-sim.js';
+import { TRAIN_SOURCES } from './fsrs-data.js';
 import { effectiveDeck, subtreeIds } from './deck-tree.js';
 import { examInfo, FINAL_DAYS } from './exam.js';
 import { deckSchedulerOptions, schedulerOptions } from './sched-settings.js';
@@ -69,7 +70,7 @@ export async function gatherInput({ deckId = '', now = Date.now(), current = nul
   // "Reviews in the last 90 days" counts only answers that would train it: not Play answers, and only the cards in scope (the chosen
   // deck and the decks inside it; for all decks, not those with their own settings, which are left out above).
   const inScope = new Map(cards.map(c => [c.id, inside ? inside.has(c.deckId) : !effectiveDeck(decks, c.deckId).options]));
-  const usable = rows.filter(l => l.source !== 'play' && l.rating >= 1 && l.rating <= 4 && inScope.get(l.cardId)).length;
+  const usable = rows.filter(l => TRAIN_SOURCES.includes(l.source) && l.rating >= 1 && l.rating <= 4 && inScope.get(l.cardId)).length;
   const deckRow = deckId ? decks.find(d => d.id === deckId) : null;
   const newPerDay = Number.isFinite(deckRow?.newPerDay) ? deckRow.newPerDay : settings.newPerDay;
   return {

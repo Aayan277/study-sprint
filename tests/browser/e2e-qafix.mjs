@@ -420,6 +420,46 @@ for (const fmt of ['lightning', 'classic']) {
   await p.close();
 }
 
+// ---------- 12b. a kept draft never overwrites what changed meanwhile ----------
+{
+  const p = await open({ w: 1440, h: 900, rail: '1' });
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.addDeckWithCards({ id: 'sd', name: 'Synced', color: '#3E63DD', created: 1 }, [{ id: 'sd1', deckId: 'sd', front: 'Gamma', back: 'Third', tags: [], created: 1 }]);
+  });
+  await p.evaluate(() => { location.hash = '#/deck/sd'; }); await p.waitForSelector('.crow'); await p.waitForTimeout(300);
+  await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm');
+  await p.click('#ceFront'); await p.keyboard.press('End'); await p.keyboard.type(' mine'); await p.waitForTimeout(150);
+  await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForTimeout(800);
+  await p.evaluate(async () => { const db = await import('./js/db.js'); const c = await db.get('cards', 'sd1'); await db.saveCards([{ ...c, back: 'Changed elsewhere' }]); });
+  await p.evaluate(() => { location.hash = '#/deck/sd'; }); await p.waitForSelector('.crow'); await p.waitForTimeout(300);
+  await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm'); await p.waitForTimeout(400);
+  const vals = await p.evaluate(() => ({ f: document.getElementById('ceFront').textContent.trim(), b: document.getElementById('ceBack').textContent.trim() }));
+  ok(vals.f === 'Gamma mine', 'draft: the edited Front comes back (' + vals.f + ')');
+  ok(vals.b === 'Changed elsewhere', 'draft: Back shows the newer saved value, not the old one (' + vals.b + ')');
+  // (the field edited here was not changed elsewhere, so nothing was left out)
+  await p.close();
+}
+{
+  const p = await open({ w: 1440, h: 900, rail: '1' });
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.addDeckWithCards({ id: 'sd', name: 'Synced', color: '#3E63DD', created: 1 }, [{ id: 'sd1', deckId: 'sd', front: 'Gamma', back: 'Third', tags: [], created: 1 }]);
+  });
+  await p.evaluate(() => { location.hash = '#/deck/sd'; }); await p.waitForSelector('.crow'); await p.waitForTimeout(300);
+  await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm');
+  await p.click('#ceFront'); await p.keyboard.press('End'); await p.keyboard.type(' mine');
+  await p.click('#ceBack'); await p.keyboard.press('End'); await p.keyboard.type(' mine2'); await p.waitForTimeout(150);
+  await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForTimeout(800);
+  await p.evaluate(async () => { const db = await import('./js/db.js'); const c = await db.get('cards', 'sd1'); await db.saveCards([{ ...c, back: 'Changed elsewhere' }]); });
+  await p.evaluate(() => { location.hash = '#/deck/sd'; }); await p.waitForSelector('.crow'); await p.waitForTimeout(300);
+  await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm'); await p.waitForTimeout(400);
+  const vals = await p.evaluate(() => ({ f: document.getElementById('ceFront').textContent.trim(), b: document.getElementById('ceBack').textContent.trim(), t: document.getElementById('toast')?.textContent || '' }));
+  ok(vals.f === 'Gamma mine' && vals.b === 'Changed elsewhere', 'draft: Front restored, the Back that changed elsewhere keeps its new value (' + vals.f + ' / ' + vals.b + ')');
+  ok(/left out because this card changed on another device/.test(vals.t), 'draft: the toast says some edits were left out (' + vals.t + ')');
+  await p.close();
+}
+
 // ---------- 13. image occlusion: moving or adding a box counts as an edit ----------
 {
   const p = await open({ w: 1440, h: 900, rail: '1' });

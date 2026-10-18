@@ -337,8 +337,8 @@ test('labelled: a list of term: definition lines that start with Front: and Back
   assert.deepEqual(cards(text), [['Front', 'anterior surface'], ['Back', 'posterior surface'], ['Side', 'lateral'], ['Top', 'superior']]);
   assert.notEqual(formatOf(text).id, 'labelled');
 });
-test('labelled: an answer that runs on into "Word: text" lines is not Q/A', () => {
-  const text = 'Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two';
+test('labelled: answers that run on into as many "Word: text" lines as there are pairs are not Q/A', () => {
+  const text = 'Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two\nSee: page 4';
   assert.notEqual(formatOf(text).id, 'labelled');
 });
 test('labelled: up to 2 title lines before the first Q: are skipped', () => {
@@ -348,4 +348,14 @@ test('labelled: up to 2 title lines before the first Q: are skipped', () => {
 });
 test('labelled: Ans: is an answer label', () => {
   assert.deepEqual(cards('Q1: What is ATP?\nAns: Energy currency\nQ2: What is DNA?\nAns: Genetic material'), [['What is ATP?', 'Energy currency'], ['What is DNA?', 'Genetic material']]);
+});
+
+test('labelled: one "Note:" line inside an answer of a 3-pair paste stays Q/A', () => {
+  const text = 'Q: A?\nA: one\nNote: see page 3\nQ: B?\nA: two\nQ: C?\nA: three';
+  assert.equal(formatOf(text).id, 'labelled');
+  assert.deepEqual(cards(text), [['A?', 'one\nNote: see page 3'], ['B?', 'two'], ['C?', 'three']]);
+});
+test('labelled: the anatomy list (one Front/Back pair, then terms) still goes to the separator rules', () => {
+  assert.equal(formatOf('Front: anterior surface\nBack: posterior surface\nSide: lateral\nTop: superior').id !== 'labelled', true);
+  assert.equal(formatOf('Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two').id, 'labelled', 'one note among two pairs stays Q/A');
 });

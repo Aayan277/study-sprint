@@ -178,3 +178,18 @@ test('a Cloze note column only counts with the export header; a changed front is
   assert.deepEqual(edited.clozes.map(c => !!c), [false, true]);
   assert.deepEqual(edited.columns, ['Front', 'Back']);
 });
+
+test('an exported CSV plus one hand-added {{c1::x}} row still groups the exported cloze cards', () => {
+  const text = '{{c1::DNA}} carries {{c2::genes}}';
+  const mk = n => ({ id: 'k' + n, noteId: 'n1', noteText: text, noteExtra: 'Ex', cloze: n, ...clozeCard(text, n), tags: ['bio'] });
+  const csv = toCSV([mk(1), mk(2), { id: 'p', front: 'plain', back: 'card', tags: [] }]) + 'The {{c1::heart}} pumps,,,,\r\n';
+  const { result, notes } = withClozeLines(csv, parseText);
+  assert.equal(notes, 1);
+  const list = buildCards(result);
+  assert.equal(list.length, 4);
+  assert.equal(list[0].cloze.noteKey, list[1].cloze.noteKey);
+  assert.equal(list[0].cloze.text, text);
+  assert.equal(list[0].noteExtra, 'Ex');
+  assert.equal(list[2].cloze, undefined);
+  assert.equal(list[3].cloze.text, 'The {{c1::heart}} pumps');
+});

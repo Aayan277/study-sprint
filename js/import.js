@@ -291,15 +291,15 @@ function tryBlocks(text) {
 // Notes written as Q:/A: (or Question:/Answer:, Ans:, Front:/Back:, any case) pairs. A label ends with a colon, so "Q - x" is left to the
 // separator rules. A card runs from its Q: line to its A: line and on to the next Q: line, so an answer can take several lines.
 // Up to 2 lines before the first Q: ("Quiz 1", "Here are your flashcards:") are skipped.
-// The separator rules win (null) when this only looks like labelled pairs: an answer that runs on into lines like "Side: lateral"
-// (a list of "Word: text" lines, two of which happen to be called Front and Back), or fewer than 2 pairs among lines that mostly split on ": ".
+// The separator rules win (null) when this only looks like labelled pairs: answers that run on into lines like "Side: lateral"
+// (a list of "Word: text" lines, two of which happen to be called Front and Back; one pair, or as many such lines as pairs), or fewer than 2 pairs among lines that mostly split on ": ".
 const LABEL_Q = /^\s*(?:[-*•–]\s+)?(?:q(?:uestion)?\s*\d{0,3}|front)\s*[:：]\s*(.*)$/i;
 const LABEL_A = /^\s*(?:[-*•–]\s+)?(?:a(?:ns(?:wer)?)?\s*\d{0,3}|back)\s*[:：]\s*(.*)$/i;
 const WORD_TEXT = /^\s*(?:[-*•–]\s+)?\p{L}[\p{L}\p{N}'’ -]{0,30}[:：]\s+\S/u;
 const LEADING_MAX = 2;
 function tryLabelled(text) {
   const rows = [], others = [];
-  let cur = null, part = 0, leading = 0, lines = 0;       // part: 0 = in the question, 1 = in the answer
+  let cur = null, part = 0, leading = 0, lines = 0, runOn = 0;       // part: 0 = in the question, 1 = in the answer
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
@@ -311,12 +311,13 @@ function tryLabelled(text) {
     } else if (a && cur && part === 0) { cur[1] = a[1].trim(); part = 1; }
     else if (!cur) { if (++leading > LEADING_MAX) return null; }      // a title line before the first Q: (more than 2: not this format)
     else {
-      if (part === 1 && WORD_TEXT.test(line)) return null;      // the answer runs on into "Word: text" lines: a list of terms
+      if (part === 1 && WORD_TEXT.test(line)) runOn++;      // the answer runs on into a "Word: text" line (a list of terms?)
       if (splitFirst(line, ': ')) others.push(line);
       cur[part] = cur[part] ? cur[part] + '\n' + line : line;      // more lines of the same side
     }
   }
   if (!rows.length || rows.some(r => !r[0].trim() || !r[1].trim())) return null;
+  if (runOn && (rows.length < 2 || runOn >= rows.length)) return null;      // a few notes inside answers are fine; a list of terms is not
   if (rows.length < 2 && others.length && (rows.length * 2 + others.length) / (lines - leading) >= MIN_SCORE) return null;
   return rows;
 }

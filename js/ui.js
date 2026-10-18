@@ -170,14 +170,15 @@ export function guardedGo(go) {
 // A screen that keeps drafts (the card panel) says how to stash one; the router calls stashDraft() before it closes the sheet.
 let stasher = null;
 export const setDraftStasher = fn => { stasher = fn; };
-export const stashDraft = () => stasher?.();
+export const stashDraft = () => stasher?.('stash');
+export const clearStashedDraft = () => stasher?.('clear');
 let discardThen = null;      // what to do after Discard (instead of just closing the sheet)
 function askDiscard(then = null) {
   const d = $('sheet'), body = d.querySelector('.sheet-in');
   if (!d.open || !body) { if (then) then(); else closeSheet(); return; }
-  discardThen = then;
   const had = $('discardAsk');
-  if (had) { $('discardKeep').focus({ preventScroll: true }); return; }
+  if (had) { if (then) discardThen = then; $('discardKeep').focus({ preventScroll: true }); return; }      // (already asking: a plain request does not replace the pending action)
+  discardThen = then;
   const back = document.activeElement;
   const box = document.createElement('div');
   box.className = 'confirm'; box.id = 'discardAsk'; box.setAttribute('role', 'alertdialog'); box.setAttribute('aria-labelledby', 'discardT');
