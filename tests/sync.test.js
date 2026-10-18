@@ -396,6 +396,7 @@ function fakeServer() {
 function pull(server, st, clock, seen = new Set(), { maxPages = Infinity, stats = {} } = {}) {
   st = startPull(st, clock.now);
   let from = pullStart(st), pages = 0;
+  const t0 = clock.now, from0 = from;
   for (;;) {
     const at = clock.now, after = from;
     const rows = server.read(from); clock.now += 1000;
@@ -403,7 +404,7 @@ function pull(server, st, clock, seen = new Set(), { maxPages = Infinity, stats 
     rows.forEach(r => seen.add(r.id));
     if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
     const lastSeq = Math.max(st.lastSeq, from);
-    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }) };
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
     if (rows.length < PAGE || ++pages >= maxPages) break;
   }
   return st;
@@ -490,7 +491,6 @@ test('overlap: a pull cut off midway carries on near where it stopped, and the b
     st = next; marks.push(st.lastSeq); clock.now += 60_000;
     assert.ok(got <= 60_000 + 1000);
   }
-  // (1 s per page: each attempt re-reads the last 30 s of the one before, so it gains 30 pages; an attempt shorter than 30 s gains nothing)
   assert.ok(marks[3] > 90_000 && marks[1] > marks[0] + 20_000, 'progress each attempt: ' + marks);
 });
 
@@ -553,13 +553,14 @@ test('overlap: a missed page followed by many full pages in the same pull is sti
   let st = pull(server, { lastSeq: 0 }, clock, seen); clock.now += 600_000;
   st = startPull(st, clock.now);
   let from = pullStart(st);
+  const t0 = clock.now, from0 = from;
   const late = server.begin('R');                 // numbered 501, still being saved
   server.add(1000);                                // another device's import commits 1000 rows after it
   const req = () => {
     const at = clock.now, after = from, rows = server.read(from); clock.now += 1000;
     rows.forEach(r => seen.add(r.id));
     if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
-    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, n: rows.length }) };
+    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
     return rows.length;
   };
   req();                                           // the page that passes R
@@ -568,4 +569,32 @@ test('overlap: a missed page followed by many full pages in the same pull is sti
   server.commit(late); clock.now += 5000;
   st = pull(server, st, clock, seen);
   assert.ok(seen.has('R'), 'R must be picked up');
+});
+
+test('overlap: a pull cut off every 20 seconds, attempts 30+ seconds apart, still moves forward and finishes', () => {
+  const server = fakeServer(), clock = { now: T0 };
+  server.add(50);
+  let st = pull(server, { lastSeq: 0 }, clock); clock.now += 5 * 60_000;
+  st = pull(server, st, clock); clock.now += 5 * 60_000;
+  server.add(100_000);
+  let done = -1;
+  for (let attempt = 0; attempt < 40 && done < 0; attempt++) {
+    const [next, got] = dl(server, st, clock, { maxPages: 20 });
+    assert.ok(next.lastSeq >= st.lastSeq);
+    st = next; clock.now += 31_000;
+    if (st.lastSeq >= 100_050) done = attempt;
+  }
+  assert.ok(done >= 0 && done <= 12, 'finished after attempts: ' + done);
+});
+
+test('overlap: a missed page is not forgotten if the attempt that settles it is itself cut off', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  server.add(100);
+  let st = pull(server, { lastSeq: 0 }, clock, seen); clock.now += 600_000;
+  const late = server.begin('R');
+  server.add(10_000);
+  st = pull(server, st, clock, seen, { maxPages: 6 });          // passes R
+  server.commit(late);
+  for (let i = 0; i < 4; i++) { clock.now += 31_000; st = pull(server, st, clock, seen, { maxPages: 4 }); }
+  assert.ok(seen.has('R'));
 });

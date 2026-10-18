@@ -239,7 +239,8 @@ export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync s
 // (counted from the log's n), except that it never skips the requests of the last SAFE_MS (a save can take several
 // seconds, so a change that a request missed was numbered just before it; it is only lost if the pull then goes on
 // to download MAX_BACK more rows, and that must have outrun the save by SAFE_MS). So for up to OVERLAP_MS after a big
-// pull, every quick sync reads again max(MAX_BACK, the rows of the last SAFE_MS) rows.
+// pull, every quick sync reads again max(MAX_BACK, the rows of the last SAFE_MS) rows. A request stops being protected
+// once it has been read again at least SAFE_MS later (see logPull), so a pull that keeps being cut off moves forward.
 // Not covered: a change that a page of a download longer than OVERLAP_MS could not see yet, numbered below that page's
 // end, on a device with no log (first sync): by the end of such a download the anchor is later than it. The same for
 // a change still unsaved after SAFE_MS while this device downloads more than MAX_BACK rows after the page that missed it.
@@ -262,7 +263,7 @@ export function pullStart(st) {
   for (let i = log.length - 1; i >= 0; i--) {                                // the second limit: MAX_BACK rows...
     rows += Number(log[i].n) || 0;
     if (rows >= MAX_BACK && Number.isFinite(log[i].from)) {
-      const recent = log.find(e => e.t >= log[log.length - 1].t - SAFE_MS && Number.isFinite(e.from));   // ...but not past the last SAFE_MS
+      const recent = log.find(e => !e.ok && e.t >= log[log.length - 1].t - SAFE_MS && Number.isFinite(e.from));   // ...but not past the last SAFE_MS
       start = Math.max(start, Math.min(log[i].from, recent ? recent.from : Infinity));
       break;
     }
@@ -281,15 +282,24 @@ export function startPull(st, now) {
 }
 
 // Add a request ({ t, seq, from, n }) to the log, and forget entries older than the one pullStart() will use.
-export function logPull(log, entry) {
-  let list = entries(log);
+// Entries are "ok" (no longer protected by the SAFE_MS rule) when nothing they could have missed is left:
+//   * cover = { t0, from, reach }: this pull started at t0, asked after `from`, and has now read everything up to `reach`
+//     (Infinity once a page came back short). A request that missed a change was sent less than SAFE_MS before the change
+//     was saved, so an entry sent at least SAFE_MS before t0 is settled once this pull has read its whole stretch.
+//   * A request whose stretch ends at or below a bookmark that was already SAFE_MS old when it was sent could not have missed
+//     anything (those changes were all saved): it is ok straight away. So a re-read of settled rows never needs a re-read.
+// That is what lets a pull that is cut off every few seconds still move forward: each attempt settles the one before.
+export function logPull(log, entry, cover) {
+  let list = entries(log).map(e => ({ ...e }));
   const { t } = entry;
   if (list.length && t < list[list.length - 1].t) {
     // The clock went backwards. Start the log over in the new time, keeping the bookmark the old one pointed to.
     const seq = pullStart({ lastSeq: Infinity, seqLog: list });
     list = [{ t: t - OVERLAP_MS, seq, from: seq, n: 0 }];
   }
-  list.push(entry);
+  const settled = Math.max(-1, ...list.filter(e => e.t <= t - SAFE_MS).map(e => e.seq));
+  if (cover) for (const e of list) if (!e.ok && cover.t0 >= e.t + SAFE_MS && cover.from <= e.from && cover.reach >= e.seq) e.ok = true;
+  list.push({ ...entry, ok: entry.seq <= settled });
   const limit = t - OVERLAP_MS;
   let keep = 0;
   list.forEach((e, i) => { if (e.t <= limit) keep = i; });

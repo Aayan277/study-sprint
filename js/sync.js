@@ -250,6 +250,7 @@ async function run() {
   let applied = 0, pulled = 0, gotNotes = false;
   st = startPull(st, Date.now());
   let from = pullStart(st);
+  const t0 = Date.now(), from0 = from;
   for (;;) {
     const at = Date.now(), after = from;
     const rows = await supa.getChanges(token, from, PAGE);
@@ -264,7 +265,7 @@ async function run() {
     // The bookmark (only ever forward) and the log of requests are saved together, page by page, so a pull cut off
     // midway carries on near where it stopped.
     const lastSeq = Math.max(st.lastSeq, from);
-    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }) };
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }, { t0, from: from0, reach: rows.length < PAGE ? Infinity : from }) };
     await db.setSetting('syncState', st);
     if (rows.length < PAGE) break;
   }
