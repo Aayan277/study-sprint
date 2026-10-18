@@ -338,7 +338,7 @@ for (const [size, [w, h, scale]] of Object.entries(SIZES)) for (const mode of ['
 // ---------------------------------------------------------------- 4. wide desktop layout (owner's desktop review)
 // Pages are centred next to the sidebar, Today's Options button lines up with the content under it, the "Add exam date"
 // chips wrap instead of being cut off, and the sidebar footer is always fully on screen.
-for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560, 1440]]) for (const mode of ['light', 'dark']) {
+for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920, 1080], [2560, 1440]]) for (const mode of ['light', 'dark']) {
   if (wantSize && !wantSize.has('desk') || wantMode && !wantMode.has(mode) || wantScene && !wantScene.has('wide')) continue;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block' });
   await ctx.addInitScript(m => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode: m })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } }, mode);
@@ -350,6 +350,9 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560
     const db = await import('./js/db.js'), now = Date.now();
     for (const [id, name] of [['long1', 'Intro to Psychology (sample deck) with a long name'], ['long2', 'Microbiology and Infectious Diseases, Part Two'], ['long3', 'Upper & Lower Limb Anatomy — Muscles, Nerves and Blood Supply']])
       await db.addDeckWithCards({ id, name, color: '#F76B15', created: now + 50 }, [{ id: id + 'c', deckId: id, front: 'Q', back: 'A', tags: [], created: 1 }]);
+    // two subdecks under Pharmacology, so its page has a Subdecks card
+    for (const [id, name] of [['sub1', 'Cardiovascular drugs'], ['sub2', 'Antimicrobials']])
+      await db.addDeckWithCards({ id, name, parentId: 'pharm', color: '#3E63DD', created: now + 60 }, [{ id: id + 'c', deckId: id, front: 'Q', back: 'A', tags: [], created: 1 }]);
   });
   await page.reload(); await page.waitForSelector('.tdeck', { state: 'attached' });
   const tag = `wide ${w}×${h} ${mode}`;
@@ -362,7 +365,8 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560
     const ea = document.querySelector('.exam-add');
     const foot = document.querySelector('.side-foot').getBoundingClientRect();
     const footLast = Math.max(...[...document.querySelectorAll('.side-foot *')].map(e => e.getBoundingClientRect().bottom));
-    return { gapL: Math.round(vb.left - inner[0]), gapR: Math.round(inner[1] - vb.right), right: Math.round(right), opt: opt && Math.round(opt.right), chips: ea && [ea.scrollWidth, ea.clientWidth],
+    const side = document.querySelector('.today-side')?.getBoundingClientRect(), hero = document.querySelector('.today-hero')?.getBoundingClientRect();
+    return { side: side && side.width ? [Math.round(side.left), Math.round(side.top)] : null, hero: hero && [Math.round(hero.right), Math.round(hero.top)], gapL: Math.round(vb.left - inner[0]), gapR: Math.round(inner[1] - vb.right), right: Math.round(right), opt: opt && Math.round(opt.right), chips: ea && [ea.scrollWidth, ea.clientWidth],
       chipsCut: ea ? [...ea.querySelectorAll('.exam-chip')].some(c => c.getBoundingClientRect().right > ea.getBoundingClientRect().right + 1) : false,
       foot: [Math.round(foot.top), Math.round(Math.max(foot.bottom, footLast)), innerHeight], hscroll: document.documentElement.scrollWidth - innerWidth };
   });
@@ -370,9 +374,11 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560
     await page.goto(URL + '#/' + route); await page.waitForSelector(sel); await page.waitForTimeout(150);
     const r = await layout();
     ok(Math.abs(r.gapL - r.gapR) <= 2, `${tag} ${route}: the page is centred next to the sidebar (${r.gapL}px left, ${r.gapR}px right)`);
+    if (w >= 1920) ok(r.gapL > 0, `${tag} ${route}: the page is narrower than the space next to the sidebar, so the centring is real (${r.gapL}px each side)`);
     ok(r.hscroll <= 0, `${tag} ${route}: no sideways scroll`);
     if (route === 'today') {
       ok(r.opt && Math.abs(r.opt - r.right) <= 1, `${tag}: Options lines up with the right edge of the content under it (${r.opt} vs ${r.right})`);
+      if (w >= 1280) ok(r.side && r.hero && r.side[0] > r.hero[0] && Math.abs(r.side[1] - r.hero[1]) < 40, `${tag}: exams sit in a column to the right of the day's work (side ${r.side}, hero right/top ${r.hero})`);
       ok(r.chips && r.chips[0] <= r.chips[1] && !r.chipsCut, `${tag}: the "Add exam date" chips are not cut off (scrollWidth ${r.chips?.[0]} ≤ clientWidth ${r.chips?.[1]})`);
       if (w === 1440) await page.screenshot({ path: `${SP}/clinical-wide-today-${w}-${mode}.png` });
     }
@@ -384,7 +390,7 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560
     await page.evaluate(() => { document.getElementById('advanced').open = true; document.getElementById('optConfirm').hidden = false; });
     const st = await page.evaluate(() => { const v = document.querySelector('main > .view').getBoundingClientRect(); const sw = [...document.querySelectorAll('#advanced .switch')].map(e => e.getBoundingClientRect().right);
       return { btns: ['optNo', 'optYes'].map(id => Math.round(document.getElementById(id).getBoundingClientRect().width)), sw: Math.max(...sw), viewW: Math.round(v.width), viewR: Math.round(v.right) }; });
-    ok(st.btns.every(x => x <= 200), `${tag}: the in-page confirm's buttons are not stretched (${st.btns.join(', ')}px)`);
+    ok(st.btns.every(x => x > 0 && x <= 200), `${tag}: the in-page confirm's buttons are not stretched (${st.btns.join(', ')}px)`);
     ok(st.viewW <= 980 && st.sw <= st.viewR + 1, `${tag}: Settings is a readable column (${st.viewW}px) and its switches sit inside it`);
     // Every control in a Settings row is within about 120px of its label: the gap between the control's box and the box of
     // the nearest label text in the same row (the row's name, or a select's own day name). Text boxes come from a Range,
@@ -394,27 +400,46 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560
       const textBox = el => { const r = document.createRange(); r.selectNodeContents(el); const rs = [...r.getClientRects()].filter(x => x.width && x.height);
         return rs.length ? { left: Math.min(...rs.map(x => x.left)), right: Math.max(...rs.map(x => x.right)), top: Math.min(...rs.map(x => x.top)), bottom: Math.max(...rs.map(x => x.bottom)) } : null; };
       const gap = (a, b) => Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
-      const out = [];
+      const out = []; let rows = 0, controls = 0;
       for (const row of document.querySelectorAll('main .set-row, main .adv-row')) {
         if (!row.getClientRects().length || row.closest('[hidden]')) continue;
+        rows++;
         const labels = [...row.querySelectorAll('b, label > span:first-child, .easy-day > span, .confirm > p')].map(textBox).filter(Boolean);
         for (const c of row.querySelectorAll('input.switch, .stepper, .num-box, select, .steps-input input, button.btn, label.btn')) {
           const b = c.getBoundingClientRect(); if (!b.width || c.closest('[hidden]')) continue;
+          controls++;
           const d = Math.min(...labels.map(l => gap(b, l)));
           if (!(d <= 120)) out.push(`${(row.querySelector('b')?.textContent || '?').trim().slice(0, 24)}: ${c.id || c.className} ${Math.round(d)}px`);
         }
       }
-      return out;
+      return { out, rows, controls };
     });
-    ok(!far.length, `${tag}: every Settings control is within 120px of its label${far.length ? ': ' + far.slice(0, 6).join(' | ') : ''}`);
+    ok(far.rows >= 20 && far.controls >= 25, `${tag}: the Settings check measured ${far.rows} rows and ${far.controls} controls`);
+    ok(!far.out.length, `${tag}: every Settings control is within 120px of its label${far.out.length ? ': ' + far.out.slice(0, 6).join(' | ') : ''}`);
     // the in-page confirm sits under its question, not at the far edge of a full-width box
     await page.evaluate(() => { document.getElementById('optConfirm').hidden = false; });
-    const cf = await page.evaluate(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('optConfirmQ')); const q = r.getBoundingClientRect(), y = document.getElementById('optYes').getBoundingClientRect(); return Math.round(y.left - q.right); });
-    ok(cf <= 120, `${tag}: the confirm's buttons are next to its question (${cf}px past the end of the question)`);
+    const cf = await page.evaluate(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('optConfirmQ')); const q = r.getBoundingClientRect();
+      return { q: [q.width, q.height], btns: ['optNo', 'optYes'].map(id => { const y = document.getElementById(id).getBoundingClientRect();
+        return { w: y.width, dx: Math.round(Math.max(0, y.left - q.right, q.left - y.right)), dy: Math.round(y.top - q.bottom) }; }) }; });
+    // each button is under the question (starts below it, at most 40px down) or on its line, and at most 120px across from its text
+    ok(cf.q[0] > 0 && cf.btns.every(b => b.w > 0 && b.dx <= 120 && b.dy <= 40), `${tag}: the confirm's buttons are next to its question (${JSON.stringify(cf.btns)})`);
     // "Couldn't load this screen": the Reload button is an ordinary button, not the browser's grey face
     const rl = await page.evaluate(() => { const el = document.querySelector('main > .view'); el.innerHTML = '<div class="empty"><b>Could not load this screen.</b><br><button class="btn" type="button" data-reload>Reload</button></div>';
       const b = getComputedStyle(el.querySelector('[data-reload]')), probe = document.createElement('i'); probe.style.background = 'var(--surface-1)'; document.body.append(probe); const s1 = getComputedStyle(probe).backgroundColor; probe.remove(); return [b.backgroundColor, s1]; });
     ok(rl[0] === rl[1], `${tag}: the Reload button on a failed screen has the card colour (${rl[0]})`);
+  }
+  // The deck page from 1600px: name, buttons and counts on the left, the Subdecks card above the cards on the right, and the
+  // counts panel stays in view while the cards scroll
+  if (w >= 1600) {
+    await page.goto(URL + '#/deck/pharm'); await page.waitForSelector('.crow'); await page.waitForSelector('.subdecks-page'); await page.waitForTimeout(150);
+    const box = sel => page.evaluate(s => { const b = document.querySelector(s)?.getBoundingClientRect(); return b && { l: Math.round(b.left), r: Math.round(b.right), t: Math.round(b.top), b: Math.round(b.bottom), w: Math.round(b.width) }; }, sel);
+    const [head, sum, sub, list] = [await box('main > .view > .screen-head'), await box('main > .view > .deck-summary'), await box('main > .view > .subdecks-page'), await box('#browser')];
+    ok(head && sum && sub && list && sub.w > 0 && list.w > 0, `${tag} deck page: header, counts, subdecks and cards are all there`);
+    ok(head.r <= list.l && sum.r <= list.l && sum.t >= head.b - 1, `${tag} deck page: name, buttons and counts in the left column (head ${head.l}-${head.r}, counts ${sum.l}-${sum.r}, cards from ${list.l})`);
+    ok(sub.l === list.l && sub.b <= list.t + 1 && sub.t < 200, `${tag} deck page: the Subdecks card is at the top of the right column, above the cards (subdecks ${sub.t}-${sub.b}, cards from ${list.t})`);
+    const stick = await page.evaluate(async () => { const s = document.querySelector('main > .view > .deck-summary'); scrollTo(0, 1500); await new Promise(r => setTimeout(r, 200));
+      const b = s.getBoundingClientRect(); const y = scrollY; scrollTo(0, 0); return { pos: getComputedStyle(s).position, top: Math.round(b.top), bottom: Math.round(b.bottom), y, h: innerHeight }; });
+    ok(stick.pos === 'sticky' && stick.y > 0 && stick.top >= 0 && stick.bottom <= stick.h, `${tag} deck page: the counts panel stays in view when the cards are scrolled (${JSON.stringify(stick)})`);
   }
   // No exam dates at all: Today is one column, and Options still sits over its right edge
   await page.evaluate(async () => { const db = await import('./js/db.js'); for (const d of await db.getAll('decks')) if (d.examDate) await db.saveDeck({ ...d, examDate: null }); });

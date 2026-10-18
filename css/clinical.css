@@ -681,8 +681,8 @@
 :root[data-ui="clinical"] .adv-row:has(#ratingFeedback){display:none}
 /* ---- a .btn with no kind (e.g. "Reload" on "Couldn't load this screen") got the browser's grey button face, which reads as
    disabled in dark mode: it is an ordinary outlined button here ---- */
-:root[data-ui="clinical"] .btn[class="btn"]{background:var(--surface-1);border-color:var(--line-strong);color:var(--text)}
-:root[data-ui="clinical"] .btn[class="btn"]:hover{background:var(--surface-2)}
+:root[data-ui="clinical"] .btn:not(.primary,.ghost,.danger,.cta,.solid,.link){background:var(--surface-1);border-color:var(--line-strong);color:var(--text)}
+:root[data-ui="clinical"] .btn:not(.primary,.ghost,.danger,.cta,.solid,.link):hover{background:var(--surface-2)}
 /* ---- the sheet's close button: square like everything else, not a circle ---- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x{border-radius:var(--r-sm);background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x:hover{background:var(--surface-2)}
@@ -742,6 +742,9 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column){display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;row-gap:10px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row:not(.column) > :first-child{justify-self:stretch}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .set-row input[type="range"]{max-width:480px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-days{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-day{min-width:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .easy-day select{width:100%;min-width:0}
   /* in-page confirms (Reset to default, Delete…): buttons their own size at the right, not two 360px slabs */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .confirm .sheet-actions .btn{flex:0 0 auto;min-width:96px}
   /* …and in Settings the confirm is as wide as its question, with the buttons right under it, not 600px away */
@@ -775,19 +778,20 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="decks"] .deck-open > .deck-counts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center}
 
   /* Today: two columns when there are exams (or courses to give one): the day's work, and a 320px column on the right */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:repeat(12,auto) 1fr;column-gap:32px;align-items:start;max-width:1200px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side){display:grid;grid-template-columns:minmax(0,1fr) 320px;column-gap:32px;align-items:start;max-width:1200px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > *{grid-column:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view:has(> .today-side) > .screen-head{grid-column:1 / -1}
-  /* the column runs down beside everything (the last, flexible row takes any extra height, so the left side never gets gaps) */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .today-side{grid-column:2;grid-row:2 / -1;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-5);align-content:start;min-width:0;margin:0}
+  /* the column runs down beside everything: it spans all the rows after the header ("span 999" = as many as there are; empty
+     rows are 0 tall and the grid has no row gap, so nothing is added) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="today"] > .view > .today-side{grid-column:2;grid-row:2 / span 999;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-5);align-content:start;min-width:0;margin:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side > .section{margin:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-side .exam-chip{flex:1 1 100%}
 
   /* Settings: the section menu becomes a list on the left that stays in view, the settings in a 760px column beside it */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view{display:grid;grid-template-columns:168px minmax(0,760px);grid-template-rows:auto repeat(30,auto) 1fr;column-gap:48px;max-width:976px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view{display:grid;grid-template-columns:168px minmax(0,760px);column-gap:48px;max-width:976px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > *{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .screen-head{grid-column:1 / -1}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / -1;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / span 999;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;margin-left:-12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
 }
@@ -798,12 +802,15 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="stats"] > .view > .cal-card{grid-column:2}
 }
 @media (min-width:1600px){
-  /* the deck page on a wide screen: the deck's name, buttons and counts in a column on the left that stays in view, its
-     cards on the right (one 1280px list left a long empty gap in every row) */
+  /* the deck page on a wide screen: the deck's name and buttons in a column on the left, with the counts panel under them
+     staying in view as the cards scroll; subdecks and cards on the right (one 1280px list left a long empty gap in every row) */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:40px;align-items:start;max-width:1440px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > *{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > :is(.back,.screen-head,.deck-summary){grid-column:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .screen-head{grid-row:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .deck-summary{grid-row:2;position:sticky;top:24px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > #browser{grid-row:1 / -1}
+  /* a course's Subdecks list goes at the top of the right column, above its cards (auto-placed, it fell below the whole list) */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .subdecks-page{grid-column:2;grid-row:1}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view:has(> .subdecks-page) > #browser{grid-row:2 / -1}
 }
