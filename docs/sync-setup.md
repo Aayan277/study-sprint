@@ -83,6 +83,7 @@ It adds:
   once a minute). When one is hit, everybody's new files or data wait, and the app says "The sync server is full
   right now. Everything is safe on this device and will sync when there's room." On the Pro plan, raise them.
 - **3 MB per file** and **64 KB per card or other record**.
+- The check behind the picture rule lives in its own `private` schema so it can't be called from outside the app's rules. Please don't add `private` to the API's "Exposed schemas" in the Supabase settings.
 - A **usage line** in the app (Settings → Your data → *In your account: …*).
 - The **Delete my account** button in Settings → Sync (it needs this script).
 
@@ -259,6 +260,12 @@ Actions tab shows a button to turn it back on.
   keep working. To remove someone, ask them to use **Settings → Sync → Delete my account**. If you must do it
   yourself: first open **Storage → media**, open the folder named with their User UID and delete its files,
   then delete the user in **Authentication → Users**.
+- **Who uses how much.** Open **SQL Editor → New query**, paste in everything from [`supabase/owner.sql`](../supabase/owner.sql)
+  and click **Run** (after `limits.sql` has been run). You get one line per person: email, number of synced
+  records, data space and picture/sound space with each limit and how full it is, biggest users first. It only
+  reads, and only you can run it here, so nobody signed in to the app can see it. Check it now and then
+  against the totals in **Project Settings → Usage**, and use the `quotas` table (step 2c) to give someone
+  more or less space.
 - **Tell people:** as the project owner you can see everyone's data in the Table Editor.
 
 ## Good to know
@@ -268,4 +275,5 @@ Actions tab shows a button to turn it back on.
 - **Friends:** they open the app, tap **Settings → Sync → Create account**, open the link in the confirmation email, and sign in. Everyone's data stays separate.
 - **Delete my account** (Settings → Sync) removes the account, everything stored in it and its pictures from the server. The device keeps its own copy of the cards. **Delete my synced data** removes the data but keeps the account.
 - **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB database. Pictures are shrunk to about 100–250 KB each and are stored separately (180 MB per account).
+- **Very large collections:** at 50,000 cards or more in one account the app says so in plain words (once after an import, and under Settings → Your data). Nothing is blocked; syncing just gets slow, and a new device takes a long time to download everything.
 - **Big Anki imports:** the app warns before importing a deck whose pictures and sounds are over 200 MB, or that carries more than 50,000 reviews of history.

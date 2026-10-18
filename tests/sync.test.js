@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
@@ -168,6 +169,59 @@ test('days off: entries over 3650 days old (further back than the streak is walk
   const junk = { nope: { on: true, at: 1 }, '2026-13-40': { on: true, at: 1 }, '2026-10-22': { on: 'yes', at: 1 }, '2026-10-23': { on: true }, '2026-10-24': null, '2026-10-25': 7, '2026-10-26': { on: true, at: 'x' }, '2026-10-27': { on: true, at: 9 } };
   assert.deepEqual(mergeDayFlags(junk, undefined, T), { '2026-10-27': { on: true, at: 9 } });
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeDayFlags(bad, bad, T), {});
+});
+
+// Local noon, n days before T, as a day key (what the app calls a dayKey).
+const keyBack = n => { const d = new Date(T); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+test('days off: when over the cap, switched-off days go first (oldest first) and streak results do not change', () => {
+  const flags = {};
+  for (let i = 1; i <= 1400; i++) flags[keyBack(i)] = { on: i % 3 === 0, at: 1000 + i };     // a mix of on and off, 1400 days back
+  const merged = mergeDayFlags(flags, null, T);
+  assert.equal(Object.keys(merged).length, MAX_FLAG_ENTRIES);
+  const offLeft = Object.values(merged).filter(v => !v.on).length;
+  assert.ok(offLeft < 1400 - 466 && merged[keyBack(1)] && !merged[keyBack(1)].on);          // the newest "off" days stay, the oldest are gone
+  assert.equal(Object.values(merged).filter(v => v.on).length, 466);                       // every day that is on is still there
+  const before = restDaySet({ restDays: flags }), after = restDaySet({ restDays: merged });
+  assert.deepEqual([...after].sort(), [...before].sort());
+  const perDay = new Map();
+  for (let i = 0; i < 400; i++) if (i % 3 !== 1) perDay.set(keyBack(i), 5);
+  assert.deepEqual(streakRuns(perDay, T, { rest: after }), streakRuns(perDay, T, { rest: before }));
+  const studied = new Set([...perDay.keys()]);
+  assert.equal(streakFromDays(studied, T, { rest: after }).days, streakFromDays(studied, T, { rest: before }).days);
+  // under the cap nothing is dropped, however old the "off" entries are
+  const small = { [keyBack(200)]: { on: false, at: 5 }, [keyBack(100)]: { on: true, at: 5 } };
+  assert.deepEqual(mergeDayFlags(small, null, T), small);
+});
+
+test('days off: an old "off" still beats an older "on" from a device that was offline (no resurrection)', () => {
+  const D = keyBack(45);
+  const phone = { [D]: { on: false, at: T - 50 * 86400000 } }, tablet = { [D]: { on: true, at: T - 60 * 86400000 } };
+  assert.equal(mergeDayFlags(phone, tablet, T)[D].on, false);
+  assert.equal(mergeDayFlags(tablet, phone, T)[D].on, false);
+});
+
+test('days off: a stored value over the cap is seen as different from its trimmed version, so it gets rewritten', () => {
+  const big = {};
+  for (let i = 1; i <= 1461; i++) big[keyBack(i)] = { on: i % 2 === 0, at: 1000 + i };
+  const trimmed = mergeDayFlags(big, null, T);
+  assert.equal(Object.keys(trimmed).length, MAX_FLAG_ENTRIES);
+  assert.equal(sameDayFlags(trimmed, big, T), false);                                    // db.js then stores `trimmed` and sends it
+  assert.ok(sameDayFlags(trimmed, mergeDayFlags(trimmed, big, T), T));                   // and it settles there
+  assert.ok(JSON.stringify({ restDays: trimmed }).length < 60 * 1024);
+});
+
+test('days off: the stored entries are capped so the settings row stays under the 60 KB push limit', () => {
+  const flags = {};
+  for (let i = 1; i <= 3000; i++) flags[keyBack(i)] = { on: true, at: 1000 + i };
+  const merged = mergeDayFlags(flags, null, T);
+  assert.equal(Object.keys(merged).length, MAX_FLAG_ENTRIES);
+  assert.ok(merged[keyBack(1)] && merged[keyBack(MAX_FLAG_ENTRIES)] && !merged[keyBack(MAX_FLAG_ENTRIES + 1)]);   // the oldest go first
+  assert.ok(JSON.stringify({ restDays: merged }).length < 60 * 1024);
+  // with the cap not reached, nothing that is on is ever lost
+  const few = {};
+  for (let i = 1; i <= 900; i++) few[keyBack(i)] = { on: true, at: 5 };
+  assert.equal(Object.keys(mergeDayFlags(few, null, T)).length, 900);
 });
 
 test('days off: sameDayFlags compares what the merge would keep', () => {
