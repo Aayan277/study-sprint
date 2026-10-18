@@ -7,7 +7,7 @@
 // readAnkiFile() returns { notes, models, reviews, media } for notesToImport() in anki.js.
 // media.has(name) / media.info(name) → { size, type } / media.get(name) → { data, type } tell about the pictures and sounds inside.
 
-import { mediaList } from './anki.js';
+import { mediaList, templateFormats } from './anki.js';
 
 export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
 const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
@@ -121,14 +121,17 @@ function readCollection(db) {
   if (tables.has('notetypes')) {
     // The config is a small binary (protobuf) record. It starts with bytes 8, 1 when the note type is Cloze.
     for (const [id, name, config] of q('SELECT id, name, config FROM notetypes')) {
-      models.set(String(id), { name, fields: [], cloze: !!config && config[0] === 8 && config[1] === 1 });
+      models.set(String(id), { name, fields: [], templates: [], cloze: !!config && config[0] === 8 && config[1] === 1 });
     }
     for (const [ntid, , name] of q('SELECT ntid, ord, name FROM fields ORDER BY ntid, ord')) models.get(String(ntid))?.fields.push(name);
+    // The card types: what each one asks (its front template). Cards that ask with the Back field are reverse cards.
+    if (tables.has('templates')) for (const [ntid, ord, config] of q('SELECT ntid, ord, config FROM templates ORDER BY ntid, ord')) models.get(String(ntid))?.templates.push({ ord, ...templateFormats(config) });
     for (const [id, name] of q('SELECT id, name FROM decks')) deckNames.set(String(id), String(name).split('\x1f').join('::'));
   } else {
     const [[modelsJson, decksJson] = []] = q('SELECT models, decks FROM col');
     for (const [id, m] of Object.entries(JSON.parse(modelsJson || '{}'))) {
-      models.set(String(id), { name: m.name, fields: [...m.flds].sort((a, b) => a.ord - b.ord).map(f => f.name), cloze: m.type === 1 });
+      models.set(String(id), { name: m.name, fields: [...m.flds].sort((a, b) => a.ord - b.ord).map(f => f.name), cloze: m.type === 1,
+        templates: [...(m.tmpls || [])].sort((a, b) => a.ord - b.ord).map(t => ({ ord: t.ord, qfmt: String(t.qfmt ?? ''), afmt: String(t.afmt ?? '') })) });
     }
     for (const [id, d] of Object.entries(JSON.parse(decksJson || '{}'))) deckNames.set(String(id), d.name);
   }

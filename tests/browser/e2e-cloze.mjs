@@ -242,9 +242,9 @@ await page.waitForFunction(() => document.querySelector('#found')?.textContent.i
 ok((await page.textContent('#found')).includes('1 cloze note make'), 'Anki import: says the cloze note makes the cards');
 await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'From Anki cloze'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const ac = (await page.evaluate(async () => { const db = await import('./js/db.js'); const ds = await db.getDecks(); return (await db.getAll('cards')).filter(c => ds.find(d => d.id === c.deckId)?.name === 'From Anki cloze' || ds.find(d => d.id === c.deckId)?.parentId === ds.find(x => x.name === 'From Anki cloze')?.id); }));
-const ak = ac.filter(c => c.noteId).sort((a, b) => a.cloze - b.cloze);
+const ak = ac.filter(c => c.noteId && c.cloze).sort((a, b) => a.cloze - b.cloze);
 ok(ak.length === 2 && ak[0].noteId === ak[1].noteId && ak.map(c => c.cloze).sort().join() === '1,2' && ak[0].front.includes('[…]') && ak[1].front.includes('[speech area]') && ak[0].noteText.includes('{{c1::'), 'Anki import: the 2-blank cloze note became 2 sibling cards with the note text');
-ok(ac.length === 7 && ac.every(c => typeof c.ankiGuid === 'string' && c.ankiGuid), 'Anki import: every card keeps its Anki guid');
+ok(ac.length === 8 && ac.every(c => typeof c.ankiGuid === 'string' && c.ankiGuid), 'Anki import: every card keeps its Anki guid');
 
 // export our own notes as an Anki file and bring them back
 await page.goto('http://localhost:8123/#/deck/' + bio); await deckMenu(page); await page.click('#exportDeck'); await page.waitForSelector('#exApkg');
