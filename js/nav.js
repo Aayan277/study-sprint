@@ -50,6 +50,11 @@ function queue(fn) {
   return (chain = p.catch(err => console.error(err)).then(() => { if (--pending === 0) reconcile(); }));
 }
 
+// Resolves when no history change is in flight or waiting (for a caller that must not act in the middle of one, e.g. a reload).
+export function whenIdle() {
+  return pending ? chain.then(whenIdle) : Promise.resolve();
+}
+
 // history.go / back, resolving when the browser has arrived (or after a short wait if it never does: e.g. nothing to go back to).
 const TRAVERSE_WAIT = 1500;
 function traverse(delta) {

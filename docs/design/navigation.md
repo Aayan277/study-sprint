@@ -63,6 +63,7 @@ to the bottom, then `history.replaceState` there.
 - Overlay ids start from `Date.now()` per load, so an entry left by an earlier load can never match a live overlay.
 - Every `a[href^="#/"]` click goes through `go()`, so a link clicked in the same tick as a sheet closing waits its turn in the queue.
 - Waiting for a history move gives up after 1.5 s; a popstate that still arrives later (within 5 s, at the depth we asked for) is recognised as ours and is not treated as a press of Back.
+- `whenIdle()` resolves when that queue is empty; the update-reload after a new service worker waits for it (and tries once more a second later if the page is still there), so a reload is never cancelled by a history step in flight.
 - All history changes run one after another (a small queue): `history.back()` is asynchronous, and a push issued before it
   lands would end up in the wrong place (closing one sheet and opening another in the same tick is the common case).
 - If a `hashchange` arrives while nav is moving through history on its own, it is held back and `reconcile()` shows the address afterwards.
@@ -73,6 +74,8 @@ to the bottom, then `history.replaceState` there.
 
 - The Play clock pauses while "Quit this round?" is open (Classic, Survival and Lightning): the question timer and the Lightning clock stop, an automatic "Next" waits, and on Keep playing (or any other way the question closes) the time spent asking is added back to the question's start. Review has no clock.
 - When Back skips several entries at once (the long-press Back menu, `history.go(-2)`), a held session is let go and the move counts as leaving. Only a single step back onto the address the hold was made on puts the hold's entry back (and asks), which is also the only push nav makes from a popstate (Chrome on Android can mark an entry pushed without a tap as skippable).
+- The long-press Back menu, and entries Chrome skips (it can mark an entry pushed without a tap as skippable), move Back by more than one entry. A running Review or Play session is then let go quietly, without asking "End this session?". That is the safe choice: nothing is lost (answers are saved as they are made), and re-pushing the hold from there could put it at the wrong address.
+- **Still to do: a check on a real Android phone** (Chrome, installed app and browser tab). Open Review, then Play, and in each press Back three times: the first Back asks, the second closes the question, the third asks again; Keep going stays in the session. Also check the edge-swipe and the hardware button leave the app from a tab. The tests use Chromium's `goBack()`, which does not apply Chrome's skippable-entry rule.
 - A sheet left open while a link inside it navigates leaves one dead entry under the new page; Back then passes over it
   (stale-entry rule), costing no extra press.
 - Opening Settings from a drill-down and closing it with the gear goes to that page as a new entry, not back to it.

@@ -20,7 +20,7 @@ import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
-import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack } from './nav.js';
+import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine } from './quota.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
@@ -1223,7 +1223,10 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloaded) return;   // first ever install: nothing old to replace
     reloaded = true;
-    location.reload();
+    // Not while nav is stepping through history (a reload then can be cancelled); and once more if the page is still here a second later.
+    const reload = () => whenIdle().then(() => location.reload());
+    reload();
+    setTimeout(reload, 1000);
   });
 }
 

@@ -1,4 +1,4 @@
-import { chromium, deckMenu } from './pw.mjs';
+import { chromium, deckMenu, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -83,7 +83,7 @@ const order = await page.$$eval('#deckForm [id=deckName], #deckForm [id=deckCour
 ok(order.join() === 'deckName,deckCourse,deckExam,deckOpts,deckTts', 'Edit deck: Exam date comes right after name and course code: ' + order.join());
 await page.click('#deckCancel');
 // New deck has an Exam date too, and keeps it
-await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('#newDeck');
+await sheetSettled(page); await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('#newDeck');
 await page.click('#newDeck'); await page.waitForSelector('#deckExam');
 await page.fill('#deckName', 'Chem'); await page.fill('#deckExam', inDays(20)); await page.click('button[type=submit][form=deckForm]');
 await page.waitForFunction(() => /Created/.test(document.querySelector('#toast')?.textContent || ''));

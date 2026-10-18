@@ -1,5 +1,5 @@
 // Today: the home screen. Counts, Start, per-deck start, Options, exam badge, done state, flip and focus mode.
-import { chromium } from './pw.mjs';
+import { chromium, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
@@ -55,7 +55,7 @@ ok(!(await focusOn()), 'focus mode is off after leaving a round');
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn');
 ok(/\d+ cards? left/.test(await page.textContent('.resume')) && (await page.getAttribute('#resumeBtn', 'href')).startsWith('#/review/'), 'Today offers Resume with the cards left: ' + (await page.textContent('.resume')).replace(/\s+/g, ' ').trim());
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
-await page.goto('http://localhost:8123/#/review'); await page.waitForTimeout(300); await page.reload(); await page.waitForSelector('.today-hero');   // (a reload: no session in memory)
+await page.goto('http://localhost:8123/#/review'); await page.waitForFunction(() => history.state?.k === 'ov'); await page.reload(); await page.waitForSelector('.today-hero');   // (a reload: no session in memory)
 ok(page.url().endsWith('#/today'), '#/review with nothing started goes to Today');
 
 // Options: decks, answer by, custom study
@@ -133,7 +133,7 @@ ok(/^(All done for today|Nothing due today)$/.test((await page.textContent('.th-
 ok(await page.locator('.th-done a[href="#/play"], .th-done [href*="play"]').count() === 0 && await page.locator('#startBtn').count() === 0, 'done state has no Play link');
 ok((await page.textContent('.th-done #customLink')).trim() === 'Extra study', 'done state has a calm Extra study button (v4.10, was a Custom study link)');
 await page.click('.th-done #customLink'); await page.waitForSelector('#sheet .cs-opt'); await page.keyboard.press('Escape'); await page.waitForSelector('#sheet', { state: 'hidden' });
-await page.reload(); await page.waitForSelector('.th-done');       // a clean page for the keyboard check below
+await sheetSettled(page); await page.reload(); await page.waitForSelector('.th-done');       // a clean page for the keyboard check below
 await page.screenshot({ path: SP + '/t-done.png', fullPage: true }); await noHScroll('done');
 
 // Keyboard: Tab reaches Options, then the deck rows; focus ring is visible
