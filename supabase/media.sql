@@ -42,3 +42,11 @@ create table if not exists private.schema_log (
 alter table private.schema_log enable row level security;
 revoke all on private.schema_log from public, anon, authenticated;
 insert into private.schema_log (file, version) values ('media.sql', 2);
+
+-- Status: every line should say ok. (Run limits.sql next: it adds the space limits to the add and change rules.)
+select * from (values
+  (1, 'media bucket is private', coalesce((select (not b.public)::text from storage.buckets b where b.id = 'media'), 'missing'),
+      case when exists (select 1 from storage.buckets b where b.id = 'media' and not b.public) then 'ok' else 'NO' end),
+  (2, 'rules on the media files', (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'media: %')::text,
+      case when (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'media: %') = 4 then 'ok' else 'NO: expected 4' end)
+) as status(n, what, value, result) order by n;

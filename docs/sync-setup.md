@@ -94,7 +94,10 @@ It adds:
   truncate a table. The only thing a visitor can call is `app_config()` (next section).
 
 **Existing people.** Running the new script lowers the defaults and the data ceiling **only if they are still the old ones**
-(180 MB / 80 MB / 420 MB). A default or ceiling you changed yourself is left alone, and anyone with their own row in the
+(180 MB / 80 MB / 420 MB). The 420 MB data ceiling is lowered to 300 MB only when the data stored today is under 280 MB
+(otherwise lowering it would refuse everybody's new data at once): **run `supabase/owner.sql` first and look at the last table; if the
+data total is over 300 MB, free space or expect the ceiling to stay at 420 MB**, and the status table at the bottom of `limits.sql` says so.
+A default or ceiling you changed yourself is left alone, and anyone with their own row in the
 `quotas` table keeps their own numbers. (A row that was made long ago just to change one thing still holds the old 180 MB / 80 MB
 for the others; look at **Table Editor → quotas** and fix any that should be lower.) People who are over the new limit can still
 read, change smaller and delete; they just can't add more until they are under.
@@ -106,8 +109,11 @@ The quickest way is one query (change the email and the numbers, which are bytes
 insert into public.quotas (user_id, media_bytes_limit, data_bytes_limit)
 select id, 209715200, 104857600 from auth.users where email = 'friend@example.com'
 on conflict (user_id) do update
-  set media_bytes_limit = excluded.media_bytes_limit, data_bytes_limit = excluded.data_bytes_limit;
+  set media_bytes_limit = excluded.media_bytes_limit, data_bytes_limit = excluded.data_bytes_limit
+returning user_id;
 ```
+
+It shows the person's `user_id` when it worked. **If no row comes back, the email was not found** (check for a typo).
 
 Or by hand: open **Authentication → Users** and copy the person's **User UID**, open **Table Editor → quotas → Insert →
 Insert row**, paste the UID into `user_id`, type the space in bytes into `media_bytes_limit` and `data_bytes_limit`, and click **Save**.
@@ -149,6 +155,27 @@ update private.app_config_values set value = '4.40' where key = 'min_client';
 ```
 
 Running the scripts again never changes that value back. Only raise it to a version that is already released, or people can't sync.
+
+### After running the scripts: check it yourself
+
+Paste these in a new query, one at a time. The status table at the bottom of each script covers most of this already.
+
+1. The pictures-total trigger exists (one row = yes, no row = no):
+   `select tgname from pg_trigger where tgrelid = 'storage.objects'::regclass and tgname = 'media_total_track';`
+2. The totals match the real sums (both lines should be equal):
+   ```sql
+   select (select bytes from private.usage_totals where name = 'sync') as sync_total,
+          (select coalesce(sum(private.row_bytes(id, data)), 0) from public.sync_items) as sync_real,
+          (select bytes from private.usage_totals where name = 'media') as media_total,
+          (select coalesce(sum((metadata ->> 'size')::bigint), 0) from storage.objects where bucket_id = 'media') as media_real;
+   ```
+3. **Before** running `limits.sql` on a live project, run `supabase/owner.sql` and look at the last table: the `sync` fuse's `used_mb` should be under 300
+   (if it is not, the ceiling stays at 420 MB until you free space).
+4. The record check covers every stored row (`t` = yes):
+   `select convalidated from pg_constraint where conname = 'sync_items_data_object';`
+5. After `ci-roles.sql`: `select rolbypassrls from pg_roles where rolname = 'study_sprint_ci';` should say `t`, and
+   `select has_table_privilege('study_sprint_ci', 'auth.users', 'select'), has_table_privilege('study_sprint_ci', 'auth.identities', 'select'), has_column_privilege('study_sprint_ci', 'storage.objects', 'metadata', 'select');`
+   should say `t, t, t`.
 
 ## 3. Let people sign up, with email confirmation
 
@@ -367,6 +394,8 @@ back. In a new project people sign in again, which resets that bookmark, and eac
      coalesce((select max(seq) from public.sync_items), 0),
      (select last_value from public.sync_seq)) + 1000);
    ```
+   Also set the app's minimum version again if you had changed it (the backup doesn't contain it; `limits.sql` made it `4.36`):
+   `update private.app_config_values set value = '4.40' where key = 'min_client';`
 5. Check it. Run `select count(*) from public.sync_items;` (should be about what the old project had) and
    `select user_id, count(*) from public.sync_items group by user_id order by 2 desc;` (one line per person). In **Authentication → Users** you should see everyone.
    When it looks right, put the new values in `js/sync-config.js` and commit them.
@@ -474,10 +503,11 @@ backup), `auth.users` and `auth.identities` (the backup), and the size columns o
 and `public.global_limits` (the space check). It cannot write, delete, truncate or create anything, and it starts every session read-only.
 (It can read your data and the sign-in accounts, because the backup does; so keep the password as private as the old one.)
 
-1. Open `supabase/ci-roles.sql` and, in the line `declare pw text := 'PASTE-A-LONG-PASSWORD-HERE';`, replace the placeholder with a long password
+1. Open `supabase/ci-roles.sql` (copy it somewhere private, not into the repository) and, in the line `declare pw text := 'PASTE-A-LONG-PASSWORD-HERE';`, replace the placeholder with a long password
    you make up (at least 20 letters and digits, no symbols; save it in your password manager). The script refuses the placeholder.
 2. **SQL Editor → New query**, paste the whole edited script, **Run**. (Running it again is safe and does not change the password; to change it
-   later: `alter role study_sprint_ci password 'new-long-password';`.) Do not commit the edited file anywhere.
+   later: `alter role study_sprint_ci password 'new-long-password';`.) Do not commit the edited file anywhere, and **afterwards delete the saved query in the SQL Editor** (it contains the password). The last table the script
+   shows should say `ok` on every line; a missing right shows as `NO`.
 3. Build the new address from the one in step 8b ("Turn it on", point 1): in the Session pooler URI, change the user from `postgres.abcdefgh`
    to `study_sprint_ci.abcdefgh` (the same project code after the dot) and the password to the new one:
    `postgresql://study_sprint_ci.abcdefgh:THE-NEW-PASSWORD@aws-0-….pooler.supabase.com:5432/postgres`
@@ -540,8 +570,10 @@ Always run the files in this order: `setup.sql`, `media.sql`, `limits.sql` (then
   - *Delete my account* no longer deletes file records with SQL; it answers `media_left` until the person's files are gone (the app deletes them first).
   - *Locked down:* nothing for visitors who aren't signed in on the data tables, and no TRUNCATE, TRIGGER or REFERENCES for anyone.
   - *New:* `app_config()` (minimum app version), `private.schema_log`, `supabase/ci-roles.sql` (optional read-only login for the GitHub jobs, step 8e).
-  - If you ran `limits.sql` but the Supabase SQL Editor printed a warning about the trigger on `storage.objects`, tell whoever helps you: it means the
-    pictures total isn't kept exact (the per-person limits and the data ceiling still work).
+  - Each script ends with a small **status table** (every line should say `ok` in the last column). If a line says `NO`, tell whoever helps you;
+    for example, `NO` for the trigger on `storage.objects` means that table wouldn't let this account add it, so uploads are checked against a live count instead.
+  - The pictures check no longer lets a file through just because its size isn't known yet: an unknown size is treated as 3 MB.
+  - The sync ceiling is lowered to 300 MB only when the stored data is under 280 MB (the status table says if it was not).
 - **Version 1.** The first limits (per-person limits, 60-second cached totals, `delete_my_account()`).
 
 To check the SQL yourself on your own computer (needs PostgreSQL installed; never touches Supabase): `npm run test:sql`.

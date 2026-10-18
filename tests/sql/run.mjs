@@ -126,6 +126,8 @@ function snapshot(db) {
     union all select 'o' || t::text from storage.objects t union all select 'b' || t::text from storage.buckets t union all select 'a' || t::text from auth.users t) z`);
   return { schema: dump.stdout.replace(/^--.*$/gm, '').replace(/^\\(un)?restrict .*$/gm, ''), data };
 }
+// The status select at the end of limits.sql, as a subquery text (so a test can filter it).
+const statusSql = db => { const f = read(join(SQL, 'limits.sql')); return f.slice(f.lastIndexOf('select * from (values')).replace(/\) as status\(n, what, value, result\) order by n;\s*$/, ') as status(n, what, value, result)') .replace(/^select \* from/, 'select result, what from'); };
 const addObject = (db, uid, name, size) => ok(psql(db, `insert into storage.objects (bucket_id, name, metadata) values ('media', '${uid}/${name}', '{"size":${size}}')`));
 
 const results = [];
@@ -430,6 +432,91 @@ await test('pictures and sounds: per-person limit, project fuse, exact total, re
   assertExact(db);
 });
 
+await test('uploads whose size is not known yet are assumed to be the largest file (3 MB)', () => {
+  const db = newDb('nullsize');
+  const chk = (uid, size) => asUser(db, uid, `select private.media_may_store('${uid}/n.png', ${size})`).out;
+  assert.equal(chk(A, 'null'), 't');
+  // per person: 2 MB left is not enough for an unknown file, 3 MB left is
+  addObject(db, A, 'big.png', 50 * 1048576 - 2 * 1048576);
+  assert.equal(chk(A, 'null'), 'f');
+  assert.equal(chk(A, `'1048576'`), 't');                                 // a known 1 MB still fits
+  // project: the same for the pictures ceiling
+  ok(psql(db, `update public.global_limits set bytes = ${total(db, 'media') + 3 * 1048576 - 1} where name = 'media'`));
+  assert.equal(chk(B, 'null'), 'f');
+  assert.equal(chk(B, `'3145000'`), 't');
+  ok(psql(db, `update public.global_limits set bytes = ${total(db, 'media') + 3 * 1048576} where name = 'media'`));
+  assert.equal(chk(B, 'null'), 't');
+  // and through the real rule: an insert whose metadata has no size is refused when the unknown file might not fit
+  ok(psql(db, `update public.global_limits set bytes = ${total(db, 'media') + 1000} where name = 'media'`));
+  fails(asUser(db, B, `insert into storage.objects (bucket_id, name, metadata) values ('media', '${B}/z.png', null)`), /row-level security/);
+});
+
+await test('without the storage trigger the pictures ceiling uses a live count; re-running keeps the trigger as it is', () => {
+  const db = newDb('notrigger');
+  const oid = () => val(db, `select oid from pg_trigger where tgname = 'media_total_track'`);
+  const before = oid();
+  runAll(db);
+  assert.equal(oid(), before, 'the trigger must not be dropped and made again');
+  addObject(db, A, 'a.png', 5000);
+  ok(psql(db, `drop trigger media_total_track on storage.objects`));
+  addObject(db, B, 'b.png', 7000);                                          // not counted: the total is now stale
+  assert.equal(total(db, 'media'), 5000);
+  ok(psql(db, `update public.global_limits set bytes = 12500 where name = 'media'`));
+  assert.equal(asUser(db, C, `select private.media_may_store('${C}/c.png', '600')`).out, 'f', 'live count 12000 + 600 > 12500');
+  assert.equal(asUser(db, C, `select private.media_may_store('${C}/c.png', '500')`).out, 't');
+  // the status table says NO, and running the script puts the trigger back
+  assert.match(val(db, `select string_agg(result, '|') from (${statusSql(db)}) x where what like 'media total kept%'`), /^NO/);
+  runAll(db);
+  assert.ok(oid());
+});
+
+await test('the status tables at the end of each script', () => {
+  const db = newDb('status');
+  const out = f => ok(psql(db, '', { file: join(SQL, f) }), f).split('\n').filter(l => l.includes('|'));
+  for (const f of ['setup.sql', 'media.sql', 'limits.sql']) {
+    const rows = out(f);
+    assert.ok(rows.length >= 2, f);
+    for (const r of rows) assert.ok(r.endsWith('|ok'), `${f}: ${r}`);
+  }
+  // a data ceiling that cannot be lowered yet says so
+  const db2 = newDb('status-old', { old: true });
+  ok(psql(db2, `set session_replication_role = replica; insert into public.sync_items (user_id, store, id, data, updated_at) select '${A}', 'cards', 'r' || g, jsonb_build_object('x', repeat('z', 60000)), 1 from generate_series(1, 5000) g`));
+  ok(psql(db2, `update public.global_limits set bytes = 440401920 where name = 'sync'`));
+  // (5000 rows of ~60 KB are counted as about 300 MB, above 280 MB)
+  for (const f of ['setup', 'media', 'limits']) {
+    const res = ok(psql(db2, '', { file: join(SQL, `${f}.sql`) }), f);
+    if (f === 'limits') {
+      assert.equal(num(db2, `select bytes from public.global_limits where name = 'sync'`), 440401920, 'not lowered while the stored data is over 280 MB');
+      assert.match(res, /NOT lowered to 300/);
+    }
+  }
+  ok(psql(db2, `delete from public.sync_items where id not like 'r1%'`));
+  runAll(db2);
+  assert.equal(num(db2, `select bytes from public.global_limits where name = 'sync'`), 314572800, 'lowered once there is room');
+  // the CI script's status
+  const withPw = read(join(SQL, 'ci-roles.sql')).replaceAll('PASTE-A-LONG-PASSWORD-HERE', 'a-test-password-0123456789-abcdef');
+  const ci = ok(psql(db, withPw), 'ci-roles.sql').split('\n').filter(l => l.includes('|'));
+  assert.equal(ci.length, 8);
+  for (const r of ci) assert.ok(r.endsWith('|ok'), r);
+  ok(psql(db, `revoke select on auth.identities from study_sprint_ci`));
+  const ciFile = read(join(SQL, 'ci-roles.sql'));
+  assert.match(ok(psql(db, ciFile.slice(ciFile.lastIndexOf('select * from (values')))), /can read auth.identities\|NO\|NO/);
+  ok(psql(db, `drop owned by study_sprint_ci; drop role study_sprint_ci`));      // (roles belong to the whole server, not one database)
+});
+
+await test('a change that does not change a record\'s size touches no counter row', () => {
+  const db = newDb('nogrowth');
+  ok(asUser(db, A, rowSql('g1', 100)));
+  const x = () => val(db, `select xmin::text from public.sync_usage where user_id = '${A}'`);
+  const before = x();
+  ok(asUser(db, A, `update public.sync_items set data = jsonb_build_object('x', repeat('y', 100)), updated_at = 5 where id = 'g1'`));
+  assert.equal(x(), before);
+  assertExact(db);
+  ok(asUser(db, A, `update public.sync_items set data = jsonb_build_object('x', repeat('y', 101)), updated_at = 6 where id = 'g1'`));
+  assert.notEqual(x(), before);
+  assertExact(db);
+});
+
 await test('two uploads at once cannot both squeeze past the pictures fuse', async () => {
   const db = newDb('mediaconc');
   ok(psql(db, `update public.global_limits set bytes = 1500 where name = 'media'`));
@@ -560,7 +647,7 @@ await test('read-only CI login: exactly what backup.yml and fuse-watch.yml need,
   assert.equal(val(db, `select md5(r::text) from pg_authid r where rolname = 'study_sprint_ci'`), snap1, 'running it again must not change the password');
   ok(psql(db, '', { file: join(SQL, 'ci-roles.sql') }), 'the unedited file is fine once the role exists');
   // the backup, with the options backup.yml uses
-  const dump = spawnSync(join(bin, 'pg_dump'), ['-h', dir, '-p', port, '-U', 'study_sprint_ci', '-d', db, '--data-only', '--no-owner', '--table=auth.users', '--table=auth.identities', '--table=public.*', '--exclude-table-data=public.sync_usage', '--exclude-table-data=public.usage_cache'], { encoding: 'utf8', env });
+  const dump = spawnSync(join(bin, 'pg_dump'), ['-h', dir, '-p', port, '-U', 'study_sprint_ci', '-d', db, '--data-only', '--no-owner', '--table=auth.users', '--table=auth.identities', '--table=public.*', '--exclude-table-data=public.sync_usage'], { encoding: 'utf8', env });
   assert.equal(dump.status, 0, dump.stderr);
   assert.match(dump.stdout, /COPY public\.sync_items /);
   assert.match(dump.stdout, /COPY auth\.users /);
@@ -593,6 +680,7 @@ await test('read-only CI login: exactly what backup.yml and fuse-watch.yml need,
   fails(asCi(`select name from storage.objects`), /permission denied/, 'only the size columns');
   fails(asCi(`select * from private.usage_totals`), /permission denied/);
   assert.equal(val(db, `select count(*) from public.sync_items`), '1');
+  ok(psql(db, `drop owned by study_sprint_ci; drop role study_sprint_ci`));
 });
 
 // ---------- the end ----------

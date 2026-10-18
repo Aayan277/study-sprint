@@ -72,8 +72,8 @@ jobs:
         run: |
           set -euo pipefail
           # One read-only query; it prints one line: data_bytes|data_limit|media_bytes|media_limit|db_bytes|bypassrls.
-          # "data" adds up sync_usage, which is what the data fuse counts (limits.sql, _total_sync_bytes). "pictures" adds
-          # up the files in the media bucket (limits.sql, _total_media_bytes). The limits come from global_limits, with the
+          # "data" adds up sync_usage, which is what the data fuse counts (limits.sql keeps private.usage_totals equal to it). "pictures" adds
+          # up the files in the media bucket (limits.sql keeps private.usage_totals equal to it). The limits come from global_limits, with the
           # same fallbacks limits.sql uses. The database limit is the free plan's 500 MB. Only totals, nothing per person.
           # (postgres:17 image, like the backup job: it has psql. The address is passed as an environment variable.)
           docker run --rm -i -e SUPABASE_DB_URL postgres:17 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt

@@ -29,7 +29,9 @@
 -- To give one named person more (change the email, the numbers are bytes):
 --   insert into public.quotas (user_id, media_bytes_limit, data_bytes_limit)
 --   select id, 209715200, 104857600 from auth.users where email = 'friend@example.com'
---   on conflict (user_id) do update set media_bytes_limit = excluded.media_bytes_limit, data_bytes_limit = excluded.data_bytes_limit;
+--   on conflict (user_id) do update set media_bytes_limit = excluded.media_bytes_limit, data_bytes_limit = excluded.data_bytes_limit
+--   returning user_id;
+-- (No row comes back if the email is wrong, so a typo is easy to see.)
 -- (That uses up some of the project-wide ceiling too, so don't hand out more than the project can hold.)
 --
 -- To raise the minimum app version (everybody with an older app is asked to update before syncing):
@@ -88,8 +90,8 @@ grant select on public.quotas to authenticated;
 -- The project-wide ceilings, in bytes (you can change them: for example when you move to the Pro plan).
 create table if not exists public.global_limits (name text primary key, bytes bigint not null check (bytes >= 0));
 insert into public.global_limits (name, bytes) values ('media', 943718400), ('sync', 314572800) on conflict (name) do nothing;
--- The data ceiling used to be 420 MB. Lower it, but only if it is still that number (a number you chose yourself is kept).
-update public.global_limits set bytes = 314572800 where name = 'sync' and bytes = 440401920;
+-- (The data ceiling used to be 420 MB. It is lowered to 300 MB further down, after the totals are counted, and only if it is
+-- still 420 MB and today's counted data is under 280 MB. See the status table at the very bottom.)
 alter table public.global_limits enable row level security;
 revoke all on public.global_limits from anon, authenticated;
 
@@ -170,14 +172,14 @@ update storage.buckets set file_size_limit = 3145728 where id = 'media';
 
 -- May the signed-in person store this file (name, and its size when the server already knows it)?
 -- Yes if the person exists, the file fits in their space (their other files + this one <= their limit; when the size
--- isn't known yet, they need to be under the limit), and the whole bucket stays under its ceiling (read from the exact
+-- isn't known yet, a full 3 MB is assumed), and the whole bucket stays under its ceiling (read from the exact
 -- total). Runs under a per-person lock, so parallel uploads are checked one after another. The storage rules call it
 -- as the person who is uploading, so that person must be allowed to run it (that is why it is in "private").
 -- The last word is the trigger on storage.objects below: it adds each file's bytes to the exact total and refuses
 -- the one that would pass the ceiling, atomically.
 create or replace function private.media_may_store(objname text, size_text text) returns boolean
 language plpgsql volatile security definer set search_path = '' as $$
-declare uid uuid := auth.uid(); lim bigint; used bigint; sz bigint; cap bigint; tot bigint; oldsz bigint;
+declare uid uuid := auth.uid(); lim bigint; used bigint; sz bigint; eff bigint; cap bigint; tot bigint; oldsz bigint;
 begin
   if uid is null then return false; end if;
   if not exists (select 1 from auth.users u where u.id = uid) then return false; end if;
@@ -185,18 +187,22 @@ begin
   lim := public._media_limit(uid);
   used := public._media_used(uid, objname);
   sz := case when size_text ~ '^[0-9]{1,12}$' then size_text::bigint end;
-  if sz is null then
-    if used >= lim then return false; end if;
-  elsif used + sz > lim then
-    return false;
-  end if;
+  -- Storage's own check often runs before it knows the size: then assume the worst, a full 3 MB file (the bucket's limit).
+  eff := coalesce(sz, 3145728);
+  if used + eff > lim then return false; end if;
   select g.bytes into cap from public.global_limits g where g.name = 'media';
-  select t.bytes into tot from private.usage_totals t where t.name = 'media';
+  -- The exact total is kept by the trigger on storage.objects. If that trigger isn't there (it needs rights on Supabase's own
+  -- table), fall back to adding the files up now.
+  if exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then
+    select t.bytes into tot from private.usage_totals t where t.name = 'media';
+  else
+    select coalesce(sum((o.metadata ->> 'size')::bigint), 0)::bigint into tot from storage.objects o where o.bucket_id = 'media';
+  end if;
   -- (replacing a file only adds the difference)
   select coalesce(sum((o.metadata ->> 'size')::bigint), 0)::bigint into oldsz
     from storage.objects o where o.bucket_id = 'media' and o.name = objname;
   if tot is null then return false; end if;
-  if tot + greatest(coalesce(sz, 0) - oldsz, 0) > coalesce(cap, 943718400) then return false; end if;
+  if tot + greatest(eff - oldsz, 0) > coalesce(cap, 943718400) then return false; end if;
   return true;
 end;
 $$;
@@ -232,16 +238,17 @@ revoke all on function private.row_bytes(text, jsonb), private.media_total_track
 revoke all on function private.media_may_store(text, text) from public, anon;
 grant execute on function private.media_may_store(text, text) to authenticated;
 
--- The trigger sits on Supabase's own table storage.objects. If this account isn't allowed to add one, the script goes on
--- but says so (and the project-wide pictures total is then only checked on upload, not exact).
+-- The trigger sits on Supabase's own table storage.objects. It is only made if it isn't there yet. If this account isn't allowed to add
+-- one, the script goes on (uploads are then checked against a live count, and the status table at the bottom says "NO").
 do $$
 begin
-  drop trigger if exists media_total_track on storage.objects;
-  create trigger media_total_track
-    after insert or delete or update of metadata, bucket_id on storage.objects
-    for each row execute function private.media_total_track();
+  if not exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then
+    create trigger media_total_track
+      after insert or delete or update of metadata, bucket_id on storage.objects
+      for each row execute function private.media_total_track();
+  end if;
 exception when insufficient_privilege then
-  raise warning 'Could not add the media_total_track trigger on storage.objects (not allowed). The project-wide pictures total will not be exact.';
+  raise warning 'Could not add the media_total_track trigger on storage.objects (not allowed). The status table at the bottom says so; until it is there, uploads are checked against a live count instead.';
 end $$;
 
 create policy "media: add own" on storage.objects for insert to authenticated
@@ -314,6 +321,8 @@ begin
   if tg_op <> 'INSERT' then old_b := private.row_bytes(old.id, old.data); end if;
   if tg_op <> 'DELETE' then new_b := private.row_bytes(new.id, new.data); end if;
   growth := new_b - old_b;
+  -- A change that doesn't change the size touches no counter (and so takes no lock that could deadlock with a recount).
+  if tg_op = 'UPDATE' and growth = 0 then return null; end if;
   perform pg_advisory_xact_lock(hashtextextended(uid::text, 1));
   if tg_op <> 'DELETE' and growth > 0 then
     select u.bytes, u.rows into cur, cur_rows from public.sync_usage u where u.user_id = uid;
@@ -394,6 +403,12 @@ drop function if exists public._total_sync_bytes();
 select public.recount_sync_usage();
 select public.recount_media_usage();
 
+-- Lower the old 420 MB data ceiling to 300 MB, but only if it is still that number (a number you chose yourself is kept) and
+-- the data already stored is under 280 MB (lowering it under what is stored would refuse everybody's new data at once).
+update public.global_limits set bytes = 314572800
+  where name = 'sync' and bytes = 440401920
+    and (select t.bytes from private.usage_totals t where t.name = 'sync') < 293601280;
+
 -- ---------- 6. my_usage() ----------
 -- { "data_bytes", "data_limit", "media_bytes", "media_limit" } for whoever is signed in.
 create or replace function public.my_usage() returns jsonb
@@ -459,3 +474,36 @@ revoke all on public.quotas, public.global_limits, public.sync_usage from anon, 
 grant select on public.quotas to authenticated;
 
 insert into private.schema_log (file, version) values ('limits.sql', 2);
+
+-- ---------- STATUS: look at this table after the script ran ----------
+-- The SQL Editor shows only the last result, so this is it. Every line should say "ok" in the last column.
+select * from (values
+  (1, 'script finished (version 2)', 'yes', 'ok'),
+  (2, 'media total kept by a trigger on storage.objects',
+      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then 'yes' else 'NO' end,
+      case when exists (select 1 from pg_trigger tg where tg.tgrelid = 'storage.objects'::regclass and tg.tgname = 'media_total_track' and not tg.tgisinternal) then 'ok'
+           else 'NO: uploads are checked against a live count instead; ask for help' end),
+  (3, 'records checked as JSON objects (all stored rows too)',
+      coalesce((select case when c.convalidated then 'yes' else 'NO' end from pg_constraint c where c.conname = 'sync_items_data_object' and c.conrelid = 'public.sync_items'::regclass), 'missing'),
+      case when coalesce((select c.convalidated from pg_constraint c where c.conname = 'sync_items_data_object' and c.conrelid = 'public.sync_items'::regclass), false) then 'ok'
+           else 'NO: new records are checked, some old ones are not; see the note above the constraint in limits.sql' end),
+  (4, 'synced data total vs counted from the rows (bytes)',
+      (select t.bytes from private.usage_totals t where t.name = 'sync')::text || ' vs ' || (select coalesce(sum(private.row_bytes(s.id, s.data)), 0) from public.sync_items s)::text,
+      case when (select t.bytes from private.usage_totals t where t.name = 'sync') = (select coalesce(sum(private.row_bytes(s.id, s.data)), 0) from public.sync_items s) then 'ok'
+           else 'NO: run select public.recount_sync_usage();' end),
+  (5, 'pictures total vs counted from the files (bytes)',
+      (select t.bytes from private.usage_totals t where t.name = 'media')::text || ' vs ' || (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media')::text,
+      case when (select t.bytes from private.usage_totals t where t.name = 'media') = (select coalesce(sum((o.metadata ->> 'size')::bigint), 0) from storage.objects o where o.bucket_id = 'media') then 'ok'
+           else 'NO: run select public.recount_media_usage();' end),
+  (6, 'default pictures / data per person (MB)',
+      round(public.default_media_limit() / 1048576.0)::text || ' / ' || round(public.default_data_limit() / 1048576.0)::text,
+      case when public.default_media_limit() = 52428800 and public.default_data_limit() = 41943040 then 'ok' else 'custom (kept, as you set it)' end),
+  (7, 'project ceiling: pictures (MB)', (select round(g.bytes / 1048576.0)::text from public.global_limits g where g.name = 'media'),
+      case when (select g.bytes from public.global_limits g where g.name = 'media') = 943718400 then 'ok' else 'custom (kept)' end),
+  (8, 'project ceiling: synced data (MB)', (select round(g.bytes / 1048576.0)::text from public.global_limits g where g.name = 'sync'),
+      case (select g.bytes from public.global_limits g where g.name = 'sync')
+        when 314572800 then 'ok'
+        when 440401920 then 'NOT lowered to 300: stored data is ' || round((select t.bytes from private.usage_totals t where t.name = 'sync') / 1048576.0)::text
+                            || ' MB. Free some space, or lower it yourself when under 300 MB: update public.global_limits set bytes = 314572800 where name = ''sync'';'
+        else 'custom (kept)' end)
+) as status(n, what, value, result) order by n;

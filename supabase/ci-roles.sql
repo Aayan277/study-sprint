@@ -50,3 +50,20 @@ create table if not exists private.schema_log (
 alter table private.schema_log enable row level security;
 revoke all on private.schema_log from public, anon, authenticated;
 insert into private.schema_log (file, version) values ('ci-roles.sql', 2);
+
+-- Status: every line should say ok. A missing right shows as NO.
+select * from (values
+  (1, 'login exists and can log in', coalesce((select r.rolcanlogin::text from pg_roles r where r.rolname = 'study_sprint_ci'), 'missing'),
+      case when exists (select 1 from pg_roles r where r.rolname = 'study_sprint_ci' and r.rolcanlogin) then 'ok' else 'NO' end),
+  (2, 'bypasses row security (the backup needs it)', coalesce((select r.rolbypassrls::text from pg_roles r where r.rolname = 'study_sprint_ci'), 'missing'),
+      case when exists (select 1 from pg_roles r where r.rolname = 'study_sprint_ci' and r.rolbypassrls) then 'ok' else 'NO: the jobs will fail; see docs/sync-setup.md step 8e' end),
+  (3, 'can read auth.users', case when has_table_privilege('study_sprint_ci', 'auth.users', 'SELECT') then 'yes' else 'NO' end, case when has_table_privilege('study_sprint_ci', 'auth.users', 'SELECT') then 'ok' else 'NO' end),
+  (4, 'can read auth.identities', case when has_table_privilege('study_sprint_ci', 'auth.identities', 'SELECT') then 'yes' else 'NO' end, case when has_table_privilege('study_sprint_ci', 'auth.identities', 'SELECT') then 'ok' else 'NO' end),
+  (5, 'can read storage.objects metadata', case when has_column_privilege('study_sprint_ci', 'storage.objects', 'metadata', 'SELECT') then 'yes' else 'NO' end, case when has_column_privilege('study_sprint_ci', 'storage.objects', 'metadata', 'SELECT') then 'ok' else 'NO' end),
+  (6, 'can read storage.objects bucket_id', case when has_column_privilege('study_sprint_ci', 'storage.objects', 'bucket_id', 'SELECT') then 'yes' else 'NO' end, case when has_column_privilege('study_sprint_ci', 'storage.objects', 'bucket_id', 'SELECT') then 'ok' else 'NO' end),
+  (7, 'can read public.sync_items, sync_usage, global_limits',
+      case when has_table_privilege('study_sprint_ci', 'public.sync_items', 'SELECT') and has_table_privilege('study_sprint_ci', 'public.sync_usage', 'SELECT') and has_table_privilege('study_sprint_ci', 'public.global_limits', 'SELECT') then 'yes' else 'NO' end,
+      case when has_table_privilege('study_sprint_ci', 'public.sync_items', 'SELECT') and has_table_privilege('study_sprint_ci', 'public.sync_usage', 'SELECT') and has_table_privilege('study_sprint_ci', 'public.global_limits', 'SELECT') then 'ok' else 'NO' end),
+  (8, 'can write nothing (insert on sync_items)', case when has_table_privilege('study_sprint_ci', 'public.sync_items', 'INSERT') then 'NO, it can' else 'yes' end,
+      case when has_table_privilege('study_sprint_ci', 'public.sync_items', 'INSERT') then 'NO' else 'ok' end)
+) as status(n, what, value, result) order by n;

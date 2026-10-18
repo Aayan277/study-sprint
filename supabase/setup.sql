@@ -81,3 +81,11 @@ grant usage on sequence public.sync_seq to authenticated;       -- the default v
 revoke all on function public.sync_items_on_change() from public, anon, authenticated;     -- (a trigger function: nobody calls it directly)
 
 insert into private.schema_log (file, version) values ('setup.sql', 2);
+
+-- Status: every line should say ok.
+select * from (values
+  (1, 'sync_items table with row rules', (select count(*) from pg_policies where schemaname = 'public' and tablename = 'sync_items')::text || ' rules',
+      case when (select count(*) from pg_policies where schemaname = 'public' and tablename = 'sync_items') = 4 then 'ok' else 'NO: expected 4 rules' end),
+  (2, 'visitors who are not signed in can read sync_items', case when has_table_privilege('anon', 'public.sync_items', 'SELECT') then 'yes' else 'no' end,
+      case when has_table_privilege('anon', 'public.sync_items', 'SELECT') then 'NO: should be no' else 'ok' end)
+) as status(n, what, value, result) order by n;
