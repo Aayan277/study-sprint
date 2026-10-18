@@ -394,7 +394,7 @@ function wireCardForm(card, ctx, msg, pair = null) {
     if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
-    const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value, card.tags), noteFields = readNoteFields('ce');
+    const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
     const accept = $('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {};
     const both = !!$('ceRevOn')?.checked && !stepsOn('ce');
     if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
@@ -487,7 +487,7 @@ async function saveClozeNote(card, ops, msg) {
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value, card.tags), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -514,7 +514,7 @@ async function saveOcclusionNote(card, ops, msg) {
     if (plan.error) { showErr('ceErr', plan.error); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value, card.tags), noteExtra: readCardText('ceOccExtra').trim() });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', occRemovalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));

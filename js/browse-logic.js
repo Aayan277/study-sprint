@@ -138,21 +138,10 @@ export function parseTagSearch(query) {
 // Does the card have the tag `path`, or a tag below it? (Ignores capitals; `path` as normTag gives it.)
 const hasTagUnder = (card, path) => tagWords(card.tags).some(t => { const n = normTag(t); return n === path || n.startsWith(path + SEP); });
 
-// "a b, c" → ['a', 'b', 'c'] (lower case, no blanks, no repeats). Tags are separated by spaces, commas or line breaks (like Anki,
-// whose tags can't contain spaces). `keep`: the card's tags as saved. One saved with a space in it ("exam 1") stays whole if it is still there.
-// A saved tag with a space is matched only as whole words, between the separators ("exam 1" is kept in "exam 1, new" but not in "exam 10").
-export function parseTags(text, keep = []) {
-  const whole = [...new Set((keep || []).map(t => String(t).trim().toLowerCase().split(/\s+/)).filter(w => w.length > 1).map(w => w.join(' ')))]
-    .map(t => t.split(' ')).sort((x, y) => y.length - x.length);
-  const out = [];
-  for (const part of String(text ?? '').toLowerCase().split(/[,\n]+/)) {
-    const words = part.split(/\s+/).filter(Boolean);
-    for (let i = 0; i < words.length;) {
-      const hit = whole.find(w => w.every((x, j) => words[i + j] === x));
-      if (hit) { out.push(hit.join(' ')); i += hit.length; } else out.push(words[i++]);
-    }
-  }
-  return [...new Set(out)];
+// "a b, c" → ['a', 'b', 'c'] (lower case, no blanks, no repeats). Tags are separated by spaces, commas or line breaks (like Anki, whose tags
+// can't contain spaces): the same rule tagWords (tag-tree.js) uses to read what is saved. A piece with nothing in it but colons ("a :: b") is dropped.
+export function parseTags(text) {
+  return [...new Set(String(text ?? '').toLowerCase().split(/[\s,]+/).filter(t => normTag(t)))];
 }
 
 // ---------- leeches ----------

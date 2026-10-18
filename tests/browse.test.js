@@ -87,16 +87,13 @@ test('tags are separated by spaces, commas or line breaks, like Anki (they are k
   assert.deepEqual(parseTags('x  X x'), ['x']);
 });
 
-test('a tag saved earlier with a space in it stays whole while it is still in the field', () => {
-  assert.deepEqual(parseTags('exam 1, new', ['Exam 1']), ['exam 1', 'new']);
-  assert.deepEqual(parseTags('new exam 1', ['exam 1']), ['new', 'exam 1']);
-  assert.deepEqual(parseTags('exam 1 exam 2', ['exam 1', 'exam']), ['exam 1', 'exam', '2']);
-  assert.deepEqual(parseTags('exam, 1', ['exam 1']), ['exam', '1']);          // edited apart: now two tags
-  // Matched as whole tags only, not as pieces of other words or tags.
-  assert.deepEqual(parseTags('exam 10', ['exam 1']), ['exam', '10']);
-  assert.deepEqual(parseTags('myexam 1', ['exam 1']), ['myexam', '1']);
-  assert.deepEqual(parseTags('exam 1x, exam 1', ['exam 1']), ['exam', '1x', 'exam 1']);
-  assert.deepEqual(parseTags('a::exam 1', ['exam 1']), ['a::exam', '1']);
+test('one rule for tags: spaces separate them when typing and when reading what is saved; empty "::" pieces are dropped', async () => {
+  const { tagWords } = await import('../js/tag-tree.js');
+  assert.deepEqual(parseTags('exam 1, new'), ['exam', '1', 'new']);
+  assert.deepEqual(parseTags('a :: b'), ['a', 'b']);
+  assert.deepEqual(parseTags(':: :::: x'), ['x']);
+  assert.deepEqual(tagWords(['exam 1', 'a :: b', 'c']), ['exam', '1', 'a', 'b', 'c']);
+  assert.deepEqual(tagWords(['exam 1']), parseTags('exam 1'));
 });
 
 test('every filter and sort has a label', () => {

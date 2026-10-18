@@ -83,16 +83,17 @@ export function parseAuthLink(hash) {
 // ---------- days off (the restDays setting) ----------
 // { 'YYYY-MM-DD': { on, at } }: whether a day is a day off, and when that was last decided. Merged per day,
 // so two devices that each add a day off keep both; for the same day the later decision wins (on a tie, "on").
-// Junk keys and values are dropped, and so is anything over 400 days old (the streak never needs those).
+// Junk keys and values are dropped, and so is anything over 3650 days old: the streak walk (stats-calc.js MAX_DAYS) reads that far back,
+// so a shorter prune would cut a long streak at a day off.
 const DAY_KEY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-const MAX_FLAG_AGE_DAYS = 400;
+const MAX_FLAG_AGE_DAYS = 3650;     // = MAX_DAYS in stats-calc.js, how far back the streak is walked
 export const MAX_AHEAD_DAYS = 60;      // how far ahead a day off can be planned (streak-sheet.js re-exports it)
 const FUTURE_SLACK_DAYS = 2;           // time zones and the 4am rollover: a key can be a day or two beyond the limit
 const MAX_FUTURE_ENTRIES = MAX_AHEAD_DAYS + FUTURE_SLACK_DAYS + 1;
 const DAY = 86400000;
 const keyOf = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 // Junk is dropped: bad keys, bad values, a decision time that is not a positive safe integer or lies more than a day
-// in the future (a huge `at` would make a day off unremovable), keys older than 400 days or further ahead than a
+// in the future (a huge `at` would make a day off unremovable), keys older than 3650 days or further ahead than a
 // day off can be planned, and (if there are still too many) the furthest-future keys.
 function cleanDayFlags(flags, cutoff, now, latest) {
   const out = {};
@@ -129,12 +130,12 @@ export function sameDayFlags(a, b, now = Date.now()) {
 // ---------- days when nothing was due (the idleDays setting) ----------
 // { 'YYYY-MM-DD': true }: study days when the ring said "Nothing due today" (study-data.js idleDaysToMark). Merged as a union, so a day
 // either device noted counts on both. Nothing ever un-notes a day, so there is no "at". Junk is dropped, and so is anything older than
-// 200 days (a streak freeze never reaches that far back) or more than two days ahead (time zones).
-export const MAX_IDLE_DAYS_AGE = 200;
+// 3650 days (the streak walk reads that far back, so a shorter prune would cut a long streak) or more than a day ahead (time zones).
+export const MAX_IDLE_DAYS_AGE = MAX_FLAG_AGE_DAYS;
 function cleanIdleDays(flags, now) {
   const out = {};
   if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
-  const cutoff = keyOf(now - MAX_IDLE_DAYS_AGE * DAY), latest = keyOf(now + 2 * DAY);
+  const cutoff = keyOf(now - MAX_IDLE_DAYS_AGE * DAY), latest = keyOf(now + DAY);
   for (const [k, v] of Object.entries(flags)) if (v === true && DAY_KEY.test(k) && k >= cutoff && k <= latest) out[k] = true;
   return out;
 }

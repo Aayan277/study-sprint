@@ -146,3 +146,39 @@ test('a day that is noted keeps the streak; days the app was not opened are for 
   assert.equal(walk([1, 2], [0]).days, 2);
   assert.equal(walk([3, 4], []).days, 0);              // two missed days, no note: broken (only one freeze)
 });
+
+test('idleDaysToMark: suspending or burying the unseen new cards cannot fake a quiet day', () => {
+  for (const hide of [{ suspended: true }, { buriedUntil: T + DAY }]) {
+    const { data } = world({ states: [{ due: T + 9 * DAY }], newCards: 5 });
+    data.allCards = data.allCards.map(c => (c.id.startsWith('n') ? { ...c, ...hide } : c));
+    data.cards = data.allCards.filter(c => !c.suspended && !(c.buriedUntil > T));
+    data.split = splitCards(data.cards, data.statesById, T, data.exam);
+    assert.equal(countFor(data, ['a']).total, 0, 'the ring itself looks quiet: ' + JSON.stringify(hide));
+    assert.deepEqual(idleDaysToMark(data, T), [], JSON.stringify(hide));
+  }
+});
+
+test('idleDaysToMark: a new-card limit of 0 leaves a real quiet day (and so does a postponed review)', () => {
+  const { data } = world({ states: [{ due: T + 9 * DAY }], newCards: 5 });
+  data.newLeft = newLimits({ perDay: 0, decks, logs: [], deckOf: data.deckOf, chains: data.chains });
+  data.split = splitCards(data.cards.filter(c => !c.id.startsWith('n')), data.statesById, T, data.exam);
+  data.cards = data.cards.filter(c => !c.id.startsWith('n'));
+  assert.deepEqual(idleDaysToMark(data, T), [k(0)]);
+});
+
+test('a long streak keeps its quiet days: the 3650-day prune does not cut it', async () => {
+  const { mergeIdleDays } = await import('../js/sync-merge.js');
+  const idleN = [150, 151, 210, 211];
+  const studied = new Set();
+  for (let i = 0; i <= 260; i++) if (!idleN.includes(i)) studied.add(k(i));
+  const flags = Object.fromEntries(idleN.map(n => [k(n), true]));
+  const pruned = mergeIdleDays(flags, { [k(0)]: true }, T);
+  assert.equal(Object.keys(pruned).length, 5);
+  assert.equal(streakFromDays(studied, T, { idle: idleDaySet({ idleDays: pruned }) }).days, 257);      // (261 days, 4 of them quiet and not counted)
+});
+
+test('the "Nothing due today" line needs the ring to still say nothing: loadStreak drops idleToday otherwise', () => {
+  const s = streakFromDays(new Set([k(1), k(2)]), T, { idle: new Set([k(0)]) });
+  assert.equal(streakText(s, T).line, 'Nothing due today: your streak is safe');
+  assert.equal(streakText({ ...s, idleToday: false }, T).line, 'Study today to keep it');
+});

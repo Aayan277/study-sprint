@@ -161,9 +161,9 @@ test('days off: for one day, the newest decision wins (also a removal)', () => {
   assert.deepEqual(mergeDayFlags(x, y, T), mergeDayFlags(y, x, T));
 });
 
-test('days off: entries over 400 days old and junk are dropped', () => {
-  const old = { '2025-01-01': { on: true, at: 1 }, '2025-09-01': { on: true, at: 1 }, '2026-10-20': { on: true, at: 1 } };
-  assert.deepEqual(Object.keys(mergeDayFlags(old, null, T)), ['2026-10-20']);
+test('days off: entries over 3650 days old (further back than the streak is walked) and junk are dropped; younger ones stay', () => {
+  const old = { '2015-01-01': { on: true, at: 1 }, '2020-01-01': { on: true, at: 1 }, '2025-01-01': { on: true, at: 1 }, '2026-10-20': { on: true, at: 1 } };
+  assert.deepEqual(Object.keys(mergeDayFlags(old, null, T)), ['2020-01-01', '2025-01-01', '2026-10-20']);      // (a day off 2 years back still bridges a long streak)
   const junk = { nope: { on: true, at: 1 }, '2026-13-40': { on: true, at: 1 }, '2026-10-22': { on: 'yes', at: 1 }, '2026-10-23': { on: true }, '2026-10-24': null, '2026-10-25': 7, '2026-10-26': { on: true, at: 'x' }, '2026-10-27': { on: true, at: 9 } };
   assert.deepEqual(mergeDayFlags(junk, undefined, T), { '2026-10-27': { on: true, at: 9 } });
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeDayFlags(bad, bad, T), {});
@@ -308,7 +308,7 @@ test('fsrsParams from the server: a good value is kept (cleaned), null means the
 
 // ---------- days with nothing due (the idleDays setting) ----------
 const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-test('idleDays is a synced, merged setting: the union of two devices, pruned to 200 days', () => {
+test('idleDays is a synced, merged setting: the union of two devices, pruned only past 3650 days (a long streak keeps its quiet days)', () => {
   assert.ok(SYNCED_SETTINGS.includes('idleDays') && MERGED_SETTINGS.includes('idleDays'));
   const a = { '2026-10-10': true, '2026-10-11': true }, b = { '2026-10-11': true, '2026-10-12': true };
   const merged = mergeIdleDays(a, b, T);
@@ -317,7 +317,8 @@ test('idleDays is a synced, merged setting: the union of two devices, pruned to 
   assert.ok(sameIdleDays(mergeIdleDays(merged, a, T), merged, T));          // merging again changes nothing
   assert.ok(!sameIdleDays(a, merged, T));
   assert.ok(sameIdleDays(a, { ...a, junk: true, '2026-10-13': false, '2026-10-09': 1 }, T));
-  const old = { '2020-01-01': true, [ymd(T - 199 * 86400000)]: true, [ymd(T - 230 * 86400000)]: true };
-  assert.equal(Object.keys(mergeIdleDays(old, null, T)).length, 1);
+  const old = { '2010-01-01': true, '2020-01-01': true, [ymd(T - 199 * 86400000)]: true, [ymd(T - 230 * 86400000)]: true };
+  assert.equal(Object.keys(mergeIdleDays(old, null, T)).length, 3);          // only the one over 3650 days old goes
+  assert.deepEqual(Object.keys(mergeIdleDays({ [ymd(T + 86400000)]: true, [ymd(T + 2 * 86400000)]: true }, null, T)), [ymd(T + 86400000)]);      // one day ahead at most (time zones)
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeIdleDays(bad, bad, T), {});
 });

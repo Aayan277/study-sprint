@@ -22,7 +22,7 @@ export const normTag = tag => pieces(tag).join(SEP).toLowerCase();
 export const hasFolders = cards => cards.some(c => (c.tags || []).some(t => String(t).includes(SEP)));
 // A card's tags as the tree, the counts, the search, the rename and the ID lookup all read them. Tags are separated by spaces now; one saved
 // with a space in it, before that, is read as the separate tags it was meant to be ("#a::1 #a::2" is two).
-export const tagWords = tags => (tags || []).flatMap(t => String(t ?? '').split(/\s+/)).filter(Boolean);
+export const tagWords = tags => (tags || []).flatMap(t => String(t ?? '').split(/\s+/)).filter(t => normTag(t));
 
 // ---------- the tree ----------
 // A node: { path, name, count, own, children }
