@@ -1398,6 +1398,9 @@ img[data-media][hidden]{display:none}
 /* Wide desktop */
 @media (min-width:1200px){
   main[data-route="stats"] .cal-card{--c:16px}
+}
+/* From 1280px the streak card is wide enough for this (at 1200 to 1279 its text column was about 106px) */
+@media (min-width:1280px){
   /* The streak card is wide enough to put the week of days beside the count, so it is no taller than it needs to be */
   main[data-route="stats"] .pgrid .pc-streak{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto 1fr;column-gap:var(--s-6);align-content:start}
   main[data-route="stats"] .pgrid .pc-streak > :is(h2,.big,p){grid-column:1}
@@ -2532,9 +2535,9 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rs-gap{font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
 .rs-scale{position:relative;height:1.3em}
 .rs-scale > span{position:absolute;top:0;transform:translateX(-50%);left:calc(var(--rs-in) + (100% - 2 * var(--rs-in)) * var(--p,0))}
-.rs-scale > span:nth-child(1){--p:0}
+.rs-scale > span:nth-child(1){--p:0;transform:none}
 .rs-scale > span:nth-child(2){--p:.5}
-.rs-scale > span:nth-child(3){--p:1}
+.rs-scale > span:nth-child(3){--p:1;transform:translateX(-100%)}
 @media (min-width:700px){.rs-row,.rs-axis{grid-template-columns:190px minmax(0,1fr) 230px;column-gap:var(--s-4)}}
 @media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}}
 
