@@ -331,8 +331,8 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.click('#optGo');
   await finished(p);
   const beat = await probeStop(p);
-  // The check must be able to fail: with the fit forced onto the page, the responsiveness verdict has to come out false, and
-  // on the turn ratio alone (not just because no Worker was started).
+  // The checks must be able to fail: with the fit forced onto the page, the Worker checks above would fail, and the turn ratio
+  // must still come out below every Worker run (so the measure itself tells the two apart).
   ok(beat.workers === 0, 'no-worker: no Worker was started, so the "fit ran in a Worker" checks above would FAIL for this run: ' + describe(base, beat));
   ok(workerRatios.length > 0 && ratioOf(base, beat) < Math.min(...workerRatios), `no-worker: and the busy-main-thread measure alone tells it from a Worker run (${Math.round(ratioOf(base, beat) * 100)}% of idle turns on the page, against ${workerRatios.map(r => Math.round(r * 100) + '%').join(' and ')} with a Worker)`);
   const note = await p.evaluate(() => window.__seen.note);
