@@ -377,3 +377,113 @@ test('idleDays is a synced, merged setting: the union of two devices, pruned onl
   assert.deepEqual(Object.keys(mergeIdleDays({ [ymd(T + 86400000)]: true, [ymd(T + 2 * 86400000)]: true }, null, T)), [ymd(T + 86400000)]);      // one day ahead at most (time zones)
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeIdleDays(bad, bad, T), {});
 });
+
+// ---------- the overlap when pulling ----------
+import { pullStart, logPull, OVERLAP_MS } from '../js/sync-merge.js';
+
+test('overlap: no log yet (first sync, or an update from an older version) means no overlap', () => {
+  assert.equal(pullStart({ lastSeq: 500 }), 500);
+  assert.equal(pullStart({ lastSeq: 0, seqLog: [] }), 0);
+  assert.equal(pullStart(undefined), 0);
+  assert.equal(pullStart({ lastSeq: 7, seqLog: [{ t: 'x', seq: 'y' }, null] }), 7);       // junk is ignored
+});
+
+test('overlap: a pull starts at the bookmark that was current OVERLAP_MS before the previous pull, never above the bookmark', () => {
+  const T = 1_000_000_000;
+  let log = logPull([], T, 100);
+  assert.equal(pullStart({ lastSeq: 120, seqLog: log }), 100);              // young history: the oldest entry
+  log = logPull(log, T + 60_000, 120);
+  assert.equal(pullStart({ lastSeq: 150, seqLog: log }), 100);              // still within the window
+  log = logPull(log, T + OVERLAP_MS + 1000, 150);
+  assert.equal(pullStart({ lastSeq: 180, seqLog: log }), 100);              // T is more than 2 minutes before the latest pull: 100 is the anchor
+  log = logPull(log, T + 2 * OVERLAP_MS + 5000, 180);
+  assert.equal(pullStart({ lastSeq: 200, seqLog: log }), 150);              // the newest entry at least 2 minutes before the latest pull
+  assert.equal(pullStart({ lastSeq: 110, seqLog: log }), 110);              // never above the bookmark (e.g. after a reset)
+});
+
+test('overlap: the gap since the previous pull does not shrink the window (the app may have been closed for days)', () => {
+  const T = 1_000_000_000;
+  let log = logPull([], T, 100);
+  log = logPull(log, T + 5 * 60_000, 160);               // previous pull
+  // the next pull happens a week later: it still starts at the bookmark of 2+ minutes before the previous pull
+  assert.equal(pullStart({ lastSeq: 160, seqLog: log }), 100);
+});
+
+test('overlap: the log stays small, keeps the anchor, and a clock going backwards does not reorder it', () => {
+  const T = 1_000_000_000;
+  let log = [];
+  for (let i = 0; i < 500; i++) log = logPull(log, T + i * 1000, i);        // a sync every second
+  assert.ok(log.length <= 61);
+  assert.ok(log.every((e, i) => i === 0 || e.t >= log[i - 1].t));
+  const before = log.length;
+  log = logPull(log, T - 10_000_000, 500);                                   // clock jumped back
+  assert.ok(log.at(-1).t >= log.at(-2).t && log.length <= before + 1);
+  assert.ok(pullStart({ lastSeq: 600, seqLog: log }) <= 600);
+});
+
+// A tiny model of the server: seq is taken when a transaction writes, rows show up when it commits.
+function fakeServer() {
+  let seq = 0; const visible = [];
+  return {
+    begin(...ids) { return { rows: ids.map(id => ({ id, seq: ++seq })) }; },
+    commit(tx) { visible.push(...tx.rows); },
+    read(after, limit = 1000) { return visible.filter(r => r.seq > after).sort((a, b) => a.seq - b.seq).slice(0, limit); }
+  };
+}
+// The client side of one pull, as sync.js does it: returns the new state and which ids were seen.
+function pull(server, st, now, seen) {
+  const from = pullStart(st);
+  const rows = server.read(from);
+  const before = st.lastSeq;
+  rows.forEach(r => seen.add(r.id));
+  return { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => r.seq)), seqLog: logPull(st.seqLog, now, before) };
+}
+
+test('overlap: a change numbered below the bookmark that becomes visible late is still picked up', () => {
+  const server = fakeServer(), seen = new Set();
+  let st = { lastSeq: 0 };
+  const T = 2_000_000_000;
+  const a = server.begin('late');            // seq 1, still being saved
+  const b = server.begin('early');           // seq 2
+  server.commit(b);
+  st = pull(server, st, T, seen);            // this device now has the bookmark at 2
+  assert.equal(st.lastSeq, 2); assert.deepEqual([...seen], ['early']);
+  server.commit(a);                          // the older number becomes visible
+  st = pull(server, st, T + 30_000, seen);
+  assert.ok(seen.has('late'), 'seen late row');
+  assert.equal(st.lastSeq, 2);
+});
+
+test('overlap: it is picked up even when the next pull comes much later', () => {
+  const server = fakeServer(), seen = new Set();
+  let st = { lastSeq: 0 };
+  const T = 2_000_000_000;
+  server.commit(server.begin('old1'));
+  st = pull(server, st, T, seen);
+  st = pull(server, st, T + 5 * 60_000, seen);              // a quiet pull: the log now reaches back over the window
+  const a = server.begin('late'), b = server.begin('early');
+  server.commit(b);
+  st = pull(server, st, T + 10 * 60_000, seen);             // bookmark passes 'late' while it is invisible
+  server.commit(a);
+  st = pull(server, st, T + 3 * 24 * 3600_000, seen);       // three days on
+  assert.ok(seen.has('late'));
+});
+
+test('overlap: the bookmark never moves backwards, and a quiet server gives no new bookmark', () => {
+  const server = fakeServer(), seen = new Set();
+  let st = { lastSeq: 0 };
+  const T = 2_000_000_000;
+  for (let i = 0; i < 5; i++) server.commit(server.begin('r' + i));
+  let prev = 0;
+  for (let i = 0; i < 8; i++) {
+    st = pull(server, st, T + i * 20_000, seen);
+    assert.ok(st.lastSeq >= prev); prev = st.lastSeq;
+  }
+  assert.equal(st.lastSeq, 5);
+  assert.ok(pullStart(st) <= st.lastSeq);
+  // re-reading is bounded: after the window passes, a pull asks for nothing old
+  st = pull(server, st, T + 10 * 60_000, seen);
+  st = pull(server, st, T + 20 * 60_000, seen);
+  assert.equal(pullStart(st), 5);
+  assert.deepEqual(server.read(pullStart(st)), []);
+});

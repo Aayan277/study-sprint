@@ -2,7 +2,8 @@
 //
 // One sync does two things:
 //   1. Pull: ask the server for every change since the last one this device saw (by its change number, seq),
-//      and save each one unless this device has a newer version (db.applyRemote).
+//      and save each one unless this device has a newer version (db.applyRemote). The request starts a couple of
+//      minutes behind that bookmark, because a change numbered earlier can become visible later (pullStart).
 //   2. Push: send everything changed here since the last push (db.localChangesSince). The server keeps
 //      whichever version is newest, so sending something old can't overwrite something new.
 // It runs when the app opens, a few seconds after you change something, when you come back online or back
@@ -19,7 +20,7 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -243,19 +244,27 @@ async function run() {
   if ((await db.getSettings()).resendPending) await startOverFromHere(auth.user.id);
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
-  // 1. Pull what changed on the server since last time.
+  // 1. Pull what changed on the server since last time. The first request starts a little behind the bookmark
+  //    (pullStart, sync-merge.js): a change numbered below it can have become visible after the bookmark moved past it.
+  //    Those rows come again and are skipped as already applied. The bookmark itself only ever moves forward.
   let applied = 0, pulled = 0, gotNotes = false;
+  let from = pullStart(st), bookmarkBefore = st.lastSeq, lastRequestAt = Date.now();
   for (;;) {
-    const rows = await supa.getChanges(token, st.lastSeq, PAGE);
+    lastRequestAt = Date.now(); bookmarkBefore = st.lastSeq;
+    const rows = await supa.getChanges(token, from, PAGE);
     if (!rows.length) break;
-    applied += await db.applyRemote(rows);
-    if (rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;
+    const got = await db.applyRemote(rows);
+    applied += got;
+    if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
     pulled += rows.length;
     if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
-    st = { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => Number(r.seq))) };
+    from = Math.max(from, ...rows.map(r => Number(r.seq)));
+    st = { ...st, lastSeq: Math.max(st.lastSeq, from) };
     await db.setSetting('syncState', st);
     if (rows.length < PAGE) break;
   }
+  st = { ...st, seqLog: logPull(st.seqLog, lastRequestAt, bookmarkBefore) };
+  await db.setSetting('syncState', st);
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.
   if (gotNotes) await healNotes();

@@ -221,3 +221,41 @@ export async function runPool(items, work, { size = 4, onProgress } = {}) {
 // The note under Settings → Sync when the server turns sounds away (the owner hasn't re-run supabase/media.sql yet).
 export const SOUNDS_BLOCKED_NOTE = 'Sounds can’t sync yet: run the new supabase/media.sql in your Supabase project (see docs/sync-setup.md). Pictures and everything else are syncing.';
 export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync server doesn’t take that kind of picture (check supabase/media.sql was run, see docs/sync-setup.md). Everything else is syncing.';
+
+// ---------- the overlap when pulling ----------
+// The server numbers a change (seq) when the row is written, not when it is saved for good. With several devices
+// sending at once, a change numbered 100 can become visible after one numbered 101 did. A device that pulled in
+// between has 101 as its bookmark and would never see 100. So every pull starts a little behind the bookmark and
+// reads that stretch again; rows already applied are skipped by decide() (same time = skip), so it costs a few
+// rows of download and nothing else.
+// "A little behind" is measured in time, not in numbers: the numbers are shared by every account on the server, so a
+// count of them means nothing. After each pull we log { t: when, seq: the bookmark then }. The next pull starts at
+// the bookmark that was current OVERLAP_MS before the previous pull. A change that was invisible to the previous
+// pull was numbered less than OVERLAP_MS before it, so it is numbered above that old bookmark, however much later
+// this pull happens (the app may have been closed for days).
+export const OVERLAP_MS = 2 * 60 * 1000;      // far longer than the few seconds one batch of changes needs to be saved
+const MAX_LOG = 60;
+
+// The change number to ask "after" in the next pull. Never above the bookmark; no log yet (first sync, or an update from
+// a version without one) means no overlap.
+export function pullStart(st) {
+  const bookmark = Number(st?.lastSeq) || 0;
+  const log = Array.isArray(st?.seqLog) ? st.seqLog.filter(e => Number.isFinite(e?.t) && Number.isFinite(e?.seq)) : [];
+  if (!log.length) return bookmark;
+  const limit = log[log.length - 1].t - OVERLAP_MS;
+  const anchor = [...log].reverse().find(e => e.t <= limit) || log[0];      // not enough history yet: the oldest entry we have
+  return Math.max(0, Math.min(bookmark, anchor.seq));
+}
+
+// Add this pull to the log ({ t, seq }), and forget entries older than the one pullStart() will use.
+export function logPull(log, t, seq) {
+  const list = Array.isArray(log) ? log.filter(e => Number.isFinite(e?.t) && Number.isFinite(e?.seq)) : [];
+  if (list.length) t = Math.max(t, list[list.length - 1].t);     // a clock that went backwards doesn't reorder the log
+  list.push({ t, seq });
+  const limit = t - OVERLAP_MS;
+  let keep = 0;
+  list.forEach((e, i) => { if (e.t <= limit) keep = i; });
+  const out = list.slice(keep);
+  if (out.length > MAX_LOG) out.splice(1, out.length - MAX_LOG);   // a burst of syncs: thin out the middle, keep the oldest and the newest
+  return out;
+}
