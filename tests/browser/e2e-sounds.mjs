@@ -21,6 +21,16 @@ const spies = () => {
     return Promise.resolve();
   };
   HTMLMediaElement.prototype.pause = function () {};
+  // The test sounds are filler bytes, not real audio, so the browser's own decoding of them fails a moment after src is set: an error
+  // that arrives at a random time against the 5 ms "ended" above, marks the ▶ being played as broken, and the next tap then does nothing.
+  // That is not what is tested here (an unplayable type is tested with canPlayType below), so the page's error handler is not told
+  // about decoding errors on a sound's blob: address.
+  const onerror = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'onerror') || Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'onerror');
+  Object.defineProperty(HTMLMediaElement.prototype, 'onerror', {
+    configurable: true,
+    get() { return onerror.get.call(this); },
+    set(fn) { onerror.set.call(this, typeof fn === 'function' ? function (e) { return String(this.src).startsWith('blob:') ? undefined : fn.call(this, e); } : fn); }
+  });
   try { speechSynthesis.speak = u => window.__speaks.push(u.text); } catch { /* no speech here */ }
 };
 async function device(name, { width = 375, height = 740, colorScheme = 'dark' } = {}) {
@@ -231,6 +241,7 @@ await page.setInputFiles('#acBackSndFile', { name: 'voice.ogg', mimeType: 'audio
 await page.waitForSelector('#acBackSnd .snd-item');
 await page.waitForFunction(() => /can't play/.test(document.querySelector('#toast')?.textContent || ''));
 ok((await toastText()).includes("This browser can't play .ogg files. Other devices may.") && (await page.locator('#acBackSnd .snd-item').count()) === 1, 'Editor: an unplayable type is saved anyway, with "This browser can\'t play .ogg files. Other devices may."');
+await page.waitForFunction(() => document.querySelector('#acBackSnd .snd-btn')?.getAttribute('aria-disabled') === 'true');   // (the app checks each new ▶ a moment after it appears)
 ok((await page.getAttribute('#acBackSnd .snd-btn', 'title')) === "This sound can't play in this browser" && (await page.getAttribute('#acBackSnd .snd-btn', 'aria-disabled')) === 'true', 'Editor: its ▶ is turned off with "This sound can\'t play in this browser"');
 // not a sound
 await page.setInputFiles('#acBackSndFile', { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
