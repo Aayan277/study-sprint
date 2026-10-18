@@ -117,8 +117,19 @@ export function importWarnings({ mediaBytes = 0, reviews = 0 } = {}) {
 export const MAX_ROW_BYTES = 60000;                 // the server's own limit is 64 KB (supabase/limits.sql); this leaves room for how it counts
 export const DAY_MS = 86400000;
 
-// How big a row is on the server, about: its data as JSON text.
-export const rowBytes = row => new TextEncoder().encode(JSON.stringify(row?.data ?? null)).length;
+// How big a row is on the server, about: its data as the database writes it as text. Postgres puts a space after every
+// ":" and "," (so [1,2,3] is 9 bytes there, not 7), and the server's 64 KB check counts that text, so we count it too.
+const enc = new TextEncoder();
+function jsonbTextBytes(v) {
+  if (v === null || v === undefined) return 4;
+  if (Array.isArray(v)) return 2 + v.reduce((n, x) => n + jsonbTextBytes(x === undefined ? null : x), 0) + Math.max(0, v.length - 1) * 2;
+  if (typeof v === 'object') {
+    const keys = Object.keys(v).filter(k => v[k] !== undefined);
+    return 2 + keys.reduce((n, k) => n + enc.encode(JSON.stringify(k)).length + 2 + jsonbTextBytes(v[k]), 0) + Math.max(0, keys.length - 1) * 2;
+  }
+  return enc.encode(JSON.stringify(v) ?? 'null').length;
+}
+export const rowBytes = row => jsonbTextBytes(row?.data ?? null);
 
 // A short name for a row, to point at it: a card's front, a deck's name.
 export function rowLabel(row) {

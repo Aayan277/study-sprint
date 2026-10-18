@@ -142,8 +142,8 @@ test('the SQL files say the same numbers as the app', () => {
   assert.equal(900 * MB, 943718400); assert.equal(420 * MB, 440401920); assert.equal(80 * MB, 83886080);
   assert.match(limits, /revoke all on public\.quotas from anon, authenticated;\s*grant select on public\.quotas to authenticated/);
   assert.doesNotMatch(limits, /new\.data is not null/);                           // every new row is checked, "deleted" markers too
-  assert.match(limits, /120 \+ 2 \* octet_length\(new\.id\) \+ coalesce\(octet_length\(new\.data::text\), 0\)/);
-  assert.match(limits, /120 \+ 2 \* octet_length\(s\.id\)/);                      // recount_sync_usage counts the same way
+  assert.match(limits, /200 \+ 2 \* octet_length\(new\.id\) \+ greatest\(coalesce\(octet_length\(new\.data::text\), 0\), coalesce\(pg_column_size\(new\.data\), 0\)\)/);
+  assert.match(limits, /200 \+ 2 \* octet_length\(s\.id\) \+ greatest\(coalesce\(octet_length\(s\.data::text\), 0\), coalesce\(pg_column_size\(s\.data\), 0\)\)/);   // recount_sync_usage counts the same way
   assert.match(limits, /octet_length\(id\) <= 200\) not valid/);
   assert.match(limits, /data_rows_limit bigint not null default 300000/);
   assert.match(limits, /pg_advisory_xact_lock/);
@@ -171,7 +171,9 @@ test('rows too big for the server are left out and named', () => {
   assert.equal(bigRowsNote([{ store: 'decks', id: 'd', label: '' }]), '1 deck is too large to sync: a deck. Shorten it to sync.');
   assert.equal(bigRowsNote([]), '');
   assert.equal(rowLabel({ data: { name: 'Biology' } }), 'Biology');
-  assert.equal(rowBytes({ data: { v: 'é' } }), JSON.stringify({ v: 'é' }).length + 1);       // bytes, not characters
+  assert.equal(rowBytes({ data: { v: 'é' } }), JSON.stringify({ v: 'é' }).length + 2);       // bytes, not characters, plus Postgres's space after ":"
+  assert.equal(rowBytes({ data: [1, 2, 3] }), '[1, 2, 3]'.length);                            // jsonb text puts a space after each comma
+  assert.equal(rowBytes({ data: { a: [1, { b: null }], c: 'x' } }), '{"a": [1, {"b": null}], "c": "x"}'.length);
 });
 
 test('which push errors can be worked around', () => {

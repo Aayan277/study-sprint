@@ -282,6 +282,56 @@ export function retention(logs, now = Date.now(), days = 30) {
   return { total: due.length, remembered, rate: due.length ? remembered / due.length : null };
 }
 
+// ---------- true retention, young and mature, against the target ----------
+// For each period (7, 30 and 90 days by default): of the due reviews where you had to recall the answer (isRecallReview), how many
+// you remembered, split by how long the card had waited since its previous review: under `youngDays` (21) = young, otherwise mature.
+// The gap comes from the card's previous answer that changed its schedule (a Review or Anki answer, or a Play answer that was applied),
+// so `logs` must reach `youngDays` further back than the longest period: a card with no earlier answer in `logs` last
+// had one at least that long ago, so it counts as mature. Pure, tested by tests/retention-sim.test.js.
+//   targetOf(cardId)  the target retention that card was scheduled with (optional): the result then has each period's mean target
+// Returns { [days]: { days, young: { n, ok }, mature: { n, ok }, all: { n, ok }, target } } (target null when not asked for or no reviews).
+export const YOUNG_DAYS = 21;
+export function retentionByAge(logs, now = Date.now(), periods = [7, 30, 90], { targetOf = null, youngDays = YOUNG_DAYS } = {}) {
+  const DAYMS = 86400000;
+  const since = periods.map(d => daysAgoStart(d - 1, now));
+  const start = Math.min(...since);
+  const out = {};
+  const sums = {};
+  for (const d of periods) { out[d] = { days: d, young: { n: 0, ok: 0 }, mature: { n: 0, ok: 0 }, all: { n: 0, ok: 0 }, target: null }; sums[d] = 0; }
+  const sorted = logs.slice().sort((a, b) => a.timestamp - b.timestamp);
+  const last = new Map();                                   // card -> time of its previous schedule-changing answer
+  for (const l of sorted) {
+    if (l.timestamp >= start && l.timestamp <= now && isRecallReview(l)) {
+      const prev = last.get(l.cardId);
+      const kind = prev !== undefined && (l.timestamp - prev) / DAYMS < youngDays ? 'young' : 'mature';
+      const target = targetOf ? targetOf(l.cardId) : null;
+      periods.forEach((d, i) => {
+        if (l.timestamp < since[i]) return;
+        const o = out[d];
+        o[kind].n++; o.all.n++;
+        if (l.correct) { o[kind].ok++; o.all.ok++; }
+        if (Number.isFinite(target)) sums[d] += target;
+      });
+    }
+    if (l.source === 'review' || l.source === 'anki' || (l.source === 'play' && l.applied)) last.set(l.cardId, l.timestamp);
+  }
+  if (targetOf) for (const d of periods) out[d].target = out[d].all.n ? sums[d] / out[d].all.n : null;
+  return out;
+}
+
+// The one verdict on "how far from the target", shared by Stats and the health check so they never disagree.
+//   bucket { n, ok } from retentionByAge (all, young or mature), target 0 to 1
+// 'few' (under RET_MIN_N reviews), or 'under' / 'over' / 'on': the gap has to be at least 3 points AND at least 1.64 standard
+// errors (a one-sided 95% test), so a handful of reviews cannot cry wolf. gap = remembered share minus target.
+export const RET_MIN_N = 30, RET_MARGIN = 0.03;
+export function retentionVerdict(bucket, target) {
+  if (!bucket || bucket.n < RET_MIN_N || !Number.isFinite(target)) return { verdict: 'few', gap: null, rate: bucket && bucket.n ? bucket.ok / bucket.n : null };
+  const rate = bucket.ok / bucket.n;
+  const gap = rate - target;
+  const margin = Math.max(RET_MARGIN, 1.64 * Math.sqrt(Math.max(rate * (1 - rate), 0.01) / bucket.n));
+  return { verdict: gap < -margin ? 'under' : gap > margin ? 'over' : 'on', gap, rate };
+}
+
 // ---------- reviews per day ----------
 // One entry per study day for the last `days` days (oldest first), split by where the answer came from.
 export function reviewsPerDay(logs, now = Date.now(), days = 30) {

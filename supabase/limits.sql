@@ -193,7 +193,7 @@ begin
 end $$;
 
 -- Keeps each person's byte and row counts, and refuses growth over their limit (or the project's). A row's size is
--- 120 bytes, twice its id (the primary key index holds it again) and its data as text. Every new row is checked, "deleted"
+-- 200 bytes, twice its id (the primary key index holds it again) and its data as text (or its stored size, if larger). Every new row is checked, "deleted"
 -- markers (a row with no data) included, and so is each person's number of rows (default 300,000). Only deleting and
 -- changes that make a row smaller are always allowed. It runs after the row is stored (and only if it
 -- was: an older change that setup.sql ignores never gets here), under a per-person lock.
@@ -202,8 +202,8 @@ language plpgsql security definer set search_path = '' as $$
 declare uid uuid; old_b bigint := 0; new_b bigint := 0; growth bigint; cur bigint; cur_rows bigint; cap bigint;
 begin
   if tg_op = 'DELETE' then uid := old.user_id; else uid := new.user_id; end if;
-  if tg_op <> 'INSERT' then old_b := 120 + 2 * octet_length(old.id) + coalesce(octet_length(old.data::text), 0); end if;
-  if tg_op <> 'DELETE' then new_b := 120 + 2 * octet_length(new.id) + coalesce(octet_length(new.data::text), 0); end if;
+  if tg_op <> 'INSERT' then old_b := 200 + 2 * octet_length(old.id) + greatest(coalesce(octet_length(old.data::text), 0), coalesce(pg_column_size(old.data), 0)); end if;
+  if tg_op <> 'DELETE' then new_b := 200 + 2 * octet_length(new.id) + greatest(coalesce(octet_length(new.data::text), 0), coalesce(pg_column_size(new.data), 0)); end if;
   growth := new_b - old_b;
   perform pg_advisory_xact_lock(hashtextextended(uid::text, 1));
   -- (No new counter row on a delete: when an account is removed its rows go too, and its counter row with them.)
@@ -242,7 +242,7 @@ create trigger sync_items_quota
 create or replace function public.recount_sync_usage() returns void
 language sql security definer set search_path = '' as $$
   insert into public.sync_usage (user_id, bytes, rows)
-    select s.user_id, sum(120 + 2 * octet_length(s.id) + coalesce(octet_length(s.data::text), 0))::bigint, count(*)
+    select s.user_id, sum(200 + 2 * octet_length(s.id) + greatest(coalesce(octet_length(s.data::text), 0), coalesce(pg_column_size(s.data), 0)))::bigint, count(*)
     from public.sync_items s group by s.user_id
   on conflict (user_id) do update set bytes = excluded.bytes, rows = excluded.rows;
   delete from public.usage_cache where name = 'sync';
