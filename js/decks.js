@@ -449,6 +449,8 @@ function summaryHTML(s, c) {
 // Save a deck's cards (and its subdecks') as a spreadsheet (CSV) or an Anki deck. Progress isn't included
 // (cards start as new). Subdecks stay subdecks in Anki ("Psych 101::Unit 1").
 async function openExport(deck, decks, deckCards) {
+  // Loaded before the sheet opens: a button that is on screen must already work (a tap before the import finished did nothing).
+  const ex = await import('./export.js');
   // Each card's deck, named from the exported deck down: "Unit 1::Lecture 3" when exporting Unit 1.
   const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
   const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
@@ -464,7 +466,6 @@ async function openExport(deck, decks, deckCards) {
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
     </div>
     <p class="err" id="exErr" hidden></p>`);
-  const ex = await import('./export.js');
   $('exCsv').addEventListener('click', () => {
     ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
     closeSheet();

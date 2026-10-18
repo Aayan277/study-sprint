@@ -61,6 +61,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
     statesById = new Map(s.map(x => [x.cardId, x]));
   };
   await load();
+  // You already moved to another screen while the cards loaded: don't draw into a box that has left the page (the $() lookups below
+  // would find nothing and throw).
+  if (!box.isConnected) return;
 
   // With no cards at all there is one friendly empty state, not a search box over an empty list.
   const emptyArt = `<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M55 38v26M42 51h26" stroke="var(--accent-text)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
