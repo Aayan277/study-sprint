@@ -65,6 +65,24 @@ async function signedIn(session) {
   return syncNow();
 }
 
+// ---------- starting over from this device ----------
+// For a lost or restored server: this device thinks the server already has its data, so it never sends it again.
+// This makes it send everything: every deck, card, review, setting and deleted marker, and every picture and sound.
+// It only re-sends, never deletes or overwrites newer data on the server: every row goes with its own change time,
+// and the server keeps whichever copy is newer (supabase/setup.sql, the "new.updated_at <= old.updated_at" check), so a
+// newer copy from another device stays. The same goes the other way: pulled rows only replace things here when they are newer (db.applyRemote).
+// Pulling starts over too (lastSeq 0), because a restored server numbers its changes from an earlier point.
+export async function resendEverything() {
+  const auth = await session();
+  if (!auth) throw new supa.SupaError('Sign in first.');
+  await running;                       // a sync in progress would write the old bookmarks back when it finishes
+  const { syncState } = await db.getSettings();
+  await db.forgetSyncedMarks();
+  await db.forgetUploadedMedia();
+  await db.setSetting('syncState', { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
+  return syncNow({ retry: true });
+}
+
 // ---------- passwords ----------
 // The app's own address, which the reset email links back to.
 const appUrl = () => location.origin + location.pathname;
@@ -256,7 +274,7 @@ async function run() {
   // Records too big to send, kept until they are shortened (editing one makes it a new change, which is tried again)
   // or deleted. Anything that went through now is no longer a problem.
   const wentKeys = new Set(pushed.sent.map(r => `${r.store}|${r.id}`));
-  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row) }))];
+  const tooBig = [...(st.tooBig || []), ...big, ...pushed.bad.map(b => ({ store: b.row.store, id: b.row.id, label: rowLabel(b.row), bytes: rowBytes(b.row), ...(b.kind === 'id' ? { reason: 'id' } : {}) }))];
   const stillBig = [...new Map(tooBig.map(r => [`${r.store}|${r.id}`, r])).values()].filter(r => !wentKeys.has(`${r.store}|${r.id}`));
   // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
   // (What did go is sent again too; the server ignores a copy it already has.)

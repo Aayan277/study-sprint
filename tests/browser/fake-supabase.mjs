@@ -159,6 +159,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         for (const raw of body) {
           let r = raw;
           if (!['decks', 'cards', 'cardStates', 'reviewLog', 'settings'].includes(r.store)) return json(route, 400, { code: '23514', message: 'check' });
+          if (limitsSql && Buffer.byteLength(String(r.id)) > 200) return json(route, 400, { code: '23514', message: 'new row for relation "sync_items" violates check constraint "sync_items_id_size"' });
           if (limitsSql && r.data && JSON.stringify(r.data).length >= recordMax) return json(route, 400, { code: '23514', message: 'new row for relation "sync_items" violates check constraint "sync_items_data_size"' });
           const k = `${uid}|${r.store}|${r.id}`, old = staged.get(k) || rows.get(k);
           r = { ...r, updated_at: Math.min(r.updated_at, Date.now() + 86400000) };     // setup.sql: a clock far ahead can't win forever

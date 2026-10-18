@@ -921,6 +921,26 @@ export async function markUploaded(ids) {
   };
   return finished(tx);
 }
+// Mark every picture and sound as not uploaded, so the next sync sends them all again (a lost or restored server has none of
+// them). Their bytes are untouched, and so are the totals. Goes through the files one at a time, like mediaToUpload.
+export async function forgetUploadedMedia() {
+  const db = await openDB();
+  const tx = db.transaction(['media', 'settings'], 'readwrite');
+  await inTx(tx, async () => {
+    const s = tx.objectStore('settings');
+    await new Promise((resolve, reject) => {
+      const req = tx.objectStore('media').openCursor();
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const c = req.result;
+        if (!c) return resolve();
+        if (c.value.uploaded) { c.update({ ...c.value, uploaded: false }); s.put(true, PENDING + c.value.id); }
+        c.continue();
+      };
+    });
+    s.put(true, 'mediaIndexed');      // the pending markers are complete now, so mediaToUpload needn't build them again
+  });
+}
 // Files the server turned away for their type (not reported as a change). They stay not-uploaded; sync tries them again later.
 export async function markBlocked(ids, reason) {
   const db = await openDB();

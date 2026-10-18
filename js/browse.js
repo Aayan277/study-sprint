@@ -12,6 +12,7 @@ import { formatInterval } from './queue.js';
 import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
 import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
 import { cleanFields } from './note-fields.js';
+import { savedTooBigNote } from './quota.js';
 import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
@@ -405,6 +406,9 @@ function wireCardForm(card, ctx, msg, pair = null) {
     const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
     const accept = $('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {};
     const both = !!$('ceRevOn')?.checked && !stepsOn('ce');
+    // A card over the server's size limit would never sync, so it is stopped here, not set aside later.
+    const big = savedTooBigNote([{ ...card, front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }]);
+    if (big) { showErr('ceErr', big); return; }
     if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
     ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
   });
@@ -492,6 +496,8 @@ async function saveClozeNote(card, ops, msg) {
     const plan = await planNow();
     if (plan.error) { showErr('ceErr', plan.error); return; }
     if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
+    const big = savedTooBigNote([...plan.update, ...plan.add], { noteExtra: readCardText('ceExtra').trim() });
+    if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
@@ -520,6 +526,8 @@ async function saveOcclusionNote(card, ops, msg) {
   const go = async confirmed => {
     const plan = await planNow();
     if (plan.error) { showErr('ceErr', plan.error); return; }
+    const big = savedTooBigNote([...plan.update, ...plan.add], { noteExtra: readCardText('ceOccExtra').trim() });
+    if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() });
@@ -829,6 +837,8 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const note = readOcclusion('ac');
       const plan = note.image ? planOcclusionSave([], note) : { error: 'Choose a picture first.' };
       if (plan.error) { showErr('acErr', plan.error); return; }
+      const big = savedTooBigNote(plan.add, { tags, noteExtra: readCardText('acOccExtra').trim() });
+      if (big) { showErr('acErr', big); return; }
       count = plan.add.length;
       save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
     } else if (kindNow === 'cloze') {
@@ -836,6 +846,8 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const plan = planNoteSave([], text);
       if (plan.error) { showErr('acErr', plan.error); return; }
       if (!plan.add.length) { showErr('acErr', 'Add at least one blank: select a word, then press New blank.'); return; }
+      const big = savedTooBigNote(plan.add, { tags, noteExtra: readCardText('acExtra').trim() });
+      if (big) { showErr('acErr', big); return; }
       count = plan.add.length;
       save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
     } else {
@@ -846,6 +858,8 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const why = stepsProblem('ac');
       if (why) { showErr('acErr', why); return; }
       const card = { id: db.newId(), deckId: deck, front, back, ...(frontImage ? { frontImage } : {}), ...(backImage ? { backImage } : {}), ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), created: Date.now() };
+      const big = savedTooBigNote([card], { tags, noteExtra: hook });
+      if (big) { showErr('acErr', big); return; }
       if ($('acRevOn').checked && !stepsOn('ac') && canReverse(card)) {
         // Both directions: a card and its reverse card, saved together as one note (reverse.js).
         count = 2; pairAdded = true;
