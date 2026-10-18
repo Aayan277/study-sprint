@@ -176,6 +176,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/exam-sheet.js` | Setting an exam date: the short "Add exam date" sheet, and the save shared with Edit deck |
 | `supabase/setup.sql`, `supabase/media.sql`, `supabase/limits.sql`, `docs/sync-setup.md` | Setting up a Supabase project for sync (tables, pictures, space limits, account deletion; email, captcha and keep-awake steps) |
 | `.github/workflows/keep-supabase-awake.yml` | Daily ping so the free Supabase project doesn't pause |
+| `.github/workflows/backup.yml` | Nightly encrypted copy of the database (the free plan makes none) |
+| `.github/workflows/fuse-watch.yml` | Daily check that opens a GitHub issue when the free plan's space is 80% full |
 | `js/today.js`, `js/study-data.js` | The Today home screen, and the data Today and Review share |
 | `js/rescue-sheet.js` | The "Back from a break" catch-up plan sheet (lazy) |
 | `js/onboarding.js` | The first-run start (landing-page welcome, name, add cards) and the guided first review |

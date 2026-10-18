@@ -71,7 +71,11 @@ const sel = p => p.evaluate(() => String(getSelection()));
 // ---------- phone: a selection made by long-press still reaches ⋯ ----------
 {
   const p = await open(375, 780);
-  await p.tap('#flash');                       // flip
+  // flip; on a busy machine the first tap can land before Review is listening, so tap again until it flips
+  for (let i = 0; i < 5; i++) {
+    await p.tap('#flash');
+    if (await p.waitForSelector('.rv-back:not([inert])', { timeout: 3000 }).then(() => true, () => false)) break;
+  }
   await p.waitForSelector('.rv-back:not([inert])');
   await p.evaluate(() => {                     // what a long-press leaves: a selected word
     const el = document.querySelector('.flash-back'); const n = document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
