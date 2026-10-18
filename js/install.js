@@ -24,7 +24,7 @@ export const isInstalled = () => {
   try { return !!(matchMedia('(display-mode: standalone)').matches || navigator.standalone === true); } catch { return false; }
 };
 const ua = () => navigator.userAgent || '';
-const isIOS = () => /iPhone|iPad|iPod/.test(ua()) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isIOS = () => /iPhone|iPad|iPod/.test(ua()) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 // Only Safari can add to the Home Screen (Chrome and Firefox on iPhone cannot).
 const isIOSSafari = () => isIOS() && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua());
 
@@ -99,3 +99,6 @@ export function settingsRowHTML() {
 export function wireSettingsRow(row) {
   row.querySelector('#installBtn')?.addEventListener('click', async () => { await install(); row.innerHTML = settingsRowHTML(); wireSettingsRow(row); });
 }
+
+// Has a Review session been finished on this device? (The reminder prompt on Today waits for the same moment: reminders.js.)
+export const sessionFinished = () => get(READY);
