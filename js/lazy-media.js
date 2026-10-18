@@ -119,3 +119,15 @@ export function leftOutNote(n, reason = 'offline', gone = 0) {
   const fix = reason === 'signed-out' ? `Sign in to download ${them}` : reason === 'error' ? `Try again in a moment to download ${them}` : `Connect to the internet to download ${them}`;
   return `${what} yet, so ${n === 1 ? "it isn't" : "they aren't"} included. ${fix}.`;
 }
+
+// Before exporting or sharing: fetch the pictures and sounds of these cards that this device doesn't have yet (browser only).
+// onProgress(done, total) is called with 0 first. → { n, reason, gone }: n files could not be fetched (0 = all there), see leftOutNote.
+export async function fetchMissingFor(cards, onProgress = () => {}) {
+  const sync = await import('./sync.js');
+  const lack = await sync.missingMedia({ cards });
+  const ids = [...lack.pictures, ...lack.sounds];
+  if (!ids.length) return { n: 0, reason: '', gone: 0 };
+  onProgress(0, ids.length);
+  const r = await sync.downloadAllMedia({ ids, onProgress });
+  return { n: r.left.length + r.gone.length, reason: r.reason, gone: r.gone.length };
+}

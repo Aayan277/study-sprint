@@ -9,6 +9,7 @@ import { hasBlank } from './cloze.js';
 import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './occlusion.js';
 import { isPair } from './reverse.js';
 import { toDetails } from './note-fields.js';
+import { ancestors } from './deck-tree.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
@@ -39,7 +40,17 @@ export function toCSV(cards) {
 }
 
 // A safe file name from a deck name: "Cell Biology / Unit 2" → "Cell Biology - Unit 2".
-export const fileName = (name, ext) => `${String(name || 'deck').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'deck'}.${ext}`;
+export const fileName = (name, ext) => {
+  // Control characters out, at most 80 characters (counted as whole characters, so an emoji is never cut in half), no dots or spaces at the ends.
+  const base = Array.from(String(name || 'deck').replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, '-').replace(/\s+/g, ' ')).slice(0, 80).join('').replace(/^[.\s]+|[.\s]+$/g, '');
+  return `${base || 'deck'}.${ext}`;
+};
+
+// A deck's cards ready to export or share: each with its deck named from the exported deck down ("Unit 1::Lecture 3"), oldest first.
+export function cardsForExport(deck, decks, deckCards) {
+  const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
+  return deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
+}
 
 // ---------- Anki ----------
 // Card text → Anki's HTML: special characters escaped, line breaks as <br>, and bold, italics and lists

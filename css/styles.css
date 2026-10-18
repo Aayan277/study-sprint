@@ -1205,6 +1205,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 /* Export (deck page) */
 .export-opts{display:grid;gap:10px}
 .export-opt{flex-direction:column;align-items:flex-start;text-align:left;gap:3px;padding:14px var(--s-4)}
+#shNow{width:100%;margin-top:var(--s-3)}
 .export-opt span{font-weight:400;font-size:var(--fs-base);color:var(--text-2)}
 
 /* Card formatting (format.js, card-editor.js) */

@@ -24,6 +24,11 @@ test('CSV: quoted where needed, Excel-friendly, and imports back in', () => {
 test('file names', () => {
   assert.equal(fileName('Cell Biology / Unit 2', 'csv'), 'Cell Biology - Unit 2.csv');
   assert.equal(fileName('   ', 'apkg'), 'deck.apkg');
+  assert.equal(fileName('.hidden deck. ', 'apkg'), 'hidden deck.apkg');
+  const long = fileName('😀'.repeat(100), 'apkg');
+  assert.equal(Array.from(long.slice(0, -5)).length, 80);
+  assert.ok(!/[\ud800-\udbff]$/.test(long.slice(0, -5)));
+  assert.doesNotMatch(fileName('a\u0001b\u007fc', 'csv'), /[\u0000-\u001f\u007f]/);
 });
 
 test('Anki: HTML, checksum and stable ids', async () => {

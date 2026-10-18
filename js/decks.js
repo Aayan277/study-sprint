@@ -13,7 +13,7 @@ import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
-import { leftOutNote } from './lazy-media.js';
+import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
 import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
@@ -305,6 +305,7 @@ export async function renderDeck(el, deckId) {
             <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
             <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
+            ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
           </div>
         </div>
       </div>
@@ -326,6 +327,7 @@ export async function renderDeck(el, deckId) {
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { navGo(`#/deck/${b.dataset.open}`); }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }, { parentId: deckId }));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
+  $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
@@ -453,9 +455,7 @@ function summaryHTML(s, c) {
 async function openExport(deck, decks, deckCards) {
   // Loaded before the sheet opens: a button that is on screen must already work (a tap before the import finished did nothing).
   const ex = await import('./export.js');
-  // Each card's deck, named from the exported deck down: "Unit 1::Lecture 3" when exporting Unit 1.
-  const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
-  const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
+  const cards = ex.cardsForExport(deck, decks, deckCards);
   openSheet(`
     <h2 id="sheetTitle">Export “${esc(deck.name)}”</h2>
     <p style="margin:0">${plural(cards.length, 'card')}, with their tags. Your progress stays in Study Sprint (in Anki they start as new cards).${(() => {
@@ -480,20 +480,14 @@ async function openExport(deck, decks, deckCards) {
       // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) belong in the file: fetch them
       // first. What can't be fetched is said, and a second tap makes the deck without it.
       if (btn.dataset.armed !== '1') {
-        const sync = await import('./sync.js');
-        const lack = await sync.missingMedia({ cards });
-        if (lack.pictures.length + lack.sounds.length) {
-          btn.querySelector('b').textContent = 'Downloading pictures and sounds first…';
-          const r = await sync.downloadAllMedia({ ids: [...lack.pictures, ...lack.sounds], onProgress: (n, t) => { btn.querySelector('b').textContent = `Downloading pictures and sounds: ${n} of ${t}…`; } });
-          const n = r.left.length + r.gone.length;
-          if (n) {
-            btn.dataset.armed = '1';
-            $('exErr').textContent = leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to make the deck without them.';
-            $('exErr').hidden = false;
-            btn.disabled = false;
-            btn.querySelector('b').textContent = 'Make it without them';
-            return;
-          }
+        const r = await fetchMissingFor(cards, (n, t) => { btn.querySelector('b').textContent = n ? `Downloading pictures and sounds: ${n} of ${t}…` : 'Downloading pictures and sounds first…'; });
+        if (r.n) {
+          btn.dataset.armed = '1';
+          $('exErr').textContent = leftOutNote(r.n, r.reason, r.gone) + ' Tap the button again to make the deck without them.';
+          $('exErr').hidden = false;
+          btn.disabled = false;
+          btn.querySelector('b').textContent = 'Make it without them';
+          return;
         }
       }
       btn.querySelector('b').textContent = 'Making the Anki deck…';
