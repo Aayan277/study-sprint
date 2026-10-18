@@ -22,6 +22,9 @@ import { $, esc, openSheet, closeSheet, plural } from './ui.js';
 const DAY = 86400000;
 const HORIZON_NAMES = { 30: '30 days', 90: '90 days', 365: 'a year' };
 const HORIZON_SHORT = { 30: '30 days', 90: '90 days', 365: '1 year' };
+// A number is only suggested once there is something to base it on: this many started cards and this many reviews in the last 90 days.
+export const MIN_STARTED = 20, MIN_REVIEWS = 50;
+export const enoughData = info => (info?.started || 0) >= MIN_STARTED && (info?.reviews || 0) >= MIN_REVIEWS;
 
 // ---------- what to simulate ----------
 // Reads the cards in scope and builds the input for simulateAll(). Returns { input, info } or { empty: true }.
@@ -73,7 +76,7 @@ export async function gatherInput({ deckId = '', now = Date.now(), current = nul
       current: Number.isFinite(current) ? current / 100 : undefined          // worked out first, so it is always there
     },
     info: {
-      started: existing.length, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own,
+      started: existing.length, reviews: rows.length, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own,
       reviewLimit: Number.isFinite(settings.reviewLimit) && settings.reviewLimit > 0 ? settings.reviewLimit : null
     }
   };
@@ -139,7 +142,8 @@ export function movePick(svg, { points, value, format, yMax, yMin }, selected) {
   svg.setAttribute('aria-valuetext', `${pct(selected)}% target: ${format(value(sel))}`);
 }
 
-const fmtReviews = (v, tick) => (tick ? String(Math.round(v)) : `${v < 10 ? v.toFixed(1) : Math.round(v)} reviews a day`);
+// (The axis labels keep decimals when the numbers are small, so a short axis reads 0, 0.8, 1.5, 2.3, 3 and not 0, 1, 1, 2, 3.)
+export const fmtReviews = (v, tick) => (tick ? (v >= 10 ? String(Math.round(v)) : String(+v.toFixed(2))) : `${v < 10 ? v.toFixed(1) : Math.round(v)} reviews a day`);
 const fmtRecall = (v, tick) => `${Math.round(v * 100)}${tick ? '%' : '% expected recall'}`;
 const num1 = v => (v < 10 ? v.toFixed(1) : String(Math.round(v)));
 
@@ -147,6 +151,7 @@ const num1 = v => (v < 10 ? v.toFixed(1) : String(Math.round(v)));
 const INTRO = 'This estimates how many reviews a day each target would give you, and how much you would remember, by replaying your own cards forward with your memory settings. It is an estimate, not a promise: real days vary, and it assumes you do every review that is due.';
 
 // The wording of the suggestion, from suggestion()'s result. Every sentence says what it is based on.
+export const NOT_ENOUGH = 'Not enough reviews yet to suggest a number.';
 export function suggestionText(s, { current, reviewLimit }) {
   const lines = [];
   const knee = s.knee !== null ? `${pct(s.knee)}%` : '';
@@ -230,9 +235,12 @@ export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
     const pts = result.points;
     const exams = examGroups();
     const ex = exams[Math.min(examIx, exams.length - 1)];
-    const s = suggestion(pts, horizon, { reviewLimit: info.reviewLimit, examGroup: ex ? ex.i : null });
+    const enough = enoughData(info);
+    // Too little to go on: no suggested number (and none of the sentences that lean on one); the chart still shows the estimates.
+    const s = enough ? suggestion(pts, horizon, { reviewLimit: info.reviewLimit, examGroup: ex ? ex.i : null }) : { target: null, kind: 'none', knee: null, curve: null };
     run.suggested = s;
-    const lines = suggestionText(s, { current: nowR(), reviewLimit: info.reviewLimit });
+    const lines = enough ? suggestionText(s, { current: nowR(), reviewLimit: info.reviewLimit })
+      : [`${NOT_ENOUGH} Come back after you have studied more: this needs at least ${MIN_STARTED} started cards and ${MIN_REVIEWS} reviews in the last 90 days (you have ${info.started} and ${info.reviews}).`];
     const workload = p => p.horizons[horizon].reviewsPerDay;
     const preRecall = p => (p.exams.find(e => e.grp === ex.i)?.preRecall ?? 0);
     drawn = [{ id: `${uid}c1`, points: pts, value: workload, format: fmtReviews, yLabel: 'Reviews a day' }];

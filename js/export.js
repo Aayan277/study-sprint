@@ -15,6 +15,7 @@ import { toDetails } from './note-fields.js';
 // Cards from more than one deck (a deck with subdecks; each card has deckName) get a Deck column too.
 // A card with its reverse card (see reverse.js) is one row, the forward card, and a "Both directions" column says "yes" for it:
 // import makes the reverse card again. (Only added when some card has one.)
+// A cloze note is one row with its {{c1::…}} text, which import makes into cloze cards again. Image occlusion cards go out as plain cards.
 // A cell that starts with = + - @ (or a tab or line break) would be run as a formula by Excel or Sheets, so it gets a ' in front. Import takes it off again.
 const cell = v => {
   let s = String(v ?? '');
@@ -26,7 +27,19 @@ const fullPairs = cards => {
   const f = new Set(cards.filter(c => isPair(c) && !c.reverse).map(c => c.noteId));
   return new Set(cards.filter(c => isPair(c) && c.reverse && f.has(c.noteId)).map(c => c.noteId));
 };
+// A cloze note (several cards, one per blank) goes out as ONE row: its text with the {{c1::…}} marks in Front and its extra line in
+// Back, which is what import reads back as a cloze note. (The other blanks' cards are left out: they come back with the note.)
+const clozeOnce = cards => {
+  const seen = new Set();
+  return cards.filter(c => {
+    if (!hasBlank(c)) return true;
+    if (seen.has(c.noteId)) return false;
+    seen.add(c.noteId);
+    return true;
+  }).map(c => (hasBlank(c) ? { ...c, front: c.noteText, back: c.noteExtra || '' } : c));
+};
 export function toCSV(cards) {
+  cards = clozeOnce(cards);
   const pairs = fullPairs(cards);
   cards = cards.filter(c => !(isPair(c) && c.reverse && pairs.has(c.noteId)));
   const several = new Set(cards.map(c => c.deckName)).size > 1;

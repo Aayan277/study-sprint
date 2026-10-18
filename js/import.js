@@ -259,6 +259,30 @@ function tryBlocks(text) {
   return blocks.map(b => [b[0], b.slice(1).join('\n')]);
 }
 
+// ---------- labelled pairs: "Q: ..." then "A: ..." ----------
+
+// Notes written as Q:/A: (or Question:/Answer:, Front:/Back:, any case) pairs. A label ends with a colon, so "Q - x" is left to the
+// separator rules. A card runs from its Q: line to its A: line and on to the next Q: line, so an answer can take several lines.
+const LABEL_Q = /^\s*(?:[-*•–]\s+)?(?:q(?:uestion)?\s*\d{0,3}|front)\s*[:：]\s*(.*)$/i;
+const LABEL_A = /^\s*(?:[-*•–]\s+)?(?:a(?:nswer)?\s*\d{0,3}|back)\s*[:：]\s*(.*)$/i;
+function tryLabelled(text) {
+  const rows = [];
+  let cur = null, part = 0;                       // part: 0 = in the question, 1 = in the answer
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const q = LABEL_Q.exec(line), a = LABEL_A.exec(line);
+    if (q) {
+      if (cur && !cur[1].trim()) return null;     // a question that never got an answer: not this format
+      cur = [q[1].trim(), '']; part = 0; rows.push(cur);
+    } else if (a && cur && part === 0) { cur[1] = a[1].trim(); part = 1; }
+    else if (!cur) return null;                   // text before the first Q: line
+    else cur[part] = cur[part] ? cur[part] + '\n' + line : line;      // more lines of the same side
+  }
+  if (!rows.length || rows.some(r => !r[0].trim() || !r[1].trim())) return null;
+  return rows;
+}
+
 // ---------- the main entry point ----------
 
 // Work out the format of pasted text and turn it into rows.
@@ -266,6 +290,9 @@ export function parseText(text) {
   text = normalize(text);
   const empty = { columns: ['Front', 'Back'], rows: [], format: { id: 'empty', label: '' }, headerSkipped: false };
   if (!text) return empty;
+  // "Q: ..." / "A: ..." pairs come first: their colons are labels, not the separator between a term and its definition.
+  const labelled = tryLabelled(text);
+  if (labelled) return finish(labelled, { id: 'labelled', label: 'as Q: / A: pairs' });
   // Lines the way a spreadsheet reads them (a quoted cell can hold line breaks); plain lines otherwise.
   const records = quoteAwareLines(text);
   const rawLines = (records || text.split('\n')).filter(l => l.trim());

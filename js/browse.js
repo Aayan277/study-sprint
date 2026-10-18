@@ -19,7 +19,7 @@ import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlu
 import { plainText, mathHTML } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, guardSheet, formSnapshot, askClose } from './ui.js';
 import { go as navGo } from './nav.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
@@ -133,11 +133,11 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
   };
 
   // Something changed: reload from the database and redraw.
-  const refresh = async () => { await load(); draw(); onChange(); };
+  const refresh = async () => { await load(); if (!box.isConnected) return; draw(); onChange(); };
 
   const remember = () => Object.assign(memory, { query: B.query, filter: B.filter, sort: B.sort });
-  let typing = 0;
-  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
+  let typing = 0;      // (the timer checks box.isConnected: leaving Browse within the 150 ms must not draw into a box that is gone)
+  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
   $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; remember(); draw(); });
   $('brSort').addEventListener('change', e => { B.sort = e.target.value; remember(); draw(); });
   $('brMore').addEventListener('click', () => { B.shown += PAGE; draw(); });
@@ -414,6 +414,9 @@ function wireCardForm(card, ctx, msg, pair = null) {
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
+  // Back, ×, a tap outside or Esc with edits not saved asks "Discard changes?" (nothing changed: it just closes).
+  const base = formSnapshot($('ceForm'));
+  guardSheet(() => !!$('ceForm') && formSnapshot($('ceForm')) !== base);
 }
 
 // ---------- cards that work in both directions (reverse.js) ----------
@@ -835,8 +838,10 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     </form>`, { side: true });
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
-  $('acDone').addEventListener('click', closeSheet);
+  $('acDone').addEventListener('click', askClose);        // Close with a typed card not added asks "Discard changes?" (as do ×, Back and Esc)
   wireRevSwitch('ac', $('acForm'));
+  let typed = formSnapshot($('acForm'), { textOnly: true });
+  guardSheet(() => !!$('acForm') && formSnapshot($('acForm'), { textOnly: true }) !== typed);
   const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
@@ -894,6 +899,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
     else { clearBasic('ac'); setCardSounds('acFront', []); setCardSounds('acBack', []); $('acFront').focus(); }
     updateAdd();
+    typed = formSnapshot($('acForm'), { textOnly: true });      // what is left (the tags stay for the next card) is not unsaved work
     toast(kindNow === 'basic' && !pairAdded ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();
   });

@@ -299,3 +299,34 @@ test('comma-separated lines: a comma inside a formula does not split', () => {
   // no formulas: as before
   assert.deepEqual(cards('Paris, France\nRome, Italy'), [['Paris', 'France'], ['Rome', 'Italy']]);
 });
+
+// ---------- Q: / A: labelled pairs (QA item 5) ----------
+test('labelled: Q:/A: pairs with blank lines become one card per pair', () => {
+  const text = 'Q: What is mitosis?\nA: Cell division\n\nQ: What is meiosis?\nA: Makes gametes';
+  assert.deepEqual(cards(text), [['What is mitosis?', 'Cell division'], ['What is meiosis?', 'Makes gametes']]);
+  assert.equal(formatOf(text).id, 'labelled');
+});
+test('labelled: no blank lines, and a lower-case q:/a:', () => {
+  assert.deepEqual(cards('q: one?\na: 1\nq: two?\na: 2'), [['one?', '1'], ['two?', '2']]);
+});
+test('labelled: Question:/Answer: and Front:/Back:, any case, bullets', () => {
+  assert.deepEqual(cards('QUESTION: Capital of France?\nANSWER: Paris\n\nQuestion: Capital of Peru?\nAnswer: Lima'), [['Capital of France?', 'Paris'], ['Capital of Peru?', 'Lima']]);
+  assert.deepEqual(cards('Front: cat\nBack: gato\n\nFront: dog\nBack: perro'), [['cat', 'gato'], ['dog', 'perro']]);
+  assert.deepEqual(cards('- Q: a?\n- A: b\n- Q: c?\n- A: d'), [['a?', 'b'], ['c?', 'd']]);
+});
+test('labelled: colons inside the text stay, and an answer can run over several lines', () => {
+  const text = 'Q: Ratio: what is it?\nA: A comparison: a to b\nsecond line of the answer\n\nQ: Next?\nA: Yes';
+  assert.deepEqual(cards(text), [['Ratio: what is it?', 'A comparison: a to b\nsecond line of the answer'], ['Next?', 'Yes']]);
+});
+test('labelled: a single pair is one card, not two', () => {
+  assert.deepEqual(cards('Q: Only one?\nA: Yes'), [['Only one?', 'Yes']]);
+});
+test('labelled: not triggered by ordinary term: definition lists or unanswered questions', () => {
+  assert.deepEqual(cards('Quartz: a mineral\nAmber: fossil resin'), [['Quartz', 'a mineral'], ['Amber', 'fossil resin']]);
+  assert.deepEqual(cards('Mitosis: cell division\nMeiosis: makes gametes'), [['Mitosis', 'cell division'], ['Meiosis', 'makes gametes']]);
+  assert.notEqual(formatOf('Q: lonely question\nQ: another').id, 'labelled');
+});
+test('labelled: tab-separated Quizlet and dash lists still work', () => {
+  assert.deepEqual(cards('apple\tmanzana\nbread\tpan'), [['apple', 'manzana'], ['bread', 'pan']]);
+  assert.deepEqual(cards('a - b\nc - d'), [['a', 'b'], ['c', 'd']]);
+});

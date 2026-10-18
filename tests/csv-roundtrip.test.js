@@ -137,3 +137,21 @@ test('the Both directions column is only read in a file with the export\'s own h
   assert.ok(buildCards(r).every(c => !c.reversed));
   assert.equal(parseText(toCSV([{ id: 'a', front: 'x', back: 'y', tags: [] }])).both, undefined, 'and not when no card has one');
 });
+
+// ---- QA item 7: cloze notes round trip through CSV as one row each ----
+import { clozeCard } from '../js/cloze.js';
+test('CSV export writes a cloze note once, with its {{c1::}} text, and import makes the same cards again', () => {
+  const text = '{{c1::DNA}} carries {{c2::genes}}';
+  const mk = n => ({ id: 'k' + n, noteId: 'n1', noteText: text, noteExtra: 'Extra line', cloze: n, ...clozeCard(text, n), tags: ['bio'], deckName: 'D' });
+  const cards = [mk(1), mk(2), { id: 'p', front: 'plain', back: 'card', tags: [], deckName: 'D' }];
+  const csv = toCSV(cards);
+  assert.equal(csv.trim().split('\r\n').length, 3, 'header + one cloze row + one plain row');
+  assert.ok(csv.includes('{{c1::DNA}} carries {{c2::genes}},Extra line,bio'));
+  const { result, notes } = withClozeLines(csv, parseText);
+  assert.equal(notes, 1);
+  const list = buildCards(result);
+  assert.deepEqual(pairs(list), [['[…] carries genes', 'DNA'], ['DNA carries […]', 'genes'], ['plain', 'card']]);
+  assert.equal(list[0].cloze.text, text);
+  assert.equal(list[0].noteExtra, 'Extra line');
+  assert.deepEqual(list[0].tags, ['bio']);
+});

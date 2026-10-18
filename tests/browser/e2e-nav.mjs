@@ -5,6 +5,13 @@
 import { chromium } from './pw.mjs';
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+// Answer one question (Back with no answers just leaves the round, so the tests that need the question need an answer first).
+const answerOne = async p => {
+  await p.keyboard.press('1'); await p.waitForSelector('.fb', { timeout: 5000 }).catch(() => {});
+  await p.keyboard.press('Enter');
+  await p.waitForFunction(() => document.querySelector('#feedback')?.innerHTML === '' && document.querySelector('#pPrompt')?.textContent, null, { timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(200);
+};
 const errors = [];
 const URL = 'http://localhost:8123/';
 
@@ -146,13 +153,23 @@ for (const style of ['original', 'clinical']) {
   // ---- 5. Play asks before leaving ----
   await tab(p, 'play'); await p.waitForSelector('#startBtn');
   await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(300);
+  // QA fix: Back during a round does what the Quit button does. With no answers yet there is nothing to keep, so it just leaves ...
   await back(p);
-  ok(await sheetOpen(p) && /Quit this round/.test(await sheetTitle(p)) && !!(await p.$('#pCard')), tag + 'play: Back asks "Quit this round?" and the round stays');
-  await p.click('#keepOn'); await p.waitForTimeout(450);
+  await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
+  ok(await hash(p) === '#/play' && !(await sheetOpen(p)), tag + 'play: Back with no answers yet leaves the round, like Quit');
+  await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(300);
+  await answerOne(p);
+  // ... and with answers it asks the same question as Quit ("End this round?", the score is kept in the results).
+  await back(p);
+  const askText = await p.evaluate(() => { const a = document.getElementById('endAsk'); return a && !a.hidden ? a.textContent : ''; });
+  ok(/End this round\?/.test(askText) && /score so far is kept/.test(askText) && !(await sheetOpen(p)) && !!(await p.$('#pCard')), tag + 'play: Back asks "End this round?" (the Quit dialog) and the round stays');
+  await p.click('#endNo'); await p.waitForTimeout(450);
   ok(!!(await p.$('#pCard')) && !(await sheetOpen(p)), tag + 'play: Keep playing stays in the round');
   await back(p);
-  await p.click('#quitNow'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
-  ok(await hash(p) === '#/play', tag + 'play: Quit round returns to Play setup');
+  await p.click('#endYes'); await p.waitForSelector('.res-head'); await p.waitForTimeout(400);
+  ok(/Accuracy/i.test(await p.textContent('#screen')), tag + 'play: End round shows the results with the score kept (same as Quit)');
+  await p.click('#menuBtn'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
+  ok(await hash(p) === '#/play', tag + 'play: back on Play setup');
   await back(p);
   ok(left(p), tag + 'play: after quitting, Back leaves the app (Play was a tab)');
 
@@ -216,7 +233,9 @@ const startPlay = async (p, fmt, pace) => {
   if (pace) await p.evaluate(v => { const e = document.getElementById('pace'); if (e) { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); } }, pace);
   await p.waitForTimeout(200);
   await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(300);
+  await answerOne(p);
 };
+const endAskOpen = p => p.evaluate(() => { const a = document.getElementById('endAsk'); return !!a && !a.hidden; });
 const secs = async p => { const t = await p.textContent('#hudClock'); const m = t.match(/(\d+):(\d+)/); return m ? +m[1] * 60 + +m[2] : parseFloat(t); };
 
 {
@@ -224,10 +243,10 @@ const secs = async p => { const t = await p.textContent('#hudClock'); const m = 
   const p = await open();
   await startPlay(p, 'lightning');
   await back(p);
-  ok(await sheetOpen(p) && /Quit this round/.test(await sheetTitle(p)), 'blocker A: Back asks "Quit this round?"');
+  ok(await endAskOpen(p), 'blocker A: Back asks "End this round?"');
   await navApi(p, "n.releaseBack('session')");            // the round ends behind the question (the clock used to do this)
   await p.waitForTimeout(300);
-  await p.click('#keepOn'); await p.waitForTimeout(700);
+  await p.click('#endNo'); await p.waitForTimeout(700);
   ok(!(await sheetOpen(p)) && await kind(p) === 'page', 'blocker A: after Keep playing the entry underneath is the page, not a dead hold (' + await kind(p) + ')');
   await back(p);
   ok(left(p), 'blocker A: the first Back leaves the app (no dead press)');
@@ -280,19 +299,19 @@ const secs = async p => { const t = await p.textContent('#hudClock'); const m = 
   await p.close();
 }
 for (const [fmt, what] of [['lightning', 'Lightning'], ['survival', 'Survival'], ['classic', 'Classic']]) {
-  // The Play clock waits while "Quit this round?" is up, and nothing is lost for the time it took.
+  // The Play clock waits while "End this round?" is up, and nothing is lost for the time it took.
   const p = await open();
   await startPlay(p, fmt, fmt === 'lightning' ? 0 : 3);
   const prompt0 = await p.textContent('#pPrompt');
   const t0 = fmt === 'lightning' ? await secs(p) : 0;
-  const hud0 = await p.textContent('#hudA');
+  const hud0 = (await p.textContent('#hudA')).replace(/Time [\d:]+/, '');       // (the clock itself is checked below: it can tick once between this read and Back)
   await back(p);
-  ok(await sheetOpen(p) && /Quit this round/.test(await sheetTitle(p)), `play clock (${what}): Back asks`);
+  ok(await endAskOpen(p), `play clock (${what}): Back asks`);
   await p.waitForTimeout(fmt === 'lightning' ? 4000 : 4500);          // longer than a Survival / Classic question's 3 s
   const t1 = fmt === 'lightning' ? await secs(p) : 0;
-  await p.click('#keepOn'); await p.waitForTimeout(500);
+  await p.click('#endNo'); await p.waitForTimeout(500);
   const t2 = fmt === 'lightning' ? await secs(p) : 0;
-  const still = await p.evaluate(() => ({ fb: document.getElementById('feedback')?.textContent || '', prompt: document.getElementById('pPrompt')?.textContent, hud: document.getElementById('hudA')?.textContent, over: !!document.querySelector('.fb.no') }));
+  const still = await p.evaluate(() => ({ fb: document.getElementById('feedback')?.textContent || '', prompt: document.getElementById('pPrompt')?.textContent, hud: (document.getElementById('hudA')?.textContent || '').replace(/Time [\d:]+/, ''), over: !!document.querySelector('.fb.no') }));
   if (fmt === 'lightning') ok(t1 === t0 && t0 - t2 <= 1, `play clock (Lightning): the clock stood still while asking (${t0}s, ${t1}s while asking, ${t2}s after Keep playing)`);
   ok(still.fb === '' && still.prompt === prompt0 && still.hud === hud0, `play clock (${what}): same question, no answer, no life lost, the HUD is unchanged after Keep playing (${hud0} -> ${still.hud})`);
   await p.waitForTimeout(fmt === 'lightning' ? 1200 : 1800);

@@ -131,8 +131,56 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 // On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
 let sheetOverlay = 0;    // the sheet's entry in the history (js/nav.js), while it is open
 let opener = null;       // what had the focus when a side panel opened (the button that opened it)
+let sheetGuard = null;   // () => true while the open sheet holds changes that were not saved (see guardSheet)
+
+// A sheet with a form in it can say when it holds unsaved work: guardSheet(() => changed). Then the × , a tap outside, a swipe down,
+// Esc, Back (and a sheet's own Close button, if it uses askClose) ask "Discard changes?" instead of throwing the work away.
+// Nothing changed: no question. It lasts until the sheet closes or is replaced by another one.
+export const guardSheet = fn => { sheetGuard = fn; };
+// What a form holds right now, as one string, to compare with the string taken when it opened. With `textOnly`, choices (radios, ticks,
+// drop-downs) are left out, so only typed text and attached pictures and sounds count (Add card: the note type you switched to is not work).
+export function formSnapshot(root, { textOnly = false } = {}) {
+  const part = [];
+  for (const el of root.querySelectorAll('input, textarea, select, [contenteditable="true"], [data-media-id], [data-sound-ids]')) {
+    if (el.isContentEditable && el.getAttribute('contenteditable') === 'true') part.push(el.id + '=' + el.textContent.replace(/\s+/g, ' ').trim() + '|' + el.innerHTML);
+    else if (el.matches('[data-media-id], [data-sound-ids]')) part.push((el.id || '') + '#' + (el.dataset.mediaId || '') + '#' + (el.dataset.soundIds || ''));
+    else if (el.type === 'file' || el.type === 'button' || el.type === 'submit' || el.type === 'hidden') continue;
+    else if (el.type === 'checkbox' || el.type === 'radio') { if (!textOnly) part.push((el.id || el.name) + ':' + el.value + '=' + el.checked); }
+    else if (el.tagName === 'SELECT') { if (!textOnly) part.push((el.id || el.name) + '=' + el.value); }
+    else part.push((el.id || el.name) + '=' + (textOnly ? el.value.trim() : el.value));
+  }
+  return part.join('\u0001');
+}
+// Close the open sheet, unless it holds unsaved work: then ask first. Returns true when it closed.
+export function askClose() {
+  if (!sheetGuard || !sheetGuard()) { closeSheet(); return true; }
+  askDiscard();
+  return false;
+}
+function askDiscard() {
+  const d = $('sheet'), body = d.querySelector('.sheet-in');
+  if (!d.open || !body) { closeSheet(); return; }
+  const had = $('discardAsk');
+  if (had) { $('discardKeep').focus({ preventScroll: true }); return; }
+  const back = document.activeElement;
+  const box = document.createElement('div');
+  box.className = 'confirm'; box.id = 'discardAsk'; box.setAttribute('role', 'alertdialog'); box.setAttribute('aria-labelledby', 'discardT');
+  box.innerHTML = `<p id="discardT">Discard changes?</p><div class="sheet-actions"><button class="btn ghost" type="button" id="discardKeep">Keep editing</button><button class="btn danger solid" type="button" id="discardYes">Discard</button></div>`;
+  body.prepend(box);
+  box.scrollIntoView({ block: 'nearest' });
+  $('discardKeep').addEventListener('click', () => { box.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); });
+  $('discardYes').addEventListener('click', () => { sheetGuard = null; closeSheet(); });
+  $('discardKeep').focus({ preventScroll: true });
+}
+// Back (or an edge swipe) closed the sheet's history entry: with unsaved work, the entry is put back and the question is asked.
+function backDismiss() {
+  sheetOverlay = 0;
+  if (sheetGuard && sheetGuard()) { sheetOverlay = openOverlay(backDismiss); askDiscard(); return; }
+  closeSheet();
+}
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
+  sheetGuard = null;       // a new sheet (or a replaced one) starts with nothing to protect
   const asSide = side && WIDE.matches;
   if (asSide && !d.open) opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
@@ -163,9 +211,9 @@ export function openSheet(html, { side = false } = {}) {
   body.appendChild(t.content);
   d.replaceChildren(head, body, ...(foot.children.length ? [foot] : []));
   d.setAttribute('aria-labelledby', 'sheetTitle');
-  d.querySelector('.sheet-x').addEventListener('click', closeSheet);
+  d.querySelector('.sheet-x').addEventListener('click', askClose);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }
-  if (!sheetOverlay) sheetOverlay = openOverlay(() => { sheetOverlay = 0; closeSheet(); });      // Back (or an edge swipe) closes the sheet
+  if (!sheetOverlay) sheetOverlay = openOverlay(backDismiss);      // Back (or an edge swipe) closes the sheet (or asks, with unsaved work)
   // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
   // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
   if (document.activeElement?.classList.contains('sheet-x')) d.focus();
@@ -178,6 +226,7 @@ export function closeSheet() {
   // that was open (or the button that opened the panel) instead of being lost on the page.
   const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) { document.dispatchEvent(new Event('sheet-closing')); d.close(); }      // (the event: so work tied to the sheet stops now, not a task later)
+  sheetGuard = null;
   releaseSheet();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
   back?.focus({ preventScroll: true });
@@ -202,11 +251,12 @@ export function initSheet() {
     if (e.target !== d) return;
     const r = d.getBoundingClientRect();
     const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-    if (!inside) closeSheet();
+    if (!inside) askClose();
   });
-  d.addEventListener('close', () => { if (!d.open) releaseSheet(); afterClose(); });          // closed another way (e.g. Escape on a pop-up)
+  d.addEventListener('close', () => { if (!d.open) { sheetGuard = null; releaseSheet(); } afterClose(); });          // closed another way (e.g. Escape on a pop-up)
+  d.addEventListener('cancel', e => { if (sheetGuard?.()) { e.preventDefault(); askClose(); } });      // Esc on a pop-up with unsaved work asks first
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
+    if (e.key === 'Escape' && d.open && d.classList.contains('side')) askClose();
   });
   let drag = null;
   d.addEventListener('pointerdown', e => {
@@ -227,7 +277,10 @@ export function initSheet() {
     d.style.transition = 'transform 160ms ease';
     if (e.type !== 'pointercancel' && (dy > Math.min(120, d.offsetHeight / 3) || fast)) {
       d.style.transform = 'translateY(100%)';
-      setTimeout(() => { closeSheet(); d.style.transform = d.style.transition = ''; }, 160);
+      setTimeout(() => {
+        d.style.transform = d.style.transition = '';
+        askClose();
+      }, 160);
     } else d.style.transform = '';
   };
   d.addEventListener('pointerup', release);

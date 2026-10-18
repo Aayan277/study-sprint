@@ -30,6 +30,12 @@ const LAST_DECK = 'study-sprint-import-last';
 const lastDeck = () => { try { localStorage.removeItem('study-sprint-import-deck'); return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
 const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
 
+// The pasted text is kept for this tab while it is on the screen, so Back (or a swipe) and then returning to Import finds it again.
+// It goes when the cards are saved or Clear is pressed.
+const DRAFT = 'study-sprint-import-draft';
+const keepDraft = text => { try { if (text.trim()) sessionStorage.setItem(DRAFT, text); else sessionStorage.removeItem(DRAFT); } catch { /* too big or blocked: fine */ } };
+const takeDraft = () => { try { return sessionStorage.getItem(DRAFT) || ''; } catch { return ''; } };
+
 // Everything the screen is working with.
 let S = null;
 
@@ -181,6 +187,7 @@ export async function renderImport(el, arg) {
   if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
   if (shared) await takeShared();
+  else if (firstTab !== 'file' && takeDraft() && $('pasteBox')) { $('pasteBox').value = takeDraft(); showText($('pasteBox').value); toast('Brought back the text you pasted'); }
 }
 
 // ---------- choosing the deck ----------
@@ -219,6 +226,7 @@ function wirePaste() {
   $('pasteBox').addEventListener('input', () => {
     clearTimeout(timer);
     S.noCloze = false;                 // new text: cloze lines count again
+    keepDraft($('pasteBox').value);
     timer = setTimeout(() => showText($('pasteBox').value), 250);
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
@@ -231,6 +239,7 @@ function wirePaste() {
     clearTimeout(timer);
     S.blocks = false; S.aiMade = false; $('aiNote').hidden = true;
     $('pasteBox').value = '';
+    keepDraft('');
     showResult(null);
     $('pasteBox').focus();
   });
@@ -994,6 +1003,7 @@ async function save() {
     let first = null;
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
     clearShare();                               // what was shared has been turned into cards
+    keepDraft('');                              // and so has the pasted text
     navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);
