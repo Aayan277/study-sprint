@@ -222,12 +222,22 @@ export async function openCardPanel(card, ctx) {
     </form>
     ${partner ? `<p class="note rev-line">${card.reverse ? 'Reverse card' : 'Has a reverse card'} · <button class="link" type="button" id="revOpen">Open the other direction</button></p>` : ''}
 
-    <div class="act-grid">
-      <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
-      <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
-      <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
-      <button class="btn danger small" type="button" data-act="delete">Delete…</button>
+    <div class="pa-group" role="group" aria-labelledby="paSched"><span class="pa-lbl" id="paSched">Schedule</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="suspend">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span></button>
+        <button class="act-row" type="button" data-act="bury">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span></button>
+        <button class="act-row" type="button" data-act="reset" ${studied ? '' : 'disabled'}>${icon('undo')}<span>Reset to new</span></button>
+      </div>
+    </div>
+    <div class="pa-group" role="group" aria-labelledby="paCard"><span class="pa-lbl" id="paCard">Card</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')}<span>Duplicate</span></button>
+      </div>
+    </div>
+    <div class="pa-group pa-danger">
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="delete">${icon('trash')}<span>Delete…</span></button>
+      </div>
     </div>
     <div id="ceConfirm"></div>
 
@@ -977,8 +987,8 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
 // ---------- shared pieces ----------
 function flagButtons(current) {
   return `<div class="flags" role="group" aria-labelledby="flagLbl">
-    <button type="button" class="flagbtn" data-flag="0" aria-pressed="${current === 0}">None</button>
-    ${FLAGS.map(f => `<button type="button" class="flagbtn" data-flag="${f.id}" aria-pressed="${current === f.id}"><i style="background:${f.color}"></i>${f.name}</button>`).join('')}
+    <button type="button" class="flagbtn" data-flag="0" aria-pressed="${current === 0}"><i class="none" aria-hidden="true"></i>None</button>
+    ${FLAGS.map(f => `<button type="button" class="flagbtn" data-flag="${f.id}" aria-pressed="${current === f.id}" aria-label="${f.name} flag"><i style="background:${f.color}" aria-hidden="true"></i>${f.name}</button>`).join('')}
   </div>`;
 }
 function wireFlags(fn) {
