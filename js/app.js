@@ -38,6 +38,7 @@ initInstall();       // listens for the browser saying the app can be installed 
 
 // ---------- settings ----------
 async function renderSettings(el) {
+  const { contactHTML } = await import('./legal.js');      // not needed to start the app, so loaded on demand
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   // "Last backup: 12 days ago", and a quiet nudge when it has been a month and there is a lot to lose (js/backup-nudge.js).
@@ -255,6 +256,14 @@ async function renderSettings(el) {
           <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
         </div>
       </details>
+    </section>
+
+    <section class="section" aria-labelledby="aboutTitle">
+      <h2 id="aboutTitle">About</h2>
+      <div class="set-row" id="aboutRow">
+        <div><b>Study Sprint ${APP_VERSION}</b>
+          <p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · Contact: ${contactHTML()}</p></div>
+      </div>
     </section>
 
     <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
@@ -683,6 +692,7 @@ function confirmResetSynced() {
 async function drawSync() {
   const box = $('syncBox');
   if (!box) return;
+  const { legalLinksHTML } = await import('./legal.js');
   const acct = await sync.account();
   if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
   $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
@@ -705,7 +715,8 @@ async function drawSync() {
         </div>
       </form>
       <p class="note">First time? Use <b>Create account</b> once (we email you a link to confirm it), then <b>Sign in</b> on your other devices.
-        <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
+        <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>
+      <p class="note" id="legalNote">By creating an account you agree to the ${legalLinksHTML()}. Your cards are stored on a server run by the app’s developer.</p>`;
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
       const err = $('syncErr'), emailF = $('syncEmail'), pwF = $('syncPw');

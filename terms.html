@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Terms · Study Sprint</title>
+<meta name="description" content="The simple rules for using Study Sprint.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+<style>
+  :root{--bg:#08090C;--surface:#11131A;--text:#ECEDF2;--text-2:#B4B8C6;--line:rgb(255 255 255 / .12);--link:#A99BFF;--note:#1A1D28}
+  :root[data-theme="light"]{--bg:#F1F2F6;--surface:#FFFFFF;--text:#14161D;--text-2:#4A4F60;--line:rgb(0 0 0 / .12);--link:#4B34C9;--note:#EAEBF1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(40px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  main{max-width:42rem;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 20px 28px}
+  h1{font-size:1.7rem;line-height:1.2;margin:.4rem 0 .2rem}
+  h2{font-size:1.2rem;margin:2rem 0 .4rem;line-height:1.3}
+  p,li{color:var(--text-2)} p{margin:.5rem 0} ul{padding-left:1.3rem;margin:.5rem 0} li{margin:.3rem 0}
+  b,strong{color:var(--text)}
+  a{color:var(--link);text-underline-offset:2px}
+  a:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:3px}
+  .back{display:inline-block;padding:8px 0;font-size:.9rem}
+  .meta{font-size:.875rem}
+  .tldr{background:var(--note);border-radius:12px;padding:4px 16px 8px;margin:1rem 0}
+  .tldr p,.tldr li{color:var(--text)}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;margin:.6rem 0}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px 8px 0;border-bottom:1px solid var(--line);color:var(--text-2)}
+  th{color:var(--text);font-weight:600}
+  @media (max-width:520px){main{padding:16px 16px 24px}th,td{display:block;padding:2px 0;border:0}tr{display:block;padding:8px 0;border-bottom:1px solid var(--line)}thead{display:none}}
+</style>
+<script>
+  // Use the same light or dark choice as the app (saved in this browser by the app); otherwise follow the device.
+  try {
+    var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}'), m = t.mode;
+    if (m !== 'light' && m !== 'dark') m = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    if (['neon', 'onyx', 'kuro'].indexOf(t.skin) >= 0) m = 'dark';
+    document.documentElement.setAttribute('data-theme', m);
+  } catch (e) { /* stays dark */ }
+</script>
+</head>
+<body>
+<main>
+<a class="back" href="./">← Back to Study Sprint</a>
+<h1>Terms</h1>
+<p class="meta">Last updated: 18 October 2026 · <a href="privacy.html">Privacy</a></p>
+
+<p>These are the rules for using Study Sprint, in plain words. By using the app, or by creating an account, you agree to them and to the <a href="privacy.html">Privacy</a> page.</p>
+
+<h2>A free hobby project</h2>
+<p>Study Sprint is made and run for free by one student developer. It is provided <b>as it is, with no warranty</b>. I try hard to keep it working, but I can't promise it will always be available or free of mistakes, and I can't be held responsible for lost data or for anything that goes wrong from using it.</p>
+
+<h2>It may change or stop</h2>
+<p>Features may change, and the app or the sync service may stop one day. I'll give reasonable notice where I can. You can always use <b>Settings → Your data → Export backup</b> to take everything with you.</p>
+
+<h2>Keep your own backups</h2>
+<p>Export a backup of anything important now and then, and keep it somewhere safe. Syncing is not a backup: if you delete something on one device, it is deleted everywhere.</p>
+
+<h2>What you may upload</h2>
+<ul>
+  <li>Only upload cards, pictures and sounds that are legal and that you have the right to use.</li>
+  <li>Don't use the service to harm others or to store anything illegal.</li>
+</ul>
+
+<h2>Don't abuse the service</h2>
+<ul>
+  <li>No bots or scripts to create accounts or hammer the server.</li>
+  <li>Don't try to fill the storage or to reach other people's data.</li>
+  <li>The free plan has storage limits per account. They are shown in Settings, and they apply to everyone.</li>
+</ul>
+<p>I may remove accounts that abuse the service.</p>
+
+<h2>Your data stays yours</h2>
+<p>Your cards belong to you. You give me only the permission needed to store them and show them back to you. More in <a href="privacy.html">Privacy</a>.</p>
+
+<h2>Contact</h2>
+<p id="contact">Contact: <a href="https://github.com/aayan277/study-sprint" target="_blank" rel="noopener">see the project page</a></p>
+
+<h2>Changes to these terms</h2>
+<p>If the terms change in a way that matters, I will update the date at the top, and where I can, say so in the app.</p>
+
+<a class="back" href="./">← Back to Study Sprint</a>
+</main>
+<script type="module">
+  // The contact address is set in one place (js/sync-config.js). If it can't be loaded, the line above stays as written.
+  try {
+    const { contactHTML } = await import('./js/legal.js');
+    document.getElementById('contact').innerHTML = 'Contact: ' + contactHTML();
+  } catch (e) { /* keep the fallback */ }
+</script>
+</body>
+</html>

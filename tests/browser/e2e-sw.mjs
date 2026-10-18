@@ -9,7 +9,7 @@ import { chromium } from './pw.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-sw-'));
-for (const f of ['index.html', 'sw.js', 'manifest.webmanifest']) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
+for (const f of ['index.html', 'privacy.html', 'terms.html', 'sw.js', 'manifest.webmanifest']) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
 for (const d of ['css', 'js', 'icons']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
 const probe = v => fs.appendFileSync(path.join(SITE, 'js/sample.js'), `\nexport const PROBE = '${v}';\n`);
 const setProbe = v => { const f = path.join(SITE, 'js/sample.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/export const PROBE = '.*';/, `export const PROBE = '${v}';`)); };
