@@ -687,8 +687,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x{border-radius:var(--r-sm);background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x:hover{background:var(--surface-2)}
 
-/* ======================================================================
-   6. Desktop page widths and wide screens (tier 2; the owner's desktop review after v4.14)
+/* ===============================================================   6. Desktop page widths and wide screens (tier 2; the owner's desktop review after v4.14)
    Every page sits in a column centred in the space next to the sidebar, with a width that suits it, so nothing is
    stranded on the left of a wide monitor and the header buttons (Options, Import, Tools) line up with the content
    under them. Decks and Stats 1200px, the card list 1280px, Settings 976px (its section menu on the left),
@@ -814,3 +813,9 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .subdecks-page{grid-column:2;grid-row:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view:has(> .subdecks-page) > #browser{grid-row:2 / -1}
 }
+=======
+
+/* ---- Retention helper, health check and Stats retention rows: square, flat, hairlines (js/retention-sheet.js, health-sheet.js) ---- */
+:root[data-ui="clinical"] .rc-inline,:root[data-ui="clinical"] .rc-detail{border-radius:var(--r-sm);background:var(--surface-sunken)}
+:root[data-ui="clinical"] .hc-badge{border-radius:var(--r-xs)}
+:root[data-ui="clinical"] .rs-dot{box-shadow:none;border-radius:2px}

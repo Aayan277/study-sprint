@@ -509,7 +509,9 @@ function studyOptionsHTML(deck) {
           <input id="deckOwnOff" type="checkbox" class="switch" ${own ? '' : 'checked'}></label>
         <div id="deckOwn" ${own ? '' : 'hidden'}>
           <label class="field"><span>Target retention: <b id="deckRetOut">${Math.round((o.targetRetention ?? 0.9) * 100)}%</b></span>
-            <input id="deckRet" type="range" min="80" max="97" step="1" value="${Math.round((o.targetRetention ?? 0.9) * 100)}"></label>
+            <input id="deckRet" type="range" min="75" max="97" step="1" value="${Math.round((o.targetRetention ?? 0.9) * 100)}"></label>
+          <div><button class="btn ghost small" type="button" id="deckRetHelp" aria-expanded="false" aria-controls="deckRetPanel">Help me choose</button></div>
+          <div id="deckRetPanel" class="rc-inline" hidden></div>
           <label class="field"><span>Learning steps</span><input id="deckLs" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(o.learningSteps ?? '')}" placeholder="${SCHED_DEFAULTS.learningSteps}"></label>
           <label class="field"><span>Relearning steps</span><input id="deckRs" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(o.relearningSteps ?? '')}" placeholder="${SCHED_DEFAULTS.relearningSteps}"></label>
           <label class="field"><span>Maximum interval (days)</span><input id="deckMax" type="number" inputmode="numeric" min="1" max="36500" value="${num(o.maxInterval)}" placeholder="36500"></label>
@@ -517,8 +519,24 @@ function studyOptionsHTML(deck) {
       </div>
     </details>`;
 }
-function wireStudyOptions() {
+function wireStudyOptions(deck) {
   $('deckRet').addEventListener('input', e => { $('deckRetOut').textContent = `${e.target.value}%`; });
+  // "Help me choose": the estimate opens inside the editor (a second sheet would replace it and lose what you typed).
+  let helper = null;
+  $('sheet').addEventListener('close', () => helper?.stop(), { once: true });          // the work stops when the editor closes
+  $('deckRetHelp').addEventListener('click', async () => {
+    const panel = $('deckRetPanel'), btn = $('deckRetHelp');
+    if (!panel.hidden) { helper?.stop(); panel.hidden = true; panel.replaceChildren(); btn.setAttribute('aria-expanded', 'false'); return; }
+    panel.hidden = false; btn.setAttribute('aria-expanded', 'true');
+    try {
+      const { mountRetentionHelper } = await import('./retention-sheet.js');
+      helper = mountRetentionHelper(panel, {
+        deckId: deck?.id || '',
+        current: () => +$('deckRet').value,
+        onPick: pct => { $('deckRet').value = pct; $('deckRetOut').textContent = `${pct}%`; }
+      });
+    } catch (err) { console.error(err); panel.textContent = "Couldn't open that. Check your connection and try again."; }
+  });
   $('deckOwnOff').addEventListener('change', async e => {
     $('deckOwn').hidden = e.target.checked;
     if (e.target.checked || $('deckLs').value || $('deckRs').value) return;

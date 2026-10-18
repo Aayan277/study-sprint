@@ -1,15 +1,22 @@
-// The optimizer's background thread (module worker). It keeps the page smooth while js/fsrs-fit.js works.
-// Started by js/optimize-sheet.js. No imports from the internet: the standard weights and their ranges come in the message.
-//   in:   { type: 'fit', input }          input as described in fitChecked() of fsrs-fit.js (fit() plus the relearning steps of each card's deck)
+// The background thread (module worker) for the heavy FSRS jobs. It keeps the page smooth while they work.
+// Started by js/optimize-sheet.js (the fit) and js/worker-job.js (the health check and the retention helper).
+// No imports from the internet: the standard weights and their ranges come in the message.
+//   in:   { type: 'fit' | 'health' | 'sim', input }     'fit': fitChecked() of fsrs-fit.js; 'health': healthFit() of fit-health.js;
+//                                                       'sim': simulateAll() of retention-sim.js
 //   out:  { type: 'progress', phase, progress }  (at most about every 100 ms)
 //         { type: 'done', result }  or  { type: 'error', message }
 // Cancel is worker.terminate() from the page, so nothing is saved by this file.
 import { fitChecked } from './fsrs-fit.js';
+import { healthFit } from './fit-health.js';
+import { simulateAll } from './retention-sim.js';
+
+const JOBS = { fit: fitChecked, health: healthFit, sim: simulateAll };
 
 self.onmessage = e => {
-  if (e.data?.type !== 'fit') return;
+  const job = JOBS[e.data?.type];
+  if (!job) return;
   try {
-    const it = fitChecked(e.data.input);
+    const it = job(e.data.input);
     let last = 0;
     for (;;) {
       const r = it.next();
