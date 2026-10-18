@@ -16,6 +16,7 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
+import { importWarnings } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -266,9 +267,10 @@ async function readAnki(file) {
   $('found').textContent = '';
   $('fileName').textContent = `${file.name} · reading…`;
   const { readAnkiFile } = await import('./anki-read.js');
-  const { notes, models, reviews, media } = await readAnkiFile(file);
+  const { notes, models, reviews, media, mediaBytes } = await readAnkiFile(file);
   const all = notesToImport(notes, models, reviews, media);
   S.ankiMedia = media;                 // the file's pictures and sounds, unpacked when the cards are added
+  S.ankiMediaBytes = mediaBytes || 0;  // about how much they take (for the size warning)
   await checkSoundSpace(all);
   $('fileName').textContent = file.name;
   if (!all.rows.length) { showError('That Anki file has no cards in it.'); return; }
@@ -550,6 +552,8 @@ function refreshFlags() {
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
+  // A big deck: more than 200 MB of pictures and sounds, or more than 50,000 reviews of history (see quota.js).
+  if (S.result.format.id === 'anki') for (const w of importWarnings({ mediaBytes: S.ankiMediaBytes, reviews: prog?.reviews || 0 })) parts.push(`<span class="warn">${esc(w)}</span>`);
   // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
   const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
   $('subRow').hidden = !subs.size;

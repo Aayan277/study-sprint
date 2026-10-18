@@ -5,6 +5,7 @@
 // Errors are thrown as SupaError with a plain-words message.
 
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
+import { readUsage } from './quota.js';
 
 export class SupaError extends Error {
   constructor(message, { status = 0, code = '' } = {}) {
@@ -37,7 +38,8 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
-    const code = json?.error_code || json?.code || json?.error || '';
+    // (The server's own refusals, supabase/limits.sql: a person's synced data is full, or the whole project is.)
+    const code = (/sync_data_full|sync_server_full/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
     throw new SupaError(explain(res.status, code, json?.msg || json?.message || json?.error_description || text), { status: res.status, code });
   }
   return json;
@@ -51,12 +53,18 @@ function explain(status, code, raw) {
     user_already_exists: 'There’s already an account with that email. Sign in instead.',
     email_exists: 'There’s already an account with that email. Sign in instead.',
     signup_disabled: 'New accounts are turned off for this project. Sign in with your existing account.',
+    captcha_failed: 'Couldn’t confirm you’re not a robot. Try again.',
+    sync_items_data_size: 'One of your cards is too big to sync (over 64 KB). Shorten its text and try again.',
+    sync_data_full: 'Your account’s synced data is full. New changes are kept on this device and will sync when there’s room.',
+    sync_server_full: 'The sync server is full right now. Everything is safe on this device and will sync when there’s room.',
+    PGRST202: 'This part isn’t set up on the server yet. The owner needs to run supabase/limits.sql (see docs/sync-setup.md).',
     weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',
     validation_failed: 'Check the email and password.',
-    email_not_confirmed: 'This account is waiting for email confirmation. In Supabase, turn off “Confirm email” (see docs/sync-setup.md), then try again.',
-    over_request_rate_limit: 'Too many tries. Wait a minute and try again.',
-    over_email_send_rate_limit: 'Supabase can only send a few emails an hour. Wait a while and try again.',
+    email_not_confirmed: 'This account is waiting for email confirmation. Open the link in the email we sent you, then sign in. (No email? Check your spam folder, or tap Create account again to send it again.)',
+    over_request_rate_limit: 'Too many tries from this network. Wait a few minutes and try again.',
+    over_email_send_rate_limit: 'Too many emails were sent just now. Wait a few minutes (it can take up to an hour) and try again.',
+    over_signup_rate_limit: 'Too many new accounts from this network. Wait a few minutes and try again.',
     same_password: 'That’s already your password. Pick a different one.',
     user_not_found: 'There’s no account with that email.',
     otp_expired: 'That link has expired. Ask for a new one.',
@@ -68,7 +76,8 @@ function explain(status, code, raw) {
   };
   if (known[code]) return known[code];
   if (status === 401 || code === 'PGRST301' || code === 'PGRST303') return 'You’ve been signed out. Sign in again to keep syncing.';
-  if (status === 429) return known.over_request_rate_limit;
+  if (status === 429) return /email/i.test(raw || '') ? known.over_email_send_rate_limit : known.over_request_rate_limit;
+  if (/sync_items_data_size/.test(raw || '')) return known.sync_items_data_size;
   if (status >= 500) return 'The sync server had a problem. It will try again later.';
   return raw || `Sync error (${status}).`;
 }
@@ -87,15 +96,20 @@ const session = json => {
   };
 };
 
-export async function signUp(email, password) {
-  const json = await call('/auth/v1/signup', { method: 'POST', body: { email, password } });
+// With a captcha set up in Supabase, every sign-up, sign-in and password reset must carry a fresh token
+// (see captcha.js); without one, captcha is undefined and nothing is added.
+const withCaptcha = (body, captcha) => (captcha ? { ...body, gotrue_meta_security: { captcha_token: captcha } } : body);
+
+// Returns { session } when the account is ready, or { pending: true } when Supabase has emailed a confirmation
+// link first (the person confirms, then signs in). redirectTo is where that link opens: the app.
+export async function signUp(email, password, { captcha, redirectTo } = {}) {
+  const query = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+  const json = await call('/auth/v1/signup' + query, { method: 'POST', body: withCaptcha({ email, password }, captcha) });
   const s = session(json);
-  // No session back means Supabase wants the email confirmed first.
-  if (!s) throw new SupaError('Account made, but Supabase is waiting for email confirmation. In Supabase, turn off “Confirm email” (Authentication → Sign In / Providers → Email), then sign in here.', { code: 'email_not_confirmed' });
-  return s;
+  return s ? { session: s } : { pending: true };
 }
-export async function signIn(email, password) {
-  return session(await call('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } }));
+export async function signIn(email, password, { captcha } = {}) {
+  return session(await call('/auth/v1/token?grant_type=password', { method: 'POST', body: withCaptcha({ email, password }, captcha) }));
 }
 export async function refresh(refreshToken) {
   const s = session(await call('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: refreshToken } }));
@@ -104,8 +118,8 @@ export async function refresh(refreshToken) {
 }
 // Forgot password: Supabase emails a link that opens the app (redirectTo) signed in, ready to set a new
 // password. The app reads the sign-in from the link: see recoveryFromLink() in sync.js.
-export async function sendPasswordReset(email, redirectTo) {
-  await call(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', body: { email } });
+export async function sendPasswordReset(email, redirectTo, { captcha } = {}) {
+  await call(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', body: withCaptcha({ email }, captcha) });
 }
 export async function setPassword(accessToken, password) {
   await call('/auth/v1/user', { method: 'PUT', token: accessToken, body: { password } });
@@ -130,6 +144,20 @@ export function putRows(token, rows) {
     method: 'POST', token, body: rows,
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }
   });
+}
+// What this account uses and may use (supabase/limits.sql my_usage()): { data, media, limit } in bytes. null when
+// limits.sql hasn't been run on the project yet.
+export async function myUsage(token) {
+  try {
+    return readUsage(await call('/rest/v1/rpc/my_usage', { method: 'POST', token, body: {} }));
+  } catch (err) {
+    if (err.code === 'PGRST202' || err.code === '42883') return null;
+    throw err;
+  }
+}
+// Delete the signed-in account itself, with its files and data (supabase/limits.sql delete_my_account()).
+export async function deleteAccount(token) {
+  await call('/rest/v1/rpc/delete_my_account', { method: 'POST', token, body: {} });
 }
 // Delete every row of this account (Settings → Sync → delete my data on the server).
 export function deleteAllRows(token, userId) {

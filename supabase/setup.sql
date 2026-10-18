@@ -30,17 +30,24 @@ drop policy if exists "own rows: read" on public.sync_items;
 drop policy if exists "own rows: add" on public.sync_items;
 drop policy if exists "own rows: change" on public.sync_items;
 drop policy if exists "own rows: delete" on public.sync_items;
-create policy "own rows: read"   on public.sync_items for select using (user_id = auth.uid());
-create policy "own rows: add"    on public.sync_items for insert with check (user_id = auth.uid());
-create policy "own rows: change" on public.sync_items for update using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "own rows: delete" on public.sync_items for delete using (user_id = auth.uid());
+-- (select auth.uid()) is worked out once per query, not once per row: much faster on big accounts.
+create policy "own rows: read"   on public.sync_items for select using (user_id = (select auth.uid()));
+create policy "own rows: add"    on public.sync_items for insert with check (user_id = (select auth.uid()));
+create policy "own rows: change" on public.sync_items for update using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "own rows: delete" on public.sync_items for delete using (user_id = (select auth.uid()));
 
--- On every change: keep the newer version if an older one arrives late, and bump seq so other devices pick it up.
+-- On every change: keep the newer version if an older (or identical) one arrives, and bump seq so other devices
+-- pick it up.
+--   * An equal timestamp is ignored too (<=), so sending everything again after a sign-in doesn't make every
+--     other device download everything again.
+--   * updated_at is capped at the server's time plus one day, so a device whose clock is far in the future
+--     can't win every conflict forever.
 create or replace function public.sync_items_on_change() returns trigger
 language plpgsql set search_path = public as $$
 begin
-  if tg_op = 'UPDATE' and new.updated_at < old.updated_at then
-    return null;                       -- an older change: ignore it
+  new.updated_at := least(new.updated_at, (extract(epoch from now()) * 1000)::bigint + 86400000);
+  if tg_op = 'UPDATE' and new.updated_at <= old.updated_at then
+    return null;                       -- an older or identical change: ignore it
   end if;
   new.seq := nextval('public.sync_seq');
   return new;

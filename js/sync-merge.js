@@ -69,8 +69,9 @@ export function parseAuthLink(hash) {
   if (p.get('error')) {
     const code = p.get('error_code') || p.get('error');
     // Fixed messages only: the text after "error_description=" can be written by anyone who makes the link.
-    return { error: code === 'otp_expired' ? 'That reset link has expired or was already used. Ask for a new one.' : 'That link didn’t work. Ask for a new reset email.' };
+    return { error: code === 'otp_expired' ? 'That link has expired or was already used. Ask for a new one (Forgot password, or Create account again).' : 'That link didn’t work. Ask for a new reset email.' };
   }
+  if (p.get('type') === 'signup') return { confirmed: true };          // the "confirm your email" link: nothing to keep
   if (p.get('type') !== 'recovery') return null;
   const expiresIn = Number(p.get('expires_in')) || 3600;
   return { session: {
