@@ -28,9 +28,9 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 | | Study Sprint | Anki | Quizlet (free) |
 | --- | --- | --- | --- |
 | Price | Free, no ads | Free, but the iPhone app is paid | Free with ads; the best study modes are paid |
-| Spaced repetition | FSRS-6, with an exam-date mode | FSRS | Basic |
+| Spaced repetition | FSRS-6, with an exam-date mode | FSRS-6 | Basic |
 | Timed game rounds that update your schedule | Yes | No | Games don't change your schedule |
-| Works offline, installs on your phone | Yes (PWA) | Yes (native apps) | Needs the paid app |
+| Works offline, installs on your phone | Yes (PWA) | Yes (native apps) | In its phone apps; offline in the browser is paid |
 | Imports Anki decks, Quizlet exports, CSV, Excel | Yes | Anki decks and text files | Pasted text and files |
 | Needs an account | No (optional sync) | No (AnkiWeb for sync) | Yes |
 
