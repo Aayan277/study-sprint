@@ -13,6 +13,7 @@ import { openSheet, closeSheet, esc, toast, $ } from './ui.js';
 import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
+import { savedTooBigNote } from './quota.js';
 import { MAX_PARTS, splitBack, splitCards, unleeched, parked, canSplit, withoutLeechTag, forgottenText } from './leech-logic.js';
 
 // After a card of a pair is deleted, its partner is an ordinary card again.
@@ -135,7 +136,11 @@ function openHook(card, done) {
       if (!fresh) { closeSheet(); return done('That card is gone'); }
       // A cloze card's extra belongs to its whole note.
       const sibs = fresh.noteId ? (await db.getAll('cards')).filter(c => c.noteId === fresh.noteId && c.id !== fresh.id) : [];
-      await db.saveCards([{ ...unleeched(fresh), noteExtra: text }, ...sibs.map(c => ({ ...c, noteExtra: text }))]);
+      const cards = [{ ...unleeched(fresh), noteExtra: text }, ...sibs.map(c => ({ ...c, noteExtra: text }))];
+      // A hook that makes the card too large to sync is refused, like in the card editor.
+      const big = savedTooBigNote(cards);
+      if (big) { busy = false; btn.disabled = false; $('hookErr').textContent = big.replace(/Shorten the text.*$/, 'Shorten the hook, or edit the card to make it smaller.'); $('hookErr').hidden = false; return; }
+      await db.saveCards(cards);
       closeSheet();
       done('Hook saved. It’s back in your reviews.');
     } catch (err) {

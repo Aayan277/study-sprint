@@ -175,13 +175,26 @@ export function splitOversized(rows, max = MAX_ROW_BYTES) {
 // record has, and are taken off it when undefined or '' (as db.saveNote does). Same size count as above.
 export function savedTooBigNote(records, extra = {}, max = MAX_ROW_BYTES) {
   for (const r of records) {
-    const { updatedAt, syncedAt, ...data } = { ...r, ...extra };
-    for (const [k, v] of Object.entries(extra)) if (v === undefined || v === '') delete data[k];
-    const bytes = rowBytes({ data });
+    const bytes = savedBytes(r, extra);
     if (bytes > max) return `This card is too large to save: it is about ${Math.round(bytes / 1000)} KB and the limit is ${Math.round(max / 1000)} KB. Shorten the text, or use smaller pictures, then save again.`;
   }
   return '';
 }
+function savedBytes(r, extra) {
+  const { updatedAt, syncedAt, ...data } = { ...r, ...extra };
+  for (const [k, v] of Object.entries(extra)) if (v === undefined || v === '') delete data[k];
+  return rowBytes({ data });
+}
+
+// For bulk saves (Find and replace, import, linking): the cards that fit and the ones too large to sync, so the rest can go
+// ahead and the person is told about these. Same size count as savedTooBigNote.
+export function splitTooBig(records, extra = {}, max = MAX_ROW_BYTES) {
+  const ok = [], big = [];
+  for (const r of records) (savedBytes(r, extra) > max ? big : ok).push(r);
+  return { ok, big };
+}
+// "2 cards were too large and were left unchanged" (what: 'unchanged', 'out', 'unlinked'). '' when n is 0.
+export const tooLargeNote = (n, what = 'unchanged') => (n > 0 ? `${n} ${n === 1 ? 'card was' : 'cards were'} too large and ${n === 1 ? 'was' : 'were'} left ${what}` : '');
 
 // "1 card is too large to sync: “Cell…”. Shorten it to sync." Rows whose id is too long get their own sentence, since
 // shortening the text doesn't help them.
