@@ -10,6 +10,7 @@
 //                    the picture from your account first if this device doesn't have it yet
 
 import * as db from './db.js';
+import { pictureTooBig } from './quota.js';
 import { soundsHTML } from './audio.js';
 import { soundType, soundExt, sniffAudioType } from './audio-type.js';
 
@@ -32,6 +33,9 @@ export async function processImage(file, { maxSide = MAX_SIDE } = {}) {
   img.close?.();
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', QUALITY));
   if (!blob) throw new Error('Could not save the picture');
+  // Still too big after shrinking (a very detailed picture): refuse it, with a message to show (quota.js).
+  const tooBig = pictureTooBig(blob.size, { occlusion: maxSide > MAX_SIDE });
+  if (tooBig) throw Object.assign(new Error(tooBig), { code: 'too_big' });
   return { type: 'image/jpeg', data: await blob.arrayBuffer(), width: w, height: h, srcWidth, srcHeight };
 }
 async function decode(file) {

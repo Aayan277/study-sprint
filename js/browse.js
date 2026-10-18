@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
+import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
 import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -171,8 +171,10 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
 //   mode        'full' (default, the card list): everything about the card in one panel
 //               'actions' (Review, Play): a short sheet of Edit, Flag, Bury, Suspend and More (More opens the full panel)
 //               'edit': just the editor (Front, Back, Tags), for the E key
+let panelFor = null;      // the card the editor panel was last opened for (Undo of a duplicate looks here)
 export async function openCardPanel(card, ctx) {
   if (!card) return;
+  panelFor = card;
   if (ctx.mode === 'actions') return openCardActions(card, ctx);
   if (ctx.mode === 'edit') return openCardEdit(card, ctx);
   const { decks, statesById, showInfo = false } = ctx;
@@ -197,6 +199,7 @@ export async function openCardPanel(card, ctx) {
     <div class="act-grid">
       <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
       <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
@@ -235,6 +238,7 @@ export async function openCardPanel(card, ctx) {
     const act = b.dataset.act;
     if (act === 'suspend') toggleSuspend(card, save);
     if (act === 'bury') toggleBury(card, save);
+    if (act === 'duplicate') duplicateAndEdit(card, ctx);
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
     if (act === 'delete' && partner) askDeletePair(card, partner, again);
     else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
@@ -378,7 +382,7 @@ const cardFieldsHTML = (card, maxN = 0, pair = null) => `
       ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
       ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
       ${noteFieldsEditHTML('ce', card.noteFields)}`}
-      <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
@@ -526,6 +530,37 @@ async function saveOcclusionNote(card, ops, msg) {
 const toggleSuspend = (card, save) => save({ suspended: !isSuspended(card) }, isSuspended(card) ? 'Unsuspended' : 'Suspended', isSuspended(card) ? 'unsuspend' : 'suspend');
 const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : buryUntil() }, isBuried(card) ? 'Unburied' : 'Buried until tomorrow', isBuried(card) ? 'unbury' : 'bury');
 
+// ---------- duplicating ----------
+// A duplicate is a new card (or, for a cloze or image-occlusion note, a new note with all its cards) with the same deck, text,
+// tags, pictures, memory hook and accepted answers, and a fresh schedule (see duplicateCards in browse-logic.js).
+// Undo deletes the copies again (they have no schedule or history to lose, unless they were studied in the meantime).
+const undoDuplicate = (copies, refresh) => ({
+  hold: true,
+  link: { href: '#', label: 'Undo', onClick: async () => {
+    // The copies and any card added to their notes since (a new blank, say) go. If the editor is showing one of them, it
+    // closes first, so a Save in it can't bring a deleted copy back.
+    const noteIds = new Set(copies.map(c => c.noteId).filter(Boolean));
+    const ids = new Set(copies.map(c => c.id));
+    for (const c of await db.getAll('cards')) if (c.noteId && noteIds.has(c.noteId)) ids.add(c.id);
+    const shown = panelFor;
+    if (shown && document.getElementById('sheet')?.open && (ids.has(shown.id) || (shown.noteId && noteIds.has(shown.noteId)))) closeSheet();
+    await db.deleteCards([...ids]);
+    toast(copies.length === 1 ? 'Copy removed' : 'Copies removed');
+    await refresh();
+  } }
+});
+// One card: make the copy, then open it in the editor.
+async function duplicateAndEdit(card, ctx) {
+  const { copies, firstCopy } = duplicateCards([card], await db.getAll('cards'), db.newId);
+  await db.saveCards(copies);
+  const { refresh = async () => {}, decks, statesById } = ctx;
+  await refresh();
+  // The copy opens with only the lists and refresh: the screen that opened the original (Review, Play) knows nothing of
+  // the copy, so its onAction / closeAfter must not apply to it.
+  await openCardPanel(firstCopy, { decks, statesById, refresh, mode: 'full', showInfo: false });
+  toast('Duplicated. Editing the copy.', undoDuplicate(copies, refresh));
+}
+
 // ---------- acting on several cards ----------
 function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   const n = selected.length;
@@ -537,6 +572,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       <button class="btn ghost small" type="button" data-act="unsuspend">Unsuspend</button>
       <button class="btn ghost small" type="button" data-act="bury">Bury until tomorrow</button>
       <button class="btn ghost small" type="button" data-act="unbury">Unbury</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards, a reverse pair in both directions">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>Reset to new</button>
       <button class="btn ghost small" type="button" data-act="reverse">Both directions</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
@@ -567,6 +603,13 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'unsuspend') update({ suspended: false }, `Unsuspended ${plural(n, 'card')}`);
     if (act === 'bury') update({ buriedUntil: buryUntil() }, `Buried ${plural(n, 'card')} until tomorrow`);
     if (act === 'unbury') update({ buriedUntil: 0 }, `Unburied ${plural(n, 'card')}`);
+    if (act === 'duplicate') (async () => {
+      const { copies } = duplicateCards(selected, await db.getAll('cards'), db.newId);
+      await db.saveCards(copies);
+      closeSheet();
+      toast(`Duplicated ${plural(copies.length, 'card')}`, undoDuplicate(copies, refresh));
+      await refresh();
+    })();
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'reverse') bulkReverse(selected, done);
     if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
@@ -760,7 +803,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      <label class="field"><span>Tags (optional, separated by commas)</span><input id="acTags" autocomplete="off"></label>
+      <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>

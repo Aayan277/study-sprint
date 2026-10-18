@@ -52,9 +52,11 @@ await page.click('#clearBtn'); ok(await page.isHidden('#preview'), 'clear hides 
 
 // file: Quizlet txt into a new deck (opened from Decks, so Back has somewhere real to go)
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+await page.evaluate(() => localStorage.setItem('study-sprint-import-deck', 'left-over'));          // (an older version's key)
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox');
-ok((await page.$eval('#deckSel', s => s.selectedOptions[0].textContent)).includes('Psychology'), 'library import starts on the deck the last import went into (Psychology)');
-await page.selectOption('#deckSel', '__new');
+ok((await page.inputValue('#deckSel')) === '__new', 'library import (not from a deck page) starts on a new deck, not the deck the last import went into');
+ok((await page.$eval('#deckSel', s => s.options[0].textContent)).startsWith('Last used: '), 'but the deck the last import went into is listed first, as "Last used: X"');
+ok(await page.evaluate(() => localStorage.getItem('study-sprint-import-deck') === null), 'and the old study-sprint-import-deck key is gone');
 await page.click('#tab-file');
 await page.setInputFiles('#fileIn', SP + '/files/quizlet.txt');
 await page.waitForSelector('#preview:not([hidden])');

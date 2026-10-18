@@ -15,7 +15,7 @@
 import * as db from './db.js';
 import { buildHistories, MIN_REVIEWS } from './fsrs-data.js';
 import { fitChecked, judge, splitHistories, HOLDOUT_SHARE, HOLDOUT_MIN } from './fsrs-fit.js';
-import { deckSchedulerOptions, FSRS_VERSION } from './sched-settings.js';
+import { deckSchedulerOptions, FSRS_VERSION, rowsFrom } from './sched-settings.js';
 import { effectiveDeck } from './deck-tree.js';
 import { $, esc, openSheet, closeSheet, toast } from './ui.js';
 
@@ -117,13 +117,13 @@ async function startRun() {
     const srs = await import('./srs.js');                       // ts-fsrs: the standard weights, their ranges, and the clipping
     const [settings, decks, cards, rows] = await Promise.all([db.getSettings(), db.getDecks(), db.getAll('cards'), db.getAllInPieces('reviewLog')]);
     if (mine !== token) return;
-    const hist = buildHistories(rows);
+    const hist = buildHistories(rowsFrom(rows, settings.ignoreBefore));       // ("Ignore reviews before" in Advanced scheduling)
     const started = settings.fsrsParams;                        // to notice a sync that changes it while we work
     const current = started?.w || srs.default_w.slice();
     const deckOf = new Map(cards.map(c => [c.id, c.deckId]));
     const steps = hist.cards.map(h => deckSchedulerOptions(settings, effectiveDeck(decks, deckOf.get(h.cardId))).relearningSteps.length);
     const clip = (w, n) => srs.clipParameters(w, n, true);
-    if (hist.reviews < MIN_REVIEWS) { setRun({ status: 'result', result: { kind: 'not-enough', reviews: hist.reviews } }); return; }
+    if (hist.reviews < MIN_REVIEWS) { setRun({ status: 'result', result: { kind: 'not-enough', reviews: hist.reviews, ignoring: settings.ignoreBefore } }); return; }
     run.counts = { reviews: hist.reviews, cards: hist.cardsUsed };
     paintLive();
     const input = { cards: hist.cards, steps, current, defaults: srs.default_w.slice(), bounds: srs.CLAMP_PARAMETERS(srs.W17_W18_Ceiling, true) };
@@ -229,10 +229,10 @@ function resultHTML(r) {
     case 'better': {
       const s = r.saved;
       return `<p class="opt-result good"><b>Done.</b> Your new settings predict your answers better, so they're now in use.</p>
-        <p class="opt-detail">Checked on your newest 20% of reviews, which the fit did not see: prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
         <p class="opt-note">Run this again every month or so as you review more.</p>
         <details class="opt-fold"><summary>Details</summary>
-          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. The error numbers above are for that check. The 21 numbers, in the same format as Anki's:</p>
+          <p class="opt-detail">Checked on your newest 20% of reviews, which the fit did not see: prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
+          <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. Those error numbers are for that check. The 21 numbers, in the same format as Anki's:</p>
           <code class="opt-w" id="optW">${esc(s.w.map(x => +x.toFixed(4)).join(', '))}</code></details>`;
     }
     case 'same':
@@ -242,7 +242,7 @@ function resultHTML(r) {
     case 'other-device':
       return `<p class="opt-result">Your other device already updated your parameters; they predict as well, so nothing changed.</p>`;
     case 'not-enough':
-      return `<p class="opt-result">Not enough reviews yet: ${num(r.reviews)} of ${MIN_REVIEWS} count. Game answers and cards whose history is incomplete aren't used.</p>`;
+      return `<p class="opt-result">Not enough reviews yet: ${num(r.reviews)} of ${MIN_REVIEWS} count. Game answers and cards whose history is incomplete aren't used.${r.ignoring ? ` Reviews before ${esc(r.ignoring)} are ignored (Advanced scheduling).` : ''}</p>`;
     case 'cancelled':
       return `<p class="opt-result">Stopped. Nothing changed.</p>`;
     default:

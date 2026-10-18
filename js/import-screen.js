@@ -16,13 +16,16 @@ import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
+import { importWarnings } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 const NEW_DECK = '__new';
 const MAX_SHOWN = 300;   // rows drawn in the preview; more than this would make phones sluggish
-const LAST_DECK = 'study-sprint-import-deck';     // the deck the last import went into (this device)
-const lastDeck = () => { try { return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
+// The deck the last import went into (this device). It is only offered, first in the list ("Last used: X"): the default is a new deck,
+// so a second subject's file doesn't quietly merge into the first one. (An older version kept it under 'study-sprint-import-deck': removed.)
+const LAST_DECK = 'study-sprint-import-last';
+const lastDeck = () => { try { localStorage.removeItem('study-sprint-import-deck'); return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
 const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
 
 // Everything the screen is working with.
@@ -37,8 +40,8 @@ export async function renderImport(el, arg) {
     cards: [],             // [{ front, back }] as shown in the preview, including any edits
     flags: [],             // duplicate flag per card: 'deck', 'import' or null
     frontCol: 0, backCol: 1,
-    // The deck in the address, otherwise the one the last import went into (if it still exists), otherwise a new deck.
-    deckId: decks.some(d => d.id === deckId) ? deckId : decks.some(d => d.id === lastDeck()) ? lastDeck() : NEW_DECK,
+    // The deck in the address (the import started from that deck's page), otherwise a new deck named after the file.
+    deckId: decks.some(d => d.id === deckId) ? deckId : NEW_DECK,
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
     suggestedName: '',     // a deck name taken from the file name
     noCloze: false,        // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
@@ -48,6 +51,9 @@ export async function renderImport(el, arg) {
     freeNote: ''           // "Not enough free space on this device for the sounds…", when the switch started off for that reason
   };
 
+  // (The deck the last import went into, if it is still there, comes first.)
+  const last = lastDeck(), all = deckChoices(decks);
+  const choices = [...all.filter(d => d.id === last), ...all.filter(d => d.id !== last)];
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ ${decks.some(d => d.id === deckId) ? 'Deck' : 'Decks'}</button>
     <div class="screen-head"><div><h1>Add cards</h1></div></div>
@@ -55,7 +61,7 @@ export async function renderImport(el, arg) {
     <section class="section">
       <label class="field"><span>Add to deck</span>
         <select id="deckSel">
-          ${deckChoices(decks).map(d => `<option value="${esc(d.id)}" ${d.id === S.deckId ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
+          ${choices.map(d => `<option value="${esc(d.id)}" data-name="${esc(d.label)}" ${d.id === S.deckId ? 'selected' : ''}>${d.id === last ? 'Last used: ' : ''}${esc(d.label)}</option>`).join('')}
           <option value="${NEW_DECK}" ${S.deckId === NEW_DECK ? 'selected' : ''}>+ New deck…</option>
         </select></label>
       <label class="field" id="newNameRow" ${S.deckId === NEW_DECK ? '' : 'hidden'}><span>Name for the new deck</span>
@@ -236,6 +242,7 @@ function wireFile() {
       else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
       console.error(err);
+      $('fileName').textContent = file.name;          // (clears "reading…")
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
       showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
@@ -266,9 +273,10 @@ async function readAnki(file) {
   $('found').textContent = '';
   $('fileName').textContent = `${file.name} · reading…`;
   const { readAnkiFile } = await import('./anki-read.js');
-  const { notes, models, reviews, media } = await readAnkiFile(file);
+  const { notes, models, reviews, media, mediaBytes } = await readAnkiFile(file);
   const all = notesToImport(notes, models, reviews, media);
   S.ankiMedia = media;                 // the file's pictures and sounds, unpacked when the cards are added
+  S.ankiMediaBytes = mediaBytes || 0;  // about how much they take (for the size warning)
   await checkSoundSpace(all);
   $('fileName').textContent = file.name;
   if (!all.rows.length) { showError('That Anki file has no cards in it.'); return; }
@@ -550,6 +558,8 @@ function refreshFlags() {
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
+  // A big deck: more than 200 MB of pictures and sounds, or more than 50,000 reviews of history (see quota.js).
+  if (S.result.format.id === 'anki') for (const w of importWarnings({ mediaBytes: S.ankiMediaBytes, reviews: prog?.reviews || 0 })) parts.push(`<span class="warn">${esc(w)}</span>`);
   // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
   const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
   $('subRow').hidden = !subs.size;
@@ -560,7 +570,7 @@ function refreshFlags() {
   $('dupBtn').hidden = !dups;
 
   // The button says where the cards go: the deck's name once it has one. A new deck without a name asks for it above.
-  const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].textContent).replace(/\s+/g, ' ');
+  const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].dataset.name).replace(/\s+/g, ' ');
   const shown = name.length > 32 ? name.slice(0, 31) + '…' : name;
   const total = complete + pairN;          // a reverse card is a card too
   $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(total, 'card')} to “${shown}”` : `Add ${plural(total, 'card')}`;
@@ -604,7 +614,7 @@ async function save() {
       return;
     }
   } else {
-    deckName = $('deckSel').selectedOptions[0].textContent;
+    deckName = $('deckSel').selectedOptions[0].dataset.name;
   }
 
   // Read what we need from the page now: the picture step below takes a while, and you may leave the screen meanwhile.

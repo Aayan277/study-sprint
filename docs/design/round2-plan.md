@@ -109,7 +109,7 @@ Written by the planning review against `quick-wins` at b257ca9. Line numbers are
 
 ### A3 Import (1D)
 - **Deck picker on top:** `.section:not(#preview)` gets `order:1` (CSS ~613).
-- **Default deck:** the route arg, otherwise `localStorage['study-sprint-import-deck']` if it still exists, otherwise New deck. Save it after a successful save.
+- **Default deck:** the route arg, otherwise a new deck. The deck the last import went into (`localStorage['study-sprint-import-last']`, if it still exists) is listed first as "Last used: X".
 - **Save button:**
   - Empty new-deck name: "Add N cards" plus the hint "Name the new deck above".
   - Named: "Add N cards to “{name}”". `#newName`'s input calls `refreshFlags()`.

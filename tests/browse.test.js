@@ -77,8 +77,23 @@ test('sorting', () => {
 });
 
 test('tags', () => {
-  assert.deepEqual(parseTags(' Biology, cells,,biology , Exam 1 '), ['biology', 'cells', 'exam 1']);
+  assert.deepEqual(parseTags(' Biology, cells,,biology , Exam 1 '), ['biology', 'cells', 'exam', '1']);
   assert.deepEqual(parseTags(''), []);
+});
+
+test('tags are separated by spaces, commas or line breaks, like Anki (they are kept lower case)', () => {
+  assert.deepEqual(parseTags('#AK_Step1_v12::#UWorld::23456 #AK_Step1_v12::#Subject::Pulm'), ['#ak_step1_v12::#uworld::23456', '#ak_step1_v12::#subject::pulm']);
+  assert.deepEqual(parseTags('a\tb\nc,  d ,e'), ['a', 'b', 'c', 'd', 'e']);
+  assert.deepEqual(parseTags('x  X x'), ['x']);
+});
+
+test('one rule for tags: spaces separate them when typing and when reading what is saved; empty "::" pieces are dropped', async () => {
+  const { tagWords } = await import('../js/tag-tree.js');
+  assert.deepEqual(parseTags('exam 1, new'), ['exam', '1', 'new']);
+  assert.deepEqual(parseTags('a :: b'), ['a', 'b']);
+  assert.deepEqual(parseTags(':: :::: x'), ['x']);
+  assert.deepEqual(tagWords(['exam 1', 'a :: b', 'c']), ['exam', '1', 'a', 'b', 'c']);
+  assert.deepEqual(tagWords(['exam 1']), parseTags('exam 1'));
 });
 
 test('every filter and sort has a label', () => {
@@ -131,11 +146,26 @@ test('find and replace', () => {
 });
 
 test('tags: counts, rename and remove everywhere', () => {
-  const cs = [{ id: 'a', tags: ['exam1', 'cells'] }, { id: 'b', tags: ['exam1'] }, { id: 'c', tags: ['cells', 'exam 1'] }, { id: 'd', tags: [] }];
-  assert.deepEqual(tagCounts(cs), [{ tag: 'cells', count: 2 }, { tag: 'exam1', count: 2 }, { tag: 'exam 1', count: 1 }]);
-  assert.deepEqual(renameTag(cs, 'exam1', 'Exam 1').map(c => [c.id, c.tags]), [['a', ['exam 1', 'cells']], ['b', ['exam 1']]]);
-  assert.deepEqual(renameTag(cs, 'cells', 'exam 1').map(c => [c.id, c.tags]), [['a', ['exam1', 'exam 1']], ['c', ['exam 1']]]);   // merging doesn't double up
-  assert.deepEqual(renameTag(cs, 'cells', '').map(c => c.tags), [['exam1'], ['exam 1']]);                                       // removing
+  const cs = [{ id: 'a', tags: ['exam1', 'cells'] }, { id: 'b', tags: ['exam1'] }, { id: 'c', tags: ['cells', 'exam-1'] }, { id: 'd', tags: [] }];
+  assert.deepEqual(tagCounts(cs), [{ tag: 'cells', count: 2 }, { tag: 'exam1', count: 2 }, { tag: 'exam-1', count: 1 }]);
+  assert.deepEqual(renameTag(cs, 'exam1', 'Exam-1').map(c => [c.id, c.tags]), [['a', ['exam-1', 'cells']], ['b', ['exam-1']]]);
+  assert.deepEqual(renameTag(cs, 'cells', 'exam-1').map(c => [c.id, c.tags]), [['a', ['exam1', 'exam-1']], ['c', ['exam-1']]]);   // merging doesn't double up
+  assert.deepEqual(renameTag(cs, 'cells', '').map(c => c.tags), [['exam1'], ['exam-1']]);                                       // removing
+});
+
+test('renaming splits on spaces like every other tag field: "Exam 1" makes two tags', async () => {
+  const { renameTagExact, renameTagPrefix } = await import('../js/browse-logic.js');
+  const cs = [{ id: 'a', tags: ['exam1', 'cells'] }];
+  assert.deepEqual(renameTag(cs, 'exam1', 'Exam 1').map(c => c.tags), [['exam', '1', 'cells']]);
+  assert.deepEqual(renameTagExact(cs, 'exam1', 'x, y z').map(c => c.tags), [['x', 'y', 'z', 'cells']]);
+  assert.deepEqual(renameTagPrefix([{ id: 'p', tags: ['f::1', 'o'] }], 'f', 'g h').map(c => c.tags), [['g::1', 'h::1', 'o']]);
+});
+
+test('a tag saved with a space ("a b", before spaces split tags) counts, renames and searches as the two tags it was meant to be', async () => {
+  const { renameTag: rn } = await import('../js/browse-logic.js');
+  const cs = [{ id: 'a', front: 'f', back: 'b', tags: ['exam 1', 'cells'] }, { id: 'b', front: 'f', back: 'b', tags: ['exam'] }];
+  assert.deepEqual(tagCounts(cs), [{ tag: 'exam', count: 2 }, { tag: '1', count: 1 }, { tag: 'cells', count: 1 }]);
+  assert.deepEqual(rn(cs, 'exam', 'test').map(c => [c.id, c.tags]), [['a', ['test', '1', 'cells']], ['b', ['test']]]);
 });
 
 test('every filter is in exactly one dropdown group', () => {
