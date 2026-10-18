@@ -8,3 +8,10 @@ tests/sim/compare/*.jsonl
 
 # local test dependency (npm install --no-save ts-fsrs@5.4.2), see tests/fsrs-parity.test.js
 node_modules/
+
+# real review data and anything with secrets must never be committed (tests/realdata keeps its data outside the repo)
+.env*
+*.parquet
+fsrs-data/
+results.jsonl
+*.revlog

@@ -11,8 +11,8 @@ import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
-import { clearDraft } from './import-draft.js';
-import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError } from './ui.js';
+import { clearDraft, takeDraft } from './import-draft.js';
+import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError, sheetDirty } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
@@ -29,11 +29,14 @@ import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, when
 import { usageLine, cardsWarning } from './quota.js';
 import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
+import { initUpdates, showUpdateRequired } from './update.js';
+import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.36';
 
 let settings = { ...db.DEFAULT_SETTINGS };
+let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
 
 // ---------- settings ----------
@@ -1254,7 +1257,7 @@ async function route() {
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); }
+  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); updates?.routed(name); }      // (an update waiting for a quiet moment restarts the app on Today or Decks)
   if (resetLink) showResetLink(resetLink);
 }
 
@@ -1358,6 +1361,22 @@ function tidyMediaWhenIdle() {
   else setTimeout(run, 3000);
 }
 
+// The server can name the oldest version allowed to sync (js/app-config.js). Asked once, after the first screen, only when signed in (a device that
+// never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
+async function checkMinClient() {
+  if (syncHeld(APP_VERSION)) return;                      // "Keep using offline" was chosen for this version: sync stays off until the app updates
+  if (!(await sync.account())) { setSyncGate(false); return; }
+  const min = await fetchMinClient();
+  if (min) rememberMinClient(min);
+  if (!min || !isTooOld(APP_VERSION, min)) { setSyncGate(false); return; }
+  setSyncGate(true);                                      // no syncing while this version is too old
+  if (await updates?.tryUpdate()) await new Promise(r => setTimeout(r, 2500));      // a new version is on its way: it restarts the app by itself
+  showUpdateRequired({
+    onUpdate: async () => { await updates?.tryUpdate(); updates?.updater.tap(); },
+    onOffline: () => { holdSync(APP_VERSION); setSyncGate(true); toast('Sync is off until Study Sprint updates. Studying works as usual.', { ms: 6000 }); }
+  });
+}
+
 async function start() {
   initSheet();
   initPanelResize();
@@ -1387,6 +1406,7 @@ async function start() {
   applyCardAlign(settings.cardAlign);
   fx.configure(settings); configureShortcuts(settings);
   const firstRun = await checkFirstRun();
+  setSyncGate(syncHeld(APP_VERSION) || isTooOld(APP_VERSION, cachedMinClient()));      // closed before sync starts if this version is known to be too old (checkMinClient, below, asks the server)
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
@@ -1400,6 +1420,7 @@ async function start() {
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();
+  checkMinClient().catch(err => console.error(err));
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
 
@@ -1407,21 +1428,33 @@ async function start() {
   navigator.storage?.persist?.().catch(() => {});
 }
 
+// Is there something a reload would lose? Then an update waits (js/update.js): an edited card, a Review or Play round or Practice test (they hide
+// the header and tabs: body.focus), or Add cards holding text or cards that aren't saved.
+function updateBusy() {
+  if (sheetDirty()) return true;
+  if (document.body.classList.contains('focus')) return true;
+  if (/^#\/test(\/|$)/.test(location.hash) || currentRoute === 'test') return true;      // a Practice test (it keeps its own state; a reload must not cut it off)
+  if (currentRoute === 'import') {
+    return !!($('pasteBox')?.value || '').trim() || !!$('preview') && !$('preview').hidden || !!$('docBox') && !$('docBox').hidden || !!takeDraft();
+  }
+  return false;
+}
+
 // Offline support and "Add to Home Screen" need the service worker.
 if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {}));
-  // When a new version has installed, reload once so it shows straight away
-  // (instead of only after closing and reopening the app a second time).
-  const hadController = !!navigator.serviceWorker.controller;
+  // When a new version has installed and nothing would be lost, reload once so it shows straight away (instead of only after closing and
+  // reopening the app a second time). With unsaved work open it waits for a tap or a quiet moment: see js/update.js.
   let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloaded) return;   // first ever install: nothing old to replace
+  // Not while nav is stepping through history (a reload then can be cancelled); and once more if the page is still here a second later.
+  const reload = () => {
+    if (reloaded) return;
     reloaded = true;
-    // Not while nav is stepping through history (a reload then can be cancelled); and once more if the page is still here a second later.
-    const reload = () => whenIdle().then(() => location.reload());
-    reload();
-    setTimeout(reload, 1000);
-  });
+    const again = () => whenIdle().then(() => location.reload());
+    again();
+    setTimeout(again, 1000);
+  };
+  updates = initUpdates({ busy: updateBusy, reload, getRoute: () => currentRoute });
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => updates.watch(reg)).catch(() => {}));
 }
 
 start();

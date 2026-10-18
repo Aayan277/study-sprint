@@ -167,5 +167,32 @@ for (const [name, mime, buf] of [['random.zip', 'application/zip', Buffer.from('
   ok(name === 'thing.bin' ? msg.includes("can't read that kind of file") : msg.startsWith("Couldn't read random.zip"), name + ' is explained, not turned into cards: ' + msg);
   ok(await page.isHidden('#preview'), name + ': no preview of junk cards');
 }
+// Another website posts to the share address (cross-site): nothing is taken and the Add cards screen is not filled in.
+{
+  await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+  await page.evaluate(async () => { const c = await caches.open('study-sprint-share'); for (const k of await c.keys()) await c.delete(k); });
+  const evil = await ctx.newPage();
+  await evil.route('http://evil.test/**', r => r.fulfill({ contentType: 'text/html', body: '<form id="f" method="POST" action="http://localhost:8123/share-target" enctype="multipart/form-data"><input name="title" value="Free cards"><input name="text" value="Q: hi\tA: planted by another site"><input name="url" value=""></form>' }));
+  await evil.goto('http://evil.test/');
+  await evil.evaluate(() => document.getElementById('f').submit());
+  await evil.waitForURL(u => u.origin === 'http://localhost:8123', { timeout: 30000 });
+  await evil.waitForTimeout(500);
+  ok(!evil.url().includes('import/share'), 'a cross-site post is sent to the app, not the share screen: ' + evil.url());
+  ok(await evil.evaluate(async () => (await (await caches.open('study-sprint-share')).keys()).length) === 0, 'and nothing from it is kept');
+  ok(!(await evil.textContent('body')).includes('planted by another site'), 'and its text is not on the page');
+  await evil.close();
+  // The same form from the app itself (same-origin) is taken.
+  await page.evaluate(() => {
+    document.getElementById('fakeShare')?.remove();
+    const f = document.createElement('form');
+    f.method = 'POST'; f.action = 'share-target'; f.enctype = 'multipart/form-data'; f.id = 'fakeShare';
+    f.innerHTML = '<input name="title" value="Mine"><input name="text" value="Cell - unit of life"><input name="url" value="">';
+    document.body.append(f);
+    f.submit();
+  });
+  await page.waitForFunction(() => location.hash === '#/import/share', null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('#pasteBox')?.value.includes('Cell - unit of life'), null, { timeout: 30000 });
+  ok(true, 'a same-origin share is still taken and fills the screen');
+}
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' || ') : ''));
 await browser.close();

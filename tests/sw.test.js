@@ -51,9 +51,9 @@ function boot(stores) {
     return out;
   };
   // A form POSTed to share-target (what Android's Share menu sends): `form` is { files: [File], title, text, url }.
-  const share = form => {
+  const share = (form, site, origin) => {
     let out;
-    on.fetch({ request: { method: 'POST', url: 'https://app.test/share-target', mode: 'navigate', formData: async () => { if (form === 'broken') throw new Error('no body'); return { getAll: k => (k === 'files' ? form.files || [] : []), get: k => form[k] ?? null }; } }, respondWith: p => { out = p; } });
+    on.fetch({ request: { method: 'POST', url: 'https://app.test/share-target', mode: 'navigate', headers: { get: k => (k.toLowerCase() === 'sec-fetch-site' ? site ?? null : k.toLowerCase() === 'origin' ? origin ?? null : null) }, formData: async () => { if (form === 'broken') throw new Error('no body'); return { getAll: k => (k === 'files' ? form.files || [] : []), get: k => form[k] ?? null }; } }, respondWith: p => { out = p; } });
     return out;
   };
   const activate = () => { let p; on.activate({ waitUntil: x => { p = x; } }); return p; };
@@ -75,13 +75,14 @@ test('keepLibraries copies pinned libraries from the newest old cache only', asy
 
 test('keepLibraries skips opaque and failed responses, and URLs this release no longer pins', async () => {
   const keep = [KATEX + 'katex.min.css', KATEX + 'fonts/KaTeX_Main-Regular.woff2', JS + 'ts-fsrs@5.4.2/dist/index.mjs',
-    JS + 'fflate@0.8.2/esm/browser.js', 'https://fonts.gstatic.com/s/geist/v1/a.woff2', 'https://fonts.googleapis.com/css2?family=Geist'];
+    JS + 'fflate@0.8.2/esm/browser.js'];
   const drop = [
     [KATEX + 'katex.mjs', { ok: false, type: 'cors', status: 404 }],
     [KATEX + 'fonts/KaTeX_Math-Italic.woff2', { ok: false, type: 'opaque' }],
     [JS + 'katex@0.16.0/dist/katex.mjs', good('older katex version')],
     [JS + 'ts-fsrs@5.0.0/dist/index.mjs', good('older ts-fsrs')],
     [JS + 'some-other-package@1.0.0/index.js', good('never pinned')],
+    ['https://fonts.gstatic.com/s/geist/v1/a.woff2', good('Google Fonts is not used any more')],
     ['https://unpkg.com/anything@1/x.js', good('other host')]
   ];
   const opaque = KATEX + 'fonts/KaTeX_Size1-Regular.woff2';
@@ -202,4 +203,39 @@ test('an app update keeps a share that is waiting (the share cache is not an app
   await activate();
   assert.ok(stores.has(SHARED), 'the share is kept');
   assert.ok(!stores.has('study-sprint-v1'), 'old app caches are still thrown away');
+});
+
+test('a share POSTed from another site is not taken: it goes to the app with nothing kept', async () => {
+  for (const site of ['cross-site', 'same-site']) {
+    const stores = new Map();
+    const { share } = boot(stores);
+    const res = await share({ files: [], title: 'Evil', text: 'cards from a stranger' }, site);
+    assert.equal(res.status, 303, site);
+    assert.equal(res.headers.get('location'), 'https://app.test/', site + ': to the app, not the share screen');
+    assert.equal(await kept(stores, 'text'), undefined, site + ': nothing is kept');
+    assert.equal(await kept(stores, 'file'), undefined);
+  }
+});
+
+test('a share from the phone itself (none), from the app (same-origin) or from a browser without the header is taken', async () => {
+  for (const site of ['none', 'same-origin', undefined]) {
+    const stores = new Map();
+    const { share } = boot(stores);
+    const res = await share({ files: [], title: 'Cells', text: 'Cell - unit of life' }, site);
+    assert.equal(res.status, 303);
+    assert.match(res.headers.get('location'), /#\/import\/share$/);
+    assert.equal((await kept(stores, 'text')).json.text, 'Cell - unit of life', String(site));
+  }
+});
+
+test('when the browser does not show Sec-Fetch-Site to the worker (Chromium), the Origin of the post decides', async () => {
+  const cases = [['https://evil.example', false], ['http://app.test', false], ['https://app.test', true], [null, true], ['null', true]];
+  for (const [origin, taken] of cases) {
+    const stores = new Map();
+    const { share } = boot(stores);
+    const res = await share({ files: [], title: 'T', text: 'from ' + origin }, undefined, origin);
+    assert.equal(res.status, 303);
+    assert.equal(!!(await kept(stores, 'text')), taken, String(origin));
+    assert.equal(/#\/import\/share$/.test(res.headers.get('location')), taken, String(origin));
+  }
 });

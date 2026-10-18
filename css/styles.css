@@ -20,6 +20,15 @@
    Themes are chosen with attributes on <html>: data-skin (the accent), data-theme="light" (otherwise dark),
    data-oled="on" (dark only). See js/themes.js. */
 
+/* Geist (the app's font), served from this site (fonts/) instead of Google Fonts, so a visit tells no one else the visitor's address.
+   Variable weight 400-700, split by alphabet exactly as Google served it: a phone only downloads the pieces a page uses.
+   Geist is © The Geist Project Authors, SIL Open Font License 1.1: the licence text is fonts/OFL.txt. */
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/geist-cyrillic-ext.woff2) format("woff2");unicode-range:U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F}
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/geist-cyrillic.woff2) format("woff2");unicode-range:U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116}
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/geist-vietnamese.woff2) format("woff2");unicode-range:U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB}
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/geist-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/geist-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+
 /* ---------- 1. Tokens ---------- */
 :root{
   --f-ui:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -615,6 +624,17 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .confirm p{margin:0}
 .err{color:var(--again);font-size:var(--fs-base);margin:12px 0 0}
 .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
+/* "Update ready — tap to restart": stays until tapped (or the app restarts itself at a safe moment). Above the tab bar; above the answer bar in a round. */
+.update-bar{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:21;width:max-content;max-width:calc(100% - 32px);min-height:44px;background:var(--accent);color:var(--on-accent);border:0;padding:10px var(--s-5);border-radius:var(--r-md);font:inherit;font-size:var(--fs-base);font-weight:600;box-shadow:var(--e-3);cursor:pointer}
+.update-bar[hidden]{display:none}
+/* The blocking "needs an update" screen (js/update.js, showUpdateRequired). */
+.update-required{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:var(--s-5);background:var(--bg)}
+.ur-card{max-width:420px;width:100%;background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s-6);box-shadow:var(--e-3)}
+.ur-card h2{margin:0 0 var(--s-3);font-size:var(--fs-lg);line-height:1.25}
+.ur-card p{margin:0 0 var(--s-5);color:var(--text-2)}
+.ur-actions{display:flex;flex-direction:column;gap:var(--s-3)}
+.ur-actions .btn{min-height:44px;width:100%}
+body.focus .update-bar{bottom:calc(160px + env(safe-area-inset-bottom,0px))}
 .field textarea,.rich{font-size:var(--fs-md)}
 /* The short card sheet in Review and Play: Edit, Flag, Bury, Suspend, More */
 .act-front{margin:0 0 -4px;font-weight:600;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1361,6 +1381,8 @@ img[data-media][hidden]{display:none}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
   body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
+  .update-bar{left:calc(50% + var(--side) / 2);bottom:24px}
+  body.focus .update-bar{bottom:150px}
   .ratebar,.savebar{bottom:0}
   .ratebar{padding-bottom:var(--s-5)}
   .bulkbar{bottom:var(--s-4)}

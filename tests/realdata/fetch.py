@@ -22,6 +22,11 @@ def main():
     ap.add_argument('--seed', type=int, default=20261018)
     ap.add_argument('--out', default=os.path.expanduser('~/fsrs-data'))
     a = ap.parse_args()
+    # Real review data stays outside the repo (the .mjs scripts refuse the same, tests/realdata/lib.mjs refuseInsideRepo).
+    repo = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+    out = os.path.realpath(os.path.expanduser(a.out))
+    if out == repo or out.startswith(repo + os.sep):
+        sys.exit(f'Refusing: --out ({out}) is inside the repo {repo}. Real review data must stay outside it.')
     token = os.environ.get('HF_TOKEN')
     if not token: sys.exit('HF_TOKEN is not set')
     info = json.loads(get(f'https://huggingface.co/api/datasets/{REPO}', token))

@@ -1,7 +1,7 @@
 import { chromium } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror ' + e.message));

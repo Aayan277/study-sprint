@@ -301,6 +301,7 @@ function wireFile() {
     } catch (err) {
       console.error(err);
       $('fileName').textContent = file.name;          // (clears "reading…")
+      if (err?.code === 'too-big') { showError(err.message); return; }      // an Anki file that unpacks huge (anki-read.js): it says why
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
       showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
@@ -463,7 +464,7 @@ async function takeShared() {
       else if (kind === 'json') await explainJson(file);
       else if (kind === 'unknown') showError("Study Sprint can't read that kind of file. Share a deck file (.apkg), PDF, PowerPoint or text.");
       else { S.noCloze = false; showText(await file.text()); }
-    } catch (err) { console.error(err); $('fileName').textContent = file.name; showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
+    } catch (err) { console.error(err); $('fileName').textContent = file.name; if (err?.code === 'too-big') { showError(err.message); return; } showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
     return;
   }
   // Text, a link, or only a title (some apps put what they share in the title).
