@@ -18,13 +18,14 @@ export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewL
 // Settings that follow you between devices. Theme, light/dark and screen choices stay per device.
 export const SYNCED_SETTINGS = [
   'targetRetention', 'newPerDay', 'learningSteps', 'relearningSteps', 'maxInterval', 'fuzz',
-  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
+  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'idleDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
   'fsrsParams',         // your own FSRS weights from the optimizer (null = the standard ones); newest wins
   'fsrsVersion'         // 6 (FSRS-6, standard) or 7 (FSRS-7, beta); newest wins. Older app versions ignore it (docs/design/fsrs7-plan.md)
 ];
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off
 // keep both. restDays is { 'YYYY-MM-DD': { on, at } }, merged per day (mergeDayFlags in sync-merge.js).
-export const MERGED_SETTINGS = ['restDays'];
+export const MERGED_SETTINGS = ['restDays', 'idleDays'];
+// idleDays is { 'YYYY-MM-DD': true }, a union (mergeIdleDays), pruned to 200 days.
 // The glossary (js/glossary.js): each term is its own synced setting, "gloss:<id>", so the newest copy of each term wins.
 export const isSyncedSetting = key => SYNCED_SETTINGS.includes(key) || (typeof key === 'string' && key.startsWith('gloss:'));
 export const SETTING_TIMES = '_times';

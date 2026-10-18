@@ -126,6 +126,28 @@ export function sameDayFlags(a, b, now = Date.now()) {
   return keys.length === Object.keys(y).length && keys.every(k => y[k] && y[k].on === x[k].on && y[k].at === x[k].at);
 }
 
+// ---------- days when nothing was due (the idleDays setting) ----------
+// { 'YYYY-MM-DD': true }: study days when the ring said "Nothing due today" (study-data.js idleDaysToMark). Merged as a union, so a day
+// either device noted counts on both. Nothing ever un-notes a day, so there is no "at". Junk is dropped, and so is anything older than
+// 200 days (a streak freeze never reaches that far back) or more than two days ahead (time zones).
+export const MAX_IDLE_DAYS_AGE = 200;
+function cleanIdleDays(flags, now) {
+  const out = {};
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
+  const cutoff = keyOf(now - MAX_IDLE_DAYS_AGE * DAY), latest = keyOf(now + 2 * DAY);
+  for (const [k, v] of Object.entries(flags)) if (v === true && DAY_KEY.test(k) && k >= cutoff && k <= latest) out[k] = true;
+  return out;
+}
+export function mergeIdleDays(a, b, now = Date.now()) {
+  return { ...cleanIdleDays(a, now), ...cleanIdleDays(b, now) };
+}
+export function sameIdleDays(a, b, now = Date.now()) {
+  const x = Object.keys(cleanIdleDays(a, now)), y = cleanIdleDays(b, now);
+  return x.length === Object.keys(y).length && x.every(k => y[k]);
+}
+// The merge and the comparison for each merged setting.
+export const MERGERS = { restDays: [mergeDayFlags, sameDayFlags], idleDays: [mergeIdleDays, sameIdleDays] };
+
 // ---------- pictures and sounds (files in Supabase Storage) ----------
 export const isSoundRow = m => String(m?.type || '').startsWith('audio/');
 // Problems with the whole storage setup (not one file): sending more files would only fail the same way.
