@@ -307,23 +307,32 @@ back. In a new project people sign in again, which resets that bookmark, and eac
    [2c. Limits and "Delete my account"](#2c-limits-and-delete-my-account) (run `limits.sql`),
    [3. Let people sign up](#3-let-people-sign-up-with-email-confirmation), [4. Send the sign-up emails from a Gmail address](#4-send-the-sign-up-emails-from-a-gmail-address),
    [5. Make the email links open the app](#5-make-the-email-links-open-the-app) and
-   [6. Block robots: Cloudflare Turnstile](#6-block-robots-cloudflare-turnstile-optional-but-recommended). Then
-   [7. Copy two values for the app](#7-copy-two-values-for-the-app) for the new project and put them in `js/sync-config.js`. Don't add any users
-   by hand: the backup brings them. (The project is empty, so there is nothing to clear first.)
+   [6. Block robots: Cloudflare Turnstile](#6-block-robots-cloudflare-turnstile-optional-but-recommended). Two cautions:
+   - **Skip the "Test it" sign-up in step 4** (or delete that test user afterwards under **Authentication → Users**), so the new project has no users before the restore.
+   - **Don't publish the new project's values yet.** Do [7. Copy two values for the app](#7-copy-two-values-for-the-app) only to write the two values down, and put them
+     in `js/sync-config.js` (and commit) as the very last thing, after step 5 below. Until then people can't reach the new project by accident.
 2. Get the new project's **Session pooler** address as in "Turn it on" step 1 (with its database password in it).
-3. In a terminal, in the folder with `backup.sql` (`psql` is part of PostgreSQL, free from postgresql.org), type:
-   `PGOPTIONS='-c session_replication_role=replica' psql -v ON_ERROR_STOP=1 "PASTE-THE-NEW-ADDRESS-HERE" -f backup.sql`
-   (In Windows PowerShell first type `$env:PGOPTIONS='-c session_replication_role=replica'`, then the same command without the `PGOPTIONS=…` part.)
-   The `PGOPTIONS` part switches off the database's own bookkeeping triggers while the data goes in; they are
-   fixed by the next two steps. It should end without any `ERROR`.
+3. In a terminal, in the folder with `backup.sql` (`psql` is part of PostgreSQL, free from postgresql.org), type this as one line,
+   with the new address between the quotes at the end:
+
+   `psql -v ON_ERROR_STOP=1 --single-transaction -c "SET session_replication_role = replica" -c "TRUNCATE public.global_limits" -f backup.sql "PASTE-THE-NEW-ADDRESS-HERE"`
+
+   It works the same in Windows PowerShell, Mac and Linux. The `SET` switches off the database's own bookkeeping triggers while the
+   data goes in, and `TRUNCATE` clears the default limits that step 2c already put there (the backup has them too).
+   The whole thing is one all-or-nothing step: **if anything goes wrong, nothing is changed and you can simply run it again.**
+   It should end without any `ERROR`. If it says `permission denied` about `session_replication_role`, run the same
+   line **without** the `-c "SET session_replication_role = replica"` part; that works too.
 4. Fix the counters. In the new project's **SQL Editor → New query** paste and click **Run**:
 
    ```sql
    select public.recount_sync_usage();
-   select setval('public.sync_seq', (select coalesce(max(seq), 0) from public.sync_items) + 1000);
+   select setval('public.sync_seq', greatest(
+     coalesce((select max(seq) from public.sync_items), 0),
+     (select last_value from public.sync_seq)) + 1000);
    ```
 5. Check it. Run `select count(*) from public.sync_items;` (should be about what the old project had) and
    `select user_id, count(*) from public.sync_items group by user_id order by 2 desc;` (one line per person). In **Authentication → Users** you should see everyone.
+   When it looks right, put the new values in `js/sync-config.js` and commit them.
 6. Tell people to open the app and sign in again (**Settings → Sync**). Their pictures and sounds come back
    from their own devices.
 
