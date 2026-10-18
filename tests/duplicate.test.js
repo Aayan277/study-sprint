@@ -59,6 +59,32 @@ test('several picked cards of one note make one copy of the note; other cards ar
   assert.equal(new Set(copies.map(c => c.id)).size, 3);
 });
 
+test('a copy gets no Anki guid, sync stamp or uid, and no leech tag (two notes must not share a guid)', () => {
+  const c = { ...basic, ankiGuid: 'G1', ankiId: 5, syncedAt: 7, uid: 'u', tags: ['x', 'leech'] };
+  const { firstCopy } = duplicateCards([c], [c], mkId(), NOW);
+  for (const k of ['ankiGuid', 'ankiId', 'syncedAt', 'uid']) assert.ok(!(k in firstCopy), k);
+  assert.deepEqual(firstCopy.tags, ['x']);
+  assert.deepEqual(c.tags, ['x', 'leech']);
+});
+
+test('a reverse pair is copied as a new pair (both cards, one new noteId, links pointing at the copies)', () => {
+  const fwd = { id: 'f', deckId: 'd', front: 'a', back: 'b', noteId: 'P', created: 1 };
+  const rev = { id: 'r', deckId: 'd', front: 'b', back: 'a', noteId: 'P', reverse: true, reverseOf: 'f', created: 2 };
+  const { copies, of } = duplicateCards([rev], [fwd, rev], mkId(), NOW);
+  assert.equal(copies.length, 2);
+  assert.equal(new Set(copies.map(c => c.noteId)).size, 1);
+  assert.notEqual(copies[0].noteId, 'P');
+  const r2 = copies.find(c => c.reverse);
+  assert.equal(r2.reverseOf, of.get('f'));
+});
+
+test('a lone pair card (its partner is missing) is copied as an ordinary card', () => {
+  const rev = { id: 'r', deckId: 'd', front: 'b', back: 'a', noteId: 'P', reverse: true, reverseOf: 'gone', created: 2 };
+  const { copies, firstCopy } = duplicateCards([rev], [rev], mkId(), NOW);
+  assert.equal(copies.length, 1);
+  for (const k of ['noteId', 'reverse', 'reverseOf']) assert.ok(!(k in firstCopy), k);
+});
+
 test('panel width limits: 360 px up to 70% of the window, the list keeps 320 px', () => {
   assert.equal(PANEL_MIN, 360);
   assert.equal(panelMax(1440, 248), 872);                         // 1440 - 248 - 320 is less than 70% (1008)

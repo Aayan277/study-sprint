@@ -165,8 +165,10 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
 //   mode        'full' (default, the card list): everything about the card in one panel
 //               'actions' (Review, Play): a short sheet of Edit, Flag, Bury, Suspend and More (More opens the full panel)
 //               'edit': just the editor (Front, Back, Tags), for the E key
+let panelFor = null;      // the card the editor panel was last opened for (Undo of a duplicate looks here)
 export async function openCardPanel(card, ctx) {
   if (!card) return;
+  panelFor = card;
   if (ctx.mode === 'actions') return openCardActions(card, ctx);
   if (ctx.mode === 'edit') return openCardEdit(card, ctx);
   const { decks, statesById, showInfo = false } = ctx;
@@ -189,7 +191,7 @@ export async function openCardPanel(card, ctx) {
     <div class="act-grid">
       <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
       <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards (a reverse pair in both directions)' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
@@ -461,10 +463,14 @@ const toggleBury = (card, save) => save({ buriedUntil: isBuried(card) ? 0 : bury
 const undoDuplicate = (copies, refresh) => ({
   hold: true,
   link: { href: '#', label: 'Undo', onClick: async () => {
-    // If the editor is showing one of the copies, it closes (the copy is gone).
-    const open = document.querySelector('.crow.sel')?.dataset.id;
-    await db.deleteCards(copies.map(c => c.id));
-    if (open && copies.some(c => c.id === open)) closeSheet();
+    // The copies and any card added to their notes since (a new blank, say) go. If the editor is showing one of them, it
+    // closes first, so a Save in it can't bring a deleted copy back.
+    const noteIds = new Set(copies.map(c => c.noteId).filter(Boolean));
+    const ids = new Set(copies.map(c => c.id));
+    for (const c of await db.getAll('cards')) if (c.noteId && noteIds.has(c.noteId)) ids.add(c.id);
+    const shown = panelFor;
+    if (shown && document.getElementById('sheet')?.open && (ids.has(shown.id) || (shown.noteId && noteIds.has(shown.noteId)))) closeSheet();
+    await db.deleteCards([...ids]);
     toast(copies.length === 1 ? 'Copy removed' : 'Copies removed');
     await refresh();
   } }
@@ -473,10 +479,11 @@ const undoDuplicate = (copies, refresh) => ({
 async function duplicateAndEdit(card, ctx) {
   const { copies, firstCopy } = duplicateCards([card], await db.getAll('cards'), db.newId);
   await db.saveCards(copies);
-  const { refresh = async () => {}, onAction } = ctx;
+  const { refresh = async () => {}, decks, statesById } = ctx;
   await refresh();
-  if (onAction) await onAction('duplicate', firstCopy, undefined);
-  await openCardPanel(firstCopy, { ...ctx, mode: 'full', showInfo: false });
+  // The copy opens with only the lists and refresh: the screen that opened the original (Review, Play) knows nothing of
+  // the copy, so its onAction / closeAfter must not apply to it.
+  await openCardPanel(firstCopy, { decks, statesById, refresh, mode: 'full', showInfo: false });
   toast('Duplicated. Editing the copy.', undoDuplicate(copies, refresh));
 }
 

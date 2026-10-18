@@ -37,7 +37,7 @@ export function initPanelResize() {
   bar.setAttribute('role', 'separator');
   bar.setAttribute('aria-orientation', 'vertical');
   bar.setAttribute('aria-label', 'Resize the card editor');
-  bar.setAttribute('aria-valuetext', 'Editor width');
+  bar.setAttribute('aria-controls', 'sheet');
   bar.tabIndex = 0;
   bar.title = 'Drag to resize. Double-click to reset.';
   document.body.append(bar);
@@ -52,19 +52,27 @@ export function initPanelResize() {
     const { min, max } = limits();
     bar.setAttribute('aria-valuemin', String(min));
     bar.setAttribute('aria-valuemax', String(max));
-    bar.setAttribute('aria-valuenow', String(Math.min(max, Math.max(min, current() || min))));
+    const now = Math.min(max, Math.max(min, current() || min));
+    bar.setAttribute('aria-valuenow', String(now));
+    bar.setAttribute('aria-valuetext', now + ' pixels');
+  };
+  // `pref` is what the person chose (kept in storage). What is applied is the preference clamped to the window and to the
+  // screen now showing, so a wide width chosen on one screen, or before the window shrank, never squeezes the list; the
+  // preference itself stays as it was.
+  let pref = storage ? savedPanel(storage) : null;
+  const apply = () => {
+    if (pref) root.style.setProperty('--panel-user', clampPanel(pref, innerWidth, listLeft()) + 'px');
+    else root.style.removeProperty('--panel-user');
+    sync();
   };
   const set = (w, { save = true } = {}) => {
-    const v = clampPanel(w, innerWidth, listLeft());
-    root.style.setProperty('--panel-user', v + 'px');
-    if (save && storage) savePanel(storage, v);
-    sync();
-    return v;
+    pref = clampPanel(w, innerWidth, 0);
+    if (save && storage) savePanel(storage, pref);
+    apply();
+    return pref;
   };
-  const reset = () => { root.style.removeProperty('--panel-user'); if (storage) savePanel(storage, null); sync(); };
-
-  const saved = storage ? savedPanel(storage) : null;
-  if (saved) root.style.setProperty('--panel-user', saved + 'px');
+  const reset = () => { pref = null; if (storage) savePanel(storage, null); apply(); };
+  apply();
 
   // Drag: the editor is as wide as the distance from the pointer to the right edge of the window.
   let dragging = false;
@@ -81,12 +89,12 @@ export function initPanelResize() {
     dragging = false;
     document.body.classList.remove('panel-resizing');
     try { bar.releasePointerCapture(e.pointerId); } catch { /* already released */ }
-    const w = parseFloat(root.style.getPropertyValue('--panel-user'));
-    if (w && storage) savePanel(storage, w);
+    if (pref && storage) savePanel(storage, pref);
     sync();
   };
   bar.addEventListener('pointerup', end);
   bar.addEventListener('pointercancel', end);
+  bar.addEventListener('lostpointercapture', end);
   bar.addEventListener('dblclick', reset);
   bar.addEventListener('keydown', e => {
     const w = current() || limits().min;
@@ -97,7 +105,9 @@ export function initPanelResize() {
     set(next);
   });
   // Keep aria-valuenow right when the panel opens or the window changes size.
-  new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  addEventListener('resize', sync);
-  sync();
+  // Re-clamp when the panel opens, the window changes size or the screen changes (the list's left edge differs per screen).
+  new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  addEventListener('resize', apply);
+  addEventListener('hashchange', () => { apply(); requestAnimationFrame(apply); });
+  apply();
 }

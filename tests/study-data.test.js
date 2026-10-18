@@ -458,6 +458,12 @@ test('fast clicker: gaps under 2 s are ignored, so 102 cards are not "~1 min"', 
   const ms = typicalCardMs(mixed, now);
   assert.ok(ms >= 5000 && ms <= 8000, `got ${ms}`);
   assert.ok(minutesText(102, typicalCardMs(fast, now), 20) !== '~1 min');
+  assert.equal(minutesText(102, typicalCardMs(fast, now), 20, 2), '~19 min');      // the exact text: default 8 s, 82 + 20 * 3 views
+});
+
+test('only learning steps under a day add time today', async () => {
+  const { sameDayStep } = await import('../js/study-data.js');
+  assert.deepEqual(['1m', '10m', '90m', '23h', '1d', '2d', '24h', '1440m'].map(sameDayStep), [true, true, true, true, false, false, false, false]);
 });
 
 test('time per card never goes below 4 seconds', () => {

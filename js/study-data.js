@@ -254,6 +254,8 @@ export function typicalCardMs(logs, now = Date.now()) {
   const mid = times.length >> 1;
   return Math.max(MIN_CARD_MS, times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2);
 }
+// A learning step like "10m", "2h" or "1d": true when it comes back the same day (under a day).
+export const sameDayStep = step => { const m = String(step).match(/^(\d+)([mhd])/i); return !!m && (m[2] !== 'd' && (m[2].toLowerCase() === 'm' ? +m[1] < 1440 : +m[1] < 24)); };
 // How long a queue takes, in ms. A review is seen once; a new card is seen once per learning step plus once more
 // (1m, 10m = shown, again after 1 min, again after 10 min = 3 times), so it costs (steps + 1) cards of time.
 export function sessionMs(due, fresh, cardMs, learningSteps = 2) {

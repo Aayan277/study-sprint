@@ -205,5 +205,29 @@ await p.waitForFunction(n => document.querySelectorAll('.crow').length === n, n2
 ok((await cards(p)).length === n2, 'bulk Undo removes them');
 await p.context().close();
 
+// a width chosen wide on one screen, or before the window shrank, never squeezes the list
+{
+  const w = await open();
+  await w.goto(URL + '#/browse'); await w.waitForSelector('.crow'); await openPanel(w);
+  await dragTo(w, 5);
+  const saved = await w.evaluate(() => Number(localStorage.getItem('study-sprint-panel-w')));
+  await w.goto(URL + '#/deck/sample'); await w.waitForSelector('.crow'); await openPanel(w);
+  const left = () => w.$eval('main', m => parseFloat(getComputedStyle(m).marginLeft) || 0);
+  const listRoom = async () => innerWidthOf(w) - (await left()) - (await width(w));
+  const innerWidthOf = pg => pg.viewportSize().width;
+  ok(await listRoom() >= 319, 'the deck page keeps a 320px list after dragging wide on All cards: ' + await listRoom());
+  ok(await w.evaluate(() => Number(localStorage.getItem('study-sprint-panel-w'))) === saved, 'and the stored preference is unchanged');
+  await w.setViewportSize({ width: 1100, height: 900 });
+  await w.waitForTimeout(200);
+  const nw = await width(w);
+  ok(nw <= 770 && nw >= 360 && await listRoom() >= 319, `a narrowed window re-clamps: panel ${nw}, list room ${await listRoom()}`);
+  ok(Number(await w.getAttribute('#panelResizer', 'aria-valuenow')) === nw && (await w.getAttribute('#panelResizer', 'aria-valuetext')) === nw + ' pixels', 'aria-valuenow and aria-valuetext follow the clamp');
+  ok(await w.evaluate(() => Number(localStorage.getItem('study-sprint-panel-w'))) === saved, 'narrowing does not overwrite the saved width');
+  await w.setViewportSize({ width: 1440, height: 900 });
+  await w.waitForTimeout(200);
+  ok(await width(w) > nw, 'widening the window gives the preferred width back');
+  await w.context().close();
+}
+
 ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close();
