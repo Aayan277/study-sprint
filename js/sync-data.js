@@ -20,7 +20,8 @@ export const SYNCED_SETTINGS = [
   'targetRetention', 'newPerDay', 'learningSteps', 'relearningSteps', 'maxInterval', 'fuzz',
   'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
   'fsrsParams',         // your own FSRS weights from the optimizer (null = the standard ones); newest wins
-  'ignoreBefore'        // 'YYYY-MM-DD' or null: the optimizer and health check ignore reviews before this day; newest wins
+  'ignoreBefore',       // 'YYYY-MM-DD' or null: the optimizer and health check ignore reviews before this day; newest wins
+  'fsrsVersion'         // 6 (FSRS-6, standard) or 7 (FSRS-7, beta); newest wins. Older app versions ignore it (docs/design/fsrs7-plan.md)
 ];
 // Synced settings that are merged instead of "the newest copy wins": two devices that each add a day off
 // keep both. restDays is { 'YYYY-MM-DD': { on, at } }, merged per day (mergeDayFlags in sync-merge.js).
@@ -33,6 +34,7 @@ export const SETTING_TIMES = '_times';
 // { ok: false } when it is junk and must be ignored. fsrsParams is checked; null is a real value (the standard settings).
 export function acceptSetting(key, value) {
   if (key === 'ignoreBefore') return value === null || value === undefined ? { ok: true, value: null } : cleanIgnoreBefore(value) ? { ok: true, value } : { ok: false };
+  if (key === 'fsrsVersion') return value === 6 || value === 7 ? { ok: true, value } : { ok: false };
   if (key !== 'fsrsParams') return { ok: true, value };
   if (value === null || value === undefined) return { ok: true, value: null };
   const clean = cleanFsrsParams(value);

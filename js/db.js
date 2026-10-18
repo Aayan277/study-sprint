@@ -4,7 +4,8 @@
 // The database has 6 "stores" (think of them as tables):
 //   decks       one row per deck            { id, name, color, created, course, updatedAt }
 //   cards       one row per card            { id, deckId, front, back, tags, created, updatedAt }
-//   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview, updatedAt }
+//   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview, updatedAt, fsrs7? }
+//                                           (fsrs7 = the FSRS-7 memory, only on cards FSRS-7 scheduled; see srs7.js)
 //   reviewLog   one row per answer          { id (auto), uid, cardId, timestamp, source, mode, correct, ms, rating, updatedAt }
 //   settings    simple key → value pairs    e.g. 'theme' → { skin: 'violet', mode: 'dark', oled: false }
 //   deleted     what was deleted, and when  { key, store, id, deletedAt }
@@ -20,11 +21,12 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
-import { cleanFsrsParams, cleanIgnoreBefore } from './sched-settings.js';
+import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
 import { decide, mergeDayFlags, sameDayFlags, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
+import { validFields, cleanFields } from './note-fields.js';
 import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS = {
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
+  fsrsVersion: 6,            // which FSRS schedules cards: 6 (standard) or 7 (beta, off by default); see sched-settings.js and docs/design/fsrs7-plan.md. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
   playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced
   easyDays: ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],   // Sunday first: 'normal' | 'reduced' | 'minimum' (balance.js)
@@ -431,7 +434,7 @@ export async function getSettings() {
   const os = await store('settings');
   const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
   const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !String(k).startsWith(PENDING)));
-  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore) };
+  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore), fsrsVersion: cleanFsrsVersion(saved.fsrsVersion) };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
@@ -450,7 +453,7 @@ export async function setSetting(key, value, { at: given } = {}) {
     };
   }
   await finished(tx);
-  if (key === 'fsrsParams') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
+  if (key === 'fsrsParams' || key === 'fsrsVersion') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
   if (isSyncedSetting(key)) changed();
 }
 
@@ -511,8 +514,15 @@ export async function exportAll({ sounds = true } = {}) {
   }
   // Sign-in details and sync bookmarks stay on this device (they're not part of your study data).
   const settings = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !isLocalOnly(k)));
-  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards, cardStates, reviewLog, settings, media };
+  return { format: BACKUP_FORMAT, version: hasSounds ? 2 : 1, exported: new Date().toISOString(), decks, cards: cards.map(safeFields), cardStates, reviewLog, settings, media };
 }
+
+// A card's other fields (note-fields.js) are cleaned to their limits on the way out, so a backup always passes checkBackup.
+const safeFields = c => {
+  if (c.noteFields === undefined || validFields(c.noteFields)) return c;
+  const { noteFields, ...rest } = c, { fields } = cleanFields(noteFields);
+  return fields.length ? { ...rest, noteFields: fields } : rest;
+};
 
 // How much room pictures and sounds take on this device: { pictures, sounds } in bytes. Kept up to date as files are added and
 // removed (a small record in settings); worked out once, a file at a time, when there is none yet.
@@ -547,6 +557,9 @@ export function checkBackup(data) {
   if (!data.cards.every(c => ['frontSounds', 'backSounds'].every(k => c[k] === undefined || (Array.isArray(c[k]) && c[k].length >= 1 && c[k].length <= MAX_SOUNDS_PER_SIDE && c[k].every(validKey))))) {
     return 'This backup file is damaged (a card has invalid sound fields).';
   }
+  // A note's other fields (item A) are a short list of { name, text }; a reverse card (item 5) is marked reverse: true and shares a noteId.
+  if (!data.cards.every(c => c.noteFields === undefined || validFields(c.noteFields))) return 'This backup file is damaged (a card has invalid note fields).';
+  if (!data.cards.every(c => c.reverse === undefined || (c.reverse === true && typeof c.noteId === 'string' && c.noteId !== ''))) return 'This backup file is damaged (a card has an invalid reverse card link).';
   // Image-occlusion fields end up in style attributes, so the boxes must be plain numbers in range.
   if (!data.cards.every(c => c.occlusion === undefined || (validOcclusion(c.occlusion) && typeof c.noteId === 'string'))) {
     return 'This backup file is damaged (a card has invalid image-occlusion fields).';
@@ -572,6 +585,7 @@ export function restoredSettings(settings) {
     .filter(([k]) => !isLocalOnly(k))
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
     .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
+    .filter(([k, v]) => k !== 'fsrsVersion' || v === 6 || v === 7)       // junk is left out, not stored as 6 (a stamped 6 would switch other devices back)
     .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
 }
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
@@ -791,7 +805,7 @@ export async function applyRemote(rows) {
         settingsStore.put(row.id.startsWith('gloss:') ? cleanGlossary({ [row.id]: accepted.value })[row.id] ?? null : accepted.value, row.id);
         times = { ...times, [row.id]: row.updated_at };
         applied++;
-        if (row.id === 'fsrsParams') schedules = true;       // another device's weights: an open Review session was planned with the old ones
+        if (row.id === 'fsrsParams' || row.id === 'fsrsVersion') schedules = true;       // another device's weights: an open Review session was planned with the old ones
       } else if (row.store in SYNC_ID) {
         const key = `${row.store}:${row.id}`;
         if (!todo.has(key) || row.updated_at >= todo.get(key).updated_at) todo.set(key, row);
