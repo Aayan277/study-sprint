@@ -201,6 +201,31 @@ export async function lazyStreak(readSince, now = Date.now(), first = null, days
   }
 }
 
+// The same streak again, but asking the database only which days had answers, and only for days it has not been asked about.
+// lazyStreak reads everything since a time, so every time it doubles its window it reads the days it already had again;
+// this reads each stretch of days once, walking back from today: [0, 60), [60, 120), [120, 240) ... (the same windows, so the
+// streak is the one lazyStreak finds) and stops at the first window the streak ends well inside.
+// readDays(from, to) is async and says which study days in [from, to) had an answer, as numbers of days back (0 = today,
+// 1 = yesterday): the day n back runs from daysAgoStart(n) up to daysAgoStart(n - 1) (db.hasLogsIn answers these in one go).
+// `first` (log rows or times of the first `days` days, if the caller has them) saves asking about those days.
+export async function lazyStreakBack(readDays, now = Date.now(), first = null, days = 60, opts) {
+  const have = new Set();             // day keys with an answer
+  let known = 0;                      // days 0 .. known - 1 are in `have`
+  if (first) {
+    for (const l of first) { const t = typeof l === 'number' ? l : isAnswerLog(l) ? l.timestamp : NaN; if (t === t) have.add(dayKey(t)); }
+    known = days;
+  }
+  for (;;) {
+    if (known < days) {
+      for (const n of await readDays(known, days)) have.add(dayKey(daysAgoStart(n, now)));
+      known = days;
+    }
+    const streak = streakFromDays(have, now, opts);
+    if (streak.span < days - LAZY_MARGIN || days >= MAX_DAYS) return streak;      // it ended inside what was read
+    days *= 2;
+  }
+}
+
 // Every run of days over the whole history, with the same rules: which days were frozen, and the longest run.
 // `perDay` is a Map of dayKey -> answers. Returns { frozen: Set of keys, longest }.
 export function streakRuns(perDay, now = Date.now(), { rest = EMPTY_SET, freezes = true } = {}) {

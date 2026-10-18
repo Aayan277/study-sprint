@@ -14,7 +14,6 @@ import {
   gradeFor, bestKey, shuffle, defaultQuestionType, canOverride, overrideEntry, roundStats, LIGHTNING_MS, PENALTY_MS, LIVES, TYPING_TIME
 } from './game.js';
 import { autoRating, scheduleDecision, applies, appliedRating, speedProfiles, speedKey, playCountsAsReviews, playLogRow } from './autograde.js';
-import { daysAgoStart } from './stats-calc.js';
 import { deckSchedulerOptions, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { loadAll } from './study-data.js';
@@ -80,7 +79,8 @@ const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back
 export async function renderPlay(el) {
   stopRound();
   // Same data as Today and Review, so the exam's final pass (examCaps) and the new-card limits match theirs.
-  const [{ settings, decks, cards: visible, logs, statesById, exam, newLeft }, everyCard, speedLogs] = await Promise.all([loadAll(), db.getAll('cards'), db.getLogsSince(daysAgoStart(60))]);
+  // (loadAll gives every card too, as allCards, and with `history` the log rows since a moment: no second read of either.)
+  const { settings, decks, cards: visible, allCards: everyCard, logs, statesById, exam, newLeft, history: speedLogs } = await loadAll({ history: true, fullHistory: true });
   // Your usual answer times per question type (speed relative to you, not the timer): the last 60 days of Play.
   // (Read before the check below: every wait comes first, so nothing can change the screen between the check and the drawing.)
   const speed = speedProfiles(speedLogs);
@@ -104,6 +104,9 @@ export async function renderPlay(el) {
     newLeft,
     speed
   };
+  // How many cards each deck holds itself, counted once; a deck's number in the list adds up its subdecks'.
+  const perDeck = new Map();
+  for (const c of cards) perDeck.set(c.deckId, (perDeck.get(c.deckId) || 0) + 1);
   const prefs = { ...DEFAULT_PREFS, ...(settings.playPrefs || {}) };
   // One deck per game. Opening Play: the deck with the nearest exam, else the one you used last, else the first deck.
   // A saved "All decks" (older versions) or a deleted deck becomes a real deck here, and is saved.
@@ -150,7 +153,7 @@ export async function renderPlay(el) {
       ${!cards.length ? emptyStartHTML() : `
       <fieldset><legend>Deck</legend>
         <select id="pDeck" class="select" aria-label="Deck">
-          ${deckChoices(decks).map(d => { const ids = subtreeIds(decks, d.id); return `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.label)} (${cards.filter(c => ids.has(c.deckId)).length})</option>`; }).join('')}
+          ${deckChoices(decks).map(d => { let n = 0; for (const id of subtreeIds(decks, d.id)) n += perDeck.get(id) || 0; return `<option value="${esc(d.id)}" ${d.id === prefs.deckId ? 'selected' : ''}>${esc(d.label)} (${n})</option>`; }).join('')}
         </select>
       </fieldset>
 

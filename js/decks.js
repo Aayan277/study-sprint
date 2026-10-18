@@ -333,7 +333,7 @@ export async function renderDeck(el, deckId) {
     if (saved === 'deleted') navGo(parent ? `#/deck/${parent.id}` : '#/decks'); else renderDeck(el, deckId);
   }));
   // The card list: search, filter, sort, edit, suspend and more. Its changes update the counts above.
-  await mountBrowser($('browser'), { deckId, onChange: () => refreshCounts(el, deckId) });
+  await mountBrowser($('browser'), { deckId, data: today, onChange: () => refreshCounts(el, deckId) });
 }
 
 // "Daily limits are shared, so the subdecks can add up to more than Course's 20 due." (or '' when they don't).

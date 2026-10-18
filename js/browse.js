@@ -50,13 +50,26 @@ export async function renderBrowseAll(el, filter) {
 // ---------- the list ----------
 // Draws the card list into `box`. deckId = null means all decks; a deck's list includes its subdecks.
 // onChange runs after anything changes (the deck page uses it to refresh its counts).
-export async function mountBrowser(box, { deckId, onChange = () => {}, filter }) {
+// data (optional): what loadAll() just read (decks, allCards, statesById), for the first draw, so the deck page does not read every card
+// and schedule a second time. Later reloads (after a change) read the database again.
+export async function mountBrowser(box, { deckId, onChange = () => {}, filter, data = null }) {
   const B = { deckId, selecting: false, selected: new Set(), shown: PAGE, ...memory };
   if (filter && FILTERS.some(([k]) => k === filter)) B.filter = filter;      // a link to a filter (#/browse/leech) starts on it
   let decks, cards, statesById, inside;
 
+  let given = data;
   const load = async () => {
-    const [d, c, s] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates')]);
+    if (given) {
+      const { decks: d, allCards, statesById: given_ } = given;
+      given = null;
+      decks = [...d].sort((a, b) => a.created - b.created);
+      inside = deckId ? subtreeIds(decks, deckId) : null;
+      // (loadAll puts the cards in deck order; the database gives them by id, which is the order ties in a sort fall back on.)
+      cards = (inside ? allCards.filter(x => inside.has(x.deckId)) : [...allCards]).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      statesById = new Map(given_);       // (a copy: the card panel keeps this map in step with its own changes)
+      return;
+    }
+    const [d, c, s] = await Promise.all([db.getDecks(), db.getAllCached('cards'), db.getAllCached('cardStates')]);
     decks = d.sort((a, b) => a.created - b.created);
     inside = deckId ? subtreeIds(decks, deckId) : null;      // this deck and its subdecks
     cards = inside ? c.filter(x => inside.has(x.deckId)) : c;

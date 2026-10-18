@@ -42,38 +42,47 @@ let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
 
 // The review log is big, so Stats avoids reading all of it. The streak and calendar only need how many answers
-// each day had (counted by the database, no rows read), and the charts only need the last 30 days.
-// The whole log is read only when a deck is picked (to know which answers belong to its cards).
+// each day had (counted by the database, no rows read: only the last year's days are counted, older days only need to say
+// whether they had an answer), and the charts only need the last 30 days.
+// With a deck picked, only that deck's cards' answers are read (a lookup for each card, not the whole log): the best streak and the
+// freeze days in the calendar need that deck's studied days over its whole history.
 // What was read is kept until the data changes (db.dataVersion goes up: an answer here, or changes from sync).
-let cache = null;       // { day, version, days, recent, full }: each a promise, filled in as needed
-async function loadLogs(needAll) {
+let cache = null;       // { day, version, days, recent, older, decks }: each a promise, filled in as needed
+const CALENDAR_DAYS = 53 * 7 + 7;       // the calendar shows 53 weeks (at most 371 days back); older days only need to say they had answers
+async function loadLogs() {
   // A new day moves "the last 30 days"; a new data version means the log changed.
   if (cache && (cache.day !== dayStart() || cache.version !== db.dataVersion())) cache = null;
-  const mine = cache = cache || { day: dayStart(), version: db.dataVersion() };
+  const mine = cache = cache || { day: dayStart(), version: db.dataVersion(), decks: new Map() };
   const keep = (name, read) => {
     if (!mine[name]) mine[name] = read().catch(err => { mine[name] = null; throw err; });
     return mine[name];
   };
-  const [days, recent, full] = await Promise.all([
-    keep('days', async () => new Map((await db.getDayCounts()).map(([t, n]) => [dayKey(t), n]))),
-    keep('recent', () => db.getLogsSince(daysAgoStart(29))),
-    needAll ? keep('full', () => db.getAll('reviewLog')) : null
+  const [days, recent] = await Promise.all([
+    keep('days', async () => new Map((await db.getDayCounts({ exactSince: daysAgoStart(CALENDAR_DAYS) })).map(([t, n]) => [dayKey(t), n]))),
+    keep('recent', () => db.getLogsSince(daysAgoStart(29)))
   ]);
-  return { days, recent, full };
+  // The answers of the cards in `ids`, as answers per day (the Stats deck filter). A small deck is read card by card; a deck that holds
+  // most of the cards reads the whole log, which is then cheaper.
+  const deckDays = (ids, allCount) => {
+    const key = [...ids].sort().join('\n');
+    if (!mine.decks.has(key)) {
+      const rows = ids.size * 3 <= allCount ? db.getLogsForCards(ids) : db.getAll('reviewLog');
+      mine.decks.set(key, rows.then(r => answerDays(r, ids).picked).catch(err => { mine.decks.delete(key); throw err; }));
+    }
+    return mine.decks.get(key);
+  };
+  // The last 30 days are already here: the retention split only reads the 80 days before them.
+  const older = () => keep('older', () => db.getLogsBetween(daysAgoStart(89) - YOUNG_DAYS * 86400000, daysAgoStart(29)));
+  return { days, recent, deckDays, older };
 }
 
 // ---------- true retention against the target ----------
 // Young and mature cards for the last 7, 30 and 90 days. The split needs each answer's previous answer, so the log is read
 // from 21 days before the 90-day window (a card with no earlier answer in that stretch had its last one 21 days or more before,
-// which is "mature"). It is read after the page is drawn and kept until the data changes, like the other logs.
-let retCache = null;     // { day, version, promise }
-function loadRetentionLogs() {
-  if (retCache && (retCache.day !== dayStart() || retCache.version !== db.dataVersion())) retCache = null;
-  if (!retCache) {
-    const mine = retCache = { day: dayStart(), version: db.dataVersion(), promise: null };
-    mine.promise = db.getLogsSince(daysAgoStart(89) - YOUNG_DAYS * 86400000).catch(err => { if (retCache === mine) retCache = null; throw err; });
-  }
-  return retCache.promise;
+// which is "mature"). The last 30 days of that are the ones the page already read; only the days before them are read here, after
+// the page is drawn, and kept until the data changes, like the other logs.
+async function loadRetentionLogs(logs) {
+  return (await logs.older()).concat(logs.recent);
 }
 const RS_PERIODS = [7, 30, 90];
 const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
@@ -187,7 +196,8 @@ function masteryGridHTML(decks, inside, cards, statesById) {
 }
 
 export async function renderStats(el) {
-  const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('cardStates'), loadLogs(deckFilter !== 'all'), db.getSettings()]);
+  // (The kept reads of the cards and schedules are only read here, never sorted or changed.)
+  const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAllCached('cards', { shared: true }), db.getAllCached('cardStates', { shared: true }), loadLogs(), db.getSettings()]);
   if (!el.isConnected) return;
   decks.sort((a, b) => a.created - b.created);
   if (deckFilter !== 'all' && !decks.some(d => d.id === deckFilter)) deckFilter = 'all';
@@ -201,7 +211,8 @@ export async function renderStats(el) {
   const ids = inside ? new Set(cards.map(c => c.id)) : null;
   // The streak counts every deck. The calendar and charts use the chosen deck's answers.
   const allDays = logs.days;
-  const pickedDays = inside ? answerDays(logs.full, ids).picked : allDays;
+  const pickedDays = inside ? await logs.deckDays(ids, allCards.length) : allDays;
+  if (!el.isConnected) return;
   const recent = ids ? logs.recent.filter(l => ids.has(l.cardId)) : logs.recent;
   const planned = restDaySet(settings), idle = idleDaySet(settings);
   const rest = new Set([...planned, ...idle]);          // (a day with nothing due is as safe as a day off)
@@ -407,7 +418,7 @@ export async function renderStats(el) {
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).
-  loadRetentionLogs().then(rows => {
+  loadRetentionLogs(logs).then(rows => {
     const box = q('retSplit');
     if (!box || !el.isConnected) return;
     const mine = ids ? rows.filter(l => ids.has(l.cardId)) : rows;
