@@ -15,6 +15,7 @@
 
 import * as db from './db.js';
 import { stopSpeaking } from './speech.js';
+import { mediaMessage } from './lazy-media.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -48,6 +49,7 @@ function remember(id, m) {
   }
   return url;
 }
+const whyNot = new Map();       // id → why a download failed (lazy-media.js), for the button's tooltip
 const cached = id => { const hit = urls.get(id); if (hit) { urls.delete(id); urls.set(id, hit); } return hit?.url || null; };
 export async function soundURL(id, { download = true } = {}) {
   const hit = cached(id);
@@ -55,7 +57,11 @@ export async function soundURL(id, { download = true } = {}) {
   let m = await db.getMedia(id);
   if (!m && download) {
     // Not on this device yet (added on another device): download it from the account, if signed in.
-    try { m = await (await import('./sync.js')).downloadMedia(id); } catch { m = null; }
+    try {
+      const got = await (await import('./sync.js')).loadMedia(id, 'view');
+      m = got.media;
+      if (!m) whyNot.set(id, got.reason);
+    } catch { m = null; }
   }
   return m ? remember(id, m) : null;
 }
@@ -138,8 +144,8 @@ export function autoplayBlocked(root = document) {
 }
 
 const buttonsOf = id => document.querySelectorAll(`.snd-btn[data-snd="${CSS.escape(id)}"]`);
-function markMissing(id) {
-  buttonsOf(id).forEach(b => { b.title = 'Sound not available on this device yet'; b.classList.add('missing'); b.setAttribute('aria-disabled', 'true'); });
+function markMissing(id, reason) {
+  buttonsOf(id).forEach(b => { b.title = mediaMessage(reason || whyNot.get(id) || 'offline', true); b.classList.add('missing'); b.setAttribute('aria-disabled', 'true'); });
 }
 function markBroken(id) {
   buttonsOf(id).forEach(b => { b.title = "This sound can't play in this browser"; b.classList.add('missing', 'broken'); b.setAttribute('aria-disabled', 'true'); });
@@ -184,10 +190,19 @@ document.addEventListener('click', e => {
 // A ▶ whose sound this browser can't play is turned off as soon as it appears, and its sound's address is made ready, so a tap can start it at once.
 async function check(btn) {
   btn.dataset.checked = '1';
-  const m = await db.getMedia(btn.dataset.snd).catch(() => null);
-  if (!m) return;
-  if (!canPlayType(m.type)) markBroken(btn.dataset.snd);
-  else if (!cached(btn.dataset.snd)) remember(btn.dataset.snd, m);
+  const id = btn.dataset.snd;
+  let m = await db.getMedia(id).catch(() => null);
+  if (!m) {
+    // Not on this device yet (lazy-media.js): download it now, while the card is read, so the tap can start it at once.
+    btn.classList.add('loading');
+    const got = await import('./sync.js').then(s => s.loadMedia(id, 'view')).catch(() => null);
+    btn.classList.remove('loading');
+    m = got?.media || null;
+    if (!m) { markMissing(id, got?.reason); return; }
+    buttonsOf(id).forEach(b => { b.classList.remove('missing'); b.removeAttribute('aria-disabled'); b.removeAttribute('title'); });
+  }
+  if (!canPlayType(m.type)) markBroken(id);
+  else if (!cached(id)) remember(id, m);
 }
 function checkAll(root) {
   root.querySelectorAll?.('.snd-btn:not([data-checked])').forEach(check);
@@ -195,6 +210,9 @@ function checkAll(root) {
 }
 new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => n.nodeType === 1 && checkAll(n))))
   .observe(document.documentElement, { childList: true, subtree: true });
+
+// Sounds that could not be downloaded try again when the connection comes back.
+addEventListener('online', () => document.querySelectorAll('.snd-btn.missing:not(.broken)').forEach(b => { delete b.dataset.checked; check(b); }));
 
 // Leaving the screen stops the sound.
 addEventListener('hashchange', stopSound);

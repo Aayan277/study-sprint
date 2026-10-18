@@ -23,6 +23,7 @@ import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
 import { backupNote } from './backup-nudge.js';
+import { leftOutNote, notDownloadedLine } from './lazy-media.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.29';
@@ -484,7 +485,9 @@ async function fillMediaInfo() {
     if (!$('mediaLine')) return;                       // moved to another screen meanwhile
     const free = est?.quota ? ` · about ${sizeText(Math.max(0, est.quota - (est.usage || 0)))} free` : '';
     const size = n => (n ? sizeText(n) : '0 KB');
-    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.`;
+    const lack = await sync.missingMedia().catch(() => null);
+    if (!$('mediaLine')) return;
+    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.${lack ? ' ' + notDownloadedLine({ pictures: lack.pictures.length, sounds: lack.sounds.length }) : ''}`;
     $('bkSoundsRow').hidden = !totals.sounds;
     if (totals.sounds) {
       $('bkSoundsTitle').textContent = `Include sounds (${sizeText(totals.sounds)})`;
@@ -495,7 +498,25 @@ async function fillMediaInfo() {
 }
 async function exportBackup() {
   // (The switch only shows when there are sounds; without it, everything is included.)
-  const data = await db.exportAll({ sounds: $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked });
+  const withSounds = $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked;
+  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) would be missing from the file:
+  // fetch them first. What can't be fetched is said before saving, and a second tap saves without it.
+  const btn = $('exportBtn');
+  let leftOut = 0;
+  const lack = await sync.missingMedia({ sounds: withSounds });
+  if (lack.pictures.length + lack.sounds.length) {
+    btn.disabled = true;
+    const r = await sync.downloadAllMedia({ sounds: withSounds, onProgress: (n, t) => { if ($('backupNote')) $('backupNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } });
+    btn.disabled = false;
+    leftOut = r.left.length + r.gone.length;
+    if (leftOut && btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Export without them';
+      if ($('backupNote')) { $('backupNote').className = 'note usage-line warn'; $('backupNote').textContent = leftOutNote(leftOut, r.reason, r.gone.length); }
+      return;
+    }
+  }
+  const data = await db.exportAll({ sounds: withSounds });
   const d = new Date();
   const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
@@ -513,7 +534,7 @@ async function exportBackup() {
   }
   settings.lastBackup = Date.now();
   await db.setSetting('lastBackup', settings.lastBackup);
-  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}`);
+  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
   if (currentRoute === 'settings') renderSettings($('screen'));
 }
 
@@ -718,6 +739,9 @@ async function drawSync() {
       <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p></div>
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
+    <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
+      <span>Off: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account's monthly download allowance. On: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi).</span></span>
+      <input id="keepAllMedia" type="checkbox" class="switch" ${settings.keepAllMedia ? 'checked' : ''}></label>
     <div class="set-row">
       <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
       <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
@@ -741,6 +765,11 @@ async function drawSync() {
   showSyncStatus(acct.lastSync);
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
+  $('keepAllMedia').addEventListener('change', async e => {
+    settings.keepAllMedia = e.target.checked;
+    await db.setSetting('keepAllMedia', e.target.checked);          // this device only (db.js LOCAL_ONLY)
+    if (e.target.checked) sync.syncNow({ retry: true });
+  });
   $('resendBtn').addEventListener('click', confirmResend);
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
@@ -851,7 +880,25 @@ async function confirmSignOut() {
       </div>
     </div>`);
   $('soNo').addEventListener('click', closeSheet);
-  $('soKeep').addEventListener('click', async () => { await sync.signOut(); closeSheet(); toast('Signed out'); drawSync(); });
+  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) can't be had once signed out: get them first.
+  $('soKeep').addEventListener('click', async () => {
+    const btn = $('soKeep');
+    if (btn.dataset.armed !== '1') {
+      const lack = await sync.missingMedia().catch(() => null);
+      if (lack && lack.pictures.length + lack.sounds.length) {
+        btn.disabled = true;
+        const r = await sync.downloadAllMedia({ onProgress: (n, t) => { if ($('soNote')) $('soNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } });
+        btn.disabled = false;
+        const n = r.left.length + r.gone.length;
+        if (n) {
+          btn.dataset.armed = '1';
+          if ($('soNote')) $('soNote').innerHTML = `<span class="warn">${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} from your cards ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} won't show here after signing out.</span> Tap again to sign out anyway.`;
+          return;
+        }
+      }
+    }
+    await sync.signOut(); closeSheet(); toast('Signed out'); drawSync();
+  });
   let armed = false;
   $('soRemove').addEventListener('click', async () => {
     const pending = await sync.pendingChanges().catch(() => 0);
@@ -915,11 +962,11 @@ function confirmDeleteServer() {
   $('dsYes').addEventListener('click', async () => {
     $('dsYes').disabled = true;
     try {
-      await sync.deleteServerData();
+      await sync.deleteServerData({ onProgress: (n, t) => { $('dsYes').textContent = `Saving pictures here first: ${n} of ${t}`; } });
       closeSheet();
       toast('Your synced data was deleted from the server');
       drawSync();
-    } catch (e) { toast(e.message); $('dsYes').disabled = false; }
+    } catch (e) { toast(e.message); $('dsYes').disabled = false; $('dsYes').textContent = 'Delete from server'; }
   });
 }
 
@@ -945,11 +992,11 @@ function confirmDeleteAccount() {
     if ($('daText').value.trim() !== 'DELETE') return;
     $('daYes').disabled = true; $('daErr').hidden = true;
     try {
-      await sync.deleteAccount();
+      await sync.deleteAccount({ onProgress: (n, t) => { $('daYes').textContent = `Saving pictures here first: ${n} of ${t}`; } });
       closeSheet();
       toast('Your account was deleted. Your data is still on this device.');
       drawSync();
-    } catch (e) { $('daErr').textContent = e.message; $('daErr').hidden = false; $('daYes').disabled = false; }
+    } catch (e) { $('daErr').textContent = e.message; $('daErr').hidden = false; $('daYes').disabled = false; $('daYes').textContent = 'Delete my account'; }
   });
 }
 
