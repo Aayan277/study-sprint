@@ -20,7 +20,7 @@ ok(note.includes('By creating an account you agree to the Terms and Privacy') &&
 ok(await page.locator('#legalNote a[href="privacy.html"]').count() === 1 && await page.locator('#legalNote a[href="terms.html"]').count() === 1, 'it links to both pages');
 ok(await page.locator('#syncCreate[aria-describedby="legalNote"]').count() === 1, 'Create account is described by the agreement line');
 ok(await page.evaluate(() => document.getElementById('legalNote').compareDocumentPosition(document.getElementById('syncCreate')) & Node.DOCUMENT_POSITION_FOLLOWING) > 0, 'the agreement line comes before the buttons');
-ok(await page.locator('a[data-sec="aboutTitle"]').count() === 1, 'Settings jump links include About');
+ok(await page.locator('a[data-sec="aboutTitle"]').count() === 0 && await page.locator('#aboutRow a[href="privacy.html"]').count() === 1, 'About sits at the end of Settings (no jump link; it would not fit on phones)');
 ok(await page.locator('p.note.mono').count() === 0, 'no second version line in Settings');
 const about = await page.textContent('#aboutRow');
 ok(/Privacy/.test(about) && /Terms/.test(about) && /open an issue on the project page/.test(about) && /4\.\d+/.test(about), 'Settings About row: ' + about.replace(/\s+/g, ' ').trim());

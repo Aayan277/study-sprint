@@ -55,7 +55,7 @@ async function renderSettings(el) {
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
     <nav class="set-nav" id="setNav" aria-label="Jump to a section">
-      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a><a href="#aboutTitle" data-sec="aboutTitle">About</a>
+      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a>
     </nav>
 
     <section class="section" aria-labelledby="appearTitle">
