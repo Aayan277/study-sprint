@@ -1,6 +1,7 @@
 // Small helpers shared by every screen.
 
 import { streakText } from './stats-calc.js';
+import { openOverlay, closeOverlay } from './nav.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -128,6 +129,7 @@ const WIDE = matchMedia('(min-width: 1200px)');      // wide enough for a side p
 //                     A submit button in it still submits its form (it gets a form="..." link, because it is
 //                     no longer inside the <form>). A sheet with no such row has no footer.
 // On a phone the header's little grab bar really works: drag the sheet down to close it (see initSheet).
+let sheetOverlay = 0;    // the sheet's entry in the history (js/nav.js), while it is open
 let opener = null;       // what had the focus when a side panel opened (the button that opened it)
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
@@ -163,6 +165,7 @@ export function openSheet(html, { side = false } = {}) {
   d.setAttribute('aria-labelledby', 'sheetTitle');
   d.querySelector('.sheet-x').addEventListener('click', closeSheet);
   if (!d.open) { if (asSide) d.show(); else d.showModal(); }
+  if (!sheetOverlay) sheetOverlay = openOverlay(() => { sheetOverlay = 0; closeSheet(); });      // Back (or an edge swipe) closes the sheet
   // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
   // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
   if (document.activeElement?.classList.contains('sheet-x')) d.focus();
@@ -175,10 +178,14 @@ export function closeSheet() {
   // that was open (or the button that opened the panel) instead of being lost on the page.
   const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) d.close();
+  releaseSheet();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
   back?.focus({ preventScroll: true });
 }
 // The page gets its full width back, and the card list stops highlighting the card that was open.
+function releaseSheet() {
+  if (sheetOverlay) { const id = sheetOverlay; sheetOverlay = 0; closeOverlay(id); }
+}
 function afterClose() {
   document.body.classList.remove('has-side');
   document.querySelectorAll('.crow.sel').forEach(r => r.classList.remove('sel'));
@@ -197,7 +204,7 @@ export function initSheet() {
     const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     if (!inside) closeSheet();
   });
-  d.addEventListener('close', afterClose);          // closed another way (e.g. Escape on a pop-up)
+  d.addEventListener('close', () => { if (!d.open) releaseSheet(); afterClose(); });          // closed another way (e.g. Escape on a pop-up)
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && d.open && d.classList.contains('side')) closeSheet();
   });

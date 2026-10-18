@@ -32,7 +32,8 @@ import { soundsHTML, stopSound } from './audio.js';
 import { occlusionHTML } from './occlusion.js';
 import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
-import { $, esc, plural, toast, onControl, setFocusMode, icon, foldOpen, saveFold } from './ui.js';
+import { holdBack, releaseBack } from './nav.js';
+import { $, esc, plural, toast, onControl, setFocusMode, openSheet, closeSheet, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
@@ -52,6 +53,7 @@ const sizeClass = text => { const n = answerText(text).length; return n > 120 ? 
 // Stop timers when a round is abandoned (leaving the tab, or quitting).
 function stopRound() {
   setFocusMode(false);
+  releaseBack('session');
   if (!G) return;
   cancelAnimationFrame(G.raf); clearTimeout(G.autoTimer); clearTimeout(G.flashTimer);
   G = null;
@@ -244,6 +246,7 @@ function start(el, opts) {
   };
   G.mixIndex = buildAnswerIndex(all, c => { const a = questionFor(c, 'typing')?.answer; return a ? answerTargets(a) : []; }, MIX_SCAN_MAX);
   setFocusMode(true);
+  holdBack('session', askQuit);        // Back (an edge swipe) asks before leaving a running round
   el.innerHTML = `
     <div class="hud mono">
       <span id="hudA"></span>
@@ -687,6 +690,7 @@ async function finish() {
   clearTimeout(G.autoTimer); cancelAnimationFrame(G.raf); clearTimeout(G.flashTimer);
   const el = G.el, round = G;
   G = null;
+  releaseBack('session');
   setFocusMode(false);
   drawSidebar();          // the sidebar's counts and ring, now the round is done
   let isBest = false, firstScore = false;
@@ -795,6 +799,20 @@ async function drawResults(el, round, ctx, { again = false } = {}) {
   $('drillBtn')?.addEventListener('click', () => start(el, { ...base, drill: missed.map(l => l.card) }));
   $('menuBtn').addEventListener('click', () => renderPlay(el));
   if (!again) { $('againBtn').focus({ preventScroll: true }); fx.result(el); }
+}
+
+// The back gesture during a round: ask, and keep playing unless they say Quit.
+function askQuit() {
+  if (!G || !$('pCard') || document.getElementById('sheet')?.open) return;
+  openSheet(`
+    <h2 id="sheetTitle">Quit this round?</h2>
+    <p>Your score so far will be lost.</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" id="keepOn">Keep playing</button>
+      <button class="btn primary" type="button" id="quitNow">Quit round</button>
+    </div>`);
+  $('keepOn').addEventListener('click', closeSheet);
+  $('quitNow').addEventListener('click', () => { closeSheet(); if (G) { const el = G.el; stopRound(); renderPlay(el); } });
 }
 
 // ---------- keyboard ----------

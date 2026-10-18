@@ -172,6 +172,10 @@
 /* Text boxes use at least 16px text: iPhones zoom the page in when you tap a box with smaller text. */
 *{box-sizing:border-box}
 html,body{margin:0}
+/* Feel like an app, not a website: a sideways drag past the edge must not trigger the browser's own back/forward (Chromium),
+   and in the installed app a pull down must not reload the page. In a normal browser tab, pull-to-refresh stays. */
+html,body{overscroll-behavior-x:none}
+@media (display-mode:standalone),(display-mode:fullscreen),(display-mode:minimal-ui){html,body{overscroll-behavior-y:none}}
 [hidden]{display:none!important}
 /* touch-action: manipulation turns off double-tap-to-zoom (so quick taps on the card and buttons
    don't zoom the page) while pinch-to-zoom and scrolling still work. iPhone doesn't pass it down

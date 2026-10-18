@@ -19,6 +19,7 @@ import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
+import { go, replace as navReplace, initNav, rewrite, releaseBack } from './nav.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.17';
@@ -513,7 +514,7 @@ async function confirmRestore(file) {
     closeSheet();
     toast(`Restored ${plural(data.cards.length, 'card')}`);
     drawSidebar();
-    location.hash = '#/decks';
+    go('#/decks');
   });
 }
 
@@ -535,7 +536,7 @@ async function confirmReset() {
     closeSheet();
     toast('All data reset');
     drawSidebar();
-    location.hash = '#/decks';
+    go('#/decks');
   });
 }
 
@@ -564,7 +565,7 @@ function confirmResetSynced() {
     closeSheet();
     toast('Everything deleted on all your devices');
     drawSidebar();
-    location.hash = '#/decks';
+    go('#/decks');
   });
   $('rsHere').addEventListener('click', async () => {
     await sync.signOut({ forget: true });
@@ -572,7 +573,7 @@ function confirmResetSynced() {
     closeSheet();
     toast('This device was reset and signed out');
     drawSidebar();
-    location.hash = '#/decks';
+    go('#/decks');
   });
 }
 
@@ -753,7 +754,7 @@ async function confirmSignOut() {
     closeSheet();
     toast('Signed out and removed from this device');
     drawSidebar();
-    location.hash = '#/decks';
+    go('#/decks');
   });
   // Send anything waiting first, so signing out loses nothing.
   await sync.syncNow();
@@ -914,7 +915,7 @@ async function route() {
   if (name !== 'settings') beforeSettings = null;
   // Once the start is done, #/welcome goes to Today. Still allowed: the guided review that follows it, and
   // #/welcome/again (the "How it works" link on an empty Today screen), which shows the pitch again.
-  if (name === 'welcome' && settings.onboarded && !/^(review\/|again$)/.test(arg || '')) { location.replace('#/today'); return; }
+  if (name === 'welcome' && settings.onboarded && !/^(review\/|again$)/.test(arg || '')) { navReplace('#/today'); return; }
   // Walking out of the first-run start any other way (a link, the back button) counts as skipping it.
   if (currentRoute === 'welcome' && name !== 'welcome') markOnboarded();
   if (name !== 'review') takeLaunch();     // a session handed over to Review that never got there (e.g. it failed to load) must not start later
@@ -936,6 +937,7 @@ async function route() {
   // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
   const sidebarStale = name !== prevRoute && name !== 'today'
     && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
+  releaseBack();                // a session's hold on the back gesture ends when you leave it (a running one asks again as it redraws)
   closeSheet();
   setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
   if (sidebarStale) drawSidebar();
@@ -996,8 +998,7 @@ function wireGear() {
     if (!e.target.closest('a[data-tab="settings"]') || e.defaultPrevented) return;
     if (currentRoute !== 'settings') return;           // not open: the link opens Settings as normal
     e.preventDefault();
-    if (beforeSettings) history.back();                 // came from another screen: step back to it
-    else location.hash = '#/today';                     // opened straight onto Settings: go home
+    go(beforeSettings || '#/today');                    // back to the screen you opened Settings from (or home)
   });
 }
 
@@ -1007,7 +1008,7 @@ function wireGear() {
 function takeResetLink() {
   const link = sync.recoveryFromLink();
   if (!link) return null;
-  history.replaceState(null, '', location.pathname + '#/settings');
+  rewrite('#/settings');
   if (link.session) { try { sessionStorage.setItem('resetLink', JSON.stringify(link)); } catch { /* fine without */ } }
   return link;
 }
@@ -1071,10 +1072,11 @@ async function start() {
   // Pictures no card uses any more. (Signed in, syncing does this, and removes them from the account too.)
   sync.account().then(acct => { if (!acct) db.cleanMedia(); }).catch(() => {});
   // Opening the app with no "#/..." in the address shows Today.
-  if (!location.hash) history.replaceState(null, '', '#/today');
+  if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
   if (firstRun && /^#\/today\/?$/.test(location.hash)) history.replaceState(null, '', '#/welcome');
   // Changing tab slides (View Transitions) unless Smooth transitions is off, motion is reduced or a round is running.
+  initNav();         // tabs replace history, sheets and sessions hold the back gesture (js/nav.js)
   addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();

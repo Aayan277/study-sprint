@@ -25,6 +25,7 @@ import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { hasMasks, occlusionHTML, occLabel } from './occlusion.js';
 import { $, esc, plural, toast, icon, setFocusMode, onControl } from './ui.js';
+import { go, replace as navReplace } from './nav.js';
 
 const GUIDE_CARDS = 3;
 // Handed to the Import screen: after it saves cards into this deck, it offers the guided review (see import-screen.js).
@@ -49,7 +50,7 @@ export async function renderWelcome(el, arg, api) {
 // Leave the first-run start for good and go to the Today screen.
 async function leave(api, hash = '#/today') {
   await api.finish();
-  location.replace(hash);      // replace, so Back doesn't return to the start
+  navReplace(hash);      // replace, so Back doesn't return to the start
 }
 
 // The little "Step 2 of 3" bar at the top of each step.
@@ -184,7 +185,7 @@ function drawAdd(el, api) {
     $('wlSample').disabled = true;
     await api.seedSample();
     await api.finish();
-    location.hash = '#/welcome/review/sample';
+    go('#/welcome/review/sample');
   });
 }
 
@@ -203,8 +204,8 @@ async function renderGuide(el, deckId, api) {
   const cards = allCards.filter(c => inside.has(c.deckId) && !isHidden(c) && !studied.has(c.id)).sort((a, b) => a.created - b.created).slice(0, GUIDE_CARDS);
   // On a device that already has a sync account, the sample cards come from the account: answering them here
   // would stamp them with "now" and could overwrite that progress when syncing.
-  if (deckId === 'sample' && (settings.syncAuth || settings.syncState)) { location.replace('#/today'); return; }
-  if (!cards.length) { location.hash = '#/today'; return; }
+  if (deckId === 'sample' && (settings.syncAuth || settings.syncState)) { navReplace('#/today'); return; }
+  if (!cards.length) { go('#/today'); return; }
   G = { el, api, settings, decks, cards, i: 0, flipped: false, shownAt: Date.now(), done: 0, saved: 0, seen: [], srs: null, deckId, priorStates: new Map(states.map(s => [s.cardId, s])) };
   // The scheduler library comes from the internet the first time; if that fails the walk-through still works, it just can't save.
   try { G.srs = await import('./srs.js'); } catch (err) { console.error(err); }

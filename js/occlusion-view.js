@@ -3,6 +3,7 @@
 // controller (panZoom), so there is one place that knows how to pinch.
 // Loaded the first time a picture card is shown (review.js), not at start-up. The maths is in occlusion.js.
 
+import { openOverlay, closeOverlay } from './nav.js';
 import { fitView, zoomAt, clampView, MIN_SCALE, MAX_SCALE } from './occlusion.js';
 
 const TAP_MS = 300;        // two taps this close together are a double-tap
@@ -179,6 +180,7 @@ export function openZoom(figureHTML, title = 'Picture', returnTo = null) {
   canvas.append(tpl.content);
   document.body.append(dlg);
   dlg.showModal();
+  const overlay = openOverlay(() => dlg.close());      // Back (an edge swipe) closes the viewer
   const pz = panZoom(stage, canvas, { oneFinger: 'pan', aspect: parseFloat(figure?.style.getPropertyValue('--ar')) || 0 });
   // Without a saved size, the box takes the picture's own shape once it has loaded.
   const img = canvas.querySelector('img');
@@ -189,6 +191,7 @@ export function openZoom(figureHTML, title = 'Picture', returnTo = null) {
     if (z === 'in') pz.zoomBy(1.5); else if (z === 'out') pz.zoomBy(1 / 1.5); else if (z === 'fit') pz.fit();
   });
   dlg.addEventListener('close', () => {
+    closeOverlay(overlay);
     pz.destroy();
     dlg.remove();
     if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });

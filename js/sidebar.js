@@ -17,6 +17,7 @@ import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
 import * as sync from './sync.js';
 import { toggleMode, isAlwaysDark } from './themes.js';
+import { go } from './nav.js';
 
 const DESKTOP = matchMedia('(min-width: 1024px)');
 const RAIL_KEY = 'study-sprint-rail';
@@ -241,7 +242,7 @@ export function initSidebar({ version = '' } = {}) {
     if (!e.target.closest('.side-new')) return;
     try {
       const { openDeckEditor } = await import('./decks.js');
-      openDeckEditor(null, saved => { location.hash = `#/deck/${saved.id}`; });
+      openDeckEditor(null, saved => { go(`#/deck/${saved.id}`); });
     } catch { toast("Couldn't open the deck editor. Check your connection and try again."); }
   });
   $('sideList').addEventListener('scroll', () => { fadeList(); hideTip(); }, { passive: true });
