@@ -9,8 +9,8 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v101';
-// files-hash: 3a3eaa1da394b89e
+const CACHE = 'study-sprint-v102';
+// files-hash: a6f7f5e6050595ef
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'css/clinical.css',
   'js/app.js', 'js/note-fields.js', 'js/reverse.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-read.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/exam.js', 'js/exam-sheet.js', 'js/fsrs-data.js', 'js/fsrs-fit.js', 'js/fit-health.js', 'js/health-sheet.js', 'js/retention-sim.js', 'js/retention-sheet.js', 'js/worker-job.js', 'js/fsrs7-model.js', 'js/fsrs7-sched.js', 'js/srs7.js', 'js/fsrs-optimize-worker.js', 'js/optimize-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/panel-resize.js', 'js/audio.js', 'js/audio-type.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/jlpt.js', 'js/match.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js', 'js/tag-tree.js', 'js/tag-study-sheet.js', 'js/postpone.js', 'js/postpone-sheet.js', 'js/accept.js', 'js/glossary.js', 'js/glossary-view.js', 'js/glossary-sheet.js', 'js/glossary-list.js',
