@@ -35,6 +35,8 @@ test('a card the saved layout does not know appears after the card before it in 
   const l = normaliseLayout({ order: saved });
   assert.equal(l.order.length, IDS.length);
   assert.equal(l.order.indexOf('hours'), l.order.indexOf('buttons') + 1);
+  // junk in a restored backup is left out, a good value is cleaned
+  assert.equal(acceptStatsLayout('x').ok, false);
   // a new first card goes to the front
   assert.equal(normaliseLayout({ order: IDS.slice(1) }).order[0], 'streak');
 });
@@ -79,16 +81,16 @@ test('reset gives the default and saves as null', () => {
 
 test('pairing: neighbouring half cards share a row, a lone half card takes the row', () => {
   const rows = pairRows(defaultLayout());
-  assert.deepEqual(rows, [['streak', 'retention'], ['rs'], ['cal'], ['perDay', 'forecast'], ['buttons', 'hours'], ['difficulty', 'hardest'], ['mastery']]);
-  // hide Time of day: Answer buttons now pairs with Difficulty, Hardest cards is alone and fills its row
+  assert.deepEqual(rows, [['streak', 'retention'], ['rs'], ['cal'], ['perDay', 'forecast'], ['hardest', 'buttons'], ['hours', 'difficulty'], ['mastery']]);
+  // hide Time of day: Difficulty has no partner left and fills its row
   const l = setHidden(defaultLayout(), 'hours', true);
   const r2 = pairRows(l);
-  assert.deepEqual(r2.slice(4), [['buttons', 'difficulty'], ['hardest'], ['mastery']]);
+  assert.deepEqual(r2.slice(4), [['hardest', 'buttons'], ['difficulty'], ['mastery']]);
   const w = widths(l, visibleOrder(l));
-  assert.equal(w.get('hardest'), 'full'); assert.equal(w.get('buttons'), 'half');
+  assert.equal(w.get('difficulty'), 'full'); assert.equal(w.get('buttons'), 'half');
   // a full card between two halves splits them
   const l2 = setSize(defaultLayout(), 'forecast', 'full');
-  assert.deepEqual(pairRows(l2).slice(3, 6), [['perDay'], ['forecast'], ['buttons', 'hours']]);
+  assert.deepEqual(pairRows(l2).slice(3, 6), [['perDay'], ['forecast'], ['hardest', 'buttons']]);
   // every row is one or two cards, and every card is in exactly one row
   for (const lay of [defaultLayout(), l, l2]) {
     const flat = pairRows(lay).flat();
@@ -108,4 +110,13 @@ test('the synced setting: listed, and a value from outside is cleaned', () => {
   assert.equal(a.ok, true);
   assert.equal(a.value.order[0], 'cal'); assert.deepEqual(a.value.hidden, ['rs']); assert.equal(a.value.size.cal, 'half');
   assert.equal(CARDS.length, new Set(IDS).size);
+});
+
+test('a backup restores a cleaned layout and leaves junk out', async () => {
+  const { restoredSettings } = await import('../js/db.js');
+  const get = s => Object.fromEntries(restoredSettings(s));
+  assert.ok(!('statsLayout' in get({ statsLayout: 'junk' })));
+  assert.equal(get({ statsLayout: null }).statsLayout, null);
+  const kept = get({ statsLayout: { order: ['cal', 'zzz'], hidden: ['rs'], size: { cal: 'half' } } }).statsLayout;
+  assert.equal(kept.hidden[0], 'rs'); assert.ok(!kept.order.includes('zzz'));
 });

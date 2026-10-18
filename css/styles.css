@@ -1013,6 +1013,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mhead .muted.small{font:400 var(--fs-xs)/1.4 var(--f-ui)}
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2);margin-bottom:var(--s-2)}
 @media (max-width:560px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pgrid.one{grid-template-columns:minmax(0,1fr)}
 .pgrid .card{height:100%;padding:var(--s-3) var(--s-3) var(--s-4);display:flex;flex-direction:column}
 .pgrid .pc-streak{background:var(--hero)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
@@ -1367,7 +1368,7 @@ img[data-media][hidden]{display:none}
   /* "More stats" is only a fold on phones: here its cards join the grid. Each card says its place (order) and width (data-w) in the
      page: Customise Stats (js/stats-layout.js) chooses them, and pairs half cards so a row never has a hole */
   main[data-route="stats"] [data-w="full"]{grid-column:1 / -1}
-  main[data-route="stats"] .stats-none{grid-column:1 / -1}
+  main[data-route="stats"] .stats-none,main[data-route="stats"] .ready-card[data-w="full"]{grid-column:1 / -1}
   /* One course picked: the readiness header and Mastery sit side by side at the top */
   main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
   main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
@@ -2629,9 +2630,8 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .sl-row.off .sl-name{color:var(--text-2);text-decoration:line-through}
 .sl-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
 .sl-show{display:flex;align-items:center;gap:var(--s-3);min-height:44px;min-width:0;flex:1 1 auto;cursor:pointer}
-.sl-grip{display:grid;place-items:center;flex:none;width:32px;height:44px;margin-left:-6px;font-size:1.4rem;line-height:1;color:var(--text-2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.sl-grip{display:grid;place-items:center;flex:none;width:44px;height:44px;margin-left:-10px;font-size:1.4rem;line-height:1;color:var(--text-2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .sl-list.dragging{user-select:none}
-.sl-list.dragging .sl-row:not(.lifted){transition:transform var(--t-fast)}
 .sl-row.lifted{position:relative;z-index:2;background:var(--surface-2);border-color:var(--accent);box-shadow:var(--e-3,0 8px 24px rgb(0 0 0 / .35));cursor:grabbing}
 .sl-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .sl-moves{display:flex;gap:6px;flex:none}
@@ -2642,6 +2642,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .sl-btn .ico{width:20px;height:20px}
 .sl-btn .sl-up{transform:rotate(180deg)}
 .sl-size{margin:0}
+.sl-size .chip span{display:inline-flex;align-items:center;min-height:44px;min-width:64px;justify-content:center}
 .sl-confirm{margin-top:var(--s-3);padding:var(--s-3);border:1px solid var(--again);border-radius:var(--r-md);background:var(--surface-2)}
 .sl-confirm p{margin:0 0 var(--s-3)}
 .sl-confirm-btns{display:flex;gap:var(--s-2);flex-wrap:wrap}

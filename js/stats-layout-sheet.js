@@ -10,12 +10,20 @@ import { cardInfo, normaliseLayout, moveCard, setHidden, setSize, toSaved, isDef
 
 export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
   let layout = normaliseLayout((await db.getSettings()).statsLayout);
-  let chain = Promise.resolve();
-  // Saves run one after the other, so quick taps cannot save in the wrong order.
-  const save = () => {
-    const value = toSaved(layout);
-    chain = chain.then(() => db.setSetting('statsLayout', value)).then(() => onChange()).catch(err => console.error(err));
-    return chain;
+  // Every change is saved. The page behind redraws once the saves are done: a change made while a save or a redraw is running
+  // only marks the layout as changed, so quick taps cost one redraw, never a queue of them.
+  let latest = null, dirty = false, busy = false;
+  const save = async () => {
+    latest = toSaved(layout); dirty = true;
+    if (busy) return;
+    busy = true;
+    try {
+      while (dirty) {
+        dirty = false;
+        await db.setSetting('statsLayout', latest);
+        if (!dirty) await onChange();
+      }
+    } catch (err) { console.error(err); } finally { busy = false; }
   };
 
   const row = id => {
@@ -102,6 +110,7 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
     if (!drag) return;
     const d = drag; drag = null;
     cancelAnimationFrame(d.raf);
+    scroller.removeEventListener('scroll', d.scrolled);
     document.removeEventListener('keydown', d.onKey, true);
     for (const [t, f] of [['pointermove', d.move], ['pointerup', d.up], ['pointercancel', d.cancel]]) document.removeEventListener(t, f);
     d.row.classList.remove('lifted'); d.row.style.transform = '';
@@ -114,6 +123,10 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
       save();
     } else { d.before.forEach(id => list.appendChild(rowOf(id))); paint(); }
   };
+  // The sheet closing (Back, a tap outside, Escape) while a row is held puts it back: nothing is saved.
+  const abort = () => endDrag(false);
+  document.addEventListener('sheet-closing', abort);
+  $('sheet').addEventListener('close', () => { abort(); document.removeEventListener('sheet-closing', abort); }, { once: true });
   list.addEventListener('pointerdown', e => {
     const grip = e.target.closest('.sl-grip');
     if (!grip || drag || (e.pointerType === 'mouse' && e.button !== 0) || e.isPrimary === false) return;
@@ -143,8 +156,10 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
     };
     // (Listened for on the document: moving the row in the list drops a pointer capture, so the grip cannot be relied on.)
     const mine = ev => ev.pointerId === d.pid;
+    scroller.addEventListener('scroll', follow);
+    d.scrolled = follow;
     d.move = ev => { if (mine(ev)) { d.y = ev.clientY; follow(); } };
-    d.up = ev => { if (mine(ev)) endDrag(true); };
+    d.up = ev => { if (mine(ev)) endDrag($('sheet').open); };
     d.cancel = ev => { if (mine(ev)) endDrag(false); };
     d.onKey = ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); endDrag(false); say('Move cancelled.'); } };
     for (const [t, f] of [['pointermove', d.move], ['pointerup', d.up], ['pointercancel', d.cancel]]) document.addEventListener(t, f);

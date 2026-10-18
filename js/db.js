@@ -21,6 +21,7 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { isMarkKey, isSeenKey, markKey, markId, seenKey, validMark, GONE } from './media-sweep.js';
+import { acceptStatsLayout } from './stats-layout.js';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
@@ -591,7 +592,8 @@ export function restoredSettings(settings) {
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
     .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
     .filter(([k, v]) => k !== 'fsrsVersion' || v === 6 || v === 7)       // junk is left out, not stored as 6 (a stamped 6 would switch other devices back)
-    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
+    .filter(([k, v]) => k !== 'statsLayout' || acceptStatsLayout(v).ok)         // junk is left out
+    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : k === 'statsLayout' ? [k, acceptStatsLayout(v).value] : [k, v]));
 }
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));

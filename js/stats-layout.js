@@ -6,7 +6,8 @@
 // shows up beside the card it follows in the default order, and a corrupt value gives the default.
 
 // The cards, in their default order. size is the default width on a wide screen (a phone always shows every card full width).
-// more: the card sits under "More stats" on a phone.
+// more: on a phone the cards of this kind that come after the last other card sit under "More stats" (a fold); the default order
+// has Hardest cards before them, so the default phone page keeps its fold.
 export const CARDS = [
   { id: 'streak', name: 'Day streak', size: 'half' },
   { id: 'retention', name: 'Retention', size: 'half' },
@@ -14,10 +15,10 @@ export const CARDS = [
   { id: 'cal', name: 'Study calendar', size: 'full' },
   { id: 'perDay', name: 'Reviews per day', size: 'half' },
   { id: 'forecast', name: 'Due in the next 7 days', size: 'half' },
+  { id: 'hardest', name: 'Hardest cards', size: 'half' },
   { id: 'buttons', name: 'Answer buttons', size: 'half', more: true },
   { id: 'hours', name: 'Time of day', size: 'half', more: true },
   { id: 'difficulty', name: 'Difficulty', size: 'half', more: true },
-  { id: 'hardest', name: 'Hardest cards', size: 'half' },
   { id: 'mastery', name: 'Mastery', size: 'full', more: true }
 ];
 export const IDS = CARDS.map(c => c.id);
@@ -31,6 +32,8 @@ export function defaultLayout() {
 }
 
 // Any value in, a complete clean layout out.
+// (Versions: an older device that receives a layout with ids it does not know drops them, and its next save sends the shorter
+// list back, so a card added by a newer version can lose its place in the order. Its hidden/size choice is lost the same way.)
 export function normaliseLayout(raw) {
   const out = defaultLayout();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
