@@ -23,7 +23,9 @@ export const inProgress = (deckId, now = Date.now()) => { const s = loadSaved(no
 export function saveRun(run, state) {
   mem = null;
   persistent = write(RUN, JSON.stringify(run)) && write(STATE, JSON.stringify(state));
-  if (!persistent) { mem = { run, state }; try { localStorage.removeItem(RUN); localStorage.removeItem(STATE); } catch { /* blocked anyway */ } }      // (no half-written old test to come back on a reload)      // blocked storage: keep it in memory (a quiet note says it cannot be resumed)
+  // Blocked storage: keep it in memory (a quiet note says it cannot be resumed), and clear any
+  // half-written old test so a reload can't bring it back.
+  if (!persistent) { mem = { run, state }; try { localStorage.removeItem(RUN); localStorage.removeItem(STATE); } catch { /* blocked anyway */ } }
   return true;
 }
 export const saveState = state => { if (mem) { mem.state = state; return true; } return write(STATE, JSON.stringify(state)); };
