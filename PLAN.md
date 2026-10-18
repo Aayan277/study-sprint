@@ -72,6 +72,7 @@ Include **Export backup** and **Import backup** (one JSON file with everything) 
 **Ways in:**
 - **Paste box** with automatic format detection (rules below).
 - **File upload:** .csv, .tsv, .txt, .xlsx.
+- **PDF and slides (.pdf, .pptx):** text only, no OCR (a scanned PDF says so). pdf.js (4.10.38, legacy build) and fflate load from the CDN only when such a file is picked (`js/doc-import.js`); max 300 pages or slides and 50 MB. Then a choice: **Make cards with AI** (the text in ~12,000-character parts on page boundaries, "Part 1 of 3" with Copy, and Copy-and-open buttons for Claude, ChatGPT and Gemini; the prompt asks for `front | back text. Source: "sentence"`, and the cards get an `ai-made` tag) or **Use the text as it is** (one block per page or slide into the paste box, read as blocks by `parseBlocks`). Android **Share → Study Sprint** (manifest `share_target`, POST; the service worker keeps the share briefly and redirects to `#/import/share`).
 - **Google Sheets link:** a sheet published to the web as CSV.
 - **JSON backup** from this app.
 

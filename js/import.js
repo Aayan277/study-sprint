@@ -306,6 +306,13 @@ export function parseText(text) {
   return finish(lines.map(l => [l, '']), { id: 'none', label: "but couldn't spot a pattern. Add the backs below, or try one card per line like: term - definition" });
 }
 
+// Text that is already in blocks (the text of a PDF or slides: a heading line, then its text, a blank line between pages):
+// read it as blocks without trying the separators first, since a lecture's lines are full of " - " and ": ".
+export function parseBlocks(text) {
+  const blocks = tryBlocks(normalize(text));
+  return blocks ? finish(blocks, { id: 'blocks', label: 'in blocks separated by blank lines' }) : parseText(text);
+}
+
 // Rows that came straight from a spreadsheet (.xlsx). Cells can be numbers or dates, so make them text.
 export function parseRows(rows) {
   const clean = rows
