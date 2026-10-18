@@ -46,7 +46,7 @@ export function wantedMedia(cards, have) {
 //   limit      at most this many files (not with keepAll)
 //   newAhead   how many new cards to look at after the due ones
 //   skip       (id) => true for a file that failed lately (retryWait): left out for now
-// Returns { ids, more } where `more` is how many wanted files were left for later (they load when a card shows them).
+// Returns { ids }: the rest loads when a card shows it.
 export function planPrefetch({ cards, statesById = new Map(), have = new Set(), now = Date.now(), keepAll = false, limit = PREFETCH_FILES, newAhead = NEW_AHEAD, skip = () => false } = {}) {
   let order;
   if (keepAll) order = cards;
@@ -57,17 +57,16 @@ export function planPrefetch({ cards, statesById = new Map(), have = new Set(), 
     order = [...reviews.map(x => x.card), ...waiting.map(x => x.card), ...firstNew];
   }
   const ids = [], seen = new Set();
-  let more = 0;
   for (const c of order) {
     const f = cardFiles(c);
     for (const id of [...f.pictures, ...f.sounds]) {
       if (have.has(id) || seen.has(id)) continue;
       seen.add(id);
       if (skip(id)) continue;
-      if (keepAll || ids.length < limit) ids.push(id); else more++;
+      if (keepAll || ids.length < limit) ids.push(id);
     }
   }
-  return { ids, more };
+  return { ids };
 }
 
 // ---------- when to try again ----------
@@ -92,13 +91,16 @@ export const canTry = (entry, now, kind) => !entry || now - entry.at >= retryWai
 // The next remembered failure for a file.
 export const failedAgain = (prev, reason, now) => ({ at: now, reason, tries: (prev?.reason === reason ? prev.tries || 1 : 0) + 1 });
 
+// A rough size for a number of files, to say "about 12 MB" before a big download (pictures are 100 to 250 KB, sounds up to 1 MB).
+export const estimateBytes = ({ pictures = 0, sounds = 0 } = {}) => pictures * 150 * 1024 + sounds * 300 * 1024;
+
 // ---------- words ----------
 // What a card shows where a file couldn't be loaded. `sound` is true for a sound.
 export function mediaMessage(reason, sound = false) {
   const what = sound ? 'Sound' : 'Picture';
   if (reason === 'signed-out') return `${what} not downloaded yet. Sign in to load it.`;
   if (reason === 'missing') return `${what} isn't in your account any more.`;
-  if (reason === 'error') return `Couldn't load this ${what.toLowerCase()}. Tap to try again.`;
+  if (reason === 'error') return `Couldn't load this ${what.toLowerCase()}.`;
   return `${what} not downloaded yet. It will load when you're online.`;
 }
 // The line in Settings → Your data: files cards use that this device hasn't downloaded yet.

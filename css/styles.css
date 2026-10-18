@@ -1232,6 +1232,10 @@ html[data-align="left"] :is(.flash-front,.flash-recap,.flash-back){text-align:le
 /* a picture still on its way (downloaded the first time a card shows it): a calm box, no text, no movement */
 .card-img.loading,.img-thumb.loading{min-height:96px;min-width:min(100%,200px);background:var(--surface-2);box-shadow:none}
 img[data-media][hidden]{display:none}
+.img-missing-sm{display:inline-block;flex:none;width:40px;height:40px;padding:0;margin:0;overflow:hidden;border-radius:var(--r-sm);background:var(--surface-2)}
+.img-missing-sm .img-retry{display:none}
+.img-thumb+.img-missing-sm{width:120px;height:60px}
+.img-retry{display:block;margin:var(--s-2) auto 0;min-height:36px;padding:0 var(--s-3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--surface-2);color:var(--accent-text);font:inherit;font-size:var(--fs-sm);cursor:pointer}
 .img-missing{display:block;margin:0 auto 10px;padding:var(--s-3);border:1px dashed var(--control);border-radius:var(--r-md);font-size:var(--fs-sm);color:var(--text-2);text-align:center}
 .flash-front .card-img,.flash-recap .card-img{max-height:32vh}
 .play-card .card-img{max-height:26vh}
@@ -1743,7 +1747,9 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
    so the boxes, placed in % of it, line up even before the picture has loaded. Every box is grey; the one to name is the
    accent colour with a "?" (.occ-ask); on the back it is uncovered with a ring (.occ-reveal). */
 .occ{position:relative;display:block;width:100%;max-width:min(100%,calc(52dvh * var(--ar,1.5)));margin:0 auto;border-radius:var(--r-md);background:#fff;box-shadow:0 0 0 1px var(--line-strong);overflow:hidden;container-type:inline-size;-webkit-user-select:none;user-select:none}
-.occ-missing{position:absolute;inset:0;display:grid;place-items:center;padding:var(--s-3);text-align:center;font-size:var(--fs-sm);color:var(--text-2);z-index:1}
+.occ-missing{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:var(--s-2);padding:var(--s-3);text-align:center;font-size:var(--fs-sm);color:var(--text-2);z-index:1}
+.occ-ed-canvas .occ-missing{font-size:calc(var(--fs-sm) / var(--s,1))}
+.occ-ed-canvas .img-retry{min-height:0;font-size:inherit}
 .occ-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;font-size:var(--fs-sm);color:var(--text-2)}
 :root:not([data-theme="light"]) .occ-img{filter:brightness(.92)}
 .occ-flow{aspect-ratio:auto}

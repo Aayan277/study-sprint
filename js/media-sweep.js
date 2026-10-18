@@ -56,3 +56,13 @@ export function planSweep({ marks = {}, gone = [], removed = [], used = new Set(
   const reupload = gone.filter(id => used.has(id) && held.has(id));
   return { mark, unmark, sweep, reupload };
 }
+
+// Files a card used at the last sweep and no card uses now, for the person's account: the files this device dropped without ever
+// holding them (lazy loading: a card deleted before its picture was viewed). cleanMedia only sees files held here, so without this
+// they would never be marked and the account would only grow. `prev` is the local-only setting "mediaRefs" ({ userId, ids }) saved by
+// the last sweep; with none, or one for another account, nothing is returned (the snapshot is just taken again). planSweep's own
+// guards (still used, already marked, gone, 30 days, first seen here) keep this safe.
+export function droppedRefs({ prev, used, userId }) {
+  if (!prev || prev.userId !== userId || !Array.isArray(prev.ids)) return [];
+  return prev.ids.filter(id => typeof id === 'string' && !used.has(id));
+}

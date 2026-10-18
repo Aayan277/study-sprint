@@ -15,7 +15,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
-import { planSweep, markKey, GONE } from './media-sweep.js';
+import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
@@ -120,6 +120,7 @@ async function startOverFromHere(userId) {
   const { syncState } = await db.getSettings();
   await db.forgetSyncedMarks();
   await db.forgetUploadedMedia();
+  await db.setSetting('mediaRefs', null);
   await db.setSetting('syncState', { userId, lastSeq: 0, pushedUntil: 0, lastSync: syncState?.lastSync || 0 });
   await db.setSetting('resendPending', false);       // only now: if this is cut short, the next sync does it again
 }
@@ -189,10 +190,12 @@ export async function pendingChanges() {
 
 // Delete everything in this account on the server, and sign this device out. Devices keep their own data.
 // (Signing in again later sends this device's data back up, starting from scratch.)
-export async function deleteServerData({ onProgress } = {}) {
-  const auth = await session();
+export async function deleteServerData(opts = {}) {
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await keepDeviceWhole(opts);
+  const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
-  await keepDeviceWhole(onProgress);
+  if (opts.signal?.aborted) throw cancelled();
   await supa.deleteAllRows(auth.access_token, auth.user.id);
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
@@ -200,10 +203,12 @@ export async function deleteServerData({ onProgress } = {}) {
 
 // Delete the account itself: its files, its synced data, and the sign-in. This device keeps its own data and is
 // signed out. (Needs supabase/limits.sql on the project.)
-export async function deleteAccount({ onProgress } = {}) {
-  const auth = await session();
+export async function deleteAccount(opts = {}) {
+  if (!(await session())) throw new supa.SupaError('Sign in first.');
+  await keepDeviceWhole(opts);
+  const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
-  await keepDeviceWhole(onProgress);
+  if (opts.signal?.aborted) throw cancelled();
   // Files first, through the Storage API (that also frees the space); the server function removes any left.
   try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await supa.deleteAccount(auth.access_token);
@@ -224,7 +229,7 @@ export async function signOut({ forget = false } = {}) {
   if (syncAuth) await supa.signOut(syncAuth.access_token);
   resetSkips();
   await db.setSetting('syncAuth', null);
-  if (forget) await db.setSetting('syncState', null);
+  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); }
   emit({ state: 'signed-out', error: null });
 }
 
@@ -451,7 +456,11 @@ async function syncMedia(auth) {
 }
 async function sweepMedia(token, uid, removed, cards) {
   const { marks, gone } = await db.mediaMarks();
-  const plan = planSweep({ marks, gone, removed, used: db.usedMediaIds(cards), held: new Set(await db.mediaKeys()), now: Date.now() });
+  // Files a card used last time and none does now, that this device never held (lazy loading): marked too, or the account would only grow.
+  const used = db.usedMediaIds(cards);
+  const dropped = droppedRefs({ prev: (await db.getSettings()).mediaRefs, used, userId: uid });
+  removed = [...new Set([...removed, ...dropped])];
+  const plan = planSweep({ marks, gone, removed, used, held: new Set(await db.mediaKeys()), now: Date.now() });
   const swept = [];
   for (const ids of chunks(plan.sweep, 100)) {
     try { await supa.deleteMedia(token, uid, ids); swept.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
@@ -460,7 +469,8 @@ async function sweepMedia(token, uid, removed, cards) {
   if (plan.reupload.length) await db.markNotUploaded(plan.reupload);
   const now = Date.now();
   await db.setSettings([...plan.mark.map(id => [markKey(id), now]), ...plan.unmark.map(id => [markKey(id), null]),
-    ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null])]);
+    ...swept.map(id => [markKey(id), GONE]), ...plan.reupload.map(id => [markKey(id), null]),
+    ['mediaRefs', { userId: uid, ids: [...used] }]]);          // (this device only: db.js LOCAL_ONLY)
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);
@@ -480,16 +490,19 @@ globalThis.addEventListener?.('online', () => { for (const [id, f] of failedFetc
 // kind: 'view' (a card shows it), 'prefetch' (a sync looks ahead) or 'force' (the person asked: an export)
 // Returns { media, reason, error }: media is the saved file (or null); reason says why not ('offline', 'signed-out', 'missing', 'error').
 export function loadMedia(id, kind = 'view') {
-  if (inflight.has(id)) return inflight.get(id);
-  const p = loadMediaNow(id, kind).finally(() => inflight.delete(id));
-  inflight.set(id, p);
-  return p;
+  const cur = inflight.get(id);
+  if (cur && (kind !== 'force' || cur.real)) return cur.p;          // (a request that was only turned away by the backoff doesn't count for a person's own request)
+  const entry = { real: false };
+  entry.p = loadMediaNow(id, kind, entry).finally(() => { if (inflight.get(id) === entry) inflight.delete(id); });
+  inflight.set(id, entry);
+  return entry.p;
 }
-async function loadMediaNow(id, kind) {
+async function loadMediaNow(id, kind, entry) {
   const failed = (reason, error) => { failedFetches.set(id, failedAgain(failedFetches.get(id), reason, Date.now())); return { media: null, reason, error }; };
   const before = failedFetches.get(id);
   if (before && !canTry(before, Date.now(), kind)) return { media: null, reason: before.reason };
   if (globalThis.navigator?.onLine === false) return failed('offline');
+  entry.real = true;
   let auth;
   try { auth = await session(); } catch (err) { return failed(supa.isSignedOutError(err) ? 'signed-out' : 'offline', err); }
   if (!auth) return { media: null, reason: 'signed-out' };
@@ -517,27 +530,34 @@ export async function missingMedia({ sounds = true, cards } = {}) {
 //   left    ids that could not be fetched just now (offline, signed out, a server problem): worth trying again
 //   gone    ids the account doesn't have (nothing to fetch: they were swept or never uploaded)
 //   reason  the first reason a file was not fetched ('offline', 'signed-out', 'missing', 'error'), or null
-export async function downloadAllMedia({ ids, sounds = true, onProgress } = {}) {
+export async function downloadAllMedia({ ids, sounds = true, onProgress, signal } = {}) {
   if (!ids) { const m = await missingMedia({ sounds }); ids = [...m.pictures, ...m.sounds]; }
   const have = new Set(await db.mediaKeys());
   ids = [...new Set(ids)].filter(id => !have.has(id));
-  let reason = null, got = 0;
+  let reason = null, got = 0, offlineRun = 0, stop = false;
   const gone = new Set();
   await runPool(ids, async id => {
+    if (stop || signal?.aborted) return;
     const r = await loadMedia(id, 'force');
-    if (r.media) got++;
-    else { reason ||= r.reason; if (r.reason === 'missing') gone.add(id); }
+    if (r.media) { got++; offlineRun = 0; return; }
+    reason ||= r.reason;
+    if (r.reason === 'missing') { gone.add(id); offlineRun = 0; }
+    else if (r.reason === 'signed-out' || (r.reason === 'offline' && ++offlineRun >= 2)) stop = true;      // no connection (or a very slow one): the rest would only wait for time-outs
   }, { onProgress }).catch(err => { if (!isWholeStorageError(err)) throw err; reason ||= 'error'; });
-  const now = new Set(await db.mediaKeys());          // (a storage problem stops the pool: whatever it didn't reach is still missing)
-  return { total: ids.length, got, left: ids.filter(id => !now.has(id) && !gone.has(id)), gone: [...gone], reason };
+  const now = new Set(await db.mediaKeys());          // (a storage problem or a stop leaves the rest missing)
+  return { total: ids.length, got, left: ids.filter(id => !now.has(id) && !gone.has(id)), gone: [...gone], reason, cancelled: !!signal?.aborted };
 }
+const cancelled = () => new supa.SupaError('Cancelled. Nothing was deleted.', { code: 'cancelled' });
 // Before something that leaves this device on its own (Delete my synced data, Delete my account): make sure it holds the files its
-// cards use, because afterwards the account can't give them back. Throws a message to show when some could not be fetched.
-async function keepDeviceWhole(onProgress) {
-  const r = await downloadAllMedia({ onProgress });
-  if (r.left.length) {
+// cards use, because afterwards the account can't give them back. Throws a message to show when some could not be fetched
+// (code 'media_left': the person may go on anyway), or 'cancelled'. The caller asks for a fresh sign-in afterwards (a long download
+// can outlast the token).
+async function keepDeviceWhole({ onProgress, signal, anyway } = {}) {
+  const r = await downloadAllMedia({ onProgress, signal });
+  if (signal?.aborted) throw cancelled();
+  if (r.left.length && !anyway) {
     const n = r.left.length;
-    throw new supa.SupaError(`${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} your cards use ${n === 1 ? "isn't" : "aren't"} on this device yet, and ${n === 1 ? 'it' : 'they'} would be lost here. Connect to the internet and try again. Nothing was deleted.`);
+    throw new supa.SupaError(`${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} your cards use ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} would be lost here. Connect to the internet and try again. Nothing was deleted.`, { code: 'media_left' });
   }
 }
 

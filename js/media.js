@@ -143,16 +143,23 @@ export async function warmCards(cards) {
 // (Picture-occlusion pictures have their boxes drawn on top, so the line sits inside the frame.)
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const noteOf = img => (img.nextElementSibling?.matches('.img-missing, .occ-missing') ? img.nextElementSibling : null);
-function placeholder(img, text) {
+const SMALL = '.hard-thumb, .img-thumb';
+function placeholder(img, text, reason) {
   img.classList.add('missing');
   img.hidden = true;
   let note = noteOf(img);
   if (!note) {
-    note = Object.assign(document.createElement('span'), { className: img.classList.contains('occ-img') ? 'occ-missing' : 'img-missing' });
-    note.setAttribute('role', 'status');
+    const occ = img.classList.contains('occ-img'), small = img.matches(SMALL);
+    note = Object.assign(document.createElement('span'), { className: occ ? 'occ-missing' : `img-missing${small ? ' img-missing-sm' : ''}` });
     img.after(note);
   }
-  note.textContent = text;
+  // Plain text (not a live region: a card full of pictures would chatter). A small thumbnail keeps the words for screen readers and a tooltip only.
+  note.replaceChildren(Object.assign(document.createElement('span'), { className: img.matches(SMALL) ? 'sr-only' : '', textContent: text }));
+  note.title = text;
+  if (reason === 'offline' || reason === 'error') {
+    note.append(Object.assign(document.createElement('button'), { type: 'button', className: 'img-retry', textContent: 'Try again' }));
+    note.lastChild.setAttribute('aria-label', 'Try again to load this picture');
+  }
 }
 function loaded(img) {
   img.classList.remove('missing', 'loading');
@@ -169,7 +176,7 @@ async function fill(img) {
   if (url) { loaded(img); img.src = url; return; }
   img.removeAttribute('src');
   img.dataset.reason = reason;
-  placeholder(img, mediaMessage(reason));
+  placeholder(img, mediaMessage(reason), reason);
 }
 // Fill in every picture as soon as it appears on the page, wherever it is.
 function fillAll(root) {
@@ -182,10 +189,12 @@ new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => n.nodeT
 // A picture that could not be loaded tries again when the connection comes back, and when its message is tapped.
 const retry = img => { if (img.isConnected && img.classList.contains('missing')) { delete img.dataset.loading; fill(img); } };
 addEventListener('online', () => document.querySelectorAll('img[data-media].missing').forEach(img => { if (img.dataset.reason !== 'missing') retry(img); }));
+// (Only the button retries: a tap anywhere else on the card still flips it, online or not.)
 document.addEventListener('click', e => {
-  const note = e.target.closest?.('.img-missing, .occ-missing');
-  const img = note?.previousElementSibling;
-  if (!img?.matches?.('img[data-media]') || img.dataset.reason === 'missing' || img.dataset.reason === 'signed-out') return;      // (nothing to retry: the tap flips the card as usual)
+  const b = e.target.closest?.('.img-retry');
+  const img = b?.parentElement?.previousElementSibling;
+  if (!img?.matches?.('img[data-media]')) return;
   e.stopPropagation();
+  e.preventDefault();
   retry(img);
 }, true);

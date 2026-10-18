@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cardFiles, wantedMedia, planPrefetch, retryWait, canTry, failedAgain, mediaMessage, notDownloadedLine, leftOutNote, PREFETCH_FILES, NEW_AHEAD } from '../js/lazy-media.js';
-import { planSweep, WAIT_MS } from '../js/media-sweep.js';
+import { planSweep, droppedRefs, WAIT_MS } from '../js/media-sweep.js';
 import { usedMediaIds, isLocalOnly } from '../js/db.js';
 import { isSyncedSetting } from '../js/sync-data.js';
 
@@ -34,7 +34,6 @@ test('a sync fetches ahead only for cards due today, not for the whole account',
   for (let i = 26; i <= 2000; i++) states.set(...due('c' + i, NOW + 20 * DAY));
   const plan = planPrefetch({ cards, statesById: states, have: new Set(), now: NOW });
   assert.deepEqual(plan.ids, Array.from({ length: 25 }, (_, i) => 'p' + (i + 1)));      // just the 25 due cards (no new cards: all have a state)
-  assert.equal(plan.more, 0);
 });
 
 test('a heavy day is capped per sync; the rest loads when its cards are shown', () => {
@@ -42,7 +41,6 @@ test('a heavy day is capped per sync; the rest loads when its cards are shown', 
   const states = new Map(cards.map(c => due(c.id, NOW - DAY)));
   const plan = planPrefetch({ cards, statesById: states, have: new Set(), now: NOW });
   assert.equal(plan.ids.length, PREFETCH_FILES);
-  assert.equal(plan.more, 260);
 });
 
 test('new cards: only the first few after the due ones', () => {
@@ -69,11 +67,10 @@ test('suspended and buried cards, files already here, shared files and recent fa
   assert.deepEqual(plan.ids, ['x', 'snd']);
 });
 
-test('over the limit: the rest is counted, not fetched', () => {
+test('over the limit: the rest is left for when its card shows', () => {
   const cards = Array.from({ length: 10 }, (_, i) => pic('c' + (i + 1), 'p' + (i + 1)));
   const plan = planPrefetch({ cards, statesById: new Map(), have: new Set(), now: NOW, limit: 4, newAhead: 10 });
   assert.equal(plan.ids.length, 4);
-  assert.equal(plan.more, 6);
 });
 
 test('"keep everything" fetches every missing file, suspended cards too, without a limit', () => {
@@ -114,7 +111,7 @@ test('the words are quiet and say what will happen', () => {
   assert.match(mediaMessage('offline', true), /^Sound not downloaded yet/);
   assert.match(mediaMessage('signed-out'), /Sign in/);
   assert.match(mediaMessage('missing'), /isn't in your account any more/);
-  assert.match(mediaMessage('error'), /Tap to try again/);
+  assert.match(mediaMessage('error'), /Couldn't load this picture/);
   assert.equal(notDownloadedLine({ pictures: 3, sounds: 0 }), '3 pictures will download when a card needs them.');
   assert.equal(notDownloadedLine({ pictures: 1, sounds: 1 }), '1 picture and 1 sound will download when a card needs them.');
   assert.equal(notDownloadedLine({ pictures: 0, sounds: 0 }), '');
@@ -148,4 +145,35 @@ test('which files a card uses does not depend on what the device holds', () => {
 test('keepAllMedia belongs to this device: not synced, not in backups', () => {
   assert.equal(isLocalOnly('keepAllMedia'), true);
   assert.equal(isSyncedSetting('keepAllMedia'), false);
+});
+
+// ---------- a card deleted before its picture was ever downloaded here ----------
+test('droppedRefs: files the last sweep saw in use and no card uses now', () => {
+  const prev = { userId: 'u1', ids: ['a', 'b', 'c'] };
+  assert.deepEqual(droppedRefs({ prev, used: new Set(['a']), userId: 'u1' }), ['b', 'c']);
+  assert.deepEqual(droppedRefs({ prev, used: new Set(['a', 'b', 'c', 'd']), userId: 'u1' }), []);
+});
+
+test('droppedRefs: no snapshot, another account or junk gives nothing (the snapshot is just taken again)', () => {
+  const used = new Set();
+  assert.deepEqual(droppedRefs({ prev: undefined, used, userId: 'u1' }), []);
+  assert.deepEqual(droppedRefs({ prev: { userId: 'u2', ids: ['a'] }, used, userId: 'u1' }), []);
+  assert.deepEqual(droppedRefs({ prev: { userId: 'u1', ids: 'abc' }, used, userId: 'u1' }), []);
+  assert.deepEqual(droppedRefs({ prev: { userId: 'u1', ids: ['a', 5, null] }, used, userId: 'u1' }), ['a']);
+});
+
+test('a dropped file this device never held is marked, then swept after 30 days; the usual guards still apply', () => {
+  const dropped = droppedRefs({ prev: { userId: 'u', ids: ['p1', 'p2', 'p3', 'p4'] }, used: new Set(['p4']), userId: 'u' });
+  const p = planSweep({ marks: { p2: NOW - 2 * DAY }, gone: ['p3'], removed: dropped, used: new Set(['p4']), held: new Set(), now: NOW });
+  assert.deepEqual(p.mark, ['p1']);               // p2 is already marked (keeps its date), p3 is gone, p4 is in use
+  assert.deepEqual(p.sweep, []);
+  const later = planSweep({ marks: { p1: NOW - 31 * DAY }, used: new Set(), held: new Set(), now: NOW });
+  assert.deepEqual(later.sweep, ['p1']);
+  // a file another card (here) still uses is never marked, even though the card that used it first was deleted
+  assert.deepEqual(planSweep({ removed: droppedRefs({ prev: { userId: 'u', ids: ['s'] }, used: new Set(['s']), userId: 'u' }), used: new Set(['s']), now: NOW }).mark, []);
+});
+
+test('mediaRefs is this device only', () => {
+  assert.equal(isLocalOnly('mediaRefs'), true);
+  assert.equal(isSyncedSetting('mediaRefs'), false);
 });

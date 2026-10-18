@@ -144,11 +144,21 @@ export function autoplayBlocked(root = document) {
 }
 
 const buttonsOf = id => document.querySelectorAll(`.snd-btn[data-snd="${CSS.escape(id)}"]`);
+// A ▶ that can't play says why in its tooltip and to screen readers (its label, then the reason); clearMissing puts the plain label back.
+function say(b, text) {
+  b.dataset.label ||= b.getAttribute('aria-label') || 'Play sound';
+  b.title = text;
+  b.setAttribute('aria-label', `${b.dataset.label}: ${text}`);
+}
+function clearMissing(b) {
+  b.classList.remove('missing'); b.removeAttribute('aria-disabled'); b.removeAttribute('title');
+  if (b.dataset.label) b.setAttribute('aria-label', b.dataset.label);
+}
 function markMissing(id, reason) {
-  buttonsOf(id).forEach(b => { b.title = mediaMessage(reason || whyNot.get(id) || 'offline', true); b.classList.add('missing'); b.setAttribute('aria-disabled', 'true'); });
+  buttonsOf(id).forEach(b => { say(b, mediaMessage(reason || whyNot.get(id) || 'offline', true)); b.classList.add('missing'); b.setAttribute('aria-disabled', 'true'); });
 }
 function markBroken(id) {
-  buttonsOf(id).forEach(b => { b.title = "This sound can't play in this browser"; b.classList.add('missing', 'broken'); b.setAttribute('aria-disabled', 'true'); });
+  buttonsOf(id).forEach(b => { say(b, "This sound can't play in this browser"); b.classList.add('missing', 'broken'); b.setAttribute('aria-disabled', 'true'); });
 }
 
 // ---------- unlocking (iOS) ----------
@@ -182,7 +192,7 @@ document.addEventListener('click', e => {
   e.preventDefault();
   if (b.classList.contains('playing')) { stopSound(); return; }
   if (b.classList.contains('broken')) return;          // a type this browser can't play: nothing to try
-  b.classList.remove('missing'); b.removeAttribute('aria-disabled'); b.removeAttribute('title');
+  clearMissing(b);
   unlock();                        // (inside the tap, in case nothing has yet)
   playSounds([b.dataset.snd], { onBlocked: () => autoplayBlocked(b.closest('.snd-row')?.parentElement || document) });
 }, true);
@@ -199,7 +209,7 @@ async function check(btn) {
     btn.classList.remove('loading');
     m = got?.media || null;
     if (!m) { markMissing(id, got?.reason); return; }
-    buttonsOf(id).forEach(b => { b.classList.remove('missing'); b.removeAttribute('aria-disabled'); b.removeAttribute('title'); });
+    buttonsOf(id).forEach(clearMissing);
   }
   if (!canPlayType(m.type)) markBroken(id);
   else if (!cached(id)) remember(id, m);

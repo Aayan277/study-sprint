@@ -90,7 +90,11 @@ await B.waitForSelector('.flash-front .img-missing');
 const alt = await B.textContent('.flash-front .img-missing');
 ok(/Picture not downloaded yet\. It will load when you're online/.test(alt), 'offline: the card says so quietly: ' + alt);
 ok(count('B') === before, 'and sent no request while offline');
+ok(await B.locator('.flash-front .img-missing button.img-retry[aria-label]').count() === 1 && !(await B.$('.flash-front .img-missing[role]')), 'the line has a real Try again button and is not a live region');
 await B.screenshot({ path: SP + '/lazy-offline.png' });
+await B.click('.flash-front .img-missing', { position: { x: 5, y: 5 } });
+await B.waitForSelector('.rate');
+ok(true, 'a tap on the placeholder still flips the card');
 await B.context().setOffline(false);
 await B.waitForSelector('.flash-front img.card-img[src^="blob:"]', { timeout: 15000 });
 ok(downloads.some(d => d.who === 'B' && d.id === 'pic-45'), 'back online: the picture loads by itself');
@@ -174,6 +178,61 @@ const [dl] = await Promise.all([C.waitForEvent('download', { timeout: 60000 }), 
 await dl.saveAs(SP + '/lazy.apkg');
 const names = JSON.parse(execFileSync('unzip', ['-p', SP + '/lazy.apkg', 'media']).toString());
 ok(Object.keys(names).length === 60, `Anki export fetched the missing pictures first (C held ${cHeld}, the file has ${Object.keys(names).length})`);
+
+const D = await device('D');
+await run(D, async () => (await import('./js/db.js')).deleteDeck('sample'));
+await signIn(D, false);
+const dHeld = (await held(D)).length;
+const marksD = () => run(D, async () => (await import('./js/db.js')).mediaMarks());
+// ---- a lazy device deletes a card whose picture it never held: the file is still marked, then swept ----
+const dHeld0 = await held(D);
+ok(!dHeld0.includes('pic-59'), 'set up: D has never held pic-59');
+await run(D, async () => { await (await import('./js/db.js')).deleteCards(['lz59']); });
+await syncNow(D);
+ok('pic-59' in (await marksD()).marks, 'D marks pic-59 for deletion although it never held it');
+ok(fake.files.has('user-1/pic-59'), 'and the account keeps it for now');
+await run(D, async () => { const m = await import('./js/media-sweep.js'), db = await import('./js/db.js'); await db.setSetting(m.markKey('pic-59'), Date.now() - 31 * 86400000); await db.setSetting(m.seenKey('pic-59'), Date.now() - 31 * 86400000); });
+await syncNow(D);
+ok(!fake.files.has('user-1/pic-59') && (await marksD()).gone.includes('pic-59'), 'after 30 days it is deleted from the account');
+
+// ---- a bad connection stops a bulk download early ----
+let refused = 0;
+const refuse = r => { refused++; return r.abort('connectionrefused'); };
+await D.context().route(SUPA, refuse);
+const dl2 = await run(D, async () => { const r = await (await import('./js/sync.js')).downloadAllMedia(); return { left: r.left.length, got: r.got, reason: r.reason }; });
+await D.context().unroute(SUPA, refuse);
+ok(dl2.got === 0 && dl2.left > 20 && dl2.reason === 'offline', `no connection: it reports ${dl2.left} files left`);
+ok(refused > 0 && refused < 12, `and gave up after ${refused} tries, not one per file`);
+
+// ---- Delete my synced data: says what it will do, can be cancelled, offers "anyway", and saves the pictures first ----
+const openDelete = async () => { await D.goto(APP + '#/decks'); await D.goto(APP + '#/settings'); await D.waitForSelector('#delServerBtn'); await D.click('#delServerBtn'); await D.waitForSelector('#dsYes'); };
+const rowsLeft = () => fake.userRows('me@example.com').length;
+await openDelete();
+await D.click('#dsYes');
+await D.waitForFunction(() => /Download, then delete/.test(document.querySelector('#dsYes')?.textContent || ''));
+ok(/first download \d+ pictures and sounds \(about [\d.]+ (KB|MB)\)/.test(await D.textContent('#dsNote')), 'the first tap says how much it will download: ' + await D.textContent('#dsNote'));
+ok(rowsLeft() > 0, 'and deletes nothing yet');
+await D.context().route(SUPA, refuse);
+await D.click('#dsYes');
+await D.waitForFunction(() => /Delete anyway/.test(document.querySelector('#dsYes')?.textContent || ''));
+ok(/Nothing was deleted|couldn't be downloaded/.test(await D.textContent('#dsNote')) && rowsLeft() > 0, 'offline: it says some could not be saved and offers Delete anyway; nothing deleted');
+await D.context().unroute(SUPA, refuse);
+await D.click('#sheet .btn.ghost');                                   // Cancel
+// cancelling while it downloads (slowed down) deletes nothing
+const slow = async r => { await new Promise(ok => setTimeout(ok, 400)); return r.fallback(); };
+await D.context().route(SUPA, slow);
+await openDelete(); await D.click('#dsYes'); await D.waitForFunction(() => /Download, then delete/.test(document.querySelector('#dsYes')?.textContent || ''));
+await D.click('#dsYes');
+await D.waitForFunction(() => /Saving pictures here first/.test(document.querySelector('#dsYes')?.textContent || ''));
+await D.click('#dsNo');
+await D.waitForTimeout(4000);
+ok(rowsLeft() > 0 && (await run(D, async () => !!(await (await import('./js/db.js')).getSettings()).syncAuth)), 'Cancel during the download: nothing deleted and still signed in');
+await D.context().unroute(SUPA, slow);
+// and going through with it saves every picture here first
+await openDelete(); await D.click('#dsYes'); await D.waitForFunction(() => /Download, then delete/.test(document.querySelector('#dsYes')?.textContent || ''));
+await D.click('#dsYes');
+await D.waitForFunction(() => /Your synced data was deleted/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 30000 });
+ok(rowsLeft() === 0 && (await held(D)).length >= 59, `after Delete: the server is empty and this device holds ${(await held(D)).length} pictures (it had ${dHeld})`);
 
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 if (errors.length) process.exitCode = 1;
