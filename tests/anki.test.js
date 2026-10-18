@@ -421,3 +421,133 @@ test('sounds: without a package every sound with a known ending is taken as pres
   assert.deepEqual(r.sounds[0].front, ['a.mp3']);
   assert.deepEqual(r.sounds[0].lost, [{ name: 'b.amr', reason: 'format' }]);
 });
+
+// ---------- round 3, batch 1b: cards that work in both directions (item 5) and note fields (item A) ----------
+import { reverseModel, templateFormats, fieldReport } from '../js/anki.js';
+import { buildCards, hasKeptFields } from '../js/import.js';
+
+const tmpl = (ord, qfmt, afmt = '') => ({ ord, qfmt, afmt });
+const revModels = new Map([
+  ['10', { name: 'Basic (and reversed card)', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Back}}')] }],
+  ['11', { name: 'Basic (optional reversed card)', fields: ['Front', 'Back', 'Add Reverse'], cloze: false,
+    templates: [tmpl(0, '{{Front}}', '{{FrontSide}}<hr id=answer>{{Back}}'), tmpl(1, '{{#Add Reverse}}{{Back}}{{/Add Reverse}}', '{{FrontSide}}<hr id=answer>{{Front}}')] }],
+  ['12', { name: 'Vocab with listening', fields: ['Word', 'Meaning', 'Audio'], cloze: false, templates: [tmpl(0, '{{Word}}'), tmpl(1, '{{Audio}}'), tmpl(2, '{{Meaning}}')] }],
+  ['13', { name: 'Basic', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}')] }],
+  ['14', { name: 'Two cards, both ask the front', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Front}} again')] }],
+  ['15', { name: 'Typed', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{type:Back}}')] }]
+]);
+
+test('reverseModel: exactly two card types, the second asking with the Back field and not the Front', () => {
+  assert.equal(reverseModel(revModels.get('10')), true);
+  assert.equal(reverseModel(revModels.get('11')), true, 'optional reversed card: {{#Add Reverse}}{{Back}}{{/Add Reverse}}');
+  assert.equal(reverseModel(revModels.get('12')), false, 'three card types');
+  assert.equal(reverseModel(revModels.get('13')), false, 'one card type');
+  assert.equal(reverseModel(revModels.get('14')), false, 'the second card asks with the Front');
+  assert.equal(reverseModel(revModels.get('15')), true, '{{type:Back}} still asks with the Back field');
+  assert.equal(reverseModel({ name: 'No templates read', fields: ['Front', 'Back'], cloze: false }), false);
+  assert.equal(reverseModel({ name: 'Cloze', fields: ['Text', 'Back Extra'], cloze: true, templates: [tmpl(0, '{{cloze:Text}}'), tmpl(1, '{{Back Extra}}')] }), false);
+});
+
+test('templateFormats: the front and back template out of a new-layout config record', () => {
+  const enc = new TextEncoder();
+  const field = (n, text) => { const b = enc.encode(text); return [(n << 3) | 2, b.length, ...b]; };
+  const config = new Uint8Array([...field(1, '{{Front}}'), ...field(2, '{{FrontSide}}<hr id=answer>{{Back}}'), 24, 5]);
+  assert.deepEqual(templateFormats(config), { qfmt: '{{Front}}', afmt: '{{FrontSide}}<hr id=answer>{{Back}}' });
+  assert.deepEqual(templateFormats(null), { qfmt: '', afmt: '' });
+});
+
+test('"Basic (and reversed card)": the note brings both cards, and the reverse card keeps its own history', () => {
+  const r = notesToImport([
+    { id: 'n1', mid: '10', fields: ['Mitosis', 'Cell division'], tags: [], deck: 'Bio', cards: { 0: 'a1', 1: 'a2' } },
+    { id: 'n2', mid: '11', fields: ['Meiosis', 'Gametes', 'y'], tags: [], deck: 'Chem', cards: { 0: 'b1', 1: 'b2' } },
+    { id: 'n3', mid: '11', fields: ['Nucleus', 'Holds DNA', ''], tags: [], deck: 'Bio', cards: { 0: 'c1' } },       // optional reverse not asked for
+    { id: 'n4', mid: '13', fields: ['Ribosome', 'Makes proteins'], tags: [], deck: 'Bio', cards: { 0: 'd1' } }
+  ], revModels, new Map([['a1', [{ timestamp: 1, ease: 3, ivl: 1, ms: 1000, type: 0, factor: 2500 }]], ['a2', [{ timestamp: 2, ease: 3, ivl: 1, ms: 1000, type: 0, factor: 2500 }, { timestamp: 3, ease: 1, ivl: 0, ms: 900, type: 1, factor: 2300 }]]]));
+  assert.deepEqual(r.reversed, [{ ankiId: 'a2' }, { ankiId: 'b2' }, null, null]);
+  assert.deepEqual(r.ankiIds, ['a1', 'b1', 'c1', 'd1']);
+  assert.deepEqual(r.progress, { cards: 2, reviews: 3 }, "the reverse card's two reviews count too");
+  assert.deepEqual([...r.reviews.keys()].sort(), ['a1', 'a2']);
+  // "Add Reverse" is only a switch: it is not a field of the note
+  assert.deepEqual(r.fieldNames[1], ['Front', 'Back', null]);
+  assert.equal(buildCards(r, 0, 1)[1].noteFields, undefined);
+  assert.deepEqual(buildCards(r, 0, 1).map(c => c.reversed), [{ ankiId: 'a2' }, { ankiId: 'b2' }, undefined, undefined]);
+  // a deck picker keeps the arrays together, and the progress follows the rows left
+  const chem = onlyDeck(r, 'Chem');
+  assert.equal(chem.rows.length, 1);
+  assert.deepEqual(chem.reversed, [{ ankiId: 'b2' }]);
+  assert.deepEqual(chem.progress, { cards: 0, reviews: 0 });
+  assert.deepEqual(onlyDeck(r, 'Bio').progress, { cards: 2, reviews: 3 });
+});
+
+test('notes with more card types than come in are counted (a listening card), not reversed', () => {
+  const r = notesToImport([
+    { id: 'n1', mid: '12', fields: ['犬', 'dog', '[sound:dog.mp3]'], tags: [], deck: 'V', cards: { 0: 'a', 1: 'b', 2: 'c' } },
+    { id: 'n2', mid: '12', fields: ['猫', 'cat', ''], tags: [], deck: 'V', cards: { 0: 'd' } },
+    { id: 'n3', mid: '12', fields: ['鳥', 'bird', ''], tags: [], deck: 'W', cards: { 0: 'e', 1: 'f' } }
+  ], revModels);
+  assert.deepEqual(r.reversed, [null, null, null]);
+  assert.equal(fieldReport(r).more, 2, 'n2 has only the first card in Anki, so nothing is left out');
+  assert.equal(fieldReport(onlyDeck(r, 'V')).more, 1);
+});
+
+// AnKing-style notes: Text, Extra, Personal Notes, First Aid, Sketchy, Pathoma
+const anking = new Map([['20', { name: 'AnKingOverhaul', fields: ['Text', 'Extra', 'Personal Notes', 'First Aid', 'Sketchy', 'Pathoma'], cloze: true }]]);
+const ankingNote = (fields, extra = {}) => ({ id: 'k1', mid: '20', fields, tags: ['#AK_Step1_v12::#UWorld::Step::12345'], deck: 'AnKing', ...extra });
+
+test('note fields: a cloze note keeps its extra open and the other fields as named folded sections', () => {
+  const r = notesToImport([ankingNote(['{{c1::Aorta}} leaves the {{c2::left ventricle}}', 'Remember <b>this</b>', '', 'p. 41', 'Video 3<br>Part two', ''])], anking);
+  assert.equal(r.rows.length, 2);
+  assert.deepEqual(r.extraSplits[0], { extra: 'Remember **this**', fields: [{ name: 'First Aid', text: 'p. 41' }, { name: 'Sketchy', text: 'Video 3\nPart two' }] });
+  assert.deepEqual(r.extraSplits[1], r.extraSplits[0], 'every card of the note');
+  assert.equal(r.noteExtras[0], 'Remember **this**\np. 41\nVideo 3\nPart two', 'with the switch off, all of it joined as before');
+  const on = buildCards(r, 0, 1, { keepFields: true });
+  assert.equal(on[0].noteExtra, 'Remember **this**');
+  assert.deepEqual(on[0].noteFields, [{ name: 'First Aid', text: 'p. 41' }, { name: 'Sketchy', text: 'Video 3\nPart two' }]);
+  const off = buildCards(r, 0, 1, { keepFields: false });
+  assert.equal(off[0].noteExtra, 'Remember **this**\np. 41\nVideo 3\nPart two');
+  assert.equal(off[0].noteFields, undefined);
+  assert.equal(hasKeptFields(r), true);
+});
+
+test('note fields: the Back Extra field is the extra even when it is not second; empty fields are dropped; duplicate names both stay', () => {
+  const m = new Map([['21', { name: 'Odd', fields: ['Text', 'Notes', 'Back Extra', 'Notes'], cloze: true }]]);
+  const r = notesToImport([{ id: 'k2', mid: '21', fields: ['{{c1::a}} b', 'one', 'extra text', 'two'], tags: [], deck: 'D' }], m);
+  assert.deepEqual(r.extraSplits[0], { extra: 'extra text', fields: [{ name: 'Notes', text: 'one' }, { name: 'Notes', text: 'two' }] });
+  const plain = notesToImport([{ id: 'k3', mid: '2', fields: ['{{c1::x}} y', 'Only an extra'], tags: [], deck: 'D' }], models);
+  assert.equal(plain.extraSplits[0], null, 'nothing else to keep');
+  assert.equal(hasKeptFields(plain), false, 'the switch is not shown');
+  assert.equal(buildCards(plain)[0].noteExtra, 'Only an extra');
+});
+
+test('note fields: a field with only a picture is dropped and counted; very long fields are cut', () => {
+  const long = 'x'.repeat(25000);
+  const r = notesToImport([ankingNote(['{{c1::a}} b', 'Extra', '', '<img src="fa.png">', long, 'ok'])], anking);
+  assert.deepEqual(r.extraSplits[0].fields.map(f => f.name), ['Sketchy', 'Pathoma']);
+  assert.equal(r.extraSplits[0].fields[0].text.length, 20000);
+  assert.ok(r.extraSplits[0].fields[0].text.endsWith('…'));
+  assert.deepEqual(fieldReport(r), { pictures: 1, cut: 1, more: 0 });
+  // {{c1::…}} inside another field stays plain text
+  const t = notesToImport([ankingNote(['{{c1::a}} b', '', '', 'A {{c1::fake}} cloze'])], anking);
+  assert.equal(t.extraSplits[0].fields[0].text, 'A {{c1::fake}} cloze');
+});
+
+test('note fields: a basic note keeps the columns that are not the front or back', () => {
+  const r = notesToImport([{ id: 'v1', mid: '3', fields: ['犬', 'dog', 'Inu wa kawaii', ''], tags: [], deck: 'V' }], new Map([['3', { name: 'Vocab', fields: ['Word', 'Meaning', 'Example', 'Notes'], cloze: false }]]));
+  assert.deepEqual(r.fieldNames[0], ['Word', 'Meaning', 'Example', 'Notes']);
+  assert.deepEqual(buildCards(r, 0, 1)[0].noteFields, [{ name: 'Example', text: 'Inu wa kawaii' }]);
+  assert.deepEqual(buildCards(r, 0, 2)[0].noteFields, [{ name: 'Meaning', text: 'dog' }], 'choosing other columns changes which are left over');
+  assert.equal(buildCards(r, 0, 1, { keepFields: false })[0].noteFields, undefined);
+  assert.equal(hasKeptFields(r), true);
+});
+
+test("note fields: <details><summary> sections are read back as fields (what this app's Anki export writes)", () => {
+  const back = 'The answer<br><br>Hook<details><summary>First Aid</summary>p. 12<br>line two</details><details><summary>Sketchy &amp; co</summary>video</details>';
+  const r = notesToImport([{ id: 'x1', mid: '1', fields: ['Front', back], tags: [], deck: 'D' }], models);
+  assert.deepEqual(r.rows[0], ['Front', 'The answer\n\nHook']);
+  assert.deepEqual(buildCards(r)[0].noteFields, [{ name: 'First Aid', text: 'p. 12\nline two' }, { name: 'Sketchy & co', text: 'video' }]);
+  assert.equal(buildCards(r, 0, 1, { keepFields: false })[0].noteFields, undefined);
+  // a cloze note's Back Extra
+  const c = notesToImport([{ id: 'x2', mid: '2', fields: ['{{c1::a}} b', 'Extra<details><summary>Sketchy</summary>vid</details>'], tags: [], deck: 'D' }], models);
+  assert.deepEqual(c.extraSplits[0], { extra: 'Extra', fields: [{ name: 'Sketchy', text: 'vid' }] });
+  assert.equal(c.noteExtras[0], 'Extra\nSketchy\nvid');
+});

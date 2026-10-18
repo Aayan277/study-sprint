@@ -9,7 +9,10 @@ import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, clearBasic } from './card-editor.js';
+import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
+import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
+import { cleanFields } from './note-fields.js';
+import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText, mathHTML } from './format.js';
@@ -110,7 +113,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
         <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
+          <span class="crow-main"><span class="f">${isPair(card) && card.reverse ? '<span class="rev-pill" title="Reverse card: asks the back, expects the front">Reverse</span> ' : ''}${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -176,6 +179,7 @@ export async function openCardPanel(card, ctx) {
   const studied = state && state.state !== 0;
   const logs = await db.getCardLogs(card.id);
   const maxN = await noteMaxN(card);
+  const partner = await partnerOf(card);
   const now = Date.now();
   const status = cardStatus(card, state, now);
   // In a side panel (wide screens), highlight the card it's showing.
@@ -184,14 +188,15 @@ export async function openCardPanel(card, ctx) {
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card, maxN)}
+      ${cardFieldsHTML(card, maxN, partner)}
       <div class="sheet-actions"><button class="btn primary" type="submit">Save changes</button></div>
     </form>
+    ${partner ? `<p class="note rev-line">${card.reverse ? 'Reverse card' : 'Has a reverse card'} · <button class="link" type="button" id="revOpen">Open the other direction</button></p>` : ''}
 
     <div class="act-grid">
       <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
       <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards (a reverse pair in both directions)' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
@@ -224,14 +229,16 @@ export async function openCardPanel(card, ctx) {
     </details>`, { side: true });
 
   const { save, again } = cardOps(card, ctx);
-  wireCardForm(card, ctx, 'Saved');
+  wireCardForm(card, ctx, 'Saved', partner);
+  $('revOpen')?.addEventListener('click', () => openCardPanel(partner, ctx));
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
     if (act === 'suspend') toggleSuspend(card, save);
     if (act === 'bury') toggleBury(card, save);
     if (act === 'duplicate') duplicateAndEdit(card, ctx);
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
-    if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
+    if (act === 'delete' && partner) askDeletePair(card, partner, again);
+    else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
       : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
   }));
   wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
@@ -309,17 +316,18 @@ document.addEventListener('keydown', e => {
 // The short editor: Front, Back and Tags (with the formatting buttons and pictures), Cancel and Save always in view.
 async function openCardEdit(card, ctx) {
   const maxN = await noteMaxN(card);
+  const partner = await partnerOf(card);
   openSheet(`
     <h2 id="sheetTitle">Edit card</h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card, maxN)}
+      ${cardFieldsHTML(card, maxN, partner)}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="ceCancel">Cancel</button>
         <button class="btn primary" type="submit">Save <kbd aria-hidden="true">${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl+↵'}</kbd></button>
       </div>
     </form>`, { side: true });
   $('ceCancel').addEventListener('click', closeSheet);
-  wireCardForm(card, ctx, 'Card saved');
+  wireCardForm(card, ctx, 'Card saved', partner);
 }
 
 // ---------- shared by the card sheets ----------
@@ -344,6 +352,7 @@ function cardOps(card, ctx) {
     const shared = { ...('deckId' in changes ? { deckId: changes.deckId } : {}), ...('tags' in changes ? { tags: changes.tags } : {}) };
     const merged = { ...card, ...changes };
     if ('noteExtra' in changes && !changes.noteExtra) delete merged.noteExtra;      // an emptied memory hook is no hook
+    if ('noteFields' in changes) { const f = cleanFields(changes.noteFields).fields; if (f.length) merged.noteFields = f; else delete merged.noteFields; }      // no other fields is no list, and the list is kept within its limits
     for (const k of ['frontSounds', 'backSounds']) if (k in changes && !changes[k]?.length) delete merged[k];      // and no sounds is no list
     if ('acceptAnswers' in changes && !changes.acceptAnswers?.length) delete merged.acceptAnswers;      // and no accepted answers is none
     await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
@@ -364,17 +373,20 @@ const occBadge = card => {
 const noteMaxN = async card => (card.noteId && hasMasks(card)
   ? Math.max(0, ...(await db.getAll('cards')).filter(c => c.noteId === card.noteId).map(c => c.occlusion?.n).filter(Number.isInteger))
   : 0);
-const cardFieldsHTML = (card, maxN = 0) => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
-      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}`}
+// pair: the other card when this one has a reverse card (or is one), else null
+const cardFieldsHTML = (card, maxN = 0, pair = null) => `
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') + noteFieldsEditHTML('ce', card.noteFields) : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
+      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
+      ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
+      ${noteFieldsEditHTML('ce', card.noteFields)}`}
       <label class="field"><span>Tags (separated by commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" hidden></p>`;
 const showErr = (id, text) => { $(id).textContent = text; $(id).hidden = false; };
-function wireCardForm(card, ctx, msg) {
+function wireCardForm(card, ctx, msg, pair = null) {
   const ops = cardOps(card, ctx);
-  if (!isClozeCard(card) && !hasMasks(card)) { setCardSounds('ceFront', card.frontSounds || []); setCardSounds('ceBack', card.backSounds || []); }
+  if (!isClozeCard(card) && !hasMasks(card)) { setCardSounds('ceFront', card.frontSounds || []); setCardSounds('ceBack', card.backSounds || []); wireRevSwitch('ce', $('ceForm')); }
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
     if (isClozeCard(card)) return saveClozeNote(card, ops, msg);
@@ -386,10 +398,69 @@ function wireCardForm(card, ctx, msg) {
     if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
-    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra: readCardText('ceHook').trim(), tags: parseTags($('ceTags').value), ...($('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {}) }, msg, 'edit');
+    const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
+    const accept = $('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {};
+    const both = !!$('ceRevOn')?.checked && !stepsOn('ce');
+    if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
+    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
+}
+
+// ---------- cards that work in both directions (reverse.js) ----------
+// The other card of a pair (a card and its reverse card), or null.
+async function partnerOf(card) {
+  if (!isPair(card)) return null;
+  return (await db.getAll('cards')).find(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId) || null;
+}
+// The "Both directions" switch hides, with a note, while "Answer in steps" is on.
+function wireRevSwitch(p, form) {
+  form.addEventListener('change', e => {
+    if (e.target.dataset?.modeFor !== p) return;      // the Answer: Text | Steps | Elements choice
+    const blocked = stepsOn(p);
+    $(p + 'RevRow').hidden = blocked; $(p + 'RevNote').hidden = !blocked;
+  });
+}
+// Saving a basic card that is, or becomes, one of a pair. `pair` is its other card (null for an ordinary card), `both` says whether the
+// switch is on, `sides` the front, back, pictures and sounds as edited, `shared` the fields both cards share (tags, hook, other fields).
+//   pair + both     both cards are saved, the other one swapped to match
+//   pair, not both  the reverse card goes (asks first) and the other card becomes an ordinary card
+//   no pair + both  the card gets a reverse card
+async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
+  const common = { deckId: card.deckId, tags: shared.tags, noteExtra: shared.noteExtra, noteFields: shared.noteFields?.length ? shared.noteFields : undefined };
+  const go = async () => {
+    if (pair && both) {
+      await db.saveNote({ update: pairPlan(card, pair, sides) }, { ...common, noteId: card.noteId });
+    } else if (pair) {
+      const [a, b] = pairPlan(card, pair, sides);
+      const [keep, drop] = a.reverse ? [b, a] : [a, b];
+      await db.saveNote({ update: [unpaired(keep)], remove: [drop] }, { ...common, noteId: undefined });
+    } else {
+      const fwd = { ...unpaired(card), ...sides };
+      for (const k of ['frontImage', 'backImage']) if (!fwd[k]) delete fwd[k];
+      for (const k of ['frontSounds', 'backSounds']) if (!fwd[k]?.length) delete fwd[k];
+      if (!canReverse(fwd)) { showErr('ceErr', "This card can't have a reverse card."); return; }
+      await db.saveNote({ update: [fwd], add: [reverseOf(fwd, db.newId())] }, { ...common, noteId: db.newId() });
+    }
+    return ops.again(msg, 'edit');
+  };
+  if (pair && !both) {
+    const steps = stepsOn('ce');
+    return confirmIn('ceFormConfirm', steps ? "Step-by-step cards can't have a reverse card. Save and remove the reverse card?" : 'Remove the reverse card? Its schedule and history go.',
+      steps ? 'Save and remove it' : 'Remove reverse card', go);
+  }
+  return go();
+}
+// Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
+function askDeletePair(card, partner, again) {
+  $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.</p><div class="sheet-actions">
+    <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
+    <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
+  $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
+  $('cfBoth').addEventListener('click', () => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete')));
+  $('cfOnly').addEventListener('click', async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); });
+  $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 
 // Saving a cloze note: every card of the note at once. A blank that was taken out deletes its card and history,
@@ -420,7 +491,7 @@ async function saveClozeNote(card, ops, msg) {
     $('ceErr').hidden = true;
     if (plan.remove.some(c => !confirmed.has(c.id))) return ask(plan);
     // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
-    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), frontSounds: card.frontSounds, backSounds: card.backSounds });
+    await db.saveNote(plan, { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds });
     return ops.again(msg, 'edit');
   };
   const ask = plan => confirmIn('ceFormConfirm', removalText(plan), 'Remove and save', () => guarded(() => go(new Set(plan.remove.map(c => c.id)))));
@@ -498,8 +569,9 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       <button class="btn ghost small" type="button" data-act="unsuspend">Unsuspend</button>
       <button class="btn ghost small" type="button" data-act="bury">Bury until tomorrow</button>
       <button class="btn ghost small" type="button" data-act="unbury">Unbury</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards">${icon('plus')} Duplicate</button>
+      <button class="btn ghost small" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards, a reverse pair in both directions">${icon('plus')} Duplicate</button>
       <button class="btn ghost small" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>Reset to new</button>
+      <button class="btn ghost small" type="button" data-act="reverse">Both directions</button>
       <button class="btn danger small" type="button" data-act="delete">Delete…</button>
     </div>
     <div id="ceConfirm"></div>
@@ -536,11 +608,23 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       await refresh();
     })();
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
-    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, () => db.deleteCards(selected.map(c => c.id)).then(() => { clear(); return done(`Deleted ${plural(n, 'card')}`); }));
+    if (act === 'reverse') bulkReverse(selected, done);
+    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
+      await db.deleteCards(selected.map(c => c.id));
+      // A card whose partner is deleted becomes an ordinary card again.
+      const gone = new Set(selected.map(c => c.id)), notes = new Set(selected.filter(isPair).map(c => c.noteId));
+      const left = notes.size ? (await db.getAll('cards')).filter(c => isPair(c) && notes.has(c.noteId) && !gone.has(c.id)) : [];
+      if (left.length) await db.saveCards(left.map(unpaired));
+      clear();
+      return done(`Deleted ${plural(n, 'card')}`);
+    });
   }));
   // Find and replace: shows how many cards would change as you type.
-  const frChanges = () => replaceInCards(selected, { find: $('frFind').value, replace: $('frWith').value,
-    field: document.querySelector('#sheet [name=frIn]:checked').value, matchCase: $('frCase').checked });
+  // A card with a reverse card changes both (the other one is swapped to match): see syncPairChanges in reverse.js.
+  let everyCard = selected;
+  const loaded = selected.some(isPair) ? db.getAll('cards').then(all => { everyCard = all; frCount(); }) : Promise.resolve();
+  const frChanges = () => syncPairChanges(replaceInCards(selected, { find: $('frFind').value, replace: $('frWith').value,
+    field: document.querySelector('#sheet [name=frIn]:checked').value, matchCase: $('frCase').checked }), everyCard);
   const frCount = () => {
     const n2 = $('frFind').value ? frChanges().length : 0;
     $('frCount').textContent = !$('frFind').value ? 'Type what to find.' : n2 ? `Changes ${plural(n2, 'card')}.` : 'No matches in these cards.';
@@ -549,6 +633,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   $('frForm').addEventListener('input', frCount);
   $('frForm').addEventListener('submit', async e => {
     e.preventDefault();
+    await loaded;
     const changed = frChanges();
     if (!changed.length) return;
     await db.saveCards(changed);
@@ -557,6 +642,25 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
   wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${deckPath(decks, deckId)}`));
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
+}
+
+// "Both directions" for the selected cards. The cards are read again first (a sync or another tab may have changed them) and again when
+// the question is answered. A card that carries a pair's noteId but has no partner counts as an ordinary card and can be paired again.
+async function bulkReverse(selected, done) {
+  const ids = selected.map(c => c.id);
+  const fresh = async () => {
+    const all = await db.getAll('cards'), lone = loneIds(all), byId = new Map(all.map(c => [c.id, c]));
+    const cards = ids.map(id => byId.get(id)).filter(Boolean);
+    return { todo: cards.filter(c => (!isPair(c) || lone.has(c.id)) && canReverse(unpaired(c))), stuck: cards.filter(c => !isPair(c) && !canReverse(c)).length };
+  };
+  const { todo, stuck } = await fresh();
+  if (!todo.length) { toast('None of these can get a reverse card'); return; }
+  confirmIn('ceConfirm', `Add reverse cards to ${plural(todo.length, 'card')}?${stuck ? ` ${stuck} can't be reversed (cloze, image-occlusion or step-by-step cards).` : ''}`, `Add ${plural(todo.length, 'reverse card')}`, async () => {
+    const now = Date.now(), { todo: again } = await fresh();
+    const cards = again.flatMap(c => { const fwd = { ...unpaired(c), noteId: db.newId(), noteEditedAt: now }; return [fwd, { ...reverseOf(fwd, db.newId()), noteEditedAt: now }]; });
+    await db.saveCards(cards);
+    done(`Added ${plural(again.length, 'reverse card')}`);
+  });
 }
 
 // ---------- tools ----------
@@ -691,6 +795,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       <div class="kind-body">
         <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
           ${basicFields('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' })}
+          ${reverseSwitchHTML('ac')}
         </div>
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
@@ -706,6 +811,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
   (kind === 'occlusion' ? $('acOccChoose') : $(kind === 'cloze' ? 'acText' : 'acFront')).focus();
   if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
   $('acDone').addEventListener('click', closeSheet);
+  wireRevSwitch('ac', $('acForm'));
   const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
   let adding = false;          // a second tap on Add while the first is saving must not add the cards twice
   $('acForm').addEventListener('submit', async e => {
@@ -714,7 +820,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     const deck = $('acDeck')?.value || target, tags = parseTags($('acTags').value);
     const kindNow = readKind('ac');
     // What to save, or the message to show (Ctrl+Enter can submit a form whose button is disabled).
-    let save, count = 1;
+    let save, count = 1, pairAdded = false;
     if (kindNow === 'occlusion') {
       const note = readOcclusion('ac');
       const plan = note.image ? planOcclusionSave([], note) : { error: 'Choose a picture first.' };
@@ -735,7 +841,12 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('acErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
       const why = stepsProblem('ac');
       if (why) { showErr('acErr', why); return; }
-      save = () => db.saveCards([{ id: db.newId(), deckId: deck, front, back, frontImage, backImage, ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), ...(hook ? { noteExtra: hook } : {}), tags, created: Date.now() }]);
+      const card = { id: db.newId(), deckId: deck, front, back, ...(frontImage ? { frontImage } : {}), ...(backImage ? { backImage } : {}), ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), created: Date.now() };
+      if ($('acRevOn').checked && !stepsOn('ac') && canReverse(card)) {
+        // Both directions: a card and its reverse card, saved together as one note (reverse.js).
+        count = 2; pairAdded = true;
+        save = () => db.saveNote({ add: [card, reverseOf(card, db.newId())] }, { deckId: deck, noteId: db.newId(), tags, noteExtra: hook });
+      } else save = () => db.saveCards([{ ...card, ...(hook ? { noteExtra: hook } : {}), tags }]);
     }
     adding = true;
     try {
@@ -752,7 +863,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     else if (kindNow === 'cloze') { setCardText('acText', ''); setCardText('acExtra', ''); $('acText').focus(); }
     else { clearBasic('ac'); setCardSounds('acFront', []); setCardSounds('acBack', []); $('acFront').focus(); }
     updateAdd();
-    toast(kindNow === 'basic' ? 'Card added' : `Added ${plural(count, 'card')}`);
+    toast(kindNow === 'basic' && !pairAdded ? 'Card added' : `Added ${plural(count, 'card')}`);
     refresh();
   });
   $('acForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('acForm').requestSubmit(); } });

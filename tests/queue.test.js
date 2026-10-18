@@ -439,6 +439,23 @@ test('pickedQueue: the given cards in the given order, skipping missing ones', a
   assert.deepEqual(waiting, []);
 });
 
+// ---- round 3, batch 1b: a card and its reverse card are one card a day, like cloze blanks ----
+test('siblings: a card and its reverse card show one a day, each with its own schedule', () => {
+  const pairCard = (id, reverse) => ({ id, deckId: 'd', noteId: 'PAIR', front: id, back: id, ...(reverse ? { reverse: true } : {}) });
+  const cards = [pairCard('fwd'), pairCard('rev', true), sibCard('plain')];
+  // new: only the forward card (it comes first in the order) is introduced today
+  assert.deepEqual(buildQueue(cards, new Map(), 5, NOW).queue.map(q => q.card.id), ['fwd', 'plain']);
+  // both due for review: the most overdue one shows
+  const states = new Map([['fwd', { state: REVIEW, due: NOW - DAY }], ['rev', { state: REVIEW, due: NOW - 3 * DAY }], ['plain', { state: REVIEW, due: NOW - DAY }]]);
+  assert.deepEqual(buildQueue(cards, states, 5, NOW).queue.map(q => q.card.id).sort(), ['plain', 'rev']);
+  // the forward card answered today: the reverse card waits for tomorrow, though it is overdue
+  const answered = answeredNotes([{ cardId: 'fwd', timestamp: NOW - HOUR, source: 'review' }], cards, NOW);
+  states.set('fwd', { state: REVIEW, due: NOW + 5 * DAY });
+  assert.deepEqual(buildQueue(cards, states, 5, NOW, Infinity, null, answered).queue.map(q => q.card.id), ['plain']);
+  // tomorrow the reverse card is the one that shows
+  assert.deepEqual(buildQueue(cards, states, 5, NOW + DAY).queue.map(q => q.card.id).sort(), ['plain', 'rev']);
+});
+
 test('spreadSiblings: cards of one note are never next to each other when the list allows', async () => {
   const { spreadSiblings } = await import('../js/queue.js');
   const c = (id, noteId) => ({ id, noteId });

@@ -2,6 +2,7 @@
 // Run with: node --test tests/duplicate.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { isPair, reverseOf, healPairs, loneIds } from '../js/reverse.js';
 import { duplicateCards } from '../js/browse-logic.js';
 import { PANEL_MIN, PANEL_KEY, panelMax, clampPanel, savedPanel, savePanel } from '../js/panel-resize.js';
 
@@ -67,22 +68,46 @@ test('a copy gets no Anki guid, sync stamp or uid, and no leech tag (two notes m
   assert.deepEqual(c.tags, ['x', 'leech']);
 });
 
-test('a reverse pair is copied as a new pair (both cards, one new noteId, links pointing at the copies)', () => {
-  const fwd = { id: 'f', deckId: 'd', front: 'a', back: 'b', noteId: 'P', created: 1 };
-  const rev = { id: 'r', deckId: 'd', front: 'b', back: 'a', noteId: 'P', reverse: true, reverseOf: 'f', created: 2 };
-  const { copies, of } = duplicateCards([rev], [fwd, rev], mkId(), NOW);
-  assert.equal(copies.length, 2);
-  assert.equal(new Set(copies.map(c => c.noteId)).size, 1);
-  assert.notEqual(copies[0].noteId, 'P');
-  const r2 = copies.find(c => c.reverse);
-  assert.equal(r2.reverseOf, of.get('f'));
+// Pairs are built with the real helpers of js/reverse.js
+const makePair = () => {
+  const fwd = { id: 'f', deckId: 'd', front: 'heart', back: 'pumps blood', noteId: 'P', noteExtra: 'hook', noteFields: [{ name: 'Origin', value: 'Latin' }], tags: ['bio', 'leech'], created: 10, noteEditedAt: 5 };
+  const rev = { ...reverseOf(fwd, 'r'), noteEditedAt: 5 };
+  return [fwd, rev];
+};
+
+test('a reverse pair copies to exactly two cards: one new noteId, exactly one reverse:true, and healPairs finds it healthy', () => {
+  const [fwd, rev] = makePair();
+  const all = [fwd, rev, basic];
+  const before = JSON.stringify(all);
+  for (const picked of [fwd, rev]) {                                   // picking either direction copies both
+    const { copies, firstCopy } = duplicateCards([picked], all, mkId(), NOW);
+    assert.equal(copies.length, 2);
+    assert.equal(new Set(copies.map(c => c.noteId)).size, 1);
+    assert.ok(copies[0].noteId && copies[0].noteId !== 'P');
+    assert.equal(copies.filter(c => c.reverse === true).length, 1);
+    assert.equal(firstCopy.reverse === true, picked.reverse === true);
+    assert.ok(copies.every(c => isPair(c) && c.noteExtra === 'hook' && c.noteFields[0].name === 'Origin' && c.deckId === 'd' && !c.tags.includes('leech')));
+    const f2 = copies.find(c => !c.reverse), r2 = copies.find(c => c.reverse);
+    assert.equal(r2.front, 'pumps blood'); assert.equal(r2.back, 'heart');
+    assert.equal(loneIds([...all, ...copies]).size, 0);                 // two clean pairs
+    assert.deepEqual(healPairs([...all, ...copies]), []);               // nothing to heal, the original pair is untouched
+    assert.equal(JSON.stringify(all), before);
+    f2.noteFields[0].value = 'changed';
+    assert.equal(fwd.noteFields[0].value, 'Latin');                     // the copy's lists are its own
+  }
 });
 
-test('a lone pair card (its partner is missing) is copied as an ordinary card', () => {
-  const rev = { id: 'r', deckId: 'd', front: 'b', back: 'a', noteId: 'P', reverse: true, reverseOf: 'gone', created: 2 };
+test('a lone pair card (its partner is gone) copies as an ordinary card', () => {
+  const [, rev] = makePair();
   const { copies, firstCopy } = duplicateCards([rev], [rev], mkId(), NOW);
   assert.equal(copies.length, 1);
-  for (const k of ['noteId', 'reverse', 'reverseOf']) assert.ok(!(k in firstCopy), k);
+  assert.ok(!isPair(firstCopy) && !('noteId' in firstCopy) && !('reverse' in firstCopy) && !('noteEditedAt' in firstCopy));
+  assert.equal(firstCopy.front, rev.front);
+  // also when the noteId group is not one clean pair (two forward cards): only the picked card is copied
+  const [fwd] = makePair();
+  const extra = { ...fwd, id: 'g' };
+  const r = duplicateCards([fwd], [fwd, extra], mkId(), NOW);
+  assert.equal(r.copies.length, 1); assert.ok(!('noteId' in r.firstCopy));
 });
 
 test('panel width limits: 360 px up to 70% of the window, the list keeps 320 px', () => {

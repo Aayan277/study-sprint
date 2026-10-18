@@ -10,6 +10,7 @@ import { dayEnd } from './days.js';
 import { formatInterval } from './queue.js';
 import { dupKey } from './import.js';
 import { normTag, SEP } from './tag-tree.js';
+import { isPair, loneIds, unpaired } from './reverse.js';
 
 export const FLAGS = [
   { id: 1, name: 'Red', color: '#E5484D' },
@@ -105,8 +106,8 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   else if (filter === 'dupes') {
     // Cards whose front matches another card's (ignoring capitals, accents, punctuation and formatting),
     // listed next to each other.
-    // (Image-occlusion cards are left out: their fronts differ only by number.)
-    const key = x => (x.card.occlusion ? '' : dupKey(x.card.front));
+    // (Image-occlusion cards are left out: their fronts differ only by number. So are reverse cards, whose front is another card's back.)
+    const key = x => (x.card.occlusion || x.card.reverse ? '' : dupKey(x.card.front));
     const counts = new Map();
     for (const x of list) counts.set(key(x), (counts.get(key(x)) || 0) + 1);
     return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE.compare(key(a), key(b)) || a.card.created - b.card.created);
@@ -240,26 +241,25 @@ export function renameTagPrefix(cards, from, to) {
 //   cards    the cards to copy        all   every card (to find the rest of a note)
 //   newId    makes an id              now   when the copies are created (each one a millisecond later, to keep their order)
 // Returns { copies, firstCopy, of }: the new cards, the copy of cards[0], and a Map from an original's id to its copy's id.
-// A reverse-pair card (the field names come from the reverse-cards work, so this is written defensively).
-const isReverseCard = c => !!(c.reverse || c.reverseOf);
+// A reverse pair (two cards of one noteId, the second with reverse: true, see reverse.js) is copied as a clean new pair; a card
+// that has a pair's noteId but no partner (loneIds) is copied as an ordinary card.
 export function duplicateCards(cards, all, newId, now = Date.now()) {
   const copies = [], of = new Map(), noteIds = new Map();
-  const seen = new Set(), pairLinks = [], origReverseOf = new Map();
+  const seen = new Set(), lone = loneIds(all);
   let i = 0;
   for (const card of cards) {
-    const group = card.noteId ? all.filter(c => c.noteId === card.noteId).sort((a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1)) : [card];
+    const group = card.noteId && !lone.has(card.id) ? all.filter(c => c.noteId === card.noteId).sort((a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1)) : [card];
     if (!group.some(c => c.id === card.id)) group.push(card);
     for (const c of group) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
-      if (c.noteId && !noteIds.has(c.noteId)) noteIds.set(c.noteId, newId());
-      const copy = { ...c, id: newId(), created: now + i++ };
+      if (c.noteId && !lone.has(c.id) && !noteIds.has(c.noteId)) noteIds.set(c.noteId, newId());
+      let copy = { ...c, id: newId(), created: now + i++ };
       // Own state and sync/export identity are not copied (a copied ankiGuid would make two notes with one guid in an export).
       for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt', 'syncedAt', 'uid', 'ankiGuid', 'ankiId']) delete copy[k];
-      if (c.noteId) copy.noteId = noteIds.get(c.noteId);
-      // A reverse pair is copied as a pair (same noteId, new one for both). A pair card whose partner is missing becomes an ordinary card.
-      if (isReverseCard(c) && group.length < 2) { delete copy.noteId; delete copy.reverse; delete copy.reverseOf; }
-      else if (c.reverseOf) { origReverseOf.set(copy.id, c.reverseOf); delete copy.reverseOf; pairLinks.push(copy); }
+      if (isPair(c) && lone.has(c.id)) copy = unpaired(copy);          // its partner is missing: an ordinary card
+      else if (c.noteId) copy.noteId = noteIds.get(c.noteId);
+      if (Array.isArray(c.noteFields)) copy.noteFields = c.noteFields.map(x => (x && typeof x === 'object' ? { ...x } : x));
       if (c.tags) copy.tags = c.tags.filter(t => t !== 'leech');
       if (c.acceptAnswers) copy.acceptAnswers = [...c.acceptAnswers];
       for (const k of ['frontSounds', 'backSounds']) if (Array.isArray(c[k])) copy[k] = [...c[k]];      // sounds (media ids) are shared, the lists are not
@@ -268,7 +268,6 @@ export function duplicateCards(cards, all, newId, now = Date.now()) {
       copies.push(copy);
     }
   }
-  for (const copy of pairLinks) { const to = of.get(origReverseOf.get(copy.id)); if (to) copy.reverseOf = to; }      // a link between two copied cards points at the copy
   const first = cards.length ? of.get(cards[0].id) : null;
   return { copies, firstCopy: copies.find(c => c.id === first) || null, of };
 }
