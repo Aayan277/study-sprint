@@ -295,7 +295,8 @@ let errSeq = 0;
 export function showFieldError(field, errEl, text, { focus = true, clearOnInput = true } = {}) {
   if (!errEl) return;
   if (!errEl.id) errEl.id = `err${++errSeq}`;
-  if (field && focus) errEl.removeAttribute('role'); else errEl.setAttribute('role', 'alert');
+  const moving = field && focus && document.activeElement !== field;      // (focus already there: nothing new is read, so the alert must speak)
+  if (moving) errEl.removeAttribute('role'); else errEl.setAttribute('role', 'alert');
   errEl.textContent = text;
   errEl.hidden = false;
   if (!field) return;

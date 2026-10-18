@@ -239,13 +239,17 @@ await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 // ---------- 3. Form errors: Edit deck ----------
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck'); await page.click('.deck-open'); await page.waitForSelector('#deckMore');
 await page.click('#deckMore'); await page.click('[data-act=edit], #deckEdit, button:has-text("Edit deck")'); await page.waitForSelector('#deckForm');
-await page.fill('#deckName', '');
+await page.fill('#deckName', ''); await page.focus('#deckCourse');
 await page.evaluate(() => document.querySelector('#deckForm').requestSubmit());
 await page.waitForSelector('#deckErr:not([hidden])');
 ok((await page.textContent('#deckErr')).includes('name') && await attr('#deckErr', 'role') === null, 'Errors: when focus moves to the field the message is its description, not also an alert (no double speech)');
 ok(await attr('#deckName', 'aria-invalid') === 'true' && (await attr('#deckName', 'aria-describedby') || '').includes('deckErr'), 'Errors: the name field is aria-invalid and described by the error');
 ok(await active() === 'deckName', 'Errors: focus goes to the field');
 { const s = await snap('#deckForm'); ok(/textbox "Name"/.test(s), 'Errors: the field keeps its name in the ARIA snapshot'); }
+// Enter pressed inside the empty box: focus is already there, so nothing is read by moving it: the message must be an alert.
+await page.fill('#deckName', ''); await page.focus('#deckName'); await page.keyboard.press('Enter');
+await page.waitForSelector('#deckErr:not([hidden])');
+ok(await attr('#deckErr', 'role') === 'alert' && await attr('#deckName', 'aria-invalid') === 'true', 'Errors: Enter in the empty Name box (focus already there) keeps the alert role');
 await page.keyboard.type('Biology');
 ok(await attr('#deckName', 'aria-invalid') === null && await page.locator('#deckErr').isHidden(), 'Errors: typing a fix clears aria-invalid and the message');
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
