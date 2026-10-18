@@ -351,6 +351,7 @@ Written down so nothing is lost. Order is roughly by value.
 22. **`media_may_store` can be called as an RPC and leaks the bucket total (low, not done).** Any signed-in person can call it and learn how full the project's picture storage is. Revoke execute from `authenticated` if the policies do not need it, or make it return only yes or no.
 23. **An over-long id shows the "too large" wording (not done).** A record id over 200 bytes fails the id check (error 23514), and the app reports it like an oversized record. Tell the two apart by the constraint name and word the id case separately.
 24. **Email templates (S):** branded confirmation and reset emails once Resend is working (Authentication > Emails > Templates).
+25. **`restDays` can outgrow one synced row (S, not done).** Days off are kept for 3650 days (the streak walk's reach), about 42 bytes each including days switched back off, so after roughly 1,400 entries the settings row passes the 60 KB push limit and stops syncing (it is set aside and reported, nothing breaks). Drop switched-off rest days once the day has passed, or cap the entries.
 
 ## Parked (not planned for now)
 
