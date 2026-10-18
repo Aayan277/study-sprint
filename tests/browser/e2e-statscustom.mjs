@@ -1,4 +1,4 @@
-// Customise Stats: the sheet (show/hide, move, size, reset), the page it builds at 1280 and 390 wide, and that it is kept after a
+// Customise Stats, the list sheet (Edit, then Edit as a list): the sheet (show/hide, move, size, reset), the page it builds at 1280 and 390 wide, and that it is kept after a
 // reload. Both styles (Original and Clinical). Screenshots go in $SHOTS (or the run's out folder).
 import { chromium } from './pw.mjs';
 import fs from 'node:fs';
@@ -24,6 +24,9 @@ const stats = async p => { await p.goto('http://localhost:8123/#/stats'); await 
 const seen = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.filter(h => h.offsetParent !== null && !h.closest('.ready-card')).map(h => { const r = h.closest('.card').getBoundingClientRect(); return { t: h.textContent.trim(), y: Math.round(r.top), x: Math.round(r.left) }; }).sort((a, b) => a.y - b.y || a.x - b.x).map(o => o.t));
 const dom = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.map(h => h.textContent.trim()));
 const box = (p, title) => p.evaluate(t => { const h = [...document.querySelectorAll('main[data-route=stats] .view .card h2')].find(x => x.textContent.trim() === t); if (!h) return null; const r = h.closest('.card').getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) }; }, title);
+// The list sheet is reached from edit mode (Edit, then "Edit as a list"); leaving it also leaves edit mode.
+const openList = async p => { if (!(await p.$('#edBar'))) { await p.click('#editBtn, #editEmpty'); await p.waitForSelector('#edBar'); } await p.click('.ed-list'); await p.waitForSelector('#sheet[open] #slList'); };
+const leave = async p => { if (await p.$('#edBar')) { await p.click('#edDone'); await p.waitForSelector('#editBtn'); } };
 const saved = p => p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).statsLayout);
 
 for (const ui of ['original', 'clinical']) {
@@ -32,14 +35,14 @@ for (const ui of ['original', 'clinical']) {
   let p = await open(ui, 1280, 900);
   await stats(p);
   ok(JSON.stringify(await seen(p)) === JSON.stringify(DEFAULT), `${tag} 1280: the default order`);
-  ok(await p.isVisible('#customBtn'), `${tag}: a Customise button beside the deck picker`);
-  const bb = await p.$eval('#customBtn', e => { const r = e.getBoundingClientRect(), s = document.querySelector('#sDeckBtn').getBoundingClientRect(); return { h: r.height, w: r.width, sameRow: Math.abs((r.top + r.height / 2) - (s.top + s.height / 2)) < 30 }; });
-  ok(bb.h >= 44 && bb.w >= 44 && bb.sameRow, `${tag}: Customise is a 44px target on the picker's row`);
-  await p.click('#customBtn'); await p.waitForSelector('#sheet[open] #slList');
+  ok(await p.isVisible('#editBtn') && !(await p.$('#customBtn')), `${tag}: an Edit button beside the deck picker`);
+  const bb = await p.$eval('#editBtn', e => { const r = e.getBoundingClientRect(), s = document.querySelector('#sDeckBtn').getBoundingClientRect(); return { h: r.height, w: r.width, sameRow: Math.abs((r.top + r.height / 2) - (s.top + s.height / 2)) < 30 }; });
+  ok(bb.h >= 44 && bb.w >= 44 && bb.sameRow, `${tag}: Edit is a 44px target on the picker's row`);
+  await openList(p);
   ok(await p.$eval('#sheet', d => d.getAttribute('aria-labelledby') === 'sheetTitle' && d.querySelector('#sheetTitle').textContent === 'Customise Stats'), `${tag}: the sheet is a labelled dialog`);
   ok((await p.$$('#slList .sl-row')).length === 11, `${tag}: a row for each of the 11 cards`);
   ok(/Size applies on wider screens/.test(await p.textContent('#sheet')), `${tag}: the sheet says sizes apply on wider screens`);
-  ok(await p.evaluate(() => [...document.querySelectorAll('#slList .sl-row')].every(r => r.querySelector('[data-act=show]').getAttribute('aria-label').startsWith('Show ') && r.querySelector('[role=radiogroup]').getAttribute('aria-label'))), `${tag}: every row is labelled with the card name`);
+  ok(await p.evaluate(() => [...document.querySelectorAll('#slList .sl-row')].every(r => r.querySelector('[data-act=show]').getAttribute('aria-label').startsWith('Show ') && (['rs', 'cal'].includes(r.dataset.id) ? !r.querySelector('[role=radiogroup]') : r.querySelector('[role=radiogroup]').getAttribute('aria-label')))), `${tag}: every row is labelled with the card name, and the two fixed-size cards have no size chips`);
   await p.screenshot({ path: `${SP}/sheet-desktop-${tag}.png` });
   // hide Difficulty
   await p.getByLabel('Show Difficulty').uncheck();
@@ -60,32 +63,32 @@ for (const ui of ['original', 'clinical']) {
   ok(true, `${tag}: the move buttons work from the keyboard`);
   // the first card's Up button is inert
   ok(await p.getAttribute('button[aria-label="Move Day streak up"]', 'aria-disabled') === 'true', `${tag}: the first card cannot move up`);
-  // Study calendar to Half
-  await p.locator('.sl-row[data-id=cal] label.chip', { hasText: 'Half' }).click();
-  await p.waitForFunction(() => document.querySelector('[data-card=cal]')?.dataset.w === 'half');
+  // Mastery to Half (it has no half card to pair with, so it still fills its row)
+  await p.locator('.sl-row[data-id=mastery] label.chip', { hasText: 'Half' }).click();
+  await p.waitForFunction(() => document.querySelector('#slList .sl-row[data-id=mastery] input[value=half]')?.checked);
   await p.waitForTimeout(150);
   await p.screenshot({ path: `${SP}/sheet-desktop-${tag}-after.png` });
-  await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open);
+  await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open); await leave(p);
   let order = await seen(p);
   ok(JSON.stringify(order) === JSON.stringify(['Day streak', 'Retention', 'Retention vs target', 'Study calendar', 'Hardest cards', 'Reviews per day', 'Due in the next 7 days', 'Answer buttons', 'Time of day', 'Mastery']), `${tag} 1280: customised order on the page: ${order.join(' | ')}`);
   const cal = await box(p, 'Study calendar'), per = await box(p, 'Reviews per day'), rs = await box(p, 'Retention vs target'), mast = await box(p, 'Mastery'), hard = await box(p, 'Hardest cards'), hrs = await box(p, 'Time of day'), btn = await box(p, 'Answer buttons');
-  ok(cal.w < rs.w * 0.6 && cal.y === hard.y && cal.x < hard.x && per.y > cal.y, `${tag} 1280: a half Study calendar pairs with Hardest cards (${cal.w}px of ${rs.w}px)`);
-  ok(btn.y === hrs.y && hrs.w < rs.w * 0.6 && mast.w > rs.w * 0.9, `${tag} 1280: neighbouring half cards pair, Mastery stays full`);
+  ok(hard.w < rs.w * 0.6 && per.y === hard.y && hard.x < per.x && hard.y > cal.y, `${tag} 1280: Hardest cards moved up pairs with Reviews per day (${hard.w}px of ${rs.w}px)`);
+  ok(btn.y !== hrs.y && hrs.y === mast.y && hrs.x < mast.x && mast.w < rs.w * 0.6, `${tag} 1280: a half Mastery pairs with the half card before it (Time of day)`);
   await p.screenshot({ path: `${SP}/page-desktop-${tag}.png`, fullPage: true });
   // kept after a reload
   await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid');
   ok(JSON.stringify(await seen(p)) === JSON.stringify(order), `${tag} 1280: kept after a reload`);
   const s = await saved(p);
-  ok(s && s.hidden.join() === 'difficulty' && s.size.cal === 'half' && s.order.indexOf('hardest') === 4, `${tag}: saved as one setting { order, hidden, size }`);
+  ok(s && s.hidden.join() === 'difficulty' && s.size.mastery === 'half' && s.order.indexOf('hardest') === 4, `${tag}: saved as one setting { order, hidden, size }`);
   ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('statsLayout')), `${tag}: the setting is a synced one`);
   // reset asks first
-  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await openList(p);
   await p.click('#slReset');
   ok(await p.isVisible('#slConfirm') && /Reset to the default layout\?/.test(await p.textContent('#slConfirm')), `${tag}: Reset to default asks to confirm`);
   await p.click('#slNo');
   ok(JSON.stringify(await seen(p)) === JSON.stringify(order), `${tag}: "Keep my layout" changes nothing`);
   await p.click('#slReset'); await p.click('#slYes');
-  await p.waitForFunction(d => document.querySelector('[data-card=cal]')?.dataset.w === 'full' && [...document.querySelectorAll('main[data-route=stats] .view .card h2')].some(h => h.textContent === 'Difficulty'));
+  await p.waitForFunction(d => document.querySelector('#slList .sl-row[data-id=mastery] input[value=full]')?.checked && [...document.querySelectorAll('main[data-route=stats] .view .card h2')].some(h => h.textContent === 'Difficulty'));
   await p.waitForTimeout(100);
   ok(JSON.stringify(await seen(p)) === JSON.stringify(DEFAULT), `${tag} 1280: Reset to default restores the order, all cards and the sizes`);
   ok((await saved(p)) === null, `${tag}: reset saves the default (null)`);
@@ -98,8 +101,8 @@ for (const ui of ['original', 'clinical']) {
   await p.evaluate(async () => { const m = await import('./js/stats-layout.js'); await (await import('./js/db.js')).setSetting('statsLayout', { order: m.IDS, hidden: m.IDS, size: {} }); });
   await stats(p);
   ok(await p.isVisible('.stats-none') && (await p.$$('main[data-route=stats] .pgrid')).length === 0, `${tag}: every card hidden shows a friendly empty state`);
-  await p.click('#customEmpty'); await p.waitForSelector('#sheet[open] #slList');
-  ok(true, `${tag}: its Customise button opens the sheet`);
+  await openList(p);
+  ok(true, `${tag}: its Edit button starts edit mode and the list opens from there`);
   await p.getByLabel('Show Mastery').check();
   await p.waitForSelector('main[data-route=stats] .stats-mastery');
   ok(!(await p.isVisible('.stats-none')) && (await seen(p)).join() === 'Mastery', `${tag}: showing one card brings it back`);
@@ -109,18 +112,18 @@ for (const ui of ['original', 'clinical']) {
   // ---------------- phone ----------------
   p = await open(ui, 390, 800);
   await stats(p);
-  const bp = await p.$eval('#customBtn', e => { const r = e.getBoundingClientRect(); return { h: r.height, right: r.right, vw: innerWidth }; });
-  ok(bp.h >= 44 && bp.right <= bp.vw, `${tag} 390: Customise is at least 44px tall and on the screen`);
-  await p.click('#customBtn'); await p.waitForSelector('#sheet[open] #slList');
+  const bp = await p.$eval('#editBtn', e => { const r = e.getBoundingClientRect(); return { h: r.height, right: r.right, vw: innerWidth }; });
+  ok(bp.h >= 44 && bp.right <= bp.vw, `${tag} 390: Edit is at least 44px tall and on the screen`);
+  await openList(p);
   ok(await p.evaluate(() => [...document.querySelectorAll('#slList button.sl-btn')].every(b => { const r = b.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; })), `${tag} 390: the move buttons are 44px`);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${tag} 390: no sideways scroll with the sheet open`);
   await p.screenshot({ path: `${SP}/sheet-phone-${tag}.png` });
   await p.getByLabel('Show Difficulty').uncheck();
   await p.click('button[aria-label="Move Hardest cards up"]'); await p.click('button[aria-label="Move Hardest cards up"]');
-  await p.locator('.sl-row[data-id=cal] label.chip', { hasText: 'Half' }).click();
-  await p.waitForFunction(() => document.querySelector('[data-card=cal]')?.dataset.w === 'half');
+  await p.locator('.sl-row[data-id=mastery] label.chip', { hasText: 'Half' }).click();
+  await p.waitForFunction(() => document.querySelector('#slList .sl-row[data-id=mastery] input[value=half]')?.checked);
   await p.waitForTimeout(150);
-  await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open);
+  await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open); await leave(p);
   // a phone keeps the "More stats" fold: Answer buttons, Time of day and Mastery are in it, after the cards that are not
   const d = await dom(p);
   ok(d.join() === ['Day streak', 'Retention', 'Retention vs target', 'Study calendar', 'Hardest cards', 'Reviews per day', 'Due in the next 7 days', 'Answer buttons', 'Time of day', 'Mastery'].join(), `${tag} 390: page order: ${d.join(' | ')}`);
@@ -139,7 +142,7 @@ for (const ui of ['original', 'clinical']) {
   const stay = (p, n) => p.evaluate(n => new Promise(r => setTimeout(r, n)), n);
   p = await open(ui, 1280, 900);
   await stats(p);
-  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await openList(p);
   ok(await p.$eval('.sl-grip', e => e.getBoundingClientRect().height >= 44 && getComputedStyle(e).touchAction === 'none'), `${tag}: each row has a grip at least 44px tall with touch-action none`);
   ok(await p.$eval('#slList', e => getComputedStyle(e).touchAction !== 'none'), `${tag}: the rest of the list still scrolls by touch`);
   // mouse: drag Time of day up three rows, above Due in the next 7 days
@@ -170,7 +173,7 @@ for (const ui of ['original', 'clinical']) {
   // touch (pointer events of type touch on the grip)
   p = await open(ui, 390, 800);
   await stats(p);
-  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await openList(p);
   await p.$eval('.sl-row[data-id=perDay]', e => e.scrollIntoView({ block: 'center' }));
   await p.evaluate(async () => {
     const grip = document.querySelector('.sl-row[data-id=perDay] .sl-grip'), r = grip.getBoundingClientRect(), tgt = document.querySelector('.sl-row[data-id=rs]').getBoundingClientRect();
@@ -200,7 +203,7 @@ for (const ui of ['original', 'clinical']) {
   // ---------------- closing the sheet in the middle of a drag ----------------
   p = await open(ui, 1280, 900);
   await stats(p);
-  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await openList(p);
   await p.$eval('.sl-row[data-id=hours]', e => e.scrollIntoView({ block: 'center' }));
   from = await centre(p, '.sl-row[data-id=hours] .sl-grip'); to = await centre(p, '.sl-row[data-id=forecast]');
   await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(to.x, to.y - 60, { steps: 10 });
@@ -210,7 +213,7 @@ for (const ui of ['original', 'clinical']) {
   ok(!(await p.evaluate(() => document.querySelector('#sheet').open)) && (await saved(p)) === null, `${tag}: closing the sheet mid-drag saves nothing`);
   ok(JSON.stringify(await seen(p)) === JSON.stringify(DEFAULT), `${tag}: and the page keeps its order`);
   // quick changes end in the right state
-  await p.click('#customBtn'); await p.waitForSelector('#slList');
+  await openList(p);
   await p.evaluate(() => { for (const id of ['hours', 'buttons', 'hours', 'difficulty', 'hours', 'forecast']) document.querySelector(`.sl-row[data-id=${id}] [data-act=show]`).click(); });
   await p.waitForTimeout(1500);
   ok(JSON.stringify((await saved(p)).hidden) === JSON.stringify(['forecast', 'buttons', 'hours', 'difficulty'].sort((a, b) => ['forecast', 'hardest', 'buttons', 'hours', 'difficulty'].indexOf(a) - ['forecast', 'hardest', 'buttons', 'hours', 'difficulty'].indexOf(b))) && !(await seen(p)).includes('Time of day') && !(await seen(p)).includes('Due in the next 7 days'), `${tag}: six quick taps end in the right saved state and page`);

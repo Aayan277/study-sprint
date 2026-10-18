@@ -41,6 +41,9 @@ PHONE.addEventListener('change', () => { try { onPhoneChange?.(); } catch { /* s
 
 let deckFilter = 'all';    // kept while the app is open
 let selected = null;       // card shown in the mastery detail panel
+// Edit mode (js/stats-edit.js): { el, mod, session } while the Stats screen `el` is being edited. It belongs to that screen: a
+// redraw of another screen's box starts without it, and the session ends itself when the screen leaves the page.
+let edit = null;
 
 // The review log is big, so Stats avoids reading all of it. The streak and calendar only need how many answers
 // each day had (counted by the database, no rows read: only the last year's days are counted, older days only need to say
@@ -219,6 +222,9 @@ function lazyValues(defs) {
 }
 
 export async function renderStats(el) {
+  if (edit && edit.el !== el) { edit.session.end(); edit = null; }       // (a new visit to Stats starts out of edit mode)
+  if (edit && !edit.session.active) edit = null;
+  if (edit) await edit.session.settled();            // a change still being saved is read back, not overwritten
   // (The kept reads of the cards and schedules are only read here, never sorted or changed.)
   const [decks, allCards, states, logs, settings] = await Promise.all([db.getDecks(), db.getAllCached('cards', { shared: true }), db.getAllCached('cardStates', { shared: true }), loadLogs(), db.getSettings()]);
   if (!el.isConnected) return;
@@ -297,7 +303,8 @@ export async function renderStats(el) {
       </div>
     </section>`;
   };
-  const customBtn = `<button type="button" class="btn ghost stats-custom" id="customBtn" aria-haspopup="dialog">${icon('sliders')}<span>Customise</span></button>`;
+  const editing = !!edit && edit.el === el;
+  const customBtn = editing ? '' : `<button type="button" class="btn ghost stats-custom" id="editBtn">${icon('edit')}<span>Edit</span></button>`;
   const scopeHTML = scoped ? `
     <div class="stats-scope">
       <button type="button" class="pick-btn" id="sDeckBtn" aria-haspopup="dialog" aria-label="Show stats for: ${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}. Change deck">
@@ -418,7 +425,7 @@ export async function renderStats(el) {
   };
   const layout = normaliseLayout(settings.statsLayout);
   // With one course picked, its readiness card and Mastery sit side by side at the top, as long as Mastery is still last.
-  const masteryUp = !!course && !layout.hidden.includes('mastery') && layout.order[layout.order.length - 1] === 'mastery';
+  const masteryUp = !editing && !!course && !layout.hidden.includes('mastery') && layout.order[layout.order.length - 1] === 'mastery';
   const shown = visibleOrder(layout, masteryUp ? ['mastery'] : []);
   const rows = pairRows(layout, shown);
   const width = widths(layout, shown);
@@ -427,15 +434,19 @@ export async function renderStats(el) {
   // Day streak and Retention that share a row stay one block (a joined band on phones); alone, each gets its own.
   const pair = rows.some(r => r[0] === 'streak' && r[1] === 'retention');
   const html = id => {
+    if (editing) {          // every card is its own piece with its controls (Day streak and Retention too, never a joined pair)
+      const card = id === 'streak' || id === 'retention' ? `<div class="pgrid one">${parts[id]()}</div>` : parts[id]();
+      return edit.mod.unitHTML(id, card, layout);
+    }
     if (id === 'streak' && pair) return `<div class="pgrid" data-w="full">${tag(parts.streak(), 'data-card="streak"')}${tag(parts.retention(), 'data-card="retention"')}</div>`;
     if (id === 'retention' && pair) return '';
     if (id === 'streak' || id === 'retention') return `<div class="pgrid one" data-w="${width.get(id)}">${tag(parts[id](), `data-card="${id}"`)}</div>`;
     return tag(parts[id](), place(id));
   };
   // The page is built in exactly the order it shows (so Tab follows the eye). On a phone the "More stats" cards that come after
-  // the last other card sit in a fold; the page is drawn again when the window crosses 1024px.
+  // the last other card sit in a fold; the page is drawn again when the window crosses 1024px. (Editing shows every card, unfolded.)
   let cut = shown.length;
-  if (PHONE.matches) while (cut > 0 && cardInfo(shown[cut - 1]).more) cut--;
+  if (PHONE.matches && !editing) while (cut > 0 && cardInfo(shown[cut - 1]).more) cut--;
   const foldIds = shown.slice(cut);
   const moreNames = foldIds.map(id => cardInfo(id).name).map((n, i) => (i ? n.toLowerCase() : n)).join(', ');
   const body = shown.slice(0, cut).map(html).join('\n') + (foldIds.length ? `
@@ -448,11 +459,13 @@ export async function renderStats(el) {
     </section>` : '');
 
   el.innerHTML = `
+    ${editing ? edit.mod.editBarHTML() : ''}
     <div class="screen-head"><div><h1>Stats</h1></div></div>
     ${!allCards.length ? emptyStartHTML({ courseId: decks.length === 1 ? decks[0].id : '' }) : `
     ${scopeHTML}
     ${course ? (masteryUp ? readyHTML() + masteryHTML(true) : tag(readyHTML(), 'data-w="full"')) : ''}
-    ${shown.length ? body : `<div class="card stats-none"><h2>No stats shown</h2><p class="muted">You hid every card. Bring some back to see your stats.</p><button type="button" class="btn primary" id="customEmpty">${icon('sliders')} Customise</button></div>`}`}`;
+    ${shown.length ? body : editing ? '' : `<div class="card stats-none"><h2>No stats shown</h2><p class="muted">You hid every card. Bring some back to see your stats.</p><button type="button" class="btn primary" id="editEmpty">${icon('edit')} Edit</button></div>`}
+    ${editing ? edit.mod.addTileHTML(layout) : ''}`}`;
 
   if (!allCards.length) { wireEmptyStart(el); return; }
   const q = id => el.querySelector('#' + id);
@@ -464,11 +477,26 @@ export async function renderStats(el) {
   });
   // Resizing across 1024px: the fold exists only on a phone, so the page is drawn again.
   onPhoneChange = () => renderStats(el);
-  // Customise Stats: the sheet saves each change and the page redraws behind it.
-  el.querySelectorAll('#customBtn, #customEmpty').forEach(b => b.addEventListener('click', async () => {
-    const { openStatsLayoutSheet } = await import('./stats-layout-sheet.js');
-    openStatsLayoutSheet({ onChange: () => renderStats(el) });      // (the sheet draws once its saves are done, never one redraw behind another)
+  // Edit mode: Edit (or the empty page's Edit) starts it; Done ends it (js/stats-edit.js does the rest).
+  el.querySelectorAll('#editBtn, #editEmpty').forEach(b => b.addEventListener('click', async () => {
+    const mod = await import('./stats-edit.js');
+    if (!el.isConnected || edit) return;
+    const mine = edit = { el, mod, session: null };
+    mine.session = mod.createSession({
+      el, layout,
+      redraw: () => renderStats(el),
+      onDone: async () => { if (edit === mine) edit = null; await renderStats(el); el.querySelector('#editBtn')?.focus({ preventScroll: true }); },
+      onEnd: () => { if (edit === mine) edit = null; },
+      // "Edit as a list": the sheet saves each change and the page redraws behind it (once its saves are done, never one redraw behind another)
+      openList: async () => {
+        const { openStatsLayoutSheet } = await import('./stats-layout-sheet.js');
+        openStatsLayoutSheet({ onChange: () => renderStats(el) });
+      }
+    });
+    await renderStats(el);
+    mine.session.focusDone();
   }));
+  if (editing) edit.session.mount(layout);
   q('sDeck')?.addEventListener('change', e => { deckFilter = e.target.value; selected = null; renderStats(el); });
   q('sDeckBtn')?.addEventListener('click', () => openDeckPicker({
     decks, selected: deckFilter === 'all' ? '' : deckFilter, title: 'Show stats for',
