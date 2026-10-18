@@ -177,6 +177,76 @@ await page.click('.rv-front .snd-btn');
 await page.waitForFunction(() => window.__plays.length >= 1);
 ok(true, 'Review: tapping the pulsing ▶ plays');
 
+// ---------- 3b. opening the app must not take the phone's audio (it pauses Spotify / Apple Music) ----------
+{
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block', colorScheme: 'dark' });
+  await ctx.addInitScript(spies);
+  // After the spies: record every play() (the silent unlock clip too) and stub the Audio Session API like Safari 16.4+.
+  await ctx.addInitScript(() => {
+    window.__calls = []; window.__types = [];
+    const spy = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () { window.__calls.push({ src: String(this.src).slice(0, 5), muted: this.muted, type: navigator.audioSession.type }); return spy.call(this); };
+    let t = 'auto';
+    Object.defineProperty(navigator, 'audioSession', { configurable: true, value: { get type() { return t; }, set type(v) { t = v; window.__types.push(v); } } });
+    const cancel = speechSynthesis.cancel.bind(speechSynthesis);
+    window.__cancels = 0; speechSynthesis.cancel = () => { window.__cancels++; return cancel(); };
+  });
+  const q = await ctx.newPage();
+  q.on('pageerror', e => errors.push(`Q pageerror ${e.stack}`));
+  await q.goto(APP + '#/decks'); await q.waitForSelector('.deck');
+  const calls = () => q.evaluate(() => window.__calls);
+  const dataCalls = async () => (await calls()).filter(c => c.src === 'data:');
+  await q.evaluate(async () => {
+    const db = await import('./js/db.js'), media = await import('./js/media.js');
+    const id = (await media.saveSound({ name: 'a.wav', type: 'audio/wav', data: new Uint8Array(900).fill(1).buffer })).id;
+    await db.addDeckWithCards({ id: 'quiet', name: 'Quiet', color: '#46A758', created: Date.now() }, [
+      { id: 'Q1', deckId: 'quiet', front: 'hear', back: 'a', frontSounds: [id], tags: [], created: 1 },
+      { id: 'Q2', deckId: 'quiet', front: 'plain', back: 'b', tags: [], created: 2 }
+    ]);
+  });
+  // tapping around screens that have no sounds
+  await q.goto(APP + '#/decks'); await q.waitForSelector('.deck');
+  for (const hash of ['#/stats', '#/settings', '#/decks', '#/import', '#/decks']) {
+    await q.goto(APP + hash); await q.waitForTimeout(150);
+    await q.mouse.click(8, 8); await q.keyboard.press('Tab');
+  }
+  ok((await calls()).length === 0, `opening the app and tapping around screens without sounds never calls play() (${(await calls()).length})`);
+  ok((await q.evaluate(() => window.__types.length + window.__cancels + window.__speaks.length)) === 0, 'and never touches the audio session or speech');
+  // a card with a sound: autoplay is tried, but the unlock waits for a tap; leaving the screen turns the listening off again
+  await q.goto(APP + '#/review/quiet'); await q.waitForSelector('#flash .snd-btn');
+  await q.goto(APP + '#/decks'); await q.waitForSelector('.deck'); await q.waitForTimeout(800);
+  await q.evaluate(() => { window.__calls.length = 0; window.__types.length = 0; });
+  await q.mouse.click(8, 8);
+  ok((await dataCalls()).length === 0, 'after leaving the sound card, taps no longer unlock');
+  await q.goto(APP + '#/review/quiet'); await q.waitForSelector('#flash .snd-btn'); await q.waitForTimeout(300);
+  await q.evaluate(() => { window.__calls.length = 0; window.__types.length = 0; window.__plays.length = 0; });
+  await q.mouse.click(8, 8);                                     // first tap on a sound card (not the ▶)
+  await q.waitForFunction(() => window.__calls.some(c => c.src === 'data:'));
+  const unl = (await dataCalls())[0];
+  ok(unl && unl.type === 'ambient', `the first tap unlocks with a silent clip in an 'ambient' audio session (${unl?.type})`);
+  await q.waitForTimeout(200);
+  ok(await q.evaluate(() => navigator.audioSession.type) === 'ambient', 'the audio session stays ambient while nothing plays');
+  // a real sound switches to 'transient' and back
+  await q.evaluate(() => { window.__calls.length = 0; window.__types.length = 0; window.__plays.length = 0; });
+  await q.click('#flash .rv-front .snd-btn');
+  await q.waitForFunction(() => window.__plays.length >= 1);
+  await q.waitForTimeout(200);
+  const types = await q.evaluate(() => window.__types.join());
+  ok(types.startsWith('transient') && types.endsWith('ambient'), `a real card sound plays as 'transient' then goes back to 'ambient' (${types})`);
+  // autoplay after the unlock: opening another deck's sound card plays it by itself
+  await q.goto(APP + '#/decks'); await q.waitForSelector('.deck');
+  await q.evaluate(async () => {
+    const db = await import('./js/db.js'), media = await import('./js/media.js');
+    const id = (await media.saveSound({ name: 'c.wav', type: 'audio/wav', data: new Uint8Array(910).fill(1).buffer })).id;
+    await db.addDeckWithCards({ id: 'quiet2', name: 'Quiet two', color: '#46A758', created: Date.now() }, [{ id: 'Q9', deckId: 'quiet2', front: 'again', back: 'z', frontSounds: [id], tags: [], created: 1 }]);
+    window.__plays.length = 0;
+  });
+  await q.goto(APP + '#/review/quiet2'); await q.waitForSelector('#flash .snd-btn');
+  await q.waitForFunction(() => window.__plays.length >= 1, null, { timeout: 5000 });
+  ok(true, 'once unlocked, a card with sounds still plays by itself');
+  await ctx.close();
+}
+
 // ---------- 4. the deck option "Play sounds automatically" ----------
 await page.goto(APP + '#/deck/listen'); await deckMenu(page); await page.click('#editDeck');
 await page.waitForSelector('#deckSoundAuto');

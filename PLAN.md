@@ -353,6 +353,7 @@ Where things stand, for the next session. Every item below is on main; the versi
    - **Later: FSRS-7 optimizer**, then make FSRS-7 the default. Start once ts-fsrs 6.0 is out of beta. Plan: `docs/design/fsrs7-optimizer-plan.md`.
 2. Ideas 6 and 7 from `docs/design/student-research.md` (listening cloze, reading to cards), which the owner said to do later.
 3. The backend backlog below, highest first. The owner said to build only the important ones for now.
+   - **Fix (18 Oct 2026, branch `claude/audio-focus`, not yet released):** opening the app paused the owner's music on iPhone. The sound "unlock" (a silent clip) ran on the first tap anywhere; now it only listens while a ▶ is on screen, plays in an `ambient` audio session where `navigator.audioSession` exists (real card sounds use `transient`, then back to `ambient`), and read-aloud's `speechSynthesis.cancel()` is only called after read-aloud was used. Needs a real-iPhone check, then a version and CACHE bump at release.
 
 **How to work here:** `CLAUDE.md` and the `release` skill (`.claude/skills/release`).
 

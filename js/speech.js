@@ -55,17 +55,20 @@ export function elementsSpeech(p, shown) {
 export const canSpeak = () => typeof speechSynthesis !== 'undefined';
 
 // Read some text aloud (stopping anything already being read). lang: a code from SPEECH_LANGS, or ''.
+// speechSynthesis is only touched once the person has used read-aloud: cancel() on a phone can wake the audio system and pause their music.
+let used = false;
 export function speak(text, lang = '') {
   if (!canSpeak()) return false;
   const say = speakableText(text);
-  speechSynthesis.cancel();
+  if (used) speechSynthesis.cancel();
   if (!say) return false;
   const u = new SpeechSynthesisUtterance(say);
   u.lang = lang || detectLang(say, navigator.language || 'en-US');
   const voice = speechSynthesis.getVoices().find(v => v.lang === u.lang) || speechSynthesis.getVoices().find(v => v.lang.startsWith(u.lang.slice(0, 2)));
   if (voice) u.voice = voice;
   u.rate = 0.95;
+  used = true;
   speechSynthesis.speak(u);
   return true;
 }
-export const stopSpeaking = () => { if (canSpeak()) speechSynthesis.cancel(); };
+export const stopSpeaking = () => { if (used && canSpeak()) speechSynthesis.cancel(); };

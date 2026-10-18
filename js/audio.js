@@ -7,6 +7,11 @@
 //   soundURL(id)           a blob: address for a sound, downloading it first if this device lacks it (null if not available)
 //   autoplayBlocked(root)  the browser refused to play by itself: pulse the first ▶ and say "Tap ▶ to play"
 //
+// Other apps' music: starting any sound that isn't muted takes the phone's audio session and pauses Spotify / Apple Music. So nothing here
+// touches audio until a card with sounds is on screen: the "unlock" listeners are armed only while a ▶ is on the page, and the silent
+// unlock clip is played in an 'ambient' audio session (mixes with other audio) where the browser has navigator.audioSession (Safari 16.4+).
+// A real card sound switches the session to 'transient' while it plays and back to 'ambient' afterwards.
+//
 // One shared <audio> element plays everything. iOS only lets a page start a sound inside a tap, and then lets that element play
 // later without one. So the element is "unlocked" with a silent clip inside the first tap (pointer, touch, click or key: whichever
 // comes first, kept listening until a play() really worked), and a ▶ tap unlocks it first if need be, then plays straight away
@@ -66,6 +71,15 @@ export async function soundURL(id, { download = true } = {}) {
   return m ? remember(id, m) : null;
 }
 
+// The Audio Session API (Safari 16.4+): where it is missing, nothing happens.
+function setSession(type) {
+  try {
+    const s = navigator.audioSession;
+    if (!s) return;
+    if (s.type !== type) s.type = type;
+  } catch { /* not supported or refused: fine */ }
+}
+
 let run = 0;                     // changes each time something new starts or everything stops
 let finishCurrent = null;        // ends the sound that is playing now (so a stop doesn't leave a promise hanging)
 let unlocked = null;             // the silent clip's promise, while it is playing
@@ -79,6 +93,7 @@ function setPlaying(id) {
 
 export function stopSound() {
   run++;
+  if (el) setSession('ambient');
   if (el) { try { el.pause(); } catch { /* fine */ } }
   finishCurrent?.();
   finishCurrent = null;
@@ -115,11 +130,15 @@ export async function playSounds(ids, { onBlocked } = {}) {
   const mine = run;
   if (unlocked) await unlocked.catch(() => {});
   if (mine !== run) return false;
+  try { return await playList(ids, mine, onBlocked); } finally { if (mine === run) setSession('ambient'); }
+}
+async function playList(ids, mine, onBlocked) {
   for (const id of ids || []) {
     const url = cached(id) || await soundURL(id).catch(() => null);
     if (mine !== run) return false;
     if (!url) { markMissing(id); continue; }
     try {
+      setSession('transient');
       await playOne(url, id, mine);
     } catch (err) {
       if (err?.name === 'NotAllowedError') onBlocked?.();
@@ -168,20 +187,24 @@ const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'];
 function unlock() {
   if (isUnlocked || unlocked || finishCurrent) return;
   const a = player();
+  setSession('ambient');                 // the silent clip must not interrupt the person's music
   a.muted = false; // not muted: some browsers allow muted play without a tap, which would look like an unlock but not be one
   a.src = SILENCE;
   let started;
   try { started = Promise.resolve(a.play()); } catch (err) { started = Promise.reject(err); }
   unlocked = started.then(() => {
     isUnlocked = true;
-    GESTURES.forEach(g => removeEventListener(g, unlock, true));       // only now, when play() really worked
+    disarm();       // only now, when play() really worked
   }).catch(() => { /* not allowed (yet): stay listening for the next tap */ }).then(() => {
     unlocked = null;
     // Only pause: taking the src away would raise an error event later, which would land on whatever sound started in the meantime.
     if (!finishCurrent) { try { a.pause(); } catch { /* fine */ } a.muted = false; }
   });
 }
-GESTURES.forEach(g => addEventListener(g, unlock, true));
+// The listeners are only on while a ▶ is on the page (a card with sounds), so opening the app never starts any audio.
+let armed = false;
+function arm() { if (armed || isUnlocked) return; armed = true; GESTURES.forEach(g => addEventListener(g, unlock, true)); }
+function disarm() { armed = false; GESTURES.forEach(g => removeEventListener(g, unlock, true)); }
 
 // ---------- wiring ----------
 // A tap on any ▶ plays that one sound (a second tap on the one that's playing stops it).
@@ -215,6 +238,7 @@ async function check(btn) {
   else if (!cached(id)) remember(id, m);
 }
 function checkAll(root) {
+  if (!isUnlocked && (root.matches?.('.snd-btn') || root.querySelector?.('.snd-btn'))) arm();
   root.querySelectorAll?.('.snd-btn:not([data-checked])').forEach(check);
   if (root.matches?.('.snd-btn:not([data-checked])')) check(root);
 }
@@ -225,4 +249,8 @@ new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => n.nodeT
 addEventListener('online', () => document.querySelectorAll('.snd-btn.missing:not(.broken)').forEach(b => { delete b.dataset.checked; check(b); }));
 
 // Leaving the screen stops the sound.
-addEventListener('hashchange', stopSound);
+addEventListener('hashchange', () => {
+  stopSound();
+  // Once the new screen has drawn: no ▶ left means no reason to listen for taps.
+  setTimeout(() => { if (!unlocked && !document.querySelector('.snd-btn')) disarm(); }, 500);
+});
