@@ -162,6 +162,13 @@ test('results history: newest last, at most ten, junk dropped, recent ones newes
   assert.equal(cleanPrefs({ e: 5 }).e, undefined);
 });
 
+test('a result of one test is added only once', () => {
+  let h = addResult({}, 'd', { run: 't1', at: 1, pct: 50, correct: 1, total: 2, secs: 5 });
+  h = addResult(h, 'd', { run: 't1', at: 2, pct: 50, correct: 1, total: 2, secs: 5 });
+  h = addResult(h, 'd', { run: 't2', at: 3, pct: 100, correct: 2, total: 2, secs: 5 });
+  assert.deepEqual(h.d.map(r => r.run), ['t1', 't2']);
+});
+
 test('clock formats minutes and hours', () => {
   assert.equal(clock(0), '0:00');
   assert.equal(clock(65000), '1:05');

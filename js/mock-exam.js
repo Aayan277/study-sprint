@@ -150,7 +150,7 @@ function tickClock() {
       if (sec <= at && sec > at - 2 && !T.said.has(at) && T.run.cfg.limit * 60 > at) { T.said.add(at); announce(text); }
     }
   }
-  if (left <= 0 && !T.submitting) { announce('Time is up. Your test is being submitted.'); submit({ auto: true }); }
+  if (left <= 0 && !T.submitting && !T.frozen) { announce('Time is up. Your test is being submitted.'); submit({ auto: true }); }
 }
 // Every second: stop if the screen was left (and keep the time used), else save the time.
 function housekeeping() {
@@ -304,6 +304,7 @@ function showAsk(kind, html) {
 }
 function hideAsk() {
   if (!T?.asking) return;
+  if (T.frozen) { if (T.asking !== 'tab') showTabAsk(); return; }       // another tab owns the test: only "Continue here" lifts that question
   T.asking = null;
   $('tAsk').hidden = true;
   setInert(false);
@@ -346,6 +347,7 @@ function leave() {
 // Back (the back gesture): asks; a second Back while the question is up leaves (the way out where there is no Esc key).
 function backPressed() {
   if (!T || T.state.done) return;
+  if (T.asking === 'tab') return;
   if (T.asking === 'leave') leave(); else if (T.asking) hideAsk(); else askLeave();
 }
 
@@ -370,6 +372,9 @@ addEventListener('keydown', e => {
 addEventListener('storage', e => {
   if (!T || T.frozen || T.submitting || T.state.done || !KEYS.includes(e.key) || !$('tLayout')) return;
   T.frozen = true;
+  showTabAsk();
+});
+function showTabAsk() {
   showAsk('tab', `<p id="tAskT"><b>This test is open in another tab.</b> Carry on there, or continue here (the other tab will stop).</p>
     <div class="end-ask-b"><button class="btn primary small" id="tAskYes" type="button">Continue here</button></div>`);
   $('tAskYes').addEventListener('click', () => {
@@ -379,7 +384,7 @@ addEventListener('storage', e => {
     renderTest(el);
   });
   $('tAskYes').focus({ preventScroll: true });
-});
+}
 
 // ---------- submitting ----------
 async function submit({ auto = false }) {
@@ -408,7 +413,7 @@ async function submit({ auto = false }) {
 async function ensureHistory(run, state, score) {
   if (state.hist) return;
   state.hist = true;
-  await saveResult(run.deckId, { at: state.finished, pct: score.pct, correct: score.correct, total: score.total, secs: Math.round(state.elapsed / 1000) }).catch(err => { state.hist = false; console.error('Could not save the result', err); });
+  await saveResult(run.deckId, { run: run.id, at: state.finished, pct: score.pct, correct: score.correct, total: score.total, secs: Math.round(state.elapsed / 1000) }).catch(err => { state.hist = false; console.error('Could not save the result', err); });
   keepState(run, state);
 }
 // Write the state back, but only while it is still the saved test (another one may have started since).

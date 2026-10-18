@@ -263,13 +263,14 @@ export function cleanHistory(raw) {
   for (const [k, list] of Object.entries(raw)) {
     if (!Array.isArray(list)) continue;
     const rows = list.filter(r => r && Number.isFinite(r.at) && Number.isFinite(r.pct) && Number.isFinite(r.correct) && Number.isFinite(r.total) && r.total > 0)
-      .map(r => ({ at: r.at, pct: Math.min(100, Math.max(0, Math.round(r.pct))), correct: r.correct, total: r.total, secs: Number.isFinite(r.secs) ? Math.max(0, Math.round(r.secs)) : 0 }));
+      .map(r => ({ at: r.at, pct: Math.min(100, Math.max(0, Math.round(r.pct))), correct: r.correct, total: r.total, secs: Number.isFinite(r.secs) ? Math.max(0, Math.round(r.secs)) : 0, ...(typeof r.run === 'string' ? { run: r.run } : {}) }));
     if (rows.length) out[k] = rows.slice(-HISTORY_MAX);
   }
   return out;
 }
 export function addResult(history, deckId, result) {
   const h = cleanHistory(history);
+  if (result.run && (h[deckId] || []).some(r => r.run === result.run)) return h;       // this test is already in (a reload between saving and noting it)
   h[deckId] = [...(h[deckId] || []), result].slice(-HISTORY_MAX);
   return h;
 }
