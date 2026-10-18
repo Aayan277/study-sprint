@@ -22,6 +22,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
+import { backupNote } from './backup-nudge.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.27';
@@ -33,6 +34,8 @@ initInstall();       // listens for the browser saying the app can be installed 
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
+  // "Last backup: 12 days ago", and a quiet nudge when it has been a month and there is a lot to lose (js/backup-nudge.js).
+  const backup = backupNote({ lastBackup: settings.lastBackup, cards: await db.count('cards'), synced: !!(await sync.account()) });
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
   // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
   if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
@@ -222,8 +225,8 @@ async function renderSettings(el) {
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
       <div class="set-row">
-        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.
-          ${settings.lastBackup ? `Last backup: ${esc(new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}.` : 'No backup yet.'}</p></div>
+        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.</p>
+          <p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
         <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
       </div>
       <label class="adv-row switch-row" id="bkSoundsRow" hidden><span><b id="bkSoundsTitle">Include sounds</b>

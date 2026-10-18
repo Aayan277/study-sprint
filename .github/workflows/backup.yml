@@ -1,0 +1,77 @@
+# A nightly copy of the database, because the free Supabase plan makes no backups of its own. Setup and how to restore:
+# docs/sync-setup.md ("Back up the database (GitHub)").
+#
+# What it saves: the app's tables (the `public` schema) and the sign-in accounts (auth.users and auth.identities), as one
+# SQL file. It does NOT save pictures and sounds (Supabase Storage); those are only on people's devices and in their
+# Export backup files.
+#
+# The repository may be public, and a workflow artifact can be downloaded by anyone who can see the repository. So the
+# file is encrypted with a password before it is uploaded; without BACKUP_PASSPHRASE it is unreadable.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions → New repository secret):
+#   SUPABASE_DB_URL     the database address: Supabase dashboard → Connect → Session pooler → URI (with your database password in it)
+#   BACKUP_PASSPHRASE   a long password you make up and keep somewhere safe (a password manager). Lose it and the backups can't be opened.
+# Until both exist, the job says so and finishes with a green tick (so no failure emails before you set it up).
+#
+# Backups are kept 30 days. GitHub switches scheduled workflows off after 60 days with no activity in the repository.
+name: Back up database
+
+on:
+  schedule:
+    - cron: '43 3 * * *'        # every day at 03:43 UTC
+  workflow_dispatch:            # and a "Run workflow" button, to try it
+
+permissions: {}
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check the two secrets exist
+        id: secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::No backup made yet. Add the repository secrets SUPABASE_DB_URL and BACKUP_PASSPHRASE (docs/sync-setup.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dump the database and encrypt it
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          name="study-sprint-db-$(date -u +%Y-%m-%d)"
+          mkdir out
+          # pg_dump must be at least as new as the Supabase database (15 or 17), so use the official postgres 17 image
+          # rather than the older client on the runner. The address goes in as an environment variable, never on the command line.
+          pgdump() { docker run --rm -e SUPABASE_DB_URL postgres:17 sh -c 'pg_dump "$SUPABASE_DB_URL" --no-owner "$@"' sh "$@"; }
+          {
+            echo "-- Study Sprint database backup, $(date -u +%Y-%m-%dT%H:%MZ). Restore: docs/sync-setup.md"
+            # Sign-in accounts first (the app's rows point at them), then the app's tables with their privacy rules.
+            pgdump --data-only --table=auth.users --table=auth.identities
+            pgdump --schema=public
+          } | gzip -9 > "out/$name.sql.gz"
+          # A dump that is tiny or lacks the app's table means something went wrong: stop rather than keep a useless file.
+          [ "$(gunzip -c "out/$name.sql.gz" | grep -c 'sync_items')" -gt 0 ] || { echo "::error::The dump has no sync_items table. Check SUPABASE_DB_URL."; exit 1; }
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "out/$name.sql.gz.gpg" "out/$name.sql.gz"
+          rm "out/$name.sql.gz"                      # only the encrypted file is uploaded
+          ls -l out
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+
+      - name: Keep the encrypted file for 30 days
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: out/*.gpg
+          retention-days: 30
+          if-no-files-found: error

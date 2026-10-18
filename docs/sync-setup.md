@@ -249,6 +249,54 @@ tiny question every day. It needs your two values from step 7 as *secrets* in th
 GitHub switches scheduled jobs off after 60 days with no activity in the repository. If that happens, the
 Actions tab shows a button to turn it back on.
 
+## 8b. Back up the database (GitHub)
+
+The free Supabase plan makes **no backups of its own**. If the project were deleted or damaged, everyone's synced
+data would be gone (each device still has its own copy, but you would rather not rely on that). The app includes a
+GitHub job (`.github/workflows/backup.yml`) that copies the database every night and keeps the last 30 copies.
+The copy is **encrypted with a password only you know**, so it is safe even if the repository is public.
+
+**What is saved:** all the app's data (decks, cards, progress, settings) and the sign-in accounts.
+**What is not saved:** pictures and sounds. They live in Supabase Storage, which this job doesn't copy. They are
+still on each person's devices and in their **Export backup** files.
+
+### Turn it on
+
+1. In Supabase, click **Connect** (top of the page). Under **Session pooler**, copy the **URI**. It looks like
+   `postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-….pooler.supabase.com:5432/postgres`.
+   Replace `[YOUR-PASSWORD]` (brackets too) with your **database password** (the one you chose in step 1; if you
+   forgot it: **Project Settings → Database → Reset database password**).
+2. On github.com open the repository, then **Settings → Secrets and variables → Actions → New repository secret**.
+   **Name:** `SUPABASE_DB_URL`, **Secret:** the address from step 1. Click **Add secret**.
+3. Make up a long password for the backup files (for example four random words), and **save it in your password
+   manager**. Without it a backup can't be opened. Click **New repository secret** again. **Name:**
+   `BACKUP_PASSPHRASE`, **Secret:** that password. Click **Add secret**.
+4. Open the **Actions** tab, click **Back up database**, then **Run workflow → Run workflow**. After a minute or
+   two it should show a green tick. Until both secrets exist the job does nothing and still shows a green tick;
+   click into the run and it says "No backup made yet".
+
+### Get a backup and open it
+
+1. **Actions** tab → **Back up database** → click a run (newest first). At the bottom, under **Artifacts**, click
+   the file named `study-sprint-db-…`. A zip downloads; open it to get a file ending in `.sql.gz.gpg`.
+2. On your computer open a terminal in the folder with that file and type (using the real file name):
+   `gpg --decrypt study-sprint-db-2026-01-31.sql.gz.gpg | gunzip > backup.sql`
+   Type the backup password when asked. You now have `backup.sql`, a plain text file of SQL commands.
+
+### Restore it
+
+Only needed if data was lost. Everyone's data comes back as of the night of the backup.
+
+1. Use a **new, empty Supabase project** if the old one is gone (do steps 1, 2, 2b and 3 of this page for it first,
+   so the sync table, storage and sign-in settings exist), or the same project if only the data was damaged.
+2. Get that project's **Session pooler** address as in "Turn it on" step 1.
+3. In the terminal: `psql "PASTE-THE-ADDRESS-HERE" -f backup.sql`
+   (`psql` comes with PostgreSQL, free from postgresql.org.) Lines saying "already exists" are normal if the tables
+   were already there. If the old rows are still there too, the restore stops with "duplicate key" messages: that
+   means they are already present.
+4. Update `js/sync-config.js` with the new project's URL and key if it is a new project (step 7), and people sign in as before.
+   Then on one device use **Settings → Sync → Re-upload everything** to fill in anything newer than the backup.
+
 ## 9. Looking after it
 
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
