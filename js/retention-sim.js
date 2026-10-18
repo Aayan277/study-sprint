@@ -400,7 +400,7 @@ export function examTarget(points, group) {
 
 // The suggestion for a horizon. Returns { target, kind, knee, curve, limit, limitFits, examGroup, exam } where kind is
 //   'knee'    the knee of the smoothed workload curve (the default)
-//   'limit'   you set a daily review limit: the highest target whose reviews a day fit it (an exam deck never goes above its own
+//   'limit'   your daily review limit is lower than the knee's (or exam's) workload: the highest target whose reviews a day fit it (an exam deck never goes above its own
 //             suggestion, so for an exam this is only used when the limit is lower)
 //   'exam'    a deck with an exam: see examTarget
 //   'none'    not enough targets were worked out, or even KNEE_MIN does not fit your limit (target = null)
@@ -418,7 +418,8 @@ export function suggestion(points, horizon, { reviewLimit = null, examGroup = nu
   if (limit !== null) {
     const fit = highestWithin(curve, limit);
     if (fit === null) return { ...none, knee, limitFits: false };
-    if (kind !== 'exam' || fit < target - 1e-9) { target = fit; kind = 'limit'; }
+    // A limit only ever lowers the suggestion (many people set a roomy limit as a safety cap, not as a target).
+    if (fit < target - 1e-9) { target = fit; kind = 'limit'; }
   }
   target = snapTo(points, target, kind === 'limit');
   const at = target === null || !hasExam ? null : points.find(p => Math.abs(p.retention - target) < 1e-9)?.exams.find(x => x.grp === examGroup) || null;

@@ -236,11 +236,11 @@ test('a review limit: the suggestion is the highest target whose reviews a day f
   assert.ok(lim.target < free.target);
   assert.ok(lim.curve.values[Math.round((lim.target - 0.8) * 100)] <= limit + 1e-9);
   assert.ok(lim.curve.values[Math.round((lim.target - 0.8) * 100) + 1] > limit);       // ...and one point higher does not fit
-  // a roomy limit is not a reason to stop at the knee: the highest target that fits is the top of the range
+  // a roomy limit only caps: it never pushes the suggestion above the knee (people set roomy limits as a safety cap)
   const roomy = suggestion(bowl, 90, { reviewLimit: 500 });
-  assert.equal(roomy.kind, 'limit');
-  assert.equal(roomy.target, KNEE_MAX);
-  assert.equal(roomy.knee, free.knee);                                           // (the knee is still there to be shown)
+  assert.equal(roomy.kind, 'knee');
+  assert.equal(roomy.target, free.target);
+  assert.equal(roomy.knee, free.knee);
   // no room even at the bottom of the range: no suggestion, and the sheet says why
   const none = suggestion(bowl, 90, { reviewLimit: 5 });
   assert.equal(none.kind, 'none');
