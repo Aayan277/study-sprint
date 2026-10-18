@@ -258,9 +258,10 @@ function renderSession(el, enter = false) {
   // Z is undo (on a picture card Z zooms the picture instead).
   const keyLine = keyLineFor(sp, occ);
 
+  // The page heading is for screen readers only; it sits beside the bar, not in it, so the bar holds just its buttons.
   const head = `
+    <h1 class="sr-only">Review</h1>
     <div class="rv-head">
-      <h1 class="sr-only">Review</h1>
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
       <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" title="Scratchpad${singleKeysOn() ? ' (D)' : ''}">${PEN_ICON}</button>

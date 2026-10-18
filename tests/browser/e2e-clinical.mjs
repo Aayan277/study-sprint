@@ -458,6 +458,12 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920,
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage(); watch(p, 'hover');
   await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
+  // The Clinical stylesheet is only fetched when the style is on (Original is the saved style here), so load it before setting data-ui by hand.
+  await p.evaluate(() => new Promise(done => {
+    let l = document.getElementById('clinicalCss');
+    if (!l) { l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/clinical.css'; l.id = 'clinicalCss'; document.head.appendChild(l); }
+    if (l.sheet) done(); else { l.addEventListener('load', done, { once: true }); l.addEventListener('error', done, { once: true }); }
+  }));
   const r = await p.evaluate(() => {
     const root = document.documentElement, keep = ['data-ui', 'data-skin', 'data-theme'].map(a => [a, root.getAttribute(a)]), out = {};
     const cv = document.createElement('canvas'); cv.width = cv.height = 1; const g = cv.getContext('2d', { willReadFrequently: true });

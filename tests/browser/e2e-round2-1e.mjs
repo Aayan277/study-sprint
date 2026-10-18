@@ -80,8 +80,12 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
   await seed(p);
   await go(p, '#/stats', '#calGrid');
   ok(await p.locator('.eyebrow').count() === 0, `${tag}: Stats has no PROGRESS eyebrow`);
-  const sb = await p.$eval('#sDeckBtn', b => ({ search: !!b.querySelector('svg'), w: b.getBoundingClientRect().width, h: b.getBoundingClientRect().height }));
-  ok(sb.search && sb.h >= 44 && sb.w > (w < 600 ? w - 60 : 400), `${tag}: the deck search is a full-width box with a search icon (${Math.round(sb.w)}px)`);
+  const sb = await p.$eval('#sDeckBtn', b => { const r = b.getBoundingClientRect(), c = document.querySelector('#customBtn').getBoundingClientRect();
+    return { search: !!b.querySelector('svg'), w: r.width, h: r.height, rowW: c.right - r.left, sameRow: Math.abs(c.top - r.top) < 4 }; });
+  if (w < 600) {
+    // On a phone the box shares its row with the Customise button (added with the Stats layout sheet); together they span the width.
+    ok(sb.search && sb.h >= 44 && sb.sameRow && sb.rowW > w - 40 && sb.w > 150, `${tag}: the deck search is a box with a search icon, beside Customise, filling the row (${Math.round(sb.w)}px of ${Math.round(sb.rowW)}px)`);
+  } else ok(sb.search && sb.h >= 44 && sb.w > 400, `${tag}: the deck search is a full-size box with a search icon (${Math.round(sb.w)}px)`);
   ok(await p.locator('.info-fold').count() === 1 && !(await p.locator('.info-fold > span').isVisible()), `${tag}: Retention fine print is behind an (i)`);
   await p.click('.info-fold summary');
   ok(await p.locator('.info-fold > span').isVisible() && /Multiple choice/.test(await p.textContent('.info-fold')), `${tag}: the (i) opens the fine print`);
