@@ -303,3 +303,16 @@ test('cardMatcher agrees with searchMatcher and notices a card edited in place',
   assert.equal(cardMatcher('   '), null);
   assert.equal(cardMatcher('?!')(card('q', { front: 'what?!' })), true);
 });
+
+test('rangeIds: anchor to target, either direction, inclusive, in shown order', async () => {
+  const { rangeIds } = await import('../js/browse-logic.js');
+  const v = ['a', 'b', 'c', 'd', 'e'];
+  assert.deepEqual(rangeIds(v, 'b', 'd'), ['b', 'c', 'd']);
+  assert.deepEqual(rangeIds(v, 'd', 'b'), ['b', 'c', 'd']);
+  assert.deepEqual(rangeIds(v, 'c', 'c'), ['c']);
+  assert.deepEqual(rangeIds(v, null, 'c'), ['c']);
+  assert.deepEqual(rangeIds(v, 'zzz', 'c'), ['c']);        // anchor filtered out: just the target
+  assert.deepEqual(rangeIds(v, 'a', 'zzz'), []);           // target not shown
+  assert.deepEqual(rangeIds([], 'a', 'b'), []);
+  assert.deepEqual(rangeIds(['x', 'c', 'a'], 'x', 'a'), ['x', 'c', 'a']);   // follows the shown order, not id order
+});

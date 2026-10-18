@@ -318,3 +318,13 @@ export function duplicateCards(cards, all, newId, now = Date.now()) {
   const first = cards.length ? of.get(cards[0].id) : null;
   return { copies, firstCopy: copies.find(c => c.id === first) || null, of };
 }
+
+// Range select: the ids from anchorId to targetId (both included) in the order of visibleIds, whichever comes first.
+// Only ids in visibleIds count. No anchor (or one that is not shown): just the target. A target that is not shown: nothing.
+export function rangeIds(visibleIds, anchorId, targetId) {
+  const t = visibleIds.indexOf(targetId);
+  if (t < 0) return [];
+  const a = anchorId == null ? -1 : visibleIds.indexOf(anchorId);
+  if (a < 0) return [targetId];
+  return visibleIds.slice(Math.min(a, t), Math.max(a, t) + 1);
+}
