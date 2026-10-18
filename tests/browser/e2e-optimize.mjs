@@ -79,7 +79,8 @@ const seed = (p, decks, plays) => p.evaluate(async ({ decks, plays }) => {
 //   - the same probe is read in the same page just before the run (baseline), so a loaded or CPU-throttled machine lowers both
 //     numbers alike, and only the ratio between them is judged.
 // A run also has to have used a Worker (counted by wrapping the constructor). The rAF gap is still read, for the message only.
-// Measured at 4x CPU throttle: a Worker keeps 48-66% of the idle turns (progress messages and drawing take some), the fit on the page 14-22%.
+// Measured: a Worker keeps 77-91% of the idle turns at 1-2x CPU throttle and 48-66% at 4x; the fit on the page 29-46% and 14-22%. A fixed
+// limit cannot separate them at every speed, so the long run only has to stay above this floor, and the main-thread run is compared with the Worker runs.
 const MIN_TURN_RATIO = 0.35;
 const instrument = p => p.evaluate(() => {
   window.__workers = 0;
@@ -134,6 +135,7 @@ const openSheet = async p => {
   await p.click('#optOpen'); await p.waitForSelector('#sheet[open] [data-opt]');
 };
 
+const workerRatios = [];       // (the turn ratio of each long Worker run: the main-thread run below has to come out clearly under them)
 for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   const tag = `${w} ${scheme}`;
   const p = await open(w, h, scheme);
@@ -295,8 +297,9 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await probeStart(p); await p.click('#optGo');
   await finished(p);
   const big = await probeStop(p);
-  ok(big.ms > 2000 && big.workers === 1, `${tag}: a ${total}-review run took a while (${Math.round(big.ms)} ms) and used a Worker (${big.workers} started)`);
+  ok(big.ms > 1000 && big.workers === 1, `${tag}: a ${total}-review run took a while (${Math.round(big.ms)} ms) and used a Worker (${big.workers} started)`);
   ok(responsive(baseBig, big), `${tag}: a ${total}-review run kept the page responsive: ` + describe(baseBig, big));
+  workerRatios.push(ratioOf(baseBig, big));
   const bigSaved = await saved(p);
   ok(bigSaved.w && bigSaved.w.length === 21, `${tag}: and saved its weights`);
   await p.click('#optClose');
@@ -315,7 +318,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck');
   ok(await p.evaluate(() => typeof Worker === 'undefined'), 'no-worker: Worker is gone in this window');
   await instrument(p);
-  await seed(p, [['B', 250, null], ['C', 200, { relearningSteps: '10m 1h' }], ['D', 1500, null]], 0);       // (long enough for the fit to dominate)
+  await seed(p, [['B', 250, null], ['C', 200, { relearningSteps: '10m 1h' }], ['D', 4000, null]], 0);       // (long enough for the fit to dominate)
   await settingsPage(p); await openSheet(p);
   await watchSheet(p);
   const base = await baseline(p);
@@ -326,7 +329,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   // The check must be able to fail: with the fit forced onto the page, the responsiveness verdict has to come out false, and
   // on the turn ratio alone (not just because no Worker was started).
   ok(beat.workers === 0 && !responsive(base, beat), 'no-worker: the responsiveness check FAILS for a fit on the main thread: ' + describe(base, beat));
-  ok(ratioOf(base, beat) < MIN_TURN_RATIO, `no-worker: and the busy-main-thread measure alone catches it (${Math.round(ratioOf(base, beat) * 100)}% of idle turns, limit ${MIN_TURN_RATIO * 100}%)`);
+  ok(ratioOf(base, beat) < Math.min(...workerRatios), `no-worker: and the busy-main-thread measure alone tells it from a Worker run (${Math.round(ratioOf(base, beat) * 100)}% of idle turns on the page, against ${workerRatios.map(r => Math.round(r * 100) + '%').join(' and ')} with a Worker)`);
   const note = await p.evaluate(() => window.__seen.note);
   ok(note === "This may make the app slower until it's done.", 'no-worker: the slower-app note is shown: ' + note);
   const r = await saved(p);
