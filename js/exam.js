@@ -15,6 +15,7 @@ import { dayStart, dayEnd } from './days.js';
 import { effectiveDeck, subtreeIds, treeOrder } from './deck-tree.js';
 import { dayKey } from './stats-calc.js';
 import { EASY_DAY_WEIGHT, NORMAL_WEEK } from './balance.js';
+import { forgettingCurve7, cleanMemory7, memoryFor, W7_DEFAULT } from './fsrs7-model.js';
 
 const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
@@ -37,10 +38,28 @@ export const recall = (stability, days, w20 = DEFAULT_W20) => {
   return stability > 0 ? (1 + (0.9 ** (1 / decay) - 1) * Math.max(0, days) / stability) ** decay : 0;
 };
 
+// With FSRS-7 on (docs/design/fsrs7-plan.md) the "w20" every function here takes can also be a model { w20, w7 }: w7 = the 34 FSRS-7 weights,
+// w20 = the FSRS-6 decay for cards that have no FSRS-7 memory yet (personalW20 in sched-settings.js makes it). A number or undefined
+// still means FSRS-6, exactly as before.
+const decayOf = model => (model !== null && typeof model === 'object' ? model.w20 : model);
+// The chance of remembering `days` after a memory. `what` is a stability (a number: FSRS-6), or a memory object. Only a memory with the FSRS-7
+// fields, and only when the model has w7, uses the FSRS-7 curve; any other object is read by its .stability.
+export function recallFrom(what, days, model) {
+  if (typeof what !== 'object' || what === null) return recall(what, days, decayOf(model));
+  const m = model !== null && typeof model === 'object' && model.w7 ? cleanMemory7(what) : null;
+  if (m) return forgettingCurve7(model.w7 ?? W7_DEFAULT, m, Math.max(0, days));
+  return recall(what.stability, days, decayOf(model));
+}
+
 // When the card was last seen (a card from older data may not have lastReview: use its due date minus its gap).
 const lastSeen = st => st.lastReview || st.due - (st.scheduledDays || 0) * DAY;
+// The FSRS-7 memory saved on a card state, if it still belongs to the card's last review (a review by an older app version or in FSRS-6 mode
+// leaves the old one behind, and a mismatch means it is stale).
+export const memory7Of = st => (st?.fsrs7 && st.fsrs7.at === st.lastReview ? cleanMemory7(st.fsrs7) : null);
 // The chance of remembering the card at a given time, with no review before it.
-export const recallAt = (st, when, w20) => recall(st.stability, (when - lastSeen(st)) / DAY, w20);
+// With the FSRS-7 model every card is read with the FSRS-7 curve: its saved memory, or (not rated with FSRS-7 yet) the rebuilt or seeded one
+// (memoryFor in fsrs7-model.js), so a list of cards never mixes the two curves.
+export const recallAt = (st, when, model) => recallFrom((model !== null && typeof model === 'object' && model.w7 ? memoryFor(st, model.w7) : null) ?? st.stability, (when - lastSeen(st)) / DAY, model);
 
 // '2026-11-20' → the start of that study day (4am local time), or null.
 export function examStart(examDate) {
@@ -142,7 +161,9 @@ export function planFinalPass(states, info, now = Date.now(), from = 0, easyDays
 // belong closest to the exam). load (optional) is the Map of reviews per day from balance.js (rate() updates it).
 export function examClamp(card, now, opts, load) {
   if (!(opts.maxDue > now) || card.due.getTime() < opts.maxDue) return card;
-  if (recall(card.stability, (opts.maxDue - now) / DAY, opts.w?.[20]) >= FINAL_R) return card;     // fine as it is
+  // (a card scheduled by FSRS-7 carries its memory in card.fsrs7: the dual-trace curve is used then)
+  const model = opts.fsrsVersion === 7 ? { w20: opts.w?.[20], w7: opts.w7 ?? W7_DEFAULT } : opts.w?.[20];
+  if (recallFrom(card.fsrs7 ?? card.stability, (opts.maxDue - now) / DAY, model) >= FINAL_R) return card;     // fine as it is
   const daysLeft = Math.round((opts.maxDue - dayStart(now)) / DAY);
   const { first, last } = finalWindow(daysLeft, 1);                  // tomorrow at the earliest
   if (first > last) return card;                                        // no day left to put it on
@@ -198,10 +219,11 @@ export function examSchedule(decks, cards, statesById, now = Date.now(), gainOf 
 // How much a review now adds to the chance of remembering a card on exam day.
 //   p = the chance of remembering it now. After a review, the card is as stable as the "Good" (if remembered)
 //   or "Again" (if not) stability. Gain = what we'd expect on exam day with the review, minus without it.
+// goodStability / againStability: a number (FSRS-6), or the memory after that answer (FSRS-7: { stability, stabilityFast, difficulty }).
 export function examGainFrom(st, goodStability, againStability, examStart, now, w20) {
   const p = recallAt(st, now, w20);
   const left = (examStart - now) / DAY;
-  return p * recall(goodStability, left, w20) + (1 - p) * recall(againStability, left, w20) - recallAt(st, examStart, w20);
+  return p * recallFrom(goodStability, left, w20) + (1 - p) * recallFrom(againStability, left, w20) - recallAt(st, examStart, w20);
 }
 
 // Cards brought forward when an exam date is set: the final pass (planFinalPass) from tomorrow on, as saved

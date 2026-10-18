@@ -9,7 +9,7 @@ import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
@@ -22,7 +22,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.16';
+const APP_VERSION = '4.20';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -32,6 +32,8 @@ async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
+  // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
+  if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
   const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
@@ -98,7 +100,8 @@ async function renderSettings(el) {
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
           <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
-        <input id="ret" type="range" min="80" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
+        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
       </div>
       <div class="set-row">
         <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
@@ -138,10 +141,17 @@ async function renderSettings(el) {
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
           <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b>
+          <span id="fsrsHint">FSRS-7 models short-term memory better (same-day repeats, cramming). Beta: off by default. Your cards keep their history; switching back is safe.</span>
+          <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" aria-describedby="fsrsHint" id="fsrsChips">
+            ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+          </div>
+        </div>
         <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
             <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
+            <button class="btn ghost small" type="button" id="healthOpen">Check how well it fits you</button>
             ${personal.using ? '<button class="link" type="button" id="optReset">Reset to default</button>' : ''}
           </div>
           ${personal.canOptimize ? '' : `<span class="steps-hint" id="optWhy">${esc(personal.why)}</span>`}
@@ -150,6 +160,13 @@ async function renderSettings(el) {
             <div class="sheet-actions"><button class="btn ghost small" type="button" id="optNo">Cancel</button><button class="btn danger solid small" type="button" id="optYes">Reset</button></div>
           </div>
         </div>
+        <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
+          <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
+          <div class="steps-input">
+            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
+            <button class="btn ghost small" type="button" id="ignoreClear" ${settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
+          </div>
+          <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
           <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
           <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
@@ -320,6 +337,20 @@ async function renderSettings(el) {
     settings.targetRetention = Number(e.target.value) / 100;
     db.setSetting('targetRetention', settings.targetRetention);
   });
+  $('retHelp').addEventListener('click', async () => {
+    try {
+      (await import('./retention-sheet.js')).openRetentionSheet({
+        deckId: '',
+        current: () => Math.round(settings.targetRetention * 100),
+        onPick: pct => {
+          settings.targetRetention = pct / 100;
+          db.setSetting('targetRetention', settings.targetRetention);
+          $('ret').value = pct; $('retOut').textContent = `${pct}%`;
+          toast(`Target retention is now ${pct}%`);
+        }
+      });
+    } catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
   rememberFold($('advanced'), 'settings-advanced');
   wireAdvanced(el);
 }
@@ -379,9 +410,34 @@ function wireAdvanced(el) {
     await renderSettings($('screen'));
     $('advanced').open = true;
   };
+  // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
+  el.querySelectorAll('input[name="fsrsVersion"]').forEach(r => r.addEventListener('change', async () => {
+    settings.fsrsVersion = +r.value === 7 ? 7 : 6;
+    await db.setSetting('fsrsVersion', settings.fsrsVersion);
+    toast(settings.fsrsVersion === 7 ? 'FSRS-7 (beta) is on' : 'Back to FSRS-6');
+    await redrawAdvanced();
+    $('fsrsChips').querySelector('input:checked')?.focus();
+  }));
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('healthOpen').addEventListener('click', async () => {
+    try { (await import('./health-sheet.js')).openHealthSheet(); }
+    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
+  });
+  $('ignoreBefore').addEventListener('change', e => {
+    const v = cleanIgnoreBefore(e.target.value);
+    e.target.value = v || '';
+    settings.ignoreBefore = v;
+    $('ignoreClear').hidden = !v;
+    db.setSetting('ignoreBefore', v);
+    toast(v ? `Reviews before ${v} are ignored when tuning` : 'Using all your reviews');
+  });
+  $('ignoreClear').addEventListener('click', () => {
+    $('ignoreBefore').value = ''; settings.ignoreBefore = null; $('ignoreClear').hidden = true;
+    db.setSetting('ignoreBefore', null);
+    toast('Using all your reviews');
   });
   $('optReset')?.addEventListener('click', () => {
     $('optConfirm').hidden = false;
