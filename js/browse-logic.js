@@ -10,6 +10,7 @@ import { dayEnd } from './days.js';
 import { formatInterval } from './queue.js';
 import { dupKey } from './import.js';
 import { normTag, tagWords, SEP } from './tag-tree.js';
+import { isPair, loneIds, unpaired } from './reverse.js';
 
 export const FLAGS = [
   { id: 1, name: 'Red', color: '#E5484D' },
@@ -232,4 +233,43 @@ export function renameTagPrefix(cards, from, to) {
     if (hit) out.push({ ...c, tags: [...new Set(moved)] });
   }
   return out;
+}
+
+// ---------- duplicating ----------
+// Copies of cards as new cards: the same deck, text, tags, pictures, memory hook and accepted answers, but a new id, a
+// fresh schedule (copies have no schedule row, so they are new) and none of the card's own state (flag, suspended, buried).
+// A card that belongs to a note (a cloze or image-occlusion card) is copied with the whole note: every card of it, under one
+// new noteId. Cards of the same note in `cards` are copied once.
+//   cards    the cards to copy        all   every card (to find the rest of a note)
+//   newId    makes an id              now   when the copies are created (each one a millisecond later, to keep their order)
+// Returns { copies, firstCopy, of }: the new cards, the copy of cards[0], and a Map from an original's id to its copy's id.
+// A reverse pair (two cards of one noteId, the second with reverse: true, see reverse.js) is copied as a clean new pair; a card
+// that has a pair's noteId but no partner (loneIds) is copied as an ordinary card.
+export function duplicateCards(cards, all, newId, now = Date.now()) {
+  const copies = [], of = new Map(), noteIds = new Map();
+  const seen = new Set(), lone = loneIds(all);
+  let i = 0;
+  for (const card of cards) {
+    const group = card.noteId && !lone.has(card.id) ? all.filter(c => c.noteId === card.noteId).sort((a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1)) : [card];
+    if (!group.some(c => c.id === card.id)) group.push(card);
+    for (const c of group) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      if (c.noteId && !lone.has(c.id) && !noteIds.has(c.noteId)) noteIds.set(c.noteId, newId());
+      let copy = { ...c, id: newId(), created: now + i++ };
+      // Own state and sync/export identity are not copied (a copied ankiGuid would make two notes with one guid in an export).
+      for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt', 'syncedAt', 'uid', 'ankiGuid', 'ankiId']) delete copy[k];
+      if (isPair(c) && lone.has(c.id)) copy = unpaired(copy);          // its partner is missing: an ordinary card
+      else if (c.noteId) copy.noteId = noteIds.get(c.noteId);
+      if (Array.isArray(c.noteFields)) copy.noteFields = c.noteFields.map(x => (x && typeof x === 'object' ? { ...x } : x));
+      if (c.tags) copy.tags = c.tags.filter(t => t !== 'leech');
+      if (c.acceptAnswers) copy.acceptAnswers = [...c.acceptAnswers];
+      for (const k of ['frontSounds', 'backSounds']) if (Array.isArray(c[k])) copy[k] = [...c[k]];      // sounds (media ids) are shared, the lists are not
+      if (c.occlusion) copy.occlusion = { ...c.occlusion, masks: c.occlusion.masks.map(m => ({ ...m })) };
+      of.set(c.id, copy.id);
+      copies.push(copy);
+    }
+  }
+  const first = cards.length ? of.get(cards[0].id) : null;
+  return { copies, firstCopy: copies.find(c => c.id === first) || null, of };
 }

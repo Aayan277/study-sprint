@@ -230,6 +230,9 @@ export const DEFAULT_CARD_MS = 8000;       // used until there are enough answer
 // Two reviews further apart than this are not "one card after another": the person looked away, took a break,
 // or the log rows are not a real session (an import, or a different day). 45 s covers a slow, careful card.
 const SAME_SESSION_MS = 45 * 1000;
+// A gap under this is a double-tap, a click-through or test data, not a card that was read and rated. The typical time
+// per card never goes below MIN_CARD_MS, whatever the log says (nobody reads, recalls and rates a card in 1 second).
+const FAST_GAP_MS = 2000, MIN_CARD_MS = 4000;
 // Recent habits count most: use the last 2 weeks when they hold enough gaps, else the whole history.
 const RECENT_DAYS = 14, MIN_GAPS = 5, MIN_RECENT_GAPS = 20;
 // Your usual time per card: the median time between one review and the next in the same session, or 8 seconds
@@ -243,17 +246,31 @@ export function typicalCardMs(logs, now = Date.now()) {
   const gaps = [];                                  // [when, how long] for each pair of reviews in one session
   for (let i = 1; i < reviews.length; i++) {
     const gap = reviews[i].timestamp - reviews[i - 1].timestamp;
-    if (gap > 0 && gap <= SAME_SESSION_MS) gaps.push([reviews[i].timestamp, gap]);
+    if (gap >= FAST_GAP_MS && gap <= SAME_SESSION_MS) gaps.push([reviews[i].timestamp, gap]);
   }
   const recent = gaps.filter(g => g[0] >= now - RECENT_DAYS * 86400000);
   const times = (recent.length >= MIN_RECENT_GAPS ? recent : gaps).map(g => g[1]);
   if (times.length < MIN_GAPS) return DEFAULT_CARD_MS;
   times.sort((a, b) => a - b);
   const mid = times.length >> 1;
-  return times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2;
+  return Math.max(MIN_CARD_MS, times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2);
 }
-// "~3 min" for a number of cards.
-export const minutesText = (cards, cardMs) => `~${Math.max(1, Math.round(cards * cardMs / 60000))} min`;
+// A learning step like "10m", "2h" or "1d": true when it comes back the same day (under a day).
+export const sameDayStep = step => { const m = String(step).match(/^(\d+)([mhd])/i); return !!m && (m[2] !== 'd' && (m[2].toLowerCase() === 'm' ? +m[1] < 1440 : +m[1] < 24)); };
+// How long a queue takes, in ms. A review is seen once; a new card is seen once per learning step plus once more
+// (1m, 10m = shown, again after 1 min, again after 10 min = 3 times), so it costs (steps + 1) cards of time.
+export function sessionMs(due, fresh, cardMs, learningSteps = 2) {
+  const views = Math.max(0, Math.round(learningSteps)) + 1;
+  return (Math.max(0, due) + Math.max(0, fresh) * views) * Math.max(MIN_CARD_MS, cardMs || 0);
+}
+// "~3 min", or "~1 h 20 min" from an hour up. `cards` is the whole queue; `fresh` of them are new.
+export function minutesText(cards, cardMs, fresh = 0, learningSteps = 2) {
+  const f = Math.min(Math.max(0, fresh), Math.max(0, cards));
+  const min = Math.max(1, Math.round(sessionMs(cards - f, f, cardMs, learningSteps) / 60000));
+  if (min < 60) return `~${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `~${h} h ${m} min` : `~${h} h`;
+}
 
 // ---------- handing a session from Today to Review ----------
 // Today works out what to study, then goes to #/review, which starts it. The hand-over is kept here.
