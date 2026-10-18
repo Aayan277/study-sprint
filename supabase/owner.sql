@@ -11,6 +11,8 @@
 --   data_mb / data_limit_mb           how much space those records take, and their limit
 --   media_mb / media_limit_mb         how much their pictures and sounds take, and their limit
 --   data_pct / media_pct              how full each of the two is, in percent
+-- (Data rows and bytes come from the sync_usage table that limits.sql keeps up to date; if a number ever looks wrong,
+-- run select public.recount_sync_usage(); once to recount everybody.)
 -- The limits are the default unless you gave that person a row in the quotas table (docs/sync-setup.md).
 select
   u.email,

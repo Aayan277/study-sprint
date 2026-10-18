@@ -770,10 +770,14 @@ async function save() {
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
     rememberDeck(deckId);
     // Past 50,000 cards: say so once (it is only a heads-up; Settings keeps showing it).
-    const bigNote = passedCardsWarning(cardsBefore, cardsBefore + cards.length) && !cardsWarnedBefore() ? cardsWarning(cardsBefore + cards.length) : null;
+    // (Only for someone signed in to sync: the note is about the account. Settings → Your data keeps showing it.)
+    let bigNote = null;
+    if (passedCardsWarning(cardsBefore, cardsBefore + cards.length) && !cardsWarnedBefore()) {
+      try { if (await (await import('./sync.js')).account()) bigNote = cardsWarning(cardsBefore + cards.length); } catch { /* no sync: no note */ }
+    }
     if (bigNote) { try { localStorage.setItem(CARDS_WARNED_KEY, '1'); } catch { /* fine */ } }
     const added = `Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`;
-    if (bigNote) toast(`${added}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' } });
+    if (bigNote) toast(`${added}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' }, hold: true });
     else toast(added);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.

@@ -227,3 +227,14 @@ test('pushSafely: other errors are thrown, big pushes go in batches, and the spl
   assert.equal(all.held.length + all.sent.length, 1000);                      // nothing lost: what couldn't be tried is held
   assert.ok(all.held.length >= 900);
 });
+
+test('50,000 cards: a plain warning from the mark on, never before, and passing it is noticed once', () => {
+  assert.equal(CARDS_WARN, 50000);
+  assert.equal(cardsWarning(49999), null);
+  assert.match(cardsWarning(50000), /^You have 50,000 cards\./);
+  assert.match(cardsWarning(1234567), /^You have 1,234,567 cards\./);   // thousands separators
+  assert.equal(passedCardsWarning(49999, 50000), true);                  // exactly one card past the line
+  assert.equal(passedCardsWarning(0, 60000), true);
+  assert.equal(passedCardsWarning(50000, 51000), false);                 // already past it: not "just passed"
+  assert.equal(passedCardsWarning(10, 49999), false);
+});
