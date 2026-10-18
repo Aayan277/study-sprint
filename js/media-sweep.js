@@ -47,7 +47,8 @@ export const validMark = v => v === null || v === GONE || (typeof v === 'number'
 //           reupload: [ids a card here uses and this device has, but the account lost: send them again] }.
 export function planSweep({ marks = {}, gone = [], removed = [], used = new Set(), held = new Set(), now = Date.now() } = {}) {
   const mark = [], unmark = [], sweep = [];
-  for (const id of removed) if (!used.has(id) && !Object.hasOwn(marks, id)) mark.push(id);
+  const lost = new Set(gone);                                 // never mark over 'gone': a device holding the file must still see it
+  for (const id of removed) if (!used.has(id) && !Object.hasOwn(marks, id) && !lost.has(id)) mark.push(id);
   for (const [id, at] of Object.entries(marks)) {
     if (used.has(id)) unmark.push(id);                        // used again: it stays
     else if (now - at >= WAIT_MS) sweep.push(id);

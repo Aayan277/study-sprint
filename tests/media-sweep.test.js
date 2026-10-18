@@ -95,3 +95,7 @@ test('a swept file that a card here still uses, and this device has, is sent aga
   assert.deepEqual(p.reupload, ['a', 'b']);                       // c: used but not held here; d: held but unused
   assert.deepEqual(planSweep({ gone: ['a'], used: new Set(['a']), now: NOW }).reupload, []);
 });
+
+test("a file the account already lost is never marked again (the 'gone' note must stay for devices that hold it)", () => {
+  assert.deepEqual(planSweep({ gone: ['a'], removed: ['a'], now: NOW }).mark, []);
+});
