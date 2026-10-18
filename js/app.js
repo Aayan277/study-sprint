@@ -9,7 +9,7 @@ import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
 import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps } from './sched-settings.js';
+import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
@@ -21,7 +21,7 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.15';
+const APP_VERSION = '4.17';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
@@ -31,6 +31,8 @@ async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
   const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
+  // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
+  if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
   const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
@@ -137,6 +139,12 @@ async function renderSettings(el) {
         <label class="adv-row switch-row"><span><b>Spread out due dates</b>
           <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
           <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
+        <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b>
+          <span id="fsrsHint">FSRS-7 models short-term memory better (same-day repeats, cramming). Beta: off by default. Your cards keep their history; switching back is safe.</span>
+          <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" aria-describedby="fsrsHint" id="fsrsChips">
+            ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+          </div>
+        </div>
         <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
@@ -378,6 +386,14 @@ function wireAdvanced(el) {
     await renderSettings($('screen'));
     $('advanced').open = true;
   };
+  // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
+  el.querySelectorAll('input[name="fsrsVersion"]').forEach(r => r.addEventListener('change', async () => {
+    settings.fsrsVersion = +r.value === 7 ? 7 : 6;
+    await db.setSetting('fsrsVersion', settings.fsrsVersion);
+    toast(settings.fsrsVersion === 7 ? 'FSRS-7 (beta) is on' : 'Back to FSRS-6');
+    await redrawAdvanced();
+    $('fsrsChips').querySelector('input:checked')?.focus();
+  }));
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }

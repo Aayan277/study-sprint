@@ -266,3 +266,88 @@ test('CSV leaves sounds out', () => {
   const csv = toCSV([{ id: 'p', front: 'dog', back: 'inu', tags: [], frontSounds: ['a'], backSounds: ['b'] }]);
   assert.ok(csv.includes('dog,inu,') && !/sound|\[/.test(csv));
 });
+
+// ---------- round 3, batch 1b: both directions (item 5) and note fields (item A) ----------
+import { notesToImport, reverseModel } from '../js/anki.js';
+import { buildCards } from '../js/import.js';
+import { reverseOf } from '../js/reverse.js';
+
+const modelsOf = col => new Map(Object.entries(JSON.parse(col.models)).map(([id, m]) => [id, { name: m.name, fields: m.flds.map(f => f.name), cloze: m.type === 1,
+  templates: m.tmpls.map(t => ({ ord: t.ord, qfmt: t.qfmt, afmt: t.afmt })) }]));
+const asNotes = (notes, ankiCards, deck = 'D') => notes.map(n => ({ id: String(n.id), guid: n.guid, mid: String(n.mid), fields: n.flds.split('\x1f'), tags: [],
+  deck, cards: Object.fromEntries(ankiCards.filter(c => c.nid === n.id).map(c => [c.ord, String(c.id)])) }));
+
+test('Anki: a card with its reverse card goes out as one "Basic (and reversed card)" note with two cards', async () => {
+  const f = { id: 'f1', deckId: 'd', noteId: 'N1', front: 'Mitosis', back: 'Cell division', tags: ['bio'], noteExtra: 'Hook', created: 1 };
+  const r = { ...reverseOf(f, 'r1'), frontImageFile: undefined };
+  const plain = { id: 'p1', front: 'Meiosis', back: 'Gametes', tags: [] };
+  const { col, notes, cards: ac } = await ankiContents({ id: 'd', name: 'Bio' }, [f, r, plain], 1_800_000_000_000);
+  assert.equal(notes.length, 2, 'the pair is one note, and the plain card another');
+  assert.equal(ac.length, 3);
+  const models = JSON.parse(col.models);
+  const rev = models[1_600_000_000_004];
+  assert.equal(rev.name, 'Study Sprint Basic (and reversed card)');
+  assert.deepEqual(rev.tmpls.map(t => [t.ord, t.qfmt]), [[0, '{{Front}}'], [1, '{{Back}}']], 'each card asks with one field only');
+  assert.ok(rev.tmpls.every(t => t.afmt.includes('{{Back Extra}}')), 'and shows Back Extra on the answer');
+  assert.deepEqual(rev.flds.map(x => x.name), ['Front', 'Back', 'Back Extra']);
+  const note = notes.find(n => n.mid === 1_600_000_000_004);
+  assert.equal(note.flds, 'Mitosis\x1fCell division\x1fHook', 'the hook is in Back Extra, not in the reverse card\'s question');
+  assert.equal(note.guid, ankiGuid('N1'), 'a stable guid from the note id');
+  assert.deepEqual(ac.filter(c => c.nid === note.id).map(c => c.ord).sort(), [0, 1]);
+  assert.equal(notes.find(n => n.mid !== 1_600_000_000_004).mid, 1_600_000_000_001, 'ordinary cards stay Basic');
+  // the importer reads it back as a note that works in both directions
+  const mm = modelsOf(col);
+  assert.equal(reverseModel(mm.get(String(1_600_000_000_004))), true);
+  assert.equal(reverseModel(mm.get(String(1_600_000_000_001))), false);
+  const back = notesToImport(asNotes(notes, ac), mm);
+  assert.equal(back.reversed.filter(Boolean).length, 1);
+  assert.equal(buildCards(back).filter(c => c.reversed).length, 1);
+  const pairBack = buildCards(back).find(c => c.reversed);
+  assert.equal(pairBack.noteExtra, 'Hook', 'Back Extra comes back as the hook, not as a named field');
+  assert.equal(pairBack.back, 'Cell division');
+  assert.equal(pairBack.noteFields, undefined);
+  // a reverse card without its forward card goes out as an ordinary card
+  const lone = await ankiContents({ id: 'd', name: 'Bio' }, [r], 1_800_000_000_000);
+  assert.equal(lone.notes.length, 1); assert.equal(lone.notes[0].mid, 1_600_000_000_001); assert.equal(lone.cards.length, 1);
+  assert.equal(lone.notes[0].flds, 'Cell division\x1fMitosis<br><br>Hook');
+});
+
+test('Anki: a pair keeps its guid from the forward card and goes to its own deck', async () => {
+  const f = { id: 'f1', deckId: 'd', noteId: 'N1', front: 'a', back: 'b', tags: [], ankiGuid: 'GUID123', deckName: 'Bio::Unit 1' };
+  const { notes, cards: ac, col } = await ankiContents({ id: 'd', name: 'Bio' }, [f, { ...reverseOf(f, 'r1'), deckName: 'Bio::Unit 1' }], 1_800_000_000_000);
+  assert.equal(notes[0].guid, 'GUID123');
+  const deckId = Object.values(JSON.parse(col.decks)).find(d => d.name === 'Bio::Unit 1').id;
+  assert.ok(ac.every(c => c.did === deckId));
+});
+
+test('Anki: the other fields go out as <details> sections and come back the same', async () => {
+  const fields = [{ name: 'First Aid', text: 'p. 12\nsecond **line**' }, { name: 'Sketchy & <co>', text: 'video' }];
+  const basic = { id: 'b1', front: 'Aorta', back: 'Big artery', tags: [], noteExtra: 'Hook', noteFields: fields };
+  const cloze = { id: 'c1', noteId: 'C1', cloze: 1, noteText: 'The {{c1::aorta}} is big', front: 'The […] is big', back: 'aorta', tags: [], noteExtra: 'Extra', noteFields: fields };
+  const { col, notes, cards: ac } = await ankiContents({ id: 'd', name: 'D' }, [basic, cloze], 1_800_000_000_000);
+  const details = '<details><summary>First Aid</summary>p. 12<br>second <b>line</b></details><details><summary>Sketchy &amp; &lt;co&gt;</summary>video</details>';
+  assert.equal(notes[0].flds.split('\x1f')[1], `Big artery<br><br>Hook${details}`, 'at the end of Back');
+  assert.equal(notes[1].flds.split('\x1f')[1], `Extra${details}`, 'in Back Extra');
+  const back = notesToImport(asNotes(notes, ac), modelsOf(col));
+  const [b, c] = buildCards(back);
+  assert.deepEqual(b.noteFields, fields);
+  assert.deepEqual(c.noteFields, fields);
+  assert.equal(c.noteExtra, 'Extra');
+  assert.equal(back.rows[0][1], 'Big artery\n\nHook', 'the back keeps its text, and the fields are not part of it');
+  // a card with no other fields is exactly as before
+  const plainOut = await ankiContents({ id: 'd', name: 'D' }, [{ id: 'z', front: 'a', back: 'b', tags: [] }], 1_800_000_000_000);
+  assert.equal(plainOut.notes[0].flds, 'a\x1fb');
+});
+
+test('CSV: a pair is one row, with "yes" in the Both directions column', () => {
+  const f = { id: 'f1', noteId: 'N1', front: 'Mitosis', back: 'Cell division', tags: ['bio'] };
+  const csv = toCSV([f, reverseOf(f, 'r1'), { id: 'p', front: 'Meiosis', back: 'Gametes', tags: [] }]);
+  assert.equal(csv.replace(/^﻿/, ''), 'Front,Back,Tags,Both directions\r\nMitosis,Cell division,bio,yes\r\nMeiosis,Gametes,,\r\n');
+  // no pairs: no extra column
+  assert.ok(toCSV([{ id: 'p', front: 'a', back: 'b', tags: [] }]).startsWith('﻿Front,Back,Tags\r\n'));
+  // the reverse card alone is an ordinary row
+  assert.ok(toCSV([reverseOf(f, 'r1')]).includes('Cell division,Mitosis,bio'));
+  // with a Deck column, Both directions comes last
+  const two = toCSV([{ ...f, deckName: 'A' }, { ...reverseOf(f, 'r1'), deckName: 'A' }, { id: 'p', front: 'x', back: 'y', tags: [], deckName: 'B' }]);
+  assert.ok(two.startsWith('﻿Front,Back,Tags,Deck,Both directions\r\n') && two.includes('Mitosis,Cell division,bio,A,yes'));
+});

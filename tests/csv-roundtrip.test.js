@@ -115,3 +115,25 @@ test('only a column headed exactly Tags is the tags column', () => {
   assert.equal(r.columns.length, 3);
   assert.equal(r.tags, undefined);
 });
+
+// ---- round 3, batch 1b: both directions ----
+import { reverseOf } from '../js/reverse.js';
+
+test('a pair is exported as one row and imported as one card that wants a reverse card', () => {
+  const f = { id: 'f1', noteId: 'N1', front: 'Mitosis', back: 'Cell division', tags: ['bio'] };
+  const cards = [f, reverseOf(f, 'r1'), { id: 'p', front: 'Meiosis', back: 'Gametes', tags: [] }, { id: 'q', front: 'Nucleus', back: 'Holds DNA', tags: ['x'] }];
+  const r = parseText(toCSV(cards));
+  assert.deepEqual(r.columns, ['Front', 'Back'], 'the Both directions column is not a card side');
+  assert.deepEqual(r.both, [true, false, false]);
+  const list = buildCards(r);
+  assert.deepEqual(list.map(c => [c.front, c.back, !!c.reversed]), [['Mitosis', 'Cell division', true], ['Meiosis', 'Gametes', false], ['Nucleus', 'Holds DNA', false]]);
+  assert.deepEqual(list[0].tags, ['bio']);
+  assert.deepEqual(list[2].tags, ['x']);
+});
+
+test('the Both directions column is only read in a file with the export\'s own header', () => {
+  const r = parseText('Term,Definition,Both directions\r\nMitosis,Division,yes\r\nMeiosis,Gametes,\r\n');
+  assert.equal(r.both, undefined);
+  assert.ok(buildCards(r).every(c => !c.reversed));
+  assert.equal(parseText(toCSV([{ id: 'a', front: 'x', back: 'y', tags: [] }])).both, undefined, 'and not when no card has one');
+});
