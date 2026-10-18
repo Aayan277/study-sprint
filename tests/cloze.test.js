@@ -239,3 +239,16 @@ test('a blank that starts inside a formula is not a blank (it shows as typed); p
   assert.equal(hasCloze('{{c1::$5}} and $10'), true);
   assert.equal(clozeCard('{{c1::ab}} $x$', 1).back, 'ab');
 });
+
+test("healing: the note's other fields (noteFields) follow the newest sibling too", () => {
+  const fields = [{ name: 'First Aid', text: 'p. 41' }];
+  const cards = [sib(1), sib(2, { updatedAt: 99, noteFields: fields }), sib(3, { noteFields: [] })];
+  const fixed = healNotes(cards);
+  assert.deepEqual(fixed.map(c => c.id), ['k1', 'k3']);
+  assert.ok(fixed.every(c => JSON.stringify(c.noteFields) === JSON.stringify(fields)));
+  // the newest sibling has none: the others lose theirs
+  const gone = healNotes([sib(1, { noteFields: fields }), sib(2, { updatedAt: 99 }), sib(3, { noteFields: fields })]);
+  assert.deepEqual(gone.map(c => c.id), ['k1', 'k3']);
+  assert.ok(gone.every(c => !('noteFields' in c)));
+  assert.equal(healNotes([sib(1, { noteFields: [] }), sib(2)]).length, 0, 'none and an empty list agree');
+});

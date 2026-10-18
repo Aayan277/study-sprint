@@ -9,6 +9,7 @@
 
 import { maskMath, MASK_CHAR } from './math.js';
 import { foldText } from './match.js';
+import { cleanFields } from './note-fields.js';
 
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
 // because fronts are usually short terms (so "Term: def - more" splits at ': ', not ' - ').
@@ -135,7 +136,8 @@ const splitTags = cell => {
 function finish(rows, format, names = null) {
   let headerSkipped = false;
   if (!names && rows.length && isHeaderRow(rows[0])) { names = rows[0]; rows = rows.slice(1); headerSkipped = true; }
-  if (isExportHeader(names)) rows = rows.map(r => r.map(c => (typeof c === 'string' ? c.replace(FORMULA_GUARD, '') : c)));
+  const own = isExportHeader(names);        // the export's own header: Front, Back, Tags…
+  if (own) rows = rows.map(r => r.map(c => (typeof c === 'string' ? c.replace(FORMULA_GUARD, '') : c)));
   // A "Tags" column (what Export writes) holds the cards' tags; it is not a side of the card.
   let tags = null;
   const at = names ? names.findIndex(n => /^tags$/i.test(String(n ?? '').trim())) : -1;
@@ -144,11 +146,20 @@ function finish(rows, format, names = null) {
     rows = rows.map(r => r.filter((_, i) => i !== at));
     names = names.filter((_, i) => i !== at);
   }
+  // A "Both directions" column (also what Export writes, when any card has a reverse card) says "yes" for cards that work both ways.
+  // Like Tags, it is only read in a file with the export's own header.
+  let both = null;
+  const bothAt = names && own ? names.findIndex((n, i) => i >= 2 && /^both directions$/i.test(String(n ?? '').trim())) : -1;
+  if (bothAt >= 2) {
+    both = rows.map(r => /^(yes|y|true|1)$/i.test(String(r[bothAt] ?? '').trim()));
+    rows = rows.map(r => r.filter((_, i) => i !== bothAt));
+    names = names.filter((_, i) => i !== bothAt);
+  }
   const width = Math.max(2, ...rows.map(r => r.length));
   rows = rows.map(r => Array.from({ length: width }, (_, i) => r[i] ?? ''));
   const columns = Array.from({ length: width }, (_, i) =>
     (names && names[i]) || (width === 2 ? ['Front', 'Back'][i] : `Column ${i + 1}`));
-  return { columns, rows, format, headerSkipped: headerSkipped || !!names, ...(tags ? { tags } : {}) };
+  return { columns, rows, format, headerSkipped: headerSkipped || !!names, ...(tags ? { tags } : {}), ...(both?.some(Boolean) ? { both } : {}) };
 }
 
 // ---------- rule 6: markdown / Notion tables ----------
@@ -310,7 +321,9 @@ export function parseRows(rows) {
 // ---------- after parsing ----------
 
 // Pick which columns are the front and back.
-export function buildCards(result, frontCol = 0, backCol = 1) {
+//   keepFields  true keeps an Anki note's other fields as folded sections with their names (noteFields, item A); false joins a cloze
+//               note's other fields into its one extra block, and leaves a basic note's other columns out
+export function buildCards(result, frontCol = 0, backCol = 1, { keepFields = true } = {}) {
   // tags, ankiId, ankiGuid, ankiDeck, cloze and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
   // review history; ankiDeck is the Anki deck it came from, for keeping subdecks).
   return result.rows.map((r, i) => ({
@@ -324,10 +337,47 @@ export function buildCards(result, frontCol = 0, backCol = 1) {
     ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
     ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
     ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
-    ...(result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {}),
-    ...(result.guids?.[i] ? { ankiGuid: result.guids[i] } : {})
+    ...extrasOf(result, i, frontCol, backCol, keepFields),
+    ...(result.guids?.[i] ? { ankiGuid: result.guids[i] } : {}),
+    // A basic note that has a reverse card too (Anki "Basic (and reversed card)", or "yes" in the CSV's Both directions column).
+    ...(!result.clozes?.[i] && !result.occlusions?.[i] && (result.reversed?.[i] || result.both?.[i]) ? { reversed: result.reversed?.[i] || {} } : {})
   }));
 }
+
+// A row's note extra and note fields. A cloze note's extras are the main extra (the Back Extra field) and the other fields; a basic
+// note's other fields are the columns that are not the front or back, plus its <details> sections.
+function extrasOf(result, i, frontCol, backCol, keep) {
+  const split = result.extraSplits?.[i];
+  if (result.clozes?.[i]) {
+    if (keep && split) return { ...(split.extra ? { noteExtra: split.extra } : {}), noteFields: split.fields };
+    return result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {};
+  }
+  const out = result.noteExtras?.[i] ? { noteExtra: result.noteExtras[i] } : {};
+  if (!keep) return out;
+  const names = result.fieldNames?.[i];
+  const fields = keptFields(result, i, frontCol, backCol);
+  return fields.length ? { ...out, noteFields: fields } : out;
+}
+// The fields a basic note keeps, cleaned to the limits (note-fields.js), so what is saved always passes a backup check.
+function rawFields(result, i, frontCol, backCol) {
+  const names = result.fieldNames?.[i];
+  const fields = [];
+  if (names) result.rows[i].forEach((text, c) => {
+    if (c === frontCol || c === backCol || names[c] === null || names[c] === undefined || !String(text).trim()) return;
+    fields.push({ name: names[c], text: String(text).trim() });
+  });
+  fields.push(...(result.detailFields?.[i] || []));
+  return fields;
+}
+const keptFields = (result, i, frontCol, backCol) => cleanFields(rawFields(result, i, frontCol, backCol)).fields;
+// How many of a basic note's fields were shortened or dropped for the length limits with these columns (what fieldReport can't
+// know, because the columns are chosen in the preview). Cloze notes are counted in anki.js.
+export const basicFieldsCut = (result, frontCol = 0, backCol = 1) =>
+  result.rows.reduce((n, _, i) => (result.clozes?.[i] || result.occlusions?.[i] ? n : n + cleanFields(rawFields(result, i, frontCol, backCol)).cut), 0);
+
+// How many of the rows have fields to keep (the "Keep the other fields" switch shows when there are any).
+export const hasKeptFields = (result, frontCol = 0, backCol = 1) =>
+  buildCards(result, frontCol, backCol, { keepFields: true }).some(c => c.noteFields?.length);
 
 // A card only counts if both sides have something on them.
 // (A side can also be just a picture or a sound: Anki imports bring those along. An image-occlusion card's back is its

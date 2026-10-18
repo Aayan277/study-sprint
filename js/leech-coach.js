@@ -11,8 +11,16 @@
 import * as db from './db.js';
 import { openSheet, closeSheet, esc, toast, $ } from './ui.js';
 import { plainText } from './format.js';
+import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
 import { MAX_PARTS, splitBack, splitCards, unleeched, parked, canSplit, withoutLeechTag, forgottenText } from './leech-logic.js';
+
+// After a card of a pair is deleted, its partner is an ordinary card again.
+async function unpairPartner(card) {
+  if (!isPair(card)) return;
+  const left = (await db.getAll('cards')).filter(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId);
+  if (left.length) await db.saveCards(left.map(unpaired));
+}
 
 // ---------- the panel ----------
 const rowHTML = (card, lapses) => `
@@ -93,7 +101,7 @@ function askDelete(row, card, done, opener) {
   yes.addEventListener('click', async () => {
     if (yes.disabled) return;
     yes.disabled = true;                                  // a double tap must not delete twice
-    try { await db.deleteCards([card.id]); done('Card deleted'); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
+    try { await db.deleteCards([card.id]); await unpairPartner(card); done('Card deleted'); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
   });
   no.focus();
   yes.scrollIntoView({ block: 'nearest' });
@@ -180,7 +188,7 @@ function openSplit(card, done) {
       const made = splitCards(fresh, read(), { newId: db.newId });
       const keep = document.querySelector('input[name=splitOrig]:checked')?.value === 'keep';
       await db.saveCards([...made, ...(keep ? [parked(fresh)] : [])]);
-      if (!keep) await db.deleteCards([fresh.id]);
+      if (!keep) { await db.deleteCards([fresh.id]); await unpairPartner(fresh); }
       closeSheet();
       done(`Split into ${made.length} cards${keep ? '. The original stays suspended.' : '.'}`);
     } catch (err) {
