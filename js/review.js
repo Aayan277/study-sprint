@@ -6,12 +6,13 @@
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
-import { RATINGS, Rating, previewIntervals, rate, examGain } from './srs.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
 import { canType, checkTyped } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { cardMediaHTML } from './media.js';
+import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
 import { renderCloze, hasBlank, clozeFull } from './cloze.js';
 import { hasMasks, occlusionHTML, occLabel, occSpeech } from './occlusion.js';
@@ -20,7 +21,7 @@ import { speak, stopSpeaking, canSpeak, stepsSpeech, elementsSpeech } from './sp
 import { parseStructured, suggestRating } from './steps.js';
 import { maskMath } from './math.js';
 import { mountScratch } from './scratchpad.js';
-import { deckSchedulerOptions, personalW20 } from './sched-settings.js';
+import { deckSchedulerOptions, personalW20, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
 import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
@@ -28,7 +29,7 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
@@ -182,6 +183,13 @@ function nextCard(el) {
   R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
+  // FSRS-7 (beta): get this card's FSRS-7 memory ready (rebuilt from its history the first time), while you read the question.
+  R.prep = null;
+  if (usesFsrs7(R.settings)) {
+    const p = prepare7([R.statesById.get(R.current.card.id)], db.getCardLogs).catch(err => console.error(err));
+    R.prep = { id: R.current.card.id, done: false, p };
+    p.then(() => { if (R?.prep?.p === p) R.prep.done = true; });
+  }
   renderSession(el, true);
 }
 
@@ -267,6 +275,7 @@ function renderSession(el, enter = false) {
             <div class="rv-typed">${R.typed ? typedResultHTML() : ''}</div>
             <div class="flash-back${cloze ? ' cloze-full' : ''}${occ ? ' occ-back' : ''}${sp ? ' steps-back' : ''}${backSize}">${answerHTML}</div>
             ${card.noteExtra ? `<p class="flash-extra"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${formatHTML(card.noteExtra)}</p>` : ''}
+            ${card.noteFields?.length ? `<div class="flash-fields"${sp && R.stepShown < sp.steps.length ? ' hidden' : ''}>${noteFieldsHTML(card.noteFields, name => foldOpen('field:' + name.toLowerCase()), formatHTML)}</div>` : ''}
           </div>
         </div>
       </div>
@@ -305,6 +314,8 @@ function renderSession(el, enter = false) {
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
+  // A note field's fold stays open (or shut) the next time, for that field name, on this device. (toggle doesn't bubble: listen while it goes down.)
+  $('flash').addEventListener('toggle', e => { const d = e.target.closest?.('.note-field'); if (d) saveFold('field:' + d.dataset.field, d.open); }, true);
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
   if (typeThis && !R.flipped) $('typeIn').focus();
@@ -374,7 +385,7 @@ function publishLive() {
 }
 
 function rateButtonsHTML() {
-  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card));
+  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card), Date.now(), R.current.card.id);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
       <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
@@ -430,6 +441,11 @@ function flip(el) {
   $('longNote')?.remove();
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
+  // FSRS-7 and the card's memory is still being rebuilt: draw the buttons again with the right intervals when it is ready.
+  if (R.prep && !R.prep.done) {
+    const prep = R.prep;
+    prep.p.then(() => { if (R?.prep === prep && R.flipped && R.current?.card.id === prep.id && $('ratebar')?.querySelector('.rate')) { $('ratebar').innerHTML = backBarHTML(); wireRatebar(el); } });
+  }
   // The button that was pressed is gone, so move focus to the answer: screen readers read it out, and the
   // keyboard stays where it was (1–4 and Space still rate).
   back.focus({ preventScroll: true });
@@ -486,7 +502,7 @@ function revealStep(el, all = false) {
   R.stepShown = all ? sp.steps.length : from + 1;
   const flash = $('flash'), items = [...flash.querySelectorAll('#steps > li')];
   items.forEach((li, i) => { li.hidden = i >= R.stepShown; });
-  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra').forEach(x => { x.hidden = false; });
+  if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
   const final = flash.querySelector('.steps-final');
@@ -561,6 +577,7 @@ async function answer(el, rating) {
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
   const now = Date.now();
+  if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
   const next = rate(id, prev, rating, schedFor(item.card, now), now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
