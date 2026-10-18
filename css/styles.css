@@ -1374,7 +1374,9 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
    Below 1200px, nothing changes. */
 .deck-tree{display:none}
 @media (min-width:1200px){
-  :root:has(main[data-route="deck"]){--panel:400px}
+  /* --panel-user is the width the person dragged the divider to (js/panel-resize.js); 360px to 70% of the window, whatever it holds */
+  :root:has(main[data-route="deck"]){--panel:clamp(360px,var(--panel-user,400px),70vw)}
+  :root:has(main[data-route="browse"]){--panel:clamp(360px,var(--panel-user,440px),70vw)}
   main[data-route="deck"]{padding:28px 32px 56px}
   html[data-rail="on"] main[data-route="deck"]{margin-left:calc(var(--side) + 240px)}
   main[data-route="deck"] > .view{max-width:none}
@@ -1406,6 +1408,17 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   .dt-all:hover{color:var(--text)}
   .dt-all .ico{width:14px;height:14px}
   :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
+
+  /* The draggable divider between the card list and the editor panel (js/panel-resize.js). Only on Browse and a deck's page,
+     and only while the panel is beside the list; on a phone (the sheet) it does not exist. */
+  #panelResizer{display:none}
+  :root:has(main[data-route="deck"]) body.has-side #panelResizer,
+  :root:has(main[data-route="browse"]) body.has-side #panelResizer{display:block;position:fixed;top:0;bottom:0;right:calc(var(--panel) - 6px);width:12px;z-index:7;cursor:col-resize;touch-action:none}
+  #panelResizer::before{content:"";position:absolute;top:0;bottom:0;left:5px;width:2px;border-radius:2px;background:transparent;transition:background var(--t-fast)}
+  #panelResizer:hover::before,#panelResizer:focus-visible::before,body.panel-resizing #panelResizer::before{background:var(--accent)}
+  #panelResizer:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:var(--r-xs)}
+  body.panel-resizing{user-select:none;-webkit-user-select:none;cursor:col-resize}
+  body.panel-resizing dialog.sheet.side{pointer-events:none}
 }
 
 /* ---------- 16. First-run start (js/onboarding.js) ---------- */

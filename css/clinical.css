@@ -819,3 +819,7 @@
 :root[data-ui="clinical"] .rc-inline,:root[data-ui="clinical"] .rc-detail{border-radius:var(--r-sm);background:var(--surface-sunken)}
 :root[data-ui="clinical"] .hc-badge{border-radius:var(--r-xs)}
 :root[data-ui="clinical"] .rs-dot{box-shadow:none;border-radius:2px}
+
+/* ---- Browse / deck page: the draggable divider between the list and the card editor (js/panel-resize.js). Flat: a thin rule that is always there, accent on hover and while dragging ---- */
+:root[data-ui="clinical"] #panelResizer::before{left:5px;width:1px;border-radius:0;background:var(--line-strong)}
+:root[data-ui="clinical"] #panelResizer:hover::before,:root[data-ui="clinical"] #panelResizer:focus-visible::before,:root[data-ui="clinical"] body.panel-resizing #panelResizer::before{left:4px;width:3px;background:var(--accent)}
