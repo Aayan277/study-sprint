@@ -71,10 +71,17 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">
+<!-- The font stylesheet does not hold up the first paint: it loads as "print" and is switched to "all" when it arrives
+     (the page shows in the fallback font meanwhile, as font-display: swap would anyway). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap"></noscript>
 <link rel="stylesheet" href="css/styles.css">
-<!-- The Clinical style (Settings → Appearance → Style). Every rule in it is scoped to html[data-ui="clinical"]. -->
-<link rel="stylesheet" href="css/clinical.css">
+<!-- The Clinical style (Settings → Appearance → Style) is only loaded when it is on: written in here before the first paint when the saved
+     style is Clinical (so no flash of the Original look), and added by js/themes.js (applyTheme) when it is switched on later.
+     Every rule in it is scoped to html[data-ui="clinical"]. -->
+<script>
+  if (document.documentElement.getAttribute('data-ui') === 'clinical') document.write('<link rel="stylesheet" href="css/clinical.css" id="clinicalCss">');
+</script>
 <!-- The files the app needs to start. Without these the browser finds them one import level at a time
      (app.js, then what it imports, then what those import...). Listing them lets it fetch them all at once.
      Keep in step with the imports of js/app.js (screens opened later, like Play and Stats, load on demand). -->

@@ -55,9 +55,20 @@ const QUICK_KEY = 'study-sprint-theme';
 const DARK_QUERY = matchMedia('(prefers-color-scheme: dark)');
 let current = null;
 
+// css/clinical.css is only fetched when the Clinical style is on (index.html writes the link in before the first paint when the
+// saved style is Clinical; this adds it when the style is switched on later, or when the saved settings turn out to say Clinical).
+function ensureClinicalCss() {
+  if (document.getElementById('clinicalCss')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet'; link.href = 'css/clinical.css'; link.id = 'clinicalCss';
+  link.addEventListener('load', () => { syncBrowserBar(); dispatchEvent(new CustomEvent('themechange', { detail: { ...current } })); });   // (its colours count once it is in)
+  document.head.appendChild(link);
+}
+
 export function applyTheme(theme) {
   current = cleanTheme(theme);
   const root = document.documentElement;
+  if (current.ui === 'clinical') ensureClinicalCss();
   root.setAttribute('data-ui', current.ui);
   root.setAttribute('data-skin', current.skin);
   root.setAttribute('data-theme', resolvedMode(current.mode));

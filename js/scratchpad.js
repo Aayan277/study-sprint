@@ -4,7 +4,10 @@ import { keepFocusOnPress } from './ui.js';
 //   const pad = mountScratch(cardEl, { onChange: on => ... });
 //   pad.on() / pad.off()   drawing on or off (the drawing stays visible when off)
 //   pad.clear()            wipe the drawing         pad.destroy()   remove everything
-//   pad.isOn()
+//   pad.isOn()             pad.hasInk()   has anything been drawn?      pad.restore(canvas)   put an earlier drawing back
+//
+// The bitmap is only sized once the pad is first turned on (or a drawing is put back): a pad that is never used costs nothing,
+// and a resize only copies the bitmap when there is something drawn on it.
 //
 // A <canvas class="scratch"> covers the card. While off it lets every touch and click through to the card
 // (pointer-events: none; touch-action: auto). While on it takes them (pointer-events: auto; touch-action: none).
@@ -45,13 +48,13 @@ export function mountScratch(card, { onChange } = {}) {
   setTool('pen');
 
   // ----- size: keep the bitmap when the card changes size -----
-  let dpr = 1, cssW = 0, cssH = 0;
+  let dpr = 1, cssW = 0, cssH = 0, inked = false, sized = false;
   function fit() {
     const w = card.clientWidth, h = card.clientHeight;
     const r = window.devicePixelRatio || 1;
     if (!w || !h || (w === cssW && h === cssH && r === dpr)) return;
     let keep = null;
-    if (canvas.width && canvas.height) {
+    if (inked && canvas.width && canvas.height) {
       keep = document.createElement('canvas');
       keep.width = canvas.width; keep.height = canvas.height;
       keep.getContext('2d').drawImage(canvas, 0, 0);
@@ -64,9 +67,11 @@ export function mountScratch(card, { onChange } = {}) {
     ctx.setTransform(r, 0, 0, r, 0, 0);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   }
-  fit();
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
-  ro?.observe(card);
+  function ensureSized() {
+    if (!sized) { sized = true; ro?.observe(card); }
+    fit();
+  }
 
   // ----- drawing -----
   let active = null;                 // pointerId being drawn with (one at a time)
@@ -85,10 +90,12 @@ export function mountScratch(card, { onChange } = {}) {
     }
   };
   function dot(pt) {
+    inked = true;
     style();
     ctx.beginPath(); ctx.arc(pt.x, pt.y, widthFor(pt.p) / 2, 0, Math.PI * 2); ctx.fill();
   }
   function segment(pt) {
+    inked = true;
     // A quadratic curve from the last midpoint to the new midpoint, with the last point as its control: smooth lines.
     const m = { x: (last.x + pt.x) / 2, y: (last.y + pt.y) / 2 };
     style();
@@ -136,13 +143,13 @@ export function mountScratch(card, { onChange } = {}) {
   canvas.addEventListener('lostpointercapture', e => { if (e.pointerId === active) end({ pointerId: active, pointerType: e.pointerType, type: 'pointercancel', timeStamp: e.timeStamp }); });
 
   // ----- tools -----
-  function clear() { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); }
+  function clear() { inked = false; ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); }
   function on() {
     if (enabled) return;
     enabled = true;
     canvas.style.pointerEvents = 'auto'; canvas.style.touchAction = 'none';
     tools.style.display = 'flex';
-    fit();
+    ensureSized();
     onChange?.(true);
   }
   function off() {
@@ -162,5 +169,12 @@ export function mountScratch(card, { onChange } = {}) {
   canvas.addEventListener('click', e => e.stopPropagation());       // finishing a stroke is not a tap on the card
 
   function destroy() { enabled = false; ro?.disconnect(); canvas.remove(); tools.remove(); }
-  return { on, off, clear, destroy, isOn: () => enabled, canvas, tools };
+  // Put an earlier drawing (another pad's canvas) back, at the same top-left pixels.
+  function restore(from) {
+    if (!from) return;
+    ensureSized();
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(from, 0, 0); ctx.restore();
+    inked = true;
+  }
+  return { on, off, clear, destroy, restore, isOn: () => enabled, hasInk: () => inked, canvas, tools };
 }

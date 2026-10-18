@@ -87,6 +87,42 @@ export function searchMatcher(query) {
   return raw ? text => rawFold(text).includes(raw) : null;
 }
 
+// The text search looks in for one card (front, back and tags), folded once and remembered per card object, so typing
+// another letter only does a substring check per card instead of re-folding every card's text. A card that was edited
+// in place (new front, back or tags list) is folded again. Cards are normally replaced by copies when they change.
+const foldCache = { fold: new WeakMap(), raw: new WeakMap() };
+function foldedCard(card, kind, fold) {
+  const tags = card.tags, n = tags ? tags.length : 0;
+  let e = foldCache[kind].get(card);
+  if (!e || e.front !== card.front || e.back !== card.back || e.tags !== tags || e.n !== n) {
+    e = { front: card.front, back: card.back, tags, n, text: fold(`${card.front} ${card.back} ${(tags || []).join(' ')}`) };
+    foldCache[kind].set(card, e);
+  }
+  return e.text;
+}
+// Like searchMatcher, but takes a card and uses the remembered folded text. Same answers as
+// searchMatcher(query)(`${front} ${back} ${tags.join(' ')}`).
+export function cardMatcher(query) {
+  const q = searchFold(query);
+  if (/[\p{L}\p{N}\p{S}#%&@*]/u.test(q)) return card => foldedCard(card, 'fold', searchFold).includes(q);
+  const raw = rawFold(query);
+  return raw ? card => foldedCard(card, 'raw', rawFold).includes(raw) : null;
+}
+
+const CARD_ONLY_SORTS = {
+  'added-new': (a, b) => b.created - a.created,
+  'added-old': (a, b) => a.created - b.created,
+  az: (a, b) => NATURAL.compare(a.front, b.front)
+};
+const sortCache = new WeakMap();    // cards array → { sort, length, list }
+function sortedCards(cards, sort) {
+  const c = sortCache.get(cards);
+  if (c && c.sort === sort && c.length === cards.length) return c.list;
+  const list = [...cards].sort(CARD_ONLY_SORTS[sort]);
+  sortCache.set(cards, { sort, length: cards.length, list });
+  return list;
+}
+
 // Search, filter and sort a list of cards.
 //   cards      all cards to consider
 //   statesById Map of cardId → schedule
@@ -95,11 +131,17 @@ export function searchMatcher(query) {
 // `tag:<path>` (for example tag:#uworld::step) keeps the cards with that tag or any tag below it; it combines with other words.
 export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now() } = {}) {
   const { text, tags: tagTerms } = parseTagSearch(query);
-  const match = searchMatcher(text);
-  let list = cards.map(card => ({ card, state: statesById.get(card.id), status: null }));
-  for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
-  for (const path of tagTerms) list = list.filter(({ card }) => hasTagUnder(card, path));
-  if (match) list = list.filter(({ card }) => match(`${card.front} ${card.back} ${(card.tags || []).join(' ')}`));
+  const match = cardMatcher(text);
+  // Narrow by tag and search first (cheap, and usually leaves fewer cards), then work out each remaining card's status.
+  // Sorts that look only at the card itself (not its schedule) are remembered for the whole list, so typing in the search box
+  // filters an already-sorted list instead of sorting again. (A stable sort of the whole list, then filtered, gives the same order
+  // as filtering and then sorting.)
+  const presorted = filter !== 'dupes' && CARD_ONLY_SORTS[sort] ? sortedCards(cards, sort) : null;
+  let found = presorted || cards;
+  for (const path of tagTerms) found = found.filter(card => hasTagUnder(card, path));
+  if (match) found = found.filter(match);
+  let list = found.map(card => ({ card, state: statesById.get(card.id), status: null }));
+  if (filter !== 'all' && filter !== 'dupes') for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
   if (filter === 'flagged') list = list.filter(x => x.card.flag);
   else if (/^flag\d$/.test(filter)) list = list.filter(x => x.card.flag === +filter.slice(4));
   else if (filter === 'leech') list = list.filter(x => (x.card.tags || []).includes('leech'));
@@ -114,6 +156,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   }
   else if (filter !== 'all') list = list.filter(x => x.status === filter);
 
+  if (presorted) return list;
   const due = x => (x.state && x.state.state !== NEW ? x.state.due : Infinity);
   const by = {
     'added-new': (a, b) => b.card.created - a.card.created,

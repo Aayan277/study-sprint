@@ -526,10 +526,10 @@ async function exportBackup() {
       return;
     }
   }
-  const data = await db.exportAll({ sounds: withSounds });
+  const { blob, cards: cardCount, reviews: reviewCount } = await db.exportAllBlob({ sounds: withSounds });
   const d = new Date();
   const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
-  const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
+  const file = new File([blob], name, { type: 'application/json' });
   // On phones, the share sheet is the reliable way to save a file ("Save to Files", Drive, email...).
   // On computers, download it like any other file.
   if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
@@ -544,7 +544,7 @@ async function exportBackup() {
   }
   settings.lastBackup = Date.now();
   await db.setSetting('lastBackup', settings.lastBackup);
-  toast(`Backup saved: ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
+  toast(`Backup saved: ${plural(cardCount, 'card')}, ${plural(reviewCount, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
   if (currentRoute === 'settings') renderSettings($('screen'));
 }
 
@@ -1251,7 +1251,9 @@ function announceScreen(el, name) {
   // Not on the very first load, and not during a Review or Play round (they manage focus themselves).
   if (first || !h1 || document.body.classList.contains('focus')) return;
   h1.tabIndex = -1;
-  h1.focus({ preventScroll: true });
+  // Next frame, not now: focusing makes the browser work out the whole new screen's layout on the spot (50-130 ms on a phone);
+  // a frame later it has done that for the paint anyway. (Skipped if the screen was already replaced.)
+  requestAnimationFrame(() => { if (h1.isConnected) h1.focus({ preventScroll: true }); });
 }
 
 let lastHash = '#/today';
