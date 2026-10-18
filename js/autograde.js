@@ -34,11 +34,11 @@ const NEW = 0;
 // ring cannot see it. On: the rules above, and every row Play writes has source 'play' (a future FSRS optimizer can skip them).
 export const playCountsAsReviews = settings => settings?.playCountsAsReviews === true;
 
-// The review-log row for one Play answer (only written when Play counts as reviews). Always source 'play'; `applied` starts
+// The review-log row for one Play answer (only written when Play counts as reviews). Source 'play' (or 'test'); `applied` starts
 // false and the caller sets it once the schedule really changed. `decision` is scheduleDecision()'s verdict, saved as `reason`.
-export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, chars = 0, prevState = 0, decision, mixedWith, overridden = false, untimed = false }) {
+export function playLogRow({ cardId, now, qtype, fmt, hard, ok, ms, rating, chars = 0, prevState = 0, decision, mixedWith, overridden = false, untimed = false, source = 'play' }) {
   const log = {
-    cardId, timestamp: now, source: 'play',
+    cardId, timestamp: now, source,
     mode: qtype, format: fmt,
     correct: ok, ms, rating, chars, hard: !!hard,
     state: prevState,      // the card's state before this answer

@@ -7,7 +7,7 @@
 //   flag         0 = none, 1 red, 2 orange, 3 green, 4 blue
 
 import { dayEnd } from './days.js';
-import { formatInterval } from './queue.js';
+import { formatInterval, isPracticeSource } from './queue.js';
 import { dupKey } from './import.js';
 import { normTag, tagWords, SEP } from './tag-tree.js';
 import { isPair, loneIds, unpaired } from './reverse.js';
@@ -203,7 +203,7 @@ export function isNewLeech(prevLapses, nextLapses, threshold = LEECH_DEFAULTS.le
 // card's schedule and "forgotten N times" stay right), but it doesn't count toward the leech limit: only Review
 // answers, answers on due cards in Play and imported history do. This counts the misses to leave out, from the card's log.
 export function notDueMisses(logs) {
-  return logs.filter(l => l.source === 'play' && l.applied && l.reason === 'again' && l.state === 2 && l.rating === 1).length;
+  return logs.filter(l => isPracticeSource(l.source) && l.applied && l.reason === 'again' && l.state === 2 && l.rating === 1).length;
 }
 // isNewLeech for a card that was just answered, leaving out the Play misses on cards that weren't due.
 //   logs  the card's review log (db.getCardLogs); the answer just given must not be a not-due Play miss

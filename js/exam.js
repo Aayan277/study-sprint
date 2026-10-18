@@ -21,6 +21,7 @@ const DAY = 86400000;
 export const RAMP_DAYS = 14;          // how long before the exam retention starts rising
 export const EXAM_RETENTION = 0.95;   // retention on the day before the exam
 const REVIEW = 2;
+export const MOCK_DAYS = 7;           // in exam week (the exam is within this many days) Today and the deck page offer "Take a mock exam"
 export const FINAL_DAYS = 3;          // the final pass is spread over at most this many days before the exam
 // A card skips its last review before the exam only if it's predicted at least this likely to be remembered on
 // exam day. Higher than EXAM_RETENTION on purpose: the predictions are a little optimistic for many students, and
