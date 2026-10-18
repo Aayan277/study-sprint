@@ -12,6 +12,7 @@ import { openSheet, closeSheet, esc, icon } from './ui.js';
 import { cardInfo, normaliseLayout, setHidden, setSize, canResize, reorderVisible, addWidget, hiddenCards, resetLayout, isDefaultLayout, toSaved, editPlan, visibleOrder } from './stats-layout.js';
 
 const LONG_PRESS = 300;       // a touch must stay put this long before the card lifts (a quicker swipe scrolls the page)
+const MOUSE_SLOP = 4;         // a mouse press must travel this far before the card lifts (a plain click does nothing)
 const SLOP = 10;              // how far a finger may drift during that time, in px
 const EDGE = 70;              // auto-scroll starts this close to the top or bottom of the window
 
@@ -21,8 +22,8 @@ export const editBarHTML = () => `
     <div class="ed-row">
       <div class="ed-title"><b>Editing Stats</b><span class="muted small ed-hint">Drag a card to move it. Tap × to remove it.</span></div>
       <div class="ed-btns">
-        <button type="button" class="link ed-list" data-act="list" aria-haspopup="dialog">Edit as a list</button>
-        <button type="button" class="btn ghost" id="edReset" data-act="reset">Reset</button>
+        <button type="button" class="ed-list" data-act="list" aria-haspopup="dialog">Edit as a list</button>
+        <button type="button" class="ed-list" id="edReset" data-act="reset">Reset</button>
         <button type="button" class="btn primary" id="edDone" data-act="done">Done</button>
       </div>
     </div>
@@ -42,8 +43,8 @@ export function unitHTML(id, cardHTML, layout) {
     <button type="button" class="ed-x" data-act="remove" aria-label="Remove ${n}"><span aria-hidden="true">${icon('x')}</span></button>
     ${canResize(id) ? `<button type="button" class="ed-size" data-act="size" aria-label="Make ${n} ${half ? 'full' : 'half'} width"><span aria-hidden="true">${half ? 'Half' : 'Full'}</span></button>` : ''}
     <span class="ed-moves">
-      <button type="button" class="ed-mv" data-act="earlier" aria-label="Move ${n} earlier"><span aria-hidden="true">${icon('down', 'ed-left')}</span></button>
-      <button type="button" class="ed-mv" data-act="later" aria-label="Move ${n} later"><span aria-hidden="true">${icon('down', 'ed-right')}</span></button>
+      <button type="button" class="ed-mv" data-act="earlier" aria-label="Move ${n} earlier"><span aria-hidden="true">${icon('down', 'ed-prev')}</span></button>
+      <button type="button" class="ed-mv" data-act="later" aria-label="Move ${n} later"><span aria-hidden="true">${icon('down', 'ed-next')}</span></button>
     </span>
   </div>`;
 }
@@ -78,7 +79,8 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
   const ac = new AbortController(), { signal } = ac;
   const doc = document;
   let L = normaliseLayout(layout);
-  let ended = false, drag = null, press = null, mo = null;
+  let ended = false, drag = null, press = null, mo = null, idle = [];
+  const flushIdle = () => { if (drag) return; const f = idle; idle = []; f.forEach(fn => fn()); };
 
   // ----- saving: every change is saved at once; quick changes cost one write at a time, never a queue
   let latest = null, dirty = false, busy = null;
@@ -225,10 +227,11 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
   // Move the placeholder to where the pointer says: over a card's near half, over an empty slot, or past either end of the page.
   const place = (x, y) => {
     const ph = drag.ph, parent = ph.parentNode;
-    const sig = () => flowItems().map(i => i.dataset.card + (i === ph ? '*' : '')).join();
-    const was = sig();
+    const spot = () => [ph.previousElementSibling, ph.nextElementSibling];
+    const was = spot();
     const inside = b => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
-    const slot = [...el.querySelectorAll('.ed-slot')].find(s => inside(s.getBoundingClientRect()));
+    // (an empty slot only takes a half card: a full card held over it is ignored, so no stray slot or blank cell is made)
+    const slot = L.size[ph.dataset.card] === 'half' ? [...el.querySelectorAll('.ed-slot')].find(s => inside(s.getBoundingClientRect())) : null;
     const hit = slot ? null : flowItems().find(u => u !== ph && inside(u.getBoundingClientRect()));
     const all = flowItems().filter(u => u !== ph), tile = el.querySelector('.ed-add');
     if (slot) parent.insertBefore(ph, slot);
@@ -240,7 +243,8 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
       parent.insertBefore(ph, after ? nx : hit);
     } else if (all[0] && y < all[0].getBoundingClientRect().top) parent.insertBefore(ph, all[0]);
     else if (all.length && y > all[all.length - 1].getBoundingClientRect().bottom) parent.insertBefore(ph, tile);
-    if (sig() !== was) reflow();
+    const now = spot();
+    if (now[0] !== was[0] || now[1] !== was[1]) reflow();      // (slots are made again wherever the placeholder moved, even past a slot)
   };
   const follow = () => {
     if (!drag) return;
@@ -258,7 +262,6 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     Object.assign(unit.style, { left: '0', top: '0', width: `${r.width}px`, height: `${r.height}px` });
     unit.classList.add('lifted');
     el.classList.add('ed-dragging');
-    unit.setAttribute('aria-grabbed', 'true');
     reflow();
     follow();
     loop();
@@ -279,7 +282,6 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     drag = null;
     cancelAnimationFrame(d.raf);
     d.unit.classList.remove('lifted');
-    d.unit.removeAttribute('aria-grabbed');
     d.unit.removeAttribute('style');
     el.classList.remove('ed-dragging');
     return d;
@@ -293,11 +295,13 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     applyOrder(); save();
     say(`Moved ${cardInfo(d.unit.dataset.card).name} to position ${position(d.unit.dataset.card)}.`);
   };
+  const dropAndFlush = () => { drop(); flushIdle(); };
   const cancelDrag = (announce = true) => {
     const d = unlift(); if (!d) return;
     d.ph.remove();
     if (el.isConnected) reflow();
     if (announce) say('Move cancelled.');
+    flushIdle();
   };
   const clearPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
 
@@ -307,7 +311,7 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     const unit = e.target.closest('.ed-unit');
     if (!unit || e.target.closest('button, a, input, select')) return;
     if (!el.isConnected) { end(); return; }
-    if (e.pointerType === 'mouse') { e.preventDefault(); lift(unit, e.clientX, e.clientY, e.pointerId); return; }
+    if (e.pointerType === 'mouse') { e.preventDefault(); press = { unit, pid: e.pointerId, x: e.clientX, y: e.clientY, mouse: true }; return; }
     // Touch and pen: hold still for a moment, so ordinary scrolling still works.
     press = { unit, pid: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => {
       const p = press; press = null;
@@ -315,13 +319,18 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     }, LONG_PRESS) };
   }, { signal });
   doc.addEventListener('pointermove', e => {
-    if (press && e.pointerId === press.pid && Math.hypot(e.clientX - press.x, e.clientY - press.y) > SLOP) clearPress();      // it is a scroll
+    if (press && e.pointerId === press.pid && press.mouse) {
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > MOUSE_SLOP) {
+        const p = press; press = null;
+        if (el.isConnected && p.unit.isConnected) { lift(p.unit, p.x, p.y, p.pid); drag.x = e.clientX; drag.y = e.clientY; follow(); } else end();
+      }
+    } else if (press && e.pointerId === press.pid && Math.hypot(e.clientX - press.x, e.clientY - press.y) > SLOP) clearPress();      // it is a scroll
     else if (press && e.pointerId === press.pid) { press.x = e.clientX; press.y = e.clientY; }
     if (drag && e.pointerId === drag.pid) { drag.x = e.clientX; drag.y = e.clientY; follow(); }
   }, { signal });
   doc.addEventListener('pointerup', e => {
     if (press && e.pointerId === press.pid) clearPress();
-    if (drag && e.pointerId === drag.pid) { if (el.isConnected) drop(); else end(); }
+    if (drag && e.pointerId === drag.pid) { if (el.isConnected) dropAndFlush(); else end(); }
   }, { signal });
   doc.addEventListener('pointercancel', e => {
     if (press && e.pointerId === press.pid) clearPress();
@@ -329,8 +338,19 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
   }, { signal });
   doc.addEventListener('touchmove', block, { signal, passive: false });
   doc.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && drag) { e.preventDefault(); e.stopPropagation(); cancelDrag(); }
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (drag) { e.preventDefault(); e.stopPropagation(); cancelDrag(); return; }
+    if (doc.getElementById('sheet')?.open || !el.isConnected) return;       // (a sheet's own Escape closes the sheet)
+    const c = q('#edConfirm');
+    if (c && !c.hidden) { e.preventDefault(); confirmReset(false); return; }
+    e.preventDefault(); finish(); onDone?.();      // Escape leaves edit mode, same as Done
   }, { signal, capture: true });
+
+  let lastFocus = null;
+  el.addEventListener('focusin', e => { const a = e.target; lastFocus = { card: a.closest('.ed-unit')?.dataset.card, act: a.dataset.act, id: a.id }; }, { signal });
+  // (forgotten once the focus goes somewhere else, or a click lands elsewhere; a control that was only hidden leaves it standing)
+  el.addEventListener('focusout', e => { if (e.relatedTarget) lastFocus = null; }, { signal });
+  doc.addEventListener('pointerdown', () => { lastFocus = null; }, { signal, capture: true });
 
   // ----- ending
   function end() {
@@ -352,16 +372,34 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
 
   return {
     // After each draw of the page: the DOM is new, so a drag in progress is dropped, then the grid and the controls are brought up to date.
-    mount(fresh) {
+    beforeRender() {
+      const a = doc.activeElement, mine = a && el.contains(a) && a !== doc.body;
+      // (a control that stopped being shown, such as a size badge when the window shrinks to a phone, dropped the focus without a word)
+      const f = mine ? { card: a.closest('.ed-unit')?.dataset.card, act: a.dataset.act, id: a.id } : lastFocus && (!a || a === doc.body) ? lastFocus : null;
+      return { y: scrollY, f };
+    },
+    whenNotDragging(fn) { if (drag) idle.push(fn); else fn(); },
+    mount(fresh, keep) {
       if (ended) return;
       if (fresh) L = normaliseLayout(fresh);
       clearPress(); cancelDrag(false);
+      el.classList.add('ed-on');      // (no browser scroll anchoring: the scroll is put back by hand below)
       const bar = q('#edBar');
       if (bar) {      // below the phone header, which is sticky too
         const top = doc.querySelector('.top'), h = top && getComputedStyle(top).position === 'sticky' && top.offsetParent !== null ? top.getBoundingClientRect().height : 0;
         bar.style.top = `${Math.round(h)}px`;
       }
       reflow();
+      if (keep) {      // the same control keeps the focus (matched by card and action), and the page stays where it was
+        const f = keep.f;
+        if (f) {
+          const shown = n => n && n.getClientRects().length ? n : null;      // (a size badge is not shown on a phone)
+          const t = shown(f.card && f.act && q(`.ed-unit[data-card="${f.card}"] [data-act=${f.act}]`)) || shown(f.id && q('#' + f.id))
+            || shown(f.card && q(`.ed-unit[data-card="${f.card}"] [data-act=remove]`)) || q('#edDone');
+          t?.focus({ preventScroll: true });
+        }
+        scrollTo(0, keep.y);
+      }
     },
     settled,
     focusDone: () => q('#edDone')?.focus({ preventScroll: true }),

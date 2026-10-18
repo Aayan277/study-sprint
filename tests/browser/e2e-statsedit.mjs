@@ -194,14 +194,16 @@ for (const ui of ['original', 'clinical']) {
   ok(await p.evaluate(() => !!document.querySelector('.ed-slot')), `${tag}: and back to half brings the slot back`);
   await p.waitForFunction(async () => (await (await import('./js/db.js')).getSettings()).statsLayout?.size.perDay === 'half');
   // the empty slot takes a drop: Hardest cards (half) dragged into it pairs with Reviews per day
-  const fromH = await grab(p, 'hardest');
+  await p.evaluate(() => { const u = document.querySelector('.ed-unit[data-card=perDay]'); scrollTo(0, u.getBoundingClientRect().top + scrollY - 60); });
+  await p.waitForTimeout(100);
+  const fromH = await p.$eval('.ed-unit[data-card=hardest]', e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: Math.min(r.top + 40, innerHeight - 90) }; });
   await p.mouse.move(fromH.x, fromH.y); await p.mouse.down(); await p.mouse.move(fromH.x + 4, fromH.y - 10, { steps: 2 });
   const slotAt = await p.$eval('.ed-slot', e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
   await p.mouse.move(slotAt.x, slotAt.y, { steps: 12 });
   await p.mouse.up();
   await p.waitForTimeout(150);
   const paired = await p.evaluate(() => { const a = document.querySelector('.ed-unit[data-card=perDay]').getBoundingClientRect(), b = document.querySelector('.ed-unit[data-card=hardest]').getBoundingClientRect(); return { same: Math.abs(a.top - b.top) < 2, right: b.left > a.left, slot: !!document.querySelector('[data-card=perDay] + .ed-slot') }; });
-  ok(paired.same && paired.right, `${tag}: a half card dropped on the slot pairs with the lone half card`);
+  ok(paired.same && paired.right, `${tag}: a half card dropped on the slot pairs with the lone half card ${JSON.stringify(paired)} ${(await order(p)).join()}`);
   const savedSz = await saved(p);
   // outside edit mode a lone half card stretches
   await setLayout(p, { order: IDS, hidden: [], size: { forecast: 'full', perDay: 'half' } });
@@ -331,15 +333,119 @@ for (const ui of ['original', 'clinical']) {
   await setLayout(p, null);
   await p.context().close();
 
+
+  // ================= review fixes =================
+  // ---- a sync with changes, mid-edit and mid-drag
+  p = await open(ui, 1280, 900);
+  await stats(p); await edit(p);
+  await p.evaluate(() => scrollTo(0, 700)); await p.waitForTimeout(100);
+  const y0 = await p.evaluate(() => scrollY), top0 = await p.$eval('.ed-unit[data-card=hardest]', e => e.getBoundingClientRect().top);
+  await p.evaluate(() => dispatchEvent(new CustomEvent('sync', { detail: { state: 'done', applied: 3 } })));
+  await p.waitForTimeout(2300);
+  ok(await p.isVisible('#edBar') && (await p.$$('.ed-unit')).length === 11 && Math.abs((await p.$eval('.ed-unit[data-card=hardest]', e => e.getBoundingClientRect().top)) - top0) < 4, `${tag}: a sync mid-edit keeps edit mode and the page where it was (${y0}px)`);
+  ok(await p.evaluate(() => !!document.querySelector('.ed-unit').isConnected), `${tag}: (still the same screen)`);
+  from = await grab(p, 'forecast');
+  await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(from.x, from.y - 120, { steps: 6 });
+  await p.evaluate(() => dispatchEvent(new CustomEvent('sync', { detail: { state: 'done', applied: 2 } })));
+  await p.waitForTimeout(2300);
+  ok(!!(await p.$('.ed-unit.lifted')) && !!(await p.$('.ed-ph')), `${tag}: a sync mid-drag leaves the held card alone`);
+  await p.mouse.up(); await p.waitForTimeout(400);
+  ok(!(await p.$('.ed-unit.lifted')) && await p.isVisible('#edBar') && (await p.$$('.ed-unit')).length === 11, `${tag}: and when it drops the page is drawn again, still in edit mode`);
+  // ---- a plain click does nothing and says nothing
+  await p.evaluate(() => scrollTo(0, 0));
+  const cc = await grab(p, 'hardest');
+  const sayBefore = await live(p);
+  await p.mouse.move(cc.x, cc.y); await p.mouse.down(); await p.mouse.up();
+  await p.waitForTimeout(150);
+  ok(!(await p.$(".ed-ph")) && (await live(p)) === sayBefore, `${tag}: a plain click lifts nothing and announces nothing`);
+  await p.mouse.move(cc.x, cc.y); await p.mouse.down(); await p.mouse.move(cc.x + 2, cc.y + 2);
+  ok(!(await p.$('.ed-ph')), `${tag}: 2px of mouse movement is still a click`);
+  await p.mouse.up();
+  // ---- Move buttons show with keyboard focus only, and stay reachable
+  const vis = async id => p.$eval(`.ed-unit[data-card=${id}] .ed-moves`, e => getComputedStyle(e).opacity);
+  await p.evaluate(() => document.activeElement?.blur());
+  ok(await vis('perDay') === '0', `${tag}: Move earlier / later are hidden until the card has focus`);
+  await p.focus('.ed-unit[data-card=perDay] [data-act=remove]');
+  ok(await vis('perDay') === '1', `${tag}: and show while the card has focus`);
+  ok(await p.$eval('.ed-unit[data-card=perDay] [data-act=later]', b => b.tabIndex === 0 && b.getAttribute('aria-label') === 'Move Reviews per day later'), `${tag}: hidden or not, they are in the Tab order with their names`);
+  // ---- Escape leaves edit mode
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('#editBtn');
+  ok(!(await p.$('#edBar')) && await p.evaluate(() => document.activeElement?.id === 'editBtn'), `${tag}: Escape (nothing held, no sheet) leaves edit mode like Done`);
+  ok(await p.evaluate(() => !document.querySelector('[aria-grabbed]')), `${tag}: no aria-grabbed`);
+  // ---- focus survives redraws: the list sheet, a deck pick
+  await edit(p);
+  await p.click('.ed-list[data-act=list]'); await p.waitForSelector('#sheet[open] #slList');
+  await p.getByLabel('Show Mastery').uncheck();
+  await p.waitForFunction(() => !document.querySelector('.ed-unit[data-card=mastery]'));
+  await p.click('#slDone'); await p.waitForFunction(() => !document.querySelector('#sheet').open);
+  await p.waitForTimeout(150);
+  ok(await p.evaluate(() => document.activeElement?.dataset.act === 'list'), `${tag}: after the list sheet closes the focus is on Edit as a list`);
+  await p.click('#sDeckBtn'); await p.waitForSelector('.pick-row');
+  await p.click('.pick-row[data-id="sample"]'); await p.waitForSelector('.ready-card');
+  await p.waitForTimeout(150);
+  ok(await p.evaluate(() => document.activeElement?.id === 'sDeckBtn') && await p.isVisible('#edBar'), `${tag}: after picking a deck while editing the focus is on the deck button, still in edit mode`);
+  await p.focus('button[aria-label="Remove Retention"]');
+  await p.evaluate(() => dispatchEvent(new CustomEvent('sync', { detail: { state: 'done', applied: 1 } })));
+  await p.waitForTimeout(2300);
+  ok(await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Remove Retention'), `${tag}: a redraw from sync keeps the focus on the same control`);
+  // crossing 1024px
+  await p.setViewportSize({ width: 1400, height: 900 });
+  await p.focus('button[aria-label="Make Reviews per day full width"], button[aria-label="Make Reviews per day half width"]');
+  await p.setViewportSize({ width: 900, height: 900 }); await p.waitForTimeout(600);
+  ok(await p.evaluate(() => document.activeElement?.closest('.ed-unit')?.dataset.card === 'perDay') && await p.isVisible('#edBar'), `${tag}: crossing 1024px redraws in place and the focus stays on that card (${await p.evaluate(() => document.activeElement?.getAttribute('aria-label'))})`);
+  await p.focus('button[aria-label="Remove Hardest cards"]');
+  await p.setViewportSize({ width: 1300, height: 900 }); await p.waitForTimeout(600);
+  ok(await p.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Remove Hardest cards'), `${tag}: and back above 1024px`);
+  await p.context().close();
+
+  // ---- a full card held over an empty slot: no blank cell, no stray slot
+  p = await open(ui, 1440, 900);
+  await setLayout(p, { order: IDS, hidden: [], size: { forecast: 'full', hardest: 'full' } });
+  await stats(p); await edit(p);
+  from = await grab(p, 'hardest');
+  await p.mouse.move(from.x, from.y); await p.mouse.down(); await p.mouse.move(from.x + 5, from.y - 10, { steps: 3 });
+  const sl = await p.$eval('.ed-slot', e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await p.mouse.move(sl.x, sl.y, { steps: 10 });
+  await p.mouse.move(sl.x + 3, sl.y + 3, { steps: 3 });
+  const st = await p.evaluate(() => {
+    const slots = [...document.querySelectorAll('.ed-slot')], lone = [...document.querySelectorAll('.ed-unit[data-lone], .ed-ph[data-lone]')], ph = document.querySelector('.ed-ph');
+    return { slots: slots.length, lone: lone.length, ok: slots.every(s => s.previousElementSibling?.hasAttribute('data-lone')), phW: ph.dataset.w, phNextSlot: ph.nextElementSibling?.classList.contains('ed-slot'), phPrevSlot: ph.previousElementSibling?.classList.contains('ed-slot') };
+  });
+  ok(st.slots === st.lone && st.ok && st.phW === 'full' && !st.phNextSlot, `${tag}: a full card held over the slot makes no stray slot (${JSON.stringify(st)})`);
+  await p.screenshot({ path: `${SP}/full-over-slot-${tag}.png` });
+  await p.mouse.up(); await p.waitForTimeout(200);
+  const fin = await p.evaluate(() => [...document.querySelectorAll('.ed-slot')].map(s => s.previousElementSibling?.dataset.card + ':' + s.previousElementSibling?.hasAttribute('data-lone')));
+  ok(fin.every(x => x.endsWith(':true')), `${tag}: and after the drop every slot still sits beside a lone half card (${fin})`);
+  await setLayout(p, null);
+  await p.context().close();
+
+  // ---- the phone bar is one compact row; the Add tile spans the page
+  p = await open(ui, 390, 800);
+  await stats(p); await edit(p);
+  const bar = await p.evaluate(() => { const b = document.querySelector('#edBar').getBoundingClientRect(), t = document.querySelector('#edAdd'); t.scrollIntoView({ block: 'center' }); const a = t.getBoundingClientRect(), v = document.querySelector('main .view').getBoundingClientRect(); return { h: b.height, aw: a.width, vw: v.width, doneRight: document.querySelector('#edDone').getBoundingClientRect().right, bw: b.right, scroll: document.documentElement.scrollWidth <= innerWidth }; });
+  ok(bar.h <= 58 && bar.scroll && bar.doneRight <= bar.bw, `${tag} 390: the edit bar is one compact row (${Math.round(bar.h)}px)`);
+  ok(Math.abs(bar.aw - bar.vw) < 3, `${tag} 390: the Add widget tile spans the page (${Math.round(bar.aw)} of ${Math.round(bar.vw)})`);
+  ok(await p.$eval('#edDone', e => { const r = e.getBoundingClientRect(); return r.height >= 44; }) && await p.$eval('#edReset', e => e.getBoundingClientRect().height >= 44), `${tag} 390: Done and Reset are still 44px targets`);
+  await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(100);
+  await p.screenshot({ path: `${SP}/edit-390-bar-${tag}.png` });
+  // bfcache: a restored page with a dead edit bar draws again
+  await p.evaluate(() => { dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })); });
+  await p.waitForTimeout(100);
+  await p.evaluate(() => { dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); });
+  await p.waitForSelector('#editBtn'); await p.waitForTimeout(100);
+  ok(!(await p.$('#edBar')) && (await p.$$('.ed-unit')).length === 0, `${tag} 390: a page restored from the back-forward cache shows no dead edit bar`);
+  await p.context().close();
+
   // ---------------- motion ----------------
   for (const motion of ['reduce', 'no-preference']) {
     p = await open(ui, 1280, 900, { motion });
     await stats(p); await edit(p);
     const m = await p.$eval('.ed-unit[data-card=perDay]', e => { const s = getComputedStyle(e); return { anim: s.animationName, outline: s.outlineStyle, w: s.outlineWidth }; });
     const wiggles = m.anim === 'ed-wiggle';
-    if (motion === 'reduce') ok(m.anim === 'none' && m.outline === 'dashed', `${tag}: reduced motion: a dashed outline and no wiggle (${m.anim}, ${m.outline})`);
-    else if (ui === 'original') ok(wiggles && m.outline !== 'dashed', `${tag}: with motion allowed the cards wiggle (${m.anim})`);
-    else ok(m.anim === 'none' && m.outline === 'dashed', `${tag}: Clinical stays calm: a dashed outline, no wiggle (${m.anim}, ${m.outline})`);
+    if (motion === 'reduce') ok(m.anim === 'none' && m.outline === 'solid', `${tag}: reduced motion: a thin solid outline and no wiggle (${m.anim}, ${m.outline})`);
+    else if (ui === 'original') ok(wiggles && m.outline !== 'solid', `${tag}: with motion allowed the cards wiggle (${m.anim})`);
+    else ok(m.anim === 'none' && m.outline === 'solid', `${tag}: Clinical stays calm: a thin solid outline, no wiggle (${m.anim}, ${m.outline})`);
     await p.context().close();
   }
 }

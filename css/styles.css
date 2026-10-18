@@ -1397,9 +1397,8 @@ img[data-media][hidden]{display:none}
   main[data-route="stats"] .ready-card{grid-column:1;align-self:stretch}
   main[data-route="stats"] .stats-mastery.up{order:0;grid-column:2;align-self:stretch}
   main[data-route="stats"] .cal-card{--c:13px}
-  /* Retention vs target is a wide table (name, track, figures): it is full width by default, and its columns give way when it is made half */
+  /* Retention vs target is a wide table (name, track, figures): it is full width only (see CARDS in js/stats-layout.js) */
   main[data-route="stats"] .rs-card{height:auto}
-  main[data-route="stats"] .rs-card[data-w="half"] :is(.rs-row,.rs-axis){grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr) minmax(0,1.1fr)}
   /* The day streak and retention cards are a pair that keeps its own height (they never stretch to match the rows below) */
   main[data-route="stats"] .pgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3)}
   main[data-route="stats"] .pgrid.one{grid-template-columns:minmax(0,1fr)}
@@ -2702,13 +2701,26 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .ed-btns{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
 .ed-bar .btn{min-height:44px}
 .ed-list{min-height:44px;padding:0 10px;background:none;border:0;color:var(--accent-text);font:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.ed-list:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-sm)}
+.ed-list[aria-disabled="true"]{opacity:.45;cursor:default}
 .ed-confirm{margin-top:var(--s-2);padding:var(--s-3);border:1px solid var(--again);border-radius:var(--r-md);background:var(--surface-2)}
 .ed-confirm p{margin:0 0 var(--s-3)}
 .ed-confirm-btns{display:flex;flex-wrap:wrap;gap:var(--s-2)}
-@media (max-width:1023px){.ed-hint{display:none}}
+/* A phone: one compact row (the title, two small text buttons, Done), about 56px */
+@media (max-width:1023px){
+  .ed-hint{display:none}
+  .ed-bar{padding:var(--s-1) var(--s-2)}
+  .ed-row{flex-wrap:nowrap;gap:var(--s-1)}
+  .ed-title{flex:1 1 auto;white-space:nowrap}
+  .ed-btns{flex-wrap:nowrap;gap:0;flex:none}
+  .ed-list{padding:0 8px;font-size:var(--fs-sm)}
+  .ed-bar .btn.primary{padding:0 16px;margin-left:var(--s-1)}
+}
+@media (max-width:359px){.ed-title b{font-size:var(--fs-sm)}.ed-list{padding:0 5px}}
 
 .ed-unit{position:relative;display:flex;flex-direction:column;min-width:0;margin-bottom:var(--s-2);cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 @media (min-width:1024px){.ed-unit,.ed-ph,.ed-add{margin-bottom:0}}
+.ed-on{overflow-anchor:none}
 .ed-body{display:contents}
 .ed-unit .ed-body > :is(.card,.pgrid){flex:1 1 auto;height:auto;margin:0}
 .ed-unit .pgrid{display:flex}
@@ -2716,7 +2728,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 main[data-route="stats"] .ed-unit .card.section,main[data-route="stats"] .ed-unit .pgrid{height:auto;margin:0}
 .ed-unit .ed-body *{cursor:inherit}
 /* room for the controls, so they never sit on a card's title or footer */
-main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 20px);padding-bottom:calc(var(--s-4) + 18px)}
+main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 20px)!important;padding-bottom:calc(var(--s-4) + 18px)!important}
 /* The controls: x at the top left, the size badge at the top right (only on cards that have two sizes), Move earlier / later at the bottom right.
    Each is a 44px target around a smaller picture. */
 .ed-x,.ed-size,.ed-mv{position:absolute;z-index:3;display:grid;place-items:center;min-width:44px;min-height:44px;padding:0;background:none;border:0;color:var(--text);cursor:pointer;touch-action:manipulation}
@@ -2724,14 +2736,17 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 .ed-size{top:-4px;right:-4px}
 .ed-moves{position:absolute;z-index:3;right:-4px;bottom:-4px;display:flex}
 .ed-moves .ed-mv{position:static}
+/* Move earlier / later appear while the card has keyboard focus (they stay in the Tab order, and a screen reader still reaches them) */
+.ed-unit:not(:focus-within) .ed-moves{opacity:0;pointer-events:none}
 .ed-x > span,.ed-size > span,.ed-mv > span{display:grid;place-items:center;min-width:28px;height:28px;border-radius:14px;box-shadow:0 2px 8px rgb(0 0 0 / .35)}
 .ed-x > span{background:var(--again);color:var(--on-role,#fff)}
 .ed-size > span,.ed-mv > span{background:var(--surface-3);border:1px solid var(--accent-line);color:var(--text);font:600 var(--fs-xs)/1 var(--f-ui);padding:0 10px}
 .ed-mv > span{padding:0;width:28px}
 .ed-x .ico{width:15px;height:15px;stroke-width:2.6}
 .ed-mv .ico{width:16px;height:16px}
-.ed-left{transform:rotate(90deg)}
-.ed-right{transform:rotate(-90deg)}
+.ed-prev{transform:rotate(90deg)}
+.ed-next{transform:rotate(-90deg)}
+@media (max-width:1023px){.ed-prev{transform:rotate(180deg)}.ed-next{transform:none}}      /* one column: up and down */
 :is(.ed-x,.ed-size,.ed-mv):focus-visible{outline:none}
 :is(.ed-x,.ed-size,.ed-mv):focus-visible > span{outline:2px solid var(--accent);outline-offset:2px}
 .ed-mv[aria-disabled="true"]{opacity:.4;cursor:default}
@@ -2743,15 +2758,15 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
   :root:not([data-ui="clinical"]) .ed-unit:not(.lifted):nth-of-type(2n){animation-duration:.33s;animation-delay:-.12s}
   :root:not([data-ui="clinical"]) .ed-dragging .ed-unit{animation:none}
 }
-@media (prefers-reduced-motion:reduce){.ed-unit{outline:2px dashed var(--accent-line);outline-offset:3px}}
-:root[data-ui="clinical"] .ed-unit{outline:2px dashed var(--accent-line);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.ed-unit{outline:1px solid var(--accent);outline-offset:3px}}
+:root[data-ui="clinical"] .ed-unit{outline:1px solid var(--accent);outline-offset:3px}
 /* The lifted card follows the pointer; the placeholder shows where it will land */
 .ed-unit.lifted{position:fixed;z-index:30;margin:0;pointer-events:none;cursor:grabbing;animation:none;outline:0;box-shadow:var(--e-3);opacity:.97}
 .ed-dragging,.ed-dragging *{cursor:grabbing!important}
 .ed-ph{min-width:0;margin-bottom:var(--s-2);border:2px dashed var(--accent);border-radius:var(--r-lg);background:var(--accent-tint)}
 /* A half card with no half partner: the true grid shows the empty half */
 .ed-slot{display:grid;place-items:center;min-height:120px;padding:var(--s-3);border:2px dashed var(--line-strong);border-radius:var(--r-lg);color:var(--text-2);font-size:var(--fs-sm);text-align:center}
-.ed-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:96px;margin-top:var(--s-2);padding:var(--s-3);border:2px dashed var(--accent-line);border-radius:var(--r-lg);background:none;color:var(--accent-text);font:600 var(--fs-base) var(--f-ui);cursor:pointer}
+.ed-add{box-sizing:border-box;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:96px;margin-top:var(--s-2);padding:var(--s-3);border:2px dashed var(--accent-line);border-radius:var(--r-lg);background:none;color:var(--accent-text);font:600 var(--fs-base) var(--f-ui);cursor:pointer}
 .ed-add:hover{background:var(--accent-tint)}
 .ed-add .ico{width:22px;height:22px}
 .ed-add[aria-disabled="true"]{border-color:var(--line-strong);color:var(--text-2);cursor:default}

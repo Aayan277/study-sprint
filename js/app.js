@@ -1098,7 +1098,12 @@ let statsTimer = null, statsStale = false;
 function redrawStatsSoon() {
   clearTimeout(statsTimer);
   if (document.hidden) { statsStale = true; return; }
-  statsTimer = setTimeout(() => { if (currentRoute === 'stats') route(); }, 1500);
+  statsTimer = setTimeout(async () => {
+    if (currentRoute !== 'stats') return;
+    // While Stats is being edited the same box is drawn again (edit mode, the scroll and a held card survive); otherwise a fresh screen.
+    try { if ((await lazy('./stats.js')).softRefresh()) return; } catch { /* fall back to a fresh draw */ }
+    if (currentRoute === 'stats') route();
+  }, 1500);
 }
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && statsStale) { statsStale = false; if (currentRoute === 'stats') redrawStatsSoon(); }
