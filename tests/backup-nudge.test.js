@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { agoText, backupNote, NUDGE_CARDS } from '../js/backup-nudge.js';
-import { isLocalOnly } from '../js/db.js';
+import { isLocalOnly, restoredSettings } from '../js/db.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = Date.UTC(2026, 5, 1, 12);
@@ -36,6 +36,14 @@ test('over 30 days (or never) with 50+ cards nudges, softer when signed in', () 
   assert.doesNotMatch(synced.text, /only live/);
 });
 
-test('lastBackup stays on this device: not synced, not in backups', () => {
+test('days are counted by calendar day, not 24-hour blocks', () => {
+  const at = new Date(2026, 4, 31, 23, 0).getTime();          // 11pm
+  assert.equal(agoText(at, new Date(2026, 5, 1, 9, 0).getTime()), 'yesterday');       // only 10 hours later, but the next day
+  assert.equal(agoText(at, new Date(2026, 5, 1, 2, 0).getTime()), 'today');           // before 4am it is still the same study day
+});
+
+test('lastBackup stays on this device: restoring an old backup does not bring its date back', () => {
   assert.equal(isLocalOnly('lastBackup'), true);
+  const kept = restoredSettings({ lastBackup: 123, newPerDay: 15 });
+  assert.deepEqual(kept, [['newPerDay', 15]]);
 });

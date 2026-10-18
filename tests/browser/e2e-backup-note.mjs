@@ -28,6 +28,17 @@ n = await note();
 ok(n.warn && n.text.startsWith('Last backup: 40 days ago.'), '40 days old: nudge: ' + n.text);
 const inFile = await page.evaluate(async () => Object.hasOwn((await (await import('./js/db.js')).exportAll({ sounds: true })).settings, 'lastBackup'));
 ok(!inFile, 'lastBackup is not written into the backup file');
+// restoring an old backup that carries a lastBackup keeps this device's own date
+const kept = await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const mine = Date.now() - 5 * 864e5;
+  await db.setSetting('lastBackup', mine);
+  const data = await db.exportAll({ sounds: true });
+  data.settings.lastBackup = 123;
+  await db.importAll(data);
+  return (await db.getSettings()).lastBackup === mine;
+});
+ok(kept, 'restoring a backup keeps this device\'s own lastBackup');
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 if (errors.length) process.exitCode = 1;
 await browser.close();

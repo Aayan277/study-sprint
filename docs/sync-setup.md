@@ -256,16 +256,23 @@ data would be gone (each device still has its own copy, but you would rather not
 GitHub job (`.github/workflows/backup.yml`) that copies the database every night and keeps the last 30 copies.
 The copy is **encrypted with a password only you know**, so it is safe even if the repository is public.
 
-**What is saved:** all the app's data (decks, cards, progress, settings) and the sign-in accounts.
+**What is saved:** the data of the app (decks, cards, progress, settings, people's limits) and the sign-in accounts.
 **What is not saved:** pictures and sounds. They live in Supabase Storage, which this job doesn't copy. They are
 still on each person's devices and in their **Export backup** files.
+
+**Good to know:** GitHub switches scheduled jobs off after 60 days with no activity in the repository (any
+commit counts). Then backups stop, and the last copies disappear 30 days later; the Actions tab shows a button to
+turn the job back on. If the repository is private, the backups use part of its free GitHub storage (a few MB a night is fine).
 
 ### Turn it on
 
 1. In Supabase, click **Connect** (top of the page). Under **Session pooler**, copy the **URI**. It looks like
    `postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-….pooler.supabase.com:5432/postgres`.
    Replace `[YOUR-PASSWORD]` (brackets too) with your **database password** (the one you chose in step 1; if you
-   forgot it: **Project Settings → Database → Reset database password**).
+   forgot it: **Project Settings → Database → Reset database password**). If the password has symbols such as
+   `@`, `#`, `/` or `:` in it, the address breaks. The easy fix is to reset the database password to one made only of
+   letters and numbers (long, for example 24 characters). The other way is to write each symbol as `%` plus its code
+   (`@` is `%40`).
 2. On github.com open the repository, then **Settings → Secrets and variables → Actions → New repository secret**.
    **Name:** `SUPABASE_DB_URL`, **Secret:** the address from step 1. Click **Add secret**.
 3. Make up a long password for the backup files (for example four random words), and **save it in your password
@@ -273,29 +280,55 @@ still on each person's devices and in their **Export backup** files.
    `BACKUP_PASSPHRASE`, **Secret:** that password. Click **Add secret**.
 4. Open the **Actions** tab, click **Back up database**, then **Run workflow → Run workflow**. After a minute or
    two it should show a green tick. Until both secrets exist the job does nothing and still shows a green tick;
-   click into the run and it says "No backup made yet".
+   click into the run and it says "No backup made yet". If the address is wrong the run turns red and says what to fix.
 
 ### Get a backup and open it
 
 1. **Actions** tab → **Back up database** → click a run (newest first). At the bottom, under **Artifacts**, click
    the file named `study-sprint-db-…`. A zip downloads; open it to get a file ending in `.sql.gz.gpg`.
-2. On your computer open a terminal in the folder with that file and type (using the real file name):
-   `gpg --decrypt study-sprint-db-2026-01-31.sql.gz.gpg | gunzip > backup.sql`
-   Type the backup password when asked. You now have `backup.sql`, a plain text file of SQL commands.
+2. You need the free program **GnuPG** once: on Windows install **Gpg4win** (gpg4win.org), on a Mac install
+   **GPG Suite** (gpgtools.org) or run `brew install gnupg`, on Linux it is usually there already.
+3. Open a terminal in the folder with the file and type (using the real file name):
+   `gpg --decrypt study-sprint-db-2026-01-31.sql.gz.gpg > backup.sql.gz`
+   Type the backup password when asked. Then unpack it: on a Mac or Linux type `gunzip backup.sql.gz`; on Windows
+   right-click `backup.sql.gz` and use 7-Zip (7-zip.org) → **Extract Here**. You now have `backup.sql`, a plain text
+   file of SQL commands.
 
 ### Restore it
 
-Only needed if data was lost. Everyone's data comes back as of the night of the backup.
+Only needed if the project was lost or damaged. Everyone's data comes back as of the night of the backup.
 
-1. Use a **new, empty Supabase project** if the old one is gone (do steps 1, 2, 2b and 3 of this page for it first,
-   so the sync table, storage and sign-in settings exist), or the same project if only the data was damaged.
-2. Get that project's **Session pooler** address as in "Turn it on" step 1.
-3. In the terminal: `psql "PASTE-THE-ADDRESS-HERE" -f backup.sql`
-   (`psql` comes with PostgreSQL, free from postgresql.org.) Lines saying "already exists" are normal if the tables
-   were already there. If the old rows are still there too, the restore stops with "duplicate key" messages: that
-   means they are already present.
-4. Update `js/sync-config.js` with the new project's URL and key if it is a new project (step 7), and people sign in as before.
-   Then on one device use **Settings → Sync → Re-upload everything** to fill in anything newer than the backup.
+**Always restore into a NEW, empty Supabase project, never into the old one.** The reason: every device keeps a
+bookmark of what it has already synced, and in an old project it would silently miss changes the restore put
+back. In a new project people sign in again, which resets that bookmark, and each device then sends anything newer than the backup.
+
+1. Create the new project and do **all** of the setup in it, in order: [1. Create the project](#1-create-the-project),
+   [2. Create the sync table](#2-create-the-sync-table), [2b. Storage for pictures and sounds](#2b-storage-for-pictures-and-sounds),
+   [2c. Limits and "Delete my account"](#2c-limits-and-delete-my-account) (run `limits.sql`),
+   [3. Let people sign up](#3-let-people-sign-up-with-email-confirmation), [4. Send the sign-up emails from a Gmail address](#4-send-the-sign-up-emails-from-a-gmail-address),
+   [5. Make the email links open the app](#5-make-the-email-links-open-the-app) and
+   [6. Block robots: Cloudflare Turnstile](#6-block-robots-cloudflare-turnstile-optional-but-recommended). Then
+   [7. Copy two values for the app](#7-copy-two-values-for-the-app) for the new project and put them in `js/sync-config.js`. Don't add any users
+   by hand: the backup brings them. (The project is empty, so there is nothing to clear first.)
+2. Get the new project's **Session pooler** address as in "Turn it on" step 1 (with its database password in it).
+3. In a terminal, in the folder with `backup.sql` (`psql` is part of PostgreSQL, free from postgresql.org), type:
+   `PGOPTIONS='-c session_replication_role=replica' psql -v ON_ERROR_STOP=1 "PASTE-THE-NEW-ADDRESS-HERE" -f backup.sql`
+   (In Windows PowerShell first type `$env:PGOPTIONS='-c session_replication_role=replica'`, then the same command without the `PGOPTIONS=…` part.)
+   The `PGOPTIONS` part switches off the database's own bookkeeping triggers while the data goes in; they are
+   fixed by the next two steps. It should end without any `ERROR`.
+4. Fix the counters. In the new project's **SQL Editor → New query** paste and click **Run**:
+
+   ```sql
+   select public.recount_sync_usage();
+   select setval('public.sync_seq', (select coalesce(max(seq), 0) from public.sync_items) + 1000);
+   ```
+5. Check it. Run `select count(*) from public.sync_items;` (should be about what the old project had) and
+   `select user_id, count(*) from public.sync_items group by user_id order by 2 desc;` (one line per person). In **Authentication → Users** you should see everyone.
+6. Tell people to open the app and sign in again (**Settings → Sync**). Their pictures and sounds come back
+   from their own devices.
+
+**Test it once, now.** A backup you have never restored is a guess. Make a second, throwaway free project, do the
+steps above in it, check the counts, then delete that project (**Project Settings → General → Delete project**).
 
 ## 9. Looking after it
 
