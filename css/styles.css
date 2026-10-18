@@ -362,6 +362,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-new .small:not(.on-track){display:block;margin-top:4px}
 .exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
+/* Upcoming exams and "Add exam date" share a wrapper (js/today.js) so the Clinical style can put them in a side column; here it adds no box */
+.today-side{display:contents}
 .exam-add{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .exam-add::-webkit-scrollbar{display:none}
 .exam-add > *{flex:none;white-space:nowrap}
