@@ -108,6 +108,23 @@ fake.rows.set(`${uid}|cards|victim`, { ...row('victim', top + 1), data: null, de
 await syncNow();
 ok(!(await cardIds()).includes('victim'), 'a delete that became visible late is applied too');
 
+// A big first download (a device that knows nothing: bookmark 0, no log). The next page is asked for as soon as the one before
+// arrives (while it is saved), so each request must still ask after the highest number of the page before it, none may be
+// skipped or asked twice, and the short last page ends it.
+const bigTop = Math.max(...fake.userRows('me@example.com').map(r => r.seq));
+for (let i = 0; i < 2500; i++) fake.rows.set(`${uid}|cards|big${i}`, row('big' + i, bigTop + 1 + i));
+const sorted = fake.userRows('me@example.com').map(r => r.seq).sort((a, b) => a - b);
+const expectAsked = [0]; for (let k = 999; k < sorted.length; k += 1000) expectAsked.push(sorted[k]);
+await run(async () => { const db = await import('./js/db.js'); const s = (await db.getSettings()).syncState; await db.setSetting('syncState', { ...s, lastSeq: 0, seqLog: undefined }); });
+asked.length = 0;
+const lb = await syncNow();
+const ids = await cardIds();
+ok(JSON.stringify(asked) === JSON.stringify(expectAsked), `one request per page, each after the top of the page before: ${asked.join(',')} (expected ${expectAsked.join(',')})`);
+ok(lb.state === 'done' && lb.applied >= 2500 && ids.includes('big0') && ids.includes('big2499'), `all 2,500 cards arrived (applied ${lb.applied})`);
+const stb = await state();
+ok(stb.lastSeq === sorted[sorted.length - 1] && stb.seqLog[stb.seqLog.length - 1].seq === stb.lastSeq, 'the bookmark and the end of the log are the highest number: ' + stb.lastSeq);
+ok(await pending() === 0, 'nothing is waiting to be sent back');
+
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 if (errors.length) process.exitCode = 1;
 await browser.close();

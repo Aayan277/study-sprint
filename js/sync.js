@@ -21,7 +21,7 @@ import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote,
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -317,28 +317,18 @@ async function run() {
   let applied = 0, pulled = 0, gotNotes = false;
   st = startPull(st, Date.now());
   let from = pullStart(st);
-  const t0 = Date.now(), from0 = from;
-  let pageSize = PAGE;          // smaller after a timeout, for the rest of this sync (getPageSafely)
-  for (;;) {
-    const after = from;
-    const page = await getPageSafely((seq, n) => supa.getChanges(token, seq, n), after, pageSize);
-    const rows = page.rows, at = page.at;       // (the send time of the request that worked: an earlier time would be the unsafe direction)
-    pageSize = page.size;
-    if (rows.length) {
+  // (The loop itself, pullPages in sync-merge.js, asks for the next page while the one before is being saved.)
+  ({ st } = await pullPages(st, from, PAGE, {
+    get: (after, n) => getPageSafely((seq, size) => supa.getChanges(token, seq, size), after, n),
+    apply: async rows => {
       const got = await db.applyRemote(rows);
       applied += got;
       if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
       pulled += rows.length;
       if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
-      from = Math.max(from, ...rows.map(r => Number(r.seq)));
-    }
-    // The bookmark (only ever forward) and the log of requests are saved together, page by page, so a pull cut off
-    // midway carries on near where it stopped.
-    const lastSeq = Math.max(st.lastSeq, from);
-    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, to: rows.length ? Math.max(...rows.map(r => Number(r.seq))) : after, n: rows.length }, { t0, from: from0, reach: rows.length < pageSize ? Infinity : from }) };
-    await db.setSetting('syncState', st);
-    if (rows.length < pageSize) break;
-  }
+    },
+    save: s => db.setSetting('syncState', s)      // (the bookmark only ever moves forward, and the log is saved with it)
+  }));
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.
   if (gotNotes) await healNotes();

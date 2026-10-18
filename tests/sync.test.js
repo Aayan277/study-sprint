@@ -381,7 +381,7 @@ test('idleDays is a synced, merged setting: the union of two devices, pruned onl
 });
 
 // ---------- the overlap when pulling ----------
-import { pullStart, startPull, logPull, OVERLAP_MS, MAX_BACK } from '../js/sync-merge.js';
+import { pullStart, startPull, logPull, pullPages, OVERLAP_MS, MAX_BACK } from '../js/sync-merge.js';
 
 const PAGE = 1000, T0 = 2_000_000_000;
 // A tiny model of the server and of sync.js's pull loop. seq is taken when a transaction writes; rows show up when it commits.
@@ -814,4 +814,98 @@ test('overlap: a page that was asked for again half as big and came back full is
   }
   assert.equal(size, 125);
   assert.equal(from, 5000); assert.ok(short && pages >= 20);
+});
+
+// ---------- the pull loop asks for the next page while the last one is being saved ----------
+// A server whose answers and saves take (fake) time, so the order of events can be checked. Every event is written to `events`.
+function pipeServer(total, { saveFails = null, size = PAGE, halveAt = null } = {}) {
+  const server = fakeServer(); server.add(total);
+  const events = [], clock = { now: T0 };
+  let n = 0;
+  const get = async (after, want) => {
+    const at = clock.now; clock.now += 1000; n++;
+    const mine = n;
+    events.push(`ask ${after}`);
+    await new Promise(r => setTimeout(r, 2));                         // the network
+    if (halveAt === mine) want = want >> 1;                          // like getPageSafely after a timeout
+    const rows = server.read(after, want);
+    events.push(`got ${rows.length}`);
+    return { rows, size: want, at };
+  };
+  const apply = async rows => {
+    events.push(`save ${rows.length}`);
+    await new Promise(r => setTimeout(r, 8));                         // the database
+    if (saveFails === events.filter(e => e.startsWith('save')).length) throw new Error('disk full');
+  };
+  const saved = [];
+  const save = async st => { saved.push(st.lastSeq); events.push(`mark ${st.lastSeq}`); };
+  return { server, events, clock, get, apply, save, saved, size };
+}
+
+test('pull: the next request is sent when a page arrives, while it is saved; each asks after the page before it', async () => {
+  const p = pipeServer(3500);
+  const { st, pages } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: p.get, apply: p.apply, save: p.save, now: () => p.clock.now });
+  assert.equal(pages, 4);
+  assert.deepEqual(p.events.filter(e => e.startsWith('ask')), ['ask 0', 'ask 1000', 'ask 2000', 'ask 3000'], 'one request per page, each after the highest number of the page before');
+  const at = k => p.events.indexOf(k);
+  assert.ok(at('ask 1000') < at('save 1000'), 'page 2 is asked for before page 1 is saved');
+  assert.ok(at('ask 1000') > at('got 1000'), '...but only after page 1 has arrived');
+  assert.ok(at('mark 1000') < at('mark 2000') && at('save 1000') < at('mark 1000'), 'a page is marked only after it is saved, in order');
+  assert.deepEqual(p.saved, [1000, 2000, 3000, 3500]);
+  assert.equal(st.lastSeq, 3500);
+  assert.equal(p.events.filter(e => e.startsWith('ask')).length, 4, 'no request after the short page');
+});
+
+test('pull: the same state at the end as asking one page at a time (log, bookmark, ok marks)', async () => {
+  for (const total of [0, 1, 999, 1000, 1001, 2500, 5000]) {
+    const a = fakeServer(), b = pipeServer(total), clock = { now: T0 };
+    a.add(total);
+    const expected = pull(a, { lastSeq: 0 }, clock);
+    const { st } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
+    assert.deepEqual(st, expected, 'total ' + total);
+  }
+});
+
+test('pull: a page that fails to save is not marked, nor is the page asked for meanwhile; the next pull starts at the old bookmark', async () => {
+  const p = pipeServer(3500, { saveFails: 2 });
+  await assert.rejects(pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get: p.get, apply: p.apply, save: p.save, now: () => p.clock.now }), /disk full/);
+  assert.deepEqual(p.saved, [1000], 'only page 1 was marked');
+  await new Promise(r => setTimeout(r, 30));                         // the request that was already on its way ends quietly
+  assert.equal(p.saved.length, 1);
+});
+
+test('pull: a request that fails while the page before is still being saved is reported after that page is marked', async () => {
+  const p = pipeServer(3500);
+  let calls = 0;
+  const get = async (after, n) => { if (++calls === 2) { await new Promise(r => setTimeout(r, 1)); throw Object.assign(new Error('offline'), { code: 'network' }); } return p.get(after, n); };
+  await assert.rejects(pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get, apply: p.apply, save: p.save, now: () => p.clock.now }), /offline/);
+  assert.deepEqual(p.saved, [1000], 'page 1 is kept: the bookmark is saved with it');
+});
+
+test('pull: after a request had to be made smaller, the next ones are too, and a short page is judged by its own size', async () => {
+  const p = pipeServer(2400, { halveAt: 2 });                         // the second request times out and is sent again at half the size
+  const asked = [];
+  const get = (after, n) => { asked.push([after, n]); return p.get(after, n); };
+  const { st, pages } = await pullPages(startPull({ lastSeq: 0 }, T0), 0, PAGE, { get, apply: p.apply, save: p.save, now: () => p.clock.now });
+  assert.deepEqual(asked.slice(0, 3), [[0, 1000], [1000, 1000], [1500, 500]], 'a half page counts as full for its own size, and the size stays smaller');
+  assert.equal(st.lastSeq, 2400);
+  assert.ok(pages >= 4);
+});
+
+test('pull: from an existing log with older, not yet settled entries, the end state is the same as one page at a time', async () => {
+  for (const total of [1500, 3200]) {
+    const a = fakeServer(), b = pipeServer(total), clock = { now: T0 };
+    a.add(total);
+    // a first pull, then a cut-off one, leaving a log with entries that are not ok yet, then more rows arrive
+    let st0 = pull(a, { lastSeq: 0 }, clock, new Set(), { maxPages: 1 });
+    clock.now += 5_000;
+    st0 = pull(a, st0, clock, new Set(), { maxPages: 1 });
+    assert.ok(st0.seqLog.some(e => !e.ok), 'set up: the log holds entries that are not settled');
+    clock.now += 10_000;
+    b.clock.now = clock.now;
+    const expected = pull(a, st0, clock);
+    const start = startPull(st0, b.clock.now);
+    const { st } = await pullPages(start, pullStart(start), PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
+    assert.deepEqual(st, expected, 'total ' + total);
+  }
 });

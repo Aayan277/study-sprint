@@ -14,8 +14,9 @@
 #   BACKUP_PASSPHRASE   a long password you make up and keep somewhere safe (a password manager). Lose it and the backups can't be opened.
 # Until both exist, the job says so and finishes with a green tick (so no failure emails before you set it up).
 #
-# Backups are kept 30 days. GitHub switches scheduled workflows off after 60 days with no activity in the repository (any commit
-# counts); the backups then stop, and the last copies expire 30 days later. On a private repository, artifacts count toward
+# Backups are kept 30 days. GitHub switches scheduled workflows off after 60 days with no activity in a public repository;
+# the backups then stop, and the last copies expire 30 days later. The weekly job in keep-workflows-enabled.yml prevents
+# that (docs/sync-setup.md, "Keep the scheduled jobs switched on"). On a private repository, artifacts count toward
 # the GitHub storage allowance (a few MB a night is fine).
 name: Back up database
 
@@ -30,6 +31,8 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      issues: write             # only to report a failure (last step)
     steps:
       - name: Check the two secrets exist
         id: secrets
@@ -94,3 +97,24 @@ jobs:
           path: out/*.gpg
           retention-days: 30
           if-no-files-found: error
+
+      # If anything above failed, open (or add a comment to) ONE issue, because GitHub's own failure emails of scheduled
+      # jobs may go to nobody (to whoever last edited the schedule, or to the github-actions bot after a re-enable).
+      # Only the job's name and the run's link go in it, never logs or secrets. Same step in every scheduled workflow.
+      - name: Tell the owner this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          JOB_NAME: Back up database
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Study Sprint: a scheduled job failed'; label=scheduled-job-failed
+          gh label create "$label" --color B60205 --description "A scheduled job failed (made by the jobs themselves)" >/dev/null 2>&1 || true
+          num=$(gh issue list --label "$label" --state open --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty" || true)
+          msg="The scheduled job \"$JOB_NAME\" failed on $(date -u +%Y-%m-%d). Open the run to see why: $RUN_URL . What to do: docs/sync-setup.md, step 8d. Close this issue when it is fixed."
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$msg"
+          else
+            gh issue create --title "$title" --label "$label" --assignee "$GITHUB_REPOSITORY_OWNER" --body "$msg"
+          fi

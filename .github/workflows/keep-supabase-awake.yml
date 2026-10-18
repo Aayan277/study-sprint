@@ -1,8 +1,9 @@
 # Keeps the free Supabase project from pausing. Free projects pause after about a week with no use; this asks
 # the database a tiny question once a day, which counts as use. Setup: docs/sync-setup.md ("Keep the project awake").
 #
-# GitHub switches scheduled workflows off after 60 days with no activity in the repository (any commit counts); if that
-# happens, the Actions tab shows a button to turn it back on.
+# GitHub switches scheduled workflows off after 60 days with no activity in a public repository. The weekly job in
+# keep-workflows-enabled.yml switches this one back on before that happens (docs/sync-setup.md, "Keep the scheduled jobs
+# switched on"); if it ever is off, the Actions tab shows an "Enable workflow" button.
 #
 # Needs two repository secrets (Settings → Secrets and variables → Actions → New repository secret):
 #   SUPABASE_URL       the Project URL, e.g. https://abcdefgh.supabase.co
@@ -20,6 +21,8 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      issues: write             # only to report a failure (last step)
     steps:
       - name: Ask the database one cheap question
         env:
@@ -37,3 +40,24 @@ jobs:
             "${SUPABASE_URL%/}/rest/v1/sync_items?select=id&limit=1"
           echo
           echo "Supabase answered."
+
+      # If anything above failed, open (or add a comment to) ONE issue, because GitHub's own failure emails of scheduled
+      # jobs may go to nobody (to whoever last edited the schedule, or to the github-actions bot after a re-enable).
+      # Only the job's name and the run's link go in it, never logs or secrets. Same step in every scheduled workflow.
+      - name: Tell the owner this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          JOB_NAME: Keep Supabase awake
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Study Sprint: a scheduled job failed'; label=scheduled-job-failed
+          gh label create "$label" --color B60205 --description "A scheduled job failed (made by the jobs themselves)" >/dev/null 2>&1 || true
+          num=$(gh issue list --label "$label" --state open --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty" || true)
+          msg="The scheduled job \"$JOB_NAME\" failed on $(date -u +%Y-%m-%d). Open the run to see why: $RUN_URL . What to do: docs/sync-setup.md, step 8d. Close this issue when it is fixed."
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$msg"
+          else
+            gh issue create --title "$title" --label "$label" --assignee "$GITHUB_REPOSITORY_OWNER" --body "$msg"
+          fi

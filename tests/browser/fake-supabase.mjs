@@ -122,7 +122,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         return json(route, 200, []);
       }
       if (req.method() === 'POST' && p === 'object/list/media') {
-        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).map(k => ({ name: k.slice(body.prefix.length) })));
+        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + (body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
       }
       return json(route, 400, { message: 'unknown storage call ' + p });
     }

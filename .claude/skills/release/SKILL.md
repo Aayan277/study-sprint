@@ -12,7 +12,7 @@ description: Study Sprint release and merge checklist (sw.js version bump, hash 
 - Two `run.mjs` runs from one checkout share `tests/browser/out` and collide; use separate worktrees.
 - Kill only your own PIDs.
 - `tests/browser/pw.mjs`: `CPU_THROTTLE=4` proves a test isn't flaky; `sheetSettled(page)` for tests that reload right after closing a sheet.
-- `e2e-selection` once timed out at its first tap on a busy machine; if it repeats, wait for the review screen before tapping.
+- `e2e-selection` used to time out at its first tap on a busy machine; its phone block now taps again until the card flips.
 
 ## Agent pacing
 - Early in the weekly usage cycle about 3-5 agents at once, later in the week 6-8.
