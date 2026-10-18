@@ -263,7 +263,7 @@ export function rememberFold(details, key) {
 // so a screen-wide shortcut must leave them alone. `except` is the id of one element that should still count
 // as "not a control" (Review's card, which is focusable but has no key handling of its own).
 export const onControl = (e, except) => {
-  const control = e.target.closest?.('button, a, input, select, textarea, [role=button]');
+  const control = e.target.closest?.('button, a, input, select, textarea, summary, [role=button]');
   return !!control && control.id !== except;
 };
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

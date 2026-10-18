@@ -3,11 +3,14 @@ import { chromium } from './pw.mjs';
 const SP = process.argv[2] || '/tmp';
 const browser = await chromium.launch();
 const errors = [];
+// CPU_THROTTLE=4 slows every page 4x (Chrome DevTools Protocol), to shake out timing races like a busy computer would.
+const THROTTLE = +process.env.CPU_THROTTLE || 1;
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const open = async ({ w = 375, h = 800, scheme = 'dark' } = {}) => {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: 'block', isMobile: w < 600, hasTouch: w < 600, colorScheme: scheme });
   const p = await ctx.newPage();
-  p.on('pageerror', e => errors.push('pageerror ' + e.message));
+  if (THROTTLE > 1) await (await ctx.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+  p.on('pageerror', e => errors.push('pageerror ' + e.message + (e.stack ? ' @ ' + e.stack.split('\n').slice(1, 3).join(' | ').trim() : '')));
   p.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
   await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck, .empty');
   await p.evaluate(t => document.documentElement.setAttribute('data-theme', t), scheme);
@@ -33,6 +36,17 @@ const typeAnswer = async (p, text) => {
   await p.fill('#pInput', text); await p.press('#pInput', 'Enter'); await p.waitForSelector('#feedback .fb');
 };
 const hud = async p => ({ score: (await p.textContent('#score')).trim(), streak: (await p.textContent('#streak')).trim() });
+// Wait for something in the database. (page.waitForFunction does not wait for an async function: it takes the Promise it
+// returns as true at once, so these checks used to pass straight away and then raced the app's background saves.)
+// This asks the page again every 50 ms until the answer is true.
+const until = async (p, fn, arg, what = 'the database to change') => {
+  const end = Date.now() + 15000;
+  for (;;) {
+    if (await p.evaluate(fn, arg)) return;
+    if (Date.now() > end) throw new Error('Timed out waiting for ' + what);
+    await new Promise(r => setTimeout(r, 50));
+  }
+};
 const cardOf = (p, id) => p.evaluate(async id => (await import('./js/db.js')).get('cards', id), id);
 
 // ----- practice mode (the default): only the round and the accept list change -----
@@ -90,13 +104,15 @@ await p.keyboard.press('Escape');
 await seed(p, 'pr', [['Process of light to sugar', 'Photosynthesis']], { due: true, counts: true });
 await setup(p, 'pr');
 await typeAnswer(p, 'zzzzzz');
-await p.waitForFunction(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length === 1);
-await p.waitForTimeout(600);
+await until(p, async () => { const db = await import('./js/db.js'); return (await db.getAll('reviewLog')).length === 1 && (await db.get('cardStates', 'pr0'))?.lapses === 1; }, null, 'the wrong answer to be saved');
 let st = await p.evaluate(async () => (await (await import('./js/db.js')).get('cardStates', 'pr0')));
 ok(st.lapses === 1, 'the wrong answer was saved as Again (a lapse): ' + JSON.stringify(st));
 await p.click('#rightBtn');
 await p.waitForFunction(() => document.querySelector('#feedback .fb.ok')?.textContent.includes('Counted as right'));
-await p.waitForFunction(async () => (await (await import('./js/db.js')).getAll('reviewLog')).some(l => l.overridden));
+await until(p, async () => {
+  const db = await import('./js/db.js');
+  return (await db.getAll('reviewLog')).some(l => l.overridden) && (await db.get('cardStates', 'pr0'))?.lapses === 0;
+}, null, 'the correction to be saved');
 st = await p.evaluate(async () => (await (await import('./js/db.js')).get('cardStates', 'pr0')));
 const rows = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.cardId === 'pr0'));
 ok(st.lapses === 0 && st.state === 2 && st.stability > 10 && st.reps === 4, `the schedule is what a right answer gives, not Again: ${JSON.stringify({ lapses: st.lapses, state: st.state, stability: Math.round(st.stability), reps: st.reps })}`);
@@ -109,7 +125,7 @@ for (const [id, action] of [['pl', 'tag'], ['pm', 'suspend']]) {
   await p.evaluate(async a => { const db = await import('./js/db.js'); await db.setSetting('leechThreshold', 1); await db.setSetting('leechAction', a); const c = await db.get('cards', a === 'tag' ? 'pl0' : 'pm0'); await db.saveCards([{ ...c, tags: ['keep'] }]); }, action);
   await setup(p, id);
   await typeAnswer(p, 'qqqqqq');
-  await p.waitForFunction(async cid => { const c = await (await import('./js/db.js')).get('cards', cid); return (c.tags || []).includes('leech'); }, id + '0');
+  await until(p, async cid => ((await (await import('./js/db.js')).get('cards', cid)).tags || []).includes('leech'), id + '0', 'the leech tag');
   const made = await cardOf(p, id + '0');
   ok(made.tags.includes('leech') && !!made.suspended === (action === 'suspend'), `${action}: the wrong answer made it a leech: ${JSON.stringify([made.tags, made.suspended])}`);
   await p.click('#rightBtn');
@@ -161,12 +177,12 @@ await p.click('#brList .crow-btn'); await p.waitForSelector('#ceAccept');
 ok((await p.inputValue('#ceAccept')) === 'nope', 'the card editor shows Other accepted answers: ' + await p.inputValue('#ceAccept'));
 await p.fill('#ceAccept', 'nope, nah');
 await p.$eval('button[type=submit][form=ceForm]', b => b.click());
-await p.waitForFunction(async id => (await (await import('./js/db.js')).get('cards', id)).acceptAnswers?.length === 2, accCard.id);
+await until(p, async id => (await (await import('./js/db.js')).get('cards', id)).acceptAnswers?.length === 2, accCard.id, 'the list to save');
 ok(true, 'editing the list saves it');
 await p.waitForSelector('#ceAccept');
 await p.fill('#ceAccept', '');
 await p.$eval('button[type=submit][form=ceForm]', b => b.click());
-await p.waitForFunction(async id => !('acceptAnswers' in (await (await import('./js/db.js')).get('cards', id))), accCard.id);
+await until(p, async id => !('acceptAnswers' in (await (await import('./js/db.js')).get('cards', id))), accCard.id, 'the field to be removed');
 ok(true, 'emptying it removes the field');
 
 // ----- typed Review: Accept my answer from now on -----

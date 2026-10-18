@@ -38,7 +38,7 @@ await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'From 
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const cards = await page.evaluate(async () => { const db = await import('./js/db.js'); const { subtreeIds } = await import('./js/deck-tree.js'); const ds = await db.getDecks(); const ids = subtreeIds(ds, ds.find(d => d.name === 'From Anki').id); return (await db.getAll('cards')).filter(c => ids.has(c.deckId)).filter(c => c.front === 'Classical conditioning' || c.front === 'Neuron'); });
 ok(cards.length === 2 && cards.find(c => c.front === 'Classical conditioning').tags.join() === 'exam1,learning', 'saved with Anki tags');
-ok((await page.locator('.crow').count()) === 7, 'deck has 7 cards');
+ok((await page.locator('.crow').count()) === 8, 'deck has 8 cards (the reversed note brings both)');
 
 // broken file
 await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
