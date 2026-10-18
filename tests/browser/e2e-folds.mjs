@@ -58,7 +58,8 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   ok(await p.isVisible('#btnTitle') && await p.isVisible('#hours') && await p.isVisible('#difficulty') && await p.isVisible('#mTitle') && await p.isVisible('#hardTitle') && await p.isVisible('#calTitle'), 'computer: every stats section is shown');
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'computer: no sideways scroll');
   const box = id => p.locator(id).boundingBox();
-  const [bt, hrs] = [await box('#btnTitle'), await box('#hours')];
+  // (the default order is Hardest cards | Answer buttons, then Time of day | Difficulty: Customise Stats, js/stats-layout.js)
+  const [bt, hrs] = [await box('#hours'), await box('#difficulty')];
   ok(Math.abs(bt.y - hrs.y) < 80 && hrs.x > bt.x, 'computer: the cards are still laid out in two columns');
   await p.screenshot({ path: SP + '/folds-stats-computer.png', fullPage: true });
   await p.context().close();

@@ -21,6 +21,7 @@ const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
 import { isMarkKey, isSeenKey, markKey, markId, seenKey, validMark, GONE } from './media-sweep.js';
+import { acceptStatsLayout } from './stats-layout.js';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
@@ -52,6 +53,7 @@ export const DEFAULT_SETTINGS = {
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
+  statsLayout: null,         // Customise Stats: { order, hidden, size } or null (the default layout); see stats-layout.js. Synced, newest wins
   fsrsVersion: 6,            // which FSRS schedules cards: 6 (standard) or 7 (beta, off by default); see sched-settings.js and docs/design/fsrs7-plan.md. Synced, newest wins
   dailyGoal: 20,             // not used since v4.10 (the Today ring counts today's work); still accepted in backups and sync so old values don't break
   playCountsAsReviews: false, // false: Play is practice only (no schedule, stats or streak changes). true: Play answers count as reviews. Synced
@@ -754,7 +756,8 @@ export function restoredSettings(settings) {
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
     .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
     .filter(([k, v]) => k !== 'fsrsVersion' || v === 6 || v === 7)       // junk is left out, not stored as 6 (a stamped 6 would switch other devices back)
-    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : [k, v]));
+    .filter(([k, v]) => k !== 'statsLayout' || acceptStatsLayout(v).ok)         // junk is left out
+    .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : k === 'statsLayout' ? [k, acceptStatsLayout(v).value] : [k, v]));
 }
 export const validRescue = r => !!r && typeof r === 'object' && !Array.isArray(r) && Number.isFinite(r.start) && Number.isInteger(r.days) && r.days >= 1 && r.days <= 10
   && Number.isFinite(r.backlog) && r.backlog >= 0 && (r.pauseNew === undefined || typeof r.pauseNew === 'boolean') && (r.at === undefined || Number.isFinite(r.at));
