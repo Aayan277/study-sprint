@@ -80,14 +80,15 @@ await run(async ({ D1, D3, T }) => {
 }, { D1, D3, T });
 fake.rows.set(`${uid2}|reviewLog|rv-1`, { user_id: uid2, store: 'reviewLog', id: 'rv-1', data: { uid: 'rv-1', cardId: 'withreview', timestamp: T - 5000, rating: 3, source: 'review' }, deleted: false, updated_at: T - 5000, seq: top0 + 50 });
 fake.rows.set(`${uid2}|settings|restDays`, { user_id: uid2, store: 'settings', id: 'restDays', data: { value: { [D1]: { on: true, at: T - 6000 }, [D2]: { on: true, at: T - 5500 } } }, deleted: false, updated_at: T - 4000, seq: top0 + 51 });
+fake.rows.set(`${uid2}|settings|mdel:other-pic`, { user_id: uid2, store: 'settings', id: 'mdel:other-pic', data: { value: 'gone' }, deleted: false, updated_at: T - 2000, seq: top0 + 53 });   // a picture mark from another device (marks are synced settings)
 fake.rows.set(`${uid2}|settings|idleDays`, { user_id: uid2, store: 'settings', id: 'idleDays', data: { value: { [D3]: true } }, deleted: false, updated_at: T - 3000, seq: top0 + 52 });
 await settle();                                   // the first time they are real news (and the merged settings go back up once)
 const snap = () => run(async () => {
   const db = await import('./js/db.js'); const { markKey } = await import('./js/media-sweep.js'); const set = await db.getSettings();
-  return JSON.stringify({ logs: (await db.getAll('reviewLog')).map(r => r.uid), rest: set.restDays, idle: set.idleDays, mark: set[markKey('gone-pic')] });
+  return JSON.stringify({ logs: (await db.getAll('reviewLog')).map(r => r.uid), rest: set.restDays, idle: set.idleDays, mark: set[markKey('gone-pic')], other: set[markKey('other-pic')] });
 });
 const known = await snap();
-ok(known.includes('rv-1') && known.includes(D2) && known.includes('gone'), 'set up: the review, both days off and the "gone" mark are here: ' + known);
+ok(known.includes('rv-1') && known.includes(D2) && known.includes('gone') && known.includes('"other":"gone"'), 'set up: the review, both days off and the "gone" mark are here: ' + known);
 const top1 = (await state()).lastSeq;
 await run(async last => { const db = await import('./js/db.js'); const s = (await db.getSettings()).syncState; const now = Date.now();
   await db.setSetting('syncState', { ...s, seqLog: [{ t: now - 10 * 60000, seq: 0, from: 0, n: 0 }, { t: now - 1000, seq: last, from: last, n: 0 }] }); }, top1);

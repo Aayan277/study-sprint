@@ -235,13 +235,18 @@ export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync s
 // was numbered less than a few seconds before it, so it is numbered above that older bookmark, however much later
 // this pull happens (the app may have been closed for days). A pull cut off midway has logged its pages, so the next
 // one resumes near where it stopped, not from the start.
-// Second limit, so a big download isn't read again: those unseen changes are among the last few hundred rows this
-// account wrote, so the start is never more than MAX_BACK rows behind the bookmark (counted from the log's n).
+// Second limit, so a big download isn't read again: the start is not more than MAX_BACK rows behind the bookmark
+// (counted from the log's n), except that it never skips the requests of the last SAFE_MS (a save can take several
+// seconds, so a change that a request missed was numbered just before it; it is only lost if the pull then goes on
+// to download MAX_BACK more rows, and that must have outrun the save by SAFE_MS). So for up to OVERLAP_MS after a big
+// pull, every quick sync reads again max(MAX_BACK, the rows of the last SAFE_MS) rows.
 // Not covered: a change that a page of a download longer than OVERLAP_MS could not see yet, numbered below that page's
 // end, on a device with no log (first sync): by the end of such a download the anchor is later than it. The same for
-// more than MAX_BACK rows written by other devices within the few seconds one save takes.
+// a change still unsaved after SAFE_MS while this device downloads more than MAX_BACK rows after the page that missed it.
+// (The "mdel:" picture marks are synced settings like the others, so they are read again the same way.)
 export const OVERLAP_MS = 2 * 60 * 1000;      // far longer than the few seconds one batch of changes needs to be saved
 export const MAX_BACK = 3000;                 // rows (a batch is 500 rows; a few devices at once)
+export const SAFE_MS = 30 * 1000;             // requests this recent are always read again (several times the server's statement timeout)
 const MAX_LOG = 60;
 const goodEntry = e => Number.isFinite(e?.t) && Number.isFinite(e?.seq);
 const entries = log => (Array.isArray(log) ? log.filter(goodEntry) : []);
@@ -254,9 +259,13 @@ export function pullStart(st) {
   const limit = log[log.length - 1].t - OVERLAP_MS;
   const anchor = [...log].reverse().find(e => e.t <= limit) || log[0];      // not enough history yet: the oldest entry we have
   let start = anchor.seq, rows = 0;
-  for (let i = log.length - 1; i >= 0; i--) {                                // the second limit: MAX_BACK rows
+  for (let i = log.length - 1; i >= 0; i--) {                                // the second limit: MAX_BACK rows...
     rows += Number(log[i].n) || 0;
-    if (rows >= MAX_BACK && Number.isFinite(log[i].from)) { start = Math.max(start, log[i].from); break; }
+    if (rows >= MAX_BACK && Number.isFinite(log[i].from)) {
+      const recent = log.find(e => e.t >= log[log.length - 1].t - SAFE_MS && Number.isFinite(e.from));   // ...but not past the last SAFE_MS
+      start = Math.max(start, Math.min(log[i].from, recent ? recent.from : Infinity));
+      break;
+    }
   }
   return Math.max(0, Math.min(bookmark, start));
 }

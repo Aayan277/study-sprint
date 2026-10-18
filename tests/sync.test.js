@@ -485,12 +485,13 @@ test('overlap: a pull cut off midway carries on near where it stopped, and the b
   server.add(100_000);
   const marks = [];
   for (let attempt = 0; attempt < 6; attempt++) {
-    const [next, got] = dl(server, st, clock, { maxPages: 30 });
+    const [next, got] = dl(server, st, clock, { maxPages: 60 });
     assert.ok(next.lastSeq >= st.lastSeq);
     st = next; marks.push(st.lastSeq); clock.now += 60_000;
-    assert.ok(got <= 30_000 + 1000);
+    assert.ok(got <= 60_000 + 1000);
   }
-  assert.ok(marks[2] > 80_000 && marks[1] > marks[0] + 20_000, 'progress each attempt: ' + marks);
+  // (1 s per page: each attempt re-reads the last 30 s of the one before, so it gains 30 pages; an attempt shorter than 30 s gains nothing)
+  assert.ok(marks[3] > 90_000 && marks[1] > marks[0] + 20_000, 'progress each attempt: ' + marks);
 });
 
 test('overlap: after a big pull, quick syncs read at most MAX_BACK rows again', () => {
@@ -501,11 +502,11 @@ test('overlap: after a big pull, quick syncs read at most MAX_BACK rows again', 
   server.add(100_000);
   let got;
   [st, got] = dl(server, st, clock); assert.equal(got, 100_000);
-  for (let i = 0; i < 6; i++) { clock.now += 10_000; [st, got] = dl(server, st, clock); assert.ok(got <= MAX_BACK, `sync ${i}: ${got}`); }
+  for (let i = 0; i < 6; i++) { clock.now += 10_000; [st, got] = dl(server, st, clock); assert.ok(got <= Math.max(MAX_BACK, 31 * PAGE), `sync ${i}: ${got}`); }   // (1 s per page here: the last 30 s are always read again)
   // and a device's very first download, then a quick sync
   let fresh;
   [fresh, got] = dl(server, { lastSeq: 0 }, { now: T0 }); assert.equal(got, 100_050);
-  [, got] = dl(server, fresh, { now: T0 + 200_000 }); assert.ok(got <= MAX_BACK + PAGE, 'quick sync after a first download: ' + got);
+  [, got] = dl(server, fresh, { now: T0 + 200_000 }); assert.ok(got <= 31 * PAGE, 'quick sync after a first download: ' + got);
 });
 
 test('overlap: steady state at 5-minute spacing reads each new row about twice', () => {
@@ -544,4 +545,27 @@ test('overlap: the bookmark never moves backwards, and a quiet server stops re-r
   clock.now += 10 * 60_000; st = pull(server, st, clock, seen);
   assert.equal(pullStart(st), 5);
   assert.deepEqual(server.read(pullStart(st)), []);
+});
+
+test('overlap: a missed page followed by many full pages in the same pull is still read again (the cap never skips the last 30 s)', () => {
+  const server = fakeServer(), seen = new Set(), clock = { now: T0 };
+  server.add(500);
+  let st = pull(server, { lastSeq: 0 }, clock, seen); clock.now += 600_000;
+  st = startPull(st, clock.now);
+  let from = pullStart(st);
+  const late = server.begin('R');                 // numbered 501, still being saved
+  server.add(1000);                                // another device's import commits 1000 rows after it
+  const req = () => {
+    const at = clock.now, after = from, rows = server.read(from); clock.now += 1000;
+    rows.forEach(r => seen.add(r.id));
+    if (rows.length) from = Math.max(from, ...rows.map(r => r.seq));
+    st = { ...st, lastSeq: Math.max(st.lastSeq, from), seqLog: logPull(st.seqLog, { t: at, seq: Math.max(st.lastSeq, from), from: after, n: rows.length }) };
+    return rows.length;
+  };
+  req();                                           // the page that passes R
+  for (let k = 0; k < 4; k++) { server.add(1000); req(); }      // the import outpaces the save: 4 more full pages
+  req();
+  server.commit(late); clock.now += 5000;
+  st = pull(server, st, clock, seen);
+  assert.ok(seen.has('R'), 'R must be picked up');
 });
