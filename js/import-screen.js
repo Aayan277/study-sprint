@@ -17,6 +17,7 @@ import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
+import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
 import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
@@ -277,13 +278,7 @@ function wireFile() {
       if (isDocFile(file)) { await readDoc(file); return; }
       if (/\.xlsx?$/i.test(file.name)) await readExcel(file);
       else if (/\.(apkg|colpkg)$/i.test(file.name)) await readAnki(file);
-      else if (/\.json$/i.test(file.name)) {
-        // A whole-app backup is restored from Settings (it replaces everything), not added as cards.
-        let data = null;
-        try { data = JSON.parse(await file.text()); } catch (e) { /* not JSON */ }
-        showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
-          : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
-      }
+      else if (/\.json$/i.test(file.name)) await explainJson(file);
       else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
       console.error(err);
@@ -293,6 +288,14 @@ function wireFile() {
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
     }
   });
+}
+
+// A whole-app backup is restored from Settings (it replaces everything), not added as cards.
+async function explainJson(file) {
+  let data = null;
+  try { data = JSON.parse(await file.text()); } catch (e) { /* not JSON */ }
+  showError(db.checkBackup(data) ? "That .json file isn't a Study Sprint backup. Use .csv, .txt or Excel files for cards."
+    : 'This is a full Study Sprint backup. Restore it from Settings → Restore (it replaces everything on this device).');
 }
 
 // ---------- PDF and slides ----------
@@ -433,12 +436,15 @@ async function takeShared() {
     suggestName(file.name.replace(/\.[^.]+$/, ''));
     if (isDocFile(file)) { await readDoc(file); return; }
     if (file.size > MAX_BYTES) { showError(tooBigMessage()); return; }
-    // A deck file from a friend (Share a deck): the same Anki import as choosing the file here.
-    if (/\.(apkg|colpkg)$/i.test(file.name)) {
-      try { await readAnki(file); } catch (err) { console.error(err); $('fileName').textContent = file.name; showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
-      return;
-    }
-    S.noCloze = false; showText(await file.text());
+    // The Share target also takes zip and generic files (so a deck file can arrive): decide what this one is.
+    const kind = sharedKind(file, new Uint8Array(await file.slice(0, 4).arrayBuffer()));
+    try {
+      if (kind === 'anki') await readAnki(file);               // a deck file from a friend (Share a deck), the same import as choosing it here
+      else if (kind === 'excel') await readExcel(file);
+      else if (kind === 'json') await explainJson(file);
+      else if (kind === 'unknown') showError("Study Sprint can't read that kind of file. Share a deck file (.apkg), PDF, PowerPoint or text.");
+      else { S.noCloze = false; showText(await file.text()); }
+    } catch (err) { console.error(err); $('fileName').textContent = file.name; showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
     return;
   }
   // Text, a link, or only a title (some apps put what they share in the title).

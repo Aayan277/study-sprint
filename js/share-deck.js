@@ -5,68 +5,73 @@
 // The pure parts (the wording, the share-or-save decision) are tested by tests/share-deck.test.js.
 
 import { $, esc, plural, toast, openSheet, closeSheet } from './ui.js';
-import { ancestors } from './deck-tree.js';
-import { leftOutNote } from './lazy-media.js';
-
+import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { APKG_TYPE, CSV_TYPE, SAVED_NOTE, shareText, makeFile, deliver } from './share-logic.js';
-export { APKG_TYPE, CSV_TYPE, SAVED_NOTE, shareText, makeFile, canShareFile, deliver } from './share-logic.js';
 
 // ---------- the sheet ----------
 export async function openShareDeck(deck, decks, deckCards) {
   // Loaded before the sheet opens: a button that is on screen must already work.
   const ex = await import('./export.js');
-  const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
-  const cards = deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
+  const cards = ex.cardsForExport(deck, decks, deckCards);
   const hasMedia = cards.some(c => c.frontImage || c.backImage || c.frontSounds?.length || c.backSounds?.length);
   openSheet(`
     <h2 id="sheetTitle">Share “${esc(deck.name)}”</h2>
-    <p style="margin:0">Sends a copy of ${plural(cards.length, 'card')}${hasMedia ? ', with their pictures and sounds' : ''}. Your progress stays here; your friend's progress is their own.</p>
-    <p class="note">Nothing is uploaded and nothing syncs. The file goes straight from your phone to the person you pick.</p>
+    <p style="margin:0">Sends a copy of ${plural(cards.length, 'card')}${hasMedia ? ', with their pictures and sounds' : ''}. Includes tags and memory hooks. Your progress stays here; your friend's progress is their own.</p>
+    <p class="note">Nothing is uploaded and nothing syncs. The file goes straight from this device to the person you pick.</p>
     <div class="export-opts">
       <button class="btn primary export-opt" type="button" id="shGo"><b>Share deck</b><span>A Study Sprint and Anki deck file (.apkg).</span></button>
-      ${hasMedia ? '' : '<button class="btn ghost export-opt" type="button" id="shCsv"><b>Share as a spreadsheet (.csv)</b><span>Text only. Opens in Excel or Google Sheets.</span></button>'}
+      ${hasMedia ? '' : '<button class="btn ghost export-opt" type="button" id="shCsv"><b>Share as a spreadsheet (.csv)</b><span>Text only, with tags. Opens in Excel or Google Sheets.</span></button>'}
     </div>
     <p class="note" id="shStatus" role="status" aria-live="polite" hidden></p>
     <p class="err" id="shErr" hidden></p>
-    <button class="btn primary" type="button" id="shNow" hidden>Share now</button>`);
+    <button class="btn primary" type="button" id="shNow" hidden>Share now</button>
+    <button class="link" type="button" id="shSave" hidden style="min-height:44px">Didn't share? Save the file instead</button>`);
   const status = (t, err) => { const el = $(err ? 'shErr' : 'shStatus'); el.textContent = t; el.hidden = !t; if (!err) $('shErr').hidden = true; };
   const buttons = [$('shGo'), $('shCsv')].filter(Boolean);
   const label = (b, t) => { b.querySelector('b').textContent = t; };
   const data = { title: deck.name, text: shareText(deck.name, cards.length) };
-  const finish = async (outcome, file) => {
+  const save = f => ex.download(f, f.name);
+  const finish = (outcome, file) => {
+    $('shSave').hidden = true;
     if (outcome === 'shared') { closeSheet(); toast('Shared a copy of the deck'); }
     else if (outcome === 'saved') { status(SAVED_NOTE); buttons.forEach(b => { b.hidden = true; }); $('shNow').hidden = true; }
     else if (outcome === 'needs-tap') {
-      // The file is ready. A fresh tap lets the share sheet open (the browser needs a tap just before sharing).
+      // The file is ready. A fresh tap lets the share sheet open (the browser needs a tap just before sharing). If the browser
+      // then refuses the file, it is saved instead, so this button never does nothing.
       buttons.forEach(b => { b.hidden = true; });
       status('The deck file is ready.');
       $('shNow').hidden = false;
-      $('shNow').onclick = async () => { const o = await deliver(navigator, file, data, f => ex.download(f, f.name)); if (o !== 'needs-tap') finish(o, file); };
+      $('shNow').onclick = async () => {
+        $('shNow').disabled = true;
+        const o = await deliver(navigator, file, data, save, { again: true });
+        $('shNow').disabled = false;
+        if (o !== 'busy') finish(o, file);
+      };
       $('shNow').focus();
-    } else { buttons.forEach(b => { b.disabled = false; }); status(''); }
+    } else {
+      // Closed the share sheet (or one is already open): nothing is said, but the file can still be saved.
+      buttons.forEach(b => { b.disabled = false; });
+      status('');
+      if (outcome === 'cancelled') { $('shSave').hidden = false; $('shSave').onclick = () => { save(file); finish('saved', file); }; }
+    }
   };
   const run = async (btn, kind) => {
     buttons.forEach(b => { b.disabled = true; });
+    $('shSave').hidden = true;
     const orig = btn.querySelector('b').textContent;
     try {
-      status(''); 
+      status('');
       if (kind === 'apkg') {
         // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) belong in the file: fetch them
         // first, as Export does. What can't be fetched is said, and a second tap makes the deck without it.
         if (btn.dataset.armed !== '1') {
-          const sync = await import('./sync.js');
-          const lack = await sync.missingMedia({ cards });
-          if (lack.pictures.length + lack.sounds.length) {
-            label(btn, 'Downloading pictures and sounds first…');
-            const r = await sync.downloadAllMedia({ ids: [...lack.pictures, ...lack.sounds], onProgress: (n, t) => { label(btn, `Downloading pictures and sounds: ${n} of ${t}…`); } });
-            const n = r.left.length + r.gone.length;
-            if (n) {
-              btn.dataset.armed = '1';
-              status(leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to share the deck without them.', true);
-              buttons.forEach(b => { b.disabled = false; });
-              label(btn, 'Share without them');
-              return;
-            }
+          const r = await fetchMissingFor(cards, (n, t) => { label(btn, n ? `Downloading pictures and sounds: ${n} of ${t}…` : 'Downloading pictures and sounds first…'); });
+          if (r.n) {
+            btn.dataset.armed = '1';
+            status(leftOutNote(r.n, r.reason, r.gone) + ' Tap the button again to share the deck without them.', true);
+            buttons.forEach(b => { b.disabled = false; });
+            label(btn, 'Share without them');
+            return;
           }
         }
         label(btn, 'Making the deck file…');
@@ -76,10 +81,11 @@ export async function openShareDeck(deck, decks, deckCards) {
         ? makeFile(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'), APKG_TYPE)
         : makeFile(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'), CSV_TYPE);
       label(btn, orig);
-      await finish(await deliver(navigator, file, data, f => ex.download(f, f.name)), file);
+      finish(await deliver(navigator, file, data, save), file);
     } catch (err) {
       console.error(err);
-      status(navigator.onLine ? "Couldn't make the deck file. Try again." : 'Making a deck file needs an internet connection the first time.', true);
+      status(kind === 'csv' ? "Couldn't make the spreadsheet. Try again."
+        : navigator.onLine ? "Couldn't make the deck file. Try again." : 'Making a deck file needs an internet connection the first time.', true);
       buttons.forEach(b => { b.disabled = false; });
       label(btn, orig);
     }

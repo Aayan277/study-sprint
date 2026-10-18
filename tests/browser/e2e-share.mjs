@@ -1,17 +1,19 @@
 // Share a deck: the share sheet (stubbed), the saved-file fallback, the file importing back, and an .apkg shared to the app (Android's Share target).
-import { chromium, deckMenu } from './pw.mjs';
+import { chromium, deckMenu, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
-const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, acceptDownloads: true, isMobile: true, hasTouch: true });
+const SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, acceptDownloads: true, isMobile: true, hasTouch: true, userAgent: SAFARI });
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(e.stack));
 // A fake share sheet: keeps what it was given. window.__canShare switches file sharing on and off.
 await page.addInitScript(() => {
-  window.__canShare = true; window.__shares = [];
+  window.__canShare = true; window.__shares = []; window.__active = true; window.__refuse = false;
+  Object.defineProperty(navigator, 'userActivation', { get: () => ({ isActive: window.__active, hasBeenActive: true }) });
   navigator.canShare = d => window.__canShare && !!d?.files?.length;
-  navigator.share = async d => { const f = d.files[0]; window.__shares.push({ name: f.name, type: f.type, title: d.title, text: d.text, bytes: Array.from(new Uint8Array(await f.arrayBuffer())) }); };
+  navigator.share = async d => { if (window.__refuse) throw new DOMException('type not allowed', 'NotAllowedError'); const f = d.files[0]; window.__shares.push({ name: f.name, type: f.type, title: d.title, text: d.text, keys: Object.keys(d), bytes: Array.from(new Uint8Array(await f.arrayBuffer())) }); };
 });
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.evaluate(async () => {
@@ -51,18 +53,63 @@ await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page); await p
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#shGo')]);
 ok(dl.suggestedFilename() === 'Bio - Unit 2.apkg', 'fallback downloads the file: ' + dl.suggestedFilename());
 await page.waitForSelector('#shStatus:not([hidden])');
-ok((await page.textContent('#shStatus')) === 'Saved the deck file. Send it to a friend; they open it in Study Sprint with Add cards → File.', 'fallback says what to do next');
+ok((await page.textContent('#shStatus')) === 'Saved the deck file to your downloads. Send it to a friend from there; they open it in Study Sprint with Add cards → File.', 'fallback says what to do next');
 ok((await page.evaluate(() => window.__shares.length)) === 2, 'nothing was shared in the fallback');
-// a share sheet that wants a fresh tap
+// no fresh tap yet (a slow build): "Share now" shares the ready file
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
-await page.evaluate(() => { window.__canShare = true; let first = true; const real = navigator.share; navigator.share = async d => { if (first) { first = false; throw new DOMException('no tap', 'NotAllowedError'); } return real(d); }; });
+await page.evaluate(() => { window.__canShare = true; window.__active = false; });
 await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page); await page.click('#shareDeck'); await page.waitForSelector('#shGo');
 await page.click('#shGo'); await page.waitForSelector('#shNow:not([hidden])');
-ok((await page.locator('#shNow').boundingBox()).height >= 44, 'a "Share now" button appears when the browser wants another tap');
+ok((await page.evaluate(() => window.__shares.length)) === 2, 'share() is not called without a fresh tap');
+ok((await page.locator('#shNow').boundingBox()).height >= 44, 'a "Share now" button appears');
+await page.evaluate(() => { window.__active = true; });
 await page.click('#shNow');
 await page.waitForFunction(() => window.__shares.length === 3);
-ok(true, 'Share now shares the ready file');
+const sn = await page.evaluate(() => window.__shares[2]);
+ok(sn.name === 'Bio - Unit 2.apkg' && sn.type === 'application/zip', 'Share now shares the ready file: ' + sn.name);
+ok(!sn.keys.includes('text'), 'on iOS only the title goes with the file (no stray text item)');
+ok((await page.textContent('#toast')).includes('Shared a copy'), 'toast after Share now');
+// the browser refuses the file even with a fresh tap: it is saved, never a silent button
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+await page.evaluate(() => { window.__refuse = true; });
+await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page); await page.click('#shareDeck'); await page.waitForSelector('#shGo');
+const [dl2] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#shGo')]);
+ok(dl2.suggestedFilename() === 'Bio - Unit 2.apkg', 'canShare yes but share refused: the file is saved');
+await page.waitForSelector('#shStatus:not([hidden])');
+ok((await page.textContent('#shStatus')).startsWith('Saved the deck file'), 'and it says so');
+// a closed share sheet: quiet, with a way to save
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+await page.evaluate(() => { window.__refuse = false; navigator.share = async () => { throw new DOMException('closed', 'AbortError'); }; });
+await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page); await page.click('#shareDeck'); await page.waitForSelector('#shGo');
+await page.click('#shGo'); await page.waitForSelector('#shSave:not([hidden])');
+ok((await page.locator('#shSave').boundingBox()).height >= 44 && await page.isHidden('#shErr'), 'cancelling shows a quiet save link and no error');
+const [dl3] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#shSave')]);
+ok(dl3.suggestedFilename() === 'Bio - Unit 2.apkg', 'the link saves the file');
+// pictures not on this device (and no account): says so, then "Share without them"
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+await page.evaluate(async () => {
+  window.__canShare = true; window.__active = true;
+  navigator.share = async d => { const f = d.files[0]; window.__shares.push({ name: f.name, type: f.type, keys: Object.keys(d), bytes: [] }); };
+  const db = await import('./js/db.js');
+  await db.addDeckWithCards({ id: 'm', name: 'Pics', color: '#46A758', created: Date.now() }, [{ id: 'm0', deckId: 'm', front: 'Heart', back: 'Pump', tags: [], created: 1, frontImage: 'nothere1' }]);
+});
+await page.goto('http://localhost:8123/#/deck/m'); await deckMenu(page); await page.click('#shareDeck'); await page.waitForSelector('#shGo');
+const n0 = await page.evaluate(() => window.__shares.length);
+await page.click('#shGo'); await page.waitForSelector('#shErr:not([hidden])');
+ok(/isn't on this device|in your account any more|aren't/.test(await page.textContent('#shErr')) && (await page.textContent('#shGo')).includes('Share without them') && (await page.evaluate(() => window.__shares.length)) === n0, 'missing pictures are explained first: ' + await page.textContent('#shErr'));
+await page.click('#shGo');
+await page.waitForFunction(n => window.__shares.length === n + 1, n0, { timeout: 30000 });
+ok(true, 'a second tap shares the deck without them');
+await sheetSettled(page);
+// Clinical style
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+await page.goto('http://localhost:8123/#/deck/x'); await page.evaluate(() => { document.documentElement.dataset.ui = 'clinical'; });
+await deckMenu(page); await page.click('#shareDeck'); await page.waitForSelector('#shGo');
+ok((await page.locator('#shGo').boundingBox()).height >= 44 && (await page.locator('#shCsv').boundingBox()).height >= 44, 'Clinical style: 44px buttons');
+await page.screenshot({ path: SP + '/share-clinical.png' });
+await page.evaluate(() => { delete document.documentElement.dataset.ui; });
 // desktop layout
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 await page.setViewportSize({ width: 1280, height: 800 });
 await page.goto('http://localhost:8123/#/deck/x'); await deckMenu(page);
 ok(await page.isVisible('#shareDeck'), 'Share is in the menu on a wide screen too');
@@ -91,5 +138,34 @@ ok((await page.evaluate(async () => (await (await caches.open('study-sprint-shar
 const man = await (await page.request.get('http://localhost:8123/manifest.webmanifest')).json();
 const acc = man.share_target.params.files[0].accept;
 ok(['application/zip', 'application/octet-stream', '.apkg'].every(a => acc.includes(a)), 'the manifest accepts .apkg shares');
+// Chromium refuses .apkg in its share sheet: the file is saved without calling share()
+const ctx2 = await browser.newContext({ viewport: { width: 375, height: 740 }, acceptDownloads: true, isMobile: true, hasTouch: true });
+const p2 = await ctx2.newPage(); p2.on('pageerror', e => errors.push(e.stack));
+await p2.addInitScript(() => { window.__calls = 0; navigator.canShare = () => true; navigator.share = async () => { window.__calls++; }; });
+await p2.goto('http://localhost:8123/#/decks'); await p2.waitForSelector('.deck');
+await p2.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'c', name: 'Chrome deck', color: '#46A758', created: 1 }, [{ id: 'c0', deckId: 'c', front: 'A', back: 'B', tags: [], created: 1 }]); });
+await p2.goto('http://localhost:8123/#/deck/c'); await deckMenu(p2); await p2.click('#shareDeck'); await p2.waitForSelector('#shGo');
+const [dl4] = await Promise.all([p2.waitForEvent('download', { timeout: 30000 }), p2.click('#shGo')]);
+ok(dl4.suggestedFilename() === 'Chrome deck.apkg' && (await p2.evaluate(() => window.__calls)) === 0, 'Chromium: the .apkg is saved and share() is not called');
+await p2.waitForSelector('#shStatus:not([hidden])');
+ok((await p2.textContent('#shStatus')).includes('Add cards → File'), 'with the instructions');
+// Other files shared to the app are sorted: a random zip and a .bin are explained, not parsed as text
+await page.setViewportSize({ width: 375, height: 740 });
+for (const [name, mime, buf] of [['random.zip', 'application/zip', Buffer.from('PK\x03\x04 not really a deck')], ['thing.bin', 'application/octet-stream', Buffer.from([1, 2, 3, 4, 5, 250])]]) {
+  await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+  await page.evaluate(() => {
+    document.getElementById('fakeShare')?.remove();
+    const f = document.createElement('form');
+    f.method = 'POST'; f.action = 'share-target'; f.enctype = 'multipart/form-data'; f.id = 'fakeShare';
+    f.innerHTML = '<input type="file" name="files"><input name="title" value=""><input name="text" value=""><input name="url" value="">';
+    document.body.append(f);
+  });
+  await page.setInputFiles('#fakeShare input[type=file]', { name, mimeType: mime, buffer: buf });
+  await page.evaluate(() => document.getElementById('fakeShare').submit());
+  await page.waitForSelector('#loadErr:not([hidden])', { timeout: 30000 });
+  const msg = await page.textContent('#loadErr');
+  ok(name === 'thing.bin' ? msg.includes("can't read that kind of file") : msg.startsWith("Couldn't read random.zip"), name + ' is explained, not turned into cards: ' + msg);
+  ok(await page.isHidden('#preview'), name + ': no preview of junk cards');
+}
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' || ') : ''));
 await browser.close();
