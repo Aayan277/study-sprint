@@ -145,3 +145,49 @@ node summarize-optimizer.mjs opt.jsonl new
 # gamma tuning on seeds 31 to 60 (OPT_CONFIG overrides FIT_DEFAULTS):
 SEED_FROM=31 PLAY_P=0 node run2.mjs tune.jsonl 60 new G default,forgetful,strong '[{"OPT":"1","PLAY_P":"0","OPT_CONFIG":"{\"gamma\":150}"}]'
 ```
+
+
+## Recency weighting (v4.15 work)
+
+Newer reviews now count more in the **training loss** (`recencyWeight` / `withRecency` in `js/fsrs-fit.js`; `FIT_DEFAULTS.recency = true`).
+The keep rule, the held-out check and every number shown to the person still score every review equally.
+
+- **Curve:** `weight(x) = floor + (1 - floor) * x^3`, `x` = the review's place in time among all reviews that get a prediction
+  (0 oldest, 1 newest); same-day reviews share a place; the loss is a weighted mean (divided by the sum of the weights).
+  fsrs-rs uses floor 0.25.
+- **Floor chosen on the tuning seeds 31 to 60** (scenario G, three learners, held-out rule on), by the criterion fixed beforehand
+  (largest sum over the three learners of the out-of-sample log-loss gain, x10^-3), as for gamma. Sum: no recency 11.00,
+  **floor 0.25 (fsrs-rs) 9.27**, **floor 0.5 11.32**. The simulator's students never change, so recency can only cost them; the fsrs-rs
+  floor cost 1.7 and 0.5 cost nothing, so `RECENCY_FLOOR = 0.5` (oldest review 0.5, middle 0.56, newest 1).
+  Real learners drift, which this simulator cannot show: the benefit (about 0.5 to 1% log loss in the benchmark) needs real data (roadmap step 1).
+- With the fsrs-rs floor 0.25 on the original seeds 1 to 30, **R4 for the `strong` learner failed** (0.97 +/- 1.41, interval includes 0); that is what led to the tuning above.
+- Baseline check: `OPT_CONFIG={"recency":false}` on seeds 1 to 30 reproduces the table above exactly (strong 1.47 +/- 1.12).
+
+### Results with recency (floor 0.5), seeds 1 to 30 (same pass rule, unchanged)
+
+| Learner (G) | mean true R (pp), off -> on | d mean R pp | recall when reviewed, off -> on | reviews, off -> on | fits kept / run | out-of-sample log loss gain x10^-3 | if it always took the fit |
+|---|---|---|---|---|---|---|---|
+| default | 94.55 -> 94.61 | 0.06 +/- 0.05 | 91.39 -> 91.40 | 2560 -> 2570 (0.4%) | 0.9 / 4.0 | -0.46 +/- 0.95 | -0.60 +/- 0.98 |
+| forgetful | 88.60 -> 89.95 | 1.35 +/- 0.18 | 85.90 -> 86.69 | 3514 -> 3816 (8.6%) | 2.0 / 4.0 | 9.77 +/- 1.93 | 10.12 +/- 1.80 |
+| strong | 95.99 -> 95.83 | -0.16 +/- 0.06 | 93.36 -> 93.31 | 2257 -> 2227 (-1.3%) | 1.5 / 4.0 | 1.54 +/- 1.21 | 2.13 +/- 1.31 |
+
+Scenario A (exam on day 30): d exam-day recall 0.00 pp for all three learners (the optimizer keeps no fit before the exam, as before).
+
+- PASS R1 G / default (not applied, baseline 91.39 > 90.5; R3 governs)
+- PASS R2 G / default: 91.39 -> 91.40
+- PASS R3 G / default: reviews +0.4%
+- PASS R4 G / default: -0.46 +/- 0.95 (limit -1)
+- PASS R1 G / forgetful: d mean R +1.35 pp, d long-run R +0.99 pp
+- PASS R2 G / forgetful: 85.90 -> 86.69 (closer to 90)
+- PASS R4 G / forgetful: +9.77 +/- 1.93
+- PASS R1' G / strong: reviews -1.3% (not higher)
+- PASS R2 G / strong: 93.36 -> 93.31 (closer to 90)
+- PASS R4 G / strong: +1.54 +/- 1.21
+- PASS R1 A / default, forgetful, strong: 0.00 pp
+
+**All rules pass.**
+
+```
+# recency tuning on seeds 31 to 60 (recencyFloor 0.25 / 0.5, or "recency":false):
+SEED_FROM=31 node run2.mjs tune.jsonl 60 new G default,forgetful,strong '[{"OPT":"1","PLAY_P":"0","OPT_CONFIG":"{\"recency\":true,\"recencyFloor\":0.5}"}]'
+```

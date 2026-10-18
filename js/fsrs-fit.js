@@ -7,6 +7,7 @@
 //   gradients       lossAndGrad: the same maths again on "dual numbers" (a value plus its 17 derivatives), so the gradient is exact
 //   pretraining     the four starting stabilities w0 to w3 from each first rating's next long-term review
 //   Adam            mini-batches of cards, a seeded shuffle, every weight kept inside its bounds
+//   recency         the fit counts newer reviews more (recencyWeight, as fsrs-rs does); the keep rule below does not
 //   metrics         evaluate: log loss and RMSE (bins) for any set of weights; decide: keep the new ones only if better
 //   fit             a generator: it yields progress as it goes, so it runs to the end in Node, in a Worker, or in slices on the main thread
 //
@@ -30,8 +31,51 @@ export const FIT_DEFAULTS = {
   gamma: 1000,          // strength of the pull towards the default weights, in "reviews" (see the loss above). Was 8; tuned on simulator seeds 31 to 60 (tests/sim/compare/report-optimizer.md)
   seed: 1,              // the shuffle: the same seed and data give the same weights
   minReviews: 400,      // fewer real reviews than this: no fit
-  priorN: 6             // pretraining blends with the default start stability as if it had this many samples
+  priorN: 6,            // pretraining blends with the default start stability as if it had this many samples
+  recency: true,        // weight newer reviews more in the training loss (recencyWeight below). The keep rule always scores every review equally
 };
+
+// ---------- recency weighting ----------
+// People change: a review from last week says more about how you remember now than one from two years ago. The training
+// loss (not the keep rule, and not the numbers shown to the person) therefore counts each review with a weight that
+// rises with its age, as fsrs-rs does with its "recency weighting". The curve:
+//
+//     weight(x) = floor + (1 - floor) * x^3
+//     x = the review's place in time among all the reviews that get a prediction (0 = the oldest, 1 = the newest)
+//
+// fsrs-rs uses floor 0.25 (the oldest review counts a quarter as much as the newest). Ours is RECENCY_FLOOR = 0.5, milder, chosen
+// on simulator seeds 31 to 60 (report-optimizer.md, "Recency weighting"): the simulator's students never change, so any recency
+// can only cost them, and 0.25 cost 1.7 (x10^-3 log loss, summed over the three learners) against no recency, where 0.5 cost nothing.
+// With floor 0.5: the oldest review counts 0.5, the middle one 0.56, three quarters of the way through 0.71, the newest 1; the
+// average over a whole history is 0.625. The loss is divided by the sum of the weights (a weighted mean), so it keeps its scale.
+// Reviews on the same day share a place (the rank of the day's first review).
+// Needs `day0` on the histories; without it every review counts 1 (as in a hand-made test history).
+export const RECENCY_FLOOR = 0.5;
+export const recencyWeight = (x, floor = RECENCY_FLOOR) => floor + (1 - floor) * x * x * x;
+
+// A copy of the histories with `wt` (Float64Array, one number per answer: the weight of a scored prediction, 1 elsewhere).
+export function withRecency(cards, floor = RECENCY_FLOOR) {
+  const days = [];
+  for (const c of cards) {
+    if (!Number.isFinite(c.day0)) return cards;
+    let day = c.day0;
+    for (let i = 0; i < c.ratings.length; i++) { day += c.deltas[i]; if (c.scored[i] && i > 0 && c.deltas[i] > 0) days.push(day); }
+  }
+  if (days.length < 2) return cards;
+  days.sort((a, b) => a - b);
+  const n = days.length;
+  const first = new Map();                                    // day -> rank of the first prediction on it
+  for (let i = 0; i < n; i++) if (!first.has(days[i])) first.set(days[i], i);
+  return cards.map(c => {
+    const wt = new Float64Array(c.ratings.length).fill(1);
+    let day = c.day0;
+    for (let i = 0; i < c.ratings.length; i++) {
+      day += c.deltas[i];
+      if (c.scored[i] && i > 0 && c.deltas[i] > 0) wt[i] = recencyWeight(first.get(day) / (n - 1), floor);
+    }
+    return { ...c, wt };
+  });
+}
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 const r8 = x => Math.round(x * 1e8) / 1e8;      // ts-fsrs rounds to 8 decimals in many places
@@ -94,17 +138,20 @@ export function nextState(w, s, d, t, g, round = true, r) {
 // Walk every history with weights w and compare each prediction (scored, on a later day than the answer before) with what happened.
 //   logLoss  mean binary cross-entropy
 //   rmse     the 20 equal bins of predicted R: sqrt of the count-weighted mean of (mean predicted − observed recall)²  ("RMSE (bins)")
-//   n        how many predictions
+//   n        how many predictions     recalled  how many of them were remembered (the share is the base rate for judging the log loss)
+//   meanPred  the average predicted R     noise  the RMSE (bins) that luck alone would give (see the health check)
+// (weighted: true uses the recency weights `wt` of the histories for the log loss; the sheet, the keep rule and the health check never do.)
 export function evaluate(cards, w, opts) { return evaluateMany([{ cards, w }], opts); }
 
 // The same, over several groups of cards that each use their own weights (the scheduler clips w17 and w18 differently
 // for decks with different relearning steps): one log loss and one set of bins over everything.
 //   parts  [{ cards, w }, …]
-export function evaluateMany(parts, { round = true } = {}) {
-  let n = 0, loss = 0;
+export function evaluateMany(parts, { round = true, weighted = false } = {}) {
+  let n = 0, wn = 0, loss = 0, yes = 0;
   const cnt = new Float64Array(BINS), pred = new Float64Array(BINS), obs = new Float64Array(BINS);
   for (const { cards, w } of parts) for (const c of cards) {
     const { deltas, ratings, scored } = c;
+    const wt = weighted ? c.wt : null;               // (weighted: the log loss is a recency-weighted mean; only the training uses this)
     let s = 0, d = 0;
     for (let i = 0; i < ratings.length; i++) {
       const g = ratings[i];
@@ -113,16 +160,25 @@ export function evaluateMany(parts, { round = true } = {}) {
       const r = forgettingCurve(w, t, s, round);
       if (scored[i] && t > 0) {
         const p = clamp(r, EPS, 1 - EPS), y = g > 1 ? 1 : 0;
-        loss -= y ? Math.log(p) : Math.log(1 - p);
+        const q = wt ? wt[i] : 1;
+        loss -= q * (y ? Math.log(p) : Math.log(1 - p));
+        wn += q; yes += y;
         const b = Math.min(BINS - 1, Math.floor(p * BINS));
         cnt[b]++; pred[b] += p; obs[b] += y; n++;
       }
       ({ s, d } = nextState(w, s, d, t, g, round, r));
     }
   }
-  let sq = 0;
-  for (let b = 0; b < BINS; b++) if (cnt[b]) sq += cnt[b] * (pred[b] / cnt[b] - obs[b] / cnt[b]) ** 2;
-  return { logLoss: n ? loss / n : 0, rmse: n ? Math.sqrt(sq / n) : 0, n };
+  let sq = 0, noise = 0, sumPred = 0;
+  for (let b = 0; b < BINS; b++) {
+    if (!cnt[b]) continue;
+    const pm = pred[b] / cnt[b];
+    sq += cnt[b] * (pm - obs[b] / cnt[b]) ** 2;
+    noise += pm * (1 - pm);                      // what chance alone adds to (observed − predicted)² in this bin, times its count: p(1−p)
+    sumPred += pred[b];
+  }
+  // noise: the RMSE that pure luck would give even for perfect predictions, sqrt(Σ over bins of p(1−p) / n). The health check subtracts it.
+  return { logLoss: n ? loss / wn : 0, rmse: n ? Math.sqrt(sq / n) : 0, n, wn, recalled: yes, meanPred: n ? sumPred / n : 0, noise: n ? Math.sqrt(noise / n) : 0 };
 }
 
 // The decision rule (owner decision Q2, softened after review): keep the new weights only if the log loss is lower AND the RMSE is not
@@ -224,13 +280,15 @@ function dNext(W, s, d, t, g, r) {
 }
 
 // The log loss summed over some histories, and its gradient with respect to w4 to w20.
-// Returns { loss (a sum, not a mean), count, grad: Float64Array(17) }. The forward values equal evaluate(..., { round: false }).
+// Returns { loss (a sum, not a mean), count, wsum, grad: Float64Array(17) }. The forward values equal evaluate(..., { round: false }).
+// A history with `wt` (withRecency) counts each prediction wt[i] times: loss and grad are weighted sums, wsum is the sum of the weights
+// (count stays the plain number of predictions, wsum = count when there is no `wt`).
 export function lossAndGrad(cards, w) {
   const W = dualWeights(w);
   const grad = new Float64Array(P);
-  let loss = 0, count = 0;
+  let loss = 0, count = 0, wsum = 0;
   for (const c of cards) {
-    const { deltas, ratings, scored } = c;
+    const { deltas, ratings, scored, wt } = c;
     let last = -1;
     for (let i = ratings.length - 1; i > 0; i--) if (scored[i] && deltas[i] > 0) { last = i; break; }
     if (last < 0) continue;
@@ -248,19 +306,19 @@ export function lossAndGrad(cards, w) {
       top = ARENA;                                  // hand back the scratch space of the answer before
       const r = dCurve(W, t, s);
       if (scored[i] && t > 0) {
-        const p = r.v, y = g > 1;
+        const p = r.v, y = g > 1, q = wt ? wt[i] : 1;
         if (p > EPS && p < 1 - EPS) {
-          loss -= Math.log(y ? p : 1 - p);
-          if (r.o >= 0) { const dl = y ? -1 / p : 1 / (1 - p); for (let k = 0; k < P; k++) grad[k] += dl * G[r.o + k]; }
-        } else loss -= Math.log(clamp(y ? p : 1 - p, EPS, 1));
-        count++;
+          loss -= q * Math.log(y ? p : 1 - p);
+          if (r.o >= 0) { const dl = q * (y ? -1 / p : 1 / (1 - p)); for (let k = 0; k < P; k++) grad[k] += dl * G[r.o + k]; }
+        } else loss -= q * Math.log(clamp(y ? p : 1 - p, EPS, 1));
+        count++; wsum += q;
       }
       const nx = dNext(W, s, d, t, g, r);
       if (top > G.length) throw new Error('fsrs-fit: the derivative buffer is too small');
       s = keep(nx.s, SLOT_S); d = keep(nx.d, SLOT_D);       // (both are copied out before either slot is read again)
     }
   }
-  return { loss, count, grad };
+  return { loss, count, wsum, grad };
 }
 
 // Put values in non-decreasing order by pooling neighbours that are the wrong way round (pool adjacent violators):
@@ -360,7 +418,8 @@ export function* fit(input) {
   yield { phase: 'pretrain', done: 1, total: 1, progress: at('pretrain', 1) };
 
   // 2. Adam on w4 to w20, from the current weights (w0 to w3 stay at their pretrained values)
-  const train = cards.filter(c => { for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) return true; return false; });
+  let train = cards.filter(c => { for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) return true; return false; });
+  if (cfg.recency) train = withRecency(train, cfg.recencyFloor ?? RECENCY_FLOOR);                // newer reviews count more in the loss (the pick of weights, not the keep rule)
   const weight = train.map(c => { let n = 0; for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) n++; return n; });
   const total = weight.reduce((a, b) => a + b, 0);
   const batches = Math.max(1, Math.ceil(total / cfg.batchSize));
@@ -379,13 +438,13 @@ export function* fit(input) {
       while (p < order.length && (seen < upto || b === batches - 1)) { batch.push(train[order[p]]); seen += weight[order[p]]; p++; }
       step++;
       if (batch.length) {
-        const { count, grad } = lossAndGrad(batch, w);
+        const { wsum, grad } = lossAndGrad(batch, w);
         const lr = cfg.lr * (0.1 + 0.45 * (1 + Math.cos(Math.PI * (step - 1) / steps)));
         for (let k = 0; k < P; k++) {
           const i = k + FIRST_TRAINED;
           const range = Math.max(bounds[i][1] - bounds[i][0], 1e-9);          // (a pinned weight has no range)
-          // mean log loss + gamma/N · Σ ((w − default) / range)²: a pull towards the defaults (gamma is the strength)
-          const gk = grad[k] / count + cfg.gamma / total * 2 * (w[i] - defaults[i]) / (range * range);
+          // (recency-weighted) mean log loss + gamma/N · Σ ((w − default) / range)²: a pull towards the defaults (gamma is the strength)
+          const gk = grad[k] / wsum + cfg.gamma / total * 2 * (w[i] - defaults[i]) / (range * range);
           m[k] = 0.9 * m[k] + 0.1 * gk;
           v[k] = 0.999 * v[k] + 0.001 * gk * gk;
           const mh = m[k] / (1 - Math.pow(0.9, step)), vh = v[k] / (1 - Math.pow(0.999, step));
@@ -403,6 +462,8 @@ export function* fit(input) {
   const byFirst = [[], [], [], []];
   for (const c of train) byFirst[c.ratings[0] - 1].push(c);
   const gr = (Math.sqrt(5) - 1) / 2;
+  let totalW = 0;
+  for (const c of train) for (let i = 1; i < c.ratings.length; i++) if (c.scored[i] && c.deltas[i] > 0) totalW += c.wt ? c.wt[i] : 1;
   for (let g = 0; g < 4; g++) {
     yield { phase: 'refine', done: g, total: 4, progress: at('refine', g / 4) };
     const list = byFirst[g];
@@ -411,8 +472,8 @@ export function* fit(input) {
     const cost = x => {
       const t = w.slice();
       t[g] = Math.exp(x);
-      const e = evaluate(list, t, { round: false });
-      return e.logLoss * e.n / total + cfg.gamma / total * ((t[g] - defaults[g]) / range) ** 2;
+      const e = evaluateMany([{ cards: list, w: t }], { round: false, weighted: cfg.recency });
+      return e.logLoss * e.wn / totalW + cfg.gamma / total * ((t[g] - defaults[g]) / range) ** 2;
     };
     let lo = Math.log(bounds[g][0]), hi = Math.log(bounds[g][1]);
     let a = hi - gr * (hi - lo), b = lo + gr * (hi - lo), fa = cost(a), fb = cost(b);
