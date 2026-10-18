@@ -2925,3 +2925,6 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 .aw-txt{display:grid;gap:2px;flex:1 1 auto;min-width:0}
 .aw-txt b{overflow-wrap:anywhere}
 .aw-plus{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text)}
+
+/* Links to Privacy, Terms and Contact in Settings → About and under the sign-up form */
+.set-row p a,#legalNote a{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}

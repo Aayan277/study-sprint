@@ -206,6 +206,14 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 
 The full plan, including what's planned next, is in [PLAN.md](PLAN.md).
 
+## Before you share it
+
+Everything the owner has to do before inviting other people is one checklist, click by click: [docs/owner-launch-checklist.md](docs/owner-launch-checklist.md). What the app stores and who can see it is written for users in [privacy.html](privacy.html) and [terms.html](terms.html).
+
+## Licence
+
+The licence for Study Sprint's own code has **not been decided yet**, so until it is, nobody else has permission to reuse it. The free libraries it loads keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## Running it on your computer
 
 ES modules don't load from a `file://` address, so use a tiny local server:

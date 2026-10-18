@@ -30,8 +30,9 @@ import { usageLine, cardsWarning } from './quota.js';
 import { damagedNote } from './sync-merge.js';
 import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
+import { contactHTML, legalLinksHTML } from './legal.js';
 
-// Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
+// Shown in Settings → About, so you can tell whether your phone has the newest version.
 const APP_VERSION = '4.36';
 
 let settings = { ...db.DEFAULT_SETTINGS };
@@ -54,7 +55,7 @@ async function renderSettings(el) {
   el.innerHTML = `
     <div class="screen-head"><div><h1>Settings</h1></div></div>
     <nav class="set-nav" id="setNav" aria-label="Jump to a section">
-      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a>
+      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a><a href="#aboutTitle" data-sec="aboutTitle">About</a>
     </nav>
 
     <section class="section" aria-labelledby="appearTitle">
@@ -258,7 +259,13 @@ async function renderSettings(el) {
       </details>
     </section>
 
-    <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
+    <section class="section" aria-labelledby="aboutTitle">
+      <h2 id="aboutTitle">About</h2>
+      <div class="set-row" id="aboutRow">
+        <div><b>Study Sprint ${APP_VERSION}</b>
+          <p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · Contact: ${contactHTML()}</p></div>
+      </div>
+    </section>`;
 
   wireSettingsRow($('installRow'));
   wireReminders(el, { decks, settings });
@@ -700,8 +707,9 @@ async function drawSync() {
         ${rulesList('syncRules')}
         <div id="captchaBox" hidden></div>
         <p class="err" id="syncErr" role="alert" hidden></p>
+        <p class="note" id="legalNote">By creating an account you agree to the ${legalLinksHTML()}. Your cards are stored on Supabase servers, managed by the app’s developer.</p>
         <div class="sheet-actions">
-          <button class="btn ghost" type="button" id="syncCreate">Create account</button>
+          <button class="btn ghost" type="button" id="syncCreate" aria-describedby="legalNote">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
@@ -790,7 +798,7 @@ async function drawSync() {
       <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
     </div>
     <div class="set-row">
-      <div><b>Delete my synced data</b><p>Removes everything stored in your account on the server. Your devices keep their own copy.</p></div>
+      <div><b>Delete my synced data</b><p>Removes your cards, progress, settings, pictures and sounds from the server. Your account (your email address) stays until you use Delete my account. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
   showSyncStatus(acct.lastSync);
@@ -1037,7 +1045,7 @@ function confirmDeleteServer() {
   openSheet(`
     <h2 id="sheetTitle">Delete your synced data?</h2>
     <div class="confirm">
-      <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress, settings, pictures and sounds. It can't be undone.</p>
+      <p>This removes your <b>decks, cards, progress, settings, pictures and sounds from the server</b>. It can't be undone. Your account (your email address) stays until you use Delete my account.</p>
       <p class="note">This device and your other devices keep their own copy of the cards. Of the pictures and sounds, each device keeps only those it has already downloaded: on a device that doesn't hold them all, turn on <b>Keep all pictures and sounds on this device</b> (Settings > Sync) and let it sync first. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
       <p class="note" id="dsNote" hidden></p>
       <div class="sheet-actions">
