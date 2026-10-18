@@ -17,7 +17,7 @@ import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
-import { importWarnings } from './quota.js';
+import { importWarnings, cardsWarning, passedCardsWarning } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -580,6 +580,8 @@ function refreshFlags() {
 }
 
 // ---------- saving ----------
+const CARDS_WARNED_KEY = 'study-sprint-cards-warned';       // the 50,000-card heads-up is shown once
+const cardsWarnedBefore = () => { try { return localStorage.getItem(CARDS_WARNED_KEY) === '1'; } catch { return false; } };
 async function save() {
   let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
@@ -764,9 +766,15 @@ async function save() {
         cardLogs.forEach(l => logs.push({ ...l, cardId: card.id }));
       });
     }
+    const cardsBefore = await db.count('cards');
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
     rememberDeck(deckId);
-    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`);
+    // Past 50,000 cards: say so once (it is only a heads-up; Settings keeps showing it).
+    const bigNote = passedCardsWarning(cardsBefore, cardsBefore + cards.length) && !cardsWarnedBefore() ? cardsWarning(cardsBefore + cards.length) : null;
+    if (bigNote) { try { localStorage.setItem(CARDS_WARNED_KEY, '1'); } catch { /* fine */ } }
+    const added = `Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`;
+    if (bigNote) toast(`${added}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' } });
+    else toast(added);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;

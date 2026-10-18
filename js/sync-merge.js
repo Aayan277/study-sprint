@@ -96,6 +96,14 @@ const keyOf = t => { const d = new Date(t); return `${d.getFullYear()}-${String(
 // Junk is dropped: bad keys, bad values, a decision time that is not a positive safe integer or lies more than a day
 // in the future (a huge `at` would make a day off unremovable), keys older than 3650 days or further ahead than a
 // day off can be planned, and (if there are still too many) the furthest-future keys.
+// To keep the one synced settings row small (it must stay under the 60 KB push limit, about 42 bytes an entry):
+//   * a switched-off day is dropped once its day is over by OFF_KEEP_DAYS. The streak only reads days that are on
+//     (restDaySet), so a past "off" means the same as no entry. It is kept for a month so a device that was offline
+//     can't bring an old "on" back from the dead by merging.
+//   * at most MAX_FLAG_ENTRIES entries are kept; if there are more, the oldest go (far back, and a streak that long
+//     is hardly ever running through them).
+const OFF_KEEP_DAYS = 30;
+export const MAX_FLAG_ENTRIES = 1000;
 function cleanDayFlags(flags, cutoff, now, latest) {
   const out = {};
   if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return out;
@@ -104,7 +112,10 @@ function cleanDayFlags(flags, cutoff, now, latest) {
     if (!Number.isSafeInteger(v.at) || v.at <= 0 || v.at > now + DAY) continue;
     out[k] = { on: v.on, at: v.at };
   }
-  const today = keyOf(now);
+  const today = keyOf(now), offCutoff = keyOf(now - OFF_KEEP_DAYS * DAY);
+  for (const k of Object.keys(out)) if (!out[k].on && k < offCutoff) delete out[k];
+  const all = Object.keys(out);
+  if (all.length > MAX_FLAG_ENTRIES) for (const k of all.sort().slice(0, all.length - MAX_FLAG_ENTRIES)) delete out[k];
   const future = Object.keys(out).filter(k => k > today).sort();
   for (const k of future.slice(MAX_FUTURE_ENTRIES)) delete out[k];
   return out;

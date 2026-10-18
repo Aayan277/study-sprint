@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink } from '../js/sync-merge.js';
+import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
@@ -168,6 +169,42 @@ test('days off: entries over 3650 days old (further back than the streak is walk
   const junk = { nope: { on: true, at: 1 }, '2026-13-40': { on: true, at: 1 }, '2026-10-22': { on: 'yes', at: 1 }, '2026-10-23': { on: true }, '2026-10-24': null, '2026-10-25': 7, '2026-10-26': { on: true, at: 'x' }, '2026-10-27': { on: true, at: 9 } };
   assert.deepEqual(mergeDayFlags(junk, undefined, T), { '2026-10-27': { on: true, at: 9 } });
   for (const bad of [undefined, null, 5, 'x', [], [1, 2]]) assert.deepEqual(mergeDayFlags(bad, bad, T), {});
+});
+
+// Local noon, n days before T, as a day key (what the app calls a dayKey).
+const keyBack = n => { const d = new Date(T); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+test('days off: switched-off days are dropped once their day is a month past; streak results do not change', () => {
+  const flags = {};
+  for (let i = 1; i <= 400; i++) flags[keyBack(i)] = { on: i % 3 === 0, at: 1000 + i };     // a mix of on and off, up to 400 days back
+  const merged = mergeDayFlags(flags, null, T);
+  assert.ok(Object.keys(merged).every(k => merged[k].on || k >= keyBack(30)));              // no old "off" left
+  assert.ok(Object.keys(merged).length < Object.keys(flags).length);
+  assert.equal(merged[keyBack(31)], undefined);                                           // 31 is not on-day (31 % 3 != 0) and old: gone
+  assert.ok(merged[keyBack(10)] && !merged[keyBack(10)].on);                               // a recent "off" is kept (a stale device could still bring "on")
+  // the days off the streak sees are exactly the same
+  const before = restDaySet({ restDays: flags }), after = restDaySet({ restDays: merged });
+  assert.deepEqual([...after].sort(), [...before].sort());
+  const perDay = new Map();
+  for (let i = 0; i < 400; i++) if (i % 3 !== 1) perDay.set(keyBack(i), 5);
+  assert.deepEqual(streakRuns(perDay, T, { rest: after }), streakRuns(perDay, T, { rest: before }));
+  const studied = new Set([...perDay.keys()]);
+  const a = streakFromDays(studied, T, { rest: before }), b = streakFromDays(studied, T, { rest: after });
+  assert.equal(b.days, a.days);
+  assert.ok(sameDayFlags(merged, flags, T));                                              // and the merge sees no real difference
+});
+
+test('days off: the stored entries are capped so the settings row stays under the 60 KB push limit', () => {
+  const flags = {};
+  for (let i = 1; i <= 3000; i++) flags[keyBack(i)] = { on: true, at: 1000 + i };
+  const merged = mergeDayFlags(flags, null, T);
+  assert.equal(Object.keys(merged).length, MAX_FLAG_ENTRIES);
+  assert.ok(merged[keyBack(1)] && merged[keyBack(MAX_FLAG_ENTRIES)] && !merged[keyBack(MAX_FLAG_ENTRIES + 1)]);   // the oldest go first
+  assert.ok(JSON.stringify({ restDays: merged }).length < 60 * 1024);
+  // with the cap not reached, nothing that is on is ever lost
+  const few = {};
+  for (let i = 1; i <= 900; i++) few[keyBack(i)] = { on: true, at: 5 };
+  assert.equal(Object.keys(mergeDayFlags(few, null, T)).length, 900);
 });
 
 test('days off: sameDayFlags compares what the merge would keep', () => {
