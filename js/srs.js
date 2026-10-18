@@ -10,6 +10,11 @@ import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PA
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
 import { examGainFrom, examClamp } from './exam.js';
+import { W7_DEFAULT } from './fsrs7-model.js';
+import { rate7, preview7, prepare7 } from './srs7.js';     // FSRS-7 (setting fsrsVersion 7): our own port, no library to load; see srs7.js
+
+// With FSRS-7 on, cards must have their FSRS-7 memory ready before they are rated or previewed (rebuilt from the review log, asynchronous).
+export { prepare7 };
 
 export { Rating };
 // What the optimizer needs from the library (js/optimize-sheet.js): the standard weights, their allowed ranges, and the per-deck clipping.
@@ -30,26 +35,26 @@ export const RATINGS = [
 //   maxInterval      longest gap in days
 //   fuzz             spread long gaps a little so cards added together don't all come due together
 //   w                optional: your own 21 FSRS weights (the standard ones when missing)
-// Rebuilt only when the options change.
-let cached = null;
+// Rebuilt only when the options change. Two are kept (the newest two sets of options), because one rating can use two
+// (evening out the reviews runs without fuzz; FSRS-7 mode also steps the FSRS-6 memory without it) and they must not push each other out.
+const cached = new Map();
 function scheduler(opts) {
-  const { maxDue, balance, ...lib } = opts;      // maxDue and balance are applied here, not by the library
+  const { maxDue, balance, fsrsVersion, w7, ...lib } = opts;      // maxDue, balance and the FSRS-7 settings are applied here, not by the library
   const key = JSON.stringify(lib);
-  if (!cached || cached.key !== key) {
-    cached = {
-      key,
-      f: fsrs(generatorParameters({
-        request_retention: lib.retention,
-        learning_steps: lib.learningSteps,
-        relearning_steps: lib.relearningSteps,
-        maximum_interval: lib.maxInterval,
-        enable_fuzz: lib.fuzz,
-        enable_short_term: true,
-        w: lib.w                       // undefined = the library's default weights
-      }))
-    };
-  }
-  return cached.f;
+  let f = cached.get(key);
+  if (f) { cached.delete(key); cached.set(key, f); return f; }        // (most recently used last)
+  f = fsrs(generatorParameters({
+    request_retention: lib.retention,
+    learning_steps: lib.learningSteps,
+    relearning_steps: lib.relearningSteps,
+    maximum_interval: lib.maxInterval,
+    enable_fuzz: lib.fuzz,
+    enable_short_term: true,
+    w: lib.w                       // undefined = the library's default weights
+  }));
+  cached.set(key, f);
+  if (cached.size > 2) cached.delete(cached.keys().next().value);
+  return f;
 }
 
 const DAY = 86400000;
@@ -91,9 +96,18 @@ function fromLibrary(cardId, c) {
     reps: c.reps,
     lapses: c.lapses,
     state: c.state,
-    lastReview: c.last_review ? c.last_review.getTime() : null
+    lastReview: c.last_review ? c.last_review.getTime() : null,
+    ...(c.fsrs7 ? { fsrs7: c.fsrs7 } : {})        // the FSRS-7 memory, when FSRS-7 scheduled this review (srs7.js); FSRS-6 reviews leave it out
   };
 }
+
+// FSRS-7 on: the FSRS-6 memory after a rating, so the FSRS-6 fields stay current and switching back to FSRS-6 is lossless.
+const sixAfter = (state, opts, now) => rating => {
+  try {
+    const c = scheduler({ ...opts, fuzz: false, fsrsVersion: undefined }).next(toLibrary(state, now), new Date(now), rating).card;
+    return { stability: c.stability, difficulty: c.difficulty };
+  } catch (err) { console.error(err); return null; }
+};
 
 // A repeatable "random" for the day balancing picks (pickDay breaks ties with it). The same card, state and button always give
 // the same numbers, so the label on a button and the day rate() really picks can't disagree, and labels don't change on a redraw.
@@ -109,10 +123,18 @@ export function previewIntervals(state, opts, now = Date.now(), cardId = state?.
   const out = {};
   for (const { rating } of RATINGS) {
     const load = opts.balance?.load;
-    const o = opts.balance ? { ...opts, balance: { ...opts.balance, load: load && new Map(load) } } : { ...opts, fuzz: false };   // no balancing: the exact gap, not a random draw
+    // With balancing, rate() picks the day (seeded, on a copy of the load). Without it, FSRS-6 fuzz is random, so it is turned off for the
+    // label (the exact gap); FSRS-7's fuzz is deterministic, so it is left on and the label is the gap rate() really gives.
+    const o = opts.balance ? { ...opts, balance: { ...opts.balance, load: load && new Map(load) } } : opts.fsrsVersion === 7 ? opts : { ...opts, fuzz: false };
     out[rating] = rate(cardId, state, rating, o, now).due - now;
   }
   return out;
+}
+
+// The four outcomes from FSRS-7, in the shape the library's repeat() gives: { 1: { card }, ... }
+function seven(cardId, state, opts, now) {
+  const cards = preview7(cardId, state, opts, now);
+  return Object.fromEntries(Object.entries(cards).map(([g, card]) => [g, { card }]));
 }
 
 // Apply a rating and return the card's new saved state.
@@ -120,7 +142,9 @@ export function previewIntervals(state, opts, now = Date.now(), cardId = state?.
 export function rate(cardId, state, rating, opts, now = Date.now()) {
   const balanced = !!(opts.balance && opts.fuzz);
   // Evening out needs the exact gap first (no random fuzz); it then picks a day within the fuzz range.
-  const { card } = scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
+  const { card } = opts.fsrsVersion === 7
+    ? { card: rate7(cardId, state, rating, balanced ? { ...opts, fuzz: false } : opts, now, sixAfter(state, opts, now)) }
+    : scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
   let counted = false;                          // did balancing add this card to the load?
@@ -145,6 +169,10 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
 // How much a review now would add to the chance of remembering the card on exam day (see examGainFrom in exam.js).
 // opts: the card's scheduler options. Used to put the cards that gain most first.
 export function examGain(state, examStart, now, opts) {
+  if (opts.fsrsVersion === 7) {          // FSRS-7: the memory after a Good and after an Again (two traces, so not a single stability)
+    const p = preview7(state?.cardId, state, opts, now);
+    return examGainFrom(state, p[Rating.Good].fsrs7, p[Rating.Again].fsrs7, examStart, now, { w20: opts.w?.[20], w7: opts.w7 ?? W7_DEFAULT });
+  }
   const preview = scheduler(opts).repeat(toLibrary(state, now), new Date(now));
   return examGainFrom(state, preview[Rating.Good].card.stability, preview[Rating.Again].card.stability, examStart, now, opts.w?.[20]);
 }

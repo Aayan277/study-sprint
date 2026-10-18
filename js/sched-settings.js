@@ -2,6 +2,8 @@
 // your settings into options for the FSRS scheduler. Pure functions, tested by tests/sched.test.js.
 
 // (the same number as MIN_REVIEWS in fsrs-data.js; tests/sched.test.js checks they agree, so this file needs no import)
+import { W7_DEFAULT } from './fsrs7-model.js';
+
 const MIN_REVIEWS = 400;
 
 export const SCHED_DEFAULTS = {
@@ -47,8 +49,15 @@ export function parseMaxInterval(value) {
 // otherwise the overall ones.
 // Your own FSRS parameters (fsrsParams) are the same for every deck, so a deck's options never override them.
 export function deckSchedulerOptions(settings, deck) {
-  return schedulerOptions(deck?.options ? { ...settings, ...deck.options, fsrsParams: settings?.fsrsParams } : settings);
+  return schedulerOptions(deck?.options ? { ...settings, ...deck.options, fsrsParams: settings?.fsrsParams, fsrsVersion: settings?.fsrsVersion } : settings);
 }
+
+// ---------- which FSRS the scheduler runs ----------
+// The synced setting `fsrsVersion`: 6 (FSRS-6, the standard) or 7 (FSRS-7, beta, off by default). The same for every deck.
+// Anything else (missing, junk from the server or a backup) means 6. Design: docs/design/fsrs7-plan.md.
+export const FSRS_VERSION_DEFAULT = 6;
+export const cleanFsrsVersion = v => (v === 7 ? 7 : FSRS_VERSION_DEFAULT);
+export const usesFsrs7 = settings => cleanFsrsVersion(settings?.fsrsVersion) === 7;
 
 // ---------- your own FSRS parameters ----------
 // The synced setting `fsrsParams` (fitted by js/fsrs-fit.js, see docs/design/fsrs-optimizer-plan.md section 6):
@@ -76,9 +85,12 @@ export function cleanFsrsParams(v) {
 
 // The forgetting-curve decay (w20) the exam and readiness maths should use: your own, or undefined for the default.
 // Kept inside the range the scheduler allows (0.1 to 0.8), so the numbers agree with it.
+// With FSRS-7 on, the forgetting curve has more than a decay, so this returns a model instead of a number: { w20, w7 } (w20 as above
+// for cards that have no FSRS-7 memory yet, w7 the 34 FSRS-7 weights). exam.js reads either form; callers just pass it along.
 export function personalW20(settings) {
   const w = cleanFsrsParams(settings?.fsrsParams)?.w;
-  return w ? Math.min(0.8, Math.max(0.1, w[20])) : undefined;
+  const w20 = w ? Math.min(0.8, Math.max(0.1, w[20])) : undefined;
+  return usesFsrs7(settings) ? { w20, w7: W7_DEFAULT } : w20;
 }
 
 // The "Personal parameters" row in Settings (wording: docs/design/fsrs-optimizer-plan.md section 8).
@@ -100,6 +112,7 @@ export function personalRow(params, total, locale) {
 }
 
 export function schedulerOptions(settings = {}) {
+  const seven = usesFsrs7(settings);
   const ls = parseSteps(settings.learningSteps ?? SCHED_DEFAULTS.learningSteps);
   const rs = parseSteps(settings.relearningSteps ?? SCHED_DEFAULTS.relearningSteps);
   const mi = parseMaxInterval(settings.maxInterval ?? SCHED_DEFAULTS.maxInterval);
@@ -110,7 +123,8 @@ export function schedulerOptions(settings = {}) {
     relearningSteps: rs.steps || parseSteps(SCHED_DEFAULTS.relearningSteps).steps,
     maxInterval: mi.days || SCHED_DEFAULTS.maxInterval,
     fuzz: settings.fuzz ?? SCHED_DEFAULTS.fuzz,
-    ...(w ? { w } : {})                      // your own FSRS weights (left out when the standard ones are used)
+    ...(w ? { w } : {}),                     // your own FSRS weights (left out when the standard ones are used)
+    ...(seven ? { fsrsVersion: 7 } : {})     // FSRS-7 on (left out for FSRS-6, so its options look exactly as before)
   };
 }
 
