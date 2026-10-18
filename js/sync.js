@@ -8,7 +8,7 @@
 //      whichever version is newest, so sending something old can't overwrite something new.
 // It runs when the app opens, a few seconds after you change something, when you come back online or back
 // to the app, every few minutes while it's open, and with Sync now. Offline, everything still works:
-// changes simply wait for the next sync.
+// changes simply wait for the next sync. When the account or server is full, automatic syncs stop pushing for a while (see pushBackoff).
 //
 // Progress is announced with a 'sync' event on window: { state: 'syncing' | 'done' | 'error' | 'signed-out',
 // at, applied (changes received), sent, error }.
@@ -18,7 +18,7 @@ import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
-import { pushSafely } from './sync-push.js';
+import { pushSafely, nextBackoff, activeBackoff } from './sync-push.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
@@ -32,10 +32,11 @@ const RESEND_FAILED_NOTE = 'The re-upload couldn’t finish, maybe because this 
 
 let running = null, again = false, againSkip = false, timer = 0, started = false;
 let resendTries = 0, resendGaveUp = false, resendFailed = false, justResent = false;   // the start-over failing (see run), and a re-upload that has just run
+let askedByPerson = false;    // a sync that a person asked for (Sync now, sign-in...) is waiting or running: it pushes even during a backoff (see run)
 let retrySounds = true;       // sounds the server turned away are tried again once each time the app opens, and on Sync now
 // Routine syncs that find another tab holding the lock try again a little later (nothing tells this tab what the other one saw);
 // a long run of those is said out loud, since the other window may be frozen. (timing: changed by the tests.)
-export const timing = { skipRetry: 45000, busyNoteAfter: 120000, lockWait: 60000 };
+export const timing = { skipRetry: 45000, busyNoteAfter: 120000, lockWait: 60000, mediaRetry: 400 };
 const BUSY_NOTE = 'Waiting for another window of the app, which is syncing or paused. Close other windows if this stays.';
 let skips = 0, firstSkip = 0, skipTimer = 0;
 let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
@@ -56,15 +57,47 @@ export async function account() {
 // Make an account. With email confirmation turned on (the normal setup, docs/sync-setup.md) nobody is signed in
 // yet: Supabase emails a link first. Returns { pending: true } then, { pending: false } once signed in.
 // captcha: the token from captcha.js, when the project uses one.
-export async function createAccount(email, password, captcha) {
+// onConflict: asked when this device holds cards that don't belong to this account (see deviceVerdict); see signedIn.
+export async function createAccount(email, password, captcha, opts = {}) {
   const made = await supa.signUp(email.trim(), password, { captcha, redirectTo: appUrl() });
   if (made.pending) return { pending: true };
-  await signedIn(made.session);
+  await signedIn(made.session, opts);
   return { pending: false };
 }
-export async function signIn(email, password, captcha) { return signedIn(await supa.signIn(email.trim(), password, { captcha })); }
+export async function signIn(email, password, captcha, opts = {}) { return signedIn(await supa.signIn(email.trim(), password, { captcha }), opts); }
 
-async function signedIn(session) {
+// ---------- whose cards are on this device ----------
+// Signing in copies everything on this device into the account (and the account's into this device). On a shared device that would
+// put the last person's cards into the next person's account, so nothing is merged silently when the cards here belong to someone else.
+// The sample deck alone is not "cards": every new device has it, and it is the same deck everywhere.
+// Returns { kind: 'ok' } (nothing here, or the cards here are this account's) or
+//   { kind: 'other', cards, decks, pending }  the cards here came from a different account (pending: changes that account hasn't sent yet)
+//   { kind: 'local', cards, decks }           the cards here were never in any account
+// cards/decks count what the person made, not the sample deck.
+export async function deviceVerdict(userId) {
+  const { syncAuth, syncState } = await db.getSettings();
+  const owner = syncState?.userId || syncAuth?.user?.id || null;
+  if (owner === userId) return { kind: 'ok' };
+  const isSample = id => id === 'sample' || String(id).startsWith('sample-');
+  const [decks, cards, logs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('reviewLog')]);
+  const mine = { decks: decks.filter(d => !isSample(d.id)).length, cards: cards.filter(c => !isSample(c.deckId) && !isSample(c.id)).length };
+  const logged = logs.filter(l => !isSample(l.cardId)).length;
+  if (!mine.decks && !mine.cards && !logged) return { kind: 'ok' };
+  return owner ? { kind: 'other', ...mine, pending: await pendingChanges().catch(() => 0) } : { kind: 'local', ...mine };
+}
+
+// Complete a sign-in (or sign-up). onConflict(verdict) is asked first when the cards here aren't this account's, and answers
+// 'go' (the person chose: for 'other' the app has already removed this device's cards; for 'local' the cards are added to the account)
+// or 'cancel'. Without an answer the sign-in is cancelled: another account's cards are never merged silently.
+async function signedIn(session, { onConflict } = {}) {
+  const verdict = await deviceVerdict(session.user.id);
+  if (verdict.kind !== 'ok') {
+    const answer = onConflict ? await onConflict(verdict) : 'cancel';
+    if (answer !== 'go' || (verdict.kind === 'other' && (await deviceVerdict(session.user.id)).kind !== 'ok')) {
+      await supa.signOut(session.access_token);          // (the server's sign-in made just now; nothing was saved here)
+      throw new supa.SupaError('Sign-in cancelled. Nothing on this device was changed.', { code: 'cancelled' });
+    }
+  }
   const { syncState } = await db.getSettings();
   await db.setSetting('syncAuth', session);
   // A different account than last time on this device (or the first): start from the beginning, so
@@ -165,7 +198,9 @@ export async function finishPasswordReset(linkSession, password) {
   await supa.setPassword(linkSession.access_token, password);
   const { syncAuth, syncState } = await db.getSettings();
   const known = syncAuth?.user?.id === user.id || syncState?.userId === user.id;
-  if (!known && !syncState && await hasLocalData()) return { signedIn: false, email: user.email };
+  // Signed in only for the same account (already signed in here, or this device's cards came from it) or on a device with nothing on it.
+  // Anyone can make a link for their own account, so for any other device the password is saved and nothing is signed in or merged.
+  if (!known && (syncState || await hasLocalData())) return { signedIn: false, email: user.email };
   await signedIn({ ...linkSession, user });
   return { signedIn: true, email: user.email };
 }
@@ -196,9 +231,30 @@ export async function deleteServerData(opts = {}) {
   const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
   if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
+  await emptyMediaFolder(auth);                      // (pictures first: if any stay, nothing has been deleted yet)
   await supa.deleteAllRows(auth.access_token, auth.user.id);
-  try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
   await signOut({ forget: true });
+}
+
+// Remove every picture and sound of the account through the Storage API, then list the folder again to make sure it is empty
+// (a few tries, a moment apart). If files are still there, or the server can't be asked, this throws MEDIA_LEFT and the caller
+// stops before anything irreversible. A project without the pictures bucket has nothing to remove.
+async function emptyMediaFolder(auth) {
+  const token = auth.access_token, uid = auth.user.id;
+  try {
+    for (let n = 0; ; n++) {
+      const ids = await supa.listMedia(token, uid);
+      if (!ids.length) return;
+      if (n >= 3) break;
+      if (n) await new Promise(r => setTimeout(r, timing.mediaRetry * n));
+      await supa.deleteMedia(token, uid, ids);
+    }
+  } catch (err) {
+    if (err?.code === 'bucket_missing') return;
+    if (supa.isSignedOutError(err)) throw err;
+    console.error('Could not remove the pictures', err);
+  }
+  throw new supa.SupaError(supa.MEDIA_LEFT, { code: 'server_media_left' });
 }
 
 // Delete the account itself: its files, its synced data, and the sign-in. This device keeps its own data and is
@@ -209,8 +265,9 @@ export async function deleteAccount(opts = {}) {
   const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
   if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
-  // Files first, through the Storage API (that also frees the space); the server function removes any left.
-  try { await supa.deleteMedia(auth.access_token, auth.user.id, await supa.listMedia(auth.access_token, auth.user.id)); } catch (err) { console.error(err); }
+  // Files first, through the Storage API (that also frees the space). If any stay, stop here: the account is still whole.
+  // (The server function refuses too while files remain: 'media_left'.)
+  await emptyMediaFolder(auth);
   await supa.deleteAccount(auth.access_token);
   await signOut({ forget: true });
 }
@@ -229,7 +286,7 @@ export async function signOut({ forget = false } = {}) {
   if (syncAuth) await supa.signOut(syncAuth.access_token);
   resetSkips();
   await db.setSetting('syncAuth', null);
-  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); }
+  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); await db.setSetting('pushBackoff', null); }
   emit({ state: 'signed-out', error: null });
 }
 
@@ -269,6 +326,7 @@ export async function healNotes() {
 // go on without a sync (app.js: Replace everywhere, Delete everywhere) stop on 'busy'.
 export function syncNow({ retry = false, skipIfBusy = false } = {}) {
   if (retry) retrySounds = true;
+  if (!skipIfBusy) askedByPerson = true;
   if (running) { againSkip = again ? againSkip && skipIfBusy : skipIfBusy; again = true; return running; }
   // (Two tabs of the app take turns, where the browser has Web Locks, so they can't mix up the bookmarks.)
   const onWait = () => emit({ state: 'syncing', progress: 'Waiting for another window to finish syncing…' });
@@ -300,6 +358,7 @@ function skipped() {
 async function run() {
   const auth = await session();
   if (!auth) return;
+  const person = askedByPerson; askedByPerson = false;
   emit({ state: 'syncing', error: null, progress: null });
   const token = auth.access_token;
   const settings0 = await db.getSettings();
@@ -349,9 +408,14 @@ async function run() {
     ...changes.tombstones.map(rowFromTombstone),
     ...changes.settings.map(s => rowFromSetting(s.key, trimForPush(s.key, s.value), s.time))
   ])));
-  const pushed = await pushSafely(part => supa.putRows(token, part), rows, {
-    onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
-  });
+  // After a refusal for space, automatic syncs don't push for a while (pushBackoff, sync-push.js). A person's Sync now does, once.
+  const saved = settings0.pushBackoff;
+  const waiting = person || !rows.length ? null : activeBackoff(saved, auth.user.id);
+  const pushed = waiting
+    ? { sent: [], held: rows, bad: [], full: waiting.kind }
+    : await pushSafely(part => supa.putRows(token, part), rows, {
+      onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
+    });
   // Records too big to send, kept until they are shortened (editing one makes it a new change, which is tried again)
   // or deleted. Anything that went through now is no longer a problem.
   const wentKeys = new Set(pushed.sent.map(r => `${r.store}|${r.id}`));
@@ -360,9 +424,11 @@ async function run() {
   // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
   // (What did go is sent again too; the server ignores a copy it already has.)
   let spaceNote = null;
-  if (pushed.held.length) {
+  if (waiting) spaceNote = waiting.note || null;
+  else if (pushed.full) {
     spaceNote = pushed.full === 'server' ? SERVER_FULL_MESSAGE : dataFullMessage(await fetchUsage(token));
-  }
+    await db.setSetting('pushBackoff', nextBackoff(saved, { userId: auth.user.id, kind: pushed.full, note: spaceNote })).catch(() => {});
+  } else if (saved) await db.setSetting('pushBackoff', null).catch(() => {});       // it went through: no more waiting
 
   st = { ...st, pushedUntil: pushed.held.length ? st.pushedUntil : pushStart - 1, lastSync: Date.now(), tooBig: stillBig };
   await db.setSetting('syncState', st);

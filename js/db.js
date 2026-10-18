@@ -25,7 +25,7 @@ import { acceptStatsLayout } from './stats-layout.js';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
-import { decide, MERGERS, recordFromRow, needsPush, tombstoneNeedsPush } from './sync-merge.js';
+import { decide, MERGERS, recordFromRow, needsPush, tombstoneNeedsPush, badRow, addDamaged } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { validFields, cleanFields } from './note-fields.js';
@@ -881,13 +881,15 @@ export async function deleteEverything() {
 //   resendPending  "Re-upload everything" was asked for; the next sync starts over from this device first (sync.js)
 //   resendTries    how many times in a row that start-over failed (sync.js gives up after a few)
 //   resendFailed   the start-over was given up; the sync note says so once (sync.js)
+//   syncDamaged  { count, seen, items }: rows from the server that were skipped because they were malformed (sync-merge.js addDamaged); Settings → Sync tells the person once
+//   pushBackoff  { userId, until, wait, kind, note }: the server or account was full, so automatic pushes wait until `until` (sync.js)
 //   mediaCleanedAt  when this device last removed pictures and sounds no card uses (app.js tidyMedia: once a day)
 //   lastBackup  when this device last saved a backup file (it never synced). Listed here so it stays out of backup files and a restore leaves this device's own date alone
 //   mediaRefs  { userId, ids }: the files cards used at the last sweep, so a card deleted before this device held its picture still gets that file marked (media-sweep.js droppedRefs)
 //   keepAllMedia  "Keep all pictures and sounds on this device" (Settings → Sync): sync downloads every file, not only what is needed soon (lazy-media.js)
 //   appBadge, reminderTime, reminderUid  "Cards due on the app icon" and the daily reminder's time (Settings → Study → Reminders): a badge and a calendar belong to one device (badge.js, reminders.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 
@@ -956,14 +958,19 @@ export async function forgetSyncedMarks() {
 // Save changes that came from the server. Each row only wins if it's newer than this device's version
 // (see decide() in sync-merge.js). Not stamped and not reported as a local change, so it isn't sent back.
 // Returns how many rows changed something here.
+// A row that can't be a record (sync-merge.js badRow) is skipped, not fatal: it used to roll the whole page back, so that account's
+// bookmark never moved again. Skipped rows are counted and listed in the local-only setting "syncDamaged" (see damagedNote).
 export async function applyRemote(rows) {
   if (!rows.length) return 0;
+  const bad = [];
+  rows = rows.filter(row => { const why = badRow(row); if (why) bad.push({ store: String(row?.store ?? ''), id: String(row?.id ?? '').slice(0, 60), seq: Number(row?.seq) || 0, why }); return !why; });
   const db = await openDB();
   const tx = db.transaction([...Object.keys(SYNC_ID), 'deleted', 'settings'], 'readwrite');
   let applied = 0, schedules = false;
   await inTx(tx, async () => {
     const settingsStore = tx.objectStore('settings');
     const deleted = tx.objectStore('deleted');
+    if (bad.length) settingsStore.put(addDamaged(await done(settingsStore.get('syncDamaged')), bad), 'syncDamaged');
     let times = (await done(settingsStore.get(SETTING_TIMES))) || {};
     // Settings first. Everything else waits in `todo`: one row per record (if a page holds two versions of
     // the same record, the newer one wins), so the reads below can all be sent at once.

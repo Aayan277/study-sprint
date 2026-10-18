@@ -23,8 +23,55 @@ export const rowFromSetting = (key, value, time) => ({ store: 'settings', id: ke
 
 // A record as saved on this device after it arrives from the server. It's marked as already synced
 // (syncedAt = updatedAt) so it isn't sent straight back.
+// The record's key (id, cardId or uid) always comes from the row's own id, never from inside the data: a row whose data
+// names another record's id can't overwrite that record.
 export function recordFromRow(row) {
-  return { ...row.data, updatedAt: row.updated_at, syncedAt: row.updated_at };
+  const key = SYNC_ID[row.store];
+  return { ...row.data, ...(key ? { [key]: row.id } : {}), updatedAt: row.updated_at, syncedAt: row.updated_at };
+}
+
+// Is this row from the server unusable? Returns a short reason (for the local log) or null when it is fine. One bad row must
+// never stop a whole page from being saved, so db.applyRemote skips what this names, counts it, and carries on.
+//   - a row with no id, or no store, is not a record
+//   - unless it is a delete, `data` must be an object (not null, a string, a number or a list)
+//   - a card, deck, schedule or review needs its own key inside the data (id, cardId, uid)
+// Stores this app doesn't know are ignored elsewhere, not damaged.
+export function badRow(row) {
+  if (!row || typeof row !== 'object') return 'not a row';
+  if (typeof row.store !== 'string' || !row.store) return 'no store';
+  if (typeof row.id !== 'string' || !row.id) return 'no id';
+  if (row.deleted) return null;
+  if (row.store !== 'settings' && !(row.store in SYNC_ID)) return null;
+  if (!row.data || typeof row.data !== 'object' || Array.isArray(row.data)) return 'data is not an object';
+  const key = SYNC_ID[row.store];
+  if (key) {
+    const v = row.data[key];
+    if (!((typeof v === 'string' && v) || (typeof v === 'number' && Number.isFinite(v)))) return `data has no ${key}`;
+  }
+  return null;
+}
+
+// The small local log of skipped rows (the local-only setting "syncDamaged"): { count, seen, items: [the last 20] }.
+// `seen` is how many the person has already been told about (Settings → Sync shows the difference once, and Dismiss sets it).
+export const DAMAGED_KEEP = 20;
+const DAMAGED_REMEMBER = 200;
+// A pull starts a little behind the bookmark (pullStart), so a skipped row is read again by the next few syncs: it is counted once,
+// by remembering the store, id and change number of the last 200 (`keys`).
+export function addDamaged(prev, bad, now = Date.now()) {
+  const old = prev && typeof prev === 'object' ? prev : {};
+  const keys = Array.isArray(old.keys) ? old.keys : [];
+  const known = new Set(keys);
+  const fresh = bad.filter(b => { const k = `${b.store}|${b.id}|${b.seq || 0}`; if (known.has(k)) return false; known.add(k); return true; });
+  return {
+    count: (Number(old.count) || 0) + fresh.length,
+    seen: Number(old.seen) || 0,
+    items: [...(Array.isArray(old.items) ? old.items : []), ...fresh.map(b => ({ ...b, at: now }))].slice(-DAMAGED_KEEP),
+    keys: [...known].slice(-DAMAGED_REMEMBER)
+  };
+}
+export function damagedNote(log) {
+  const n = (Number(log?.count) || 0) - (Number(log?.seen) || 0);
+  return n > 0 ? `${n.toLocaleString()} synced ${n === 1 ? 'record was' : 'records were'} damaged and skipped. Everything else synced normally.` : null;
 }
 
 // What to do with a row from the server, given when this device last changed (or deleted) that record.

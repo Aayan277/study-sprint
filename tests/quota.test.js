@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES, MAX_ID_BYTES, savedTooBigNote, splitTooBig, tooLargeNote } from '../js/quota.js';
-import { pushSafely } from '../js/sync-push.js';
+import { pushSafely, nextBackoff, activeBackoff } from '../js/sync-push.js';
 
 const usage = (media, limit = 180 * MB, data = 3 * MB) => ({ data, media, limit });
 const file = n => ({ id: 'm' + n, data: { byteLength: n * MB } });
@@ -209,12 +209,75 @@ test('pushSafely: one refused row does not block the batch', async () => {
   assert.ok(calls.length < 20, 'found it by halving, not one request per row: ' + calls.length);
 });
 
-test('pushSafely: rows over the data limit are held, the rest go', async () => {
-  const out = await pushSafely(fakePut({ capped: ['r3', 'r15'] }), ids(40));
-  assert.equal(out.sent.length, 38);
-  assert.deepEqual(out.held.map(r => r.id).sort(), ['r15', 'r3']);
+test('pushSafely: a refusal for space stops the sending at once (no splitting), and everything not sent is held', async () => {
+  const calls = [];
+  const out = await pushSafely(fakePut({ capped: ['r3', 'r15'], onCall: r => calls.push(r.length) }), ids(40));
+  assert.deepEqual(calls, [40], 'one request, and it was refused');
+  assert.equal(out.sent.length, 0);
+  assert.equal(out.held.length, 40);
   assert.equal(out.full, 'data');
   assert.equal(out.bad.length, 0);
+});
+
+test('pushSafely: a full server costs one request however much is waiting', async () => {
+  for (const n of [10, 200, 2000]) {
+    let calls = 0;
+    const put = async () => { calls++; throw Object.assign(new Error('x'), { code: 'sync_server_full' }); };
+    const out = await pushSafely(put, ids(n));
+    assert.equal(calls, 1, `${n} rows`);
+    assert.equal(out.held.length, n);
+    assert.equal(out.full, 'server');
+  }
+});
+
+test('pushSafely: deletes are sent first and still go when the account is full; the puts are held', async () => {
+  const seen = [];
+  const rows = [...ids(30).map(r => ({ ...r, deleted: false })), ...Array.from({ length: 5 }, (_, i) => ({ id: 'd' + i, deleted: true, data: null }))];
+  const put = async part => {
+    seen.push(part.map(r => (r.deleted ? 'D' : 'P')).join(''));
+    if (part.some(r => !r.deleted)) throw Object.assign(new Error('x'), { code: '54000', message: 'sync_data_full' });
+  };
+  const out = await pushSafely(put, rows);
+  assert.deepEqual(seen, ['DDDDD', 'P'.repeat(30)]);
+  assert.equal(out.sent.length, 5);
+  assert.ok(out.sent.every(r => r.deleted));
+  assert.equal(out.held.length, 30);
+  assert.equal(out.full, 'data');
+});
+
+test('pushSafely: a row problem found by halving still splits, but a space refusal found on the way stops the rest', async () => {
+  let calls = 0;
+  const put = async part => {
+    calls++;
+    if (part.some(r => r.id === 'r2')) throw Object.assign(new Error('x'), { code: '23514' });
+    if (part.some(r => r.id === 'r5')) throw Object.assign(new Error('x'), { code: 'sync_data_full' });
+  };
+  const out = await pushSafely(put, ids(8));
+  assert.deepEqual(out.bad.map(b => b.row.id), ['r2']);
+  assert.equal(out.full, 'data');
+  assert.ok(out.held.some(r => r.id === 'r5'));
+  assert.ok(calls < 8);
+  assert.equal(out.sent.length + out.held.length + out.bad.length, 8);
+});
+
+test('push backoff: 15 minutes, doubling up to 6 hours, per account, and only while it lasts', () => {
+  const T = 1_000_000_000_000, MIN = 60000;
+  let b = nextBackoff(null, { userId: 'u', kind: 'server', note: 'full', now: T });
+  assert.equal(b.wait, 15 * MIN); assert.equal(b.until, T + 15 * MIN);
+  const waits = [b.wait];
+  for (let i = 0; i < 6; i++) { b = nextBackoff(b, { userId: 'u', kind: 'server', now: T }); waits.push(b.wait); }
+  assert.deepEqual(waits.map(w => w / MIN), [15, 30, 60, 120, 240, 360, 360]);
+  assert.equal(nextBackoff(b, { userId: 'other', kind: 'data', now: T }).wait, 15 * MIN, 'another account starts over');
+  const first = nextBackoff(null, { userId: 'u', kind: 'data', now: T });
+  assert.ok(activeBackoff(first, 'u', T + 14 * MIN));
+  assert.equal(activeBackoff(first, 'u', T + 15 * MIN), null);
+  assert.equal(activeBackoff(first, 'other', T), null);
+  assert.equal(activeBackoff(null, 'u', T), null);
+  assert.equal(activeBackoff({ userId: 'u', until: T + 30 * 86400000, wait: 1 }, 'u', T), null, 'a clock set far back does not freeze pushing');
+});
+
+test('Postgres 25006 (read-only transaction) counts as a full server', () => {
+  assert.equal(pushErrorKind({ code: '25006', message: 'cannot execute INSERT in a read-only transaction' }), 'server');
 });
 
 test('pushSafely: other errors are thrown, big pushes go in batches, and the splitting is limited', async () => {

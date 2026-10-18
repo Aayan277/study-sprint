@@ -28,6 +28,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   // With captcha protection on, a request needs a token (any non-empty one passes here).
   const needsCaptcha = body => { if (!captcha) return false; const t = body?.gotrue_meta_security?.captcha_token; if (t) captchaTokens.push(t); return !t; };
   const files = new Map();      // storage: `${uid}/${id}` → { type, data }
+  let mediaStuck = false, listBlind = false;     // storage delete that quietly removes nothing; a file list that shows nothing
   let bucket = true;            // false = media.sql not run yet
   let audio = true;             // false = the bucket's file types are the old list (media.sql from before sounds): audio uploads are turned away
   const uploads = [];           // every upload that was accepted, in order: { path, type }
@@ -118,10 +119,11 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         return route.fulfill({ status: 200, contentType: f.type, headers: { 'access-control-allow-origin': '*' }, body: f.data });
       }
       if (req.method() === 'DELETE' && p === 'object/media') {
-        for (const k of body.prefixes) if (k.startsWith(uid + '/')) files.delete(k);
+        if (!mediaStuck) for (const k of body.prefixes) if (k.startsWith(uid + '/')) files.delete(k);
         return json(route, 200, []);
       }
       if (req.method() === 'POST' && p === 'object/list/media') {
+        if (listBlind) return json(route, 200, []);
         return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + (body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
       }
       return json(route, 400, { message: 'unknown storage call ' + p });
@@ -133,7 +135,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       if (url.pathname.endsWith('my_usage')) {
         return json(route, 200, { data_bytes: dataUsed(uid), data_limit: dataLimits.get(uid) ?? DEFAULT_DATA_LIMIT, media_bytes: mediaUsed(uid), media_limit: limitOf(uid) });
       }
-      for (const k of [...files.keys()]) if (k.startsWith(uid + '/')) files.delete(k);
+      // limits.sql: delete_my_account() refuses while files remain in the account's folder (the app removes them first)
+      if ([...files.keys()].some(k => k.startsWith(uid + '/'))) return json(route, 400, { code: 'P0001', message: 'media_left' });
       for (const [k, r] of rows) if (r.user_id === uid) rows.delete(k);
       for (const [t, id] of tokens) if (id === uid) tokens.delete(t);
       for (const [t, id] of refreshTokens) if (id === uid) refreshTokens.delete(t);
@@ -197,7 +200,11 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     // The person opened the link in the confirmation email: confirmed, and (as the real link does) sent back to the app.
     confirm(email) { users.get(email).confirmed = true; },
     confirmLink(email, base) { users.get(email).confirmed = true; const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=signup`; },
+    // A row exactly as given (even a malformed one), as if it were already in the project: for tests of what the app does with junk.
+    inject(email, row) { const uid = users.get(email).id; rows.set(`${uid}|${row.store}|${row.id}`, { user_id: uid, deleted: false, updated_at: Date.now(), ...row, seq: ++seq }); },
     setBucket(v) { bucket = v; },
+    setMediaStuck(v) { mediaStuck = v; },
+    setListBlind(v) { listBlind = v; },
     setAudio(v) { audio = v; },
     // The link in a reset email: a fresh sign-in for that account, after the #.
     recoveryLink(email, base) { const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=recovery`; },

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, badRow, addDamaged, damagedNote } from '../js/sync-merge.js';
 import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { splitOversized } from '../js/quota.js';
@@ -909,3 +909,74 @@ test('pull: from an existing log with older, not yet settled entries, the end st
     assert.deepEqual(st, expected, 'total ' + total);
   }
 });
+
+// ---------- rows from the server that can't be records ----------
+const srow = (store, id, data, extra = {}) => ({ store, id, data, deleted: false, updated_at: 5, seq: 1, ...extra });
+
+test('badRow: the audit cases (no id inside the data, no cardId, data a string, data null while not deleted) are all bad', () => {
+  assert.ok(badRow(srow('cards', 'x1', { deckId: 'd', front: 'a' })));
+  assert.ok(badRow(srow('cardStates', 'x2', { due: 1 })));
+  assert.ok(badRow(srow('cards', 'x3', 'oops')));
+  assert.ok(badRow(srow('decks', 'x4', null)));
+  assert.ok(badRow(srow('cards', 'x5', [1, 2])));
+  assert.ok(badRow(srow('reviewLog', 'x6', { cardId: 'c' })), 'a review needs its uid');
+  assert.ok(badRow(srow('cards', '', { id: 'a' })), 'no id on the row');
+  assert.ok(badRow(srow('settings', 'newPerDay', 'x')));
+  assert.ok(badRow(null));
+});
+
+test('badRow: good rows, deletes, and stores this app does not know are not damaged', () => {
+  assert.equal(badRow(srow('cards', 'c1', { id: 'c1', front: 'a' })), null);
+  assert.equal(badRow(srow('cardStates', 'c1', { cardId: 'c1' })), null);
+  assert.equal(badRow(srow('reviewLog', 'u1', { uid: 'u1', cardId: 'c' })), null);
+  assert.equal(badRow(srow('settings', 'newPerDay', { value: 30 })), null);
+  assert.equal(badRow(srow('cards', 'gone', null, { deleted: true })), null);
+  assert.equal(badRow(srow('flashmobs', 'f1', 'whatever')), null, 'a store from a newer app is ignored elsewhere, not counted as damage');
+});
+
+test('recordFromRow: the key always comes from the row id, so data naming another record cannot overwrite it', () => {
+  assert.equal(recordFromRow(srow('cards', 'mine', { id: 'victim', front: 'a' })).id, 'mine');
+  assert.equal(recordFromRow(srow('cardStates', 'mine', { cardId: 'victim', due: 1 })).cardId, 'mine');
+  assert.equal(recordFromRow(srow('reviewLog', 'u9', { uid: 'u1' })).uid, 'u9');
+  const r = recordFromRow(srow('decks', 'd1', { id: 'd1', name: 'N' }));
+  assert.deepEqual(r, { id: 'd1', name: 'N', updatedAt: 5, syncedAt: 5 });
+});
+
+test('the skipped-rows log counts every row, keeps the last 20, and tells the person once until more arrive', () => {
+  let log = addDamaged(null, [{ store: 'cards', id: 'a', why: 'x' }], 10);
+  assert.equal(log.count, 1);
+  assert.match(damagedNote(log), /^1 synced record was damaged and skipped/);
+  log = addDamaged(log, Array.from({ length: 30 }, (_, i) => ({ store: 'cards', id: 'b' + i, why: 'x' })), 11);
+  assert.equal(log.count, 31);
+  assert.equal(log.items.length, 20);
+  assert.match(damagedNote(log), /^31 synced records were damaged and skipped/);
+  assert.equal(damagedNote({ ...log, seen: 31 }), null, 'after Dismiss nothing is shown');
+  assert.match(damagedNote(addDamaged({ ...log, seen: 31 }, [{ id: 'z' }])), /^1 synced record was damaged/);
+  assert.equal(damagedNote(undefined), null);
+  // the same row read again by the next sync's overlap is not counted twice
+  const once = addDamaged(null, [{ store: 'cards', id: 'a', seq: 7, why: 'x' }]);
+  assert.equal(addDamaged(once, [{ store: 'cards', id: 'a', seq: 7, why: 'x' }]).count, 1);
+  assert.equal(addDamaged(once, [{ store: 'cards', id: 'a', seq: 9, why: 'x' }]).count, 2, 'a new version of it is a new row');
+});
+
+// ---------- wording for end users ----------
+test('server errors use neutral wording: nothing about the owner, a project, SQL or a dashboard', async () => {
+  const supa = await import('../js/supa.js');
+  const realFetch = globalThis.fetch;
+  const ask = async (res) => {
+    globalThis.fetch = async () => { if (res instanceof Error) throw res; return { ok: false, status: res.status, text: async () => JSON.stringify(res.body) }; };
+    try { await supa.putRows('t', []); } catch (e) { return e; } finally { globalThis.fetch = realFetch; }
+  };
+  const net = await ask(new TypeError('Failed to fetch'));
+  assert.equal(net.message, "Couldn't reach the sync server. Your cards are safe on this device and will sync when it's back.");
+  const ro = await ask({ status: 400, body: { code: '25006', message: 'cannot execute INSERT in a read-only transaction' } });
+  assert.equal(ro.message, SERVER_FULL_MESSAGE_TEXT);
+  assert.equal(ro.code, '25006');
+  for (const body of [{ code: 'PGRST202' }, { code: 'PGRST205' }, { code: '42P01' }, { error_code: 'signup_disabled' }, { message: 'media_left' }]) {
+    const e = await ask({ status: 404, body });
+    assert.doesNotMatch(e.message, /supabase|project|\bSQL\b|\.sql|dashboard|owner|Restore/i, e.message);
+  }
+  const left = await ask({ status: 400, body: { code: 'P0001', message: 'media_left' } });
+  assert.equal(left.code, 'media_left');
+});
+const SERVER_FULL_MESSAGE_TEXT = "The sync server is full right now. Everything is safe on this device and will sync when there’s room.";

@@ -39,6 +39,13 @@ export const realChromium = { launch: launchMapped };
 // gives every new browser window the "skip onboarding" flag in localStorage (the app also accepts
 // ?skipOnboarding in the address). e2e-onboarding.mjs uses `realChromium` to see the real first run.
 const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } };
+// Signing in on a device that has cards of its own now asks first ("Add these N cards to your account" / "Start fresh" / "Cancel").
+// Most tests build a device with cards and then sign in on purpose to merge them, so `chromium` taps "Add these cards" when the
+// question appears. e2e-devices.mjs tests the question itself with `realChromium`, which does not.
+const ADD_WHEN_ASKED = () => {
+  const tap = () => document.getElementById('devAdd')?.click();
+  document.addEventListener('DOMContentLoaded', () => new MutationObserver(tap).observe(document.documentElement, { childList: true, subtree: true }));
+};
 export const chromium = {
   launch: async (...args) => {
     const browser = await realChromium.launch(...args);
@@ -48,6 +55,7 @@ export const chromium = {
     browser.newContext = async (opts = {}, ...rest) => {
       const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest);
       await ctx.addInitScript(SKIP);
+      await ctx.addInitScript(ADD_WHEN_ASKED);
       cpuThrottle(ctx);
       return ctx;
     };

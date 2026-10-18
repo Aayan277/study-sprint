@@ -1,9 +1,11 @@
 // Sending rows to the server so that one bad row can't hold up the rest.
 //
-// The server takes a batch in one go: if one row in it is refused, the whole batch is. Rows can be refused because
-// the record is over the server's size limit ('size'), its id is too long ('id'), the account's synced-data space is full ('data'), or the
-// whole project is full ('server') (supabase/limits.sql). pushSafely() sends batches, and when one is refused for
-// one of those reasons it splits it in halves, and again, until the rows that were refused are alone. The rest go.
+// The server takes a batch in one go: if one row in it is refused, the whole batch is. Two kinds of refusal are about ONE row:
+// the record is over the server's size limit ('size'), or its id is too long ('id') (supabase/limits.sql). For those, pushSafely()
+// splits the batch in halves, and again, until the rows that were refused are alone. The rest go.
+// The other two are about the whole account or server: the account's synced-data space is full ('data'), or the whole project is
+// full or read-only ('server'). Splitting can't help there (every half is refused too, which used to cost hundreds of requests a
+// sync), so the first such refusal stops the sending: the rest is held for a later sync. Deletes are sent first, because they free space.
 //
 //   put(rows)   sends one batch (supa.putRows); throws on a refusal
 // Returns { sent: [rows that went], held: [rows to try again next time], bad: [{ row, kind: 'size' | 'id', message }] (over the size or id limit),
@@ -19,10 +21,12 @@ const BUDGET = 150;          // extra requests allowed per sync for splitting; w
 export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, onProgress } = {}) {
   const out = { sent: [], held: [], bad: [], full: null };
   let spare = budget;
+  let halted = false;       // the account or server is full: nothing more is sent this sync
   // The batch size for the rest of this sync: halved when a request times out (a slow connection), so the next batches don't each
   // wait out the full timeout first, like the pull's page size (getPageSafely); it doesn't grow back, so a link that always times out at 500 doesn't pay the timeout again.
   let size = batch;
   const attempt = async part => {
+    if (halted) { out.held.push(...part); return; }
     try {
       await put(part);
       out.sent.push(...part);
@@ -39,13 +43,13 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       }
       const kind = pushErrorKind(err);
       if (!kind) throw err;
-      const rowProblem = kind === 'size' || kind === 'id';
-      if (!rowProblem) out.full = out.full === 'server' ? 'server' : kind;
-      if (part.length === 1) {
-        if (rowProblem) out.bad.push({ row: part[0], kind, message: err.message });
-        else out.held.push(part[0]);
+      if (kind === 'data' || kind === 'server') {          // everything is refused alike: stop, don't split
+        out.full = out.full === 'server' ? 'server' : kind;
+        halted = true;
+        out.held.push(...part);
         return;
       }
+      if (part.length === 1) { out.bad.push({ row: part[0], kind, message: err.message }); return; }
       if (spare <= 0) { out.held.push(...part); return; }          // out of requests for this sync: try again next time
       spare--;
       const mid = part.length >> 1;
@@ -53,11 +57,33 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       await attempt(part.slice(mid));
     }
   };
-  for (let i = 0; i < rows.length;) {
-    onProgress?.(i, rows.length);
+  // Deletes first: they only shrink what the account holds, so they go through even when it is full (and may make room for the rest).
+  const ordered = [...rows.filter(r => r.deleted), ...rows.filter(r => !r.deleted)];
+  for (let i = 0; i < ordered.length;) {
+    onProgress?.(i, ordered.length);
     const n = size;                  // (size may change while this batch is sent)
-    await attempt(rows.slice(i, i + n));
-    i += n;
+    // (A batch is all deletes or all puts, so a refusal of the puts never holds a delete back.)
+    const end = Math.min(i + n, ordered.length);
+    let cut = end;
+    if (ordered[i].deleted) { while (cut > i && !ordered[cut - 1].deleted) cut--; }
+    else { for (let j = i; j < end; j++) if (ordered[j].deleted) { cut = j; break; } }
+    await attempt(ordered.slice(i, cut));
+    i = cut;
   }
   return out;
+}
+
+// ---------- backing off while the account or server is full ----------
+// After a refusal for space, automatic syncs stop pushing for a while (they still pull): 15 minutes, then 30, 60... up to 6 hours
+// while it keeps being refused. Sync now (a person's tap) pushes anyway, once; a push that goes through clears it. It is kept in the
+// local-only setting "pushBackoff", { userId, until, wait, kind, note }, so closing the app doesn't reset it.
+export const BACKOFF_FIRST = 15 * 60 * 1000;
+export const BACKOFF_MAX = 6 * 60 * 60 * 1000;
+export function nextBackoff(prev, { userId, kind, note, now = Date.now() }) {
+  const wait = prev?.userId === userId && prev.wait ? Math.min(BACKOFF_MAX, prev.wait * 2) : BACKOFF_FIRST;
+  return { userId, until: now + wait, wait, kind, note: note || null };
+}
+// The saved backoff if it still applies to this account right now, else null.
+export function activeBackoff(b, userId, now = Date.now()) {
+  return b && typeof b === 'object' && b.userId === userId && Number(b.until) > now && now + BACKOFF_MAX >= Number(b.until) ? b : null;
 }

@@ -79,6 +79,8 @@ It adds:
   the check falls back to "is the account under its limit", which can let one 3 MB file over.)
 - **Space for synced data (cards, reviews, settings): 80 MB per account.** Going over is refused, and the app
   keeps the changes on the device and says so. Deleting is always allowed.
+  The app then stops pushing for 15 minutes (doubling up to 6 hours while it keeps being refused) so a full account or
+  server costs one request per sync, not hundreds; reading carries on, and **Sync now** tries once anyway.
 - **Project-wide ceilings** (table `global_limits`: 900 MB of files, 420 MB of data; totals re-counted at most
   once a minute). When one is hit, everybody's new files or data wait, and the app says "The sync server is full
   right now. Everything is safe on this device and will sync when there's room." On the Pro plan, raise them.
@@ -86,6 +88,8 @@ It adds:
 - The check behind the picture rule lives in its own `private` schema so it can't be called from outside the app's rules. Please don't add `private` to the API's "Exposed schemas" in the Supabase settings.
 - A **usage line** in the app (Settings → Your data → *In your account: …*).
 - The **Delete my account** button in Settings → Sync (it needs this script).
+  The app first removes the account's pictures and sounds through the Storage API and checks the folder is empty; if any
+  remain, `delete_my_account()` refuses (`media_left`) and nothing is deleted.
 
 **Giving one person more (or less) space.** Everyone gets 180 MB unless they have a row in the `quotas` table:
 
