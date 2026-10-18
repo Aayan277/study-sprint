@@ -11,6 +11,7 @@
 //
 // Loaded the first time it is needed (card-editor.js), not at start-up.
 
+import { holdBack, releaseBack } from './nav.js';
 import { panZoom } from './occlusion-view.js';
 import { imgHTML } from './media.js';
 import { esc } from './ui.js';
@@ -122,6 +123,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     const labelRow = $q('.occ-ed-label'), labelIn = $q('#occEdLabel'), cfBox = $q('.occ-ed-confirm');
     const tool = id => $q(`[data-tool="${id}"]`);
     dlg.showModal();
+    holdBack('occ-editor', () => cancel());      // Back (an edge swipe) asks before throwing changes away, like Esc
 
     pz = panZoom(stage, canvas, { oneFinger: 'none', aspect: w > 0 && h > 0 ? w / h : 0, onPinch: () => abort(), onChange: () => markTiny(), arrowsBusy: () => sel.size > 0 });
     // Without a saved size the picture's own shape is used once it has loaded.
@@ -579,6 +581,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     dlg.addEventListener('close', () => {
       // Closed some other way (Android back) with changes: keep the boxes rather than lose them.
       if (!closed && dirty() && hist.present.length) result = outcome();
+      releaseBack('occ-editor');
       ac.abort();
       pz.destroy();
       clearTimeout(noteTimer);

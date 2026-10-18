@@ -20,6 +20,7 @@ import { drawCard as drawInstallCard } from './install.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
 import { drawSidebar } from './sidebar.js';
+import { go as navGo } from './nav.js';
 
 // Start a study session (see launchStudy in study-data.js), with two things first:
 //   - if a session is in progress, Start carries on with it when it covers the same decks, and otherwise asks,
@@ -35,7 +36,7 @@ export async function startStudy(spec = {}) {
   const r = live.resume;
   const going = r && r.day === dayStart() && r.version === db.scheduleVersion() ? r : null;
   if (!going) return launchStudy(spec);
-  if (going.scope === scopeKey(spec.deckIds, spec.kind, spec.days, spec.cardIds)) { location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; return; }
+  if (going.scope === scopeKey(spec.deckIds, spec.kind, spec.days, spec.cardIds)) { navGo(`#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`); return; }
   openSheet(`
     <h2 id="sheetTitle">Start over?</h2>
     <p>You have a session in progress (${plural(going.left, 'card')} left). Starting a new one replaces it: your answers so far are saved, but you'll lose this session's undo.</p>
@@ -43,7 +44,7 @@ export async function startStudy(spec = {}) {
       <button class="btn ghost" type="button" id="soKeep">Keep going</button>
       <button class="btn primary" type="button" id="soNew">Start over</button>
     </div>`);
-  $('soKeep').addEventListener('click', () => { closeSheet(); location.hash = `#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`; });
+  $('soKeep').addEventListener('click', () => { closeSheet(); navGo(`#/review${going.deckId ? '/' + encodeURIComponent(going.deckId) : ''}`); });
   $('soNew').addEventListener('click', () => { closeSheet(); launchStudy(spec); });
 }
 const launch = startStudy;

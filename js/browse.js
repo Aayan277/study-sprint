@@ -19,6 +19,7 @@ import { plainText, mathHTML } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
+import { go as navGo } from './nav.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
 const RATING = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
@@ -41,7 +42,7 @@ export async function renderBrowseAll(el, filter) {
     <button class="back" type="button" id="back">‹ Decks</button>
     <div class="screen-head"><div><h1>All cards</h1></div></div>
     <section id="browser"></section>`;
-  $('back').addEventListener('click', () => { location.hash = '#/decks'; });
+  $('back').addEventListener('click', () => { navGo('#/decks'); });
   await mountBrowser($('browser'), { deckId: null, filter });
 }
 

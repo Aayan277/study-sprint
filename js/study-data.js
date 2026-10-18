@@ -10,6 +10,7 @@ import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { personalW20 } from './sched-settings.js';
 import { lazyStreak, daysAgoStart, restDaySet, idleDaySet, dayKey } from './stats-calc.js';
 import { mergeIdleDays } from './sync-merge.js';
+import { go as navGo } from './nav.js';
 
 // How far back Today looks for the time estimate and the streak.
 const HISTORY_DAYS = 60;
@@ -285,7 +286,7 @@ export const setLaunch = l => { launch = l; };
 export function launchStudy({ deckIds = [], deckId, kind = null, days = 3, cardIds = [], includeSuspended = false, spread = false, label = '' } = {}) {
   if (!deckId && !kind && deckIds.length === 1) deckId = deckIds[0];
   setLaunch({ deckIds, deckId, kind, days, cardIds, includeSuspended, spread, label });
-  location.hash = deckId ? `#/review/${encodeURIComponent(deckId)}` : '#/review';
+  navGo(deckId ? `#/review/${encodeURIComponent(deckId)}` : '#/review');
 }
 // A short name for what a session covers (its decks and kind), to tell whether starting again means the same session.
 // No decks means all of them. `days` is how far ahead a "review ahead" or exam-prep session looks.

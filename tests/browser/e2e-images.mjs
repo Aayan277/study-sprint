@@ -1,4 +1,4 @@
-import { chromium } from './pw.mjs';
+import { chromium, sheetSettled } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -97,7 +97,7 @@ await B.goto(APP + '#/deck/sample'); await B.waitForSelector('.crow');
 await B.locator('.crow').nth(1).click(); await B.waitForSelector('#ceFront');
 await B.setInputFiles('#ceFrontFile', photo); await B.waitForSelector('#ceFrontImg img[src^="blob:"]');
 await B.click('button[type=submit][form=ceForm]'); await B.waitForTimeout(300); await B.click('.sheet-x');
-await B.goto(APP + '#/settings'); await B.waitForSelector('#syncNowBtn');
+await sheetSettled(B); await B.goto(APP + '#/settings'); await B.waitForSelector('#syncNowBtn');
 await B.click('#syncNowBtn'); await B.waitForFunction(() => /Pictures can.t sync yet/.test(document.querySelector('#syncStatus')?.textContent || ''));
 ok((await B.textContent('#syncStatus')).startsWith('Synced'), 'without picture storage: cards still sync, with a note: ' + await B.textContent('#syncStatus'));
 fake.setBucket(true);

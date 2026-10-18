@@ -29,8 +29,9 @@ import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logi
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
 import { drawSidebar } from './sidebar.js';
-import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
+import { $, esc, plural, toast, onControl, keepFocusOnPress, setFocusMode, openSheet, closeSheet, icon, SPEAKER_ICON, streakHTML, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
+import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav.js';
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
@@ -61,13 +62,13 @@ export async function renderReview(el, deckId) {
     const custom = launch.kind ? customQueue(launch.kind, data, c.cards, launch.days, launch.cardIds, { includeSuspended: launch.includeSuspended, spread: launch.spread, label: launch.label }) : null;
     if (custom && !custom.queue.length) {      // e.g. exam prep when every card was seen in the last 3 days
       toast(launch.kind === 'prep' ? 'You have seen every card in this deck in the last 3 days' : 'Nothing to review there');
-      location.replace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
+      navReplace(launch.kind === 'prep' && launch.deckId ? `#/deck/${encodeURIComponent(launch.deckId)}` : '#/today');
       return;
     }
     return start(el, data, c.cards, typing, launch.deckId, custom, scopeKey(launch.deckIds, launch.kind, launch.days, launch.cardIds));
   }
   // No deck and nothing started: the home screen is Today.
-  if (!deckId) { location.replace('#/today'); return; }
+  if (!deckId) { navReplace('#/today'); return; }
 
   // From a deck's page (or a reload): straight into its cards (no setup screen).
   const c = countFor(data, [deckId]);
@@ -215,6 +216,7 @@ function renderSession(el, enter = false) {
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
   if (!R.current) return finish(el);
+  holdBack('session', askEnd);        // Back (an edge swipe) asks before leaving a running session
   const { card } = R.current;
   const sp = stepsOf(card);
   R.stepShown = sp ? Math.min(R.stepShown || 0, sp.steps.length) : 0;      // (an edit can change the number of steps)
@@ -762,7 +764,23 @@ async function quick(act) {
 }
 
 // ---------- 3. finish ----------
+// The back gesture during a session: ask, and keep going unless they say End. (Answers are saved either way.)
+function askEnd() {
+  if (!R?.active || document.getElementById('sheet')?.open) return;
+  openSheet(`
+    <h2 id="sheetTitle">End this session?</h2>
+    <p>Your answers so far are saved. The cards you haven't done stay due.</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" type="button" id="keepOn">Keep going</button>
+      <button class="btn primary" type="button" id="endNow">End session</button>
+    </div>`);
+  $('keepOn').addEventListener('click', closeSheet);
+  $('endNow').addEventListener('click', () => { closeSheet(); if (R?.active && R.el?.isConnected) finish(R.el); });
+}
+
 async function finish(el) {
+  closeSheet();                 // a card panel or a question that was open belongs to the session that just ended
+  releaseBack('session');
   destroyPad();
   stopSound();
   R.active = false;
@@ -813,7 +831,7 @@ async function finish(el) {
     <section class="finish-next" aria-label="What's next">
       ${streakHTML(streak)}
     </section>`;
-  $('againBtn').addEventListener('click', () => { R = null; publishLive(); location.hash = '#/today'; });
+  $('againBtn').addEventListener('click', () => { R = null; publishLive(); navGo('#/today'); });
   $('keepBtn')?.addEventListener('click', async () => {
     R = null; publishLive();
     const { startStudy } = await import('./today.js');

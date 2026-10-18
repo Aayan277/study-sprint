@@ -24,7 +24,7 @@ const load = async file => {
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 };
 const save = async name => { await page.selectOption('#deckSel', '__new'); await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 }); };
-const closeSheet = async () => { await page.waitForTimeout(500); await page.evaluate(() => { const s = document.getElementById('sheet'); if (s?.open) s.close(); }); };      // (a moment first: a saved card's panel opens again a moment after the toast)
+const closeSheet = async () => { await page.waitForTimeout(500); await page.evaluate(() => { const s = document.getElementById('sheet'); if (s?.open) s.close(); }); await page.waitForTimeout(250); };      // (a moment first: a saved card's panel opens again a moment after the toast; a moment after: the sheet's history entry comes off, see js/nav.js)
 const openDeck = async id => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck'); await page.goto(APP + '#/deck/' + id); await page.waitForSelector('.crow'); };
 const until = async (fn, ms = 6000) => { for (let t = 0; t < ms; t += 100) { if (await fn()) return true; await page.waitForTimeout(100); } return false; };
 const FA = { name: 'First Aid', text: 'p. 41' }, SK = { name: 'Sketchy', text: 'Video: Heart' };
