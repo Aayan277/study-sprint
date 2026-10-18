@@ -339,12 +339,57 @@ back. In a new project people sign in again, which resets that bookmark, and eac
 **Test it once, now.** A backup you have never restored is a guess. Make a second, throwaway free project, do the
 steps above in it, check the counts, then delete that project (**Project Settings → General → Delete project**).
 
+## 8c. Get a warning when space runs low (GitHub)
+
+The free plan has hard ceilings, and the app has "fuses" that refuse new data before the ceilings are reached (step 2c:
+about 420 MB of synced data, 900 MB of pictures and sounds). When a fuse trips, people just see "server full". This job
+(`.github/workflows/fuse-watch.yml`) checks every morning and **opens a GitHub issue when anything is at 80% or more**, so you
+hear about it first. GitHub emails you about new issues (check **Watch → Custom → Issues** on the repository if you don't get the email).
+
+**What it checks:** the total of everyone's synced data against its fuse, the total of pictures and sounds against its fuse,
+and the size of the whole database against the free plan's 500 MB. It counts the same way the fuses do, so the numbers match.
+It only reads. The issue holds **totals only**: no emails, no names, nothing about any one person, so it is safe on a public repository.
+
+### Turn it on
+
+1. Make sure the secret `SUPABASE_DB_URL` exists. It is the same one the backup job uses (step 8b, "Turn it on", points 1 and 2).
+   If you haven't made it yet, do those two points now. You don't need `BACKUP_PASSPHRASE` for this.
+2. Open the **Actions** tab, click **Watch free-plan space**, then **Run workflow → Run workflow**. After a few seconds
+   it should show a green tick. Until the secret exists the job does nothing and still shows a green tick (click into
+   the run: "No space check yet"). If the address is wrong the run turns red and says what to fix.
+3. That's all. It then runs by itself every day. (Same note as the other jobs: GitHub switches scheduled jobs off after 60 days
+   with no activity in the repository; the Actions tab shows a button to turn it back on.)
+
+### What the issue means
+
+The issue is called **Study Sprint: storage is almost full** and has the label `storage-warning`. There is only ever one:
+it is updated each day, not repeated. It shows a small table: what is used, its limit, how full it is.
+
+- **Pictures and sounds near the limit, or data near the limit:** a few people are using most of the shared space. Pick one:
+  1. **Give each person less.** Lower the default limits (step 2c has the one-line change for the per-person defaults; backlog item 20 in `PLAN.md`
+     explains the sums), and give people you know more with the `quotas` table. To see who uses the most, run
+     `supabase/owner.sql` (step 9, "Who uses how much").
+  2. **Move to the Pro plan** (backlog item 7). Then raise the two fuses by editing the two rows in **Table Editor → global_limits** (step 2c).
+- **Whole database near 500 MB:** the same two choices. Nothing is lost at 500 MB, but Supabase makes the project
+  read-only for everybody until you free space or upgrade.
+
+When every total is back under 75%, the job closes the issue by itself with a comment. If it fills again, it opens a new one.
+
+### Downloads ("egress"): look by hand now and then
+
+The free plan also allows **5 GB of downloads a month**. Every time someone signs in on a new device, the device downloads all
+their cards and pictures, so a few new phones with big picture decks add up. The database can't tell the job about this number,
+so check it yourself, say once a month, and the issue reminds you:
+open Supabase, then **Project Settings → Usage**, and look at **Egress** (also called Bandwidth) for the current billing month.
+If it is over about 4 GB (80%) with weeks to go, treat it like the limits above: fewer or smaller pictures per person, or the Pro plan.
+Going over 5 GB on Free can make the project stop serving until the month rolls over, so it is better to act at 80%.
+
 ## 9. Looking after it
 
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
   (the project turns read-only above that), 1 GB of files and 5 GB of downloads a month. Roughly: a light
   user takes 7 MB of database a year, a heavy one 100 MB, and a full 180 MB of pictures and sounds is
-  about 1,000 pictures. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
+  about 1,000 pictures. Step 8c warns you by itself. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
   and when to move to the Pro plan.
 - **Abuse.** To stop new accounts quickly, turn off **Allow new users to sign up** (step 3). Existing people
   keep working. To remove someone, ask them to use **Settings → Sync → Delete my account**. If you must do it
