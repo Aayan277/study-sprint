@@ -639,13 +639,14 @@ button.act-row:hover{background:var(--surface-3)}
 .pa-list .act-row{min-height:44px;padding:6px 14px;gap:12px;font-size:var(--fs-base)}
 .pa-list .act-row:disabled{opacity:.5;cursor:not-allowed}
 button.act-row:disabled:hover{background:none}
-.pa-danger{margin-top:calc(var(--s-2) * -1)}
+.pa-danger{margin-top:var(--s-2)}
+#ceConfirm:empty{display:none}
 .pa-danger .act-row,.pa-danger .act-row > .ico{color:var(--again)}
 .act-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .act-grid .btn{width:100%;justify-content:flex-start;padding:0 var(--s-3);min-height:44px;font-weight:500}
 /* The row of flag colors scrolls sideways inside its own box (not the page) if it is too wide */
-.flags{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px}
-.flags .flagbtn{flex-direction:column;justify-content:center;gap:4px;min-height:48px;padding:6px 2px;font-size:var(--fs-xs);cursor:pointer;min-width:0}
+.flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(max(44px,4.2em),1fr));gap:4px;font-size:var(--fs-xs)}
+.flags .flagbtn{flex-direction:column;justify-content:center;gap:4px;min-height:48px;padding:6px 1px;font-size:1em;text-align:center;overflow-wrap:anywhere;cursor:pointer;min-width:0}
 .flagbtn i{width:14px;height:14px;border-radius:4px;flex:none}
 .flagbtn i.none{background:none;box-shadow:inset 0 0 0 1.5px var(--text-2)}
 .flagbtn[aria-pressed="true"]{font-weight:700}
@@ -2596,7 +2597,6 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
   html:not([data-ui="clinical"]) .brand,
   html:not([data-ui="clinical"]) .chip,
   html:not([data-ui="clinical"]) .set-nav a,
-  html:not([data-ui="clinical"]) .flagbtn,
   html:not([data-ui="clinical"]) .tchip,
   html:not([data-ui="clinical"]) .el-tick,
   html:not([data-ui="clinical"]) .seg button,
@@ -2617,7 +2617,6 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
   html:not([data-ui="clinical"]) .pw-show::before,
   html:not([data-ui="clinical"]) .chip::before,
   html:not([data-ui="clinical"]) .set-nav a::before,
-  html:not([data-ui="clinical"]) .flagbtn::before,
   html:not([data-ui="clinical"]) .tchip::before,
   html:not([data-ui="clinical"]) .el-tick::before,
   html:not([data-ui="clinical"]) .seg button::before,
