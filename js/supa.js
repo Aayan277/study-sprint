@@ -190,8 +190,26 @@ async function storage(path, { method = 'GET', token, body, type } = {}) {
   }
   return res;
 }
+// Whether the account already has this file. (A HEAD request: no bytes come back.)
+export async function mediaExists(token, userId, id) {
+  try {
+    await storage(`object/authenticated/media/${userId}/${encodeURIComponent(id)}`, { method: 'HEAD', token });
+    return true;
+  } catch (err) {
+    if (err.status === 400 || err.status === 404) return false;
+    throw err;
+  }
+}
+// A picture's id is never reused, so a file that is already there is the same file: nothing to send. The server checks the
+// "add" rule (with the account's space limit) even for a replace, so at a full account a retry of a file it already holds would
+// be refused: when that happens, ask whether the file is there, and if it is, the upload is done.
 export async function uploadMedia(token, userId, id, type, data) {
-  await storage(`object/media/${userId}/${encodeURIComponent(id)}`, { method: 'POST', token, body: data, type });
+  try {
+    await storage(`object/media/${userId}/${encodeURIComponent(id)}`, { method: 'POST', token, body: data, type });
+  } catch (err) {
+    if (err.code === 'media_policy' && await mediaExists(token, userId, id).catch(() => false)) return;
+    throw err;
+  }
 }
 // { type, data } of a picture, or null if the account doesn't have it.
 export async function downloadMedia(token, userId, id) {

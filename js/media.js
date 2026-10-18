@@ -83,7 +83,7 @@ export async function saveSound(file) {
   // The file's own first bytes say what it is more honestly than its name or the type the picker guessed.
   const type = sniffAudioType(data) || soundType(file.type, name);
   if (!type) throw new Error("That isn't a sound file the app can keep (use .mp3, .m4a, .ogg, .wav or .flac).");
-  if (data.byteLength > MAX_SOUND_BYTES) throw new Error(`That sound is ${sizeText(data.byteLength)}. Sounds can be up to 1 MB: shorten it or save it at a lower quality.`);
+  if (data.byteLength > MAX_SOUND_BYTES) throw Object.assign(new Error(`That sound is ${sizeText(data.byteLength)}. Sounds can be up to 1 MB: shorten it or save it at a lower quality.`), { code: 'too_big' });
   const id = db.newId();
   await db.putMedia({ id, type, data, size: data.byteLength, name: name.slice(0, 120), created: Date.now(), uploaded: false });
   persistOnce();

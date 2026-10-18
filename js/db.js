@@ -20,6 +20,7 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
+import { isMarkKey, markKey, markId, validMark } from './media-sweep.js';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
@@ -706,7 +707,8 @@ export async function deleteEverything() {
 //   syncState  sync bookmarks: the last server change seen, and when this device last sent its changes
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
 export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed'];
-export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING);
+// (Media deletion marks, "mdel:<id>", do sync but are left out of backups: see media-sweep.js.)
+export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k);
 
 // Tell sync.js when something changed on this device, so it can send it.
 const listeners = new Set();
@@ -928,6 +930,15 @@ export async function markBlocked(ids, reason) {
   const os = tx.objectStore('media');
   for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) os.put({ ...e.target.result, blocked: reason }); };
   return finished(tx);
+}
+// The pictures and sounds marked for deletion from the account (media-sweep.js): { id: time marked }. Un-marked ones are left out.
+export async function mediaMarks() {
+  const os = await store('settings');
+  const range = IDBKeyRange.bound(markKey(''), markKey('\uffff'));
+  const [keys, values] = await Promise.all([done(os.getAllKeys(range)), done(os.getAll(range))]);
+  const out = {};
+  keys.forEach((k, i) => { if (typeof values[i] === 'number' && validMark(values[i])) out[markId(k)] = values[i]; });
+  return out;
 }
 // The ids of every picture and sound that some card uses.
 export function usedMediaIds(cards) {

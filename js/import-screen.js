@@ -17,7 +17,7 @@ import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
-import { importWarnings } from './quota.js';
+import { importWarnings, tooBigNotes } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
 const SHEETJS_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
@@ -560,7 +560,7 @@ function refreshFlags() {
   $('progRow').hidden = !prog?.cards;
   if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
   // A big deck: more than 200 MB of pictures and sounds, or more than 50,000 reviews of history (see quota.js).
-  if (S.result.format.id === 'anki') for (const w of importWarnings({ mediaBytes: S.ankiMediaBytes, reviews: prog?.reviews || 0 })) parts.push(`<span class="warn">${esc(w)}</span>`);
+  if (S.result.format.id === 'anki') for (const w of importWarnings({ mediaBytes: S.ankiMediaBytes, reviews: prog?.reviews || 0, soundBytes: S.bringSounds ? snd.bytes : 0 })) parts.push(`<span class="warn">${esc(w)}</span>`);
   // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
   const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
   $('subRow').hidden = !subs.size;
@@ -622,6 +622,8 @@ async function save() {
   const saveBtn = $('saveBtn');
   const makeSubdecks = !$('subRow').hidden && $('ankiSubs').checked;
   saveBtn.disabled = true;
+  // Files over the size limit that were left out (told at the end). Sounds over 1 MB were already counted when the file was read (anki.js).
+  const tooBig = { pictures: 0, sounds: S.bringSounds ? soundReport(S.result).tooBig : 0 };
   try {
     const now = Date.now();
     // created + i keeps the cards in the order they were pasted.
@@ -649,7 +651,7 @@ async function save() {
     // front and back are made from them (occlusion.js). A note whose picture or boxes can't be used comes in as one
     // plain picture card instead.
     if (toAdd.some(c => c.occlusion)) {
-      const drop = await addOcclusion(toAdd, cards, saveBtn);
+      const drop = await addOcclusion(toAdd, cards, saveBtn, tooBig);
       if (drop.size) { toAdd = toAdd.filter((_, i) => !drop.has(i)); cards = cards.filter((_, i) => !drop.has(i)); }
     }
     // Pictures from an Anki file: unpack, shrink and save each one, then point the card at it.
@@ -665,7 +667,7 @@ async function save() {
             if (!got) return null;
             const { type, data } = await processImage(new Blob([got.data], { type: got.type }));
             return saveImage(type, data);
-          })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+          })().catch(err => { console.error('Skipped a picture', name, err); if (err?.code === 'too_big') tooBig.pictures++; return null; }));
         }
         return done.get(name);
       };
@@ -691,7 +693,7 @@ async function save() {
             const got = found.get(name);
             if (!got) throw new Error('not in the file');
             ids.set(name, (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id);     // (a copy: a view would drag the whole package along)
-          } catch (err) { console.error('Skipped a sound', name, err); soundsSkipped++; }
+          } catch (err) { console.error('Skipped a sound', name, err); if (err?.code === 'too_big') tooBig.sounds++; else soundsSkipped++; }
         }
       }
       for (const [sn, card] of withSounds) {
@@ -766,7 +768,8 @@ async function save() {
     }
     await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
     rememberDeck(deckId);
-    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`);
+    const left = tooBigNotes(tooBig);
+    toast(`Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}${left.length ? `. ${left.join('. ')}` : ''}`, left.length ? { ms: 6000 } : undefined);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;
@@ -782,7 +785,7 @@ async function save() {
 
 // The picture and boxes of the image-occlusion cards being added (cards[i] belongs to toAdd[i]). Returns the indexes of
 // cards to leave out: boxes whose group came to nothing, and the extra cards of a note that became a plain picture.
-async function addOcclusion(toAdd, cards, saveBtn) {
+async function addOcclusion(toAdd, cards, saveBtn, tooBig) {
   const { processImage, saveImage, OCCLUSION_SIDE } = await import('./media.js');
   const pictures = new Map();          // 'name|2048' → the saved picture { id, width, height, srcWidth, srcHeight }, or null
   const picture = name => {
@@ -793,7 +796,7 @@ async function addOcclusion(toAdd, cards, saveBtn) {
         if (!got) return null;
         const out = await processImage(new Blob([got.data], { type: got.type }), { maxSide: OCCLUSION_SIDE });
         return { ...out, id: await saveImage(out.type, out.data) };
-      })().catch(err => { console.error('Skipped a picture', name, err); return null; }));
+      })().catch(err => { console.error('Skipped a picture', name, err); if (err?.code === 'too_big') tooBig.pictures++; return null; }));
     }
     return pictures.get(key);
   };

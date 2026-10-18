@@ -14,6 +14,7 @@
 
 import * as db from './db.js';
 import * as supa from './supa.js';
+import { planSweep, markKey } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
@@ -274,13 +275,15 @@ async function run() {
 // ---------- pictures and sounds ----------
 // Both are files in the same bucket. Pictures go first, so a problem with sounds can never hold them up.
 // Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
+const checkedOnServer = new Set();      // kept-back files already asked about (sync-quota.js alreadyOnServer); starts empty each time the app opens
 async function syncMedia(auth) {
   const token = auth.access_token, uid = auth.user.id;
   const rows = await db.mediaToUpload();
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
   const pending = rows.filter(m => !(m.blocked === 'type' && !retrySounds));
   // Within the account's space limit (sync-quota.js): what doesn't fit waits on this device and goes when there's room.
-  const gate = await planMedia(auth, pending);
+  const gate = await planMedia(auth, pending, checkedOnServer);
+  if (gate.done.length) await db.markUploaded(gate.done);         // the account already had them
   let upload;
   try {
     upload = await uploadMediaFiles(gate.send, m => supa.uploadMedia(token, uid, m.id, m.type, m.data), {
@@ -310,12 +313,22 @@ async function syncMedia(auth) {
       onProgress: (n, total) => { if (total > 3) emit({ progress: `Downloading ${kind}: ${n} of ${total}…` }); }
     });
   }
-  // Pictures and sounds no card uses any more: remove them here and from the account.
+  // Pictures and sounds no card uses any more: remove them here, and mark them for deletion from the account; the account's copy
+  // goes 30 days later if still unused (media-sweep.js), in case another device still needs it.
   const removed = await db.cleanMedia();
-  if (removed.length) await supa.deleteMedia(token, uid, removed).catch(err => console.error(err));
+  await sweepMedia(token, uid, removed, cards);
   if (gate.full) return fullMessage(gate.full);
   if (gate.note) return gate.note;
   return blockedKinds.picture ? PICTURES_BLOCKED_NOTE : blockedKinds.sound ? SOUNDS_BLOCKED_NOTE : null;
+}
+async function sweepMedia(token, uid, removed, cards) {
+  const plan = planSweep({ marks: await db.mediaMarks(), removed, used: db.usedMediaIds(cards), now: Date.now() });
+  if (plan.mark.length || plan.unmark.length) await db.setSettings([...plan.mark.map(id => [markKey(id), Date.now()]), ...plan.unmark.map(id => [markKey(id), null])]);
+  const gone = [];
+  for (const ids of chunks(plan.sweep, 100)) {
+    try { await supa.deleteMedia(token, uid, ids); gone.push(...ids); } catch (err) { console.error(err); break; }      // a mark stays until its file is really gone
+  }
+  if (gone.length) await db.setSettings(gone.map(id => [markKey(id), null]));
 }
 async function fetchMedia(token, uid, id) {
   const got = await supa.downloadMedia(token, uid, id);

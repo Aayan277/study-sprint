@@ -112,7 +112,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         files.set(`${m[1]}/${m[2]}`, { type: h['content-type'], data: req.postDataBuffer() });
         return json(route, 200, { Key: `media/${m[1]}/${m[2]}` });
       }
-      if (req.method() === 'GET' && (m = /^object\/authenticated\/media\/([^/]+)\/(.+)$/.exec(p))) {
+      if ((req.method() === 'GET' || req.method() === 'HEAD') && (m = /^object\/authenticated\/media\/([^/]+)\/(.+)$/.exec(p))) {
         const f = m[1] === uid && files.get(`${m[1]}/${m[2]}`);
         if (!f) return json(route, 400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
         return route.fulfill({ status: 200, contentType: f.type, headers: { 'access-control-allow-origin': '*' }, body: f.data });
