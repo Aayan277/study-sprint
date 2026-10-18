@@ -95,7 +95,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
 // ============================ B. "Nothing due" days keep the streak ============================
 {
   const WED = new Date(2026, 9, 14, 12);
-  const seed = async (p, { overdue = false }) => p.evaluate(async overdue => {
+  const seed = async (p, { overdue = false, studied = [1, 2, 3] }) => p.evaluate(async ([overdue, studied]) => {
     const db = await import('./js/db.js');
     const { daysAgoStart } = await import('./js/stats-calc.js');
     const now = Date.now(), D = 86400000;
@@ -103,12 +103,12 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
     await db.addDeckWithCards({ id: 'bio', name: 'Cell Biology', color: '#46A758', created: now + 1 }, cards);
     // All learned; the next reviews are days away (or, in the other run, one is overdue since yesterday).
     await db.putMany('cardStates', cards.map((c, i) => ({ cardId: c.id, due: overdue && i === 0 ? now - D : now + 9 * D, stability: 9, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now - 4 * D, scheduledDays: 9, elapsedDays: 3, learningSteps: 0 })));
-    // Last studied 4 days ago and the days before: Sat 10, Fri 9, Thu 8 Oct. Nothing since.
-    await db.putMany('reviewLog', [4, 5, 6].flatMap(d => [0, 1].map(i => ({ cardId: 'q' + i, timestamp: daysAgoStart(d, now) + 12 * 3600000 + i * 60000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2 }))));
+    // Studied yesterday and the two days before: Tue 13, Mon 12, Sun 11 Oct. Nothing due since.
+    await db.putMany('reviewLog', studied.flatMap(d => [0, 1].map(i => ({ cardId: 'q' + i, timestamp: daysAgoStart(d, now) + 12 * 3600000 + i * 60000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2 }))));
     await db.setSetting('newPerDay', 0);
-  }, overdue);
+  }, [overdue, studied]);
 
-  // Nothing due, nothing left over: the days since are safe.
+  // Nothing due today: today is safe (and only today is noted).
   let p = await open(1440, 900, { at: WED, hash: '#/today' });
   await seed(p, {});
   await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
@@ -117,25 +117,38 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   ok(/^3\s*day streak/.test(line) && line.includes('Nothing due today: your streak is safe'), 'Today: a 3 day streak, "Nothing due today: your streak is safe": ' + line);
   ok((await norm(p, '.th-big')) === 'Nothing due today', 'and the ring says Nothing due today');
   const idle = await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}).sort());
-  ok(idle.join() === '2026-10-11,2026-10-12,2026-10-13,2026-10-14', 'the quiet days (11 to 14 Oct) were noted on this device: ' + idle.join());
+  ok(idle.join() === '2026-10-14', 'only today (14 Oct) was noted: ' + idle.join());
   ok(!/Freeze used/.test(line), 'no freeze was used');
   // The streak sheet and Stats agree.
   await go(p, '#/stats', '.pgrid');
   ok(/^3\s*day streak|3\s*days?/.test(await norm(p, '.pgrid .card')), 'Stats shows the same 3 day streak: ' + (await norm(p, '.pgrid .card')).slice(0, 60));
-  // A day later (the clock moves on), still safe: the notes stay.
+  // A day later (the clock moves on), nothing due again: that day is noted too, and the streak stays.
   await p.context().clock.setFixedTime(new Date(2026, 9, 15, 12));
   await go(p, '#/today', '.streak');
   await p.waitForFunction(() => document.querySelector('.streak')?.textContent.includes('streak is safe'));
   ok(/^3\s*day streak/.test(await norm(p, '.streak')), 'the next day, still a 3 day streak and safe: ' + await norm(p, '.streak'));
   await p.context().close();
 
-  // A card was overdue and not studied: those days do count as missed.
+  // A card was overdue and not studied: no day is noted. Hiding it (suspend) does not fake a quiet day either.
   p = await open(1440, 900, { at: WED, hash: '#/today' });
   await seed(p, { overdue: true });
   await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
   const broke = await norm(p, '.streak');
-  ok(!broke.includes('streak is safe') && !/^3\s*day streak/.test(broke), 'with a review overdue the missed days are real misses: ' + broke);
+  ok(!broke.includes('streak is safe') && broke.includes('Study today to keep it'), 'with a review overdue today is not "safe" (nothing is noted): ' + broke);
   ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}))).length === 0, 'and nothing is noted as quiet');
+  await p.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards')).find(x => x.id === 'q0'); await db.saveCards([{ ...c, suspended: true }]); });
+  await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
+  ok((await norm(p, '.th-big')) === 'Nothing due today' && !(await norm(p, '.streak')).includes('streak is safe'), 'with the overdue card suspended the ring is quiet but the streak is not: ' + await norm(p, '.streak'));
+  ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}))).length === 0, 'and nothing is noted');
+  await p.context().close();
+
+  // Days the app was not opened are not back-filled as quiet, however quiet the cards were: last studied 4 days ago, today is the only day noted.
+  p = await open(1440, 900, { at: WED, hash: '#/today' });
+  await seed(p, { studied: [4, 5, 6] });
+  await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
+  const gap = await norm(p, '.streak');
+  ok(!/^3\s*day streak/.test(gap), 'after days away the streak is not bridged by the days nobody opened the app: ' + gap);
+  ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}).sort().join())) === '2026-10-14', 'only today was noted');
   await p.context().close();
 }
 
@@ -179,6 +192,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await p.keyboard.press('Space');                 // step 2: the last one, and the final answer shows
   await p.waitForFunction(() => document.querySelectorAll('.rate').length === 4);
   ok(await p.locator('.steps-final:not([hidden])').count() === 1, 'the last step shows the final answer and the rating buttons');
+  ok((await norm(p, '#keyLine')).startsWith('1–4 to rate') && !(await norm(p, '#keyLine')).includes('Space'), 'after the last step the key line reads "1–4 to rate": ' + await norm(p, '#keyLine'));
   await p.keyboard.press('Space'); await p.keyboard.press('Enter'); await p.waitForTimeout(400);
   ok(await p.locator('.rate').count() === 4 && await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length) === 0, 'Space and Enter after the last step do not rate the card');
   await p.keyboard.press('3');
@@ -200,7 +214,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   const answers = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'review' && l.cardId.startsWith('a')).length);
   ok(done[0].startsWith('3') && answers > 3, `the finish screen counts cards (3), not answers (${answers}): ${done[0]}`);
   ok((await norm(p, '.note')).includes(`${answers} answers on 3 cards`), `and says "${answers} answers on 3 cards": ` + (await norm(p, '.note')));
-  ok(await p.locator('#keepBtn').count() === 0, 'Deck B still has cards due, but Keep going is not offered after finishing Deck A (it counts this deck)');
+  ok(await p.locator('#keepBtn').count() === 0, 'Deck B still has cards due, but Keep going is not offered after finishing Deck A (it counts this deck): ' + await norm(p, '.res-actions'));
 
   // End early: Keep going counts what is left in this deck, not every deck.
   await go(p, '#/review/B', '#flash');

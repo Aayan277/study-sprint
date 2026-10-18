@@ -152,6 +152,15 @@ test('plurals and singulars: s, es and ies <-> y (the last word only)', () => {
   assert.ok(m);
 });
 
+test('plurals: words whose "s" form is another word get no variants (new/news, aid/AIDS, series)', () => {
+  assert.deepEqual(marks('Some news about new things', [E('1', 'new')]), ['new']);
+  assert.deepEqual(marks('The news and new things', [E('1', 'news')]), ['news']);
+  assert.deepEqual(marks('AIDS and a first aid kit', [E('1', 'aid')]), ['aid']);
+  assert.deepEqual(marks('HIV aid and AIDS', [E('1', 'AIDS')]), ['AIDS']);
+  assert.deepEqual(marks('A time series', [E('1', 'time series')]), ['time series']);
+  assert.deepEqual(marks('Some aids for the lens', [E('1', 'hearing aid')]), []);
+});
+
 test('hyphen or space: "ACE inhibitor", "ACE inhibitors" and "ACE-inhibitor" are one term', () => {
   const es = [E('1', 'ACE inhibitor'), E('2', 'T-cell')];
   assert.deepEqual(marks('an ACE-inhibitor', es), ['ACE-inhibitor']);
@@ -201,6 +210,9 @@ test('paste a list: every line picks its own separator (tab, " - ", " – ", ": 
   assert.equal(r.skipped, 2);
   // A dash inside the definition, or a colon after a dash, does not move the split.
   assert.deepEqual(parseGlossaryList('ACE inhibitor - blocks ACE: lowers BP\nHb:Hemoglobin: the protein', []).items.map(i => [i.term, i.def]), [['ACE inhibitor', 'blocks ACE: lowers BP'], ['Hb:Hemoglobin', 'the protein']]);
+  // The earliest separator in the line wins, whichever it is (not the first one in the list of separators).
+  assert.deepEqual(parseGlossaryList('Anti-HBs: antibody - seen early\nPaO2 = pressure - in mmHg\nOsmosis\twater: moving - in', []).items.map(i => [i.term, i.def]),
+    [['Anti-HBs', 'antibody - seen early'], ['PaO2', 'pressure - in mmHg'], ['Osmosis', 'water: moving - in']]);
 });
 
 test('paste a list: the counts add up (new, in the glossary, repeated, no definition, too long)', () => {

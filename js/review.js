@@ -251,7 +251,7 @@ function renderSession(el, enter = false) {
 
   // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.
   // Z is undo (on a picture card Z zooms the picture instead).
-  const keyLine = `Space to flip · 1–4 rate · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
+  const keyLine = keyLineFor(sp, occ);
 
   const head = `
     <div class="rv-head">
@@ -309,7 +309,7 @@ function renderSession(el, enter = false) {
   $('flash').addEventListener('pointerdown', () => { selAtPress = selectedNow(); }, true);
   $('flash').addEventListener('click', e => {
     if (e.target.closest('.scratch, .scratch-tools')) return;      // drawing (or choosing a tool) is not a tap on the card
-    if (e.detail > 1 || selectionEndedHere()) return;      // a double-click, or a click that ends selecting some words, is not a tap to flip
+    if (selectionEndedHere()) return;      // a click that ends selecting some words is not a tap to flip
     const zoom = e.target.closest('.occ-zoom');
     if (zoom) { import('./occlusion-view.js').then(v => v.zoomFrom(zoom)); return; }      // (once the viewer is loaded it handles this click first)
     if (e.target.closest('.occ-peek')) return;
@@ -317,6 +317,7 @@ function renderSession(el, enter = false) {
     if (e.target.closest('.gl-term, .gl-pop')) return;      // a tap on an underlined term opens its definition; it never flips the card
     const tick = e.target.closest('[data-tick]');
     if (tick) { toggleMissed(el, +tick.dataset.tick); return; }
+    if (e.detail > 1) return;      // a double-click (to select a word) is not a tap to flip
     if (!R.flipped && !typeThis) flip(el);
   });
   $('flash').querySelector('.occ-peek')?.addEventListener('click', e => togglePeek(e.currentTarget));
@@ -490,6 +491,8 @@ const tickHTML = i => {
   const missed = R.elMissed.has(i);
   return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
+// The shortcut line under the card. On a step-by-step card, once the last step is on screen Space no longer does anything: it says "1–4 to rate".
+const keyLineFor = (sp, occ) => `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() {
@@ -527,6 +530,8 @@ function revealStep(el, all = false) {
   if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
+  const kl = $('keyLine');
+  if (kl) { kl.dataset.normal = keyLineFor(sp, false); kl.textContent = kl.dataset.normal; }
   const final = flash.querySelector('.steps-final');
   if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
   else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)

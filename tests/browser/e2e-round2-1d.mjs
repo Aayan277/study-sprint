@@ -120,7 +120,7 @@ await go(p, '#/import', '#pasteBox');
 ok(await p.$eval('#deckSel', s => s.value) === '__new' && await p.isVisible('#newName'), 'an import opened from the library starts on a new deck, not the deck of the last import');
 const cellsId = await p.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Cells').id);
 await go(p, '#/import/' + cellsId, '#pasteBox');
-ok((await p.$eval('#deckSel', s => s.selectedOptions[0].textContent)) === 'Cells' && await p.isHidden('#newName'), 'opened from the deck page, that deck is chosen');
+ok((await p.$eval('#deckSel', s => s.selectedOptions[0].dataset.name)) === 'Cells' && await p.isHidden('#newName'), 'opened from the deck page, that deck is chosen');
 await paste(p, 'a - b', 'Found 1 card');
 ok((await p.textContent('#saveBtn')) === 'Add 1 card to “Cells”' && await p.isHidden('#saveHint'), 'existing deck: Add 1 card to “Cells”');
 // a deck that no longer exists is not preselected

@@ -7,18 +7,20 @@ import { LIMITS } from './glossary.js';
 const str = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
 // ---------- "term - definition" lists (Paste a list) ----------
-// Each line picks its own separator, the first of these it contains: a tab, " - ", " – ", ": ", "=" (then "|"). So a list that mixes
+// Each line picks its own separator: whichever of a tab, " - ", " – ", ": ", "=" and "|" comes first in the line (the one listed first if
+// two start at the same place), so "Anti-HBs: antibody - seen early" splits at the colon, not at the dash after it. A list that mixes
 // "beta-agonist - stimulates receptors", "Anti-HBs: antibody" and a tab-separated line reads all three. Left of the separator is the
 // term, the rest is the definition.
 // → { items: [{ term, def }] (new terms), already: n (the glossary has them), repeated: n (an earlier line has them), noDef: n (no
 //     separator or nothing after it), tooLong: n (term over the limit), skipped: noDef + tooLong, over: n (the glossary is full) }
 const SEPARATORS = ['\t', ' - ', ' – ', ': ', '=', '|'];
 export function splitLine(line) {
+  let best = null;
   for (const sep of SEPARATORS) {
     const at = line.indexOf(sep);
-    if (at > 0) return [line.slice(0, at), line.slice(at + sep.length)];
+    if (at > 0 && (!best || at < best.at)) best = { at, sep };
   }
-  return [line, ''];
+  return best ? [line.slice(0, best.at), line.slice(best.at + best.sep.length)] : [line, ''];
 }
 export function parseGlossaryList(text, existing = []) {
   const have = new Set(existing.flatMap(e => [e.term, ...(e.aliases || [])]).map(dupKey));

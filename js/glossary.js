@@ -78,9 +78,12 @@ const firstChar = s => String.fromCodePoint(s.codePointAt(0));
 // To stay fast with thousands of terms the search itself is not widened: spellings and the text are both read with a hyphen (or any
 // run of spaces) between two words as one plain space, and a spelling that ends in a letter also looks for the other number of its
 // last word (see pattern). `spellings` knows those other forms, to say which term a found text belongs to.
+// Words whose "s" form is a different word, or not a plural at all: "new" is not "news", "aid" is not "AIDS", and "bias", "lens", "series" and
+// "species" are already single words.
+const NO_NUMBER = new Set(['new', 'news', 'aid', 'aids', 'bias', 'lens', 'series', 'species', 'alias', 'atlas', 'canvas']);
 function numberForms(w) {
   const n = [...w].length;
-  if (n < 3) return [];
+  if (n < 3 || NO_NUMBER.has(w.toLowerCase())) return [];
   if (/ies$/i.test(w) && n > 4) return [w.slice(0, -3) + 'y'];
   if (/(?:ss|sh|ch|x|z)es$/i.test(w) && n > 4) return [w.slice(0, -2)];
   if (/[^s\W]s$/i.test(w) && n > 3 && !/(?:us|is)$/i.test(w)) return [w.slice(0, -1)];
