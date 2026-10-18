@@ -27,6 +27,7 @@ const hash = p => p.evaluate(() => location.hash);
 const len = p => p.evaluate(() => history.length);
 const left = p => p.url() === 'about:blank';
 const back = async p => { await p.goBack(); await p.waitForTimeout(450); };
+const endAskOpen = p => p.evaluate(() => { const a = document.getElementById('endAsk'); return !!a && !a.hidden; });
 const tab = async (p, name) => { await p.click(`.tab[data-tab=${name}]`); await p.waitForTimeout(350); };
 const sheetOpen = p => p.evaluate(() => document.getElementById('sheet').open);
 const sheetTitle = p => p.evaluate(() => document.getElementById('sheetTitle')?.textContent || '');
@@ -166,8 +167,10 @@ for (const style of ['original', 'clinical']) {
   await p.click('#endNo'); await p.waitForTimeout(450);
   ok(!!(await p.$('#pCard')) && !(await sheetOpen(p)), tag + 'play: Keep playing stays in the round');
   await back(p);
-  await p.click('#endYes'); await p.waitForSelector('.res-head'); await p.waitForTimeout(400);
-  ok(/Accuracy/i.test(await p.textContent('#screen')), tag + 'play: End round shows the results with the score kept (same as Quit)');
+  ok(await endAskOpen(p), tag + 'play: Back asks again');
+  await back(p);       // a second Back while it is showing ends the round, like Esc again (a way out where there is no Esc key)
+  await p.waitForSelector('.res-head'); await p.waitForTimeout(400);
+  ok(/Accuracy/i.test(await p.textContent('#screen')), tag + 'play: a second Back while asking ends the round, with the score kept (same as Quit)');
   await p.click('#menuBtn'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
   ok(await hash(p) === '#/play', tag + 'play: back on Play setup');
   await back(p);
@@ -235,7 +238,6 @@ const startPlay = async (p, fmt, pace) => {
   await p.click('#startBtn'); await p.waitForSelector('#pCard'); await p.waitForTimeout(300);
   await answerOne(p);
 };
-const endAskOpen = p => p.evaluate(() => { const a = document.getElementById('endAsk'); return !!a && !a.hidden; });
 const secs = async p => { const t = await p.textContent('#hudClock'); const m = t.match(/(\d+):(\d+)/); return m ? +m[1] * 60 + +m[2] : parseFloat(t); };
 
 {

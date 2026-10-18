@@ -346,10 +346,11 @@ async function importKatex() {
   }
 }
 
-// Formulas left as raw text because KaTeX could not load get another go.
+// Formulas left as raw text because KaTeX could not load get another go. They keep showing as typed text while it
+// tries (nothing blinks out); the ones that get drawn lose the typed look (draw below).
 function resetRaw() {
   const stuck = document.querySelectorAll('.tex[data-done="raw"]');
-  stuck.forEach(el => { el.classList.remove('tex-raw'); el.removeAttribute('title'); delete el.dataset.done; });
+  stuck.forEach(el => { el.removeAttribute('title'); delete el.dataset.done; });
   return stuck.length > 0;
 }
 
@@ -390,7 +391,7 @@ function draw(katex, el) {
   el.dataset.done = '1';
   const out = html(katex, el.dataset.tex || '', el.classList.contains('tex-d'));
   if (out === null) el.classList.add('tex-raw');           // the text inside is still what was typed
-  else el.innerHTML = out;
+  else { el.classList.remove('tex-raw'); el.removeAttribute('title'); el.innerHTML = out; }
 }
 
 const CHUNK = 50;
@@ -401,20 +402,43 @@ const idle = fn => new Promise(done => {
 
 // Draw every formula under root that has not been drawn yet. Loads nothing when there are none. The first 50 are
 // drawn at once; a longer list goes on in the idle moments, so a page of 500 formulas never freezes.
-export async function renderMath(root = document.body) {
+// If KaTeX has not come after RAW_CAP_MS (a stalled network), formulas still waiting show as typed text instead of
+// staying hidden. They are drawn properly when it does arrive (loadKatex then calls resetRaw).
+export const RAW_CAP_MS = 1500;
+const running = new Set();
+export function renderMath(root = document.body) {
+  const p = drawAll(root);
+  running.add(p);
+  p.finally(() => running.delete(p)).catch(() => {});
+  return p;
+}
+
+// Is there a formula under any of these that is not drawn (or shown as typed) yet?
+export const mathPending = root => !!root && (root.matches?.('.tex') ? [root] : []).concat([...root.querySelectorAll('.tex')]).some(el => el.dataset.done !== '1' && el.dataset.done !== 'raw');
+
+// Resolves when every formula under root is drawn or shown as typed text (at the latest after the cap).
+export async function mathReady(root = document.body) {
+  await renderMath(root);
+  while (running.size) await Promise.all([...running]);
+}
+
+async function drawAll(root) {
   const spans = [...(root.matches?.('.tex:not([data-done])') ? [root] : []), ...root.querySelectorAll('.tex:not([data-done])')];
   if (!spans.length) return;
   spans.forEach(el => { el.dataset.done = 'q'; });
-  let katex;
-  try { katex = await loadKatex(); } catch {
+  const showTyped = () => {
     for (const el of spans) {
       if (el.dataset.done !== 'q') continue;
       el.dataset.done = 'raw';
       el.classList.add('tex-raw');
       el.title = "Maths shows after you've been online once";
     }
-    return;
-  }
+  };
+  let katex, timer;
+  const capped = new Promise(ok => { timer = setTimeout(ok, RAW_CAP_MS, null); });
+  try { katex = await Promise.race([loadKatex(), capped]); } catch { katex = null; }
+  clearTimeout(timer);
+  if (!katex) { showTyped(); return; }
   const batch = list => { list.forEach(el => draw(katex, el)); list.forEach(fit); };
   batch(spans.slice(0, CHUNK));
   for (let at = CHUNK; at < spans.length; at += CHUNK) await idle(() => batch(spans.slice(at, at + CHUNK)));

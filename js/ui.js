@@ -141,8 +141,9 @@ export const guardSheet = fn => { sheetGuard = fn; };
 // drop-downs) are left out, so only typed text and attached pictures and sounds count (Add card: the note type you switched to is not work).
 export function formSnapshot(root, { textOnly = false } = {}) {
   const part = [];
-  for (const el of root.querySelectorAll('input, textarea, select, [contenteditable="true"], [data-media-id], [data-sound-ids]')) {
+  for (const el of root.querySelectorAll('input, textarea, select, [contenteditable="true"], [data-media-id], [data-sound-ids], [data-occ-sig]')) {
     if (el.isContentEditable && el.getAttribute('contenteditable') === 'true') part.push(el.id + '=' + el.textContent.replace(/\s+/g, ' ').trim() + '|' + el.innerHTML);
+    else if (el.matches('[data-occ-sig]')) part.push((el.id || '') + '~' + el.dataset.occSig);
     else if (el.matches('[data-media-id], [data-sound-ids]')) part.push((el.id || '') + '#' + (el.dataset.mediaId || '') + '#' + (el.dataset.soundIds || ''));
     else if (el.type === 'file' || el.type === 'button' || el.type === 'submit' || el.type === 'hidden') continue;
     else if (el.type === 'checkbox' || el.type === 'radio') { if (!textOnly) part.push((el.id || el.name) + ':' + el.value + '=' + el.checked); }
@@ -157,9 +158,24 @@ export function askClose() {
   askDiscard();
   return false;
 }
-function askDiscard() {
+// Is there unsaved work in the open sheet right now?
+export const sheetDirty = () => !!sheetGuard?.();
+// Run `go` (something that replaces what the sheet shows, or changes the card in it) unless the sheet holds unsaved work:
+// then ask "Discard changes?" first, and run it only after Discard. Returns true when it ran at once.
+export function guardedGo(go) {
+  if (!sheetDirty()) { go(); return true; }
+  askDiscard(go);
+  return false;
+}
+// A screen that keeps drafts (the card panel) says how to stash one; the router calls stashDraft() before it closes the sheet.
+let stasher = null;
+export const setDraftStasher = fn => { stasher = fn; };
+export const stashDraft = () => stasher?.();
+let discardThen = null;      // what to do after Discard (instead of just closing the sheet)
+function askDiscard(then = null) {
   const d = $('sheet'), body = d.querySelector('.sheet-in');
-  if (!d.open || !body) { closeSheet(); return; }
+  if (!d.open || !body) { if (then) then(); else closeSheet(); return; }
+  discardThen = then;
   const had = $('discardAsk');
   if (had) { $('discardKeep').focus({ preventScroll: true }); return; }
   const back = document.activeElement;
@@ -168,8 +184,8 @@ function askDiscard() {
   box.innerHTML = `<p id="discardT">Discard changes?</p><div class="sheet-actions"><button class="btn ghost" type="button" id="discardKeep">Keep editing</button><button class="btn danger solid" type="button" id="discardYes">Discard</button></div>`;
   body.prepend(box);
   box.scrollIntoView({ block: 'nearest' });
-  $('discardKeep').addEventListener('click', () => { box.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); });
-  $('discardYes').addEventListener('click', () => { sheetGuard = null; closeSheet(); });
+  $('discardKeep').addEventListener('click', () => { discardThen = null; box.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); });
+  $('discardYes').addEventListener('click', () => { const then = discardThen; discardThen = null; sheetGuard = null; if (then) then(); else closeSheet(); });
   $('discardKeep').focus({ preventScroll: true });
 }
 // Back (or an edge swipe) closed the sheet's history entry: with unsaved work, the entry is put back and the question is asked.
@@ -180,7 +196,7 @@ function backDismiss() {
 }
 export function openSheet(html, { side = false } = {}) {
   const d = $('sheet');
-  sheetGuard = null;       // a new sheet (or a replaced one) starts with nothing to protect
+  sheetGuard = null; discardThen = null;       // a new sheet (or a replaced one) starts with nothing to protect
   const asSide = side && WIDE.matches;
   if (asSide && !d.open) opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   if (d.open && d.classList.contains('side') !== asSide) d.close();     // switching between the two kinds
@@ -226,7 +242,7 @@ export function closeSheet() {
   // that was open (or the button that opened the panel) instead of being lost on the page.
   const back = d.open && d.classList.contains('side') ? (opener?.isConnected && !opener.closest('.crow') ? opener : document.querySelector('.crow.sel .crow-btn') || (opener?.isConnected ? opener : null)) : null;
   if (d.open) { document.dispatchEvent(new Event('sheet-closing')); d.close(); }      // (the event: so work tied to the sheet stops now, not a task later)
-  sheetGuard = null;
+  sheetGuard = null; discardThen = null;
   releaseSheet();
   afterClose();          // straight away (the dialog's own 'close' event comes a moment later)
   back?.focus({ preventScroll: true });

@@ -10,6 +10,7 @@
 import { maskMath, MASK_CHAR } from './math.js';
 import { foldText } from './match.js';
 import { cleanFields } from './note-fields.js';
+import { clozeCard, clozeNumbers, hasClozeLines } from './cloze.js';
 
 // Separators, tried in groups. Within the middle group, the one that gives the shortest fronts wins,
 // because fronts are usually short terms (so "Term: def - more" splits at ': ', not ' - ').
@@ -155,11 +156,37 @@ function finish(rows, format, names = null) {
     rows = rows.map(r => r.filter((_, i) => i !== bothAt));
     names = names.filter((_, i) => i !== bothAt);
   }
+  // A "Cloze note" column (the export writes one row per cloze card, with the note's {{c1::…}} text here) puts the rows of one note back
+  // together as a single cloze note, with only the blanks that have a row. Like Both directions, only with the export's own header.
+  // "Cloze extra" holds the note's extra line.
+  let clozes = null, noteExtras = null;
+  const noteAt = names && own ? names.findIndex((n, i) => i >= 2 && /^cloze note$/i.test(String(n ?? '').trim())) : -1;
+  if (noteAt >= 2) {
+    const extraAt = names.findIndex((n, i) => i >= 2 && /^cloze extra$/i.test(String(n ?? '').trim()));
+    const texts = rows.map(r => String(r[noteAt] ?? '').trim()), extras = rows.map(r => String(r[extraAt] ?? '').trim());
+    const groups = new Map();        // note text → the notes made from it so far: { key, used: numbers taken }
+    clozes = rows.map((r, i) => {
+      const text = texts[i];
+      if (!text || !hasClozeLines(text)) return null;
+      const front = String(r[0] ?? '').trim();
+      const n = clozeNumbers(text).find(k => clozeCard(text, k).front.trim() === front);
+      if (n === undefined) return null;                      // the front was changed in the spreadsheet: an ordinary card
+      const list = groups.get(text) || groups.set(text, []).get(text);
+      let g = list.find(x => !x.used.has(n));
+      if (!g) { g = { key: 'csv' + i, used: new Set() }; list.push(g); }
+      g.used.add(n);
+      return { noteKey: g.key, n, text };
+    });
+    if (clozes.some(Boolean)) noteExtras = extras.map((x, i) => (clozes[i] ? x || null : null)); else clozes = null;
+    const drop = new Set([noteAt, extraAt]);
+    rows = rows.map(r => r.filter((_, i) => !drop.has(i)));
+    names = names.filter((_, i) => !drop.has(i));
+  }
   const width = Math.max(2, ...rows.map(r => r.length));
   rows = rows.map(r => Array.from({ length: width }, (_, i) => r[i] ?? ''));
   const columns = Array.from({ length: width }, (_, i) =>
     (names && names[i]) || (width === 2 ? ['Front', 'Back'][i] : `Column ${i + 1}`));
-  return { columns, rows, format, headerSkipped: headerSkipped || !!names, ...(tags ? { tags } : {}), ...(both?.some(Boolean) ? { both } : {}) };
+  return { columns, rows, format, headerSkipped: headerSkipped || !!names, ...(tags ? { tags } : {}), ...(both?.some(Boolean) ? { both } : {}), ...(clozes ? { clozes, noteExtras } : {}) };
 }
 
 // ---------- rule 6: markdown / Notion tables ----------
@@ -261,25 +288,36 @@ function tryBlocks(text) {
 
 // ---------- labelled pairs: "Q: ..." then "A: ..." ----------
 
-// Notes written as Q:/A: (or Question:/Answer:, Front:/Back:, any case) pairs. A label ends with a colon, so "Q - x" is left to the
+// Notes written as Q:/A: (or Question:/Answer:, Ans:, Front:/Back:, any case) pairs. A label ends with a colon, so "Q - x" is left to the
 // separator rules. A card runs from its Q: line to its A: line and on to the next Q: line, so an answer can take several lines.
+// Up to 2 lines before the first Q: ("Quiz 1", "Here are your flashcards:") are skipped.
+// The separator rules win (null) when this only looks like labelled pairs: an answer that runs on into lines like "Side: lateral"
+// (a list of "Word: text" lines, two of which happen to be called Front and Back), or fewer than 2 pairs among lines that mostly split on ": ".
 const LABEL_Q = /^\s*(?:[-*•–]\s+)?(?:q(?:uestion)?\s*\d{0,3}|front)\s*[:：]\s*(.*)$/i;
-const LABEL_A = /^\s*(?:[-*•–]\s+)?(?:a(?:nswer)?\s*\d{0,3}|back)\s*[:：]\s*(.*)$/i;
+const LABEL_A = /^\s*(?:[-*•–]\s+)?(?:a(?:ns(?:wer)?)?\s*\d{0,3}|back)\s*[:：]\s*(.*)$/i;
+const WORD_TEXT = /^\s*(?:[-*•–]\s+)?\p{L}[\p{L}\p{N}'’ -]{0,30}[:：]\s+\S/u;
+const LEADING_MAX = 2;
 function tryLabelled(text) {
-  const rows = [];
-  let cur = null, part = 0;                       // part: 0 = in the question, 1 = in the answer
+  const rows = [], others = [];
+  let cur = null, part = 0, leading = 0, lines = 0;       // part: 0 = in the question, 1 = in the answer
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
+    lines++;
     const q = LABEL_Q.exec(line), a = LABEL_A.exec(line);
     if (q) {
       if (cur && !cur[1].trim()) return null;     // a question that never got an answer: not this format
       cur = [q[1].trim(), '']; part = 0; rows.push(cur);
     } else if (a && cur && part === 0) { cur[1] = a[1].trim(); part = 1; }
-    else if (!cur) return null;                   // text before the first Q: line
-    else cur[part] = cur[part] ? cur[part] + '\n' + line : line;      // more lines of the same side
+    else if (!cur) { if (++leading > LEADING_MAX) return null; }      // a title line before the first Q: (more than 2: not this format)
+    else {
+      if (part === 1 && WORD_TEXT.test(line)) return null;      // the answer runs on into "Word: text" lines: a list of terms
+      if (splitFirst(line, ': ')) others.push(line);
+      cur[part] = cur[part] ? cur[part] + '\n' + line : line;      // more lines of the same side
+    }
   }
   if (!rows.length || rows.some(r => !r[0].trim() || !r[1].trim())) return null;
+  if (rows.length < 2 && others.length && (rows.length * 2 + others.length) / (lines - leading) >= MIN_SCORE) return null;
   return rows;
 }
 

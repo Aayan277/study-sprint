@@ -2156,7 +2156,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .tex:not([data-done]){opacity:.75}
 /* Play: the options and the question wait for KaTeX instead of showing the raw LaTeX for a moment (they keep their room, so nothing jumps).
    A formula KaTeX could not load (data-done="raw") shows as typed. */
-.opt .tex:not([data-done="1"]):not([data-done="raw"]),.play-card .tex:not([data-done="1"]):not([data-done="raw"]){visibility:hidden}
+.opt .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw),.play-card .tex:not([data-done="1"]):not([data-done="raw"]):not(.tex-raw){opacity:0}
 /* The raw text, until KaTeX has drawn it or if it can't (offline on the first visit) */
 .tex-raw{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-decoration:underline dotted var(--text-3);text-underline-offset:.2em;overflow-wrap:anywhere;white-space:pre-wrap}
 /* Display maths sits on its own line and scrolls sideways inside its own box, never the page */

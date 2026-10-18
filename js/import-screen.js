@@ -6,6 +6,7 @@ import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFiel
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
+import { keepDraft, takeDraft } from './import-draft.js';
 import { formatHTML } from './format.js';
 import { hasMath } from './math.js';
 import { toFractions, occFrontBack, groupsOf, groupIndex, validOcclusion, MAX_HEADER } from './occlusion.js';
@@ -30,11 +31,9 @@ const LAST_DECK = 'study-sprint-import-last';
 const lastDeck = () => { try { localStorage.removeItem('study-sprint-import-deck'); return localStorage.getItem(LAST_DECK) || ''; } catch { return ''; } };
 const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch { /* fine */ } };
 
-// The pasted text is kept for this tab while it is on the screen, so Back (or a swipe) and then returning to Import finds it again.
-// It goes when the cards are saved or Clear is pressed.
-const DRAFT = 'study-sprint-import-draft';
-const keepDraft = text => { try { if (text.trim()) sessionStorage.setItem(DRAFT, text); else sessionStorage.removeItem(DRAFT); } catch { /* too big or blocked: fine */ } };
-const takeDraft = () => { try { return sessionStorage.getItem(DRAFT) || ''; } catch { return ''; } };
+// The pasted text is kept for this tab (with how it is read: pages, AI answer, plain cards) while it is on the screen, so Back (or a swipe)
+// and then returning to Import finds it again. It goes when the cards are saved or Clear is pressed (js/import-draft.js).
+const saveDraft = text => keepDraft({ text, blocks: S?.blocks, aiMade: S?.aiMade, noCloze: S?.noCloze });
 
 // Everything the screen is working with.
 let S = null;
@@ -187,7 +186,15 @@ export async function renderImport(el, arg) {
   if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
   if (shared) await takeShared();
-  else if (firstTab !== 'file' && takeDraft() && $('pasteBox')) { $('pasteBox').value = takeDraft(); showText($('pasteBox').value); toast('Brought back the text you pasted'); }
+  else if (firstTab !== 'file' && $('pasteBox')) {
+    const d = takeDraft();
+    if (!d) return;
+    Object.assign(S, { blocks: d.blocks, aiMade: d.aiMade, noCloze: d.noCloze });      // read the way it was before
+    $('aiNote').hidden = !d.aiMade;
+    $('pasteBox').value = d.text;
+    showText(d.text);
+    toast('Brought back the text you pasted');
+  }
 }
 
 // ---------- choosing the deck ----------
@@ -226,20 +233,20 @@ function wirePaste() {
   $('pasteBox').addEventListener('input', () => {
     clearTimeout(timer);
     S.noCloze = false;                 // new text: cloze lines count again
-    keepDraft($('pasteBox').value);
+    saveDraft($('pasteBox').value);
     timer = setTimeout(() => showText($('pasteBox').value), 250);
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
   $('pasteBox').addEventListener('paste', () => {
     const b = $('pasteBox');
-    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) S.blocks = false;
+    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) { S.blocks = false; saveDraft(b.value); }
   });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(timer);
     S.blocks = false; S.aiMade = false; $('aiNote').hidden = true;
     $('pasteBox').value = '';
-    keepDraft('');
+    keepDraft(null);
     showResult(null);
     $('pasteBox').focus();
   });
@@ -254,8 +261,10 @@ function wirePaste() {
 // "Keep … as plain cards" link was pressed.
 function showText(text) {
   S.pasted = text;
+  saveDraft(text);          // however the text got here (typed, a file, a sheet, shared, read as pages), with how it is read
   const parse = S.blocks ? parseBlocks : parseText;
   let result = S.noCloze ? parse(text) : withClozeLines(text, parse).result;
+  if (S.noCloze && result.clozes) { const { clozes, noteExtras, ...rest } = result; result = rest; }      // a spreadsheet's "Cloze note" column too
   // Cards from an AI's answer carry the ai-made tag (same tag for every row; the preview says "Tags come along too").
   if (S.aiMade && result.rows.length) result = { ...result, tags: result.rows.map((_, i) => [...new Set([...(result.tags?.[i] || []), 'ai-made'])]) };
   showResult(result, false, text);
@@ -395,6 +404,7 @@ let aiParts = [];
 function showAiView() {
   aiParts = splitParts(S.doc.pages, undefined, S.withNotes);
   S.aiMade = true; S.blocks = false;
+  saveDraft($('pasteBox').value);
   $('aiNote').hidden = false;
   S.part = Math.min(S.part, aiParts.length - 1);
   $('aiHow').textContent = aiParts.length > 1
@@ -1003,7 +1013,7 @@ async function save() {
     let first = null;
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
     clearShare();                               // what was shared has been turned into cards
-    keepDraft('');                              // and so has the pasted text
+    keepDraft(null);                            // and so has the pasted text
     navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);

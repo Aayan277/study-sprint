@@ -88,6 +88,7 @@ Include **Export backup** and **Import backup** (one JSON file with everything) 
 7. If no separator wins: if blocks are separated by blank lines, use the first line of each block as the front and the rest as the back. Otherwise, if the line count is even, alternate lines (term, definition, term, definition).
 8. Detect bolded terms (`**Term** definition` or `**Term**: definition`).
 9. Quizlet's default export is tab between term and definition with a new line between cards, which rule 3 covers. Add a test for it.
+10. Labelled pairs (`Q:`/`A:`, `Question:`/`Answer:`, `Ans:`, `Front:`/`Back:`) are checked **before rule 3**, because their colons are labels, not a term-and-definition separator. Up to 2 title lines before the first `Q:` are skipped. The separator rules win instead when the answer runs on into `Word: text` lines, or when there are fewer than 2 pairs and most lines split on `: `.
 
 Write tests in `tests/import.test.js` covering every rule, including messy real-world cases: definitions containing commas or colons, extra blank lines, mixed bullets and Windows line endings.
 

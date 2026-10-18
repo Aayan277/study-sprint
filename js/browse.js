@@ -19,7 +19,7 @@ import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlu
 import { plainText, mathHTML } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, guardSheet, formSnapshot, askClose } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher } from './ui.js';
 import { go as navGo } from './nav.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
@@ -152,7 +152,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
     const row = e.target.closest('.crow'); if (!row) return;
     const id = row.dataset.id;
     if (B.selecting) { B.selected.has(id) ? B.selected.delete(id) : B.selected.add(id); draw(); return; }
-    openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
+    guardedGo(() => openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh }));      // (asks first if the open panel holds unsaved edits)
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
@@ -235,21 +235,22 @@ export async function openCardPanel(card, ctx) {
 
   const { save, again } = cardOps(card, ctx);
   wireCardForm(card, ctx, 'Saved', partner);
-  $('revOpen')?.addEventListener('click', () => openCardPanel(partner, ctx));
+  $('revOpen')?.addEventListener('click', () => guardedGo(() => openCardPanel(partner, ctx)));
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
-    if (act === 'suspend') toggleSuspend(card, save);
-    if (act === 'bury') toggleBury(card, save);
-    if (act === 'duplicate') duplicateAndEdit(card, ctx);
-    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => db.clearStates([card.id]).then(() => again('Reset to new', 'reset')));
+    // Each of these ends by showing the panel again, which would throw away unsaved edits: with some, they ask first (guardedGo).
+    if (act === 'suspend') guardedGo(() => toggleSuspend(card, save));
+    if (act === 'bury') guardedGo(() => toggleBury(card, save));
+    if (act === 'duplicate') guardedGo(() => duplicateAndEdit(card, ctx));
+    if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => guardedGo(() => db.clearStates([card.id]).then(() => again('Reset to new', 'reset'))));
     if (act === 'delete' && partner) askDeletePair(card, partner, again);
     else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
-      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete')));
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete'))));
   }));
-  wireFlags(f => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag'));
-  wireMove(deckId => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move'));
+  wireFlags(f => guardedGo(() => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag')));
+  wireMove(deckId => guardedGo(() => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move')));
   showMixedWith(card);
-  if (studied) wireDue(days => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due')));
+  if (studied) wireDue(days => guardedGo(() => db.putStates([dueIn(state, days)]).then(() => again(days ? `Due in ${plural(days, 'day')}` : 'Due today', 'due'))));
 }
 
 // "Often mixed up with: X (3×) · Compare": the cards this one is confused with (see confusion.js), filled in a moment
@@ -267,10 +268,10 @@ async function showMixedWith(card) {
     box.hidden = false;
     box.addEventListener('click', async e => {
       const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;
-      if (id) (await import('./compare-sheet.js')).openCompare(card, cardsById.get(id), { onDismiss: () => {
+      if (id) { const m = await import('./compare-sheet.js'); guardedGo(() => m.openCompare(card, cardsById.get(id), { onDismiss: () => {
         box.querySelector(`[data-mix-with="${CSS.escape(id)}"]`)?.closest('.mixed-line')?.remove();         // no longer mixed up: drop its line
         if (!box.querySelector('.mixed-line')) box.hidden = true;
-      } });
+      } })); }
     });
   } catch (err) { console.warn('mixed up with:', err); }     // the panel is fine without it
 }
@@ -416,7 +417,32 @@ function wireCardForm(card, ctx, msg, pair = null) {
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
   // Back, ×, a tap outside or Esc with edits not saved asks "Discard changes?" (nothing changed: it just closes).
   const base = formSnapshot($('ceForm'));
+  $('ceForm').dataset.cardId = card.id;
   guardSheet(() => !!$('ceForm') && formSnapshot($('ceForm')) !== base);
+  restoreDraft(card);
+}
+
+// Changing screen closes the card panel. Edits that were not saved are kept (not asked about: the screen has already changed)
+// and put back if that card's panel is opened again.
+let draft = null;
+setDraftStasher(() => stashCardDraft());
+function stashCardDraft() {
+  const f = $('ceForm');
+  if (!f || !sheetDirty()) return;
+  draft = { id: f.dataset.cardId, at: Date.now(), fields: [...f.querySelectorAll('input, textarea, select, [contenteditable="true"]')].filter(el => el.id && !['file', 'button', 'submit', 'hidden'].includes(el.type)).map(el => ({
+    id: el.id, rich: el.isContentEditable, v: el.isContentEditable ? el.innerHTML : (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value })) };
+}
+function restoreDraft(card) {
+  const d = draft;
+  if (!d) return;
+  if (d.id !== card.id) { if (Date.now() - d.at > 30 * 60000) draft = null; return; }      // (another card: it waits for its own card, for a while)
+  draft = null;
+  for (const x of d.fields) {
+    const el = $(x.id);
+    if (!el || !$('ceForm').contains(el)) continue;
+    if (x.rich) el.innerHTML = x.v; else if (typeof x.v === 'boolean') el.checked = x.v; else el.value = x.v;
+  }
+  toast('Your unsaved edits to this card are back');
 }
 
 // ---------- cards that work in both directions (reverse.js) ----------
@@ -469,8 +495,8 @@ function askDeletePair(card, partner, again) {
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
-  $('cfBoth').addEventListener('click', () => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete')));
-  $('cfOnly').addEventListener('click', async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); });
+  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete'))));
+  $('cfOnly').addEventListener('click', () => guardedGo(async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); }));
   $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 

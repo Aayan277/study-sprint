@@ -66,6 +66,10 @@ export async function gatherInput({ deckId = '', now = Date.now(), current = nul
   // The weights as the scheduler will use them (clipped for the number of relearning steps), like everywhere else the weights are used.
   const w = srs.clipParameters(params ? params.slice() : srs.default_w.slice(), opts.relearningSteps.length, true);
   const probs = ratingProbs(rows);
+  // "Reviews in the last 90 days" counts only answers that would train it: not Play answers, and only the cards in scope (the chosen
+  // deck and the decks inside it; for all decks, not those with their own settings, which are left out above).
+  const inScope = new Map(cards.map(c => [c.id, inside ? inside.has(c.deckId) : !effectiveDeck(decks, c.deckId).options]));
+  const usable = rows.filter(l => l.source !== 'play' && l.rating >= 1 && l.rating <= 4 && inScope.get(l.cardId)).length;
   const deckRow = deckId ? decks.find(d => d.id === deckId) : null;
   const newPerDay = Number.isFinite(deckRow?.newPerDay) ? deckRow.newPerDay : settings.newPerDay;
   return {
@@ -76,7 +80,7 @@ export async function gatherInput({ deckId = '', now = Date.now(), current = nul
       current: Number.isFinite(current) ? current / 100 : undefined          // worked out first, so it is always there
     },
     info: {
-      started: existing.length, reviews: rows.length, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own,
+      started: existing.length, reviews: usable, unseen: unseen.length, skipped, groups, usingOwnWeights: !!params, ownProbs: probs.own,
       reviewLimit: Number.isFinite(settings.reviewLimit) && settings.reviewLimit > 0 ? settings.reviewLimit : null
     }
   };

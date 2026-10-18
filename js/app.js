@@ -11,7 +11,8 @@ import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
-import { $, esc, plural, toast, openSheet, closeSheet, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
+import { clearDraft } from './import-draft.js';
+import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
@@ -913,7 +914,7 @@ async function confirmSignOut() {
         }
       }
     }
-    await sync.signOut(); closeSheet(); toast('Signed out'); drawSync();
+    await sync.signOut(); clearDraft(); closeSheet(); toast('Signed out'); drawSync();
   });
   let armed = false;
   $('soRemove').addEventListener('click', async () => {
@@ -1051,6 +1052,7 @@ function confirmDeleteAccount() {
 
 // Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
 async function wipeThisDevice() {
+  clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, appBadge, reminderTime } = settings;
   await db.resetAll();
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
@@ -1207,6 +1209,7 @@ async function route() {
   const sidebarStale = name !== prevRoute && name !== 'today'
     && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
   releaseBack();                // a session's hold on the back gesture ends when you leave it (a running one asks again as it redraws)
+  stashDraft();             // unsaved edits in a card panel are kept for when it is opened again
   closeSheet();
   setFocusMode(false);          // a running Review or Play round turns it back on (see ui.js)
   if (sidebarStale) drawSidebar();

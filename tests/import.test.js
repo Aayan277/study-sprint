@@ -330,3 +330,22 @@ test('labelled: tab-separated Quizlet and dash lists still work', () => {
   assert.deepEqual(cards('apple\tmanzana\nbread\tpan'), [['apple', 'manzana'], ['bread', 'pan']]);
   assert.deepEqual(cards('a - b\nc - d'), [['a', 'b'], ['c', 'd']]);
 });
+
+// ---------- review fix 9: labelled pairs, false positives, leading titles, Ans: ----------
+test('labelled: a list of term: definition lines that start with Front: and Back: stays four cards', () => {
+  const text = 'Front: anterior surface\nBack: posterior surface\nSide: lateral\nTop: superior';
+  assert.deepEqual(cards(text), [['Front', 'anterior surface'], ['Back', 'posterior surface'], ['Side', 'lateral'], ['Top', 'superior']]);
+  assert.notEqual(formatOf(text).id, 'labelled');
+});
+test('labelled: an answer that runs on into "Word: text" lines is not Q/A', () => {
+  const text = 'Q: First?\nA: one\nNote: see page 3\nQ: Second?\nA: two';
+  assert.notEqual(formatOf(text).id, 'labelled');
+});
+test('labelled: up to 2 title lines before the first Q: are skipped', () => {
+  assert.deepEqual(cards('Quiz 1\nHere are your flashcards:\nQ: a?\nA: b\nQ: c?\nA: d'), [['a?', 'b'], ['c?', 'd']]);
+  assert.deepEqual(cards('Quiz 1\nQ: a?\nA: b'), [['a?', 'b']]);
+  assert.notEqual(formatOf('One\nTwo\nThree\nQ: a?\nA: b\nQ: c?\nA: d').id, 'labelled', 'three is too many');
+});
+test('labelled: Ans: is an answer label', () => {
+  assert.deepEqual(cards('Q1: What is ATP?\nAns: Energy currency\nQ2: What is DNA?\nAns: Genetic material'), [['What is ATP?', 'Energy currency'], ['What is DNA?', 'Genetic material']]);
+});

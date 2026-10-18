@@ -532,13 +532,17 @@ export const lastKind = () => { try { const k = localStorage.getItem('study-spri
 const occForms = new Map();       // p → { masks, image, w, h, maxN, n }: the form's state (n = the card being edited)
 const CAMERA = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg>';
 
+// A short fingerprint of the picture and boxes (they live in occForms, not in a field), kept on the form as data-occ-sig so that
+// formSnapshot (ui.js) notices a box that was moved, added or removed.
+const occSig = st => `${st.image || ''}|${st.w}x${st.h}|` + st.masks.map(m => JSON.stringify(m)).join(';');
+
 export function occlusionFields(p, card = null, extra = '', { hidden = false, maxN = 0 } = {}) {
   const o = card?.occlusion;
   const st = { masks: o ? o.masks.map(m => ({ ...m })) : [], image: card?.backImage || null, w: o?.w || 0, h: o?.h || 0, maxN: Math.max(0, maxN, ...(o?.masks || []).map(m => m.n)), n: o?.n ?? null };
   occForms.set(p, st);
   const parts = occParts(p, st, o?.header || '');
   const desk = RICH.matches;
-  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}" ${hidden ? 'hidden' : ''}>
+  return `<div class="occ-form" id="${p}Occ" data-occ-form="${p}" data-occ-sig="${esc(occSig(st))}" ${hidden ? 'hidden' : ''}>
       <div class="occ-pick" id="${p}OccPick" data-occ-pick="${p}" ${st.image ? 'hidden' : ''}>
         <button type="button" class="occ-pick-btn" id="${p}OccChoose" data-occ-choose="${p}">${CAMERA}<b>Choose a picture</b><span>${desk ? 'or drop one here, or paste a screenshot (Ctrl/⌘+V)' : 'A photo or screenshot of a diagram'}</span></button>
         <input type="file" id="${p}OccFile" accept="image/*" hidden data-occ-file="${p}">
@@ -571,6 +575,8 @@ export function drawOcclusion(p) {
   if (!st || !prev) return;
   const parts = occParts(p, st, document.getElementById(p + 'OccHead')?.value ?? '');
   prev.innerHTML = parts.preview;
+  const occ = document.getElementById(p + 'Occ');
+  if (occ) occ.dataset.occSig = occSig(st);
   document.getElementById(p + 'OccPick').hidden = !!st.image;
   document.getElementById(p + 'OccBody').hidden = !st.image;
   const makes = document.getElementById(p + 'OccMakes');

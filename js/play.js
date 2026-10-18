@@ -34,6 +34,7 @@ import { drawSidebar } from './sidebar.js';
 import { refreshBadge } from './badge.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { holdBack, releaseBack } from './nav.js';
+import { mathPending, mathReady } from './math.js';
 import { $, esc, plural, toast, onControl, setFocusMode, openSheet, closeSheet, icon, foldOpen, saveFold } from './ui.js';
 import * as fx from './fx.js';
 
@@ -63,26 +64,35 @@ function stopRound() {
 // Quit, Esc or Back (the back gesture) during a round: with answers to keep, ask first (Esc again or Enter ends it, and the results
 // show the score so far). A round with no answers yet has nothing to keep, so it just closes.
 // The round waits while the question is up: the clock (and a question's timer) stop, and so does an automatic "Next".
+const asking = () => !!$('endAsk') && !$('endAsk').hidden;
+// While "End this round?" is open the round can't be played: the card, the options, the typing box and the Next/Skip buttons are inert.
+const ROUND_PARTS = ['pCard', 'options', 'pType', 'feedback'];
+const setInert = on => ROUND_PARTS.forEach(id => { const e = $(id); if (e) e.inert = on; });
+// Back while the question is already open ends the round, the same as Esc again (a way out where there is no Esc key).
+function backPressed() { if (G && asking() && !document.getElementById('sheet')?.open) finish(); else askEnd(); }
 function askEnd() {
   if (!G) return;
   if (!G.log.length) { const el = G.el; stopRound(); renderPlay(el); return; }
-  if (!$('endAsk').hidden || document.getElementById('sheet')?.open) return;      // already asking (or a card sheet is over the round)
+  if (asking() || document.getElementById('sheet')?.open) return;      // already asking (or a card sheet is over the round)
   const round = G, t0 = performance.now();
   cancelAnimationFrame(round.raf); clearTimeout(round.autoTimer);
   const wait = round.autoFn ? Math.max(0, round.autoAt - t0) : 0, fn = round.autoFn;
   round.resume = () => {
     if (G !== round || !$('pCard')) return;
     if (!round.answered) {
+      if (!round.started) { round.begin?.(); return; }         // still waiting for the maths to draw: the clock starts now
       round.qStart += performance.now() - t0;           // the time spent asking doesn't count
       round.raf = requestAnimationFrame(tick);
     } else if (fn) later(fn, wait);
   };
+  setInert(true);
   $('endAsk').hidden = false;
   $('endYes').focus({ preventScroll: true });
 }
 function keepPlaying() {
   if (!G) return;
   $('endAsk').hidden = true;
+  setInert(false);
   const resume = G.resume; G.resume = null; resume?.();
   (G.qtype === 'typing' && !G.answered ? $('pInput') : $('pCard'))?.focus?.({ preventScroll: true });
 }
@@ -274,7 +284,7 @@ function start(el, opts) {
   };
   G.mixIndex = buildAnswerIndex(all, c => { const a = questionFor(c, 'typing')?.answer; return a ? answerTargets(a) : []; }, MIX_SCAN_MAX);
   setFocusMode(true);
-  holdBack('session', askEnd);        // Back (an edge swipe) does what Quit does: asks before leaving a round that has answers
+  holdBack('session', backPressed);        // Back (an edge swipe) does what Quit does: asks before leaving a round that has answers
   el.innerHTML = `
     <div class="hud mono">
       <span id="hudA"></span>
@@ -302,9 +312,9 @@ function start(el, opts) {
   $('quitBtn').addEventListener('click', askEnd);
   $('endYes').addEventListener('click', finish);
   $('endNo').addEventListener('click', keepPlaying);
-  $('options').addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && !G.answered) answer(+b.dataset.i); });
-  $('pType').addEventListener('submit', e => { e.preventDefault(); if (!G.answered) answer($('pInput').value); });
-  $('skipBtn').addEventListener('click', () => { if (!G.answered) answer(''); });
+  $('options').addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && !G.answered && !asking()) answer(+b.dataset.i); });
+  $('pType').addEventListener('submit', e => { e.preventDefault(); if (!G.answered && !asking()) answer($('pInput').value); });
+  $('skipBtn').addEventListener('click', () => { if (!G.answered && !asking()) answer(''); });
   G.el = el;
   showQuestion();
 }
@@ -367,7 +377,18 @@ function showQuestion() {
   G.qStart = performance.now();
   $('pTimer').classList.remove('low');
   cancelAnimationFrame(G.raf);
-  G.raf = requestAnimationFrame(tick);
+  // The question's clock starts once the maths on the card has drawn (or shows as typed text after a short wait).
+  const round = G, qi = G.i;
+  G.started = false;
+  G.begin = () => {
+    if (G !== round || G.i !== qi || G.started || G.answered || !$('pCard')) return;
+    if (asking()) return;                  // "End this round?" is open: keepPlaying starts the clock
+    G.started = true;
+    G.qStart = performance.now();
+    G.raf = requestAnimationFrame(tick);
+  };
+  if (mathPending($('pCard')) || mathPending($('options'))) { mathReady($('pCard')).then(() => mathReady($('options'))).then(G.begin, G.begin); }
+  else G.begin();
 }
 
 function tick(now) {
@@ -417,7 +438,7 @@ function reveal() {
 
 // choice: an option number, typed text, '' for skip, or null for out of time.
 function answer(choice) {
-  if (!G || G.answered) return;
+  if (!G || G.answered || asking()) return;
   G.answered = true;
   cancelAnimationFrame(G.raf);
   reveal();
@@ -684,6 +705,7 @@ function replaceInRound(round, card) {
 
 // The "Card ⋯" button after answering: the same card panel as the card list. Pauses the auto "Next".
 async function openCardMenu() {
+  if (asking()) return;
   if (!G?.answered) return;
   clearTimeout(G.autoTimer);
   const round = G;
@@ -698,7 +720,7 @@ async function openCardMenu() {
 }
 
 function next() {
-  if (!G || !G.answered || !$('pCard')) return;
+  if (!G || !G.answered || !$('pCard') || asking()) return;
   clearTimeout(G.autoTimer);
   if (G.over) { finish(); return; }
   G.i++;
