@@ -1,5 +1,5 @@
 // Score FSRS models on real Anki review logs, per user, on held-out reviews. See README.md.
-//   node tests/realdata/run.mjs [--users 1,2,3 | --limit N] [--jobs 4] [--out file] [--cap 150000]
+//   node tests/realdata/run.mjs [--users 1,2,3 | --limit N] [--jobs 4] [--out file] [--cap N]
 // Reads ~/fsrs-data/users/*.json (folder: env FSRS_DATA), appends one JSON line per user to results/results.jsonl and skips
 // users already done, so it can be stopped and started again. Users run in a pool of worker threads.
 
@@ -16,7 +16,8 @@ import { toHistories, truncate, eval6, eval7 } from './lib.mjs';
 const ROOT = process.env.FSRS_DATA || join(homedir(), 'fsrs-data');
 const SCENARIOS = [['full', Infinity], ['first1000', 1000], ['first5000', 5000]];
 const RELEARN_STEPS = 1;                 // the app's default relearningSteps is '10m' (js/sched-settings.js): one step
-const DEFAULT_CAP = 150000;              // rows; bigger users are thinned by whole cards (see capCards)
+// No cap by default: the biggest user measured (776,000 rows) took 43 seconds. --cap N thins bigger users by whole cards (capCards).
+const DEFAULT_CAP = Infinity;
 
 // ts-fsrs 5.4.2 from node_modules: the default weights and bounds the app uses (js/srs.js loads the same version from a CDN).
 const ts = await import(pathToFileURL(createRequire(import.meta.url).resolve('ts-fsrs')).href);
