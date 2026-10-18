@@ -56,7 +56,7 @@ ok(await p.isVisible('.top .brand') && !(await p.locator('.top .icon-btn:visible
 ok(await p.isVisible('.side-add') && (await p.textContent('.side-add')).trim() === 'Add cards', 'a quiet "Add cards" button under the logo');
 
 // the Decks section is told apart from the Decks link
-ok(await p.locator('nav.tabs a[data-tab="decks"]').count() === 1 && (await p.getByRole('button', { name: 'Your decks' }).count()) === 1, 'the Decks link and the "Your decks" heading have different names');
+ok(await p.locator('nav.tabs a[data-tab="decks"]').count() === 1 && (await p.getByRole('button', { name: 'Deck shortcuts' }).count()) === 1, 'the Decks link and the "Deck shortcuts" button have different names');
 ok((await p.textContent('#sideDecksH')).trim() === 'Decks', 'the heading says "Decks", not "Courses"');
 ok(await p.evaluate(() => !/courses/i.test(document.querySelector('.side-decks').textContent)), 'the word "Courses" appears nowhere in the list');
 

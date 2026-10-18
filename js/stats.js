@@ -526,9 +526,21 @@ function wireChart(chart) {
     tipEl.style.top = `${Math.max(bar.top - c.top - tipEl.offsetHeight - 6, 0)}px`;
   };
   const hide = () => { tipEl.hidden = true; };
-  chart.querySelectorAll('.col').forEach(col => {
+  // One tab stop for the whole chart (the newest bar to start with); the arrow keys, Home and End move between bars.
+  const cols = [...chart.querySelectorAll('.col')];
+  const rove = col => cols.forEach(c => { c.tabIndex = c === col ? 0 : -1; });
+  rove(cols[cols.length - 1]);
+  chart.addEventListener('keydown', e => {
+    const i = cols.indexOf(document.activeElement);
+    if (i < 0 || e.altKey || e.ctrlKey || e.metaKey) return;
+    const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: cols.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    cols[Math.min(Math.max(to, 0), cols.length - 1)].focus();
+  });
+  cols.forEach(col => {
     col.addEventListener('pointerenter', () => show(col));
-    col.addEventListener('focus', () => show(col));
+    col.addEventListener('focus', () => { rove(col); show(col); });
     col.addEventListener('click', () => show(col));
     col.addEventListener('blur', hide);
   });

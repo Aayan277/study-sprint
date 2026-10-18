@@ -10,6 +10,18 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Screen readers hear a toast through a live region that is always in the page (#toastLive, visually hidden). A region that
+// appears and fills in one step is often skipped, so it is cleared first and filled on the next tick. The visible toast is not
+// a live region itself (it comes and goes, and its Undo link must stay a normal link: it is the last stop in the tab order).
+let liveTimer = 0;
+function announceToast(msg) {
+  const live = document.getElementById('toastLive');
+  if (!live) return;
+  live.textContent = '';
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => { live.textContent = msg; }, 60);
+}
+
 // A short message that pops up above the tab bar for a few seconds.
 let toastTimer = 0, toastLeave = null;      // toastLeave: the hashchange listener of a held toast
 // `link` ({ href, label, onClick }) adds a link after the message and keeps the toast up longer, so it can be tapped.
@@ -19,6 +31,7 @@ export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   const t = $('toast');
   if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one
   t.textContent = msg;
+  announceToast(msg);
   if (link) {
     const a = document.createElement('a');
     a.href = link.href; a.textContent = link.label; a.className = 'toast-link';
