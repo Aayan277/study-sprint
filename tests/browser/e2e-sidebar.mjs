@@ -158,7 +158,7 @@ const ver = (await p.textContent('#sideVer')).trim();
 await go(p, '#/decks', '.deck');
 await p.click('#sideSet'); await p.waitForSelector('#skins');
 ok((await p.getAttribute('#sideSet', 'aria-current')) === 'page' && (await p.getAttribute('#sideSet', 'aria-label')) === 'Close settings', 'Settings link: highlighted, and "Close settings" while open');
-ok(ver === 'v' + (await p.textContent('.note.mono:has-text("Study Sprint")')).match(/(\d+(?:\.\d+)+)/)[1], `the footer shows the app version (${ver})`);
+ok(ver === 'v' + (await p.textContent('#aboutRow b')).match(/(\d+(?:\.\d+)+)/)[1], `Settings → About shows the app version (${ver})`);
 await p.click('#sideSet'); await p.waitForSelector('.deck');
 ok(p.url().endsWith('#/decks') && (await p.getAttribute('#sideSet', 'aria-label')) === 'Settings', 'clicking it again closes Settings and goes back');
 

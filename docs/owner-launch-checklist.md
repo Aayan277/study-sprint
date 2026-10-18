@@ -20,11 +20,11 @@ In Supabase: open your project, then **SQL Editor → New query**. For each file
 - [ ] Run `supabase/media.sql`. Check the status table: all `ok`.
 - [ ] **Only if this project already has data from an older version** (this query works on the old schema too): before `limits.sql`, run
   `select round(coalesce(sum(bytes),0)/1048576.0,1) as sync_used_mb from public.sync_usage;`
-  and check the number is **under 300**. If it is not, tell the developer first. (On a brand-new project there is nothing stored, so skip this.)
+  and check the number is **under 300**. If it is not, tell the developer first. (On a brand-new project there is nothing stored, so skip this. If it says the table doesn't exist, skip it too.)
 - [ ] Run `supabase/limits.sql`. Check the status table: all `ok`. In **row 8**, `NOT lowered to 300: stored data is … MB` means there was too much data to lower the project-wide data ceiling safely. Nothing is broken; tell the developer.
 - [ ] Only now, if you want to see who uses the most space: run `supabase/owner.sql` (after `limits.sql`, never before).
 - [ ] **Optional, but recommended: `supabase/ci-roles.sql`** (a login that can only read, for the two GitHub jobs, so the GitHub secret doesn't hold your all-powerful `postgres` password). It needs a few extra steps; see "The read-only login" in section 7 below. Skip it for now if you like and come back.
-- [ ] Check the limits are the right ones. Run `select * from public.global_limits;` (pictures and sounds **900 MB**, synced data **300 MB**) and `select round(public.default_media_limit()/1048576.0), round(public.default_data_limit()/1048576.0);` (you should see **50** and **40**: 50 MB of pictures and sounds and 40 MB of synced data per person).
+- [ ] Check the limits are the right ones. Run `select name, round(bytes/1048576.0) as mb from public.global_limits;` (you should see `media` **900** and `sync` **300**) and `select round(public.default_media_limit()/1048576.0), round(public.default_data_limit()/1048576.0);` (you should see **50** and **40**: 50 MB of pictures and sounds and 40 MB of synced data per person).
 - [ ] Check privacy protection is on for every table. Run:
   `select relname, relrowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r';`
   **Every row must say `true`.** If any says `false`, stop and tell the developer.
