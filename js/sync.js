@@ -18,7 +18,7 @@ import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
-import { pushSafely, nextBackoff, activeBackoff } from './sync-push.js';
+import { pushSafely, nextBackoff, activeBackoff, deletedThroughAfter } from './sync-push.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
@@ -306,7 +306,7 @@ export async function signOut({ forget = false } = {}) {
   if (syncAuth) await supa.signOut(syncAuth.access_token);
   resetSkips();
   await db.setSetting('syncAuth', null);
-  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); await db.setSetting('pushBackoff', null); }
+  if (forget) { await db.setSetting('syncState', null); await db.setSetting('mediaRefs', null); await db.setSetting('pushBackoff', null); await db.setSetting('mediaBackoff', null); }
   emit({ state: 'signed-out', error: null });
 }
 
@@ -458,7 +458,7 @@ async function run() {
   if (waiting) spaceNote = pushed.held.length ? waiting.note || null : null;
   else if (pushed.full) {
     spaceNote = pushed.full === 'server' ? SERVER_FULL_MESSAGE : dataFullMessage(await fetchUsage(token));
-    const deletedThrough = Math.max(saved?.userId === auth.user.id ? saved.deletedThrough || 0 : 0, ...pushed.sent.filter(r => r.deleted).map(r => r.updated_at));
+    const deletedThrough = deletedThroughAfter(deletesDone, pushed.sent, pushed.held);
     await db.setSetting('pushBackoff', { ...nextBackoff(saved, { userId: auth.user.id, kind: pushed.full, note: spaceNote }), deletedThrough }).catch(() => {});
   } else if (saved) await db.setSetting('pushBackoff', null).catch(() => {});       // it went through: no more waiting
 

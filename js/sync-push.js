@@ -83,6 +83,13 @@ export function nextBackoff(prev, { userId, kind, note, now = Date.now() }) {
   const wait = prev?.userId === userId && prev.wait ? Math.min(BACKOFF_MAX, prev.wait * 2) : BACKOFF_FIRST;
   return { userId, until: now + wait, wait, kind, note: note || null };
 }
+// Deletes already on the server need not be sent again while puts are held (the bookmark can't move). `deletedThrough` is the time up
+// to which that holds. It moves up only when NO delete was held: a deck's delete markers all share one time, so with some sent and
+// some held, "newest sent" would also cover the held ones and they would never be sent. (Then it stays where it was.)
+export function deletedThroughAfter(prev, sent, held) {
+  if (held.some(r => r.deleted)) return prev || 0;
+  return Math.max(prev || 0, ...sent.filter(r => r.deleted).map(r => r.updated_at));
+}
 // The saved backoff if it still applies to this account right now, else null.
 export function activeBackoff(b, userId, now = Date.now()) {
   return b && typeof b === 'object' && b.userId === userId && Number(b.until) > now && now + BACKOFF_MAX >= Number(b.until) ? b : null;

@@ -163,6 +163,16 @@ ok((await state(N)).user === null && serverCards('eve@example.com', 'dandeck') =
 }
 ok(fake.log.some(l => l.includes('/auth/v1/logout')) && fake.log.filter(l => l.includes('/auth/v1/logout')).every(l => l.endsWith('?scope=local')), 'every sign-out (Cancel included) is scope=local, so the person\'s other devices stay signed in');
 
+// ================= reset link on a device with only the sample deck =================
+{
+  const P = await device('P');
+  await P.goto(fake.recoveryLink('ann@example.com', APP));
+  await P.waitForSelector('#sheet[open] #pwForm');
+  await P.fill('#pw1', 'newpass789'); await P.fill('#pw2', 'newpass789'); await P.click('button[type=submit][form=pwForm]');
+  await P.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('signed in'));
+  ok((await state(P)).user === 'ann@example.com', 'a reset link on a device with only the sample deck signs in');
+}
+
 // ================= code path without the screen: never merges silently =================
 const code = await run(N, async () => {
   const sync = await import('./js/sync.js');

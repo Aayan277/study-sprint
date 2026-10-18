@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { MB, DEFAULT_MEDIA_LIMIT, MAX_PICTURE, MAX_OCCLUSION_PICTURE, fmtSize, readUsage, level, dataLevel, fullMessage, warnMessage, dataFullMessage, SERVER_FULL_MESSAGE, usageLine, planUploads, pictureTooBig, importWarnings, CARDS_WARN, cardsWarning, passedCardsWarning, rowBytes, rowLabel, splitOversized, bigRowsNote, pushErrorKind, capTimes, MAX_ROW_BYTES, MAX_ID_BYTES, savedTooBigNote, splitTooBig, tooLargeNote } from '../js/quota.js';
-import { pushSafely, nextBackoff, activeBackoff } from '../js/sync-push.js';
+import { pushSafely, nextBackoff, activeBackoff, deletedThroughAfter } from '../js/sync-push.js';
 
 const usage = (media, limit = 180 * MB, data = 3 * MB) => ({ data, media, limit });
 const file = n => ({ id: 'm' + n, data: { byteLength: n * MB } });
@@ -274,6 +274,19 @@ test('push backoff: 15 minutes, doubling up to 6 hours, per account, and only wh
   assert.equal(activeBackoff(first, 'other', T), null);
   assert.equal(activeBackoff(null, 'u', T), null);
   assert.equal(activeBackoff({ userId: 'u', until: T + 30 * 86400000, wait: 1 }, 'u', T), null, 'a clock set far back does not freeze pushing');
+});
+
+test('deletedThrough does not cover deletes that were held (equal times across a batch boundary)', async () => {
+  const T = 5000;
+  const dels = Array.from({ length: 700 }, (_, i) => ({ id: 'd' + i, deleted: true, data: null, updated_at: T }));
+  let call = 0;
+  const out = await pushSafely(async () => { if (++call === 2) throw Object.assign(new Error('x'), { code: '54000', message: 'sync_data_full' }); }, dels);
+  assert.equal(out.sent.length, 500); assert.equal(out.held.length, 200);
+  const through = deletedThroughAfter(0, out.sent, out.held);
+  assert.equal(through, 0, 'stays where it was');
+  assert.equal(dels.filter(r => !(r.deleted && r.updated_at <= through)).length, 700, 'so the 200 held deletes are sent again next time (the 500 already there are ignored by the server)');
+  assert.equal(deletedThroughAfter(0, out.sent, []), T, 'once nothing is held it moves up');
+  assert.equal(deletedThroughAfter(9000, [], out.held), 9000);
 });
 
 test('Postgres 25006 (read-only transaction) counts as a full server', () => {
