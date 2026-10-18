@@ -2,6 +2,7 @@
 
 import { streakText } from './stats-calc.js';
 import { openOverlay, closeOverlay } from './nav.js';
+import { toggleToken } from './a11y.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -281,4 +282,34 @@ export function keepFocusOnPress(root, selector = 'button') {
   const stop = e => { if (e.target.closest?.(selector)) e.preventDefault(); };
   root.addEventListener('pointerdown', stop);
   root.addEventListener('mousedown', stop);
+}
+
+// ---------- form errors (WCAG 3.3.1 Error Identification, 4.1.3 Status Messages) ----------
+let errSeq = 0;
+// Show a problem with a form field. errEl is the error paragraph (role="alert" is set here if the markup forgot, but give it in the markup:
+// an alert that exists before its text appears is announced most reliably). The field gets aria-invalid and aria-describedby pointing at the
+// message, and the cursor moves to it. The error clears itself when the person edits the field. field may be null (an error about the whole form).
+export function showFieldError(field, errEl, text, { focus = true } = {}) {
+  if (!errEl) return;
+  if (!errEl.id) errEl.id = `err${++errSeq}`;
+  if (!errEl.getAttribute('role')) errEl.setAttribute('role', 'alert');
+  errEl.textContent = text;
+  errEl.hidden = false;
+  if (!field) return;
+  field.setAttribute('aria-invalid', 'true');
+  field.setAttribute('aria-describedby', toggleToken(field.getAttribute('aria-describedby'), errEl.id, true));
+  if (focus) field.focus();
+  if (!field._errClear) {
+    field._errClear = () => { field._errClear = null; clearFieldError(field, errEl); };
+    field.addEventListener('input', field._errClear, { once: true });
+  }
+}
+// The problem is fixed: hide the message and remove aria-invalid / the describedby link.
+export function clearFieldError(field, errEl) {
+  if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+  if (!field) return;
+  field.removeAttribute('aria-invalid');
+  const d = toggleToken(field.getAttribute('aria-describedby'), errEl?.id || '', false);
+  if (d) field.setAttribute('aria-describedby', d); else field.removeAttribute('aria-describedby');
+  if (field._errClear) { field.removeEventListener('input', field._errClear); field._errClear = null; }
 }

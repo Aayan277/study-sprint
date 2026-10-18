@@ -368,6 +368,21 @@ export function addWaiting(waiting, item) {
 }
 
 // "Good · 4d" style labels for the time until a card comes back.
+// The same time in words, for a screen reader: "less than a minute", "10 minutes", "5 days", "1.5 months" (formatInterval's rounding).
+export function formatIntervalLong(ms) {
+  const n = (x, unit) => `${x} ${unit}${x === 1 ? '' : 's'}`;
+  const min = ms / 60000;
+  if (min < 1) return 'less than a minute';
+  if (min < 60) return n(Math.round(min), 'minute');
+  const h = min / 60;
+  if (h < 24) return n(Math.round(h), 'hour');
+  const d = h / 24;
+  if (d < 30) return n(Math.round(d), 'day');
+  const trim = x => +x.toFixed(1);
+  if (d < 365) return n(trim(d / 30.4), 'month');
+  return n(trim(d / 365), 'year');
+}
+
 export function formatInterval(ms) {
   const min = ms / 60000;
   if (min < 1) return '<1m';

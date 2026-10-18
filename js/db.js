@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS = {
   compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
   ratingFeedback: true,  // Review: a ring on the pressed button, the interval floating up and an outline of the old card leaving. This device only
   smoothMotion: true,    // Smooth transitions: tabs slide and sheets spring (View Transitions). This device only
+  singleKeys: true,      // Single-key shortcuts in Review, Play and the card sheet (E, I, R, D, Z, 1-4, ...); off for voice control and switch users (WCAG 2.1.4). This device only
   statsReadiness: true,  // Stats for one course: a readiness header with an Exam prep button, Mastery on top (off = no header). This device only
   targetRetention: 0.9,
   newPerDay: 20,

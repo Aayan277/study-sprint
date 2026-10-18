@@ -5,7 +5,8 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, formatInterval, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, RELEARNING } from './queue.js';
+import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
 import { canType, checkTyped } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
@@ -259,24 +260,26 @@ function renderSession(el, enter = false) {
 
   const head = `
     <div class="rv-head">
+      <h1 class="sr-only" tabindex="-1">Review</h1>
       <div class="rv-counts mono" role="group" aria-label="Cards left: new, learning, due">${countsHTML()}</div>
       ${R.undo.length ? `<button class="link" type="button" id="undoBtn" aria-label="Undo" title="Undo the last answer">${icon('undo')}</button>` : ''}
-      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad (D)" title="Scratchpad (D)">${PEN_ICON}</button>
+      <button class="link" type="button" id="scratchBtn" aria-pressed="${scratchPref()}" aria-keyshortcuts="D" aria-label="Scratchpad${singleKeysOn() ? ' (D)' : ''}" title="Scratchpad${singleKeysOn() ? ' (D)' : ''}">${PEN_ICON}</button>
       <button class="link more" type="button" id="moreBtn" aria-label="Card actions: edit, flag, suspend, bury and more">${icon('more')}</button>
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
-    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-label="Flashcard question${typeThis ? '' : '. Press Space or Enter to show the answer'}"`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
         ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
         <div class="rv-face rv-front" ${R.flipped ? HIDDEN : ''}>
+          <h2 class="sr-only">Question</h2>
           ${deckLabel}
           <div class="flash-front${size}">${front}</div>
           ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
-        <div class="rv-face rv-back" tabindex="-1" ${R.flipped ? '' : HIDDEN}>
+        <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer" ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
           ${cloze || occ ? '' : `<div class="flash-recap${backSize || sp ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
@@ -295,8 +298,8 @@ function renderSession(el, enter = false) {
       </form>` : ''}
     ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? TYPING_KEYS : keyLine)}</p>`;
-  drawSessionPage(el, head, body);
+    <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? typingKeys() : keyLine)}</p>`;
+  drawSessionPage(el, stripKeys(head), stripKeys(body));
   glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
 
@@ -332,7 +335,7 @@ function renderSession(el, enter = false) {
   if (typeThis && !R.flipped) {
     $('typeIn').focus();
     // The shortcut keys work again once the cursor leaves the box.
-    $('typeIn').addEventListener('focus', () => { $('keyLine').textContent = TYPING_KEYS; });
+    $('typeIn').addEventListener('focus', () => { $('keyLine').textContent = typingKeys(); });
     $('typeIn').addEventListener('blur', () => { $('keyLine').textContent = $('keyLine').dataset.normal; });
   }
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
@@ -380,8 +383,8 @@ function drawSessionPage(el, head, body) {
   prog.firstElementChild.style.width = `${total ? (done / total * 100).toFixed(1) : 0}%`;
 }
 
-const showButtonHTML = typeThis =>
-  `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`;
+const showButtonHTML = typeThis => stripKeys(
+  `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`);
 
 // The buttons under the card: Show answer, or the four ratings.
 function wireRatebar(el) {
@@ -414,7 +417,7 @@ function publishLive() {
 function rateButtonsHTML() {
   const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card), Date.now(), R.current.card.id);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
-    <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}">
+    <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}" aria-label="${label}, next review in ${formatIntervalLong(ivl[rating])}${R.suggest === rating ? ', suggested' : ''}">
       <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
 }
 
@@ -491,15 +494,17 @@ function stepsHTML(sp) {
     <ol class="steps${el ? ' elements' : ''}" id="steps" aria-label="${el ? 'Elements' : 'Steps'}">${sp.steps.map((t, i) => `<li class="step" tabindex="-1" ${i < shown ? '' : 'hidden'}><div class="step-body">${formatHTML(t)}</div>${el ? tickHTML(i) : ''}</li>`).join('')}</ol>
     ${sp.final ? `<div class="steps-final" tabindex="-1" ${all ? '' : 'hidden'}><b class="steps-final-l">Answer</b><div>${formatHTML(sp.final)}</div></div>` : ''}`;
 }
-const tickHTML = i => {
+const tickHTML = i => stripKeys(tickRaw(i));
+const tickRaw = i => {
   const missed = R.elMissed.has(i);
   return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
 // The shortcut line under the card. On a step-by-step card, once the last step is on screen Space no longer does anything: it says "1–4 to rate".
-const keyLineFor = (sp, occ) => `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
+const keyLineFor = (sp, occ) => !singleKeysOn() ? '' : `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
-function backBarHTML() {
+function backBarHTML() { return stripKeys(backBarRaw()); }
+function backBarRaw() {
   const sp = stepsOf(R.current.card);
   if (sp?.kind === 'elements' && R.stepShown >= sp.steps.length) {
     const n = sp.steps.length, missed = R.elMissed.size, rating = suggestRating(n, missed);
@@ -850,7 +855,7 @@ async function finish(el) {
   fx.finished(el, { complete: !R.current, reviewed });
 }
 
-const TYPING_KEYS = 'Enter to check · Esc to leave the box for shortcuts';
+const typingKeys = () => singleKeysOn() ? 'Enter to check · Esc to leave the box for shortcuts' : 'Enter to check';
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
 // Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.
@@ -862,7 +867,9 @@ document.addEventListener('keydown', e => {
   const inInput = e.target.matches('input, textarea, select');
   if (e.key === 'Escape' && e.target.id === 'typeIn') { e.preventDefault(); e.target.blur(); return; }      // out of the answer box: the single keys work again
   const onButton = onControl(e, 'flash');   // Enter or Space on a focused button should press that button, not flip or rate
-  if (!inInput) {
+  // Settings → Study → Single-key shortcuts (WCAG 2.1.4): off, the letter and number keys do nothing, and Space / Enter only act on the card itself.
+  const keys = singleKeysOn(), cardKeys = keys || !!e.target.closest?.('#flash');
+  if (!inInput && keys) {
     const k = e.key.toLowerCase();
     if (k === 'e' || k === 'i') { e.preventDefault(); openCardMenu(k === 'i' ? 'info' : 'edit'); return; }
     if (e.key === '-' || e.key === '@') { e.preventDefault(); quick(e.key === '-' ? 'bury' : 'suspend'); return; }
@@ -883,12 +890,12 @@ document.addEventListener('keydown', e => {
     if (k === 'm' && face?.querySelector('.occ-peek')) { e.preventDefault(); togglePeek(face.querySelector('.occ-peek')); return; }
   }
   if (!R.flipped) {
-    if (!onButton && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
+    if (!onButton && cardKeys && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); flip(R.el); }
     return;
   }
-  if (stepsLeft() && !inInput && ((!onButton && (e.key === ' ' || e.key === 'Enter')) || e.key === 'ArrowRight')) { e.preventDefault(); revealStep(R.el); return; }
-  if (!inInput && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
-  else if (!onButton && (e.key === ' ' || e.key === 'Enter')) {
+  if (stepsLeft() && !inInput && (((!onButton && cardKeys) && (e.key === ' ' || e.key === 'Enter')) || e.key === 'ArrowRight')) { e.preventDefault(); revealStep(R.el); return; }
+  if (!inInput && keys && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); answer(R.el, +e.key); }
+  else if (!onButton && cardKeys && (e.key === ' ' || e.key === 'Enter')) {
     e.preventDefault();
     // A step-by-step card: Space only reveals (the last step shows the final answer). Rating it is 1–4 or a rating button, so a Space
     // pressed to see the final answer (or held down) can't rate the card by accident.

@@ -78,6 +78,14 @@ export function answerText(text) {
   return unholdMath(unescapeDollar(stripMarks(held.text)), held.items, it => texToPlain(it.tex));
 }
 
+// A card as one short phrase for a screen reader: "What is x²? Answer: a square" (formulas as plain words, long text cut off, no marks).
+// For a name on a list row, where the picture of the formula (KaTeX) would be read out symbol by symbol.
+export function spokenCard(front, back, max = 160) {
+  const clip = s => { const t = answerText(s).replace(/\[…\]/g, 'blank').replace(/\s+/g, ' ').trim(); return t.length > max ? `${t.slice(0, max - 1)}…` : t; };
+  const f = clip(front), b = clip(back);
+  return b ? `${f || 'Picture'}${/[.!?…:]$/.test(f) ? '' : '.'} Answer: ${b}` : f || 'Picture';
+}
+
 // The raw text typed as it stands (formulas as written), with "\$" as "$". The other thing a typed answer may match.
 export function rawAnswerText(text) {
   const held = holdMath(String(text ?? ''));

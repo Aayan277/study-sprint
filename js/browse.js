@@ -16,10 +16,11 @@ import { savedTooBigNote, splitTooBig, tooLargeNote } from './quota.js';
 import { noteFieldsEditHTML, readNoteFields } from './note-fields.js';
 import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './cloze.js';
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
-import { plainText, mathHTML } from './format.js';
+import { plainText, mathHTML, spokenCard } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError } from './ui.js';
+import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
 
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
@@ -92,7 +93,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
     <ul class="crows" id="brList"></ul>
     <button class="btn ghost small" type="button" id="brMore" hidden>Show more</button>
     <div class="bulkbar" id="brBulk" hidden>
-      <span id="brSel" class="mono"></span>
+      <span id="brSel" class="mono" aria-live="polite"></span>
       <button class="btn ghost small" type="button" id="brAll">Select all</button>
       <button class="btn primary small" type="button" id="brActions">Actions…</button>
     </div></div>`;
@@ -116,7 +117,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
       const flag = FLAGS.find(f => f.id === card.flag);
       const sel = B.selected.has(card.id);
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
-        <button type="button" class="crow-btn" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
+        <button type="button" class="crow-btn" aria-label="${esc(`${spokenCard(card.front, card.back)}. ${st.label}${flag ? `, ${flag.name} flag` : ''}`)}" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
           <span class="crow-main"><span class="f">${isPair(card) && card.reverse ? '<span class="rev-pill" title="Reverse card: asks the back, expects the front">Reverse</span> ' : ''}${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
@@ -126,10 +127,13 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
     }).join('') : `<li class="empty">${cards.length ? 'No cards match.' : 'No cards yet. Tap + Add card, or import some.'}</li>`;
     $('brMore').hidden = list.length <= B.shown;
     $('brBulk').hidden = !B.selecting;
-    $('brSel').textContent = `${B.selected.size} selected`;
     $('brSelect').textContent = B.selecting ? 'Cancel' : 'Select';
-    // Says what it will do: select everything shown, or clear if that's already selected.
-    $('brAll').textContent = list.length && list.every(x => B.selected.has(x.card.id)) ? 'Clear' : 'Select all';
+    selCount();
+  };
+  // "3 selected" and what the Select all button will do (select everything shown, or clear if that's already selected).
+  const selCount = () => {
+    $('brSel').textContent = `${B.selected.size} selected`;
+    $('brAll').textContent = B.visible.length && B.visible.every(x => B.selected.has(x.card.id)) ? 'Clear' : 'Select all';
   };
 
   // Something changed: reload from the database and redraw.
@@ -151,7 +155,14 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter })
   $('brList').addEventListener('click', e => {
     const row = e.target.closest('.crow'); if (!row) return;
     const id = row.dataset.id;
-    if (B.selecting) { B.selected.has(id) ? B.selected.delete(id) : B.selected.add(id); draw(); return; }
+    if (B.selecting) {
+      // The row is changed where it stands: redrawing the list would drop the focus and the screen reader's "checked / not checked".
+      B.selected.has(id) ? B.selected.delete(id) : B.selected.add(id);
+      row.classList.toggle('selected', B.selected.has(id));
+      row.querySelector('.crow-btn')?.setAttribute('aria-checked', String(B.selected.has(id)));
+      selCount();
+      return;
+    }
     openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh });
   });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
@@ -286,7 +297,7 @@ async function openCardActions(card, ctx) {
   const state = ctx.statesById.get(card.id);
   const now = Date.now();
   const status = cardStatus(card, state, now);
-  openSheet(`
+  openSheet(stripKeys(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <p class="act-front">${mathHTML(plainText(card.front), { inline: true })}</p>
     <div class="act-list">
@@ -297,7 +308,7 @@ async function openCardActions(card, ctx) {
       <button type="button" class="act-row" data-act="suspend" aria-keyshortcuts="@">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span><kbd aria-hidden="true">@</kbd></button>
       <button type="button" class="act-row" data-go="glossary">${icon('plus')}<span>Add to glossary${picked ? `<small>“${esc(picked)}”</small>` : ''}</span></button>
       <button type="button" class="act-row" data-go="more">${icon('more')}<span>More<small>Move, due date, reset, delete, card info</small></span>${icon('chevron')}</button>
-    </div>`, { side: true });
+    </div>`), { side: true });
   const { save } = cardOps(card, ctx);
   const sheet = $('sheet');
   sheet.querySelector('[data-go="glossary"]').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openTermForm({ term: picked, back: 'close' })).catch(err => console.error(err)));
@@ -313,7 +324,7 @@ async function openCardActions(card, ctx) {
 document.addEventListener('keydown', e => {
   const sheet = document.getElementById('sheet');
   if (!sheet?.open || !sheet.querySelector('.act-list') || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.target.closest?.('input, textarea, select')) return;
+  if (!singleKeysOn() || e.target.closest?.('input, textarea, select')) return;
   const pick = { e: '[data-go="edit"]', E: '[data-go="edit"]', '-': '[data-act="bury"]', '@': '[data-act="suspend"]' }[e.key];
   if (pick) { e.preventDefault(); sheet.querySelector(pick)?.click(); }
 });
@@ -387,8 +398,14 @@ const cardFieldsHTML = (card, maxN = 0, pair = null) => `
       <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
-      <p class="err" id="ceErr" hidden></p>`;
-const showErr = (id, text) => { $(id).textContent = text; $(id).hidden = false; };
+      <p class="err" id="ceErr" role="alert" hidden></p>`;
+// The form's error: read out, linked to the field it is about (aria-invalid + aria-describedby) and the cursor goes there. Without `field`, the
+// first box of the form that is showing (the Text of a cloze note, the Front of a card, the picture button of a picture note).
+const showErr = (id, text, field) => {
+  const p = id.slice(0, 2);
+  const shown = [p + 'Text', p + 'Front', p + 'OccChoose', p + 'OccEdit'].map($).find(x => x && !x.closest('[hidden]'));
+  showFieldError(field ? $(field) : shown, $(id), text);
+};
 function wireCardForm(card, ctx, msg, pair = null) {
   const ops = cardOps(card, ctx);
   if (!isClozeCard(card) && !hasMasks(card)) { setCardSounds('ceFront', card.frontSounds || []); setCardSounds('ceBack', card.backSounds || []); wireRevSwitch('ce', $('ceForm')); }
@@ -400,7 +417,7 @@ function wireCardForm(card, ctx, msg, pair = null) {
     const frontImage = readCardImage('ceFront'), backImage = readCardImage('ceBack');
     const frontSounds = readCardSounds('ceFront'), backSounds = readCardSounds('ceBack');
     // Each side needs something on it: text, a picture or a sound.
-    if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
+    if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('ceErr', 'A card needs a front and a back (text or a picture, or a sound).', front || frontImage || frontSounds.length ? 'ceBack' : 'ceFront'); return; }
     const why = stepsProblem('ce');
     if (why) { showErr('ceErr', why); return; }
     const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
@@ -826,7 +843,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
       <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
-      <p class="err" id="acErr" hidden></p>
+      <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>
         <button class="btn ghost" type="button" id="acDone">Close</button>
@@ -867,7 +884,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const front = readCardText('acFront').trim(), back = readBack('ac').trim(), hook = readCardText('acHook').trim();
       const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
       const frontSounds = readCardSounds('acFront'), backSounds = readCardSounds('acBack');
-      if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('acErr', 'A card needs a front and a back (text or a picture, or a sound).'); return; }
+      if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('acErr', 'A card needs a front and a back (text or a picture, or a sound).', front || frontImage || frontSounds.length ? 'acBack' : 'acFront'); return; }
       const why = stepsProblem('ac');
       if (why) { showErr('acErr', why); return; }
       const card = { id: db.newId(), deckId: deck, front, back, ...(frontImage ? { frontImage } : {}), ...(backImage ? { backImage } : {}), ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), created: Date.now() };

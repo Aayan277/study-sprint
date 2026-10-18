@@ -1,7 +1,7 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold, showFieldError, clearFieldError } from './ui.js';
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
@@ -467,7 +467,7 @@ async function openExport(deck, decks, deckCards) {
       <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint.</span></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
     </div>
-    <p class="err" id="exErr" hidden></p>`);
+    <p class="err" id="exErr" role="alert" hidden></p>`);
   $('exCsv').addEventListener('click', () => {
     ex.download(new Blob([ex.toCSV(cards)], { type: 'text/csv;charset=utf-8' }), ex.fileName(deck.name, 'csv'));
     closeSheet();
@@ -488,8 +488,7 @@ async function openExport(deck, decks, deckCards) {
           const n = r.left.length + r.gone.length;
           if (n) {
             btn.dataset.armed = '1';
-            $('exErr').textContent = leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to make the deck without them.';
-            $('exErr').hidden = false;
+            showFieldError(null, $('exErr'), leftOutNote(n, r.reason, r.gone.length) + ' Tap the button again to make the deck without them.');
             btn.disabled = false;
             btn.querySelector('b').textContent = 'Make it without them';
             return;
@@ -497,14 +496,13 @@ async function openExport(deck, decks, deckCards) {
         }
       }
       btn.querySelector('b').textContent = 'Making the Anki deck…';
-      $('exErr').hidden = true;
+      clearFieldError(null, $('exErr'));
       ex.download(await ex.makeApkg(deck, cards), ex.fileName(deck.name, 'apkg'));
       closeSheet();
       toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
     } catch (err) {
       console.error(err);
-      $('exErr').textContent = navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.';
-      $('exErr').hidden = false;
+      showFieldError(null, $('exErr'), navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
       btn.disabled = false;
       btn.querySelector('b').textContent = 'Anki deck (.apkg)';
     }
@@ -575,10 +573,10 @@ function readStudyOptions() {
   const reviewPerDay = rev ? Math.max(1, Math.min(9999, Math.round(Number(rev) || 1))) : null;
   if ($('deckOwnOff').checked) return { reviewPerDay, options: null };
   const ls = parseSteps($('deckLs').value || SCHED_DEFAULTS.learningSteps), rs = parseSteps($('deckRs').value || SCHED_DEFAULTS.relearningSteps);
-  if (ls.error) return { error: `Learning steps: ${ls.error}` };
-  if (rs.error) return { error: `Relearning steps: ${rs.error}` };
+  if (ls.error) return { error: `Learning steps: ${ls.error}`, field: 'deckLs' };
+  if (rs.error) return { error: `Relearning steps: ${rs.error}`, field: 'deckRs' };
   const mi = parseMaxInterval($('deckMax').value || 36500);
-  if (mi.error) return { error: `Maximum interval: ${mi.error}` };
+  if (mi.error) return { error: `Maximum interval: ${mi.error}`, field: 'deckMax' };
   return { reviewPerDay, options: {
     targetRetention: +$('deckRet').value / 100,
     learningSteps: formatSteps(ls.steps), relearningSteps: formatSteps(rs.steps), maxInterval: mi.days
@@ -622,7 +620,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b>
         <span>In Review: the front's sounds when a card appears, the back's when you flip.</span></span>
         <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>`}
-      <p class="err" id="deckErr" hidden></p>
+      <p class="err" id="deckErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
         <button class="btn primary" type="submit">${isNew ? 'Create deck' : 'Save'}</button>
@@ -647,11 +645,12 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
   $('deckForm').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('deckName').value.trim();
-    if (!name) { $('deckErr').textContent = 'Give the deck a name.'; $('deckErr').hidden = false; $('deckName').focus(); return; }
+    for (const f of ['deckName', 'deckExam', 'deckLs', 'deckRs', 'deckMax']) if ($(f)) clearFieldError($(f), $('deckErr'));
+    if (!name) { showFieldError($('deckName'), $('deckErr'), 'Give the deck a name.'); return; }
     // A date that was already saved is left alone; a new one is checked (blank clears it).
     const newExam = $('deckExam').value;
     const examProblem = newExam !== (deck?.examDate || '') ? examDateError(newExam) : '';
-    if (examProblem) { $('deckErr').textContent = examProblem; $('deckErr').hidden = false; $('deckExam').focus(); return; }
+    if (examProblem) { showFieldError($('deckExam'), $('deckErr'), examProblem); return; }
     const course = $('deckCourse').value.trim();
     const parentId = $('deckParent').value;
     // Read aloud automatically: a subdeck only stores it when it differs from the deck it's inside.
@@ -665,7 +664,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     let options = null;
     if (!isNew) {
       const read = readStudyOptions();
-      if (read.error) { $('deckErr').textContent = read.error; $('deckErr').hidden = false; $('deckOpts').open = true; return; }
+      if (read.error) { $('deckOpts').open = true; showFieldError($(read.field), $('deckErr'), read.error); return; }
       options = read;
     }
     if (saving) return;                // a double-click or a second Enter: the first save is already running

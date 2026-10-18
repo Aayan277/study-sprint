@@ -6,6 +6,7 @@ import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
 import { isStepped, finalStep, parseElements } from './steps.js';
 import { maskMath } from './math.js';
+import { answerText } from './format.js';
 import { playRole } from './reverse.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
@@ -207,11 +208,20 @@ export function weightedQueue(items, len, weightOf = () => 1, rnd = Math.random,
   return out;
 }
 
+// What the screen reader says when a question is drawn: "Question 3 of 20: <the prompt as plain words>" (Survival and Lightning have no
+// total). A picture question has no text to read.
+export function questionAnnouncement(round, q) {
+  const n = round.fmt === 'classic' && round.total ? `Question ${Math.min(round.i + 1, round.total)} of ${round.total}` : `Question ${round.i + 1}`;
+  const text = q.occ ? 'name the highlighted box in the picture' : answerText(q.prompt).trim() || 'look at the picture';
+  return `${n}: ${text}`;
+}
+
 // Time allowed for question number i (counting from 0), in ms.
 // Survival shrinks 3% each question, down to a 2s floor. Lightning has no per-question timer.
-export function timeLimit({ fmt, pace, typing, i = 0 }) {
+// untimed (Classic and Survival only): no limit at all (WCAG 2.2.1 Timing Adjustable). Lightning is a 60-second race by nature, so it stays timed.
+export function timeLimit({ fmt, pace, typing, i = 0, untimed = false }) {
   const mul = typing ? TYPING_TIME : 1;
-  if (fmt === 'lightning') return Infinity;
+  if (fmt === 'lightning' || untimed) return Infinity;
   if (fmt === 'survival') return Math.max(2000 * mul, pace * mul * 1000 * Math.pow(0.97, i));
   return pace * mul * 1000;
 }
@@ -221,7 +231,7 @@ export function timeLimit({ fmt, pace, typing, i = 0 }) {
 // A wrong answer on Hard loses 50 points (never below 0).
 export function scoreAnswer({ ok, seconds, limitMs, fmt, streak, hard, flash, score }) {
   if (!ok) return { pts: hard ? -Math.min(50, score) : 0, speed: 0, mult: 1 };
-  const speed = fmt === 'lightning' ? Math.max(0, 1 - seconds / 3) : Math.max(0, 1 - seconds / (limitMs / 1000));
+  const speed = fmt === 'lightning' ? Math.max(0, 1 - seconds / 3) : !Number.isFinite(limitMs) ? 0 : Math.max(0, 1 - seconds / (limitMs / 1000));      // (no time limit: no speed bonus)
   const mult = 1 + 0.1 * Math.min(streak, 5);
   const pts = Math.round((100 + Math.round(100 * speed)) * mult * (hard ? 1.25 : 1) * (flash ? 1.2 : 1));
   return { pts, speed, mult };
@@ -260,6 +270,6 @@ export function gradeFor(accuracy, avgSpeed) {
 }
 
 // Best scores are kept per deck, format, question type, difficulty, flash and (for Classic) length.
-export function bestKey({ deckId, fmt, qtype, hard, flash, len }) {
-  return [deckId || 'all', fmt, qtype, hard ? 'hard' : 'normal', flash || 0, fmt === 'classic' ? len : '-'].join('|');
+export function bestKey({ deckId, fmt, qtype, hard, flash, len, untimed }) {
+  return [deckId || 'all', fmt, qtype, hard ? 'hard' : 'normal', flash || 0, fmt === 'classic' ? len : '-'].join('|') + (untimed && fmt !== 'lightning' ? '|untimed' : '');
 }
