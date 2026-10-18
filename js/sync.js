@@ -20,7 +20,7 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, logPull, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -248,23 +248,26 @@ async function run() {
   //    (pullStart, sync-merge.js): a change numbered below it can have become visible after the bookmark moved past it.
   //    Those rows come again and are skipped as already applied. The bookmark itself only ever moves forward.
   let applied = 0, pulled = 0, gotNotes = false;
-  let from = pullStart(st), bookmarkBefore = st.lastSeq, lastRequestAt = Date.now();
+  st = startPull(st, Date.now());
+  let from = pullStart(st);
   for (;;) {
-    lastRequestAt = Date.now(); bookmarkBefore = st.lastSeq;
+    const at = Date.now(), after = from;
     const rows = await supa.getChanges(token, from, PAGE);
-    if (!rows.length) break;
-    const got = await db.applyRemote(rows);
-    applied += got;
-    if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
-    pulled += rows.length;
-    if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
-    from = Math.max(from, ...rows.map(r => Number(r.seq)));
-    st = { ...st, lastSeq: Math.max(st.lastSeq, from) };
+    if (rows.length) {
+      const got = await db.applyRemote(rows);
+      applied += got;
+      if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
+      pulled += rows.length;
+      if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
+      from = Math.max(from, ...rows.map(r => Number(r.seq)));
+    }
+    // The bookmark (only ever forward) and the log of requests are saved together, page by page, so a pull cut off
+    // midway carries on near where it stopped.
+    const lastSeq = Math.max(st.lastSeq, from);
+    st = { ...st, lastSeq, seqLog: logPull(st.seqLog, { t: at, seq: lastSeq, from: after, n: rows.length }) };
     await db.setSetting('syncState', st);
     if (rows.length < PAGE) break;
   }
-  st = { ...st, seqLog: logPull(st.seqLog, lastRequestAt, bookmarkBefore) };
-  await db.setSetting('syncState', st);
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.
   if (gotNotes) await healNotes();

@@ -229,33 +229,62 @@ export const PICTURES_BLOCKED_NOTE = 'Some pictures can’t sync yet: the sync s
 // reads that stretch again; rows already applied are skipped by decide() (same time = skip), so it costs a few
 // rows of download and nothing else.
 // "A little behind" is measured in time, not in numbers: the numbers are shared by every account on the server, so a
-// count of them means nothing. After each pull we log { t: when, seq: the bookmark then }. The next pull starts at
-// the bookmark that was current OVERLAP_MS before the previous pull. A change that was invisible to the previous
-// pull was numbered less than OVERLAP_MS before it, so it is numbered above that old bookmark, however much later
-// this pull happens (the app may have been closed for days).
+// count of them means nothing. After EVERY request (each page) we log { t: when it was sent, seq: the bookmark after
+// it, from: what it asked "after", n: rows it got } next to the bookmark, in one save. The next pull starts at the
+// bookmark that was current OVERLAP_MS before the previous pull's last request. A change that request could not see
+// was numbered less than a few seconds before it, so it is numbered above that older bookmark, however much later
+// this pull happens (the app may have been closed for days). A pull cut off midway has logged its pages, so the next
+// one resumes near where it stopped, not from the start.
+// Second limit, so a big download isn't read again: those unseen changes are among the last few hundred rows this
+// account wrote, so the start is never more than MAX_BACK rows behind the bookmark (counted from the log's n).
+// Not covered: a change that a page of a download longer than OVERLAP_MS could not see yet, numbered below that page's
+// end, on a device with no log (first sync): by the end of such a download the anchor is later than it. The same for
+// more than MAX_BACK rows written by other devices within the few seconds one save takes.
 export const OVERLAP_MS = 2 * 60 * 1000;      // far longer than the few seconds one batch of changes needs to be saved
+export const MAX_BACK = 3000;                 // rows (a batch is 500 rows; a few devices at once)
 const MAX_LOG = 60;
+const goodEntry = e => Number.isFinite(e?.t) && Number.isFinite(e?.seq);
+const entries = log => (Array.isArray(log) ? log.filter(goodEntry) : []);
 
-// The change number to ask "after" in the next pull. Never above the bookmark; no log yet (first sync, or an update from
-// a version without one) means no overlap.
+// The change number to ask "after" in the next pull. Never above the bookmark; no log means no overlap.
 export function pullStart(st) {
   const bookmark = Number(st?.lastSeq) || 0;
-  const log = Array.isArray(st?.seqLog) ? st.seqLog.filter(e => Number.isFinite(e?.t) && Number.isFinite(e?.seq)) : [];
+  const log = entries(st?.seqLog);
   if (!log.length) return bookmark;
   const limit = log[log.length - 1].t - OVERLAP_MS;
   const anchor = [...log].reverse().find(e => e.t <= limit) || log[0];      // not enough history yet: the oldest entry we have
-  return Math.max(0, Math.min(bookmark, anchor.seq));
+  let start = anchor.seq, rows = 0;
+  for (let i = log.length - 1; i >= 0; i--) {                                // the second limit: MAX_BACK rows
+    rows += Number(log[i].n) || 0;
+    if (rows >= MAX_BACK && Number.isFinite(log[i].from)) { start = Math.max(start, log[i].from); break; }
+  }
+  return Math.max(0, Math.min(bookmark, start));
 }
 
-// Add this pull to the log ({ t, seq }), and forget entries older than the one pullStart() will use.
-export function logPull(log, t, seq) {
-  const list = Array.isArray(log) ? log.filter(e => Number.isFinite(e?.t) && Number.isFinite(e?.seq)) : [];
-  if (list.length) t = Math.max(t, list[list.length - 1].t);     // a clock that went backwards doesn't reorder the log
-  list.push({ t, seq });
+// The state to start a pull from. The log always ends at the bookmark (every page saves both together), so a log
+// that is missing (first sync, a reset, an update from an older version) or doesn't end there (the bookmark was moved
+// by an older version after a downgrade) is replaced by a fresh one: no overlap this time.
+export function startPull(st, now) {
+  const log = entries(st.seqLog);
+  const bookmark = Number(st.lastSeq) || 0;
+  if (log.length && log[log.length - 1].seq === bookmark) return st;
+  return { ...st, seqLog: [{ t: now, seq: bookmark, from: bookmark, n: 0 }] };
+}
+
+// Add a request ({ t, seq, from, n }) to the log, and forget entries older than the one pullStart() will use.
+export function logPull(log, entry) {
+  let list = entries(log);
+  const { t } = entry;
+  if (list.length && t < list[list.length - 1].t) {
+    // The clock went backwards. Start the log over in the new time, keeping the bookmark the old one pointed to.
+    const seq = pullStart({ lastSeq: Infinity, seqLog: list });
+    list = [{ t: t - OVERLAP_MS, seq, from: seq, n: 0 }];
+  }
+  list.push(entry);
   const limit = t - OVERLAP_MS;
   let keep = 0;
   list.forEach((e, i) => { if (e.t <= limit) keep = i; });
   const out = list.slice(keep);
-  if (out.length > MAX_LOG) out.splice(1, out.length - MAX_LOG);   // a burst of syncs: thin out the middle, keep the oldest and the newest
+  if (out.length > MAX_LOG) out.splice(1, out.length - MAX_LOG);   // a burst of requests: thin out the middle, keep the oldest and the newest
   return out;
 }

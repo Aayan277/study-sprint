@@ -56,15 +56,46 @@ const after = await run(async () => { const db = await import('./js/db.js'); ret
 ok(l2.applied === 0 && l2.sent === 0 && await pending() === 0 && before === after, `re-read rows change nothing (applied ${l2.applied}, sent ${l2.sent}, pending ${await pending()})`);
 ok((await state()).lastSeq === base + 2, 'bookmark unchanged');
 
-// Old history: with the log reaching back well past the window, a pull only asks from the bookmark of 2+ minutes before
-// the previous pull (here: the bookmark itself), so a quiet account re-reads nothing.
-await run(async seq => {
-  const db = await import('./js/db.js'); const s = (await db.getSettings()).syncState;
-  await db.setSetting('syncState', { ...s, seqLog: [{ t: Date.now() - 20 * 60000, seq }, { t: Date.now() - 10 * 60000, seq }, { t: Date.now() - 5 * 60000, seq }] });
-}, base + 2);
+// Old history: with entries at different bookmarks, a pull asks after the one that was current 2+ minutes before the
+// previous pull (here the one 5 minutes back), not the oldest and not the newest.
+const top0 = (await state()).lastSeq;
+const setLog = (seqs) => run(async ({ seqs, last }) => {
+  const db = await import('./js/db.js'); const s = (await db.getSettings()).syncState; const now = Date.now();
+  const ages = [20 * 60000, 10 * 60000, 5 * 60000];
+  await db.setSetting('syncState', { ...s, lastSeq: last, seqLog: [...seqs.map((seq, i) => ({ t: now - ages[i], seq, from: seq, n: 0 })), { t: now - 1000, seq: last, from: last, n: 0 }] });
+}, { seqs, last: top0 });
+await setLog([top0 - 30, top0 - 20, top0 - 10]);
 asked.length = 0;
 await syncNow();
-ok(asked.length >= 1 && asked[0] === base + 2, 'a quiet account with old history asks only after the bookmark: ' + asked.join(','));
+ok(asked[0] === top0 - 10, `asks after the bookmark from 5 minutes back (${top0 - 10}): ${asked.join(',')}`);
+
+// Re-reads of rows of every kind change nothing: nothing new, nothing to send, nothing marked.
+const uid2 = uid, T = Date.now();
+const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const D1 = day(3), D2 = day(2), D3 = day(4);
+await run(async ({ D1, D3, T }) => {
+  const db = await import('./js/db.js'); const { markKey, GONE } = await import('./js/media-sweep.js');
+  await db.setSettings([[markKey('gone-pic'), GONE], ['restDays', { [D1]: { on: true, at: T - 6000 } }], ['idleDays', { [D3]: true }]]);
+  await db.saveCards([{ id: 'withreview', deckId: 'sample', front: 'q', back: 'a', tags: [], created: Date.now() }]);
+}, { D1, D3, T });
+fake.rows.set(`${uid2}|reviewLog|rv-1`, { user_id: uid2, store: 'reviewLog', id: 'rv-1', data: { uid: 'rv-1', cardId: 'withreview', timestamp: T - 5000, rating: 3, source: 'review' }, deleted: false, updated_at: T - 5000, seq: top0 + 50 });
+fake.rows.set(`${uid2}|settings|restDays`, { user_id: uid2, store: 'settings', id: 'restDays', data: { value: { [D1]: { on: true, at: T - 6000 }, [D2]: { on: true, at: T - 5500 } } }, deleted: false, updated_at: T - 4000, seq: top0 + 51 });
+fake.rows.set(`${uid2}|settings|idleDays`, { user_id: uid2, store: 'settings', id: 'idleDays', data: { value: { [D3]: true } }, deleted: false, updated_at: T - 3000, seq: top0 + 52 });
+await settle();                                   // the first time they are real news (and the merged settings go back up once)
+const snap = () => run(async () => {
+  const db = await import('./js/db.js'); const { markKey } = await import('./js/media-sweep.js'); const set = await db.getSettings();
+  return JSON.stringify({ logs: (await db.getAll('reviewLog')).map(r => r.uid), rest: set.restDays, idle: set.idleDays, mark: set[markKey('gone-pic')] });
+});
+const known = await snap();
+ok(known.includes('rv-1') && known.includes(D2) && known.includes('gone'), 'set up: the review, both days off and the "gone" mark are here: ' + known);
+const top1 = (await state()).lastSeq;
+await run(async last => { const db = await import('./js/db.js'); const s = (await db.getSettings()).syncState; const now = Date.now();
+  await db.setSetting('syncState', { ...s, seqLog: [{ t: now - 10 * 60000, seq: 0, from: 0, n: 0 }, { t: now - 1000, seq: last, from: last, n: 0 }] }); }, top1);
+asked.length = 0;
+const l3 = await syncNow();
+ok(asked[0] === 0, 'this pull re-reads everything from the start: ' + asked.join(','));
+ok(l3.applied === 0 && l3.sent === 0 && await pending() === 0, `re-read review, days off, settings: applied ${l3.applied}, sent ${l3.sent}, pending ${await pending()}`);
+ok(await snap() === known, 'and nothing here changed (the "gone" mark included)');
 
 // A deleted record and a setting that arrive late behave the same way.
 await page.evaluate(async () => { const db = await import('./js/db.js'); await db.saveCards([{ id: 'victim', deckId: 'sample', front: 'v', back: 'v', tags: [], created: Date.now() }]); });
