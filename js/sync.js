@@ -19,7 +19,7 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely } from './sync-push.js';
 import { storedType } from './audio-type.js';
-import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
+import { rowFromRecord, rowFromTombstone, rowFromSetting, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
 
 const AFTER_CHANGE = 4000;            // wait this long after a change, so a burst of changes goes in one sync
 const EVERY = 5 * 60 * 1000;          // and check for other devices' changes every 5 minutes while open
@@ -34,7 +34,7 @@ let retrySounds = true;       // sounds the server turned away are tried again o
 // Routine syncs that find another tab holding the lock try again a little later (nothing tells this tab what the other one saw);
 // a long run of those is said out loud, since the other window may be frozen. (timing: changed by the tests.)
 export const timing = { skipRetry: 45000, busyNoteAfter: 120000, lockWait: 60000 };
-const BUSY_NOTE = 'Another window of the app is syncing or paused. Close other windows if this stays.';
+const BUSY_NOTE = 'Waiting for another window of the app, which is syncing or paused. Close other windows if this stays.';
 let skips = 0, firstSkip = 0, skipTimer = 0;
 let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
 
@@ -218,6 +218,7 @@ export async function usage() {
 export async function signOut({ forget = false } = {}) {
   const { syncAuth } = await db.getSettings();
   if (syncAuth) await supa.signOut(syncAuth.access_token);
+  resetSkips();
   await db.setSetting('syncAuth', null);
   if (forget) await db.setSetting('syncState', null);
   emit({ state: 'signed-out', error: null });
@@ -263,8 +264,9 @@ export function syncNow({ retry = false, skipIfBusy = false } = {}) {
   // (Two tabs of the app take turns, where the browser has Web Locks, so they can't mix up the bookmarks.)
   const onWait = () => emit({ state: 'syncing', progress: 'Waiting for another window to finish syncing…' });
   running = Promise.resolve(withSyncLock(run, { skipIfBusy, onWait, waitMs: timing.lockWait }))
-    .then(r => (r === SKIPPED ? skipped() : (skips = 0, { ok: true })), err => {
+    .then(r => (r === SKIPPED ? skipped() : (resetSkips(), { ok: true })), err => {
       console.error('Sync failed', err);
+      resetSkips();
       const extra = failedNote();
       if (err?.code === 'lock-timeout') { emit({ state: 'error', error: err.message }); return { ok: false, reason: 'busy' }; }
       emit(supa.isSignedOutError(err) ? { state: 'signed-out', error: err.message } : { state: 'error', error: extra ? `${err.message} ${extra}` : err.message });
@@ -276,10 +278,11 @@ export function syncNow({ retry = false, skipIfBusy = false } = {}) {
     });
   return running;
 }
+const resetSkips = () => { skips = 0; clearTimeout(skipTimer); };
 // A routine sync that found the lock taken: look again soon, and after a couple of minutes of that, say so.
 function skipped() {
   if (!skips++) firstSkip = Date.now();
-  if (Date.now() - firstSkip >= timing.busyNoteAfter) emit({ state: 'error', error: BUSY_NOTE });
+  if (Date.now() - firstSkip >= timing.busyNoteAfter) emit({ state: 'syncing', error: null, progress: BUSY_NOTE });
   clearTimeout(skipTimer);
   skipTimer = setTimeout(() => syncNow({ skipIfBusy: true }), timing.skipRetry);
   return { ok: false, reason: 'skipped' };
@@ -296,13 +299,16 @@ async function run() {
   // Days off stored over the entry limit (a single device that got there before the limit existed): the row was set aside as too large
   // and counted as sent, so nothing would send it until the next change. Saving the trimmed copy is that change.
   const trimmed = overLimitDayFlags(settings0.restDays);
-  if (trimmed) await db.setSetting('restDays', trimmed);
+  if (trimmed) await db.setSetting('restDays', trimmed).catch(err => console.error('Could not trim the days off', err));       // (the rest of the sync goes on)
   let st = (await db.getSettings()).syncState || { userId: auth.user.id, lastSeq: 0, pushedUntil: 0, lastSync: 0 };
 
   // 1. Pull what changed on the server since last time.
   let applied = 0, pulled = 0, gotNotes = false;
+  let pageSize = PAGE;          // smaller after a timeout, for the rest of this sync (getPageSafely)
   for (;;) {
-    const rows = await supa.getChanges(token, st.lastSeq, PAGE);
+    const page = await getPageSafely((seq, n) => supa.getChanges(token, seq, n), st.lastSeq, pageSize);
+    const rows = page.rows;
+    pageSize = page.size;
     if (!rows.length) break;
     applied += await db.applyRemote(rows);
     if (rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;
@@ -310,7 +316,7 @@ async function run() {
     if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs
     st = { ...st, lastSeq: Math.max(st.lastSeq, ...rows.map(r => Number(r.seq))) };
     await db.setSetting('syncState', st);
-    if (rows.length < PAGE) break;
+    if (rows.length < pageSize) break;
   }
 
   // Cloze cards from two devices can disagree about their note's text: make them agree again.

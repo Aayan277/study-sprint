@@ -166,15 +166,27 @@ export function sameIdleDays(a, b, now = Date.now()) {
 // What to send for a merged setting: days off are trimmed to the entry limit (capDayFlags) even when the stored value is already over it,
 // as when a single-device account got there before the limit existed; nothing else is touched.
 export function trimForPush(key, value) {
-  return key === 'restDays' && value && typeof value === 'object' && !Array.isArray(value) ? capDayFlags({ ...value }) : value;
+  return key === 'restDays' && value && typeof value === 'object' && !Array.isArray(value) ? mergeDayFlags(value, null) : value;     // (cleaned first: a junk entry must not break the trim)
 }
 // The stored days off, trimmed, if there are more than the limit; else null (nothing to do). A value that big was set aside as too large
 // and its change is already marked as sent, so sync.js saves the trimmed copy: that makes it a new change, which is sent.
 export function overLimitDayFlags(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > MAX_FLAG_ENTRIES ? capDayFlags({ ...value }) : null;
+  return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > MAX_FLAG_ENTRIES ? mergeDayFlags(value, null) : null;
 }
 // The merge and the comparison for each merged setting.
 export const MERGERS = { restDays: [mergeDayFlags, sameDayFlags], idleDays: [mergeIdleDays, sameIdleDays] };
+
+// One page of changes from the server. A page that times out (rows can be 60 KB each: a 1,000-row page may be 20 MB, too much for a slow
+// connection) is asked for again half as big, down to `min`; after that the timeout is thrown. Returns { rows, size }: the size that worked,
+// which the caller keeps using for the rest of the sync.
+export async function getPageSafely(get, afterSeq, size, min = 50) {
+  for (;;) {
+    try { return { rows: await get(afterSeq, size), size }; } catch (err) {
+      if (err?.code !== 'timeout' || size <= min) throw err;
+      size = Math.max(min, size >> 1);
+    }
+  }
+}
 
 // ---------- taking turns between tabs ----------
 // Runs fn() while holding the sync lock, so two tabs can't mix up the bookmarks. A tab frozen while it holds the lock (a backgrounded

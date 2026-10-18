@@ -3,10 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS } from '../js/sync-data.js';
-import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags } from '../js/sync-merge.js';
+import { MAX_FLAG_ENTRIES, mergeDayFlags, sameDayFlags, mergeIdleDays, sameIdleDays, rowFromRecord, rowFromTombstone, rowFromSetting, recordFromRow, decide, needsPush, tombstoneNeedsPush, newestOnly, chunks, parseAuthLink, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags } from '../js/sync-merge.js';
 import { restDaySet, streakRuns, streakFromDays } from '../js/stats-calc.js';
 import { DEFAULT_SETTINGS } from '../js/db.js';
 import { splitOversized } from '../js/quota.js';
+import { pushSafely } from '../js/sync-push.js';
 import { checkPassword, passwordOk, passwordMissing } from '../js/password.js';
 
 const NOW = 1_800_000_000_000;
@@ -445,11 +446,11 @@ test('syncNow: a routine sync that finds the lock taken says "skipped", tries ag
       const free = holdLock(locks);
       assert.deepEqual(await sync.syncNow({ skipIfBusy: true }), { ok: false, reason: 'skipped' });
       await new Promise(r => setTimeout(r, 150));                       // it came back by itself, found the lock taken again, and finally said so
-      assert.equal(sync.lastStatus().state, 'error');
-      assert.match(sync.lastStatus().error, /Another window of the app is syncing or paused/);
+      assert.equal(sync.lastStatus().state, 'syncing');           // (not an error: it is waiting)
+      assert.match(sync.lastStatus().progress, /another window of the app, which is syncing or paused/);
       await free();
       await new Promise(r => setTimeout(r, 100));                       // the next retry gets the lock (and then fails at once: no database here)
-      assert.doesNotMatch(sync.lastStatus().error || '', /Another window of the app/);
+      assert.match(sync.lastStatus().error || '', /indexedDB/);          // it ran this time (and failed: no database in node)
     });
   } finally { Object.assign(sync.timing, old); }
 });
@@ -494,9 +495,11 @@ test('re-upload start-over: counting, giving up, and the note', async () => {
   sync.forgetResendFailures();
 });
 
+// n real day keys ending yesterday (junk keys would be cleaned away)
+const dayKeys = n => Array.from({ length: n }, (_, i) => { const d = new Date(Date.now() - (i + 1) * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
 test('days off: a stored value over the limit is found and trimmed (the stuck case: its change was already marked as sent)', () => {
   const big = {};
-  for (let i = 0; i < 1100; i++) big[`2024-01-${String(i).padStart(4, '0')}`] = { on: i % 2 === 0, at: 5 };
+  dayKeys(1100).forEach((k, i) => { big[k] = { on: i % 2 === 0, at: 5 }; });
   const trimmed = overLimitDayFlags(big);
   assert.equal(Object.keys(trimmed).length, MAX_FLAG_ENTRIES);
   assert.equal(Object.keys(big).length, 1100);
@@ -508,7 +511,7 @@ test('days off: a stored value over the limit is found and trimmed (the stuck ca
 
 test('days off: an oversized stored value is trimmed on the way out; other settings are untouched', () => {
   const big = {};
-  for (let i = 0; i < 1200; i++) big[`2024-01-${String(i).padStart(4, '0')}`] = { on: i % 2 === 0, at: 5 };      // (keys only need to be unique here)
+  dayKeys(1200).forEach((k, i) => { big[k] = { on: i % 2 === 0, at: 5 }; });
   const out = trimForPush('restDays', big);
   assert.equal(Object.keys(out).length, MAX_FLAG_ENTRIES);
   assert.equal(Object.keys(big).length, 1200);                         // the stored value itself is not changed
@@ -516,4 +519,34 @@ test('days off: an oversized stored value is trimmed on the way out; other setti
   assert.deepEqual(trimForPush('restDays', small), small);
   assert.equal(trimForPush('newPerDay', 30), 30);
   assert.equal(trimForPush('restDays', null), null);
+});
+
+test('days off: a junk entry next to an oversized stored value does not break the trim', () => {
+  const big = { '2024-01-bad': null, 'x': 5 };
+  dayKeys(1100).forEach(k => { big[k] = { on: false, at: 5 }; });
+  const stored = { ...big, '2026-01-01': { on: true, at: 5 }, '2026-01-02': null, '2026-01-03': 'junk' };
+  const trimmed = overLimitDayFlags(stored);
+  assert.ok(trimmed && Object.keys(trimmed).length <= MAX_FLAG_ENTRIES);
+  assert.ok(!('2026-01-02' in trimmed) && !('2026-01-03' in trimmed) && !('x' in trimmed));
+  assert.doesNotThrow(() => trimForPush('restDays', stored));
+  assert.ok(Object.keys(trimForPush('restDays', stored)).length <= MAX_FLAG_ENTRIES);
+});
+
+test('a page of changes that times out is asked for again half as big, down to 50 rows', async () => {
+  const timeout = () => Object.assign(new Error('slow'), { code: 'timeout' });
+  const asked = [];
+  const out = await getPageSafely(async (seq, n) => { asked.push(n); if (n > 200) throw timeout(); return ['row']; }, 7, 1000);
+  assert.deepEqual(asked, [1000, 500, 250, 125]);
+  assert.equal(out.size, 125);                                     // kept for the rest of the sync
+  await assert.rejects(getPageSafely(async () => { throw timeout(); }, 0, 1000), { code: 'timeout' });      // gives up at 50
+  await assert.rejects(getPageSafely(async () => { throw Object.assign(new Error('x'), { code: 'network' }); }, 0, 1000), { code: 'network' });     // other errors are not retried
+});
+
+test('a push batch that times out is sent in halves, down to 50 rows, and a timeout at the bottom is thrown', async () => {
+  const rows = Array.from({ length: 400 }, (_, i) => ({ store: 'cards', id: 'c' + i, data: { id: 'c' + i }, deleted: false, updated_at: 1 }));
+  const sizes = [];
+  const out = await pushSafely(async part => { sizes.push(part.length); if (part.length > 100) throw Object.assign(new Error('slow'), { code: 'timeout' }); }, rows);
+  assert.equal(out.sent.length, 400);
+  assert.deepEqual(sizes.slice(0, 3), [400, 200, 100]);
+  await assert.rejects(pushSafely(async () => { throw Object.assign(new Error('slow'), { code: 'timeout' }); }, rows), { code: 'timeout' });
 });

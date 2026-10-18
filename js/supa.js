@@ -9,7 +9,7 @@ import { readUsage } from './quota.js';
 
 // No request is allowed to hang for ever: a frozen or stalled connection would hold the sync lock (and every other tab) with it.
 // The timeout has its own code, so it isn't taken for anything else.
-const REQUEST_TIMEOUT = 60000;
+const REQUEST_TIMEOUT = 180000;          // (a page of 1,000 changes can be many MB; sync.js asks for smaller pages after a timeout)
 const timeoutSignal = ms => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return { signal: c.signal, done: () => clearTimeout(t) }; };
 const timedOut = () => new SupaError("The sync server took too long to answer. It will be tried again.", { code: 'timeout' });
 
@@ -178,9 +178,10 @@ export function deleteAllRows(token, userId) {
 // ---------- pictures (Supabase Storage: bucket "media", one folder per account) ----------
 // Set up by supabase/media.sql. Pictures are files, so these send and receive bytes, not JSON.
 const MEDIA_MISSING = 'Pictures can’t sync yet: run supabase/media.sql in your Supabase project (see docs/sync-setup.md). Everything else is syncing.';
-async function storage(path, { method = 'GET', token, body, type } = {}) {
+// ms: how long the request may take (until the answer starts; with keepTimer, until the caller has read it and calls res.limit.done()).
+async function storage(path, { method = 'GET', token, body, type, ms = 60000, keepTimer = false } = {}) {
   let res;
-  const limit = timeoutSignal(REQUEST_TIMEOUT * 2);       // (until the answer starts: a big file may take longer to arrive)
+  const limit = timeoutSignal(ms);
   try {
     res = await fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
       signal: limit.signal,
@@ -191,8 +192,10 @@ async function storage(path, { method = 'GET', token, body, type } = {}) {
   } catch {
     if (limit.signal.aborted) throw timedOut();
     throw new SupaError("Couldn't reach the sync server.", { code: 'network' });
-  } finally { limit.done(); }
+  } finally { if (!keepTimer) limit.done(); }
+  res.limit = limit;
   if (!res.ok) {
+    limit.done();
     let json = null;
     try { json = await res.json(); } catch { /* not JSON */ }
     const msg = String(json?.message || json?.error || '');
@@ -219,7 +222,7 @@ export async function mediaExists(token, userId, id) {
 // be refused: when that happens, ask whether the file is there, and if it is, the upload is done.
 export async function uploadMedia(token, userId, id, type, data) {
   try {
-    await storage(`object/media/${userId}/${encodeURIComponent(id)}`, { method: 'POST', token, body: data, type });
+    await storage(`object/media/${userId}/${encodeURIComponent(id)}`, { method: 'POST', token, body: data, type, ms: 60000 + (data?.byteLength || 0) / 20 });          // (a slow uplink: 20 KB a second)
   } catch (err) {
     if (err.code === 'media_policy' && await mediaExists(token, userId, id).catch(() => false)) return;
     throw err;
@@ -228,8 +231,13 @@ export async function uploadMedia(token, userId, id, type, data) {
 // { type, data } of a picture, or null if the account doesn't have it.
 export async function downloadMedia(token, userId, id) {
   try {
-    const res = await storage(`object/authenticated/media/${userId}/${encodeURIComponent(id)}`, { token });
-    return { type: res.headers.get('content-type') || 'image/jpeg', data: await res.arrayBuffer() };
+    const res = await storage(`object/authenticated/media/${userId}/${encodeURIComponent(id)}`, { token, ms: 5 * 60000, keepTimer: true });
+    try {
+      return { type: res.headers.get('content-type') || 'image/jpeg', data: await res.arrayBuffer() };
+    } catch (err) {
+      if (res.limit.signal.aborted) throw timedOut();
+      throw err;
+    } finally { res.limit.done(); }
   } catch (err) {
     if (err.status === 400 || err.status === 404) return null;
     throw err;

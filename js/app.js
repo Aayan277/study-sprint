@@ -548,7 +548,7 @@ async function confirmRestore(file) {
     try {
       // Catch up first, so everything in the account gets replaced. If another window holds the sync, stop: going on could lose its changes.
       // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
-      if (synced && (await sync.syncNow()).reason === 'busy') { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
+      if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
       await db.importAll(data, { everywhere: synced });
     } catch (e) {
       console.error(e);
@@ -607,7 +607,12 @@ function confirmResetSynced() {
   $('rsNo').addEventListener('click', closeSheet);
   $('rsAll').addEventListener('click', async () => {
     // First catch up, so nothing from another device is missed. Stops if another window holds the sync (as with restore).
-    if ((await sync.syncNow()).reason === 'busy') { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was deleted.'); return; }
+    const caught = await sync.syncNow();
+    if (!caught.ok) {
+      closeSheet();
+      toast(caught.reason === 'error' ? "Couldn't sync first, so cards from your other devices might be missed. Connect to the internet and try again. Nothing was deleted." : 'Another window is syncing. Try again in a moment. Nothing was deleted.');
+      return;
+    }
     await db.deleteEverything();
     // Study settings back to their defaults (they sync); the theme stays.
     for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
