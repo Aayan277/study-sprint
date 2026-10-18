@@ -84,6 +84,30 @@ const signedIn = page => page.evaluate(async () => !!(await (await import('./js/
   await page.context().close();
 }
 
+// ================= a server that lists and removes only 100 at a time =================
+{
+  const { fake, page } = await setup();
+  const uid = fake.users.get('me@example.com').id;
+  for (let i = 0; i < 250; i++) fake.files.set(`${uid}/bulk-${String(i).padStart(3, '0')}`, { type: 'image/jpeg', data: Buffer.from('x') });
+  fake.setListCap(100);
+  const r = await attempt(page, 'deleteAccount');
+  ok(r.done && fake.files.size === 0 && fake.deleted.includes('me@example.com'), 'a page cap of 100 is handled: all 253 files are removed, then the account');
+  await page.context().close();
+}
+
+// ================= a failure after the files are gone says so =================
+{
+  const { fake, page } = await setup();
+  fake.setRowsDeleteFails(true);
+  const r = await attempt(page, 'deleteServerData');
+  ok(r.message === 'Your pictures and sounds were removed from the server, but the rest wasn’t. Try again.' && r.code === 'partly_deleted', 'the message is specific, not "Nothing was deleted": ' + r.message);
+  ok(fake.files.size === 0 && fake.userRows('me@example.com').length > 0 && await signedIn(page), 'the files are gone, the rows are not, and the person is still signed in to try again');
+  fake.setRowsDeleteFails(false);
+  const r2 = await attempt(page, 'deleteServerData');
+  ok(r2.done && fake.userRows('me@example.com').length === 0, 'Try again: it finishes');
+  await page.context().close();
+}
+
 // ================= the sheet in Settings shows it =================
 {
   const { fake, page } = await setup();

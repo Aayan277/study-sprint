@@ -74,6 +74,7 @@ export async function alreadyOnServer(held, exists, checked = new Set(), cap = 2
 // The account is full (another device filled it meanwhile), the whole server is full, or we can't tell. null when
 // it was some other kind of error (to be thrown as before).
 export async function explainRefusal(auth, err) {
+  if (err?.code === 'media_server_full') return SERVER_FULL_MESSAGE;
   if (err?.code !== 'media_policy') return null;
   const usage = await fetchUsage(auth.access_token);
   if (usage && level(usage) === 'full') return fullMessage(usage);

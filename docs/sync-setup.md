@@ -58,22 +58,16 @@ Because anyone can join, one account must not be able to fill the whole project.
 
 > **Read this if anyone can sign up.** The free plan has 1 GB of files and a 500 MB database for the whole
 > project, and when either is full the project stops working for everybody. Out of the box each account may
-> use **180 MB of pictures and sounds** and **80 MB of synced data**, and the project as a whole stops taking
-> new pictures at 900 MB and new data at 420 MB (so it never reaches the free plan's own limits). Five people
-> at full size fill the project. **If you will let strangers in, lower the default first** (one line, below)
-> and give more space by hand to the people you know.
-> To make 50 MB the default for pictures and sounds, run this once in the SQL Editor (**New query**, paste, **Run**):
->
-> ```sql
-> create or replace function public.default_media_limit() returns bigint
-> language sql immutable as 'select 52428800::bigint';
-> ```
+> use **50 MB of pictures and sounds** and **80 MB of synced data**, and the project as a whole stops taking
+> new pictures at 900 MB and new data at 420 MB (so it never reaches the free plan's own limits). **If you will
+> let strangers in, keep the default low** and give more space by hand to the people you know. To change the
+> default for everyone, replace `default_media_limit()` (in `supabase/limits.sql`) and run it again.
 >
 > (For synced data it is `default_data_limit()`. Running `limits.sql` again does not undo either.)
 
 It adds:
 
-- **Space for pictures and sounds: 180 MB per account.** A new picture or sound is accepted only if it fits.
+- **Space for pictures and sounds: 50 MB per account.** A new picture or sound is accepted only if it fits.
   When an account is full, its new pictures and sounds wait on the person's device and **everything else keeps
   syncing**. The app tells them. (If Supabase doesn't tell the server a file's size until after it is stored,
   the check falls back to "is the account under its limit", which can let one 3 MB file over.)
@@ -91,7 +85,7 @@ It adds:
   The app first removes the account's pictures and sounds through the Storage API and checks the folder is empty; if any
   remain, `delete_my_account()` refuses (`media_left`) and nothing is deleted.
 
-**Giving one person more (or less) space.** Everyone gets 180 MB unless they have a row in the `quotas` table:
+**Giving one person more (or less) space.** Everyone gets 50 MB unless they have a row in the `quotas` table:
 
 1. Open **Authentication → Users** and copy the person's **User UID**.
 2. Open **Table Editor → quotas → Insert → Insert row**. Paste the UID into `user_id`, and type the space in
@@ -100,7 +94,8 @@ It adds:
 
    | Space | Bytes |
    |---|---|
-   | 180 MB (the default) | 188743680 |
+   | 50 MB (the default) | 52428800 |
+   | 180 MB | 188743680 |
    | 500 MB | 524288000 |
    | 1 GB | 1073741824 |
    | 2 GB (a sensible limit if you move to the Pro plan) | 2147483648 |
@@ -438,7 +433,7 @@ on that job: Keep scheduled jobs on leaves jobs that you switched off yourself a
   runs should be recent (step 8d).
 - **Watch the space.** Open **Project Settings → Usage** now and then. The free plan has a 500 MB database
   (the project turns read-only above that), 1 GB of files and 5 GB of downloads a month. Roughly: a light
-  user takes 7 MB of database a year, a heavy one 100 MB, and a full 180 MB of pictures and sounds is
+  user takes 7 MB of database a year, a heavy one 100 MB, and a full 50 MB of pictures and sounds is
   about 1,000 pictures. Step 8c warns you by itself. See [docs/design/scale-and-backend.md](design/scale-and-backend.md) for the numbers
   and when to move to the Pro plan.
 - **Abuse.** To stop new accounts quickly, turn off **Allow new users to sign up** (step 3). Existing people
@@ -459,6 +454,6 @@ on that job: Keep scheduled jobs on leaves jobs that you switched off yourself a
 - **Forgot your password?** On the Sync sign-in form, type your email and tap **Forgot password?**. Open the link in the email: it opens Study Sprint in your browser, where you set a new one. Then sign in with it on your other devices.
 - **Friends:** they open the app, tap **Settings → Sync → Create account**, open the link in the confirmation email, and sign in. Everyone's data stays separate.
 - **Delete my account** (Settings → Sync) removes the account, everything stored in it and its pictures from the server. The device keeps its own copy of the cards. **Delete my synced data** removes the data but keeps the account.
-- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB database. Pictures are shrunk to about 100–250 KB each and are stored separately (180 MB per account).
+- **Space:** a 2,000-card deck with a year of daily reviews uses about 20–30 MB of the free 500 MB database. Pictures are shrunk to about 100–250 KB each and are stored separately (50 MB per account).
 - **Very large collections:** at 50,000 cards or more in one account the app says so in plain words (once after an import, and under Settings → Your data). Nothing is blocked; syncing just gets slow, and a new device takes a long time to download everything.
 - **Big Anki imports:** the app warns before importing a deck whose pictures and sounds are over 200 MB, or that carries more than 50,000 reviews of history.

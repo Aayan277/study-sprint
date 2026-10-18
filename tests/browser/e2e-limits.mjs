@@ -4,7 +4,7 @@
 import { chromium } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ autoAddCards: true })      // builds devices with cards, then signs in on purpose to merge them (pw.mjs);
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
 const APP = 'http://localhost:8123/';

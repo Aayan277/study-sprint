@@ -25,9 +25,11 @@ export const rowFromSetting = (key, value, time) => ({ store: 'settings', id: ke
 // (syncedAt = updatedAt) so it isn't sent straight back.
 // The record's key (id, cardId or uid) always comes from the row's own id, never from inside the data: a row whose data
 // names another record's id can't overwrite that record.
+// (Only a key that doesn't match is replaced: a number id, which backups allow, keeps its type, so it stays the same record.)
 export function recordFromRow(row) {
   const key = SYNC_ID[row.store];
-  return { ...row.data, ...(key ? { [key]: row.id } : {}), updatedAt: row.updated_at, syncedAt: row.updated_at };
+  const fix = key && String(row.data?.[key]) !== row.id ? { [key]: row.id } : {};
+  return { ...row.data, ...fix, updatedAt: row.updated_at, syncedAt: row.updated_at };
 }
 
 // Is this row from the server unusable? Returns a short reason (for the local log) or null when it is fine. One bad row must
@@ -263,7 +265,7 @@ export function withSyncLock(fn, { skipIfBusy = false, waitMs = LOCK_WAIT, onWai
 // ---------- pictures and sounds (files in Supabase Storage) ----------
 export const isSoundRow = m => String(m?.type || '').startsWith('audio/');
 // Problems with the whole storage setup (not one file): sending more files would only fail the same way.
-const WHOLE_STORAGE_ERRORS = ['bucket_missing', 'media_policy', 'network', 'timeout'];
+const WHOLE_STORAGE_ERRORS = ['bucket_missing', 'media_policy', 'media_server_full', 'network', 'timeout'];
 export const isWholeStorageError = err => WHOLE_STORAGE_ERRORS.includes(err?.code) || err?.status === 401;
 
 // Send files one at a time, pictures first and then sounds. A file that fails on its own never stops the others.
@@ -275,6 +277,7 @@ export const isWholeStorageError = err => WHOLE_STORAGE_ERRORS.includes(err?.cod
 export async function uploadMediaFiles(rows, upload, { onSent, onProgress } = {}) {
   const sent = [], blocked = [], failed = [];
   const rejected = new Set();
+  let serverErrors = 0;          // answers in a row from a server having trouble (5xx): after two, stop, whatever file is next
   const ordered = [...rows.filter(m => !isSoundRow(m)), ...rows.filter(isSoundRow)];
   for (const [i, m] of ordered.entries()) {
     const kind = isSoundRow(m) ? 'sound' : 'picture';
@@ -283,10 +286,13 @@ export async function uploadMediaFiles(rows, upload, { onSent, onProgress } = {}
     try {
       await upload(m);
       sent.push(m.id);
+      serverErrors = 0;
       await onSent?.(m);
     } catch (err) {
       if (err?.code === 'media_type') { rejected.add(kind); blocked.push(m.id); continue; }
       if (isWholeStorageError(err)) throw err;
+      if (err?.status >= 500 && ++serverErrors >= 2) throw err;
+      if (!(err?.status >= 500)) serverErrors = 0;
       failed.push({ id: m.id, message: err?.message || String(err) });
     }
   }

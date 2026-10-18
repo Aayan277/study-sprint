@@ -828,7 +828,7 @@ function askAboutDevice(v) {
   return new Promise(resolve => {
     let settled = false;
     const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
-    const things = v.cards ? plural(v.cards, 'card') : plural(v.decks, 'deck');
+    const things = v.cards ? plural(v.cards, 'card') : v.decks ? plural(v.decks, 'deck') : 'progress and settings';
     openSheet(v.kind === 'other' ? `
       <h2 id="sheetTitle">This device has cards from another account</h2>
       <div class="confirm">
@@ -850,7 +850,8 @@ function askAboutDevice(v) {
       </div>`);
     $('sheet').addEventListener('close', () => finish('cancel'), { once: true });
     const wipeThen = async () => {
-      try { await wipeThisDevice(); } catch (e) { toast("Couldn't clear this device. Nothing was changed."); finish('cancel'); closeSheet(); return; }
+      // (wipeThisDevice clears first and sets up again after: if it fails, some of the data may already be gone.)
+      try { await wipeThisDevice(); } catch (e) { console.error(e); toast("Couldn't finish clearing this device. Some local data may have been cleared. You are not signed in."); finish('cancel'); closeSheet(); drawSidebar(); return; }
       drawSidebar();
       finish('go'); closeSheet();
     };

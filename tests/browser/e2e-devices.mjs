@@ -121,6 +121,48 @@ ok(await asked(N) === 'This device has cards from another account', 'Create acco
 await N.click('#devCancel'); await N.waitForSelector('#sheet:not([open])', { state: 'attached' });
 ok((await state(N)).user === null && serverCards('eve@example.com', 'dandeck') === 0, 'Cancel there: nothing merged');
 
+// ================= a device that belongs to another account, with no cards of its own =================
+{
+  const signOutKeep = page => run(page, async () => { await (await import('./js/sync.js')).signOut({}); });
+  // only defaults: the next person signs in without a question
+  const Y = await device('Y');
+  await fillForm(Y, { email: 'fay@example.com', create: true }); await waitSynced(Y);
+  await signOutKeep(Y);
+  await fillForm(Y, { email: 'gus@example.com', create: true });
+  await waitSynced(Y);
+  ok((await state(Y)).user === 'gus@example.com', 'an account\'s device holding only defaults: the next person signs in without a question');
+  // a changed synced setting is the previous person's
+  const S = await device('S');
+  await fillForm(S, { email: 'hal@example.com', create: true }); await waitSynced(S);
+  await run(S, async () => { await (await import('./js/db.js')).setSetting('newPerDay', 35); await (await import('./js/sync.js')).syncNow(); });
+  await signOutKeep(S);
+  await fillForm(S, { email: 'ida@example.com', create: true });
+  ok(await asked(S) === 'This device has cards from another account', 'no cards, but the previous person\'s study settings are there: asks');
+  ok((await S.textContent('#sheet')).includes('progress and settings'), 'and says it is progress and settings');
+  await S.click('#devCancel'); await S.waitForSelector('#sheet:not([open])', { state: 'attached' });
+  ok((await state(S)).user === null, 'Cancel: nothing signed in');
+  // a review of a sample card is the previous person's progress
+  const V = await device('V');
+  await fillForm(V, { email: 'jon@example.com', create: true }); await waitSynced(V);
+  await run(V, async () => {
+    const db = await import('./js/db.js');
+    await db.saveReview({ cardId: 'sample-0', due: Date.now() + 86400000, stability: 2, difficulty: 5, reps: 1, lapses: 0, state: 2 }, { cardId: 'sample-0', timestamp: Date.now(), source: 'review', rating: 3, correct: true, state: 0 });
+  });
+  await signOutKeep(V);
+  await fillForm(V, { email: 'kim@example.com', create: true });
+  ok(await asked(V) === 'This device has cards from another account', 'a review of a sample card counts: asks');
+  await V.click('#devCancel'); await V.waitForSelector('#sheet:not([open])', { state: 'attached' });
+  // a card added to the sample deck is the previous person's card
+  const W = await device('W');
+  await fillForm(W, { email: 'lee@example.com', create: true }); await waitSynced(W);
+  await run(W, async () => { await (await import('./js/db.js')).saveCards([{ id: 'mine-in-sample', deckId: 'sample', front: 'q', back: 'a', tags: [], created: Date.now() }]); });
+  await signOutKeep(W);
+  await fillForm(W, { email: 'max@example.com', create: true });
+  ok(await asked(W) === 'This device has cards from another account', 'a card added to the sample deck counts: asks');
+  await W.click('#devCancel'); await W.waitForSelector('#sheet:not([open])', { state: 'attached' });
+}
+ok(fake.log.some(l => l.includes('/auth/v1/logout')) && fake.log.filter(l => l.includes('/auth/v1/logout')).every(l => l.endsWith('?scope=local')), 'every sign-out (Cancel included) is scope=local, so the person\'s other devices stay signed in');
+
 // ================= code path without the screen: never merges silently =================
 const code = await run(N, async () => {
   const sync = await import('./js/sync.js');

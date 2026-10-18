@@ -28,6 +28,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   // With captcha protection on, a request needs a token (any non-empty one passes here).
   const needsCaptcha = body => { if (!captcha) return false; const t = body?.gotrue_meta_security?.captcha_token; if (t) captchaTokens.push(t); return !t; };
   const files = new Map();      // storage: `${uid}/${id}` → { type, data }
+  let listCap = Infinity, rowsDeleteFails = false;     // the Storage API lists at most this many names a page; DELETE of the rows fails with a 500
+  let mediaServerFull = 0;      // 0 = no; else the status the Storage API gives when the trigger on storage.objects raises 'media_server_full' (400 or 500)
   let mediaStuck = false, listBlind = false;     // storage delete that quietly removes nothing; a file list that shows nothing
   let bucket = true;            // false = media.sql not run yet
   let audio = true;             // false = the bucket's file types are the old list (media.sql from before sounds): audio uploads are turned away
@@ -107,6 +109,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         if (m[1] !== uid) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
         if (!audio && String(h['content-type']).startsWith('audio/')) return json(route, 415, { statusCode: '415', error: 'invalid_mime_type', message: `mime type ${h['content-type']} is not supported` });
         uploads.push({ path: `${m[1]}/${m[2]}`, type: h['content-type'] });
+        if (mediaServerFull) return json(route, mediaServerFull, { statusCode: String(mediaServerFull), error: mediaServerFull === 500 ? 'Internal' : 'Bad Request', message: 'media_server_full' });
         if (req.postDataBuffer().length > MAX_FILE) return json(route, 413, { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' });
         // limits.sql: no new files once the folder is at or above the limit (the file being added isn't counted)
         if (mediaFull || mediaUsed(uid) + req.postDataBuffer().length > limitOf(uid)) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
@@ -124,7 +127,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       }
       if (req.method() === 'POST' && p === 'object/list/media') {
         if (listBlind) return json(route, 200, []);
-        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + (body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
+        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + Math.min(listCap, body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
       }
       return json(route, 400, { message: 'unknown storage call ' + p });
     }
@@ -180,6 +183,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         return json(route, 201);
       }
       if (req.method() === 'DELETE') {
+        if (rowsDeleteFails) return json(route, 500, { message: 'boom' });
         for (const [k, r] of rows) if (r.user_id === uid) rows.delete(k);
         return json(route, 204);
       }
@@ -204,6 +208,9 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     inject(email, row) { const uid = users.get(email).id; rows.set(`${uid}|${row.store}|${row.id}`, { user_id: uid, deleted: false, updated_at: Date.now(), ...row, seq: ++seq }); },
     setBucket(v) { bucket = v; },
     setMediaStuck(v) { mediaStuck = v; },
+    setListCap(n) { listCap = n; },
+    setRowsDeleteFails(v) { rowsDeleteFails = v; },
+    setMediaServerFull(status) { mediaServerFull = status; },
     setListBlind(v) { listBlind = v; },
     setAudio(v) { audio = v; },
     // The link in a reset email: a fresh sign-in for that account, after the #.

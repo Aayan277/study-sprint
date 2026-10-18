@@ -5,7 +5,7 @@
 // Errors are thrown as SupaError with a plain-words message.
 
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
-import { readUsage } from './quota.js';
+import { readUsage, SERVER_FULL_MESSAGE } from './quota.js';
 
 // No request is allowed to hang for ever: a frozen or stalled connection would hold the sync lock (and every other tab) with it.
 // The timeout has its own code, so it isn't taken for anything else.
@@ -147,7 +147,8 @@ export async function getUser(accessToken) {
   return { id: u.id, email: u.email };
 }
 export async function signOut(accessToken) {
-  try { await call('/auth/v1/logout', { method: 'POST', token: accessToken }); } catch { /* signed out here either way */ }
+  // (scope=local: only this device's sign-in ends. The default, global, would sign the person out of all their other devices.)
+  try { await call('/auth/v1/logout?scope=local', { method: 'POST', token: accessToken }); } catch { /* signed out here either way */ }
 }
 
 // ---------- data ----------
@@ -209,9 +210,12 @@ async function storage(path, { method = 'GET', token, body, type, ms = 60000, ke
   res.limit = limit;
   if (!res.ok) {
     limit.done();
-    let json = null;
-    try { json = await res.json(); } catch { /* not JSON */ }
+    let json = null, raw = '';
+    try { raw = await res.text(); json = JSON.parse(raw); } catch { /* not JSON */ }
     const msg = String(json?.message || json?.error || '');
+    // The project is over its ceiling for files: a trigger on storage.objects raises media_server_full, and the Storage API passes
+    // it on as a 400 or a 500 (so look for it whatever the status, in the body however it is shaped).
+    if (/media_server_full/.test(raw)) throw new SupaError(SERVER_FULL_MESSAGE, { status: res.status, code: 'media_server_full' });
     // The bucket turns away a kind of file it isn't set up for (a sound, before supabase/media.sql was run again).
     if (String(json?.statusCode) === '415' || /invalid_mime_type|mime type/i.test(`${json?.error} ${msg}`)) throw new SupaError('The sync server doesn’t take this kind of file yet.', { status: res.status, code: 'media_type' });
     if (/bucket not found/i.test(msg)) throw new SupaError(MEDIA_MISSING, { status: res.status, code: 'bucket_missing' });
@@ -262,16 +266,22 @@ export async function deleteMedia(token, userId, ids) {
   }
 }
 // The ids of every picture in the account (for Delete my synced data, and the held-file check in sync-quota.js). Sorted by name so
-// the pages don't overlap. Stops at a short or empty page. A server that ignores `offset` would repeat the first page for ever, so
-// after MAX_LIST_PAGES pages it gives up with an error (callers fall back to something else).
-const MAX_LIST_PAGES = 200;
-export async function listMedia(token, userId) {
+// the pages don't overlap. Paging stops only at an empty page, because a server may cap a page below the limit asked for (100, say),
+// and it moves on by the number of entries it got. A server that ignores `offset` would repeat the first page for ever, so after
+// MAX_LIST_PAGES pages it gives up with an error (callers fall back to something else). A sub-folder (an entry with id null) is listed
+// inside, so files in it count (and are removed with their path), instead of being missed.
+const MAX_LIST_PAGES = 500;
+export async function listMedia(token, userId, folder = '', depth = 0) {
   const ids = [];
-  for (let n = 0; n < MAX_LIST_PAGES; n++) {
-    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/`, limit: 1000, offset: n * 1000, sortBy: { column: 'name', order: 'asc' } }) });
+  for (let n = 0, offset = 0; n < MAX_LIST_PAGES; n++) {
+    const res = await storage('object/list/media', { method: 'POST', token, type: 'application/json', body: JSON.stringify({ prefix: `${userId}/${folder}`, limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } }) });
     const page = await res.json();
-    ids.push(...page.map(f => f.name));
-    if (page.length < 1000) return ids;
+    if (!page.length) return ids;
+    for (const f of page) {
+      if (f.id === null) { if (depth < 3) ids.push(...await listMedia(token, userId, `${folder}${f.name}/`, depth + 1)); }
+      else ids.push(folder + f.name);
+    }
+    offset += page.length;
   }
   throw new SupaError('The list of pictures never ended.', { code: 'list_too_long' });
 }

@@ -19,6 +19,7 @@ import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely, nextBackoff, activeBackoff } from './sync-push.js';
+import { SYNCED_SETTINGS } from './sync-data.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
@@ -74,16 +75,27 @@ export async function signIn(email, password, captcha, opts = {}) { return signe
 //   { kind: 'other', cards, decks, pending }  the cards here came from a different account (pending: changes that account hasn't sent yet)
 //   { kind: 'local', cards, decks }           the cards here were never in any account
 // cards/decks count what the person made, not the sample deck.
+// A device that belongs to another account counts as holding that account's things unless it holds only defaults: besides cards and
+// decks, its reviews (also of the sample cards), cards added to the sample deck, and synced settings that differ from the defaults
+// (fsrsParams, glossary terms, the Stats layout, days off...) are that person's. A never-synced device is asked about only when it
+// holds cards, decks or reviews of its own (not the sample deck's).
 export async function deviceVerdict(userId) {
-  const { syncAuth, syncState } = await db.getSettings();
+  const s = await db.getSettings();
+  const { syncAuth, syncState } = s;
   const owner = syncState?.userId || syncAuth?.user?.id || null;
   if (owner === userId) return { kind: 'ok' };
-  const isSample = id => id === 'sample' || String(id).startsWith('sample-');
+  const sampleCard = c => c.deckId === 'sample' && String(c.id).startsWith('sample-');
   const [decks, cards, logs] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('reviewLog')]);
-  const mine = { decks: decks.filter(d => !isSample(d.id)).length, cards: cards.filter(c => !isSample(c.deckId) && !isSample(c.id)).length };
-  const logged = logs.filter(l => !isSample(l.cardId)).length;
-  if (!mine.decks && !mine.cards && !logged) return { kind: 'ok' };
-  return owner ? { kind: 'other', ...mine, pending: await pendingChanges().catch(() => 0) } : { kind: 'local', ...mine };
+  const mine = { decks: decks.filter(d => d.id !== 'sample').length, cards: cards.filter(c => !sampleCard(c)).length };
+  if (!owner) {
+    const logged = logs.filter(l => !String(l.cardId).startsWith('sample-')).length;
+    return mine.decks || mine.cards || logged ? { kind: 'local', ...mine } : { kind: 'ok' };
+  }
+  const plain = v => (v && typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length ? undefined : v);
+  const customised = SYNCED_SETTINGS.some(k => JSON.stringify(plain(s[k])) !== JSON.stringify(plain(db.DEFAULT_SETTINGS[k])))
+    || Object.keys(s).some(k => k.startsWith('gloss:') && s[k] != null);
+  if (!mine.decks && !mine.cards && !logs.length && !customised) return { kind: 'ok' };
+  return { kind: 'other', ...mine, pending: await pendingChanges().catch(() => 0) };
 }
 
 // Complete a sign-in (or sign-up). onConflict(verdict) is asked first when the cards here aren't this account's, and answers
@@ -200,13 +212,9 @@ export async function finishPasswordReset(linkSession, password) {
   const known = syncAuth?.user?.id === user.id || syncState?.userId === user.id;
   // Signed in only for the same account (already signed in here, or this device's cards came from it) or on a device with nothing on it.
   // Anyone can make a link for their own account, so for any other device the password is saved and nothing is signed in or merged.
-  if (!known && (syncState || await hasLocalData())) return { signedIn: false, email: user.email };
+  if (!known && (await deviceVerdict(user.id)).kind !== 'ok') return { signedIn: false, email: user.email };
   await signedIn({ ...linkSession, user });
   return { signedIn: true, email: user.email };
-}
-async function hasLocalData() {
-  for (const name of ['decks', 'cards', 'reviewLog']) if ((await db.getAll(name)).length) return true;
-  return false;
 }
 // Change the password while signed in.
 export async function changePassword(password) {
@@ -231,26 +239,38 @@ export async function deleteServerData(opts = {}) {
   const auth = await session();                      // (again: a long download can outlast the sign-in)
   if (!auth) throw new supa.SupaError('Sign in first.');
   if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
-  await emptyMediaFolder(auth);                      // (pictures first: if any stay, nothing has been deleted yet)
-  await supa.deleteAllRows(auth.access_token, auth.user.id);
+  const removed = await emptyMediaFolder(auth);      // (pictures first: if any stay, nothing has been deleted yet)
+  try { await supa.deleteAllRows(auth.access_token, auth.user.id); } catch (err) { throw afterFiles(err, removed); }
   await signOut({ forget: true });
+}
+// The files are gone for good once removed, so a failure after that must not say "nothing was deleted".
+const PARTLY_DELETED = 'Your pictures and sounds were removed from the server, but the rest wasn’t. Try again.';
+function afterFiles(err, removed) {
+  if (!removed || supa.isSignedOutError(err) || err?.code === 'server_media_left') return err;
+  return new supa.SupaError(PARTLY_DELETED, { status: err?.status, code: 'partly_deleted' });
 }
 
 // Remove every picture and sound of the account through the Storage API, then list the folder again to make sure it is empty
 // (a few tries, a moment apart). If files are still there, or the server can't be asked, this throws MEDIA_LEFT and the caller
 // stops before anything irreversible. A project without the pictures bucket has nothing to remove.
+// Returns how many files it found to remove. It keeps going while each pass leaves fewer files (a server that lists or removes at
+// most 100 at a time needs several passes) and gives up after 3 passes that remove nothing.
 async function emptyMediaFolder(auth) {
   const token = auth.access_token, uid = auth.user.id;
+  let first = null;
   try {
-    for (let n = 0; ; n++) {
+    for (let stuck = 0, before = Infinity; ;) {
       const ids = await supa.listMedia(token, uid);
-      if (!ids.length) return;
-      if (n >= 3) break;
-      if (n) await new Promise(r => setTimeout(r, timing.mediaRetry * n));
+      first ??= ids.length;
+      if (!ids.length) return first;
+      if (ids.length >= before) stuck++;
+      if (stuck >= 3) break;
+      if (stuck) await new Promise(r => setTimeout(r, timing.mediaRetry * stuck));
+      before = ids.length;
       await supa.deleteMedia(token, uid, ids);
     }
   } catch (err) {
-    if (err?.code === 'bucket_missing') return;
+    if (err?.code === 'bucket_missing') return 0;
     if (supa.isSignedOutError(err)) throw err;
     console.error('Could not remove the pictures', err);
   }
@@ -267,8 +287,8 @@ export async function deleteAccount(opts = {}) {
   if (opts.signal?.aborted || opts.isLive?.() === false) throw cancelled();      // (right before the irreversible call: the sheet may have been closed meanwhile)
   // Files first, through the Storage API (that also frees the space). If any stay, stop here: the account is still whole.
   // (The server function refuses too while files remain: 'media_left'.)
-  await emptyMediaFolder(auth);
-  await supa.deleteAccount(auth.access_token);
+  const removed = await emptyMediaFolder(auth);
+  try { await supa.deleteAccount(auth.access_token); } catch (err) { throw afterFiles(err, removed); }
   await signOut({ forget: true });
 }
 // What this account uses and may use: { data, media, limit } in bytes, or null (limits.sql not run, or offline).
@@ -396,23 +416,34 @@ async function run() {
   //    devices use (so they work offline). A picture problem (e.g. storage not set up yet) doesn't stop the
   //    rest of the sync; it's reported as a note.
   let mediaNote = null;
-  try { mediaNote = await syncMedia(auth); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
+  try { mediaNote = await syncMedia(auth, person, settings0.mediaBackoff); } catch (err) { console.error('Picture sync failed', err); mediaNote = err.message; }
 
   // 3. Push what changed here. Anything changed while this runs is caught by the next sync.
   const pushStart = Date.now();
   const changes = await db.localChangesSince(st.pushedUntil);
   // A clock that's ahead counts as at most a day ahead (the server does the same). A record over the server's size
   // limit is left out and remembered (named in the note), so it can't block everything else.
-  const { ok: rows, big } = splitOversized(capTimes(newestOnly([
+  const { ok: allRows, big } = splitOversized(capTimes(newestOnly([
     ...Object.entries(changes.records).flatMap(([name, list]) => list.map(r => rowFromRecord(name, r))),
     ...changes.tombstones.map(rowFromTombstone),
     ...changes.settings.map(s => rowFromSetting(s.key, trimForPush(s.key, s.value), s.time))
   ])));
   // After a refusal for space, automatic syncs don't push for a while (pushBackoff, sync-push.js). A person's Sync now does, once.
   const saved = settings0.pushBackoff;
+  // Deletes the server already has (sent during the wait, while puts are held and the bookmark stays) are not sent again.
+  const deletesDone = saved?.userId === auth.user.id ? saved.deletedThrough || 0 : 0;
+  const rows = allRows.filter(r => !(r.deleted && r.updated_at <= deletesDone));
   const waiting = person || !rows.length ? null : activeBackoff(saved, auth.user.id);
+  // (Deletes free space, so they are still sent during a backoff: one request. If that is refused too, they are held like the rest.)
+  const sendDeletes = async () => {
+    // (The bookmark can't move while puts are held, so deletes sent already are remembered: deletedThrough.)
+    const dels = rows.filter(r => r.deleted && r.updated_at > (waiting.deletedThrough || 0));
+    const part = dels.length ? await pushSafely(part => supa.putRows(token, part), dels) : { sent: [], held: [], bad: [], full: null };
+    if (part.sent.length && !part.held.length) await db.setSetting('pushBackoff', { ...waiting, deletedThrough: Math.max(...dels.map(r => r.updated_at)) }).catch(() => {});
+    return { ...part, held: [...part.held, ...rows.filter(r => !r.deleted)], full: waiting.kind };
+  };
   const pushed = waiting
-    ? { sent: [], held: rows, bad: [], full: waiting.kind }
+    ? await sendDeletes()
     : await pushSafely(part => supa.putRows(token, part), rows, {
       onProgress: (i, n) => { if (n > BATCH) emit({ progress: `Sending ${i.toLocaleString()} of ${n.toLocaleString()} changes…` }); }
     });
@@ -424,10 +455,11 @@ async function run() {
   // Rows the server's space limits held back stay "not sent yet": the bookmark doesn't move, so they go again next time.
   // (What did go is sent again too; the server ignores a copy it already has.)
   let spaceNote = null;
-  if (waiting) spaceNote = waiting.note || null;
+  if (waiting) spaceNote = pushed.held.length ? waiting.note || null : null;
   else if (pushed.full) {
     spaceNote = pushed.full === 'server' ? SERVER_FULL_MESSAGE : dataFullMessage(await fetchUsage(token));
-    await db.setSetting('pushBackoff', nextBackoff(saved, { userId: auth.user.id, kind: pushed.full, note: spaceNote })).catch(() => {});
+    const deletedThrough = Math.max(saved?.userId === auth.user.id ? saved.deletedThrough || 0 : 0, ...pushed.sent.filter(r => r.deleted).map(r => r.updated_at));
+    await db.setSetting('pushBackoff', { ...nextBackoff(saved, { userId: auth.user.id, kind: pushed.full, note: spaceNote }), deletedThrough }).catch(() => {});
   } else if (saved) await db.setSetting('pushBackoff', null).catch(() => {});       // it went through: no more waiting
 
   st = { ...st, pushedUntil: pushed.held.length ? st.pushedUntil : pushStart - 1, lastSync: Date.now(), tooBig: stillBig };
@@ -443,7 +475,7 @@ async function run() {
 // Returns a note to show under Settings → Sync (or null); a problem with the whole storage setup is thrown.
 const MAX_NEW_AHEAD = 50;
 const checkedOnServer = new Set();      // kept-back files already asked about (sync-quota.js alreadyOnServer); starts empty each time the app opens
-async function syncMedia(auth) {
+async function syncMedia(auth, person, savedBackoff) {
   const token = auth.access_token, uid = auth.user.id;
   const rows = await db.mediaToUpload();         // without their bytes; each file is loaded just before it is sent
   // Sounds the server turned away stay put (and aren't re-sent every time) until the app is opened again or Sync now is pressed.
@@ -457,8 +489,14 @@ async function syncMedia(auth) {
     cap: Infinity, size: 8, onProgress: (i, n) => { if (n > 3) emit({ progress: `Checking pictures already in your account: ${i} of ${n}…` }); }
   } : {});
   if (gate.done.length) await db.markUploaded(gate.done);         // the account already had them
+  // A project that is over its file ceiling refuses every upload: like pushes, uploads then wait 15 min, doubling to 6 h (mediaBackoff);
+  // Sync now tries once anyway, and a file that goes up clears the wait.
+  const mediaWait = person ? null : activeBackoff(savedBackoff, uid);
   let upload;
-  try {
+  if (mediaWait) {
+    upload = { sent: [], blocked: [], failed: [] };
+    if (gate.send.length) gate.note = mediaWait.note || SERVER_FULL_MESSAGE;
+  } else try {
     upload = await uploadMediaFiles(gate.send, async m => supa.uploadMedia(token, uid, m.id, m.type, (await db.getMedia(m.id)).data), {
       onSent: m => db.markUploaded([m.id]),
       onProgress: (i, n, kind) => { if (n > 3) emit({ progress: `Sending ${kind}s: ${i + 1} of ${n}…` }); }
@@ -468,7 +506,9 @@ async function syncMedia(auth) {
     if (!refused) throw err;
     gate.note = refused;
     upload = { sent: [], blocked: [], failed: [] };
+    if (err.code === 'media_server_full') await db.setSetting('mediaBackoff', nextBackoff(savedBackoff, { userId: uid, kind: 'media', note: refused })).catch(() => {});
   }
+  if (upload.sent.length && savedBackoff) await db.setSetting('mediaBackoff', null).catch(() => {});
   if (upload.blocked.length) await db.markBlocked(upload.blocked, 'type');
   retrySounds = false;
   justResent = false;

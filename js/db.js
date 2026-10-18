@@ -889,7 +889,7 @@ export async function deleteEverything() {
 //   keepAllMedia  "Keep all pictures and sounds on this device" (Settings → Sync): sync downloads every file, not only what is needed soon (lazy-media.js)
 //   appBadge, reminderTime, reminderUid  "Cards due on the app icon" and the daily reminder's time (Settings → Study → Reminders): a badge and a calendar belong to one device (badge.js, reminders.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'mediaBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 
@@ -1011,7 +1011,7 @@ export async function applyRemote(rows) {
       const os = tx.objectStore(row.store);
       // Review-log rows are found by uid; everything else by its id.
       const [local, tomb] = await Promise.all([
-        done(row.store === 'reviewLog' ? os.index('uid').get(row.id) : os.get(row.id)),
+        done(row.store === 'reviewLog' ? os.index('uid').get(row.id) : os.get(typeof row.data?.[SYNC_ID[row.store]] === 'number' ? Number(row.id) : row.id)),      // (a number id, which backups allow, is looked up as the number it is saved as)
         done(deleted.get(tombstoneKey(row.store, row.id)))
       ]);
       return { row, local, tomb };

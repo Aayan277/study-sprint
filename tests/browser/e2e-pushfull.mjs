@@ -15,7 +15,7 @@ async function device(name, fake) {
   await ctx.route('https://lakxeftzlpvydzulxrbi.supabase.co/**', fake.handle);
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(`${name} pageerror ${e.stack}`));
-  page.on('console', m => { if (m.type() === 'error' && !/status of (400|401|422|429|404)|Sync failed|Failed to load resource/.test(m.text())) errors.push(`${name} console ${m.text()}`); });
+  page.on('console', m => { if (m.type() === 'error' && !/status of (400|401|422|429|404)|Sync failed|Picture sync failed|Failed to load resource/.test(m.text())) errors.push(`${name} console ${m.text()}`); });
   await page.goto(APP + '#/decks'); await page.waitForSelector('.deck');
   return page;
 }
@@ -61,6 +61,15 @@ const onServer = (fake, tag) => fake.userRows('me@example.com').filter(r => r.st
   await auto(A);
   ok(writes(fake) === w, 'a new change inside the wait is not sent either');
 
+  // a delete still goes during the wait (it frees space): one request, and nothing else
+  await run(A, async () => { await (await import('./js/db.js')).deleteCards(['sample-0']); });
+  w = writes(fake);
+  await auto(A);
+  ok(writes(fake) - w === 1 && fake.userRows('me@example.com').some(r => r.id === 'sample-0' && r.deleted), 'a delete is still sent during the wait (one request)');
+  w = writes(fake);
+  await auto(A);
+  ok(writes(fake) === w, 'and the next automatic sync sends nothing again');
+
   // the wait survives closing the app
   await A.goto(APP + '#/decks'); await A.reload(); await A.waitForSelector('.deck');
   await new Promise(r => setTimeout(r, 1500));          // (the app's own sync on opening)
@@ -69,7 +78,7 @@ const onServer = (fake, tag) => fake.userRows('me@example.com').filter(r => r.st
 
   // Sync now bypasses it once; refused again, the wait doubles
   const st2 = await person(A);
-  ok(writes(fake) - w === 1 && /sync server is full/.test(st2.note || ''), 'Sync now pushes once even inside the wait (one request)');
+  ok(writes(fake) - w === 1 && /sync server is full/.test(st2.note || ''), 'Sync now pushes once even inside the wait (one request; the delete already sent is not sent again)');
   const b3 = await backoff(A);
   ok(b3.wait === 30 * MIN, 'refused again: the wait doubles to 30 minutes');
   w = writes(fake);
@@ -128,6 +137,54 @@ const onServer = (fake, tag) => fake.userRows('me@example.com').filter(r => r.st
   const w = writes(fake);
   const st = await person(A);
   ok(writes(fake) - w === 1 && /sync server is full right now/.test(st.note || ''), 'read-only: one request, and the "server full" wording: ' + st.note);
+  await A.context().close();
+}
+
+// ================= the project is over its file ceiling (media_server_full) =================
+for (const status of [400, 500]) {
+  const fake = fakeSupabase();
+  const A = await device('A', fake);
+  await signUp(A);
+  const addPics = n => run(A, async n => {
+    const db = await import('./js/db.js');
+    for (let i = 0; i < n; i++) await db.putMedia({ id: `pic-${status}-${i}-${Math.random()}`, type: 'image/jpeg', data: new Uint8Array(300).buffer, size: 300, created: Date.now(), uploaded: false });
+  }, n);
+  const mediaBackoff = () => run(A, async () => (await (await import('./js/db.js')).getSettings()).mediaBackoff || null);
+  fake.setMediaServerFull(status);
+  await addPics(5);
+  let u = fake.uploads.length;
+  const st = await person(A);
+  ok(fake.uploads.length - u === 1, `${status}: a full project costs one upload request, not one per file (${fake.uploads.length - u})`);
+  ok(/sync server is full/.test(st.note || '') && fake.files.size === 0, `${status}: the note says the server is full: ${st.note}`);
+  const b = await mediaBackoff();
+  ok(b && b.wait === 15 * MIN && b.kind === 'media', `${status}: uploads back off for 15 minutes`);
+  u = fake.uploads.length;
+  const st2 = await auto(A);
+  ok(fake.uploads.length === u && /sync server is full/.test(st2.note || ''), `${status}: an automatic sync inside the wait uploads nothing and keeps the note`);
+  await person(A);
+  ok(fake.uploads.length - u === 1 && (await mediaBackoff()).wait === 30 * MIN, `${status}: Sync now tries once, and the wait doubles`);
+  fake.setMediaServerFull(0);
+  const st3 = await person(A);
+  ok(fake.files.size === 5 && !st3.note && await mediaBackoff() === null, `${status}: with room again everything goes up, the note goes, the wait is cleared`);
+  await A.context().close();
+}
+// the safety net: two server errors in a row (5xx without any explanation) stop the upload loop
+{
+  const fake = fakeSupabase();
+  const A = await device('A', fake);
+  await signUp(A);
+  await A.context().route('https://lakxeftzlpvydzulxrbi.supabase.co/storage/v1/object/media/**', route => {
+    if (route.request().method() !== 'POST') return fake.handle(route);
+    fake.uploads.push({ path: 'x', type: 'x' });
+    return route.fulfill({ status: 502, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ message: 'bad gateway' }) });
+  });
+  await run(A, async () => {
+    const db = await import('./js/db.js');
+    for (let i = 0; i < 8; i++) await db.putMedia({ id: 'q' + i, type: 'image/jpeg', data: new Uint8Array(300).buffer, size: 300, created: Date.now(), uploaded: false });
+  });
+  const u = fake.uploads.length;
+  await person(A);
+  ok(fake.uploads.length - u === 2, `two 5xx answers in a row stop the upload loop (${fake.uploads.length - u} of 8 tried)`);
   await A.context().close();
 }
 
