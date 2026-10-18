@@ -79,7 +79,8 @@ const seed = (p, decks, plays) => p.evaluate(async ({ decks, plays }) => {
 //   - the same probe is read in the same page just before the run (baseline), so a loaded or CPU-throttled machine lowers both
 //     numbers alike, and only the ratio between them is judged.
 // A run also has to have used a Worker (counted by wrapping the constructor). The rAF gap is still read, for the message only.
-const MIN_TURN_RATIO = 0.5;
+// Measured at 4x CPU throttle: a Worker keeps 48-66% of the idle turns (progress messages and drawing take some), the fit on the page 14-22%.
+const MIN_TURN_RATIO = 0.35;
 const instrument = p => p.evaluate(() => {
   window.__workers = 0;
   const W = window.Worker;
