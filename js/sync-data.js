@@ -11,6 +11,7 @@
 //   settings '_times'          { setting: when it last changed } for the settings that sync
 
 import { cleanFsrsParams, cleanIgnoreBefore } from './sched-settings.js';
+import { isMarkKey, validMark } from './media-sweep.js';
 
 // The stores that sync, and which field is each record's id across devices.
 export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewLog: 'uid' };
@@ -28,7 +29,8 @@ export const SYNCED_SETTINGS = [
 export const MERGED_SETTINGS = ['restDays', 'idleDays'];
 // idleDays is { 'YYYY-MM-DD': true }, a union (mergeIdleDays), pruned to 200 days.
 // The glossary (js/glossary.js): each term is its own synced setting, "gloss:<id>", so the newest copy of each term wins.
-export const isSyncedSetting = key => SYNCED_SETTINGS.includes(key) || (typeof key === 'string' && key.startsWith('gloss:'));
+// "mdel:<id>" marks a picture or sound for deletion from the account (media-sweep.js): a time, or null; newest wins.
+export const isSyncedSetting = key => SYNCED_SETTINGS.includes(key) || (typeof key === 'string' && (key.startsWith('gloss:') || isMarkKey(key)));
 export const SETTING_TIMES = '_times';
 
 // A synced setting that came in from outside (the server or a backup): { ok: true, value } with the value cleaned, or
@@ -36,6 +38,7 @@ export const SETTING_TIMES = '_times';
 export function acceptSetting(key, value) {
   if (key === 'ignoreBefore') return value === null || value === undefined ? { ok: true, value: null } : cleanIgnoreBefore(value) ? { ok: true, value } : { ok: false };
   if (key === 'fsrsVersion') return value === 6 || value === 7 ? { ok: true, value } : { ok: false };
+  if (isMarkKey(key)) return validMark(value) ? { ok: true, value } : { ok: false };
   if (key !== 'fsrsParams') return { ok: true, value };
   if (value === null || value === undefined) return { ok: true, value: null };
   const clean = cleanFsrsParams(value);

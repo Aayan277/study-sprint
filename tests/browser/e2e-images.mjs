@@ -87,7 +87,16 @@ await A.locator('.crow').nth(0).click(); await A.waitForSelector('[data-img-remo
 await A.click('[data-img-remove="ceFront"]'); await A.click('button[type=submit][form=ceForm]'); await A.waitForTimeout(300); await A.click('.sheet-x');
 await run(A, async id => { const db = await import('./js/db.js'); const m = await db.getMedia(id); await db.putRemoteMedia({ ...m, created: 0 }); }, info.frontImage);   // pretend it's old
 await syncNow(A);
-ok(!fake.files.has(`user-1/${info.frontImage}`) && fake.files.has(`user-1/${picCard.backImage}`), 'unused picture removed here and from the account; the used one stays');
+const marked = () => run(A, async () => (await (await import('./js/db.js')).mediaMarks()).marks);
+ok(!(await run(A, async id => !!(await (await import('./js/db.js')).getMedia(id)), info.frontImage)), 'unused picture removed from this device at once');
+ok(fake.files.has(`user-1/${info.frontImage}`) && fake.files.has(`user-1/${picCard.backImage}`), 'but the account keeps it for now (another device may still use it)');
+ok(info.frontImage in await marked() && !(picCard.backImage in await marked()), 'the unused picture is marked for deletion; the used one is not');
+await syncNow(A);
+ok(fake.files.has(`user-1/${info.frontImage}`), 'still there on the next sync (30 days have not passed)');
+await run(A, async id => { const m = await import('./js/media-sweep.js'); const db = await import('./js/db.js'); await db.setSetting(m.markKey(id), Date.now() - 31 * 86400000); await db.setSetting(m.seenKey(id), Date.now() - 31 * 86400000); }, info.frontImage);   // pretend it was marked (and first seen here) a month ago
+await syncNow(A);
+ok(!fake.files.has(`user-1/${info.frontImage}`) && fake.files.has(`user-1/${picCard.backImage}`), 'after 30 days the unused picture is removed from the account; the used one stays');
+ok(!(info.frontImage in await marked()), 'and its mark is cleared');
 await syncNow(B);
 ok(!(await run(B, async () => (await (await import('./js/db.js')).get('cards', 'sample-0')).frontImage)), 'B sees the picture removed');
 

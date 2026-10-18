@@ -20,6 +20,7 @@
 const DB_NAME = 'study-sprint';
 const DB_VERSION = 3;   // 1 → 2: added updatedAt, review uids and the deleted store (for sync). 2 → 3: media store
 
+import { isMarkKey, isSeenKey, markKey, markId, seenKey, validMark, GONE } from './media-sweep.js';
 import { stamp, tombstone, tombstoneKey, upgradeRecord, acceptSetting, SYNC_ID, SYNCED_SETTINGS, MERGED_SETTINGS, SETTING_TIMES, randomId, isSyncedSetting } from './sync-data.js';
 import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-settings.js';
 import { cleanGlossary } from './glossary.js';
@@ -448,7 +449,7 @@ export async function setSetting(key, value, { at: given } = {}) {
     // A merged setting must beat the version the server already holds even if another device's clock is ahead.
     os.get(SETTING_TIMES).onsuccess = e => {
       const times = e.target.result || {};
-      const at = Number.isFinite(given) ? given : MERGED_SETTINGS.includes(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
+      const at = Number.isFinite(given) ? given : MERGED_SETTINGS.includes(key) || isMarkKey(key) ? Math.max(Date.now(), (times[key] || 0) + 1) : Date.now();
       os.put({ ...times, [key]: at }, SETTING_TIMES);
     };
   }
@@ -468,7 +469,8 @@ export async function setSettings(pairs) {
     os.get(SETTING_TIMES).onsuccess = e => {
       const times = { ...(e.target.result || {}) };
       const at = Date.now();
-      for (const [key] of pairs) if (isSyncedSetting(key)) times[key] = at;
+      // (A deletion mark is stamped later than the copy already known, so it wins even if this clock is behind: media-sweep.js.)
+      for (const [key] of pairs) if (isSyncedSetting(key)) times[key] = isMarkKey(key) ? Math.max(at, (times[key] || 0) + 1) : at;
       os.put(times, SETTING_TIMES);
     };
   }
@@ -704,9 +706,11 @@ export async function deleteEverything() {
 // Settings that belong to this device only: never synced, never in backups.
 //   syncAuth   who's signed in (and their sign-in tokens)
 //   syncState  sync bookmarks: the last server change seen, and when this device last sent its changes
+//   resendPending  "Re-upload everything" was asked for; the next sync starts over from this device first (sync.js)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed'];
-export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING);
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending'];
+// (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
+export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 
 // Tell sync.js when something changed on this device, so it can send it.
 const listeners = new Set();
@@ -795,7 +799,7 @@ export async function applyRemote(rows) {
           if (changed) { settingsStore.put(merged, row.id); applied++; }
           if (changed || !sameAsRemote) {
             // If the server already has exactly this, remember its time. Otherwise stamp it now so the union is sent back once.
-            times = { ...times, [row.id]: sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Math.max(Date.now(), row.updated_at + 1) };
+            times[row.id] = sameAsRemote ? Math.max(times[row.id] || 0, row.updated_at) : Math.max(Date.now(), row.updated_at + 1);
           }
           continue;
         }
@@ -804,7 +808,7 @@ export async function applyRemote(rows) {
         if (!accepted.ok) continue;                  // junk from the server is ignored
         // (A glossary term from another device is checked first; a broken one is stored as deleted.)
         settingsStore.put(row.id.startsWith('gloss:') ? cleanGlossary({ [row.id]: accepted.value })[row.id] ?? null : accepted.value, row.id);
-        times = { ...times, [row.id]: row.updated_at };
+        times[row.id] = row.updated_at;
         applied++;
         if (row.id === 'fsrsParams' || row.id === 'fsrsVersion') schedules = true;       // another device's weights: an open Review session was planned with the old ones
       } else if (row.store in SYNC_ID) {
@@ -892,7 +896,8 @@ export async function putMedia(m) {
 }
 // Pictures that came from the server (not reported as a change, so they aren't sent back).
 export async function putRemoteMedia(m) { await writeMedia({ ...m, uploaded: true }); }
-// Files not uploaded yet. The marker list is built once (a pass over the files) for a device that had files before it existed.
+// Files not uploaded yet, without their bytes ({ id, type, size, blocked? }; getMedia(id) loads one just before it is sent), so a big
+// library never sits in memory at once. The marker list is built once (a pass over the files) for a device that had files before it existed.
 export async function mediaToUpload() {
   const db = await openDB();
   const tx = db.transaction(['media', 'settings'], 'readwrite');
@@ -906,7 +911,7 @@ export async function mediaToUpload() {
     const ids = (await done(s.getAllKeys(IDBKeyRange.bound(PENDING, PENDING + '\uffff')))).map(k => k.slice(PENDING.length));
     for (const id of ids) {
       const m = await done(tx.objectStore('media').get(id));
-      if (m && !m.uploaded) rows.push(m); else s.delete(PENDING + id);
+      if (m && !m.uploaded) rows.push({ id: m.id, type: m.type, size: m.size || m.data?.byteLength || 0, ...(m.blocked ? { blocked: m.blocked } : {}) }); else s.delete(PENDING + id);
     }
   });
   return rows;
@@ -921,12 +926,67 @@ export async function markUploaded(ids) {
   };
   return finished(tx);
 }
+// Mark every picture and sound as not uploaded, so the next sync sends them all again (a lost or restored server has none of
+// them). Their bytes and the totals stay as they are. Each file is a record with its bytes, so this is done in small batches
+// (one transaction each) rather than one huge one. Safe to run again if it is cut short.
+export async function forgetUploadedMedia() {
+  const db = await openDB();
+  const ids = await done(db.transaction('media').objectStore('media').getAllKeys());
+  for (let i = 0; i < ids.length; i += 25) {
+    const tx = db.transaction(['media', 'settings'], 'readwrite');
+    await inTx(tx, async () => {
+      for (const id of ids.slice(i, i + 25)) {
+        const m = await done(tx.objectStore('media').get(id));
+        if (!m) continue;
+        if (m.uploaded) tx.objectStore('media').put({ ...m, uploaded: false });
+        tx.objectStore('settings').put(true, PENDING + id);
+      }
+    });
+  }
+  const tx = db.transaction('settings', 'readwrite');
+  tx.objectStore('settings').put(true, 'mediaIndexed');      // the pending markers are complete now, so mediaToUpload needn't build them again
+  await finished(tx);
+}
 // Files the server turned away for their type (not reported as a change). They stay not-uploaded; sync tries them again later.
 export async function markBlocked(ids, reason) {
   const db = await openDB();
   const tx = db.transaction('media', 'readwrite');
   const os = tx.objectStore('media');
   for (const id of ids) os.get(id).onsuccess = e => { if (e.target.result) os.put({ ...e.target.result, blocked: reason }); };
+  return finished(tx);
+}
+// The pictures and sounds marked for deletion from the account (media-sweep.js): { marks: { id: time }, gone: [ids] }.
+// A mark's time is the later of the marker's and when this device first saw it (kept as "mseen:<id>", on this device only), so a
+// wrong clock elsewhere can't shorten the 30 days. Un-marked files are left out of marks; "gone" ones were deleted from the account.
+export async function mediaMarks(now = Date.now()) {
+  const db = await openDB();
+  const tx = db.transaction('settings', 'readwrite');
+  const os = tx.objectStore('settings');
+  const marked = IDBKeyRange.bound(markKey(''), markKey('\uffff')), seenRange = IDBKeyRange.bound(seenKey(''), seenKey('\uffff'));
+  const [keys, values, seenKeys, seenValues] = await Promise.all([done(os.getAllKeys(marked)), done(os.getAll(marked)), done(os.getAllKeys(seenRange)), done(os.getAll(seenRange))]);
+  const seen = new Map(seenKeys.map((k, i) => [k.slice(seenKey('').length), seenValues[i]]));
+  const marks = {}, gone = [], live = new Set();
+  keys.forEach((k, i) => {
+    const id = markId(k), v = values[i];
+    if (v === GONE) gone.push(id);
+    else if (typeof v === 'number' && validMark(v)) {
+      live.add(id);
+      if (!seen.has(id)) { os.put(now, seenKey(id)); seen.set(id, now); }
+      marks[id] = Math.max(v, seen.get(id));
+    }
+  });
+  for (const id of seen.keys()) if (!live.has(id)) os.delete(seenKey(id));         // no longer marked: forget when it was first seen
+  await finished(tx);
+  return { marks, gone };
+}
+// Files this device has that the account should get again (not reported as a change): back to "not uploaded".
+export async function markNotUploaded(ids) {
+  const db = await openDB();
+  const tx = db.transaction(['media', 'settings'], 'readwrite');
+  const os = tx.objectStore('media');
+  for (const id of ids) os.get(id).onsuccess = e => {
+    if (e.target.result) { os.put({ ...e.target.result, uploaded: false }); tx.objectStore('settings').put(true, PENDING + id); }
+  };
   return finished(tx);
 }
 // The ids of every picture and sound that some card uses.
