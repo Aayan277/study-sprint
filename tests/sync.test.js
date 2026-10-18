@@ -891,3 +891,21 @@ test('pull: after a request had to be made smaller, the next ones are too, and a
   assert.equal(st.lastSeq, 2400);
   assert.ok(pages >= 4);
 });
+
+test('pull: from an existing log with older, not yet settled entries, the end state is the same as one page at a time', async () => {
+  for (const total of [1500, 3200]) {
+    const a = fakeServer(), b = pipeServer(total), clock = { now: T0 };
+    a.add(total);
+    // a first pull, then a cut-off one, leaving a log with entries that are not ok yet, then more rows arrive
+    let st0 = pull(a, { lastSeq: 0 }, clock, new Set(), { maxPages: 1 });
+    clock.now += 5_000;
+    st0 = pull(a, st0, clock, new Set(), { maxPages: 1 });
+    assert.ok(st0.seqLog.some(e => !e.ok), 'set up: the log holds entries that are not settled');
+    clock.now += 10_000;
+    b.clock.now = clock.now;
+    const expected = pull(a, st0, clock);
+    const start = startPull(st0, b.clock.now);
+    const { st } = await pullPages(start, pullStart(start), PAGE, { get: b.get, apply: b.apply, save: b.save, now: () => b.clock.now });
+    assert.deepEqual(st, expected, 'total ' + total);
+  }
+});
