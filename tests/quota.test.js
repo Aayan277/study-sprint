@@ -325,7 +325,7 @@ test('pushSafely: after one timeout the next batches start smaller, and no row i
   assert.deepEqual(sizes.slice(0, 4), [500, 250, 250, 250]);       // timed out at 500, halves, then the next batch is 250 (not 500)
   assert.equal(out.sent.length, 2000);
   assert.deepEqual(new Set(out.sent.map(r => r.id)), stored);       // sent == what the server really got
-  assert.ok(sizes.includes(500) && sizes.lastIndexOf(500) > 0);     // grew back to full size after a few successes
+  assert.ok(!sizes.slice(1).includes(500));                          // never back to 500 after the timeout (no regrowth)
 });
 
 test('pushSafely: a timeout at the bottom still throws, and size refusals do not shrink later batches', async () => {

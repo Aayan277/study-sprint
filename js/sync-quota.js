@@ -30,7 +30,11 @@ export async function planMedia(auth, pending, checked = new Set(), { cap, size,
   if (!pending.length) return { send: [], full: null, done: [] };
   const ordered = [...pending.filter(m => !isSoundRow(m)), ...pending.filter(isSoundRow)];
   const plan = planUploads(ordered, await fetchUsage(auth.access_token));
-  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap, { size, onProgress, list: () => supa.listMedia(auth.access_token, auth.user.id) });
+  const done = await alreadyOnServer(plan.held, id => supa.mediaExists(auth.access_token, auth.user.id, id), checked, cap, { size, onProgress, list: async () => {
+    const ids = await supa.listMedia(auth.access_token, auth.user.id);
+    if (!ids.length && plan.usage?.media_bytes > 0) throw new Error('The listing is empty but the account uses space');       // don't trust it: ask per file
+    return ids;
+  } });
   const stillHeld = plan.held.length - done.length;
   return { send: plan.send, full: stillHeld ? plan.usage : null, done };
 }
@@ -39,14 +43,17 @@ export async function planMedia(auth, pending, checked = new Set(), { cap, size,
 // and remembers (in `checked`, for as long as the app is open) the ones it found missing, so the next sync looks at the next few
 // instead of asking about thousands of files every time. A check that fails is skipped, not remembered.
 // list (optional): () => the ids of every file the account has (a few paged requests, storage list API; the account's own
-// "read own" rule allows it). When it works, all the unchecked held files are answered at once (cap doesn't apply: one list instead
-// of a request per file) and the missing ones are remembered. If it fails (older server, no permission, offline), it falls back to asking per file.
+// "read own" rule allows it). Used only when more files are unchecked than `cap` (after a re-upload, or a big backlog): then all of them are
+// answered at once and the missing ones are remembered. Fewer than that, one request each is cheaper than listing a whole big account.
+// If the listing fails, is empty while the account uses space, or misses a file the account has (spot-checked), it falls back to asking per file.
 export async function alreadyOnServer(held, exists, checked = new Set(), cap = 25, { size, onProgress, list } = {}) {
-  if (list) {
-    const unchecked = held.filter(m => !checked.has(m.id));
-    if (!unchecked.length) return [];
+  const unchecked = held.filter(m => !checked.has(m.id));
+  if (list && (cap === Infinity || unchecked.length > cap)) {
     try {
+      onProgress?.(0, unchecked.length);
       const have = new Set(await list());
+      // If it says nothing is there, make sure with one file: an empty or wrong listing must not make us upload everything again.
+      if (!unchecked.some(m => have.has(m.id)) && await exists(unchecked[0].id)) throw new Error('The listing misses a file the account has');
       const found = [];
       for (const m of unchecked) { if (have.has(m.id)) found.push(m.id); else checked.add(m.id); }
       return found;
