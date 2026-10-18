@@ -27,7 +27,10 @@ const FAST_GAP_MS = 2000, MIN_CARD_MS = 4000;
 export function recentHistoryEnough(rows, now = Date.now()) {
   if (cardGaps(rows, now).recent.length < MIN_RECENT_GAPS) return false;
   const today = dayStart(now), days = new Set();
-  for (const l of rows) if (l.source === 'review' && l.timestamp < today && l.timestamp > 0) days.add(dayStart(l.timestamp));
+  const from = recentHistoryFrom(now);
+  // (A study day that began before the read started is only partly in `rows`, so it is not counted: it could be one of the 14 with more
+  // answers than we have seen, or not one at all.)
+  for (const l of rows) if (l.source === 'review' && l.timestamp < today && l.timestamp > 0 && dayStart(l.timestamp) >= from) days.add(dayStart(l.timestamp));
   return days.size >= RECENT_DAYS;
 }
 // Where the first read of the review log starts: two weeks back, with a margin so the gap across the edge is still there.

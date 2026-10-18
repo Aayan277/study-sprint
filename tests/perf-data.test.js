@@ -118,3 +118,16 @@ test('with only a few gaps in two weeks the older weeks matter, so they are read
   assert.equal(recentHistoryEnough(short, now), false);
   assert.notEqual(typicalCardMs(short, now), typicalCardMs(rows, now));       // reading only two weeks here would have changed the estimate
 });
+
+test('a study day that began before the read started is not counted as one of the 14', () => {
+  const now = new Date(2026, 9, 14, 4, 30).getTime();          // 4:30, just after the day rolls over
+  const from = recentHistoryFrom(now);
+  const rows = [];
+  for (let d = 1; d <= 13; d++) rows.push({ timestamp: daysAgoStart(d, now) + 6 * 3600000, source: 'review' });
+  rows.push({ timestamp: from + 15 * 60000, source: 'review' });             // the partly-read 15th day
+  for (let i = 0; i < 30; i++) rows.push({ timestamp: daysAgoStart(1, now) + 7 * 3600000 + i * 10000, source: 'review' });
+  rows.sort((a, b) => a.timestamp - b.timestamp);
+  assert.equal(recentHistoryEnough(rows, now), false);
+  rows.push({ timestamp: daysAgoStart(14, now) + 6 * 3600000, source: 'review' });       // a full 14th day
+  assert.equal(recentHistoryEnough(rows, now), true);
+});

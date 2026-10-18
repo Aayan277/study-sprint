@@ -169,7 +169,10 @@ export async function getAllInPieces(name, size = 3000) {
 // most of their time on a big account. This keeps the last read of each, until the data changes (dataVersion() goes up: every save
 // below, changes from sync, an import, and another open tab all raise it, so a kept read is never older than the data).
 //   getAllCached(name)                a copy of the rows that nobody else holds, so callers may sort or change them
-//   getAllCached(name, { shared })    the kept rows themselves, for a caller that only reads (never sorts or changes them)
+//   getAllCached(name, { shared })    the kept rows themselves, for a caller that only reads (never sorts or changes them). Note that
+//                                     saveReview/undoReview may later patch such an array in place (rows inserted, replaced or removed).
+// The kept arrays stay in memory for the whole session. A save in another tab is only seen here when its BroadcastChannel message
+// arrives, so for a few milliseconds after it a kept read can still be the old one.
 // Only 'cards' and 'cardStates' are kept; any other store is read fresh.
 const KEPT = ['cards', 'cardStates'];
 const KEY_OF = { cards: 'id', cardStates: 'cardId' };
@@ -189,6 +192,10 @@ export async function getAllCached(name, { shared = false } = {}) {
 //   patches  { cardStates: { put: [row, ...], del: [key, ...] } }: kept rows to change in step with the save
 // Anything not named in `patches` or `unchanged` is dropped by the new version number, as for every other save.
 function keptStill(patches = {}, unchanged = []) {
+  try { return keptStillUnsafe(patches, unchanged); } catch (err) { console.warn('kept reads dropped:', err); return []; }       // (a save that is already committed must never fail because of this)
+}
+const cloneRow = row => (typeof structuredClone === 'function' ? structuredClone(row) : JSON.parse(JSON.stringify(row)));       // (Safari before 15.4 has no structuredClone)
+function keptStillUnsafe(patches, unchanged) {
   const keep = [];
   for (const name of KEPT) {
     const e = kept.get(name);
@@ -202,7 +209,7 @@ function keptStill(patches = {}, unchanged = []) {
       const ok = [...(patch.put || []), ...(patch.del || [])].every(x => typeof (x[key] ?? x) === 'string');
       if (!ok || rows.some((r, i) => i && !(rows[i - 1][key] < r[key]))) continue;       // keys that are not text, or rows not in key order: drop the read instead
       for (const k of patch.del || []) { const i = find(k); if (rows[i]?.[key] === k) rows.splice(i, 1); }
-      for (const row of patch.put || []) { const i = find(row[key]); const c = structuredClone(row); if (rows[i]?.[key] === row[key]) rows[i] = c; else rows.splice(i, 0, c); }
+      for (const row of patch.put || []) { const i = find(row[key]); const c = cloneRow(row); if (rows[i]?.[key] === row[key]) rows[i] = c; else rows.splice(i, 0, c); }
       keep.push(e);
     } else if (unchanged.includes(name)) keep.push(e);
   }
@@ -534,7 +541,7 @@ export async function setSetting(key, value, { at: given } = {}) {
   }
   await finished(tx);
   if (key === 'fsrsParams' || key === 'fsrsVersion') scheduleChanges++;       // an open Review session was planned with the old weights: start it again
-  if (isSyncedSetting(key)) changed();
+  if (isSyncedSetting(key)) changed(keptStill({}, KEPT));       // (settings are not part of the kept cards and schedules; they are applied to them when read)
 }
 
 // Several settings in one go (one transaction, one change report): Paste a list in the glossary. pairs: [[key, value], ...]
