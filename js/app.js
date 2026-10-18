@@ -25,7 +25,7 @@ import { usageLine, cardsWarning } from './quota.js';
 import { backupNote } from './backup-nudge.js';
 
 // Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.29';
+const APP_VERSION = '4.30';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 initInstall();       // listens for the browser saying the app can be installed (see install.js)

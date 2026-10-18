@@ -19,6 +19,9 @@ const BUDGET = 150;          // extra requests allowed per sync for splitting; w
 export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, onProgress } = {}) {
   const out = { sent: [], held: [], bad: [], full: null };
   let spare = budget;
+  // The batch size for the rest of this sync: halved when a request times out (a slow connection), so the next batches don't each
+  // wait out the full timeout first, like the pull's page size (getPageSafely); it doesn't grow back, so a link that always times out at 500 doesn't pay the timeout again.
+  let size = batch;
   const attempt = async part => {
     try {
       await put(part);
@@ -29,6 +32,7 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       if (err?.code === 'timeout' && part.length > MIN_PART && spare > 0) {
         spare--;
         const mid = part.length >> 1;
+        size = Math.max(MIN_PART, Math.min(size, mid));
         await attempt(part.slice(0, mid));
         await attempt(part.slice(mid));
         return;
@@ -49,9 +53,11 @@ export async function pushSafely(put, rows, { batch = BATCH, budget = BUDGET, on
       await attempt(part.slice(mid));
     }
   };
-  for (let i = 0; i < rows.length; i += batch) {
+  for (let i = 0; i < rows.length;) {
     onProgress?.(i, rows.length);
-    await attempt(rows.slice(i, i + batch));
+    const n = size;                  // (size may change while this batch is sent)
+    await attempt(rows.slice(i, i + n));
+    i += n;
   }
   return out;
 }
