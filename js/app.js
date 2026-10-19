@@ -45,7 +45,8 @@ initInstall();       // listens for the browser saying the app can be installed 
 
 // ---------- settings ----------
 // Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
-const settingsView = () => $('screen').querySelector('.view') || $('screen');
+// null when there is none: the redraw is skipped rather than drawn straight into #screen.
+const settingsView = () => $('screen').querySelector(':scope > .view');
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
@@ -458,8 +459,9 @@ function wireAdvanced(el) {
   $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
-    if (currentRoute !== 'settings') return;
-    await renderSettings(settingsView());
+    const view = currentRoute === 'settings' && settingsView();
+    if (!view) return;
+    await renderSettings(view);
     $('advanced').open = true;
   };
   // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
@@ -505,8 +507,8 @@ function wireAdvanced(el) {
   });
   $('schedReset').addEventListener('click', async () => {
     for (const [k, v] of Object.entries(SCHED_DEFAULTS)) { settings[k] = v; await db.setSetting(k, v); }
-    await renderSettings(settingsView());
-    $('advanced').open = true;
+    const view = settingsView();
+    if (view) { await renderSettings(view); $('advanced').open = true; }
     toast('Scheduling reset to defaults');
   });
 }
@@ -579,7 +581,8 @@ async function exportBackup() {
   settings.lastBackup = Date.now();
   await db.setSetting('lastBackup', settings.lastBackup);
   toast(`Backup saved: ${plural(cardCount, 'card')}, ${plural(reviewCount, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
-  if (currentRoute === 'settings') renderSettings(settingsView());
+  const view = currentRoute === 'settings' && settingsView();
+  if (view) renderSettings(view);
 }
 
 function downloadFile(file) {
@@ -1284,7 +1287,7 @@ addEventListener('sync', async e => {
   else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
   else if (currentRoute === 'settings') {
     // Redraw Settings in place (keeping your scroll position) so synced study settings show.
-    const view = $('screen').querySelector('.view'), y = scrollY;
+    const view = settingsView(), y = scrollY;
     if (view) { await renderSettings(view); scrollTo(0, y); }
   }
 });
