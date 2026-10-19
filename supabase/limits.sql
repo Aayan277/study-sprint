@@ -36,6 +36,8 @@
 --
 -- To raise the minimum app version (everybody with an older app is asked to update before syncing):
 --   update private.app_config_values set value = '4.40' where key = 'min_client';
+-- Publish the new app version on the website FIRST, then raise this (otherwise everyone is asked to update to a version that
+-- isn't there yet). Write it with two digits after the dot, like the app's version: '4.40', not '4.4'.
 
 -- ---------- 0. the private schema, its log, and the numbers only the database may touch ----------
 -- The checks below live in the schema "private" on purpose. Anything in "public" can also be called straight from the
