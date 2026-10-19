@@ -1,0 +1,72 @@
+PSYC 101 – Lec 5 – Learning
+Page 1
+PSYC 101 – Lec 5 – Learning
+Prof. Alvarez   10:32
+
+Learning = a relatively permanent change in behaviour due to experience
+Midterm: Tues Oct 14, room 204!!
+office hrs moved to Weds
+
+Classical conditioning
+classical conditioning: learning by association (Pavlov)
+Pavlov studied digestion in dogs and noticed that they drooled at the sight of the lab assistant, before any food was
+given. he then paired a bell with food ->  dogs drool to bell alone
+UCS (unconditioned stimulus)
+UCR = unconditioned response, the automatic reaction e.g. drooling to food
+CS = conditioned stimulus
+CR = conditioned response
+- neutral stimulus becomes CS after pairing with UCS
+- see textbook ch 6 p. 195
+Timing matters. The CS has to come just before the UCS, usually by about half a second, for conditioning to work well.
+If the bell comes after the food the dogs barely learn anything. Also works with taste aversion (Garcia) - one pairing is enough,
+people feel sick after eating something and then avoid that food, even if the real cause was a virus.
+Acquisition is the stage when the CS and UCS are first paired and the response is being learned.
+
+Page 2
+PSYC 101 – Lec 5 – Learning
+--- slide 4 ---
+Extinction
+extinction: CR fades when the CS is presented again and again without the UCS
+Spontaneous recovery is the reappearance of an extinguished CR after a rest period, usually weaker than before
+Watson + Rayner (1920) "Little Albert" - conditioned fear of a white rat
+generalization -> responds to similar stimuli (e.g. a white rabbit)
+discrimination: only responds to the CS, not to similar ones
+Phobias can be explained this way. A bad experience with a dog can produce a fear of all dogs, because the fear generalizes.
+Treatment = exposure, i.e. the CS is presented without the UCS until the fear goes (extinction again!)
+
+https://www.example.edu/psyc101/lec5-slides.pdf
+questions?? email prof.alvarez@example.edu
+
+TODO read ch 6
+Operant conditioning
+operant cond. - learning from consequences (Skinner)
+Thorndike's law of effect: behaviours followed by satisfying consequences are repeated
+the box expts. with cats (puzzle box
+so basically the consequence
+Reinforcement is anything that increases the likelihood that a behaviour will be repeated.
+Punishment is anything that decreases the likelihood that a behaviour will be repeated.
+positive reinforcement = adding something pleasant
+negative reinforcement = removing something unpleasant
+NOT the same as punishment!!
+Skinner box: a rat presses a lever and gets food pellets. The rate of pressing goes up, so the food is a reinforcer.
+primary reinforcers satisfy a biological need (food, water). Secondary reinforcers get their value by association, e.g. money, grades, praise
+Punishment can suppress behaviour but it does not teach what to do instead, and it can cause fear and aggression
+so most psychologists say reinforcement works better
+
+Page 3
+PSYC 101 – Lec 5 – Learning
+Schedules of reinforcement:
+- fixed ratio
+- variable ratio
+- fixed interval
+- variable interval
+variable ratio is the most resistant to extinction e.g. slot machines
+Shaping is rewarding successive approximations of the target behaviour.
+Used to train animals (dolphins, guide dogs) and also in therapy.
+Ratio schedules depend on the number of responses and interval schedules depend on time passing.
+Cognitive view: Tolman showed that rats learn a mental map of a maze even without reward (latent learning), so learning is not just stimulus and response.
+Observational learning
+Bandura (1961) Bobo doll study: children who watched an adult hit the doll copied the aggression
+Week 6 reading: Bandura 1977
+Next time: memory
+Due Fri

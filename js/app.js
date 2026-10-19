@@ -1504,7 +1504,7 @@ function updateBusy() {
   if (document.body.classList.contains('focus')) return true;
   if (/^#\/test(\/|$)/.test(location.hash) || currentRoute === 'test') return true;      // a Practice test (it keeps its own state; a reload must not cut it off)
   if (currentRoute === 'import') {
-    return !!($('pasteBox')?.value || '').trim() || !!$('preview') && !$('preview').hidden || !!$('docBox') && !$('docBox').hidden || !!takeDraft();
+    return !!($('pasteBox')?.value || '').trim() || !!$('preview') && !$('preview').hidden || !!$('docBox') && !$('docBox').hidden || !!$('sugStatus') && !$('sugStatus').hidden || !!takeDraft();
   }
   return false;
 }
