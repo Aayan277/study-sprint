@@ -1,0 +1,474 @@
+{
+ "name": "Derm rotation",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Macule",
+   "back": "Flat, non-palpable change in skin colour < 1 cm.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c2",
+   "front": "Patch",
+   "back": "Flat, non-palpable change in skin colour > 1 cm.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c3",
+   "front": "Papule",
+   "back": "Raised, palpable solid lesion < 1 cm.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c4",
+   "front": "Plaque",
+   "back": "Raised, flat-topped lesion > 1 cm, often formed by papules joining.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c5",
+   "front": "Nodule",
+   "back": "Solid, raised lesion > 1 cm that extends deeper into the dermis.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c6",
+   "front": "Vesicle",
+   "back": "Small fluid-filled blister < 1 cm.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c7",
+   "front": "Bulla",
+   "back": "Fluid-filled blister > 1 cm.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c8",
+   "front": "Pustule",
+   "back": "Small raised lesion filled with pus.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c9",
+   "front": "Wheal",
+   "back": "Transient, itchy, oedematous papule or plaque, as in urticaria.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c10",
+   "front": "Lichenification",
+   "back": "Thickened skin with exaggerated skin markings from chronic scratching or rubbing.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c11",
+   "front": "Excoriation",
+   "back": "Linear erosion caused by scratching.",
+   "tags": [],
+   "topic": "lesion"
+  },
+  {
+   "id": "c12",
+   "front": "Atopic eczema: typical sites in infants vs adults",
+   "back": "Infants: face and extensor surfaces. Older children and adults: flexures (elbows, knees).",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c13",
+   "front": "Atopic triad",
+   "back": "Atopic eczema, asthma and allergic rhinitis (hay fever).",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c14",
+   "front": "First-line treatment of atopic eczema",
+   "back": "Regular emollients, plus topical corticosteroids for flares.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c15",
+   "front": "Eczema herpeticum",
+   "back": "Widespread herpes simplex infection on eczema: punched-out erosions and fever. An emergency.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c16",
+   "front": "Filaggrin mutation",
+   "back": "Loss-of-function mutation in a skin barrier protein; a major risk factor for atopic eczema.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c17",
+   "front": "Contact dermatitis: two types",
+   "back": "Irritant contact dermatitis (direct damage, e.g. detergents) and allergic contact dermatitis (type IV hypersensitivity, e.g. nickel).",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c18",
+   "front": "Patch testing",
+   "back": "Used to identify the allergen in allergic contact dermatitis.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c19",
+   "front": "Seborrhoeic dermatitis",
+   "back": "Greasy yellow scale on the scalp, eyebrows and nasolabial folds; linked to Malassezia yeast.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c20",
+   "front": "Pompholyx",
+   "back": "Itchy vesicles on the palms and soles; a type of hand eczema.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c21",
+   "front": "Discoid eczema",
+   "back": "Coin-shaped, itchy eczema plaques, often on the limbs.",
+   "tags": [],
+   "topic": "eczema"
+  },
+  {
+   "id": "c22",
+   "front": "Plaque psoriasis: appearance",
+   "back": "Well-demarcated red plaques with silvery-white scale on extensor surfaces (elbows, knees) and the scalp.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c23",
+   "front": "Koebner phenomenon",
+   "back": "New psoriasis lesions appear at sites of skin trauma.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c24",
+   "front": "Nail changes in psoriasis",
+   "back": "Pitting, onycholysis, oil-drop discolouration, subungual hyperkeratosis.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c25",
+   "front": "Guttate psoriasis",
+   "back": "Many small teardrop-shaped psoriasis plaques, often 2–4 weeks after a streptococcal throat infection.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c26",
+   "front": "Psoriatic arthritis",
+   "back": "Inflammatory arthritis in people with psoriasis; can cause dactylitis and DIP joint involvement.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c27",
+   "front": "Auspitz sign",
+   "back": "Pinpoint bleeding when psoriasis scale is scraped off.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c28",
+   "front": "Erythrodermic psoriasis",
+   "back": "Psoriasis covering most of the body; risk of fluid loss and infection. An emergency.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c29",
+   "front": "Pustular psoriasis",
+   "back": "Sterile pustules on red skin, either localised (palms/soles) or generalised.",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c30",
+   "front": "Triggers of psoriasis",
+   "back": "Stress, infection, trauma, alcohol, smoking, some drugs (lithium, beta-blockers).",
+   "tags": [],
+   "topic": "psoriasis"
+  },
+  {
+   "id": "c31",
+   "front": "Pathogenesis of acne vulgaris",
+   "back": "Increased sebum, follicular hyperkeratinisation, Cutibacterium acnes colonisation, inflammation.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c32",
+   "front": "Comedones",
+   "back": "Open (blackheads) and closed (whiteheads) blocked pilosebaceous follicles; non-inflammatory acne lesions.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c33",
+   "front": "Mild acne: first line",
+   "back": "Topical retinoid or benzoyl peroxide, or both.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c34",
+   "front": "Isotretinoin in acne",
+   "back": "Oral retinoid for severe nodulocystic acne; highly teratogenic, needs pregnancy prevention.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c35",
+   "front": "Rosacea: features",
+   "back": "Facial flushing, persistent central facial redness, telangiectasia, papules and pustules; no comedones.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c36",
+   "front": "Rhinophyma",
+   "back": "Thickened, bulbous nose from sebaceous overgrowth in advanced rosacea.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c37",
+   "front": "Acne scarring types",
+   "back": "Ice-pick, boxcar, rolling and hypertrophic scars.",
+   "tags": [],
+   "topic": "acne"
+  },
+  {
+   "id": "c38",
+   "front": "ABCDE of melanoma",
+   "back": "Asymmetry, Border irregularity, Colour variation, Diameter > 6 mm, Evolving.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c39",
+   "front": "Breslow thickness",
+   "back": "Depth of melanoma invasion in mm; the most important prognostic factor.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c40",
+   "front": "Subtypes of melanoma",
+   "back": "Superficial spreading, nodular, lentigo maligna, acral lentiginous.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c41",
+   "front": "Basal cell carcinoma: appearance",
+   "back": "Pearly papule with rolled edges and telangiectasia; may ulcerate (rodent ulcer).",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c42",
+   "front": "Does basal cell carcinoma metastasise?",
+   "back": "Very rarely; it is locally invasive.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c43",
+   "front": "Squamous cell carcinoma: appearance",
+   "back": "Keratotic, scaly nodule that may ulcerate, on sun-exposed skin.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c44",
+   "front": "Precursor of squamous cell carcinoma",
+   "back": "Actinic keratosis. The in situ form is Bowen's disease.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c45",
+   "front": "Actinic keratosis",
+   "back": "Rough, scaly patches on sun-damaged skin; premalignant.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c46",
+   "front": "Mohs surgery",
+   "back": "Staged excision with margin checks; used for basal cell carcinoma on the face.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c47",
+   "front": "Risk factors for skin cancer",
+   "back": "UV exposure, sunburn, fair skin, immunosuppression, family history, many naevi.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c48",
+   "front": "Ugly duckling sign",
+   "back": "A mole that looks different from the patient's other moles; suspicious for melanoma.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c49",
+   "front": "Dermoscopy",
+   "back": "Handheld magnified examination of pigmented lesions to help diagnose melanoma.",
+   "tags": [],
+   "topic": "cancer"
+  },
+  {
+   "id": "c50",
+   "front": "Impetigo",
+   "back": "Superficial bacterial skin infection with honey-coloured crusts; Staph aureus or Strep pyogenes.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c51",
+   "front": "Cellulitis",
+   "back": "Infection of the dermis and subcutaneous tissue: spreading redness, warmth, swelling.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c52",
+   "front": "Tinea corporis",
+   "back": "Fungal infection: annular scaly plaque with central clearing (ringworm).",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c53",
+   "front": "Tinea pedis",
+   "back": "Fungal infection of the feet (athlete's foot), between the toes.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c54",
+   "front": "Diagnosis of fungal skin infection",
+   "back": "Skin scrapings for microscopy and culture; Wood's lamp for some.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c55",
+   "front": "Scabies",
+   "back": "Intensely itchy rash with burrows in the finger webs, from the Sarcoptes scabiei mite.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c56",
+   "front": "Molluscum contagiosum",
+   "back": "Pearly umbilicated papules caused by a poxvirus; common in children.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c57",
+   "front": "Shingles (herpes zoster)",
+   "back": "Painful vesicular rash in a dermatome from reactivation of varicella zoster virus.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c58",
+   "front": "Pityriasis versicolor",
+   "back": "Malassezia fungal infection causing hypo- or hyperpigmented scaly patches on the trunk.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c59",
+   "front": "Erysipelas",
+   "back": "Superficial form of cellulitis with a sharply raised border; usually streptococcal.",
+   "tags": [],
+   "topic": "infection"
+  },
+  {
+   "id": "c60",
+   "front": "Urticaria",
+   "back": "Itchy wheals that each last < 24 hours; from mast cell histamine release.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c61",
+   "front": "Angioedema",
+   "back": "Deeper swelling of the dermis and subcutaneous tissue, often the lips and eyelids.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c62",
+   "front": "Bullous pemphigoid",
+   "back": "Tense blisters in older adults; autoantibodies against hemidesmosomes.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c63",
+   "front": "Pemphigus vulgaris",
+   "back": "Flaccid blisters and mouth erosions; autoantibodies against desmoglein; Nikolsky sign positive.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c64",
+   "front": "Nikolsky sign",
+   "back": "Skin shears off with gentle lateral pressure; seen in pemphigus vulgaris and SJS/TEN.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c65",
+   "front": "Stevens-Johnson syndrome",
+   "back": "Severe drug reaction with mucosal involvement and skin detachment < 10% of body surface area.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c66",
+   "front": "Dermatitis herpetiformis",
+   "back": "Itchy vesicles on the elbows, knees and buttocks; associated with coeliac disease.",
+   "tags": [],
+   "topic": "blister"
+  },
+  {
+   "id": "c67",
+   "front": "Erythema multiforme",
+   "back": "Target lesions, often after herpes simplex infection.",
+   "tags": [],
+   "topic": "blister"
+  }
+ ]
+}

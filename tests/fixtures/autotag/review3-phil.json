@@ -1,0 +1,418 @@
+{
+ "name": "PHIL 110",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Utilitarianism",
+   "back": "The right action is the one that produces the greatest happiness for the greatest number.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c2",
+   "front": "Act vs rule utilitarianism",
+   "back": "Act utilitarianism judges each action by its consequences; rule utilitarianism follows rules that maximise utility if generally followed.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c3",
+   "front": "Bentham's hedonic calculus",
+   "back": "Measures pleasure by intensity, duration, certainty, propinquity, fecundity, purity and extent.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c4",
+   "front": "Mill's higher and lower pleasures",
+   "back": "Intellectual pleasures are higher in quality than bodily pleasures: \"better Socrates dissatisfied than a fool satisfied\".",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c5",
+   "front": "Preference utilitarianism",
+   "back": "Maximise the satisfaction of preferences rather than pleasure (Peter Singer).",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c6",
+   "front": "Tyranny of the majority objection",
+   "back": "Utilitarianism could justify harming a minority if it increases total happiness.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c7",
+   "front": "Consequentialism",
+   "back": "Moral rightness depends only on consequences.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c8",
+   "front": "Nozick's experience machine",
+   "back": "A thought experiment against hedonism: we value more than pleasurable experiences.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c9",
+   "front": "Trolley problem",
+   "back": "Is it right to divert a trolley to kill one person instead of five? Tests consequentialism against deontology.",
+   "tags": [],
+   "topic": "util"
+  },
+  {
+   "id": "c10",
+   "front": "Deontology",
+   "back": "Morality is about duties and rules, not consequences.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c11",
+   "front": "Categorical imperative: universal law formulation",
+   "back": "Act only on a maxim you could will to become a universal law.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c12",
+   "front": "Categorical imperative: humanity formulation",
+   "back": "Treat humanity never merely as a means, but always also as an end.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c13",
+   "front": "Hypothetical vs categorical imperative",
+   "back": "Hypothetical: if you want X, do Y. Categorical: do Y whatever you want.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c14",
+   "front": "Kant's good will",
+   "back": "The only thing good without qualification: acting from duty.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c15",
+   "front": "Kant: perfect vs imperfect duties",
+   "back": "Perfect duties must always be followed (don't lie); imperfect duties allow latitude (help others).",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c16",
+   "front": "Kant and the murderer at the door",
+   "back": "Kant held that lying is wrong even to save a friend.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c17",
+   "front": "Ross's prima facie duties",
+   "back": "Several duties (fidelity, non-maleficence, justice…) that can conflict: deontology without a single rule.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c18",
+   "front": "Kingdom of ends",
+   "back": "Kant's ideal community in which everyone treats each other as ends.",
+   "tags": [],
+   "topic": "kant"
+  },
+  {
+   "id": "c19",
+   "front": "Virtue ethics",
+   "back": "Focuses on character: what would a virtuous person do?",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c20",
+   "front": "Aristotle: eudaimonia",
+   "back": "Flourishing, or living well; the final end of human life.",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c21",
+   "front": "Aristotle's doctrine of the mean",
+   "back": "A virtue is the mean between two vices of excess and deficiency (courage between rashness and cowardice).",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c22",
+   "front": "Phronesis",
+   "back": "Practical wisdom: knowing how to act well in particular situations (Aristotle).",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c23",
+   "front": "Aristotle's function argument",
+   "back": "The human function is rational activity; living well is doing it with virtue.",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c24",
+   "front": "Objection to virtue ethics",
+   "back": "It gives little action guidance in moral dilemmas.",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c25",
+   "front": "Akrasia",
+   "back": "Weakness of will: knowingly acting against one's better judgement.",
+   "tags": [],
+   "topic": "virtue"
+  },
+  {
+   "id": "c26",
+   "front": "Moral realism",
+   "back": "There are objective moral facts independent of what anyone thinks.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c27",
+   "front": "Emotivism (Ayer)",
+   "back": "Moral statements express feelings of approval or disapproval: \"boo to murder\".",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c28",
+   "front": "Error theory (Mackie)",
+   "back": "Moral statements try to state objective facts, but all are false because there are no such facts.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c29",
+   "front": "Argument from queerness",
+   "back": "Mackie: objective moral values would be metaphysically strange entities.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c30",
+   "front": "Hume's is–ought gap",
+   "back": "You cannot derive an \"ought\" from purely factual \"is\" statements.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c31",
+   "front": "Moore's open question argument",
+   "back": "For any natural property X, \"Is X good?\" stays an open question, so good is not X.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c32",
+   "front": "Naturalistic fallacy",
+   "back": "Moore: identifying goodness with a natural property.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c33",
+   "front": "Moral relativism",
+   "back": "Moral truths are relative to cultures or individuals.",
+   "tags": [],
+   "topic": "meta"
+  },
+  {
+   "id": "c34",
+   "front": "Tripartite definition of knowledge",
+   "back": "Justified true belief.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c35",
+   "front": "Gettier problem",
+   "back": "Cases of justified true belief that are not knowledge, because the belief is true by luck.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c36",
+   "front": "Rationalism vs empiricism",
+   "back": "Rationalists: some knowledge comes from reason alone. Empiricists: all knowledge comes from experience.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c37",
+   "front": "Descartes' cogito",
+   "back": "\"I think, therefore I am\": certain even under radical doubt.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c38",
+   "front": "Descartes' evil demon",
+   "back": "A demon could deceive me about everything, so sense experience gives no certain knowledge.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c39",
+   "front": "Locke: tabula rasa",
+   "back": "The mind at birth is a blank slate; knowledge comes from experience.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c40",
+   "front": "Hume's problem of induction",
+   "back": "There is no non-circular justification that the future will resemble the past.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c41",
+   "front": "A priori vs a posteriori knowledge",
+   "back": "A priori knowledge is independent of experience; a posteriori knowledge depends on experience.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c42",
+   "front": "Foundationalism",
+   "back": "Knowledge rests on basic beliefs that need no further justification.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c43",
+   "front": "Direct realism",
+   "back": "We perceive the external world directly, as it is.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c44",
+   "front": "Argument from illusion",
+   "back": "Perception can be mistaken (a stick looks bent in water), so we do not directly perceive objects.",
+   "tags": [],
+   "topic": "epist"
+  },
+  {
+   "id": "c45",
+   "front": "Substance dualism",
+   "back": "Mind and body are distinct substances (Descartes).",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c46",
+   "front": "Mind-body problem",
+   "back": "How do mental states relate to physical states of the brain?",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c47",
+   "front": "Physicalism",
+   "back": "Everything, including the mind, is physical.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c48",
+   "front": "Mary's room (knowledge argument)",
+   "back": "Jackson: Mary knows all the physical facts about colour but learns something new when she sees red, so physicalism is incomplete.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c49",
+   "front": "Philosophical zombie",
+   "back": "A being physically identical to us but without conscious experience; an argument against physicalism.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c50",
+   "front": "Functionalism",
+   "back": "Mental states are defined by their causal role, not by what they are made of.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c51",
+   "front": "Searle's Chinese room",
+   "back": "Manipulating symbols by rules is not understanding; an argument against strong AI and functionalism.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c52",
+   "front": "Qualia",
+   "back": "The subjective, felt qualities of conscious experience (what red looks like).",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c53",
+   "front": "Interaction problem",
+   "back": "How can a non-physical mind cause physical events? An objection to substance dualism.",
+   "tags": [],
+   "topic": "mind"
+  },
+  {
+   "id": "c54",
+   "front": "Hard determinism",
+   "back": "Every event is causally determined, so free will does not exist.",
+   "tags": [],
+   "topic": "free"
+  },
+  {
+   "id": "c55",
+   "front": "Compatibilism",
+   "back": "Free will is compatible with determinism: acting on your own desires without external constraint.",
+   "tags": [],
+   "topic": "free"
+  },
+  {
+   "id": "c56",
+   "front": "Libertarian free will",
+   "back": "Free will exists, and requires that determinism is false.",
+   "tags": [],
+   "topic": "free"
+  },
+  {
+   "id": "c57",
+   "front": "Frankfurt cases",
+   "back": "Examples meant to show that moral responsibility does not require the ability to do otherwise.",
+   "tags": [],
+   "topic": "free"
+  },
+  {
+   "id": "c58",
+   "front": "Principle of alternate possibilities",
+   "back": "A person is morally responsible only if they could have done otherwise.",
+   "tags": [],
+   "topic": "free"
+  },
+  {
+   "id": "c59",
+   "front": "Van Inwagen's consequence argument",
+   "back": "If determinism is true, our acts are consequences of the laws and the past, which are not up to us.",
+   "tags": [],
+   "topic": "free"
+  }
+ ]
+}

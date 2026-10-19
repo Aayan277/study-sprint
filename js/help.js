@@ -33,6 +33,8 @@ export const SECTIONS = [
     ['adding', 'How do I add my own cards?', `
       <p>Tap <b>Import</b> (on the Decks screen or on a deck’s page), or <b>Add cards</b> in the sidebar on a computer. Paste one card per line, with the front and back separated by a dash, tab, colon or comma, for example ${code('Mitosis - cell division into 2 identical cells')}. Quizlet exports and tables from Notion, Excel or Google Sheets work too, and so do .csv and .xlsx files and Anki decks (.apkg).</p>
       <p>Notes written in paragraphs don’t split into cards by themselves. Tap <b>Suggest cards</b> and the app picks out definitions, lists, key terms and dates for you to tick and check (it works on your device), or use <b>Make cards with Claude</b> for an AI version.</p>`],
+    ['tags', 'Can the app tag my cards for me?', `
+      <p>Yes. Open a deck, tap ⋯ → <b>Suggest tags</b> (or in Browse, Tools → <b>Suggest tags for these cards</b>). The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>`],
     ['typing', 'Can I type my answers instead of flipping?', `
       <p>Yes, and the app shows which letters were wrong. For one session: Today → <b>Options</b> → Answer by → <b>Typing the answer</b> (answers of 40 characters or less). To keep it: open a card and set <b>Answer by</b> to Typing the answer, select several cards in Browse and choose <b>Answer by…</b>, or turn on <b>Type the answers</b> in a deck’s Edit deck sheet. Anki cards with a “type in the answer” box come in as typing cards.</p>`],
     ['share', 'Can I share a deck with a friend?', `

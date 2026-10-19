@@ -1,0 +1,460 @@
+{
+ "name": "Music Theory Grade 5",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Perfect fifth",
+   "back": "Interval of 7 semitones, e.g. C to G.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c2",
+   "front": "Major third",
+   "back": "Interval of 4 semitones, e.g. C to E.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c3",
+   "front": "Minor third",
+   "back": "Interval of 3 semitones, e.g. A to C.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c4",
+   "front": "Tritone",
+   "back": "Interval of 6 semitones: an augmented fourth or diminished fifth.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c5",
+   "front": "Inverting an interval",
+   "back": "The interval numbers add up to 9; major becomes minor, augmented becomes diminished, perfect stays perfect.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c6",
+   "front": "Compound interval",
+   "back": "An interval larger than an octave, e.g. a major ninth.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c7",
+   "front": "Perfect fourth",
+   "back": "Interval of 5 semitones, e.g. C to F.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c8",
+   "front": "Minor seventh",
+   "back": "Interval of 10 semitones, e.g. G to F.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c9",
+   "front": "Consonant vs dissonant intervals",
+   "back": "Consonant: unisons, thirds, sixths, perfect fifths, octaves. Dissonant: seconds, sevenths, the tritone.",
+   "tags": [],
+   "topic": "interval"
+  },
+  {
+   "id": "c10",
+   "front": "Major triad",
+   "back": "Root, major third and perfect fifth (C–E–G).",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c11",
+   "front": "Minor triad",
+   "back": "Root, minor third and perfect fifth (A–C–E).",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c12",
+   "front": "Diminished triad",
+   "back": "Root, minor third and diminished fifth (B–D–F).",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c13",
+   "front": "Augmented triad",
+   "back": "Root, major third and augmented fifth (C–E–G#).",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c14",
+   "front": "Dominant seventh chord",
+   "back": "A major triad plus a minor seventh, built on the fifth degree (G–B–D–F in C major).",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c15",
+   "front": "First inversion chord",
+   "back": "The third of the chord is in the bass; figured bass 6.",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c16",
+   "front": "Second inversion chord",
+   "back": "The fifth of the chord is in the bass; figured bass 6/4.",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c17",
+   "front": "Figured bass",
+   "back": "Numbers under a bass line showing the intervals above it, which tell you the chord.",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c18",
+   "front": "Neapolitan sixth chord",
+   "back": "A major chord on the flattened second degree, in first inversion.",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c19",
+   "front": "Diminished seventh chord",
+   "back": "A stack of minor thirds, built on the leading note in the harmonic minor.",
+   "tags": [],
+   "topic": "chord"
+  },
+  {
+   "id": "c20",
+   "front": "Major scale pattern",
+   "back": "Tone, tone, semitone, tone, tone, tone, semitone.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c21",
+   "front": "Harmonic minor scale",
+   "back": "The natural minor with a raised seventh degree, giving an augmented second between 6 and 7.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c22",
+   "front": "Melodic minor scale",
+   "back": "Raised sixth and seventh going up; natural minor coming down.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c23",
+   "front": "Relative minor",
+   "back": "The minor key that shares the key signature of a major key, a minor third below (A minor for C major).",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c24",
+   "front": "Order of sharps",
+   "back": "F C G D A E B",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c25",
+   "front": "Order of flats",
+   "back": "B E A D G C F",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c26",
+   "front": "Circle of fifths",
+   "back": "Keys arranged by perfect fifths; each step clockwise adds a sharp to the key signature.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c27",
+   "front": "Key signature of D major",
+   "back": "Two sharps: F# and C#.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c28",
+   "front": "Leading note",
+   "back": "The seventh degree of the scale, a semitone below the tonic.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c29",
+   "front": "Chromatic scale",
+   "back": "All twelve semitones in an octave.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c30",
+   "front": "Pentatonic scale",
+   "back": "A five-note scale; the major pentatonic uses degrees 1 2 3 5 6.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c31",
+   "front": "Scale degree names",
+   "back": "Tonic, supertonic, mediant, subdominant, dominant, submediant, leading note.",
+   "tags": [],
+   "topic": "scale"
+  },
+  {
+   "id": "c32",
+   "front": "Dorian mode",
+   "back": "The natural minor with a raised sixth; D to D on the white notes.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c33",
+   "front": "Mixolydian mode",
+   "back": "The major scale with a flattened seventh; G to G on the white notes.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c34",
+   "front": "Lydian mode",
+   "back": "The major scale with a raised fourth; F to F on the white notes.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c35",
+   "front": "Phrygian mode",
+   "back": "The natural minor with a flattened second; E to E on the white notes.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c36",
+   "front": "Aeolian mode",
+   "back": "The natural minor scale; A to A on the white notes.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c37",
+   "front": "Locrian mode",
+   "back": "B to B on the white notes; a diminished fifth above the tonic.",
+   "tags": [],
+   "topic": "mode"
+  },
+  {
+   "id": "c38",
+   "front": "Perfect cadence",
+   "back": "V–I: dominant chord to tonic chord; sounds finished.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c39",
+   "front": "Plagal cadence",
+   "back": "IV–I: the \"Amen\" cadence.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c40",
+   "front": "Imperfect cadence",
+   "back": "Ends on V; sounds unfinished, like a comma.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c41",
+   "front": "Interrupted cadence",
+   "back": "V–VI: the music seems about to end but goes to the submediant chord.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c42",
+   "front": "Phrygian cadence",
+   "back": "IVb–V in a minor key: a kind of imperfect cadence.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c43",
+   "front": "Tierce de Picardie",
+   "back": "Ending a minor-key piece on a major tonic chord.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c44",
+   "front": "Cadential 6/4",
+   "back": "Ic–V–I: a second inversion tonic chord before the dominant at a cadence.",
+   "tags": [],
+   "topic": "cadence"
+  },
+  {
+   "id": "c45",
+   "front": "Simple vs compound time",
+   "back": "Simple: the beat divides into two (2/4, 3/4, 4/4). Compound: the beat divides into three (6/8, 9/8, 12/8).",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c46",
+   "front": "6/8 time signature",
+   "back": "Compound duple time: two dotted crotchet beats in a bar.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c47",
+   "front": "3/4 time signature",
+   "back": "Simple triple time: three crotchet beats in a bar.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c48",
+   "front": "Syncopation",
+   "back": "Accenting off-beats or weak beats.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c49",
+   "front": "Hemiola",
+   "back": "Two bars of triple time felt as three bars of duple time.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c50",
+   "front": "Anacrusis",
+   "back": "An upbeat: the note or notes before the first strong beat of a bar.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c51",
+   "front": "Dotted notes",
+   "back": "A dot adds half the note's value: a dotted minim lasts 3 crotchets.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c52",
+   "front": "Triplet",
+   "back": "Three notes played in the time of two of the same value.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c53",
+   "front": "Irregular time signature",
+   "back": "e.g. 5/4 or 7/8: the beats are grouped unevenly.",
+   "tags": [],
+   "topic": "rhythm"
+  },
+  {
+   "id": "c54",
+   "front": "Parallel fifths",
+   "back": "Two voices moving in perfect fifths; avoided in four-part harmony.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c55",
+   "front": "Suspension",
+   "back": "A note held over from the previous chord to make a dissonance, which then resolves down by step.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c56",
+   "front": "Passing note",
+   "back": "A non-chord note moving by step between two chord notes.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c57",
+   "front": "Appoggiatura",
+   "back": "An accented non-chord note approached by leap and resolved by step.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c58",
+   "front": "Doubling in four-part harmony",
+   "back": "Usually double the root; avoid doubling the leading note.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c59",
+   "front": "Pedal note",
+   "back": "A sustained or repeated bass note while the harmony changes above it.",
+   "tags": [],
+   "topic": "voice"
+  },
+  {
+   "id": "c60",
+   "front": "Allegro",
+   "back": "Fast, lively.",
+   "tags": [],
+   "topic": "terms"
+  },
+  {
+   "id": "c61",
+   "front": "Andante",
+   "back": "At a walking pace.",
+   "tags": [],
+   "topic": "terms"
+  },
+  {
+   "id": "c62",
+   "front": "Crescendo",
+   "back": "Gradually getting louder.",
+   "tags": [],
+   "topic": "terms"
+  },
+  {
+   "id": "c63",
+   "front": "Rallentando",
+   "back": "Gradually getting slower.",
+   "tags": [],
+   "topic": "terms"
+  },
+  {
+   "id": "c64",
+   "front": "Legato",
+   "back": "Smoothly.",
+   "tags": [],
+   "topic": "terms"
+  },
+  {
+   "id": "c65",
+   "front": "Staccato",
+   "back": "Short and detached.",
+   "tags": [],
+   "topic": "terms"
+  }
+ ]
+}

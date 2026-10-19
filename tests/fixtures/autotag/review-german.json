@@ -1,0 +1,323 @@
+{
+ "name": "Deutsch GCSE",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "das Brot",
+   "back": "bread",
+   "topic": "food",
+   "noteExtra": "Plural: die Brote. Neuter noun."
+  },
+  {
+   "id": "c2",
+   "front": "die Milch",
+   "back": "milk",
+   "topic": "food"
+  },
+  {
+   "id": "c3",
+   "front": "der Apfel",
+   "back": "apple",
+   "topic": "food",
+   "noteExtra": "Plural: die Äpfel (umlaut in the plural)"
+  },
+  {
+   "id": "c4",
+   "front": "das Gemüse",
+   "back": "vegetables",
+   "topic": "food",
+   "noteExtra": "Always singular in German"
+  },
+  {
+   "id": "c5",
+   "front": "das Frühstück",
+   "back": "breakfast",
+   "topic": "food"
+  },
+  {
+   "id": "c6",
+   "front": "das Mittagessen",
+   "back": "lunch",
+   "topic": "food"
+  },
+  {
+   "id": "c7",
+   "front": "das Abendessen",
+   "back": "dinner",
+   "topic": "food"
+  },
+  {
+   "id": "c8",
+   "front": "der Käse",
+   "back": "cheese",
+   "topic": "food"
+  },
+  {
+   "id": "c9",
+   "front": "das Fleisch",
+   "back": "meat",
+   "topic": "food"
+  },
+  {
+   "id": "c10",
+   "front": "die Kartoffel",
+   "back": "potato",
+   "topic": "food",
+   "noteExtra": "Plural: die Kartoffeln"
+  },
+  {
+   "id": "c11",
+   "front": "ich habe Hunger",
+   "back": "I am hungry",
+   "topic": "food",
+   "noteExtra": "Literally \"I have hunger\"; use haben, not sein"
+  },
+  {
+   "id": "c12",
+   "front": "ich habe Durst",
+   "back": "I am thirsty",
+   "topic": "food"
+  },
+  {
+   "id": "c13",
+   "front": "der Bahnhof",
+   "back": "train station",
+   "topic": "travel"
+  },
+  {
+   "id": "c14",
+   "front": "der Zug",
+   "back": "train",
+   "topic": "travel",
+   "noteExtra": "Plural: die Züge"
+  },
+  {
+   "id": "c15",
+   "front": "die Fahrkarte",
+   "back": "ticket",
+   "topic": "travel"
+  },
+  {
+   "id": "c16",
+   "front": "der Flughafen",
+   "back": "airport",
+   "topic": "travel"
+  },
+  {
+   "id": "c17",
+   "front": "mit dem Bus fahren",
+   "back": "to go by bus",
+   "topic": "travel",
+   "noteExtra": "mit + dative: dem Bus, der Bahn"
+  },
+  {
+   "id": "c18",
+   "front": "ich fahre nach Berlin",
+   "back": "I am going to Berlin",
+   "topic": "travel",
+   "noteExtra": "nach for cities and countries without an article"
+  },
+  {
+   "id": "c19",
+   "front": "ich fahre in die Schweiz",
+   "back": "I am going to Switzerland",
+   "topic": "travel",
+   "noteExtra": "in + accusative for countries with an article (die Schweiz, die Türkei)"
+  },
+  {
+   "id": "c20",
+   "front": "die Unterkunft",
+   "back": "accommodation",
+   "topic": "travel"
+  },
+  {
+   "id": "c21",
+   "front": "das Hotelzimmer",
+   "back": "hotel room",
+   "topic": "travel"
+  },
+  {
+   "id": "c22",
+   "front": "die Jugendherberge",
+   "back": "youth hostel",
+   "topic": "travel"
+  },
+  {
+   "id": "c23",
+   "front": "der Urlaub",
+   "back": "holiday",
+   "topic": "travel"
+  },
+  {
+   "id": "c24",
+   "front": "im Urlaub",
+   "back": "on holiday",
+   "topic": "travel",
+   "noteExtra": "in + dem = im"
+  },
+  {
+   "id": "c25",
+   "front": "Which prepositions always take the dative?",
+   "back": "aus, außer, bei, mit, nach, seit, von, zu",
+   "topic": "grammar",
+   "noteExtra": "Mnemonic: \"aus-bei-mit-nach-seit-von-zu\""
+  },
+  {
+   "id": "c26",
+   "front": "Which prepositions always take the accusative?",
+   "back": "durch, für, gegen, ohne, um",
+   "topic": "grammar",
+   "noteExtra": "Mnemonic: \"FUDGEO\" (für, um, durch, gegen, entlang, ohne)"
+  },
+  {
+   "id": "c27",
+   "front": "What are the two-way prepositions?",
+   "back": "an, auf, hinter, in, neben, über, unter, vor, zwischen",
+   "topic": "grammar",
+   "noteExtra": "Accusative for movement (wohin?), dative for position (wo?)"
+  },
+  {
+   "id": "c28",
+   "front": "Word order: where does the verb go in a main clause?",
+   "back": "Second position (verb second)",
+   "topic": "grammar",
+   "noteExtra": "\"Heute gehe ich ins Kino\" — time first, then the verb"
+  },
+  {
+   "id": "c29",
+   "front": "Word order after weil / dass / wenn",
+   "back": "The verb goes to the end of the clause",
+   "topic": "grammar",
+   "noteExtra": "\"..., weil ich müde bin\""
+  },
+  {
+   "id": "c30",
+   "front": "How do you form the perfect tense?",
+   "back": "haben or sein + past participle at the end",
+   "topic": "grammar",
+   "noteExtra": "ich habe gespielt; ich bin gefahren"
+  },
+  {
+   "id": "c31",
+   "front": "Which verbs take sein in the perfect tense?",
+   "back": "Verbs of movement or change of state: gehen, fahren, kommen, werden, bleiben",
+   "topic": "grammar"
+  },
+  {
+   "id": "c32",
+   "front": "Past participle of a regular verb",
+   "back": "ge- + stem + -t: spielen → gespielt",
+   "topic": "grammar"
+  },
+  {
+   "id": "c33",
+   "front": "Past participle of fahren",
+   "back": "gefahren (strong verb, -en ending)",
+   "topic": "grammar"
+  },
+  {
+   "id": "c34",
+   "front": "Accusative of der (masculine)",
+   "back": "den",
+   "topic": "grammar",
+   "noteExtra": "ich habe den Apfel"
+  },
+  {
+   "id": "c35",
+   "front": "Dative of die (feminine)",
+   "back": "der",
+   "topic": "grammar",
+   "noteExtra": "mit der Bahn"
+  },
+  {
+   "id": "c36",
+   "front": "Dative plural adds what to the noun?",
+   "back": "-n (if it doesn't already end in -n or -s)",
+   "topic": "grammar",
+   "noteExtra": "mit den Kindern"
+  },
+  {
+   "id": "c37",
+   "front": "How do you form the future tense?",
+   "back": "werden + infinitive at the end",
+   "topic": "grammar",
+   "noteExtra": "ich werde Deutsch studieren"
+  },
+  {
+   "id": "c38",
+   "front": "What is the conditional?",
+   "back": "würde + infinitive",
+   "topic": "grammar",
+   "noteExtra": "ich würde gern reisen = I would like to travel"
+  },
+  {
+   "id": "c39",
+   "front": "Modal verbs",
+   "back": "können, müssen, dürfen, sollen, wollen, mögen",
+   "topic": "grammar",
+   "noteExtra": "Modal + infinitive at the end: ich kann schwimmen"
+  },
+  {
+   "id": "c40",
+   "front": "das Fach",
+   "back": "subject",
+   "topic": "school",
+   "noteExtra": "Plural: die Fächer"
+  },
+  {
+   "id": "c41",
+   "front": "die Hausaufgaben",
+   "back": "homework",
+   "topic": "school"
+  },
+  {
+   "id": "c42",
+   "front": "der Lehrer / die Lehrerin",
+   "back": "teacher (m/f)",
+   "topic": "school"
+  },
+  {
+   "id": "c43",
+   "front": "die Pause",
+   "back": "break",
+   "topic": "school"
+  },
+  {
+   "id": "c44",
+   "front": "die Klassenarbeit",
+   "back": "test (class test)",
+   "topic": "school"
+  },
+  {
+   "id": "c45",
+   "front": "die Schuluniform",
+   "back": "school uniform",
+   "topic": "school"
+  },
+  {
+   "id": "c46",
+   "front": "mein Lieblingsfach ist Mathe",
+   "back": "my favourite subject is maths",
+   "topic": "school"
+  },
+  {
+   "id": "c47",
+   "front": "die Oberstufe",
+   "back": "sixth form",
+   "topic": "school"
+  },
+  {
+   "id": "c48",
+   "front": "streng",
+   "back": "strict",
+   "topic": "school"
+  },
+  {
+   "id": "c49",
+   "front": "sitzen bleiben",
+   "back": "to repeat a year",
+   "topic": "school",
+   "noteExtra": "Separable: ich bleibe sitzen"
+  }
+ ]
+}

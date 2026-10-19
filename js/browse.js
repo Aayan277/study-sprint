@@ -912,6 +912,9 @@ function openTools(cards, { scope, refresh }) {
         <button class="btn ghost small" type="button" data-tag-remove>Remove</button></li>`).join('')}</ul>`
       : '<p class="note">No tags yet. Add them when editing a card.</p>'}
     <div id="tagEdit"></div>
+    <h3 class="tool-h">Suggest tags</h3>
+    <p class="note">Finds the topics in ${esc(scope)}'s cards and offers them as tags. You choose which to add.</p>
+    <button class="btn ghost small" type="button" id="toolAutoTag"${cards.length >= 10 ? '' : ' disabled'}>Suggest tags for these cards</button>
     <h3 class="tool-h">Link cloze cards</h3>
     <p class="note">Cards imported before notes existed have one separate card for each blank (“The […] makes ATP” and “The mitochondria makes […]”). This finds cards of one deck that come from the same sentence and links them as one cloze note, so Review shows one of them a day. Schedules and history stay as they are. You see what it found first.</p>
     <button class="btn ghost small" type="button" id="linkFind">Find cards to link</button>
@@ -919,6 +922,10 @@ function openTools(cards, { scope, refresh }) {
   wireLinkTool(cards, { scope, refresh });
   $('toolTagStudy').addEventListener('click', async () => {
     try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: refresh }); }
+    catch { toast("Couldn't open this. Check your connection and try again."); }
+  });
+  $('toolAutoTag').addEventListener('click', async () => {
+    try { (await import('./autotag-sheet.js')).openAutotagSheet({ cardIds: cards.map(c => c.id), refresh }); }
     catch { toast("Couldn't open this. Check your connection and try again."); }
   });
   const apply = async (from, to, { folder = false, name = from, exact = false } = {}) => {

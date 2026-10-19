@@ -1,0 +1,432 @@
+{
+ "name": "STAT 201 – Intro Statistics",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "What is a null hypothesis?",
+   "back": "A statement of no effect or no difference, assumed true until the data give evidence against it (H0).",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c2",
+   "front": "Alternative hypothesis",
+   "back": "The claim that there is an effect; what we accept if we reject the null hypothesis (H1 or Ha).",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c3",
+   "front": "p-value",
+   "back": "Probability of getting results at least as extreme as observed, assuming the null hypothesis is true.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c4",
+   "front": "Type I error",
+   "back": "Rejecting a true null hypothesis (false positive); probability = alpha.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c5",
+   "front": "Type II error",
+   "back": "Failing to reject a false null hypothesis (false negative); probability = beta.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c6",
+   "front": "Statistical power",
+   "back": "1 − beta: probability of rejecting the null hypothesis when the alternative is true.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c7",
+   "front": "Significance level (alpha)",
+   "back": "The threshold for rejecting the null hypothesis, commonly 0.05.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c8",
+   "front": "One-tailed vs two-tailed test",
+   "back": "One-tailed tests for an effect in one direction only; two-tailed tests for an effect in either direction.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c9",
+   "front": "What does \"statistically significant\" mean?",
+   "back": "The p-value is below alpha, so we reject the null hypothesis. It does not mean the effect is practically important.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c10",
+   "front": "Factors that increase power",
+   "back": "Larger sample size, larger effect size, higher alpha, lower variability.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c11",
+   "front": "Independent samples t-test",
+   "back": "Compares the means of two independent groups; assumes roughly normal data and similar variances.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c12",
+   "front": "Paired t-test",
+   "back": "Compares the means of two related measurements on the same subjects (before/after).",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c13",
+   "front": "Chi-square test of independence",
+   "back": "Tests whether two categorical variables are associated, using a contingency table.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c14",
+   "front": "ANOVA",
+   "back": "Analysis of variance: tests whether three or more group means differ, using the F statistic.",
+   "tags": [],
+   "topic": "hyp"
+  },
+  {
+   "id": "c15",
+   "front": "Pearson correlation coefficient r",
+   "back": "Measures the strength and direction of a linear relationship; ranges from −1 to 1.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c16",
+   "front": "Correlation vs causation",
+   "back": "A correlation between two variables does not show that one causes the other; a confounding variable may explain it.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c17",
+   "front": "Least squares regression line",
+   "back": "The line that minimises the sum of squared residuals: ŷ = b0 + b1x.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c18",
+   "front": "Residual",
+   "back": "Observed y minus predicted y (y − ŷ) for a data point in regression.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c19",
+   "front": "Slope in simple linear regression",
+   "back": "The predicted change in y for a one-unit increase in x.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c20",
+   "front": "Intercept in regression",
+   "back": "The predicted value of y when x = 0; may have no real meaning.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c21",
+   "front": "Coefficient of determination R²",
+   "back": "The proportion of the variance in y explained by the regression model.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c22",
+   "front": "Multicollinearity",
+   "back": "When predictors in a multiple regression are highly correlated with each other, making the coefficients unstable.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c23",
+   "front": "Residual plot",
+   "back": "Residuals plotted against fitted values; a random scatter suggests the linear regression model fits.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c24",
+   "front": "Extrapolation",
+   "back": "Using a regression line to predict outside the range of observed x values; unreliable.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c25",
+   "front": "Outlier vs influential point",
+   "back": "An outlier has a large residual; an influential point changes the regression slope a lot when removed.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c26",
+   "front": "Spearman rank correlation",
+   "back": "A nonparametric correlation based on ranks; measures monotonic relationships.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c27",
+   "front": "Logistic regression",
+   "back": "Regression for a binary outcome; models the log odds as a linear function of the predictors.",
+   "tags": [],
+   "topic": "reg"
+  },
+  {
+   "id": "c28",
+   "front": "Normal distribution",
+   "back": "Symmetric, bell-shaped distribution described by its mean μ and standard deviation σ.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c29",
+   "front": "Empirical rule (68-95-99.7)",
+   "back": "In a normal distribution about 68% of values fall within 1 standard deviation of the mean, 95% within 2 and 99.7% within 3.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c30",
+   "front": "z-score",
+   "back": "(x − mean) / standard deviation: how many standard deviations a value is from the mean.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c31",
+   "front": "Standard normal distribution",
+   "back": "The normal distribution with mean 0 and standard deviation 1.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c32",
+   "front": "Binomial distribution",
+   "back": "The number of successes in n independent trials, each with the same probability p.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c33",
+   "front": "Conditions for a binomial distribution",
+   "back": "Fixed number of trials n, two outcomes, independent trials, constant probability of success.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c34",
+   "front": "Mean and variance of a binomial distribution",
+   "back": "Mean = np, variance = np(1 − p).",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c35",
+   "front": "Poisson distribution",
+   "back": "Counts of events in a fixed interval when events occur independently at a constant rate λ.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c36",
+   "front": "Right-skewed distribution",
+   "back": "A long tail to the right; the mean is greater than the median.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c37",
+   "front": "Uniform distribution",
+   "back": "Every value in an interval is equally likely.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c38",
+   "front": "t distribution",
+   "back": "Like the normal distribution but with heavier tails; used when σ is unknown; depends on degrees of freedom.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c39",
+   "front": "Expected value of a random variable",
+   "back": "The long-run average: the sum of each value times its probability.",
+   "tags": [],
+   "topic": "dist"
+  },
+  {
+   "id": "c40",
+   "front": "Confidence interval",
+   "back": "A range of plausible values for a population parameter: estimate ± margin of error.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c41",
+   "front": "Interpretation of a 95% confidence interval",
+   "back": "If we repeated the sampling many times, about 95% of the intervals would contain the true parameter.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c42",
+   "front": "Margin of error",
+   "back": "Critical value × standard error; half the width of a confidence interval.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c43",
+   "front": "What makes a confidence interval narrower?",
+   "back": "A larger sample size, a lower confidence level, less variability.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c44",
+   "front": "Standard error of the mean",
+   "back": "σ/√n: the standard deviation of the sampling distribution of the sample mean.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c45",
+   "front": "Central limit theorem",
+   "back": "For large samples the sampling distribution of the sample mean is approximately normal, whatever the shape of the population.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c46",
+   "front": "Sampling distribution",
+   "back": "The distribution of a statistic (like the sample mean) over all possible samples of the same size.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c47",
+   "front": "Simple random sample",
+   "back": "Every group of n individuals in the population has the same chance of being chosen.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c48",
+   "front": "Stratified sampling",
+   "back": "Divide the population into strata and take a random sample from each stratum.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c49",
+   "front": "Cluster sampling",
+   "back": "Divide the population into clusters, randomly choose whole clusters, and sample everyone in them.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c50",
+   "front": "Sampling bias",
+   "back": "When the sampling method systematically favours some outcomes, e.g. convenience sampling or voluntary response.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c51",
+   "front": "Nonresponse bias",
+   "back": "Bias when people chosen for the sample do not respond and differ from those who do.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c52",
+   "front": "Parameter vs statistic",
+   "back": "A parameter describes a population; a statistic describes a sample.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c53",
+   "front": "Bootstrap",
+   "back": "Resampling the observed sample with replacement to estimate the sampling distribution of a statistic.",
+   "tags": [],
+   "topic": "ci"
+  },
+  {
+   "id": "c54",
+   "front": "Median",
+   "back": "The middle value of ordered data; resistant to outliers.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c55",
+   "front": "Interquartile range (IQR)",
+   "back": "Q3 − Q1: the spread of the middle 50% of the data.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c56",
+   "front": "Standard deviation",
+   "back": "The typical distance of values from the mean; the square root of the variance.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c57",
+   "front": "Variance",
+   "back": "The average squared deviation from the mean.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c58",
+   "front": "Boxplot",
+   "back": "Shows the five-number summary (min, Q1, median, Q3, max) with outliers marked.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c59",
+   "front": "1.5 × IQR rule",
+   "back": "A value below Q1 − 1.5×IQR or above Q3 + 1.5×IQR is flagged as an outlier.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c60",
+   "front": "Mean or median for skewed data?",
+   "back": "The median, because the mean is pulled toward the tail.",
+   "tags": [],
+   "topic": "desc"
+  },
+  {
+   "id": "c61",
+   "front": "Histogram",
+   "back": "A bar chart of a quantitative variable, showing counts in bins.",
+   "tags": [],
+   "topic": "desc"
+  }
+ ]
+}

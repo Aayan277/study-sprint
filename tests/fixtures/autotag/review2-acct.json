@@ -1,0 +1,377 @@
+{
+ "name": "ACCT 201 Financial Accounting",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Accounting equation",
+   "back": "Assets = Liabilities + Equity",
+   "tags": []
+  },
+  {
+   "id": "c2",
+   "front": "What is an asset?",
+   "back": "A resource owned or controlled that brings future economic benefit",
+   "tags": []
+  },
+  {
+   "id": "c3",
+   "front": "What is a liability?",
+   "back": "An obligation to pay or deliver something in the future",
+   "tags": []
+  },
+  {
+   "id": "c4",
+   "front": "What is equity?",
+   "back": "Owners' residual interest: assets minus liabilities",
+   "tags": []
+  },
+  {
+   "id": "c5",
+   "front": "Debit and credit rules for assets",
+   "back": "Debit increases, credit decreases",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "Debit and credit rules for liabilities",
+   "back": "Credit increases, debit decreases",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "Normal balance of revenue",
+   "back": "Credit",
+   "tags": []
+  },
+  {
+   "id": "c8",
+   "front": "Normal balance of expenses",
+   "back": "Debit",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "Journal entry",
+   "back": "Record of a transaction with equal debits and credits",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "General ledger",
+   "back": "Collection of all accounts and their balances",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "Trial balance",
+   "back": "List of all account balances to check debits equal credits",
+   "tags": []
+  },
+  {
+   "id": "c12",
+   "front": "Double-entry bookkeeping",
+   "back": "Every transaction affects at least two accounts",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "Accrual basis accounting",
+   "back": "Revenue recorded when earned, expenses when incurred, not when cash moves",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "Cash basis accounting",
+   "back": "Revenue and expenses recorded when cash is received or paid",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "Revenue recognition principle",
+   "back": "Recognize revenue when the performance obligation is satisfied",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "Matching principle",
+   "back": "Expenses recorded in the same period as the revenue they help earn",
+   "tags": []
+  },
+  {
+   "id": "c17",
+   "front": "Adjusting entries",
+   "back": "Made at period end to update accruals and deferrals",
+   "tags": []
+  },
+  {
+   "id": "c18",
+   "front": "Accrued revenue",
+   "back": "Revenue earned but not yet received in cash; debit accounts receivable",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "Accrued expense",
+   "back": "Expense incurred but not yet paid; credit a payable",
+   "tags": []
+  },
+  {
+   "id": "c20",
+   "front": "Prepaid expense",
+   "back": "Cash paid in advance, recorded as an asset until used (e.g. prepaid rent)",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "Unearned revenue",
+   "back": "Cash received before the service is performed; a liability",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "Depreciation",
+   "back": "Allocating the cost of a long-term asset over its useful life",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "Straight-line depreciation formula",
+   "back": "(Cost − salvage value) / useful life",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "Declining balance depreciation",
+   "back": "Higher depreciation in early years; rate × book value",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "Accumulated depreciation",
+   "back": "Contra-asset account with total depreciation to date",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "Book value of an asset",
+   "back": "Cost minus accumulated depreciation",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "Income statement",
+   "back": "Shows revenues and expenses over a period; net income or loss",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "Balance sheet",
+   "back": "Shows assets, liabilities and equity at a point in time",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "Statement of cash flows",
+   "back": "Cash from operating, investing and financing activities",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "Statement of retained earnings",
+   "back": "Beginning retained earnings + net income − dividends",
+   "tags": []
+  },
+  {
+   "id": "c31",
+   "front": "Retained earnings",
+   "back": "Cumulative net income kept in the business after dividends",
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "Dividends",
+   "back": "Distribution of earnings to shareholders; reduces retained earnings",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "Closing entries",
+   "back": "Transfer revenue, expense and dividend balances to retained earnings",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "Gross profit",
+   "back": "Net sales minus cost of goods sold",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "Cost of goods sold (COGS)",
+   "back": "Beginning inventory + purchases − ending inventory",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "FIFO inventory method",
+   "back": "First in, first out; ending inventory at latest costs",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "LIFO inventory method",
+   "back": "Last in, first out; not allowed under IFRS",
+   "tags": []
+  },
+  {
+   "id": "c38",
+   "front": "Weighted average inventory cost",
+   "back": "Total cost of goods available / units available",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "Perpetual inventory system",
+   "back": "Inventory and COGS updated with every sale",
+   "tags": []
+  },
+  {
+   "id": "c40",
+   "front": "Periodic inventory system",
+   "back": "Inventory counted and COGS calculated at period end",
+   "tags": []
+  },
+  {
+   "id": "c41",
+   "front": "Accounts receivable",
+   "back": "Amounts owed by customers for credit sales",
+   "tags": []
+  },
+  {
+   "id": "c42",
+   "front": "Allowance for doubtful accounts",
+   "back": "Contra-asset estimating uncollectible receivables",
+   "tags": []
+  },
+  {
+   "id": "c43",
+   "front": "Bad debt expense",
+   "back": "Estimated cost of receivables that won't be collected",
+   "tags": []
+  },
+  {
+   "id": "c44",
+   "front": "Accounts payable",
+   "back": "Amounts owed to suppliers",
+   "tags": []
+  },
+  {
+   "id": "c45",
+   "front": "Current ratio",
+   "back": "Current assets / current liabilities; measures liquidity",
+   "tags": []
+  },
+  {
+   "id": "c46",
+   "front": "Quick ratio",
+   "back": "(Cash + marketable securities + receivables) / current liabilities",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "Debt to equity ratio",
+   "back": "Total liabilities / total equity",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "Return on assets",
+   "back": "Net income / average total assets",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "Profit margin",
+   "back": "Net income / net sales",
+   "tags": []
+  },
+  {
+   "id": "c50",
+   "front": "Inventory turnover",
+   "back": "COGS / average inventory",
+   "tags": []
+  },
+  {
+   "id": "c51",
+   "front": "Current assets vs non-current assets",
+   "back": "Current: used within one year (cash, inventory); non-current: long-term (equipment, land)",
+   "tags": []
+  },
+  {
+   "id": "c52",
+   "front": "Current liabilities",
+   "back": "Due within one year (accounts payable, short-term loans)",
+   "tags": []
+  },
+  {
+   "id": "c53",
+   "front": "Bonds payable",
+   "back": "Long-term liability; company borrows by issuing bonds",
+   "tags": []
+  },
+  {
+   "id": "c54",
+   "front": "Bond issued at a discount",
+   "back": "Market rate higher than the stated rate",
+   "tags": []
+  },
+  {
+   "id": "c55",
+   "front": "Common stock",
+   "back": "Shares representing ownership; part of contributed capital",
+   "tags": []
+  },
+  {
+   "id": "c56",
+   "front": "Treasury stock",
+   "back": "Company's own shares bought back; reduces equity",
+   "tags": []
+  },
+  {
+   "id": "c57",
+   "front": "GAAP",
+   "back": "Generally Accepted Accounting Principles (US)",
+   "tags": []
+  },
+  {
+   "id": "c58",
+   "front": "IFRS",
+   "back": "International Financial Reporting Standards",
+   "tags": []
+  },
+  {
+   "id": "c59",
+   "front": "Going concern assumption",
+   "back": "The business is expected to continue operating",
+   "tags": []
+  },
+  {
+   "id": "c60",
+   "front": "Materiality",
+   "back": "An item is material if it would change a user's decision",
+   "tags": []
+  },
+  {
+   "id": "c61",
+   "front": "Bank reconciliation",
+   "back": "Matching the cash balance in the books to the bank statement",
+   "tags": []
+  },
+  {
+   "id": "c62",
+   "front": "Petty cash",
+   "back": "Small fund for minor expenses",
+   "tags": []
+  }
+ ]
+}

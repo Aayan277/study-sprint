@@ -1,0 +1,270 @@
+{
+ "name": "Geography",
+ "cards": [
+  {
+   "id": "c0165",
+   "front": "What is the capital of Australia?",
+   "back": "Canberra, not Sydney"
+  },
+  {
+   "id": "c0166",
+   "front": "What is the capital of Canada?",
+   "back": "Ottawa"
+  },
+  {
+   "id": "c0167",
+   "front": "What is the capital of Brazil?",
+   "back": "Brasília"
+  },
+  {
+   "id": "c0168",
+   "front": "What is the capital of Turkey?",
+   "back": "Ankara"
+  },
+  {
+   "id": "c0169",
+   "front": "What is the capital of Nigeria?",
+   "back": "Abuja"
+  },
+  {
+   "id": "c0170",
+   "front": "What is the capital of Kenya?",
+   "back": "Nairobi"
+  },
+  {
+   "id": "c0171",
+   "front": "What is the capital of Peru?",
+   "back": "Lima"
+  },
+  {
+   "id": "c0172",
+   "front": "What is the capital of Vietnam?",
+   "back": "Hanoi"
+  },
+  {
+   "id": "c0173",
+   "front": "What is the capital of Poland?",
+   "back": "Warsaw"
+  },
+  {
+   "id": "c0174",
+   "front": "What is the capital of Egypt?",
+   "back": "Cairo"
+  },
+  {
+   "id": "c0175",
+   "front": "What is the longest river in Africa?",
+   "back": "The Nile"
+  },
+  {
+   "id": "c0176",
+   "front": "Which river flows through Paris?",
+   "back": "The Seine"
+  },
+  {
+   "id": "c0177",
+   "front": "Which river flows through London?",
+   "back": "The Thames"
+  },
+  {
+   "id": "c0178",
+   "front": "What is the longest river in South America?",
+   "back": "The Amazon"
+  },
+  {
+   "id": "c0179",
+   "front": "Which river forms much of the border between Texas and Mexico?",
+   "back": "The Rio Grande"
+  },
+  {
+   "id": "c0180",
+   "front": "Which river flows through Baghdad?",
+   "back": "The Tigris"
+  },
+  {
+   "id": "c0181",
+   "front": "Which river is the longest in Europe?",
+   "back": "The Volga"
+  },
+  {
+   "id": "c0182",
+   "front": "Into which sea does the Danube flow?",
+   "back": "The Black Sea"
+  },
+  {
+   "id": "c0183",
+   "front": "Which river carved the Grand Canyon?",
+   "back": "The Colorado River"
+  },
+  {
+   "id": "c0184",
+   "front": "Which river is sacred in India?",
+   "back": "The Ganges"
+  },
+  {
+   "id": "c0185",
+   "front": "What is the highest mountain in the world?",
+   "back": "Mount Everest, in the Himalayas"
+  },
+  {
+   "id": "c0186",
+   "front": "What is the highest mountain in Africa?",
+   "back": "Kilimanjaro in Tanzania"
+  },
+  {
+   "id": "c0187",
+   "front": "What is the highest mountain in North America?",
+   "back": "Denali in Alaska"
+  },
+  {
+   "id": "c0188",
+   "front": "Which mountain range separates Europe from Asia?",
+   "back": "The Ural Mountains"
+  },
+  {
+   "id": "c0189",
+   "front": "Which mountain range runs along the west coast of South America?",
+   "back": "The Andes"
+  },
+  {
+   "id": "c0190",
+   "front": "Where are the Alps?",
+   "back": "Across Switzerland, Austria, France and Italy"
+  },
+  {
+   "id": "c0191",
+   "front": "Where is Mont Blanc?",
+   "back": "On the border of France and Italy, the highest peak in the Alps"
+  },
+  {
+   "id": "c0192",
+   "front": "Which is the largest desert in the world, excluding the polar regions?",
+   "back": "The Sahara"
+  },
+  {
+   "id": "c0193",
+   "front": "Where is the Atacama Desert?",
+   "back": "Chile, one of the driest places on Earth"
+  },
+  {
+   "id": "c0194",
+   "front": "Which desert covers much of Mongolia and northern China?",
+   "back": "The Gobi Desert"
+  },
+  {
+   "id": "c0195",
+   "front": "What is the largest ocean?",
+   "back": "The Pacific Ocean"
+  },
+  {
+   "id": "c0196",
+   "front": "What is the smallest ocean?",
+   "back": "The Arctic Ocean"
+  },
+  {
+   "id": "c0197",
+   "front": "Which is the largest island in the world?",
+   "back": "Greenland"
+  },
+  {
+   "id": "c0198",
+   "front": "Which is the largest country by area?",
+   "back": "Russia"
+  },
+  {
+   "id": "c0199",
+   "front": "Which is the most populous country in Africa?",
+   "back": "Nigeria"
+  },
+  {
+   "id": "c0200",
+   "front": "Which country has the most islands?",
+   "back": "Sweden"
+  },
+  {
+   "id": "c0201",
+   "front": "Which strait separates Spain from Morocco?",
+   "back": "The Strait of Gibraltar"
+  },
+  {
+   "id": "c0202",
+   "front": "Which canal links the Mediterranean and the Red Sea?",
+   "back": "The Suez Canal"
+  },
+  {
+   "id": "c0203",
+   "front": "Which canal links the Atlantic and the Pacific?",
+   "back": "The Panama Canal"
+  },
+  {
+   "id": "c0204",
+   "front": "Which line of latitude is at 0 degrees?",
+   "back": "The Equator"
+  },
+  {
+   "id": "c0205",
+   "front": "What is the Tropic of Cancer?",
+   "back": "The latitude 23.5 degrees north"
+  },
+  {
+   "id": "c0206",
+   "front": "What type of climate has hot dry summers and mild wet winters?",
+   "back": "Mediterranean climate"
+  },
+  {
+   "id": "c0207",
+   "front": "Where is the monsoon climate found?",
+   "back": "South and Southeast Asia"
+  },
+  {
+   "id": "c0208",
+   "front": "What is a tundra?",
+   "back": "A cold treeless biome with permafrost"
+  },
+  {
+   "id": "c0209",
+   "front": "What is the climate of the Amazon basin?",
+   "back": "Hot and wet all year, tropical rainforest"
+  },
+  {
+   "id": "c0210",
+   "front": "What causes the rain shadow effect?",
+   "back": "Moist air rises over mountains and drops its rain, leaving the lee side dry"
+  },
+  {
+   "id": "c0211",
+   "front": "Which ocean current warms north-west Europe?",
+   "back": "The Gulf Stream"
+  },
+  {
+   "id": "c0212",
+   "front": "What is the Ring of Fire?",
+   "back": "A belt of volcanoes and earthquakes around the edge of the Pacific"
+  },
+  {
+   "id": "c0213",
+   "front": "What is a tectonic plate boundary where plates move apart?",
+   "back": "A divergent boundary, as in the Mid-Atlantic Ridge"
+  },
+  {
+   "id": "c0214",
+   "front": "Which lake is the deepest in the world?",
+   "back": "Lake Baikal in Russia"
+  },
+  {
+   "id": "c0215",
+   "front": "Which is the largest lake in Africa?",
+   "back": "Lake Victoria"
+  },
+  {
+   "id": "c0216",
+   "front": "Which is the largest of the Great Lakes?",
+   "back": "Lake Superior"
+  },
+  {
+   "id": "c0217",
+   "front": "Which sea is the saltiest?",
+   "back": "The Dead Sea"
+  }
+ ]
+}

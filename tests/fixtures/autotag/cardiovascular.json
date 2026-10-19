@@ -1,0 +1,225 @@
+{
+ "name": "Cardiovascular",
+ "cards": [
+  {
+   "id": "c0276",
+   "front": "What are the four chambers of the heart?",
+   "back": "Right atrium, right ventricle, left atrium and left ventricle"
+  },
+  {
+   "id": "c0277",
+   "front": "Which side of the heart pumps blood to the lungs?",
+   "back": "The right side"
+  },
+  {
+   "id": "c0278",
+   "front": "Which valve lies between the left atrium and left ventricle?",
+   "back": "The mitral (bicuspid) valve"
+  },
+  {
+   "id": "c0279",
+   "front": "Which valve lies between the right atrium and right ventricle?",
+   "back": "The tricuspid valve"
+  },
+  {
+   "id": "c0280",
+   "front": "What does the aortic valve prevent?",
+   "back": "Backflow of blood from the aorta into the left ventricle"
+  },
+  {
+   "id": "c0281",
+   "front": "What are the heart sounds S1 and S2?",
+   "back": "S1 is closure of the AV valves, S2 is closure of the semilunar valves"
+  },
+  {
+   "id": "c0282",
+   "front": "Where does the sinoatrial node sit?",
+   "back": "In the wall of the right atrium, the heart's pacemaker"
+  },
+  {
+   "id": "c0283",
+   "front": "What is the normal resting heart rate?",
+   "back": "60 to 100 beats per minute"
+  },
+  {
+   "id": "c0284",
+   "front": "What is stroke volume?",
+   "back": "The volume of blood ejected by the ventricle in one beat"
+  },
+  {
+   "id": "c0285",
+   "front": "What is cardiac output?",
+   "back": "Heart rate times stroke volume"
+  },
+  {
+   "id": "c0286",
+   "front": "What is preload?",
+   "back": "The stretch of the ventricle at the end of diastole"
+  },
+  {
+   "id": "c0287",
+   "front": "What is afterload?",
+   "back": "The resistance the ventricle must overcome to eject blood"
+  },
+  {
+   "id": "c0288",
+   "front": "What does the P wave on an ECG represent?",
+   "back": "Atrial depolarisation"
+  },
+  {
+   "id": "c0289",
+   "front": "What does the QRS complex represent?",
+   "back": "Ventricular depolarisation"
+  },
+  {
+   "id": "c0290",
+   "front": "What does the T wave represent?",
+   "back": "Ventricular repolarisation"
+  },
+  {
+   "id": "c0291",
+   "front": "What does ST elevation suggest?",
+   "back": "Acute myocardial infarction"
+  },
+  {
+   "id": "c0292",
+   "front": "What is atrial fibrillation?",
+   "back": "An irregularly irregular rhythm with no clear P waves"
+  },
+  {
+   "id": "c0293",
+   "front": "What is the most common cause of a heart attack?",
+   "back": "Rupture of an atherosclerotic plaque with a clot in a coronary artery"
+  },
+  {
+   "id": "c0294",
+   "front": "Which artery supplies the anterior wall of the left ventricle?",
+   "back": "The left anterior descending artery"
+  },
+  {
+   "id": "c0295",
+   "front": "What is angina?",
+   "back": "Chest pain from reduced blood flow to the myocardium"
+  },
+  {
+   "id": "c0296",
+   "front": "What is heart failure?",
+   "back": "The heart cannot pump enough blood for the body's needs"
+  },
+  {
+   "id": "c0297",
+   "front": "What are the signs of left-sided failure?",
+   "back": "Breathlessness, pulmonary oedema and crackles"
+  },
+  {
+   "id": "c0298",
+   "front": "What are the signs of right-sided failure?",
+   "back": "Raised jugular venous pressure, ankle oedema and hepatomegaly"
+  },
+  {
+   "id": "c0299",
+   "front": "What is a murmur?",
+   "back": "An extra sound caused by turbulent blood flow"
+  },
+  {
+   "id": "c0300",
+   "front": "What murmur is typical of aortic stenosis?",
+   "back": "An ejection systolic murmur radiating to the carotids"
+  },
+  {
+   "id": "c0301",
+   "front": "What is endocarditis?",
+   "back": "Infection of the heart valves"
+  },
+  {
+   "id": "c0302",
+   "front": "What is pericarditis?",
+   "back": "Inflammation of the pericardium, with pain that improves on sitting forward"
+  },
+  {
+   "id": "c0303",
+   "front": "What is cardiac tamponade?",
+   "back": "Fluid in the pericardial sac compressing the heart"
+  },
+  {
+   "id": "c0304",
+   "front": "What is Beck's triad?",
+   "back": "Hypotension, raised JVP and muffled heart sounds"
+  },
+  {
+   "id": "c0305",
+   "front": "What is hypertension?",
+   "back": "Blood pressure persistently above 140/90 mmHg"
+  },
+  {
+   "id": "c0306",
+   "front": "What is mean arterial pressure?",
+   "back": "Diastolic pressure plus a third of the pulse pressure"
+  },
+  {
+   "id": "c0307",
+   "front": "What is the baroreceptor reflex?",
+   "back": "A fast feedback loop that keeps blood pressure steady"
+  },
+  {
+   "id": "c0308",
+   "front": "What does the renin-angiotensin system do?",
+   "back": "Raises blood pressure by vasoconstriction and sodium retention"
+  },
+  {
+   "id": "c0309",
+   "front": "What is a congenital septal defect?",
+   "back": "A hole in the wall between the heart's chambers"
+  },
+  {
+   "id": "c0310",
+   "front": "What is tetralogy of Fallot?",
+   "back": "VSD, pulmonary stenosis, overriding aorta and right ventricular hypertrophy"
+  },
+  {
+   "id": "c0311",
+   "front": "What is a patent ductus arteriosus?",
+   "back": "A fetal vessel that fails to close after birth"
+  },
+  {
+   "id": "c0312",
+   "front": "What is the Frank-Starling law?",
+   "back": "The more the heart is filled, the harder it contracts"
+  },
+  {
+   "id": "c0313",
+   "front": "What is an ejection fraction?",
+   "back": "The percentage of blood in the ventricle that is pumped out each beat"
+  },
+  {
+   "id": "c0314",
+   "front": "What is the cardiac cycle?",
+   "back": "The sequence of contraction and relaxation, called systole and diastole"
+  },
+  {
+   "id": "c0315",
+   "front": "Which coronary artery supplies the SA node most often?",
+   "back": "The right coronary artery"
+  },
+  {
+   "id": "c0316",
+   "front": "What is a pacemaker used for?",
+   "back": "To treat a slow or irregular heartbeat"
+  },
+  {
+   "id": "c0317",
+   "front": "What is an echocardiogram?",
+   "back": "An ultrasound scan of the heart"
+  },
+  {
+   "id": "c0318",
+   "front": "What does troponin show?",
+   "back": "Damage to heart muscle, raised after a heart attack"
+  },
+  {
+   "id": "c0319",
+   "front": "What is a stent?",
+   "back": "A mesh tube that holds a coronary artery open"
+  }
+ ]
+}

@@ -1,0 +1,290 @@
+{
+ "name": "Pharmacology",
+ "cards": [
+  {
+   "id": "c0108",
+   "front": "Metformin",
+   "back": "Biguanide for type 2 diabetes. Lowers liver glucose output. Side effects: diarrhoea, lactic acidosis"
+  },
+  {
+   "id": "c0109",
+   "front": "Glipizide",
+   "back": "Sulfonylurea. Closes K-ATP channels so beta cells release insulin. Risk of hypoglycaemia"
+  },
+  {
+   "id": "c0110",
+   "front": "Insulin glargine",
+   "back": "Long-acting insulin analogue given once a day"
+  },
+  {
+   "id": "c0111",
+   "front": "Pioglitazone",
+   "back": "Thiazolidinedione. Activates PPAR-gamma and improves insulin sensitivity. Causes fluid retention"
+  },
+  {
+   "id": "c0112",
+   "front": "Sitagliptin",
+   "back": "DPP-4 inhibitor. Increases incretin levels and raises insulin release after meals"
+  },
+  {
+   "id": "c0113",
+   "front": "Empagliflozin",
+   "back": "SGLT2 inhibitor. Blocks glucose reabsorption in the kidney tubule so glucose is lost in urine"
+  },
+  {
+   "id": "c0114",
+   "front": "Lisinopril",
+   "back": "ACE inhibitor for hypertension. Side effects: dry cough, hyperkalaemia, angioedema"
+  },
+  {
+   "id": "c0115",
+   "front": "Enalapril",
+   "back": "ACE inhibitor. Prodrug converted to enalaprilat in the liver"
+  },
+  {
+   "id": "c0116",
+   "front": "Losartan",
+   "back": "Angiotensin receptor blocker. No cough. Avoid in pregnancy"
+  },
+  {
+   "id": "c0117",
+   "front": "Amlodipine",
+   "back": "Dihydropyridine calcium channel blocker. Vasodilator. Causes ankle oedema"
+  },
+  {
+   "id": "c0118",
+   "front": "Verapamil",
+   "back": "Non-dihydropyridine calcium channel blocker. Slows the heart rate. Causes constipation"
+  },
+  {
+   "id": "c0119",
+   "front": "Metoprolol",
+   "back": "Beta-1 selective beta blocker. Reduces heart rate and contractility"
+  },
+  {
+   "id": "c0120",
+   "front": "Propranolol",
+   "back": "Non-selective beta blocker. Avoid in asthma"
+  },
+  {
+   "id": "c0121",
+   "front": "Atenolol",
+   "back": "Beta-1 selective beta blocker cleared by the kidney"
+  },
+  {
+   "id": "c0122",
+   "front": "Furosemide",
+   "back": "Loop diuretic. Blocks the Na-K-2Cl transporter in the loop of Henle. Causes hypokalaemia and ototoxicity"
+  },
+  {
+   "id": "c0123",
+   "front": "Hydrochlorothiazide",
+   "back": "Thiazide diuretic. Acts on the distal tubule. Can cause hyponatraemia and raise calcium"
+  },
+  {
+   "id": "c0124",
+   "front": "Spironolactone",
+   "back": "Aldosterone antagonist, a potassium-sparing diuretic. Gynaecomastia is a side effect"
+  },
+  {
+   "id": "c0125",
+   "front": "Digoxin",
+   "back": "Inhibits the Na-K ATPase pump. Narrow therapeutic index. Toxicity causes nausea and yellow vision"
+  },
+  {
+   "id": "c0126",
+   "front": "Amiodarone",
+   "back": "Class III antiarrhythmic. Can cause thyroid and lung toxicity"
+  },
+  {
+   "id": "c0127",
+   "front": "Warfarin",
+   "back": "Vitamin K antagonist. Monitor with INR. Reversal with vitamin K"
+  },
+  {
+   "id": "c0128",
+   "front": "Heparin",
+   "back": "Activates antithrombin. Monitor with aPTT. Reversal with protamine"
+  },
+  {
+   "id": "c0129",
+   "front": "Rivaroxaban",
+   "back": "Direct factor Xa inhibitor, an oral anticoagulant"
+  },
+  {
+   "id": "c0130",
+   "front": "Aspirin",
+   "back": "Irreversibly inhibits COX-1 and COX-2, so platelets cannot make thromboxane"
+  },
+  {
+   "id": "c0131",
+   "front": "Clopidogrel",
+   "back": "P2Y12 antagonist that prevents platelet aggregation"
+  },
+  {
+   "id": "c0132",
+   "front": "Atorvastatin",
+   "back": "Statin. Inhibits HMG-CoA reductase and lowers LDL cholesterol. Can cause myopathy"
+  },
+  {
+   "id": "c0133",
+   "front": "Ezetimibe",
+   "back": "Blocks cholesterol absorption in the gut"
+  },
+  {
+   "id": "c0134",
+   "front": "Amoxicillin",
+   "back": "Penicillin. Beta-lactam antibiotic that inhibits cell wall synthesis. Allergy is a risk"
+  },
+  {
+   "id": "c0135",
+   "front": "Ciprofloxacin",
+   "back": "Fluoroquinolone that inhibits DNA gyrase. Risk of tendon rupture"
+  },
+  {
+   "id": "c0136",
+   "front": "Gentamicin",
+   "back": "Aminoglycoside that binds the 30S ribosome. Nephrotoxic and ototoxic"
+  },
+  {
+   "id": "c0137",
+   "front": "Doxycycline",
+   "back": "Tetracycline. Inhibits the 30S ribosome. Avoid in pregnancy and children"
+  },
+  {
+   "id": "c0138",
+   "front": "Azithromycin",
+   "back": "Macrolide that inhibits the 50S ribosome. Can prolong the QT interval"
+  },
+  {
+   "id": "c0139",
+   "front": "Vancomycin",
+   "back": "Glycopeptide active against MRSA. Red man syndrome if infused too fast"
+  },
+  {
+   "id": "c0140",
+   "front": "Metronidazole",
+   "back": "Active against anaerobes and protozoa. Avoid alcohol"
+  },
+  {
+   "id": "c0141",
+   "front": "Trimethoprim",
+   "back": "Inhibits dihydrofolate reductase, used for urinary tract infection"
+  },
+  {
+   "id": "c0142",
+   "front": "Fluconazole",
+   "back": "Azole antifungal that inhibits ergosterol synthesis"
+  },
+  {
+   "id": "c0143",
+   "front": "Acyclovir",
+   "back": "Guanosine analogue that inhibits viral DNA polymerase, used for herpes"
+  },
+  {
+   "id": "c0144",
+   "front": "Salbutamol",
+   "back": "Short-acting beta-2 agonist. Relieves bronchospasm in asthma. Tremor and tachycardia"
+  },
+  {
+   "id": "c0145",
+   "front": "Salmeterol",
+   "back": "Long-acting beta-2 agonist, never used alone in asthma"
+  },
+  {
+   "id": "c0146",
+   "front": "Beclometasone",
+   "back": "Inhaled corticosteroid for asthma prevention. Oral thrush is a side effect"
+  },
+  {
+   "id": "c0147",
+   "front": "Prednisolone",
+   "back": "Oral corticosteroid. Long-term use causes osteoporosis, hyperglycaemia and adrenal suppression"
+  },
+  {
+   "id": "c0148",
+   "front": "Ipratropium",
+   "back": "Antimuscarinic bronchodilator used in COPD"
+  },
+  {
+   "id": "c0149",
+   "front": "Omeprazole",
+   "back": "Proton pump inhibitor. Irreversibly blocks the H+/K+ ATPase in parietal cells"
+  },
+  {
+   "id": "c0150",
+   "front": "Ranitidine",
+   "back": "H2 receptor antagonist that reduces gastric acid"
+  },
+  {
+   "id": "c0151",
+   "front": "Ondansetron",
+   "back": "5-HT3 antagonist antiemetic. Can prolong the QT interval"
+  },
+  {
+   "id": "c0152",
+   "front": "Loperamide",
+   "back": "Opioid agonist in the gut that slows motility and treats diarrhoea"
+  },
+  {
+   "id": "c0153",
+   "front": "Morphine",
+   "back": "Opioid agonist at mu receptors. Side effects: respiratory depression, constipation. Reversed by naloxone"
+  },
+  {
+   "id": "c0154",
+   "front": "Naloxone",
+   "back": "Opioid antagonist used for overdose"
+  },
+  {
+   "id": "c0155",
+   "front": "Paracetamol",
+   "back": "Analgesic and antipyretic. Overdose damages the liver. Antidote is acetylcysteine"
+  },
+  {
+   "id": "c0156",
+   "front": "Ibuprofen",
+   "back": "NSAID that inhibits COX. Risk of gastric ulcers and kidney injury"
+  },
+  {
+   "id": "c0157",
+   "front": "Fluoxetine",
+   "back": "SSRI antidepressant. Blocks serotonin reuptake. Risk of serotonin syndrome"
+  },
+  {
+   "id": "c0158",
+   "front": "Amitriptyline",
+   "back": "Tricyclic antidepressant. Overdose causes arrhythmias. Anticholinergic effects"
+  },
+  {
+   "id": "c0159",
+   "front": "Lithium",
+   "back": "Mood stabiliser. Narrow therapeutic index. Toxicity causes tremor. Monitor levels"
+  },
+  {
+   "id": "c0160",
+   "front": "Haloperidol",
+   "back": "Typical antipsychotic that blocks D2 receptors. Extrapyramidal side effects"
+  },
+  {
+   "id": "c0161",
+   "front": "Diazepam",
+   "back": "Benzodiazepine that enhances GABA-A. Dependence and sedation. Reversed by flumazenil"
+  },
+  {
+   "id": "c0162",
+   "front": "Carbamazepine",
+   "back": "Anticonvulsant that blocks sodium channels. Induces liver enzymes"
+  },
+  {
+   "id": "c0163",
+   "front": "Phenytoin",
+   "back": "Anticonvulsant with zero-order kinetics. Gingival hyperplasia"
+  },
+  {
+   "id": "c0164",
+   "front": "Levothyroxine",
+   "back": "Thyroid hormone replacement for hypothyroidism"
+  }
+ ]
+}
