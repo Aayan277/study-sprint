@@ -1,0 +1,11 @@
+Plate Tectonics and Earthquakes
+
+The lithosphere is the rigid outer layer of the Earth, made up of the crust and the uppermost part of the mantle. It is broken into about fifteen major tectonic plates that move slowly over the asthenosphere, a hotter and partly molten layer beneath. Plates move at rates of 2 to 10 centimetres per year, roughly as fast as fingernails grow.
+
+There are three main types of plate boundary. At divergent boundaries, plates move apart and new crust forms as magma rises, as along the Mid-Atlantic Ridge. At convergent boundaries, plates move towards each other; where oceanic crust meets continental crust, the denser oceanic plate sinks beneath the other in a process called subduction. At transform boundaries, plates slide past each other horizontally, as at the San Andreas Fault in California.
+
+An earthquake is a sudden release of energy in the Earth's crust that creates seismic waves. The point underground where the rupture starts is called the focus, or hypocentre, and the point on the surface directly above it is the epicentre. Primary waves (P-waves) are compressional waves that travel fastest and can pass through solids and liquids, while secondary waves (S-waves) are slower and travel only through solids. The fact that S-waves do not pass through the outer core showed scientists that it is liquid.
+
+The moment magnitude scale (Mw) has largely replaced the Richter scale for measuring large earthquakes. Each whole number on the scale represents about 32 times more energy released. The 2004 Indian Ocean earthquake had a magnitude of 9.1 and triggered a tsunami that killed about 230,000 people in 14 countries.
+
+The theory of continental drift was proposed by Alfred Wegener in 1912. He noticed that the coastlines of South America and Africa fit together like puzzle pieces and that the same fossils, such as Mesosaurus, were found on both continents. His idea was rejected for decades because he could not explain what force moved the continents. Seafloor spreading, discovered in the 1960s, provided the mechanism.

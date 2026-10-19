@@ -739,6 +739,22 @@ main[data-route="import"] > .view > .savebar{order:5}
 .badge{justify-self:start;font-size:var(--fs-xs);font-weight:600;color:var(--again);background:var(--again-tint);border-radius:4px;padding:1px 7px;margin-left:7px}
 .prow .icon-btn{width:40px;height:40px}
 .prow .icon-btn svg{width:18px;height:18px}
+.prow.sug{grid-template-columns:auto minmax(0,1fr);padding:2px 6px 2px 0}
+.prow.sug.off .pcells textarea,.prow.sug.off .sug-kind{color:var(--text-2)}
+.pick-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:44px;min-height:44px;cursor:pointer}
+.pick-wrap .pick{width:20px;height:20px;margin:0;accent-color:var(--accent);cursor:pointer}
+.prow.sug .pnum{padding-top:0;min-width:0;text-align:center}
+.pcells .sug-kind{justify-self:start;margin:6px 7px 0;font-size:var(--fs-xs);font-weight:600;color:var(--accent-text)}
+.sug-src{margin:0 7px;font-size:var(--fs-sm);color:var(--text-2)}
+.sug-src summary{cursor:pointer;display:flex;align-items:center;min-height:44px}
+.sug-src p{margin:2px 0 8px;overflow-wrap:anywhere}
+.sug-bar{display:grid;gap:var(--s-2);margin:0 0 var(--s-3)}
+.sug-bar .pane-actions{margin-top:0;align-items:center}
+.sug-bar .btn,.sug-status .btn{min-height:44px}
+.err-note{color:var(--again)}
+.sug-status{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.ai-view{margin-top:var(--s-3)}
+.ai-view .btn{min-height:44px}
 .savebar{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:4;padding:var(--s-4) 0 4px;background:linear-gradient(to bottom,transparent,var(--bg) 35%)}
 .savebar .btn{width:100%;min-height:50px;font-size:var(--fs-md)}
 
