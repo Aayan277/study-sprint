@@ -1,0 +1,417 @@
+{
+ "name": "enviro sci final!!",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "greenhouse effect",
+   "back": "gases (CO2, methane, water vapour) trap outgoing infrared heat -> warms surface",
+   "tags": [
+    "ch1",
+    "climate"
+   ]
+  },
+  {
+   "id": "c2",
+   "front": "main greenhouse gases",
+   "back": "CO2, CH4 (methane), N2O, water vapor, CFCs",
+   "tags": [
+    "ch1",
+    "climate"
+   ]
+  },
+  {
+   "id": "n3c1",
+   "noteId": "n3",
+   "cloze": 1,
+   "noteText": "The {{c1::Keeling curve}} shows rising atmospheric {{c2::CO2}} measured at Mauna Loa",
+   "front": "The [...] shows rising atmospheric CO2 measured at Mauna Loa",
+   "back": "",
+   "tags": [
+    "climate"
+   ]
+  },
+  {
+   "id": "n3c2",
+   "noteId": "n3",
+   "cloze": 2,
+   "noteText": "The {{c1::Keeling curve}} shows rising atmospheric {{c2::CO2}} measured at Mauna Loa",
+   "front": "The Keeling curve shows rising atmospheric [...] measured at Mauna Loa",
+   "back": "",
+   "tags": [
+    "climate"
+   ]
+  },
+  {
+   "id": "c4",
+   "front": "global warming potential??",
+   "back": "how much heat a gas traps vs CO2 over 100 yrs. methane ~28x",
+   "tags": []
+  },
+  {
+   "id": "n5c1",
+   "noteId": "n5",
+   "cloze": 1,
+   "noteText": "{{c1::Carbon sinks}} like oceans and forests absorb more carbon than they release",
+   "front": "[...] like oceans and forests absorb more carbon than they release",
+   "back": "",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "carbon cycle",
+   "back": "photosynthesis, respiration, decomposition, combustion, ocean exchange. humans add CO2 by burning fossil fuels",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "ocean acidification",
+   "back": "CO2 dissolves in seawater -> carbonic acid, lowers pH, hurts coral + shellfish",
+   "tags": [
+    "climate"
+   ]
+  },
+  {
+   "id": "c8",
+   "front": "coral bleaching",
+   "back": "corals expel algae when water too warm",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "Paris Agreement (2015)",
+   "back": "keep warming well below 2°C, countries set NDCs",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "Kyoto protocol",
+   "back": "1997, binding emission targets for developed countries",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "nitrogen cycle steps",
+   "back": "fixation, nitrification, assimilation, ammonification, denitrification",
+   "tags": []
+  },
+  {
+   "id": "n12c1",
+   "noteId": "n12",
+   "cloze": 1,
+   "noteText": "{{c1::Nitrogen fixation}} turns N2 gas into ammonia, done by bacteria in root nodules of {{c2::legumes}}",
+   "front": "[...] turns N2 gas into ammonia, done by bacteria in root nodules of legumes",
+   "back": "",
+   "tags": []
+  },
+  {
+   "id": "n12c2",
+   "noteId": "n12",
+   "cloze": 2,
+   "noteText": "{{c1::Nitrogen fixation}} turns N2 gas into ammonia, done by bacteria in root nodules of {{c2::legumes}}",
+   "front": "Nitrogen fixation turns N2 gas into ammonia, done by bacteria in root nodules of [...]",
+   "back": "",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "eutrophication",
+   "back": "excess nutrients (fertilizer runoff - N + P) -> algal bloom -> decomposition uses O2 -> dead zone",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "phosphorus cycle",
+   "back": "no atmospheric part; rocks -> soil -> organisms -> sediment",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "water cycle",
+   "back": "evaporation, condensation, precipitation, infiltration, runoff, transpiration",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "Biodiversity",
+   "back": "variety of life: genetic, species, ecosystem diversity",
+   "tags": [
+    "ch3"
+   ]
+  },
+  {
+   "id": "c17",
+   "front": "HIPPCO",
+   "back": "Habitat loss, Invasive species, Pollution, Population growth, Climate change, Overexploitation = threats to biodiversity",
+   "tags": [
+    "ch3"
+   ]
+  },
+  {
+   "id": "c18",
+   "front": "invasive species ex.",
+   "back": "zebra mussels, kudzu, cane toads",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "keystone species",
+   "back": "has big effect on ecosystem relative to its numbers e.g. sea otter, wolves",
+   "tags": []
+  },
+  {
+   "id": "n20c1",
+   "noteId": "n20",
+   "cloze": 1,
+   "noteText": "An {{c1::indicator species}} shows the health of an ecosystem (e.g. frogs, lichens)",
+   "front": "An [...] shows the health of an ecosystem (e.g. frogs, lichens)",
+   "back": "",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "endemic species",
+   "back": "found only in one place",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "habitat fragmentation",
+   "back": "habitat split into small patches by roads/farms; edge effects",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "ecological succession - primary",
+   "back": "starts on bare rock, no soil; pioneer species = lichens + mosses",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "secondary succession",
+   "back": "after disturbance like fire, soil still there",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "trophic levels",
+   "back": "producers -> primary consumers -> secondary -> tertiary. ~10% energy passed on",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "10% rule",
+   "back": "only about 10% of energy moves to next trophic level, rest lost as heat",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "biomagnification",
+   "back": "toxins like DDT, mercury get more concentrated up the food chain",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "Air pollution - primary vs secondary pollutants",
+   "back": "primary emitted directly (CO, SO2), secondary form in air (ozone, acid rain)",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "acid rain",
+   "back": "SO2 and NOx + water -> sulfuric/nitric acid. damages lakes, forests, buildings",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "photochemical smog",
+   "back": "NOx + VOCs + sunlight -> ground level ozone",
+   "tags": []
+  },
+  {
+   "id": "c31",
+   "front": "ozone layer depletion",
+   "back": "CFCs break down stratospheric ozone; Montreal Protocol 1987 fixed it mostly",
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "Clean Air Act",
+   "back": "US law regulating air pollutants (1970)",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "Clean Water Act",
+   "back": "regulates discharge of pollutants into US waters",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "point source vs nonpoint source pollution",
+   "back": "point = single identifiable source (pipe); nonpoint = diffuse (farm runoff)",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "BOD",
+   "back": "biological oxygen demand. high = lots of organic waste in water",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "groundwater",
+   "back": "water stored in aquifers underground",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "aquifer depletion - Ogallala",
+   "back": "pumped faster than recharge, used for irrigation in great plains",
+   "tags": []
+  },
+  {
+   "id": "n38c1",
+   "noteId": "n38",
+   "cloze": 1,
+   "noteText": "Drip irrigation is more efficient than {{c1::flood irrigation}}",
+   "front": "Drip irrigation is more efficient than [...]",
+   "back": "",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "renewable energy sources",
+   "back": "solar, wind, hydro, geothermal, biomass",
+   "tags": [
+    "ch7",
+    "energy"
+   ]
+  },
+  {
+   "id": "c40",
+   "front": "solar energy pros/cons",
+   "back": "no emissions when running; intermittent, needs storage, land",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c41",
+   "front": "wind energy",
+   "back": "turbines, cheap now; intermittent, bird deaths",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c42",
+   "front": "nuclear power",
+   "back": "fission of uranium-235; no CO2 but radioactive waste, meltdown risk",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c43",
+   "front": "fossil fuels",
+   "back": "coal, oil, natural gas. nonrenewable, release CO2 when burned",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c44",
+   "front": "fracking",
+   "back": "hydraulic fracturing, inject water + chemicals to release natural gas from shale",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c45",
+   "front": "hydroelectric dams",
+   "back": "renewable but flood habitat, block fish migration",
+   "tags": [
+    "energy"
+   ]
+  },
+  {
+   "id": "c46",
+   "front": "energy efficiency",
+   "back": "using less energy for the same service, e.g. LED bulbs, insulation",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "population growth - exponential vs logistic",
+   "back": "J curve vs S curve (carrying capacity)",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "carrying capacity (K)",
+   "back": "max population an environment can sustain",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "demographic transition model",
+   "back": "4 stages: high birth+death -> death falls -> birth falls -> both low",
+   "tags": []
+  },
+  {
+   "id": "c50",
+   "front": "total fertility rate",
+   "back": "avg # children per woman. replacement level ~2.1",
+   "tags": []
+  },
+  {
+   "id": "c51",
+   "front": "rule of 70",
+   "back": "doubling time = 70 / growth rate (%)",
+   "tags": []
+  },
+  {
+   "id": "c52",
+   "front": "IPAT",
+   "back": "Impact = Population x Affluence x Technology",
+   "tags": []
+  },
+  {
+   "id": "c53",
+   "front": "tragedy of the commons",
+   "back": "shared resource overused bc everyone acts in self-interest (overfishing)",
+   "tags": []
+  },
+  {
+   "id": "c54",
+   "front": "sustainable yield",
+   "back": "amount of a renewable resource that can be harvested w/o depleting it",
+   "tags": []
+  },
+  {
+   "id": "c55",
+   "front": "soil horizons",
+   "back": "O (organic), A (topsoil), B (subsoil), C (parent material)",
+   "tags": []
+  },
+  {
+   "id": "c56",
+   "front": "soil erosion causes",
+   "back": "overgrazing, deforestation, tilling",
+   "tags": []
+  },
+  {
+   "id": "c57",
+   "front": "deforestation effects",
+   "back": "loss of habitat + biodiversity, more CO2, soil erosion",
+   "tags": []
+  },
+  {
+   "id": "c58",
+   "front": "LD50",
+   "back": "dose that kills 50% of a test population",
+   "tags": []
+  }
+ ]
+}

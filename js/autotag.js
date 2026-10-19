@@ -45,7 +45,7 @@ source value variable measure sign symptom sample study test type version unit s
 beginning middle edge center centre inside outside inner outer upper lower left right front back
 usually often always never sometimes together also only just still even already again either neither
 become becomes known called using given based related involved caused produced formed made
-avoid monitor oral world largest smallest highest lowest longest shortest deepest biggest greatest oldest newest best worst strongest weakest fastest slowest`.split(/\s+/).map(w => stem(w)));
+avoid monitor oral world theme quote character moral largest smallest highest lowest longest shortest deepest biggest greatest oldest newest best worst strongest weakest fastest slowest`.split(/\s+/).map(w => stem(w)));
 const ADVERB = /[^aeiou]ly$/;                 // ("quickly"; not "family")
 const PARTICIPLE = /[^e]ed$/;                 // ("located", "called"; not "speed")
 const EVERYWHERE = 0.5;                        // a word in more than this share of the notes cannot make a phrase a topic ("ribosome membrane")
@@ -67,7 +67,8 @@ export function derives(a, b) {
   if (a.length > b.length) [a, b] = [b, a];
   if (a.includes(' ') || b.includes(' ') || a.length < 4) return false;
   for (const base of new Set([a, a.replace(/e$/, ''), a.replace(/y$/, ''), a.replace(/le$/, '')])) {
-    if (base.length >= 4 && b.startsWith(base) && SUFFIX.includes(b.slice(base.length))) return true;
+    const rest = b.slice(base.length);
+    if (base.length >= 4 && b.startsWith(base) && (SUFFIX.includes(rest) || (rest === 'l' && base.endsWith('a')))) return true;      // bacteria, bacterial
   }
   return false;
 }
@@ -92,6 +93,7 @@ const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\
 // reverse); a card with no noteId is a note by itself.
 //   front   what names the thing (the front; for a cloze note the sentence with its blanks filled; for image occlusion the heading)
 //   text    the back
+//   tags    the tags its cards have now (so a tag the student already uses can be told from a new one)
 //   extra   the note's extra text. It is NOT read for tags: it holds grammar notes, mnemonics and the like, not what the card is about.
 // An image-occlusion note is read from its heading only (the picture and the box labels say little).
 export function notesOf(cards) {
@@ -109,7 +111,7 @@ export function notesOf(cards) {
     if (c.occlusion) front = plain(c.occlusion.header);
     else if (hasBlank(c)) front = plain(clozeFull(c.noteText));
     else { front = plain(c.front); text = plain(c.back); }
-    out.push({ id, front: front.trim(), text: text.trim(), extra: c.occlusion ? '' : plain(c.noteExtra).trim(), cardIds: list.map(x => x.id) });
+    out.push({ id, front: front.trim(), text: text.trim(), extra: c.occlusion ? '' : plain(c.noteExtra).trim(), tags: [...new Set(list.flatMap(x => tagWords(x.tags).map(normTag)))], cardIds: list.map(x => x.id) });
   }
   return out;
 }
@@ -165,8 +167,10 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     const pr = new Set();
     for (const toks of [ft, tt]) for (let k = 0; k + 1 < toks.length; k++) {
       const a = toks[k].w, b = toks[k + 1].w;
-      if (toks[k + 1].brk || STOPWORDS.has(a) || STOPWORDS.has(b) || a.includes('-') || b.includes('-')) continue;
-      pr.add(stem(a) + ' ' + stem(b));
+      if (toks[k + 1].brk || STOPWORDS.has(a) || FOREIGN.has(a) || FOREIGN.has(b) || a.includes('-') || b.includes('-')) continue;
+      if (!STOPWORDS.has(b)) pr.add(stem(a) + ' ' + stem(b));
+      const c = toks[k + 2]?.w;                      // "Pride and Prejudice": "pride" is next to "prejudice" too
+      if ((b === 'and' || b === 'of') && c && !toks[k + 2].brk && !STOPWORDS.has(c) && !FOREIGN.has(c)) pr.add(stem(a) + ' ' + stem(c));
     }
     for (const x of pr) pairs.set(x, (pairs.get(x) || 0) + 1);
     if (i % YIELD_EVERY === YIELD_EVERY - 1) yield { phase: 'reading', progress: (i + 1) / N * 0.7 };
@@ -175,11 +179,12 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   // 2. The phrases that could be a tag: in enough notes but not nearly all, a topic word and not a filler.
   const dw = new Set(deckWords.map(w => stem(w)));
   const cand = [];
-  const followedBy = new Map(), precededBy = new Map();      // word → the most notes in which one other word comes straight after it / before it
+  const followedBy = new Map(), precededBy = new Map(), precededAll = new Map();      // word → the most notes in which one other word comes straight after it / before it
   for (const [x, df] of pairs) {
     const sp = x.indexOf(' '), a = x.slice(0, sp), b = x.slice(sp + 1);
     if (df > (followedBy.get(a) || 0)) followedBy.set(a, df);
     if (df > (precededBy.get(b) || 0)) precededBy.set(b, df);
+    precededAll.set(b, (precededAll.get(b) || 0) + df);
   }
   let seen = 0;
   for (const [key, e] of counts) {
@@ -252,36 +257,11 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   if (scored.length < 3) return none;
   scored.sort((a, b) => b.score - a.score || (a.key < b.key ? -1 : 1));
 
-  // 3. Pick the best, one at a time, leaving out what says the same as a tag already picked.
-  const picked = [], covered = new Uint8Array(N);
-  let coveredN = 0, step = 0;
-  for (const c of scored) {
-    if (++step % 200 === 0) yield { phase: 'choosing', progress: 0.9 };
-    if (picked.length >= max) break;
-    if (c.score < scored[0].score * MIN_SCORE_SHARE) break;
-    let dup = false;
-    for (const p of picked) {
-      if (derives(c.key, p.key)) { p.docs = union(p.docs, c.docs); p.aliases.push(c.label); dup = true; break; }      // "bonding" joins "bond"
-      const both = overlap(c.docs, p.docs);
-      if (both / (c.docs.length + p.docs.length - both) > MAX_JACCARD) { dup = true; break; }
-      // a word of a picked phrase that is nearly always in it (or the other way round) is an alias of it
-      if ((c.n < p.n && sub(c.key, p.key) || c.n > p.n && sub(p.key, c.key)) && both / Math.min(c.docs.length, p.docs.length) >= 0.8) { dup = true; break; }
-      if (slugTag(c.label) === slugTag(p.label)) { dup = true; break; }
-    }
-    if (dup) continue;
-    let fresh = 0;
-    for (const d of c.docs) if (!covered[d]) fresh++;
-    if (fresh < Math.max(2, N * MIN_NEW)) continue;
-    for (const d of c.docs) if (!covered[d]) { covered[d] = 1; coveredN++; }
-    c.aliases = [];
-    picked.push(c);
-  }
-  if (!picked.length) return none;
-  for (const p of picked) for (const d of p.docs) if (!covered[d]) { covered[d] = 1; coveredN++; }       // (notes that only an alias reached)
-  yield { phase: 'choosing', progress: 0.93 };
-
-  // 4. How sure: do the cards of a tag hang together? Two cards of one topic share other words besides the tag's own ("preload", "afterload");
-  // a broad word ("price", "artery") sits on cards of different topics that share nothing. Measured against two cards of the deck at random.
+  // 3. Decide how sure each tag is, then pick. A tag is sure when it names what the cards are about: the word is on the front of at least half
+  // of them, there are 4 or more, it is not a place, and the cards hang together (two cards of one topic share other words besides the tag's
+  // own, "preload" and "afterload"; a broad word like "price" sits on cards of different topics that share nothing, measured against two cards
+  // of the deck at random). A tag the student already has is sure only if most of its cards carry it already.
+  // Only sure tags count toward coverage, so a broad unticked word ("assets") can't use up the cards of a clear topic ("depreciation").
   const termsOf = new Map();
   const terms = i => {
     let t = termsOf.get(i);
@@ -301,26 +281,78 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   const meanSim = (list, skip) => { let s = 0, c = 0; for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { s += sim(list[a], list[b], skip); c++; } return c ? s / c : 0; };
   const base = meanSim(pick(Array.from({ length: N }, (_, i) => i), BASE_NOTES), new Set()) || 0.01;
   const have = new Set([...existingTags].map(t => normTag(t)));
+  const tagged = notes.map(n => new Set(n.tags || []));
+  const judge = c => {
+    c.name = slugTag(c.label);
+    c.frontShare = Math.min(1, c.front / c.docs.length);
+    c.cohesion = null; c.sure = false;
+    const place = c.n === 1 && c.key.split(' ').some(w => PLACES.has(w));
+    if (place || c.docs.length < MIN_SURE_NOTES || c.frontShare < MIN_FRONT) return;
+    if (have.has(c.name) && c.docs.filter(d => tagged[d].has(c.name)).length < c.docs.length / 2) return;
+    const own = new Set(c.key.split(' '));
+    c.cohesion = meanSim(pick(c.docs, PAIRS_FROM), own) / base;
+    // On nearly every front is enough without the cohesion, unless it is the end of many different compounds ("demand curve", "supply curve",
+    // "water cycle", "carbon cycle"): then it names no one topic.
+    const df = c.docs.length, key = c.key;
+    const compoundEnd = c.n === 1 && (precededAll.get(key) || 0) >= df * 0.75 && (precededBy.get(key) || 0) <= df * 0.5;
+    c.sure = c.cohesion >= MIN_COHESION || (c.frontShare >= 0.8 && !compoundEnd);
+  };
+  const similar = (c, picked) => {
+    for (const p of picked) {
+      if (derives(c.key, p.key)) { p.docs = union(p.docs, c.docs); p.aliases.push(c.label); return true; }      // "bonding" joins "bond"
+      const both = overlap(c.docs, p.docs);
+      if (both / (c.docs.length + p.docs.length - both) > MAX_JACCARD) return true;
+      // a word of a picked phrase that is nearly always in it (or the other way round) is an alias of it
+      if ((c.n < p.n && sub(c.key, p.key) || c.n > p.n && sub(p.key, c.key)) && both / Math.min(c.docs.length, p.docs.length) >= 0.8) return true;
+      if (slugTag(c.label) === slugTag(p.label)) return true;
+    }
+    return false;
+  };
+  const picked = [], covered = new Uint8Array(N);
+  let coveredN = 0, step = 0;
+  const take = c => {
+    for (const d of c.docs) if (!covered[d]) { covered[d] = 1; coveredN++; }
+    c.aliases = [];
+    picked.push(c);
+  };
+  const floor = scored[0].score * MIN_SCORE_SHARE;
+  const rest = [];
+  for (const c of scored) {                                       // the sure tags first
+    if (++step % 100 === 0) yield { phase: 'choosing', progress: 0.9 };
+    if (picked.length >= max) break;
+    if (c.score < floor) break;
+    if (similar(c, picked)) continue;
+    judge(c);
+    if (!c.sure) { rest.push(c); continue; }
+    let fresh = 0;
+    for (const d of c.docs) if (!covered[d]) fresh++;
+    if (fresh < Math.max(2, N * MIN_NEW)) continue;
+    take(c);
+  }
+  const nSure = picked.length;
+  for (const c of rest) {                                         // then the others, for the cards no sure tag reached
+    if (picked.length >= max) break;
+    if (similar(c, picked)) continue;
+    let fresh = 0;
+    for (const d of c.docs) if (!covered[d]) fresh++;
+    if (fresh < Math.max(2, N * MIN_NEW)) continue;
+    take(c);
+  }
+  if (!picked.length) return none;
+  yield { phase: 'choosing', progress: 0.93 };
   const tags = picked.map(p => {
-    const name = slugTag(p.label);
     const ns = p.docs.map(i => notes[i]);
-    const own = new Set(p.key.split(' '));
-    for (const a of p.aliases) for (const w of a.toLowerCase().split(/[\s-]+/)) own.add(stem(w));
-    const cohesion = meanSim(pick(p.docs, PAIRS_FROM), own) / base;
-    const frontShare = Math.min(1, p.front / p.docs.length);
-    const place = p.key.split(' ').some(w => PLACES.has(w)) && p.n === 1;
     return {
-      key: p.key, name, label: p.label, aliases: p.aliases,
+      key: p.key, name: p.name, label: p.label, aliases: p.aliases,
       noteIds: ns.map(n => n.id), cardIds: ns.flatMap(n => n.cardIds), count: ns.reduce((t, n) => t + n.cardIds.length, 0),
       sample: ns.slice(0, 2).map(n => n.front.replace(/\s+/g, ' ').slice(0, 80)),
-      exists: have.has(name), cohesion: Math.round(cohesion * 10) / 10, front: Math.round(frontShare * 100) / 100,
-      sure: !place && ns.length >= MIN_SURE_NOTES && frontShare >= MIN_FRONT && (cohesion >= MIN_COHESION || frontShare >= 0.8)
+      exists: have.has(p.name), cohesion: p.cohesion == null ? null : Math.round(p.cohesion * 10) / 10, front: Math.round(p.frontShare * 100) / 100, sure: p.sure
     };
   });
-  tags.sort((a, b) => (b.sure ? 1 : 0) - (a.sure ? 1 : 0));          // (stable: the better score first within each kind)
+  const others = tags.slice(nSure).sort((a, b) => b.noteIds.length - a.noteIds.length);       // (the biggest topics first)
+  tags.splice(nSure, tags.length, ...others);
   yield { phase: 'choosing', progress: 1 };
-  const sure = tags.filter(t => t.sure).length;
-  return { tags, ...(sure ? {} : { reason: 'none' }), stats: { notes: N, covered: coveredN, candidates: scored.length, sure } };
+  return { tags, ...(nSure ? {} : { reason: 'none' }), stats: { notes: N, covered: coveredN, candidates: scored.length, sure: nSure } };
 }
 
 export function autotag(input) {

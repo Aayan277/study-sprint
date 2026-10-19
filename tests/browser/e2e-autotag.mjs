@@ -65,7 +65,7 @@ ok(workers >= 1, 'the reading ran in a worker (' + workers + ')');
 const sureRows = await p.locator('.tag-sugs li[data-sure="1"]').count(), lessRows = await p.locator('.tag-sugs li[data-sure="0"]').count();
 ok(sureRows >= 2 && lessRows >= 1, `${sureRows} sure tags and ${lessRows} less sure ones`);
 ok(await p.locator('.tag-sugs li[data-sure="1"] .pick:checked').count() === sureRows && await p.locator('.tag-sugs li[data-sure="0"] .pick:checked').count() === 0, 'the sure ones are ticked and the less sure ones are not');
-ok((await p.textContent('#atLess')) === 'Less sure' && await p.evaluate(() => { const h = document.getElementById('atLess'), l = document.querySelector('li[data-sure="1"]'); return !!(l.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'a "Less sure" heading comes after the sure ones');
+ok((await p.textContent('#atLess')) === 'Other possible tags' && await p.evaluate(() => { const h = document.getElementById('atLess'), l = document.querySelector('li[data-sure="1"]'); return !!(l.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'an "Other possible tags" heading comes after the sure ones');
 const names = await p.$$eval('.tag-sugs .tag-name', i => i.map(x => x.value));
 console.log('   tags:', names.join(', '));
 ok(names.every(n => /^[\p{L}-]+$/u.test(n) && n.length >= 4), 'every name is a clean word or phrase');
@@ -213,7 +213,7 @@ await p.evaluate(async cards => { const db = await import('./js/db.js'); await d
 await p.goto('http://localhost:8123/#/deck/geo'); await p.waitForSelector('.crow');
 await p.click('#deckMore'); await p.click('#autoTag');
 await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
-ok((await p.textContent('#atBody')).startsWith('No clear topics found') && await p.isVisible('#atLess'), 'no sure tag: the "No clear topics" message, and the less sure ones below');
+ok((await p.textContent('#atBody')).startsWith('No tag stood out enough') && await p.isVisible('#atLess'), 'no sure tag: "No tag stood out enough to tick", and the other possible tags below');
 ok(await p.locator('.tag-sugs .pick:checked').count() === 0 && await p.isDisabled('#atAdd'), 'none is ticked, so Add is off');
 await p.keyboard.press('Escape');
 await p.goto('http://localhost:8123/#/deck/tiny'); await p.waitForSelector('.crow');

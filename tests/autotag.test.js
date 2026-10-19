@@ -251,7 +251,8 @@ test('a plural and its singular are one tag', () => {
 // ---------- quality: what is ticked to begin with ----------
 
 const ALL = ['biology-mixed', 'pharmacology', 'geography', 'french-vocab', 'cardiovascular', 'spanish-vocab-deck', 'computer-science', 'geology', 'german-vocab-notes',
-  'review-anatomy', 'review-chemistry', 'review-econ', 'review-german', 'review-history', 'review-psych'];
+  'review-anatomy', 'review-chemistry', 'review-econ', 'review-german', 'review-history', 'review-psych',
+  'review2-acct', 'review2-englit', 'review2-messy', 'review2-micro', 'review2-physics', 'review2-spanish'];
 const RUNS = Object.fromEntries(ALL.map(n => [n, run(deck(n))]));
 
 test('every deck: the tags, ticked (sure) first, then the less sure ones (printed so a run shows them)', () => {
@@ -309,4 +310,41 @@ test('what is ticked to begin with is almost never junk: every ticked tag has 4 
   for (const [name, r] of Object.entries(RUNS)) for (const t of r.tags.filter(x => x.sure)) { ticked++; assert.ok(t.noteIds.length >= 4 && t.front >= 0.5, `${name}: ${t.name}`); }
   console.log('ticked tags over all decks:', ticked);
   assert.ok(ticked >= 8, 'some tags are still sure: ' + ticked);
+});
+
+test('a clear topic is not lost to broad unticked words that cover its cards (depreciation), and a foreign word is not a modifier (pretérito)', () => {
+  const acct = RUNS['review2-acct'];
+  assert.ok(acct.tags.find(t => t.name === 'depreciation')?.sure, 'depreciation is ticked: ' + acct.tags.map(t => t.name));
+  const es = RUNS['review2-spanish'];
+  assert.ok(es.tags.some(t => /pret[eé]rito/.test(t.name)), 'pretérito is a tag: ' + es.tags.map(t => t.name));
+});
+
+test('a word of a title is not a topic ("pride" in "Pride and Prejudice"); big back-only topics come first among the unticked', () => {
+  const lit = RUNS['review2-englit'];
+  assert.ok(!lit.tags.some(t => t.name === 'pride' && t.sure), 'pride is not ticked');
+  const less = lit.tags.filter(t => !t.sure).map(t => t.noteIds.length);
+  assert.deepEqual(less, [...less].sort((a, b) => b - a), 'unticked tags are sorted by size');
+  assert.ok(!lit.tags.some(t => t.sure && ['theme', 'character', 'moral', 'quote'].includes(t.name)));
+});
+
+test('bacteria and bacterial are one tag', () => {
+  assert.ok(derives('bacteria', 'bacterial'));
+  const m = RUNS['review2-micro'];
+  assert.equal(m.tags.filter(t => /^bacteri/.test(t.name)).length, 1, m.tags.map(t => t.name).join());
+});
+
+test('a tag the student already has starts unticked unless most of its cards already carry it', () => {
+  const d = deck('review2-messy');
+  const withTag = (share) => {
+    const cards = structuredClone(d.cards);
+    for (const c of cards) c.tags = (c.tags || []).filter(t => t !== 'energy');
+    const notes0 = notesOf(cards), en = autotag({ notes: notes0, deckWords: [] }).tags.find(t => t.name === 'energy');
+    if (!en) return null;
+    const ids = new Set(en.cardIds.slice(0, Math.ceil(en.cardIds.length * share)));
+    for (const c of cards) if (ids.has(c.id)) c.tags = [...(c.tags || []), 'energy'];
+    return autotag({ notes: notesOf(cards), deckWords: [], existingTags: ['energy'] }).tags.find(t => t.name === 'energy');
+  };
+  const few = withTag(0.1), most = withTag(1);
+  assert.ok(few && few.exists && !few.sure, 'few cards have it: unticked');
+  assert.ok(most && most.exists && most.sure, 'all cards have it: ticked');
 });

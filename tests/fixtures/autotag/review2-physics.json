@@ -1,0 +1,401 @@
+{
+ "name": "PHYS 1A Midterm 2",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Newton's first law",
+   "back": "An object stays at rest or moves at constant velocity unless a net force acts on it (inertia)",
+   "tags": []
+  },
+  {
+   "id": "c2",
+   "front": "Newton's second law",
+   "back": "F_net = ma; net force equals mass times acceleration",
+   "tags": []
+  },
+  {
+   "id": "c3",
+   "front": "Newton's third law",
+   "back": "Every force has an equal and opposite reaction force acting on a different object",
+   "tags": []
+  },
+  {
+   "id": "c4",
+   "front": "What is inertia?",
+   "back": "Tendency of an object to resist changes in its motion; depends on mass",
+   "tags": []
+  },
+  {
+   "id": "c5",
+   "front": "Units of force",
+   "back": "Newton (N) = kg·m/s²",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "Weight vs mass",
+   "back": "Mass is amount of matter (kg); weight is gravitational force W = mg (N)",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "Normal force",
+   "back": "Contact force perpendicular to a surface",
+   "tags": []
+  },
+  {
+   "id": "c8",
+   "front": "Static friction formula",
+   "back": "f_s ≤ μ_s N",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "Kinetic friction formula",
+   "back": "f_k = μ_k N, opposes sliding motion",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "Why is static friction usually larger than kinetic friction?",
+   "back": "Surfaces interlock more when not moving; μ_s > μ_k",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "Free body diagram",
+   "back": "Sketch showing all forces acting on one object as arrows",
+   "tags": []
+  },
+  {
+   "id": "c12",
+   "front": "Tension in a rope",
+   "back": "Pulling force transmitted through a string, same throughout a massless rope",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "Acceleration on a frictionless incline",
+   "back": "a = g sin θ",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "Centripetal acceleration",
+   "back": "a = v²/r directed toward the center of the circle",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "Centripetal force",
+   "back": "Net inward force needed for circular motion, F = mv²/r",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "Kinetic energy formula",
+   "back": "KE = ½mv²",
+   "tags": []
+  },
+  {
+   "id": "c17",
+   "front": "Gravitational potential energy",
+   "back": "PE = mgh",
+   "tags": []
+  },
+  {
+   "id": "c18",
+   "front": "Work done by a constant force",
+   "back": "W = Fd cos θ",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "Work-energy theorem",
+   "back": "Net work done on an object equals its change in kinetic energy",
+   "tags": []
+  },
+  {
+   "id": "c20",
+   "front": "Conservation of mechanical energy",
+   "back": "KE + PE stays constant when only conservative forces act",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "Power",
+   "back": "Rate of doing work, P = W/t, measured in watts",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "Elastic potential energy of a spring",
+   "back": "PE = ½kx²",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "Hooke's law",
+   "back": "F = -kx; spring force is proportional to displacement",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "Momentum",
+   "back": "p = mv, a vector quantity",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "Impulse",
+   "back": "J = FΔt = change in momentum",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "Conservation of momentum",
+   "back": "Total momentum of an isolated system is constant",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "Elastic collision",
+   "back": "Both momentum and kinetic energy are conserved",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "Inelastic collision",
+   "back": "Momentum conserved but kinetic energy is not; objects may stick together",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "Torque",
+   "back": "τ = rF sin θ, the rotational effect of a force",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "Moment of inertia",
+   "back": "Rotational analog of mass, I = Σmr²",
+   "tags": []
+  },
+  {
+   "id": "c31",
+   "front": "Projectile motion horizontal velocity",
+   "back": "Constant (no horizontal acceleration ignoring air resistance)",
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "Projectile range on level ground",
+   "back": "R = v₀² sin 2θ / g, maximum at 45°",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "Free fall acceleration",
+   "back": "g = 9.8 m/s² downward",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "What is a wave?",
+   "back": "A disturbance that transfers energy without transferring matter",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "Transverse wave",
+   "back": "Particles oscillate perpendicular to the direction of wave travel (e.g. light, string)",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "Longitudinal wave",
+   "back": "Particles oscillate parallel to wave travel (e.g. sound)",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "Wave speed equation",
+   "back": "v = fλ",
+   "tags": []
+  },
+  {
+   "id": "c38",
+   "front": "Wave frequency",
+   "back": "Number of oscillations per second, measured in hertz",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "Wavelength",
+   "back": "Distance between two consecutive crests",
+   "tags": []
+  },
+  {
+   "id": "c40",
+   "front": "Wave amplitude",
+   "back": "Maximum displacement from equilibrium; relates to energy",
+   "tags": []
+  },
+  {
+   "id": "c41",
+   "front": "Period of a wave",
+   "back": "T = 1/f",
+   "tags": []
+  },
+  {
+   "id": "c42",
+   "front": "Wave interference",
+   "back": "Superposition of two waves; constructive adds, destructive cancels",
+   "tags": []
+  },
+  {
+   "id": "c43",
+   "front": "Standing wave",
+   "back": "Wave pattern with fixed nodes and antinodes formed by reflection and interference",
+   "tags": []
+  },
+  {
+   "id": "c44",
+   "front": "Doppler effect",
+   "back": "Change in observed frequency when the source or observer moves",
+   "tags": []
+  },
+  {
+   "id": "c45",
+   "front": "Resonance",
+   "back": "Large amplitude oscillation when driven at the natural frequency",
+   "tags": []
+  },
+  {
+   "id": "c46",
+   "front": "Speed of sound in air",
+   "back": "About 343 m/s at 20 °C",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "Wave diffraction",
+   "back": "Bending of a wave around obstacles or through openings",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "Simple harmonic motion",
+   "back": "Oscillation where restoring force is proportional to displacement",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "Period of a pendulum",
+   "back": "T = 2π√(L/g)",
+   "tags": []
+  },
+  {
+   "id": "c50",
+   "front": "Electric charge",
+   "back": "Property of matter; measured in coulombs (C)",
+   "tags": []
+  },
+  {
+   "id": "c51",
+   "front": "Coulomb's law",
+   "back": "F = kq₁q₂/r²",
+   "tags": []
+  },
+  {
+   "id": "c52",
+   "front": "Electric field",
+   "back": "Force per unit charge, E = F/q",
+   "tags": []
+  },
+  {
+   "id": "c53",
+   "front": "Electric potential (voltage)",
+   "back": "Energy per unit charge, V = W/q, in volts",
+   "tags": []
+  },
+  {
+   "id": "c54",
+   "front": "Electric current",
+   "back": "Rate of flow of charge, I = Q/t, in amperes",
+   "tags": []
+  },
+  {
+   "id": "c55",
+   "front": "Ohm's law",
+   "back": "V = IR",
+   "tags": []
+  },
+  {
+   "id": "c56",
+   "front": "Resistance of a wire",
+   "back": "R = ρL/A",
+   "tags": []
+  },
+  {
+   "id": "c57",
+   "front": "Resistors in series",
+   "back": "R_total = R₁ + R₂ + …; same current through each",
+   "tags": []
+  },
+  {
+   "id": "c58",
+   "front": "Resistors in parallel",
+   "back": "1/R_total = 1/R₁ + 1/R₂ + …; same voltage across each",
+   "tags": []
+  },
+  {
+   "id": "c59",
+   "front": "Electric power",
+   "back": "P = IV = I²R = V²/R",
+   "tags": []
+  },
+  {
+   "id": "c60",
+   "front": "Kirchhoff's current law",
+   "back": "Current into a junction equals current out of it",
+   "tags": []
+  },
+  {
+   "id": "c61",
+   "front": "Kirchhoff's voltage law",
+   "back": "Sum of voltage changes around a closed loop is zero",
+   "tags": []
+  },
+  {
+   "id": "c62",
+   "front": "Capacitor",
+   "back": "Stores charge, Q = CV",
+   "tags": []
+  },
+  {
+   "id": "c63",
+   "front": "Energy stored in a capacitor",
+   "back": "U = ½CV²",
+   "tags": []
+  },
+  {
+   "id": "c64",
+   "front": "Capacitors in parallel",
+   "back": "C_total = C₁ + C₂ + …",
+   "tags": []
+  },
+  {
+   "id": "c65",
+   "front": "EMF of a battery",
+   "back": "Energy supplied per unit charge by the source",
+   "tags": []
+  },
+  {
+   "id": "c66",
+   "front": "Magnetic force on a moving charge",
+   "back": "F = qvB sin θ",
+   "tags": []
+  }
+ ]
+}
