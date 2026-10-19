@@ -44,6 +44,12 @@ ok(!!(await p.getAttribute('#wnX', 'aria-label')), '(b) the × has a label');
 ok(await p.locator('.inst').count() === 0, '(b) it is not an install card');
 ok(await p.locator('.wn[role=alert], .wn[autofocus]').count() === 0 && await p.evaluate(() => !document.activeElement?.closest('.wn')), '(b) it does not take focus');
 
+// shown once: written the moment it is drawn, so a reload without dismissing does not bring it back
+ok(await seenOf(p) === VERSION, '(b) it counts as seen as soon as it is drawn');
+await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForTimeout(300);
+ok(await p.locator('.wn').count() === 0, '(b) and a reload without dismissing does not show it again');
+await setSeen(p, '4.36'); await p.reload(); await p.waitForSelector('.wn');
+
 // (c) Got it
 await p.click('#wnOk'); await p.waitForSelector('.wn', { state: 'detached' });
 ok(await p.locator('.wn').count() === 0, '(c) Got it removes the card');

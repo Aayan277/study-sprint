@@ -53,6 +53,7 @@ test('NOTES hygiene: newest first, valid and unique versions, short plain lines,
     for (const t of n.items) assert.ok(t.length >= 1 && t.length <= 160 && !t.includes('<'), t);
   });
   const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/const APP_VERSION = '([^']+)'/)[1];
+  // (Once APP_VERSION is bumped, NOTES[0] is that version's entry: it is the newest, and this requires it to be at least the app's version.)
   assert.ok(compareVersions(NOTES[0].version, app) >= 0, `add a NOTES entry for ${app} in js/whats-new.js (items: [] if there is nothing to announce)`);
 });
 test('the recent list skips empty entries', () => {

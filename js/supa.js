@@ -18,10 +18,11 @@ const timedOut = () => new SupaError("The sync server took too long to answer. I
 export const MEDIA_LEFT = 'Couldn’t remove your pictures from the server. Nothing was deleted. Try again.';
 
 export class SupaError extends Error {
-  constructor(message, { status = 0, code = '' } = {}) {
+  constructor(message, { status = 0, code = '', retryAfter = 0 } = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;          // seconds to wait, when the server said ("you can only request this after N seconds")
   }
 }
 
@@ -55,13 +56,17 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   if (!res.ok) {
     // (The server's own refusals, supabase/limits.sql: a person's synced data is full, or the whole project is.)
     const code = (/sync_data_full|sync_server_full|media_left/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
-    throw new SupaError(explain(res.status, code, json?.msg || json?.message || json?.error_description || text), { status: res.status, code });
+    const raw = json?.msg || json?.message || json?.error_description || text;
+    throw new SupaError(explain(res.status, code, raw), { status: res.status, code, retryAfter: Number((/only request this after (\d+) seconds/.exec(raw || '') || [])[1]) || 0 });
   }
   return json;
 }
 
 // Supabase's error codes, in plain words.
 function explain(status, code, raw) {
+  // GoTrue's one-email-a-minute rule says how long is left; that is worth more than the general "too many emails".
+  const wait = /only request this after (\d+) seconds/.exec(raw || '');
+  if (wait) return `Wait ${wait[1]} seconds, then try again.`;
   const known = {
     invalid_credentials: 'Wrong email or password. Check both, or tap Forgot password? below.',
     invalid_grant: 'Wrong email or password. Check both, or tap Forgot password? below.',
@@ -129,6 +134,8 @@ export async function signUp(email, password, { captcha, redirectTo } = {}) {
   if (s) return { session: s };
   // With "Confirm email" on, Supabase answers 200 for an address that already has an account, with a made-up user whose
   // identities list is empty, and sends no email. Say so instead of "Check your email".
+  // (Telling someone that an address already has an account is a deliberate choice: the alternative, "Check your email" with no email ever
+  // coming, leaves a stranger stuck. It does let anyone test whether an address is registered; sign-in and reset answers still don't.)
   const ids = json?.identities ?? json?.user?.identities;
   if (Array.isArray(ids) && ids.length === 0) {
     throw new SupaError(explain(422, 'user_already_exists'), { status: 422, code: 'user_already_exists' });

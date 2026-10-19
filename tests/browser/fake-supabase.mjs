@@ -13,6 +13,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   let seq = 0, n = 0, down = false;
   const log = [];
   const recoveries = [];
+  const lastEmail = new Map();   // email → when a confirmation was last sent (GoTrue allows one a minute per address on /resend)
   const confirmations = [];     // sign-up confirmation emails sent: { email, redirectTo }
   const captchaTokens = [];     // tokens that came with sign-ups, sign-ins and resets
   const limits = new Map();     // user id → media limit (quotas table); 180 MB when missing
@@ -65,6 +66,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       if (!strong(body.password)) return json(route, 422, { error_code: 'weak_password', msg: 'weak', weak_password: { reasons: ['length', 'characters'] } });
       users.set(body.email, { id: `user-${users.size + 1}`, password: body.password, confirmed: !confirmEmail });
       if (confirmEmail) {
+        lastEmail.set(body.email, Date.now());
         confirmations.push({ email: body.email, redirectTo: url.searchParams.get('redirect_to') });
         return json(route, 200, { id: users.get(body.email).id, email: body.email, identities: [{ id: users.get(body.email).id, provider: 'email' }], confirmation_sent_at: new Date().toISOString() });
       }
@@ -73,7 +75,12 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     if (url.pathname === '/auth/v1/resend') {
       if (needsCaptcha(body)) return json(route, 400, { error_code: 'captcha_failed', msg: 'captcha verification process failed' });
       if (rateLimited) return json(route, 429, { error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' });
-      if (confirmEmail && users.get(body.email)?.confirmed === false) confirmations.push({ email: body.email, redirectTo: url.searchParams.get('redirect_to'), resent: true });
+      if (confirmEmail && users.get(body.email)?.confirmed === false) {
+        const left = 60 - Math.floor((Date.now() - (lastEmail.get(body.email) || 0)) / 1000);
+        if (left > 0) return json(route, 429, { error_code: 'over_email_send_rate_limit', msg: `For security purposes, you can only request this after ${left} seconds.` });
+        lastEmail.set(body.email, Date.now());
+        confirmations.push({ email: body.email, redirectTo: url.searchParams.get('redirect_to'), resent: true });
+      }
       return json(route, 200, {});            // (like the real project: the same answer whether or not there is anything to send)
     }
     if (url.pathname === '/auth/v1/token') {
@@ -217,6 +224,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     setMediaFull(v) { mediaFull = v; },
     setRecordMax(n) { recordMax = n; },
     setRateLimited(v) { rateLimited = v; },
+    ageEmails() { lastEmail.clear(); },          // a minute has passed since the last confirmation email
     // The person opened the link in the confirmation email: confirmed, and (as the real link does) sent back to the app.
     confirm(email) { users.get(email).confirmed = true; },
     confirmLink(email, base) { users.get(email).confirmed = true; const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=signup`; },

@@ -745,7 +745,7 @@ async function drawSync() {
         <button class="btn ghost small" type="button" id="pendResend">Send the link again</button>`;
       wireResend($('pendResend'), email, $('syncErr'));
     };
-    if (wait && Date.now() - wait.at < PENDING_DAYS * 864e5 && wait.email) { $('syncEmail').value = wait.email; fillPending(wait.email); }
+    if (wait && Date.now() - wait.at < PENDING_DAYS * 864e5 && wait.email) { $('syncEmail').value = wait.email; if (!wait.confirmed) fillPending(wait.email); }
     else if (wait) db.setSetting('pendingSignup', null);
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
@@ -765,6 +765,7 @@ async function drawSync() {
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
           box.querySelectorAll('button').forEach(b => { b.disabled = false; });
           await db.setSetting('pendingSignup', { email, at: Date.now() });
+          resendRestUntil = Date.now() + 60000;          // an email was just sent: the server allows the next one in a minute
           fillPending(email);
           openSheet(`
             <h2 id="sheetTitle">Check your email</h2>
@@ -772,7 +773,13 @@ async function drawSync() {
             <p class="note">No email after a few minutes? Look in your spam folder, or ask for it again.</p>
             <div class="sheet-actions"><button class="btn ghost" type="button" id="pendResend2">Send the link again</button><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
           $('pendOk').addEventListener('click', closeSheet);
-          wireResend($('pendResend2'), email, null);
+          // The sheet is modal, and an interactive "are you a person?" box can't be solved behind it: close the sheet and ask from the form's button.
+          $('pendResend2').classList.add('resend-link');
+          restResend();
+          $('pendResend2').addEventListener('click', () => {
+            closeSheet();
+            setTimeout(() => { const b = $('pendResend'); b?.scrollIntoView({ block: 'center' }); b?.click(); }, 0);
+          });
           return;
         }
         db.setSetting('pendingSignup', null);
@@ -882,6 +889,7 @@ function wireResend(btn, email, errEl) {
       toast('Sent. Check your inbox and spam folder.');
     } catch (e) {
       const text = authMessage(e, { online: navigator.onLine !== false });
+      if (e.retryAfter) resendRestUntil = Date.now() + e.retryAfter * 1000;
       if (errEl?.isConnected) showFieldError(null, errEl, text); else toast(text);
     }
     restResend();
@@ -1206,7 +1214,7 @@ function confirmDeleteAccount() {
 async function wipeThisDevice() {
   clearStashedDraft();            // unsaved card edits kept from leaving a screen
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
-  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime } = settings;
+  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = settings;
   await db.resetAll();
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
@@ -1218,7 +1226,8 @@ async function wipeThisDevice() {
   await db.setSetting('singleKeys', singleKeys !== false);
   await db.setSetting('appBadge', appBadge === true);
   await db.setSetting('reminderTime', reminderTime || '19:00');
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime };
+  if (whatsNewSeen) await db.setSetting('whatsNewSeen', whatsNewSeen);          // this device has seen those notes, wiped or not
+  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen: whatsNewSeen ?? null };
   await markOnboarded();          // someone resetting has seen the first-run start
   await seedSampleDeck();
   refreshBadgeNow();              // the number on the app icon follows the fresh data
@@ -1294,10 +1303,20 @@ async function checkFirstRun() {
   if (settings.onboarded) return false;
   // Upgrades: anyone who opened the app before has `seeded` set (the old first-run flag) or has data.
   const hasData = settings.seeded || (await db.getDecks()).length || (await db.getAll('cards')).length || (await db.getAll('reviewLog')).length;
-  if (hasData) { await markOnboarded(); return false; }
-  if (skipFlag()) { await seedSampleDeck(); await markOnboarded(); await markWhatsNewSeen(); return false; }
+  if (hasData) { await pinOldTheme(true); await markOnboarded(); return false; }
+  // A new install saves its theme now (auto: it follows the device), so what it looks like never depends on a default that may change.
+  if (skipFlag()) { await db.setSetting('theme', settings.theme); await seedSampleDeck(); await markOnboarded(); await markWhatsNewSeen(); return false; }
+  await db.setSetting('theme', settings.theme);
   await markWhatsNewSeen();            // a brand-new install has no "what's new": everything is new to it
   return true;
+}
+// New installs follow the device's light or dark setting (auto), but an install from before that change was dark without ever saving a choice:
+// it stays dark. (getSettings fills in defaults, so the raw store is asked whether a theme was ever saved.)
+async function pinOldTheme(known = false) {
+  if (await db.get('settings', 'theme') !== undefined) return;
+  if (!known && !(settings.onboarded || settings.seeded)) return;
+  settings.theme = { ...settings.theme, mode: 'dark' };
+  await db.setSetting('theme', settings.theme);
 }
 async function markWhatsNewSeen() {
   settings.whatsNewSeen = APP_VERSION;
@@ -1477,6 +1496,9 @@ async function showResetLink(link) {
   if (link.error) { forget(); toast(link.error); return; }
   if (link.confirmed) {
     forget();
+    // The address is confirmed: keep it for the Sync form's email box, but it is no longer "waiting".
+    const wait = (await db.getSettings()).pendingSignup;
+    if (wait) await db.setSetting('pendingSignup', { ...wait, confirmed: true });
     openSheet(`
       <h2 id="sheetTitle">Email confirmed</h2>
       <p>Your account is ready. Sign in with your email and password to start syncing.</p>
@@ -1568,6 +1590,7 @@ async function start() {
     $('screen').innerHTML = `<div class="empty"><b>Couldn't open storage.</b><br>${esc(err.message)}<br>Private browsing can block it. Try a normal tab.</div>`;
     return;
   }
+  await pinOldTheme();
   settings.theme = applyTheme(settings.theme);
   applyCardAlign(settings.cardAlign);
   fx.configure(settings); configureShortcuts(settings);

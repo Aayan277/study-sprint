@@ -2214,7 +2214,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-set svg,.side-help svg{width:16px;height:16px;flex:none}
   .side-set::after{content:"";display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--exam);box-shadow:0 0 0 2px var(--bg)}
   html[data-rail="on"] .side-set.warn::after{display:block}
-  .side-set:hover,.side-set[aria-current="page"],.side-help:hover,.side-help[aria-current="page"]{background:var(--surface-2);color:var(--text)}
+  .side-set:hover,.side-set[aria-current="page"],.side-help:hover{background:var(--surface-2);color:var(--text)}
   .side-help{width:32px;padding:0;justify-content:center}
   .side-help span{display:none}
   .side-ver{margin-left:2px;font:500 var(--fs-2xs)/1 var(--f-num);color:var(--text-3)}

@@ -36,6 +36,7 @@ export function notesToShow({ seen, version, notes = NOTES }) {
 }
 
 let current = null;
+let showing = null;      // { version, items } once the card was drawn: it stays for the rest of this page session, even if Today is redrawn
 export const initWhatsNew = ({ version }) => { current = version; };
 
 const skipped = () => { try { return localStorage.getItem('study-sprint-skip-whatsnew') === '1'; } catch { return false; } };
@@ -44,9 +45,18 @@ const skipped = () => { try { return localStorage.getItem('study-sprint-skip-wha
 export async function drawWhatsNew(slot) {
   if (!slot?.isConnected || !current || skipped()) return false;
   const version = current;
-  const shown = notesToShow({ seen: (await db.getSettings()).whatsNewSeen, version });
-  if (!slot.isConnected) return false;
+  let shown = showing;
+  if (!shown) {
+    shown = notesToShow({ seen: (await db.getSettings()).whatsNewSeen, version });
+    if (!slot.isConnected) return false;
+    if (shown) {
+      // Seen the moment it is drawn, so it can't come back on the next start (and block the install card for ever); this page session still keeps it up.
+      showing = shown;
+      await db.setSetting('whatsNewSeen', version);
+    }
+  }
   if (!shown) { slot.innerHTML = ''; return false; }
+  if (!slot.isConnected) return false;
   slot.innerHTML = `<section class="wn" aria-labelledby="wnTitle">
     <span class="wn-icon" aria-hidden="true">${icon('bolt')}</span>
     <div class="wn-txt"><h2 id="wnTitle">New in Study Sprint ${esc(shown.version)}</h2>
@@ -54,6 +64,7 @@ export async function drawWhatsNew(slot) {
       <button class="btn primary small" type="button" id="wnOk">Got it</button></div>
     <button class="inst-x" type="button" id="wnX" aria-label="Dismiss what’s new">${icon('x')}</button></section>`;
   const done = async () => {
+    showing = null;
     await db.setSetting('whatsNewSeen', version);
     slot.innerHTML = '';
     // Focus would otherwise be lost with the card: the Start button, or the screen's heading.

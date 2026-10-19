@@ -113,6 +113,7 @@ async function signedIn(session, { onConflict } = {}) {
   }
   const { syncState } = await db.getSettings();
   await db.setSetting('syncAuth', session);
+  await db.setSetting('pendingSignup', null);          // signed in by any route: nothing is waiting for an email link any more
   // A different account than last time on this device (or the first): start from the beginning, so
   // everything here is sent and everything on the server is merged in.
   if (!syncState || syncState.userId !== session.user.id) {

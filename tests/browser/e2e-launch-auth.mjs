@@ -83,20 +83,33 @@ ok(s.pw === false, 'Forgot password clears an old password error');
   await R.goto(APP + '#/settings/sync'); await R.waitForSelector('#syncEmail');
   await R.fill('#syncEmail', 'wait@example.com'); await R.fill('#syncPw', 'secret123'); await R.click('#syncCreate'); await R.waitForSelector('#pendResend2');
   ok(f4.confirmations.length === 1, 'sign-up sent one email');
-  await R.click('#pendResend2');
-  await R.waitForFunction(() => document.querySelector('#pendResend2')?.textContent === 'Sent ✓');
-  ok(f4.confirmations.length === 2 && f4.log.some(l => l.startsWith('POST /auth/v1/resend')), 'Send the link again in the sheet sends a second email');
-  ok(await R.isDisabled('#pendResend2'), 'and the button rests for a minute (Sent ✓)');
+  ok(await R.isDisabled('#pendResend2') && (await R.textContent('#pendResend2')) === 'Sent ✓', 'the sheet button rests right after sign-up (the server allows one email a minute)');
   await R.click('#pendOk');
   ok(/Waiting for you to confirm\s*wait@example.com/.test((await R.textContent('#pendBox')).replace(/\s+/g, ' ')) && await R.isVisible('#pendResend'), 'the form now says it is waiting, with Send the link again');
   ok(await R.isDisabled('#pendResend'), 'the button in the form is resting too');
-  await R.reload(); await R.waitForSelector('#syncEmail');
-  ok(await R.inputValue('#syncEmail') === 'wait@example.com' && await R.isVisible('#pendBox'), 'after a reload the email is filled in and the waiting note is back');
-  f4.setRateLimited(true);
+  // too soon: the server's own wait is shown and the button rests for that long
   await R.evaluate(() => { document.getElementById('pendResend').disabled = false; });
   await R.click('#pendResend');
   await R.waitForFunction(() => !document.querySelector('#syncErr')?.hidden);
-  ok(/Too many emails/.test(await R.textContent('#syncErr')), 'asking again too soon shows the rate-limit words: ' + await R.textContent('#syncErr'));
+  ok(/^Wait \d+ seconds, then try again\.$/.test(await R.textContent('#syncErr')), 'asking again too soon: "Wait N seconds": ' + await R.textContent('#syncErr'));
+  ok(await R.isDisabled('#pendResend'), 'and the button rests');
+  // a minute later: the sheet button closes the sheet and asks from the form (an interactive captcha could not be solved behind the sheet)
+  f4.ageEmails();
+  await R.goto(APP + '#/settings/sync'); await R.waitForSelector('#syncEmail');
+  await R.fill('#syncPw', 'secret123'); await R.click('#syncCreate'); await R.waitForSelector('#pendResend2');
+  ok(f4.confirmations.length === 2, 'Create account again sends it again');
+  f4.ageEmails();
+  await R.evaluate(() => { for (const id of ['pendResend2', 'pendResend']) document.getElementById(id).disabled = false; });
+  await R.click('#pendResend2');
+  await R.waitForFunction(() => !document.querySelector('#sheet[open]'));
+  await R.waitForFunction(() => document.querySelector('#pendResend')?.textContent === 'Sent ✓');
+  ok(f4.confirmations.length === 3 && f4.confirmations.at(-1).resent, 'the sheet button closes the sheet and the form button sends the email');
+  await R.reload(); await R.waitForSelector('#syncEmail');
+  ok(await R.inputValue('#syncEmail') === 'wait@example.com' && await R.isVisible('#pendBox'), 'after a reload the email is filled in and the waiting note is back');
+  f4.ageEmails(); f4.setRateLimited(true);
+  await R.click('#pendResend');
+  await R.waitForFunction(() => !document.querySelector('#syncErr')?.hidden);
+  ok(/Too many emails/.test(await R.textContent('#syncErr')), 'a general rate limit shows the rate-limit words: ' + await R.textContent('#syncErr'));
   f4.setRateLimited(false);
   const stored = await R.evaluate(async () => (await (await import('./js/db.js')).getSettings()).pendingSignup);
   ok(stored?.email === 'wait@example.com', 'the pending sign-up is stored on this device');
@@ -123,6 +136,7 @@ ok(/different browser/.test(await B.textContent('#sheet')), 'and it mentions the
 await B.click('#cfSignIn');
 await B.waitForSelector('#syncEmail');
 ok(new URL(B.url()).hash === '#/settings/sync', 'Sign in goes to the Sync form: ' + B.url());
+ok(await B.isHidden('#pendBox') && await B.inputValue('#syncEmail') === 'new@example.com', 'after Email confirmed the form no longer says "Waiting for you to confirm", and the email is filled in');
 await c2.close();
 
 // ---- Add this 1 deck (grammar) ----

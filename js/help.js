@@ -19,13 +19,13 @@ export const SECTIONS = [
       </ul>
       <p>Each button shows when the card will come back. Be honest: pressing Good on a card you forgot just means you’ll forget it again before the exam.</p>`],
     ['scheduling', 'How does the app decide what I review?', `
-      <p>Study Sprint uses FSRS, the same scheduling method as Anki. It estimates how well you know each card and brings it back just before you’d be likely to forget it. New cards come back a few times on the first day. Each time you remember one, the wait grows: days, then weeks, then months. A card you forget starts again with short gaps.</p>
-      <p>By default it aims for a 90% chance that you still remember a card when it comes back (Settings → Study → Target retention). If a course has an exam date, every card in it comes back before the exam.</p>`],
+      <p>Study Sprint uses FSRS, the scheduler Anki also offers. It estimates how well you know each card and brings it back just before you’d be likely to forget it. New cards come back a few times on the first day. Each time you remember one, the wait grows: days, then weeks, then months. A card you forget starts again with short gaps.</p>
+      <p>By default it aims for a 90% chance that you still remember a card when it comes back (Settings → Study → Target retention). If a course has an exam date, cards you might forget come back in the last days before the exam.</p>`],
     ['daily', 'How much should I study each day?', `
       <p>Press <b>Start</b> on Today and keep going until it says <b>All done for today</b>. That’s everything due plus up to 20 new cards (Settings → Study → New cards per day). A new day starts at 4 am, so a late-night session still counts for the day before.</p>
       <p>Lots of new cards today means lots of reviews over the next few days. If Today feels too long, lower New cards per day.</p>`],
     ['missed', 'What if I miss a day?', `
-      <p>Nothing is lost: cards you didn’t review wait for you. One missed day a week is covered by a streak freeze, so a single slip doesn’t end your streak (two missed days in a row still do). Back after a longer break? Today offers to spread the overdue cards over 2 or 3 days (<b>Spread them out</b>).</p>`],
+      <p>Nothing is lost: cards you didn’t review wait for you. One missed day a week (the week runs Monday to Sunday) is covered by a streak freeze, so a single slip doesn’t end your streak (two missed days in a row still do). Back after a longer break? Today offers to spread the overdue cards over 2 or 3 days (<b>Spread them out</b>).</p>`],
     ['play', 'What are Play and Practice test? Do they change my schedule?', `
       <p><b>Play</b> turns a deck into timed game rounds for cramming. By default it’s practice only: it doesn’t change when cards are due, your stats or your streak (to change that, turn on Settings → Study → Count Play answers as reviews). <b>Practice test</b>, on a deck’s page, is a calm mock exam that’s marked at the end.</p>`]
   ] },
@@ -45,7 +45,7 @@ export const SECTIONS = [
     ['device', 'How do I move my cards to a new phone?', `
       <p>Easiest: make an account on the old device (Settings → Sync), then sign in with the same email on the new one. Without an account: Settings → Your data → <b>Export backup</b> on the old device, send the file to the new one, and use <b>Import backup</b> there.</p>`],
     ['email', 'I didn’t get the confirmation or password email.', `
-      <p>Check your spam or junk folder and give it a few minutes. Then ask for it again: tap <b>Send the link again</b> in Settings → Sync, or Create account again with the same email and password. Forgot your password? Type your email in Settings → Sync and tap <b>Forgot password?</b></p>`],
+      <p>Check your spam or junk folder and give it a few minutes. Then ask for it again: tap <b>Send the link again</b> (it appears in Settings → Sync after you create an account here), or Create account again with the same email and password. Forgot your password? Type your email in Settings → Sync and tap <b>Forgot password?</b></p>`],
     ['install', 'How do I install it as an app?', `
       <p><b>iPhone or iPad (Safari):</b> tap Share, then Add to Home Screen. <b>Android (Chrome):</b> tap ⋮, then Install app or Add to Home screen. <b>Computer (Chrome or Edge):</b> click the install icon in the address bar. Installed, it opens full-screen, works offline and keeps your data safer.</p>`],
     ['contact', 'Something isn’t working.', `
