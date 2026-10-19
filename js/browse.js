@@ -854,7 +854,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
 // "Answer by…" for the selected cards: typing, flipping, or the deck's way. The cards are read again first (a sync may have changed
 // them); a cloze or picture note changes all its cards, a reverse partner is left alone (type-in.js setTypeIn).
 function bulkTyping(selected, done) {
-  $('ceConfirm').innerHTML = `<div class="confirm"><p>How should Review ask these ${plural(selected.length, 'card')}?</p><div class="sheet-actions">
+  $('ceConfirm').innerHTML = `<div class="confirm neutral"><p>How should Review ask these ${plural(selected.length, 'card')}?</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button>
     <button class="btn ghost" type="button" data-type-in="">Same as the deck</button>
     <button class="btn ghost" type="button" data-type-in="0">Flipping the card</button>

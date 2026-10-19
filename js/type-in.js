@@ -81,7 +81,7 @@ export function typeNote({ kind = 'basic', value = null, length = 0, structured 
   if (kind === 'occlusion') return 'You type the label of the hidden box. Boxes without a label are flipped.';
   const parts = [];
   if (value === true && length > TYPE_HARD_MAX) parts.push('Too long to type: Review will flip this card.');
-  else if (value === true && length > TYPE_MAX) parts.push(`Long answer: you'll type all ${length} characters. Typing works best for a word or a short phrase.`);
+  else if (value === true && length > TYPE_MAX) parts.push("Long answer: you'll type all of it. Typing works best for a word or a short phrase.");
   else if (value === null && deckDefault && length > TYPE_MAX) parts.push(`The deck only types answers of ${TYPE_MAX} characters or less. Pick Typing the answer to type this one anyway.`);
   if (both) parts.push('Applies to this direction only.');
   return parts.join(' ');

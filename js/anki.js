@@ -100,7 +100,7 @@ function templateUses(fmt) {
   for (const m of String(fmt ?? '').matchAll(/\{\{([^}]*)\}\}/g)) {
     const raw = m[1].trim();
     if (raw.startsWith('/')) continue;
-    out.push({ name: raw.replace(/^[#^]\s*/, '').split(':').pop().trim(), cond: /^[#^]/.test(raw), type: /^type:/i.test(raw) });
+    out.push({ name: raw.replace(/^[#^]\s*/, '').split(':').pop().trim(), cond: /^[#^]/.test(raw), type: /^type:/.test(raw) });      // (Anki matches type: in lower case only)
   }
   return out;
 }
@@ -117,11 +117,33 @@ export function reverseModel(model) {
   const names = (plain.length ? plain : uses).map(u => u.name);
   return names.includes(back) && !names.includes(front);
 }
-// The card types ("ord" numbers) that ask for the answer to be typed: their question side has a {{type:Field}} box, which also
-// covers {{type:cloze:Text}} and {{type:nc:Field}}. A box only on the answer side doesn't count: Anki shows nothing to type.
-export function typedOrds(model) {
-  const out = new Set();
-  (model?.templates || []).forEach((t, i) => { if (/\{\{\s*type:[^}]+\}\}/i.test(String(t?.qfmt ?? ''))) out.add(Number.isInteger(t.ord) ? t.ord : i); });
+// The card types ("ord" numbers) whose question side asks for the typed answer, and where that answer is the one this app keeps: a
+// {{type:Field}} box (also {{type:nc:Field}}) counts only when Field is what becomes the card's back: the second field for card 1
+// (the Back), the first for a reverse card 2 (the Front); for a cloze type, {{type:cloze:<the Text field>}}. A box for another field
+// (say a Reading, when the back is the Meaning) leaves the card as it is. A box only on the answer side doesn't count either.
+// A box inside {{#F}}...{{/F}} counts only when field F has something in it for this note (given as `fields`, the note's field texts);
+// inside {{^F}}...{{/F}} only when it is empty. Without `fields` those conditions are taken as met. "type:" is lower case, as in Anki.
+export function typedOrds(model, fields = null) {
+  const out = new Set(), names = (model?.fields || []).map(f => String(f).trim());
+  const filled = name => {
+    const at = names.indexOf(name);
+    return at < 0 || !fields ? null : String(fields[at] ?? '').replace(/<[^>]*>|&nbsp;/g, '').trim() !== '';
+  };
+  (model?.templates || []).forEach((t, i) => {
+    const ord = Number.isInteger(t?.ord) ? t.ord : i;
+    const want = model.cloze ? names[0] : ord === 0 ? names[1] : ord === 1 ? names[0] : null;
+    const open = [];
+    for (const m of String(t?.qfmt ?? '').matchAll(/\{\{([^}]*)\}\}/g)) {
+      const raw = m[1].trim();
+      if (raw.startsWith('/')) { open.pop(); continue; }
+      if (/^[#^]/.test(raw)) { open.push({ name: raw.slice(1).trim(), not: raw[0] === '^' }); continue; }
+      const parts = raw.split(':').map(x => x.trim());
+      if (parts[0] !== 'type' || parts.length < 2 || want == null) continue;
+      const clozeBox = parts[1] === 'cloze';
+      if (clozeBox !== !!model.cloze || parts[parts.length - 1] !== want) continue;
+      if (open.every(c => { const f = filled(c.name); return f === null || f !== c.not; })) out.add(ord);
+    }
+  });
   return out;
 }
 // A field the card types only use as a condition ("Add Reverse" in the optional-reverse type): a switch, not content.
@@ -320,7 +342,7 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
         const { front, back } = clozeCard(text[0], n);
         rows.push([front, back]); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
         clozes.push({ noteKey, n, text: text[0] }); occlusions.push(null); noteExtras.push(extra); guids.push(note.guid || null); sounds.push(noteSounds);
-        if (typedOrds(model).size > 0) typeAt.add(rows.length - 1);
+        if (typedOrds(model, note.fields).size > 0) typeAt.add(rows.length - 1);
         ankiIds.push(note.cards?.[n - 1] ?? null);      // blank number n is Anki card number n - 1
         if (kept.fields.length) splitAt.set(rows.length - 1, { extra: (text[mainAt] ?? '').trim(), fields: kept.fields });
         infoAt.set(rows.length - 1, { note: noteKey, pics, cut: kept.cut, more: false });
@@ -336,7 +358,7 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
       const extraAt = fieldIndex(model, 'back extra', -1);
       if (extraAt >= 2 && !isOcclusionNote(note, model)) { noteExtras[at] = text[extraAt].trim(); }
       // "Basic (and reversed card)" brings both cards: the reverse card exists in Anki when the note has a second card.
-      const ords = typedOrds(model);
+      const ords = typedOrds(model, note.fields);
       if (ords.has(0)) typeAt.add(at);
       const reverse = reverseModel(model) && note.cards?.[1] ? { ankiId: note.cards[1], ...(ords.has(1) ? { typeIn: true } : {}) } : null;
       if (reverse) revAt.set(at, reverse);

@@ -745,7 +745,8 @@ export function wireTypeIn(p, form, ctx) {
     sel.options[0].textContent = `Same as the deck (${deckDefault ? 'typing' : 'flipping'})`;
     const length = kind === 'basic' && !structured ? typeFacts({ back: ctx.answer() }).answer.length : 0;
     const text = typeNote({ kind, value: readTypeIn(p), length, structured, deckDefault, both: kind === 'basic' && !structured && ctx.both() });
-    note.textContent = text; note.hidden = !text;
+    if (note.textContent !== text) note.textContent = text;      // (only a changed note is announced, not one that is the same on every keystroke)
+    note.hidden = !text;
   };
   form.addEventListener('input', update);
   form.addEventListener('change', update);

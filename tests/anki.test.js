@@ -614,4 +614,37 @@ import { typedOrds } from '../js/anki.js';
     assert.deepEqual(onlyDeck(r, 'One').typeIns, [false]);
     assert.deepEqual(buildCards(onlyDeck(r, 'Two')).map(c => c.front), ['c', 'e']);
   });
+
+  test('typedOrds: only a box for the field that becomes the card\'s answer counts', () => {
+    const vocab = { name: 'Vocab', fields: ['Expression', 'Meaning', 'Reading'], cloze: false, templates: [tmpl(0, '{{Expression}}<br>{{type:Reading}}')] };
+    assert.deepEqual([...typedOrds(vocab)], [], 'the answer is Meaning, so typing the Reading is not a typing card');
+    const ok1 = { ...vocab, templates: [tmpl(0, '{{Expression}}<br>{{type:Meaning}}')] };
+    assert.deepEqual([...typedOrds(ok1)], [0]);
+    const clozeOther = { name: 'C', fields: ['Text', 'Extra'], cloze: true, templates: [tmpl(0, '{{cloze:Text}}{{type:cloze:Extra}}')] };
+    assert.deepEqual([...typedOrds(clozeOther)], []);
+    const rev = { name: 'R', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}{{type:Front}}'), tmpl(1, '{{Back}}{{type:Back}}')] };
+    assert.deepEqual([...typedOrds(rev)], [], 'card 1 answers with the Back and card 2 with the Front');
+    const r = notesToImport([{ id: 'n', mid: 'v', fields: ['a', 'b', 'c'], tags: [], deck: 'D', cards: { 0: 'x' } }], new Map([['v', vocab]]));
+    assert.deepEqual(r.typeIns, [false]);
+  });
+
+  test('typedOrds: a box inside {{#F}} counts only for notes where F is filled, {{^F}} the opposite', () => {
+    const cond = (q) => ({ name: 'Opt', fields: ['Front', 'Back', 'Flag'], cloze: false, templates: [tmpl(0, q)] });
+    const yes = cond('{{Front}}{{#Flag}}{{type:Back}}{{/Flag}}'), no = cond('{{Front}}{{^Flag}}{{type:Back}}{{/Flag}}');
+    assert.deepEqual([...typedOrds(yes, ['a', 'b', 'y'])], [0]);
+    assert.deepEqual([...typedOrds(yes, ['a', 'b', ''])], []);
+    assert.deepEqual([...typedOrds(yes, ['a', 'b', '<br> &nbsp;'])], [], 'only markup is empty');
+    assert.deepEqual([...typedOrds(no, ['a', 'b', ''])], [0]);
+    assert.deepEqual([...typedOrds(no, ['a', 'b', 'y'])], []);
+    const notes = [{ id: 'n1', mid: 'o', fields: ['q1', 'a1', 'y'], tags: [], deck: 'D', cards: { 0: 'x1' } }, { id: 'n2', mid: 'o', fields: ['q2', 'a2', ''], tags: [], deck: 'D', cards: { 0: 'x2' } }];
+    assert.deepEqual(notesToImport(notes, new Map([['o', yes]])).typeIns, [true, false]);
+  });
+
+  test('typedOrds: type: is lower case, as in Anki', () => {
+    const m = q => ({ name: 'B', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, q)] });
+    assert.deepEqual([...typedOrds(m('{{Front}}{{type:Back}}'))], [0]);
+    assert.deepEqual([...typedOrds(m('{{Front}}{{Type:Back}}'))], []);
+    assert.deepEqual([...typedOrds(m('{{Front}}{{TYPE:Back}}'))], []);
+    assert.equal(reverseModel({ name: 'R', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Back}}{{Type:Front}}')] }), false, 'an unknown tag is a field name, so card 2 shows the Front');
+  });
 }

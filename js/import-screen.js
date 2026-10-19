@@ -613,7 +613,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}), ...(c.reversed ? { typeIn: c.reversed.typeIn, reversed: { ...c.reversed, typeIn: c.typeIn } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();

@@ -2,7 +2,7 @@
 // Answer by… action, the Browse filter and badge, Anki import ({{type:…}}) and export, and the Today note.
 // Run with: node tests/browser/run.mjs typecards
 import fs from 'node:fs';
-import { chromium, deckMenu } from './pw.mjs';
+import { chromium, deckMenu, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -20,7 +20,7 @@ const cardsIn = name => run(async n => {
   return (await db.getCardsInDeck(d.id)).sort((a, b) => a.created - b.created);
 }, name);
 const card = id => run(async i => (await import('./js/db.js')).get('cards', i), id);
-const closeSheet = async () => { await page.waitForTimeout(500); await page.evaluate(() => { const s = document.getElementById('sheet'); if (s?.open) s.close(); }); };
+const closeSheet = async () => { await page.waitForTimeout(500); await page.evaluate(() => { const s = document.getElementById('sheet'); if (s?.open) s.close(); }); await sheetSettled(page); };      // (the sheet's history entry goes a moment later: wait, or it undoes the next navigation)
 const toast = () => page.textContent('#toast');
 const LONG60 = 'abcdefghij'.repeat(6);
 
@@ -181,7 +181,7 @@ ok((await card('e1')).typeIn === false, 'Edit form: Flipping the card saves type
 await closeSheet();
 await open('Edit long');
 await page.selectOption('#ceTypeIn', '1');
-ok((await page.textContent('#ceTypeNote')).includes("Long answer: you'll type all 60 characters. Typing works best for a word or a short phrase."), 'Edit form: a 60-character answer gets the long-answer note');
+ok((await page.textContent('#ceTypeNote')).includes("Long answer: you'll type all of it. Typing works best for a word or a short phrase."), 'Edit form: a 60-character answer gets the long-answer note');
 await page.fill('#ceBack', 'x'.repeat(501));
 ok((await page.textContent('#ceTypeNote')).includes('Too long to type: Review will flip this card.'), 'Edit form: over 500 characters, the note says Review will flip it');
 await closeSheet(); await page.waitForTimeout(300);
@@ -289,14 +289,15 @@ if (await page.locator('#modeChips').count()) {
 } else ok(false, 'Today: could not open the options sheet');
 
 // ---------- 7. importing Anki typing cards ----------
-const load = async file => {
+const load = async (file, timeout = 30000) => {
+  await sheetSettled(page);      // (a sheet that just closed, like the export one, takes its history entry off a moment later)
   await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
-  await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout });
   await page.selectOption('#deckSel', '__new');
 };
 for (const [file, name] of [['anki-typein-new.apkg', 'Typein new'], ['anki-typein-legacy.apkg', 'Typein old']]) {
-  await load(file);
+  await load(file, name === 'Typein new' ? 90000 : 30000);      // (the first Anki file also downloads sql.js from the CDN)
   await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
   const cs = await cardsIn(name);
   const by = f => cs.filter(c => c.front === f);
