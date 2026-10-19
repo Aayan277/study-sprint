@@ -1,12 +1,13 @@
-// Runs one of the text jobs that work out key words ('reading' = suggest cards from a reading) in its own worker
+// Runs one of the text jobs that work out key words ('reading' = suggest cards from a reading, 'autotag' = suggest tags for a deck) in its own worker
 // (js/keywords-worker.js), or on the page in small slices when workers are not available. The same pattern as runJob() in worker-job.js,
 // which it copies so that the FSRS jobs stay as they are.
 //   runKeywordJob(type, input, { onProgress, timeoutMs, useWorker }) → { promise, cancel }
 // The promise always resolves (never rejects) with { status: 'done', result, inWorker } | { status: 'cancelled' } |
 // { status: 'timeout' } | { status: 'error', message }. Nothing is saved by it.
 import { suggestSteps } from './reading-cards.js';
+import { autotagSteps } from './autotag.js';
 
-const GENERATORS = { reading: suggestSteps };
+const GENERATORS = { reading: suggestSteps, autotag: autotagSteps };
 const SLICE_MS = 30;
 
 export function runKeywordJob(type, input, { onProgress = () => {}, timeoutMs = 30000, useWorker = true } = {}) {

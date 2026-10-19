@@ -1,0 +1,145 @@
+{
+ "name": "Spanish",
+ "cards": [
+  {
+   "id": "c0320",
+   "front": "Unidad 3",
+   "back": "La casa"
+  },
+  {
+   "id": "c0321",
+   "front": "la cocina",
+   "back": "the kitchen"
+  },
+  {
+   "id": "c0322",
+   "front": "el dormitorio",
+   "back": "the bedroom"
+  },
+  {
+   "id": "c0323",
+   "front": "el baño",
+   "back": "the bathroom"
+  },
+  {
+   "id": "c0324",
+   "front": "la sala",
+   "back": "the living room"
+  },
+  {
+   "id": "c0325",
+   "front": "el comedor",
+   "back": "the dining room"
+  },
+  {
+   "id": "c0326",
+   "front": "el jardín",
+   "back": "the garden"
+  },
+  {
+   "id": "c0327",
+   "front": "el garaje",
+   "back": "the garage"
+  },
+  {
+   "id": "c0328",
+   "front": "la puerta",
+   "back": "the door"
+  },
+  {
+   "id": "c0329",
+   "front": "la ventana",
+   "back": "the window"
+  },
+  {
+   "id": "c0330",
+   "front": "el techo",
+   "back": "the roof"
+  },
+  {
+   "id": "c0331",
+   "front": "la pared",
+   "back": "the wall"
+  },
+  {
+   "id": "c0332",
+   "front": "el suelo",
+   "back": "the floor"
+  },
+  {
+   "id": "c0333",
+   "front": "la escalera (f.)",
+   "back": "the stairs"
+  },
+  {
+   "id": "c0334",
+   "front": "el piso",
+   "back": "the apartment, the floor"
+  },
+  {
+   "id": "c0335",
+   "front": "la mesa",
+   "back": "the table"
+  },
+  {
+   "id": "c0336",
+   "front": "la silla",
+   "back": "the chair"
+  },
+  {
+   "id": "c0337",
+   "front": "el sofá",
+   "back": "the sofa"
+  },
+  {
+   "id": "c0338",
+   "front": "la cama",
+   "back": "the bed"
+  },
+  {
+   "id": "c0339",
+   "front": "el armario",
+   "back": "the wardrobe"
+  },
+  {
+   "id": "c0340",
+   "front": "la lámpara",
+   "back": "the lamp"
+  },
+  {
+   "id": "c0341",
+   "front": "la alfombra",
+   "back": "the rug"
+  },
+  {
+   "id": "c0342",
+   "front": "la cortina",
+   "back": "the curtain"
+  },
+  {
+   "id": "c0343",
+   "front": "la vecina (f.)",
+   "back": "the neighbour"
+  },
+  {
+   "id": "c0344",
+   "front": "el ascensor",
+   "back": "the lift"
+  },
+  {
+   "id": "c0345",
+   "front": "el balcón",
+   "back": "the balcony"
+  },
+  {
+   "id": "c0346",
+   "front": "Ejemplo",
+   "back": "Mi casa tiene tres dormitorios y un jardín grande."
+  },
+  {
+   "id": "c0347",
+   "front": "Ejemplo",
+   "back": "Vivimos en un piso pequeño cerca del centro."
+  }
+ ]
+}
