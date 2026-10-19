@@ -1,7 +1,7 @@
 // Round 3, item 12: your own glossary (Settings sheet, Add / Paste a list, underlines and the popover in Review, the front-answer
 // rule, sync of terms, a 2,000-term time budget).
 // Run with: node tests/browser/run.mjs glossary
-import { chromium } from './pw.mjs';
+import { chromium, sheetSettled } from './pw.mjs';
 const SP = process.argv[2];
 const URL = 'http://localhost:8123/';
 const browser = await chromium.launch();
@@ -79,6 +79,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.fill('#glSearch', '');
   ok(await p.locator('#glList .gl-row').count() === 2, `${tag}: deleted`);
   await p.keyboard.press('Escape');
+  await sheetSettled(p);      // (the sheet takes its history entry off a moment later; a goto before that can be undone)
 
   // ---------- Review: underlines, popover, no flip ----------
   await p.goto('about:blank'); await p.goto(URL + '#/review/T'); await p.waitForSelector('#flash');
