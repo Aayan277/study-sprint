@@ -3067,7 +3067,8 @@ a.back{text-decoration:none}
 /* A selected chip: a clear tinted fill, the accent edge drawn twice as thick, and a check mark (so it is not color alone). Same specificity as before on purpose: this is a state. */
 :root:not([data-theme="light"]) :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:rgb(var(--acc) / .3);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .chip span,.tchip{position:relative}
-.chip input:checked + span::after,.tchip[aria-pressed="true"]::after{content:"";position:absolute;left:5px;top:50%;width:3px;height:6px;margin-top:-5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}      /* drawn inside the chip's left padding, so a chip does not get wider when it is selected */
+.chip input:checked + span,.tchip[aria-pressed="true"]{padding-left:19px;padding-right:5px}      /* room for the check mark; the same total width as unselected (12 + 12) */
+.chip input:checked + span::after,.tchip[aria-pressed="true"]::after{content:"";position:absolute;left:8px;top:50%;width:3px;height:6px;margin-top:-5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}      /* drawn inside the chip's left padding, so a chip does not get wider when it is selected */
 /* Primary buttons (Show answer, Start...): no glow, and a fill a little deeper than the accent so it is not the brightest thing on the page.
    The dark text on it stays above 4.5:1 in every accent. Clinical already has no glow and keeps its own fill. */
 :root:not([data-theme="light"]) .btn.primary{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .1)}
