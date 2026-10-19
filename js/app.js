@@ -778,7 +778,7 @@ async function drawSync() {
           restResend();
           $('pendResend2').addEventListener('click', () => {
             closeSheet();
-            setTimeout(() => { const b = $('pendResend'); b?.scrollIntoView({ block: 'center' }); b?.click(); }, 0);
+            setTimeout(() => { const b = $('pendResend'); b?.scrollIntoView({ block: 'center' }); b?.focus(); b?.click(); }, 0);
           });
           return;
         }
@@ -1303,7 +1303,7 @@ async function checkFirstRun() {
   if (settings.onboarded) return false;
   // Upgrades: anyone who opened the app before has `seeded` set (the old first-run flag) or has data.
   const hasData = settings.seeded || (await db.getDecks()).length || (await db.getAll('cards')).length || (await db.getAll('reviewLog')).length;
-  if (hasData) { await pinOldTheme(true); await markOnboarded(); return false; }
+  if (hasData) { await pinOldTheme(true); settings.theme = applyTheme(settings.theme); await markOnboarded(); return false; }
   // A new install saves its theme now (auto: it follows the device), so what it looks like never depends on a default that may change.
   if (skipFlag()) { await db.setSetting('theme', settings.theme); await seedSampleDeck(); await markOnboarded(); await markWhatsNewSeen(); return false; }
   await db.setSetting('theme', settings.theme);
