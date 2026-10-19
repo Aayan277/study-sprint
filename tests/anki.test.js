@@ -551,3 +551,67 @@ test("note fields: <details><summary> sections are read back as fields (what thi
   assert.deepEqual(c.extraSplits[0], { extra: 'Extra', fields: [{ name: 'Sketchy', text: 'vid' }] });
   assert.equal(c.noteExtras[0], 'Extra\nSketchy\nvid');
 });
+
+// ---------- typing cards: {{type:…}} in a card type ----------
+import { typedOrds } from '../js/anki.js';
+{
+  const typeModels = new Map([
+    ['t1', { name: 'Basic (type in the answer)', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}\n\n{{type:Back}}', '{{Front}}<hr id=answer>{{type:Back}}')] }],
+    ['t2', { name: 'Basic (no composition)', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}\n{{type:nc:Back}}')] }],
+    ['t3', { name: 'Cloze (type)', fields: ['Text', 'Back Extra'], cloze: true, templates: [tmpl(0, '{{cloze:Text}}\n{{type:cloze:Text}}')] }],
+    ['t4', { name: 'Basic (and reversed, typed back)', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Back}}\n\n{{type:Front}}')] }],
+    ['t5', { name: 'Typed only on the answer side', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}', '{{FrontSide}}<hr id=answer>{{type:Back}}')] }],
+    ['t6', { name: 'Plain', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}', '{{Back}}')] }],
+    ['t7', { name: 'Cloze', fields: ['Text', 'Back Extra'], cloze: true, templates: [tmpl(0, '{{cloze:Text}}')] }]
+  ]);
+
+  test('typedOrds: the card types whose question side has a {{type:…}} box', () => {
+    assert.deepEqual([...typedOrds(typeModels.get('t1'))], [0]);
+    assert.deepEqual([...typedOrds(typeModels.get('t2'))], [0], '{{type:nc:Back}}');
+    assert.deepEqual([...typedOrds(typeModels.get('t3'))], [0], '{{type:cloze:Text}}');
+    assert.deepEqual([...typedOrds(typeModels.get('t4'))], [1]);
+    assert.deepEqual([...typedOrds(typeModels.get('t5'))], [], 'a box only on the answer side does not count');
+    assert.deepEqual([...typedOrds(typeModels.get('t6'))], []);
+    assert.deepEqual([...typedOrds({ name: 'x' })], []);
+  });
+
+  test('"Basic (type in the answer)" notes import as typing cards; other notes do not', () => {
+    const r = notesToImport([
+      { id: 'n1', mid: 't1', fields: ['Capital of France', 'Paris'], tags: [], deck: 'Geo', cards: { 0: 'a1' } },
+      { id: 'n2', mid: 't2', fields: ['Capital of Italy', 'Rome'], tags: [], deck: 'Geo', cards: { 0: 'a2' } },
+      { id: 'n3', mid: 't6', fields: ['Capital of Spain', 'Madrid'], tags: [], deck: 'Geo', cards: { 0: 'a3' } },
+      { id: 'n4', mid: 't5', fields: ['Capital of Peru', 'Lima'], tags: [], deck: 'Geo', cards: { 0: 'a4' } }
+    ], typeModels);
+    assert.deepEqual(r.typeIns, [true, true, false, false]);
+    const cards = buildCards(r);
+    assert.deepEqual(cards.map(c => c.typeIn), [true, true, undefined, undefined], 'only true is ever set');
+  });
+
+  test('a cloze type with {{type:cloze:Text}} types every card of the note', () => {
+    const r = notesToImport([
+      { id: 'n1', mid: 't3', fields: ['The {{c1::heart}} pumps {{c2::blood}}', ''], tags: [], deck: 'A', cards: { 0: 'c1', 1: 'c2' } },
+      { id: 'n2', mid: 't7', fields: ['The {{c1::lung}} breathes', ''], tags: [], deck: 'A', cards: { 0: 'c3' } }
+    ], typeModels);
+    assert.deepEqual(r.typeIns, [true, true, false]);
+  });
+
+  test('a reverse model with {{type:Front}} on card 2: reverse card typed, forward card not', () => {
+    assert.equal(reverseModel(typeModels.get('t4')), true, 'the Back is shown and the Front only typed');
+    assert.equal(reverseModel({ name: 'both typed', fields: ['Front', 'Back'], cloze: false, templates: [tmpl(0, '{{Front}}'), tmpl(1, '{{Back}}{{type:Front}}')] }), true);
+    const r = notesToImport([{ id: 'n1', mid: 't4', fields: ['Mitosis', 'Cell division'], tags: [], deck: 'Bio', cards: { 0: 'a1', 1: 'a2' } }], typeModels);
+    assert.deepEqual(r.typeIns, [false]);
+    assert.deepEqual(r.reversed, [{ ankiId: 'a2', typeIn: true }]);
+  });
+
+  test('onlyDeck keeps typeIns lined up with the rows', () => {
+    const r = notesToImport([
+      { id: 'n1', mid: 't6', fields: ['a', 'b'], tags: [], deck: 'One', cards: { 0: 'x1' } },
+      { id: 'n2', mid: 't1', fields: ['c', 'd'], tags: [], deck: 'Two', cards: { 0: 'x2' } },
+      { id: 'n3', mid: 't1', fields: ['e', 'f'], tags: [], deck: 'Two::Sub', cards: { 0: 'x3' } }
+    ], typeModels);
+    assert.deepEqual(r.typeIns, [false, true, true]);
+    assert.deepEqual(onlyDeck(r, 'Two').typeIns, [true, true]);
+    assert.deepEqual(onlyDeck(r, 'One').typeIns, [false]);
+    assert.deepEqual(buildCards(onlyDeck(r, 'Two')).map(c => c.front), ['c', 'e']);
+  });
+}

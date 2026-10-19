@@ -316,7 +316,7 @@ export async function renderToday(el) {
           <button type="button" class="tchip" data-typing="0" aria-pressed="${!typing}">Flipping the card</button>
           <button type="button" class="tchip" data-typing="1" aria-pressed="${typing}">Typing the answer</button>
         </div>
-        <p class="note">Typing is used for answers of 40 characters or less. Longer ones are flipped.</p>
+        <p class="note">Typing the answer types every answer of 40 characters or less; longer ones are flipped. Cards set to type (in the card or its deck) are typed either way, and cards set to Flipping the card are always flipped.</p>
       </section>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="customBtn">Custom study…</button>

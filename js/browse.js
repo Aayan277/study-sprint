@@ -9,7 +9,8 @@ import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic } from './card-editor.js';
+import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic, typeInFieldHTML, readTypeIn, wireTypeIn } from './card-editor.js';
+import { ownTypeIn, setTypeIn, typeFacts, isTypingCard } from './type-in.js';
 import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
 import { cleanFields } from './note-fields.js';
 import { savedTooBigNote, splitTooBig, tooLargeNote } from './quota.js';
@@ -18,11 +19,13 @@ import { planNoteSave, removalText, planLinks, clozeCard, renderCloze } from './
 import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlusion.js';
 import { plainText, mathHTML, spokenRow } from './format.js';
 import { soundsHTML } from './audio.js';
-import { ancestors, subtreeIds, deckPath, deckChoices } from './deck-tree.js';
+import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
 
+const factsMemo = new WeakMap();      // typeFacts per card object (a changed card is a new object)
+const factsOf = card => factsMemo.get(card) || (factsMemo.set(card, typeFacts(card)), factsMemo.get(card));
 const PAGE = 150;          // rows drawn at a time; "Show more" adds another page
 const RATING = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
 const shortDate = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -119,6 +122,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     return chain.slice(0, chain.findIndex(d => d.id === deckId)).reverse().map(d => d.name).join(' › ');
   };
   const draw = () => {
+    // Which cards Review types: their own setting, else their deck's (the Today switch is a per-session choice, so it isn't counted).
+    const typeDefault = new Map(decks.map(d => [d.id, !!effectiveDeck(decks, d.id)?.typeAnswers]));
+    B.typing = card => { const dflt = typeDefault.get(card.deckId) ?? false, own = ownTypeIn(card); return (own === true || (own === null && dflt)) && isTypingCard(card, dflt, factsOf(card)); };
     $('brEmpty').hidden = cards.length > 0;
     $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
@@ -131,9 +137,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
       const flag = FLAGS.find(f => f.id === card.flag);
       const sel = B.selected.has(card.id);
       return `<li class="crow${sel ? ' selected' : ''}" data-id="${esc(card.id)}">
-        <button type="button" class="crow-btn" aria-label="${esc(spokenRow({ front: card.front, back: card.back, reverse: isPair(card) && !!card.reverse, cloze: Number(card.cloze), pic: !!(card.frontImage || card.backImage), sound: !!(card.frontSounds?.length || card.backSounds?.length), where: where(card), status: st.label, flag: flag?.name }))}" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
+        <button type="button" class="crow-btn" aria-label="${esc(spokenRow({ front: card.front, back: card.back, reverse: isPair(card) && !!card.reverse, cloze: Number(card.cloze), pic: !!(card.frontImage || card.backImage), sound: !!(card.frontSounds?.length || card.backSounds?.length), typing: B.typing(card), where: where(card), status: st.label, flag: flag?.name }))}" ${B.selecting ? `role="checkbox" aria-checked="${sel}"` : ''}>
           ${B.selecting ? '<span class="tick" aria-hidden="true"></span>' : ''}
-          <span class="crow-main"><span class="f">${isPair(card) && card.reverse ? '<span class="rev-pill" title="Reverse card: asks the back, expects the front">Reverse</span> ' : ''}${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
+          <span class="crow-main"><span class="f">${isPair(card) && card.reverse ? '<span class="rev-pill" title="Reverse card: asks the back, expects the front">Reverse</span> ' : ''}${Number(card.cloze) > 0 ? `<span class="ckind" title="Cloze card, blank ${Number(card.cloze)}">c${Number(card.cloze)}</span> ` : ''}${occBadge(card)}${card.frontImage || card.backImage ? '<span class="pic-mark" title="Has a picture" aria-label="Has a picture">▣</span> ' : ''}${card.frontSounds?.length || card.backSounds?.length ? '<span class="pic-mark snd-mark" title="Has sound" aria-label="Has sound">♪</span> ' : ''}${B.typing(card) ? `<span class="pic-mark type-mark" title="Typing card: you type the answer" aria-label="Typing card">${icon('keyboard')}</span> ` : ''}${mathHTML(plainText(card.front), { inline: true })}</span><span class="b">${mathHTML(plainText(card.back), { inline: true })}</span>
             ${where(card) ? `<span class="d">${esc(where(card))}</span>` : ''}</span>
           <span class="crow-meta"><span class="st st-${st.key}">${esc(st.label)}</span>
             ${flag ? `<i class="flagdot" style="background:${flag.color}" title="${flag.name} flag" aria-label="${flag.name} flag"></i>` : ''}</span>
@@ -287,6 +293,7 @@ export async function openCardPanel(card, ctx) {
   const logs = await db.getCardLogs(card.id);
   const maxN = await noteMaxN(card);
   const partner = await partnerOf(card);
+  const deckDefault = await deckTypes(card, ctx);
   const now = Date.now();
   const status = cardStatus(card, state, now);
   // In a side panel (wide screens), highlight the card it's showing.
@@ -295,7 +302,7 @@ export async function openCardPanel(card, ctx) {
   openSheet(`
     <h2 id="sheetTitle">Card <span class="st st-${status.key}">${esc(status.label)}</span></h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card, maxN, partner)}
+      ${cardFieldsHTML(card, maxN, partner, deckDefault)}
       <div class="sheet-actions"><button class="btn primary" type="submit">Save changes</button></div>
     </form>
     ${partner ? `<p class="note rev-line">${card.reverse ? 'Reverse card' : 'Has a reverse card'} · <button class="link" type="button" id="revOpen">Open the other direction</button></p>` : ''}
@@ -346,7 +353,7 @@ export async function openCardPanel(card, ctx) {
     </details>`, { side: true });
 
   const { save, again } = cardOps(card, ctx);
-  wireCardForm(card, ctx, 'Saved', partner);
+  wireCardForm(card, ctx, 'Saved', partner, deckDefault);
   $('revOpen')?.addEventListener('click', () => guardedGo(() => openCardPanel(partner, ctx)));
   document.querySelectorAll('#sheet [data-act]').forEach(b => b.addEventListener('click', () => {
     const act = b.dataset.act;
@@ -435,17 +442,18 @@ document.addEventListener('keydown', e => {
 async function openCardEdit(card, ctx) {
   const maxN = await noteMaxN(card);
   const partner = await partnerOf(card);
+  const deckDefault = await deckTypes(card, ctx);
   openSheet(`
     <h2 id="sheetTitle">Edit card</h2>
     <form id="ceForm" class="sheet-in" style="padding:0">
-      ${cardFieldsHTML(card, maxN, partner)}
+      ${cardFieldsHTML(card, maxN, partner, deckDefault)}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="ceCancel">Cancel</button>
         <button class="btn primary" type="submit">Save <kbd aria-hidden="true">${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl+↵'}</kbd></button>
       </div>
     </form>`, { side: true });
   $('ceCancel').addEventListener('click', closeSheet);
-  wireCardForm(card, ctx, 'Card saved', partner);
+  wireCardForm(card, ctx, 'Card saved', partner, deckDefault);
 }
 
 // ---------- shared by the card sheets ----------
@@ -473,6 +481,7 @@ function cardOps(card, ctx) {
     if ('noteFields' in changes) { const f = cleanFields(changes.noteFields).fields; if (f.length) merged.noteFields = f; else delete merged.noteFields; }      // no other fields is no list, and the list is kept within its limits
     for (const k of ['frontSounds', 'backSounds']) if (k in changes && !changes[k]?.length) delete merged[k];      // and no sounds is no list
     if ('acceptAnswers' in changes && !changes.acceptAnswers?.length) delete merged.acceptAnswers;      // and no accepted answers is none
+    if ('typeIn' in changes && typeof changes.typeIn !== 'boolean') delete merged.typeIn;      // "same as the deck" is no value
     await db.saveCards([merged, ...sibs.map(c => ({ ...c, ...shared }))]);
     return again(msg, act);
   };
@@ -492,11 +501,14 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
   ? Math.max(0, ...(await db.getAll('cards')).filter(c => c.noteId === card.noteId).map(c => c.occlusion?.n).filter(Number.isInteger))
   : 0);
 // pair: the other card when this one has a reverse card (or is one), else null
-const cardFieldsHTML = (card, maxN = 0, pair = null) => `
+// Does this card's deck (or a deck above it) type the answers? (Review's panel and Play pass no decks: read them.)
+const deckTypes = async (card, ctx) => !!effectiveDeck(ctx.decks || await db.getAll('decks'), card.deckId)?.typeAnswers;
+const cardFieldsHTML = (card, maxN = 0, pair = null, deckDefault = false) => `
       ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') + noteFieldsEditHTML('ce', card.noteFields) : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
       ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
       ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
       ${noteFieldsEditHTML('ce', card.noteFields)}`}
+      ${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
       <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
@@ -508,8 +520,10 @@ const showErr = (id, text, field) => {
   const shown = [p + 'Text', p + 'Front', p + 'OccChoose', p + 'OccEdit'].map($).find(x => x && !x.closest('[hidden]'));
   showFieldError(field ? $(field) : shown, $(id), text);
 };
-function wireCardForm(card, ctx, msg, pair = null) {
+function wireCardForm(card, ctx, msg, pair = null, deckDefault = false) {
   const ops = cardOps(card, ctx);
+  const kind = isClozeCard(card) ? 'cloze' : hasMasks(card) ? 'occlusion' : 'basic';
+  wireTypeIn('ce', $('ceForm'), { kind: () => kind, deckDefault: () => deckDefault, answer: () => (kind === 'basic' ? readBack('ce') : ''), both: () => !!$('ceRevOn')?.checked });
   if (!isClozeCard(card) && !hasMasks(card)) { setCardSounds('ceFront', card.frontSounds || []); setCardSounds('ceBack', card.backSounds || []); wireRevSwitch('ce', $('ceForm')); }
   $('ceForm').addEventListener('submit', e => {
     e.preventDefault();
@@ -524,12 +538,13 @@ function wireCardForm(card, ctx, msg, pair = null) {
     if (why) { showErr('ceErr', why); return; }
     const noteExtra = readCardText('ceHook').trim(), tags = parseTags($('ceTags').value), noteFields = readNoteFields('ce');
     const accept = $('ceAccept') ? { acceptAnswers: parseAccepted($('ceAccept').value) } : {};
+    const typeIn = readTypeIn('ce');
     const both = !!$('ceRevOn')?.checked && !stepsOn('ce');
     // A card over the server's size limit would never sync, so it is stopped here, not set aside later.
-    const big = savedTooBigNote([{ ...card, front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }]);
+    const big = savedTooBigNote([{ ...card, front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(typeIn !== null ? { typeIn } : {}), ...(noteFields !== undefined ? { noteFields } : {}) }]);
     if (big) { showErr('ceErr', big); return; }
-    if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
-    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
+    if (pair || both) return saveWithReverse(card, pair, both, { front, back, frontImage, backImage, frontSounds, backSounds, typeIn, ...accept }, { tags, noteExtra, noteFields }, ops, msg);
+    ops.save({ front, back, frontImage, backImage, frontSounds, backSounds, typeIn, noteExtra, tags, ...accept, ...(noteFields !== undefined ? { noteFields } : {}) }, msg, 'edit');
   });
   // Ctrl/⌘+Enter saves from inside a box.
   $('ceForm').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('ceForm').requestSubmit(); } });
@@ -605,6 +620,7 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
       await db.saveNote({ update: [unpaired(keep)], remove: [drop] }, { ...common, noteId: undefined });
     } else {
       const fwd = { ...unpaired(card), ...sides };
+      if (typeof fwd.typeIn !== 'boolean') delete fwd.typeIn;
       for (const k of ['frontImage', 'backImage']) if (!fwd[k]) delete fwd[k];
       for (const k of ['frontSounds', 'backSounds']) if (!fwd[k]?.length) delete fwd[k];
       if (!canReverse(fwd)) { showErr('ceErr', "This card can't have a reverse card."); return; }
@@ -656,7 +672,7 @@ async function saveClozeNote(card, ops, msg) {
     if (plan.error) { showErr('ceErr', plan.error); return; }
     if (!plan.update.length && !plan.add.length) { showErr('ceErr', 'Add at least one blank: select a word, then press New blank.'); return; }
     // (The note's sounds come along to a blank added now, as they are shared by all its cards.)
-    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds };
+    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceExtra').trim(), noteFields: readNoteFields('ce')?.length ? readNoteFields('ce') : undefined, frontSounds: card.frontSounds, backSounds: card.backSounds, typeIn: readTypeIn('ce') ?? undefined };
     const big = savedTooBigNote([...plan.update, ...plan.add], common);
     if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
@@ -686,7 +702,7 @@ async function saveOcclusionNote(card, ops, msg) {
   const go = async confirmed => {
     const plan = await planNow();
     if (plan.error) { showErr('ceErr', plan.error); return; }
-    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim() };
+    const common = { deckId: card.deckId, noteId: card.noteId, tags: parseTags($('ceTags').value), noteExtra: readCardText('ceOccExtra').trim(), typeIn: readTypeIn('ce') ?? undefined };
     const big = savedTooBigNote([...plan.update, ...plan.add], common);
     if (big) { showErr('ceErr', big); return; }
     $('ceErr').hidden = true;
@@ -750,6 +766,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
       <div class="pa-list">
         <button class="act-row" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards, a reverse pair in both directions">${icon('plus')}<span>Duplicate</span></button>
         <button class="act-row" type="button" data-act="reverse">${icon('swap')}<span>Both directions</span></button>
+        <button class="act-row" type="button" data-act="typing" title="A cloze or picture note changes all its cards">${icon('keyboard')}<span>Answer by…</span></button>
       </div>
     </div>
     <div class="pa-group pa-danger">
@@ -792,6 +809,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     })();
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'reverse') bulkReverse(selected, done);
+    if (act === 'typing') bulkTyping(selected, done);
     if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
       await db.deleteCards(selected.map(c => c.id));
       // A card whose partner is deleted becomes an ordinary card again.
@@ -831,6 +849,27 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   wireFlags(f => update({ flag: f }, f ? `Flagged ${plural(n, 'card')} ${FLAGS.find(x => x.id === f).name.toLowerCase()}` : `Removed flags from ${plural(n, 'card')}`));
   wireMove(deckId => update({ deckId }, `Moved ${plural(n, 'card')} to ${deckPath(decks, deckId)}`));
   if (studied.length) wireDue(days => db.putStates(studied.map(c => dueIn(statesById.get(c.id), days))).then(() => done(`${plural(studied.length, 'card')} due ${days ? `in ${plural(days, 'day')}` : 'today'}`)));
+}
+
+// "Answer by…" for the selected cards: typing, flipping, or the deck's way. The cards are read again first (a sync may have changed
+// them); a cloze or picture note changes all its cards, a reverse partner is left alone (type-in.js setTypeIn).
+function bulkTyping(selected, done) {
+  $('ceConfirm').innerHTML = `<div class="confirm"><p>How should Review ask these ${plural(selected.length, 'card')}?</p><div class="sheet-actions">
+    <button class="btn ghost" type="button" id="cfNo">Cancel</button>
+    <button class="btn ghost" type="button" data-type-in="">Same as the deck</button>
+    <button class="btn ghost" type="button" data-type-in="0">Flipping the card</button>
+    <button class="btn primary" type="button" data-type-in="1">Typing the answer</button></div></div>`;
+  $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
+  $('ceConfirm').querySelectorAll('[data-type-in]').forEach(b => b.addEventListener('click', async () => {
+    const value = b.dataset.typeIn === '1' ? true : b.dataset.typeIn === '0' ? false : null;
+    const all = await db.getAll('cards'), ids = new Set(selected.map(c => c.id));
+    const { changed, skipped } = setTypeIn(all.filter(c => ids.has(c.id)), value, all);
+    const note = skipped ? `. ${plural(skipped, 'step-by-step or elements card')} ${skipped === 1 ? 'is' : 'are'} always flipped` : '';
+    if (!changed.length) { $('ceConfirm').innerHTML = ''; toast(`Nothing to change${note}`); return; }
+    await db.saveCards(changed);
+    done(`${plural(changed.length, 'card')} ${value === true ? 'set to typing' : value === false ? 'set to flipping' : 'now follow their deck'}${note}`);
+  }));
+  $('ceConfirm').querySelector('[data-type-in="1"]').scrollIntoView({ block: 'nearest' });
 }
 
 // "Both directions" for the selected cards. The cards are read again first (a sync or another tab may have changed them) and again when
@@ -994,6 +1033,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
+      ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}
       <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
       <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
@@ -1006,6 +1046,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
   if (prefill) { setCardText('acFront', prefill.front || ''); setCardText('acBack', prefill.back || ''); $('acBack').focus(); }
   $('acDone').addEventListener('click', askClose);        // Close with a typed card not added asks "Discard changes?" (as do ×, Back and Esc)
   wireRevSwitch('ac', $('acForm'));
+  wireTypeIn('ac', $('acForm'), { kind: () => readKind('ac'), deckDefault: () => !!effectiveDeck(decks, $('acDeck')?.value || target)?.typeAnswers, answer: () => readBack('ac'), both: () => !!$('acRevOn')?.checked });
   let typed = formSnapshot($('acForm'), { textOnly: true });
   guardSheet(() => !!$('acForm') && formSnapshot($('acForm'), { textOnly: true }) !== typed);
   const updateAdd = watchAdd('ac');           // Add stays aria-disabled, with the reason beside it, until the card can be saved
@@ -1014,7 +1055,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
     e.preventDefault();
     if (adding) return;
     const deck = $('acDeck')?.value || target, tags = parseTags($('acTags').value);
-    const kindNow = readKind('ac');
+    const kindNow = readKind('ac'), typeIn = readTypeIn('ac');
     // What to save, or the message to show (Ctrl+Enter can submit a form whose button is disabled).
     let save, count = 1, pairAdded = false;
     if (kindNow === 'occlusion') {
@@ -1024,7 +1065,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const big = savedTooBigNote(plan.add, { tags, noteExtra: readCardText('acOccExtra').trim() });
       if (big) { showErr('acErr', big); return; }
       count = plan.add.length;
-      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim() });
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acOccExtra').trim(), typeIn: typeIn ?? undefined });
     } else if (kindNow === 'cloze') {
       const text = readCardText('acText').trim();
       const plan = planNoteSave([], text);
@@ -1033,7 +1074,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       const big = savedTooBigNote(plan.add, { tags, noteExtra: readCardText('acExtra').trim() });
       if (big) { showErr('acErr', big); return; }
       count = plan.add.length;
-      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim() });
+      save = () => db.saveNote(plan, { deckId: deck, noteId: db.newId(), tags, noteExtra: readCardText('acExtra').trim(), typeIn: typeIn ?? undefined });
     } else {
       const front = readCardText('acFront').trim(), back = readBack('ac').trim(), hook = readCardText('acHook').trim();
       const frontImage = readCardImage('acFront'), backImage = readCardImage('acBack');
@@ -1041,7 +1082,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       if (!(front || frontImage || frontSounds.length) || !(back || backImage || backSounds.length)) { showErr('acErr', 'A card needs a front and a back (text or a picture, or a sound).', front || frontImage || frontSounds.length ? 'acBack' : 'acFront'); return; }
       const why = stepsProblem('ac');
       if (why) { showErr('acErr', why); return; }
-      const card = { id: db.newId(), deckId: deck, front, back, ...(frontImage ? { frontImage } : {}), ...(backImage ? { backImage } : {}), ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), created: Date.now() };
+      const card = { id: db.newId(), deckId: deck, front, back, ...(frontImage ? { frontImage } : {}), ...(backImage ? { backImage } : {}), ...(frontSounds.length ? { frontSounds } : {}), ...(backSounds.length ? { backSounds } : {}), ...(typeIn !== null ? { typeIn } : {}), created: Date.now() };
       const big = savedTooBigNote([card], { tags, noteExtra: hook });
       if (big) { showErr('acErr', big); return; }
       if ($('acRevOn').checked && !stepsOn('ac') && canReverse(card)) {

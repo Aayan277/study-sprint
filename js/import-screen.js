@@ -819,7 +819,7 @@ function refreshFlags() {
 const CARDS_WARNED_KEY = 'study-sprint-cards-warned';       // the 50,000-card heads-up is shown once
 const cardsWarnedBefore = () => { try { return localStorage.getItem(CARDS_WARNED_KEY) === '1'; } catch { return false; } };
 async function save() {
-  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
+  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, typeIn: c.typeIn, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -870,6 +870,7 @@ async function save() {
     let cards = toAdd.map((c, i) => {
       const card = { id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i };
       if (c.ankiGuid) card.ankiGuid = c.ankiGuid;
+      if (c.typeIn) card.typeIn = true;
       if (c.noteFields?.length && !c.occlusion) card.noteFields = c.noteFields;       // an Anki note's other fields, shown folded (note-fields.js)
       if (c.cloze) {
         if (!noteIds.has(c.cloze.noteKey)) noteIds.set(c.cloze.noteKey, db.newId());
@@ -993,6 +994,7 @@ async function save() {
       card.noteEditedAt = now;
       const rev = reverseOf(card, db.newId());
       rev.noteEditedAt = now;
+      if (r.typeIn) rev.typeIn = true;
       reverses.push(rev);
       ankiOf.set(rev.id, r.ankiId);
     });

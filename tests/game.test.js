@@ -361,3 +361,15 @@ test('elements cards are front-only; multiple choice answers with the elements j
   assert.ok(!isFrontOnly({ id: 'o', front: 'q', back: 'Element 1: only one' }));
   assert.ok(!isFrontOnly({ id: 'c', front: 'Water', back: 'Elements: H, O' }));
 });
+
+test('defaultQuestionType: a pool that is mostly typing cards starts on Typing, unless you picked a type', () => {
+  const mk = (n, typed) => Array.from({ length: n }, (_, i) => ({ id: `${typed ? 't' : 'f'}${i}`, front: 'q', back: 'a', typeIn: typed }));
+  const isTyping = c => c.typeIn === true;
+  assert.equal(defaultQuestionType([...mk(3, true), ...mk(2, false)], isTyping), 'typing');
+  assert.equal(defaultQuestionType([...mk(2, true), ...mk(2, false)], isTyping), 'front', 'exactly half is not most');
+  assert.equal(defaultQuestionType([...mk(1, true), ...mk(3, false)], isTyping), 'front');
+  assert.equal(defaultQuestionType(mk(4, true)), 'front', 'without the predicate nothing counts');
+  assert.equal(defaultQuestionType([], isTyping), 'front');
+  const long = Array.from({ length: 3 }, (_, i) => ({ id: 'l' + i, front: 'q', back: 'x'.repeat(50) }));
+  assert.equal(defaultQuestionType(long, isTyping), 'back', 'long definitions without typing cards keep their default');
+});

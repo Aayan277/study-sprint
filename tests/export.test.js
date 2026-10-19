@@ -356,3 +356,84 @@ test('CSV: a pair is one row, with "yes" in the Both directions column', () => {
   const two = toCSV([{ ...f, deckName: 'A' }, { ...reverseOf(f, 'r1'), deckName: 'A' }, { id: 'p', front: 'x', back: 'y', tags: [], deckName: 'B' }]);
   assert.ok(two.startsWith('﻿Front,Back,Tags,Deck,Both directions\r\n') && two.includes('Mitosis,Cell division,bio,A,yes'));
 });
+
+// ---------- typing cards ----------
+test('typing cards: a typed basic card goes out as the type-in model, with Back holding only the answer', async () => {
+  const typed = { id: 't', front: 'Capital of France', back: 'Paris', tags: [], noteExtra: 'Hint', backImageFile: 'b.png', backSoundFiles: ['s.mp3'], typed: true, deckName: 'Geo' };
+  const plain = { id: 'p', front: 'Capital of Spain', back: 'Madrid', tags: [], deckName: 'Geo' };
+  const { col, notes } = await ankiContents({ id: 'd', name: 'Geo' }, [typed, plain], 1_800_000_000_000);
+  const models = JSON.parse(col.models);
+  assert.equal(Object.values(models)[0].name, 'Study Sprint Basic', 'Basic stays first');
+  const tm = models[1_600_000_000_005];
+  assert.equal(tm.tmpls[0].qfmt, '{{Front}}\n\n{{type:Back}}');
+  assert.equal(tm.tmpls[0].afmt, '{{Front}}\n\n<hr id=answer>\n\n{{type:Back}}<br>\n{{Back Extra}}');
+  assert.deepEqual(tm.flds.map(f => f.name), ['Front', 'Back', 'Back Extra']);
+  const n = notes.find(x => x.mid === tm.id);
+  const [front, back, extra] = n.flds.split('\x1f');
+  assert.equal(front, 'Capital of France');
+  assert.equal(back, 'Paris');
+  assert.ok(extra.includes('Hint') && extra.includes('<img src="b.png">') && extra.includes('[sound:s.mp3]'));
+  assert.equal(notes.find(x => x.mid === 1_600_000_000_001).flds, 'Capital of Spain\x1fMadrid');
+});
+
+test('untyped decks write exactly the models they always did', async () => {
+  const { col } = await ankiContents({ id: 'd', name: 'P' }, [{ id: 'a', front: 'a', back: 'b', tags: [], typed: false }, ...cards], 1_800_000_000_000);
+  assert.deepEqual(Object.keys(JSON.parse(col.models)), ['1600000000001']);
+});
+
+test('typing cards: a typed cloze card uses the typed cloze model', async () => {
+  const { clozeCard } = await import('../js/cloze.js');
+  const text = 'The {{c1::heart}} pumps {{c2::blood}}';
+  const cs = [1, 2].map(n => ({ id: 'k' + n, ...clozeCard(text, n), tags: [], noteId: 'N1', cloze: n, noteText: text, deckName: 'Bio', typed: n === 1 }));
+  const { col, notes } = await ankiContents({ id: 'd', name: 'Bio' }, cs, 1_800_000_000_000);
+  const m = JSON.parse(col.models)[1_600_000_000_006];
+  assert.equal(m.type, 1);
+  assert.equal(m.tmpls[0].qfmt, '{{cloze:Text}}\n\n{{type:cloze:Text}}');
+  assert.equal(notes[0].mid, m.id);
+  assert.ok(!JSON.parse(col.models)[1_600_000_000_002], 'the ordinary cloze model is not written when no note uses it');
+});
+
+test('typing cards: a pair with only card 2 typed uses the matching model; both and card 1 have their own', async () => {
+  const pairOf = (t1, t2) => {
+    const f = { id: 'f', front: 'Mitosis', back: 'Cell division', tags: [], noteId: 'N', created: 1, deckName: 'Bio', typed: t1 };
+    return [f, { id: 'r', front: 'Cell division', back: 'Mitosis', tags: [], noteId: 'N', reverse: true, created: 1.5, deckName: 'Bio', typed: t2 }];
+  };
+  const idOf = async (t1, t2) => { const { col, notes } = await ankiContents({ id: 'd', name: 'Bio' }, pairOf(t1, t2), 1_800_000_000_000); return [notes[0].mid, JSON.parse(col.models)]; };
+  const [none] = await idOf(false, false);
+  assert.equal(none, 1_600_000_000_004);
+  const [two, m2] = await idOf(false, true);
+  assert.equal(two, 1_600_000_000_008);
+  assert.equal(m2[two].tmpls[0].qfmt, '{{Front}}');
+  assert.equal(m2[two].tmpls[1].qfmt, '{{Back}}\n\n{{type:Front}}');
+  assert.equal(m2[two].tmpls[1].afmt, '{{Back}}\n\n<hr id=answer>\n\n{{type:Front}}<br>\n{{Back Extra}}');
+  const [one, m1] = await idOf(true, false);
+  assert.equal(one, 1_600_000_000_007);
+  assert.equal(m1[one].tmpls[0].qfmt, '{{Front}}\n\n{{type:Back}}');
+  assert.equal(m1[one].tmpls[1].qfmt, '{{Back}}');
+  const [both] = await idOf(true, true);
+  assert.equal(both, 1_600_000_000_009);
+});
+
+test('typing cards: export, then import reads them back as typing cards', async () => {
+  const { notesToImport } = await import('../js/anki.js');
+  const { clozeCard } = await import('../js/cloze.js');
+  const text = 'The {{c1::heart}} pumps {{c2::blood}}';
+  const all = [
+    { id: 'a', front: 'Capital of France', back: 'Paris', tags: [], deckName: 'G', typed: true },
+    { id: 'b', front: 'Capital of Spain', back: 'Madrid', tags: [], deckName: 'G', typed: false },
+    { id: 'f', front: 'Mitosis', back: 'Cell division', tags: [], noteId: 'N', created: 1, deckName: 'G', typed: false },
+    { id: 'r', front: 'Cell division', back: 'Mitosis', tags: [], noteId: 'N', reverse: true, created: 1.5, deckName: 'G', typed: true },
+    ...[1, 2].map(n => ({ id: 'k' + n, ...clozeCard(text, n), tags: [], noteId: 'Z', cloze: n, noteText: text, deckName: 'G', typed: true }))
+  ];
+  const { col, notes, cards: ac } = await ankiContents({ id: 'd', name: 'G' }, all, 1_800_000_000_000);
+  const models = new Map(Object.entries(JSON.parse(col.models)).map(([id, m]) => [id, { name: m.name, fields: m.flds.map(f => f.name), cloze: m.type === 1, templates: m.tmpls.map(t => ({ ord: t.ord, qfmt: t.qfmt, afmt: t.afmt })) }]));
+  const back = notes.map(n => ({ id: String(n.id), guid: n.guid, mid: String(n.mid), fields: n.flds.split('\x1f'), tags: [], deck: 'G', cards: Object.fromEntries(ac.filter(c => c.nid === n.id).map(c => [c.ord, String(c.id)])) }));
+  const r = notesToImport(back, models);
+  const at = f => r.rows.findIndex(x => x[0] === f);
+  assert.equal(r.typeIns[at('Capital of France')], true);
+  assert.equal(r.typeIns[at('Capital of Spain')], false);
+  assert.equal(r.typeIns[at('Mitosis')], false);
+  assert.equal(r.reversed[at('Mitosis')].typeIn, true);
+  assert.deepEqual(r.clozes.map((c, i) => c && r.typeIns[i]).filter(x => x !== null), [true, true]);
+  assert.equal(r.rows[at('Capital of France')][1], 'Paris', 'the Back field is the answer alone');
+});

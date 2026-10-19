@@ -1437,6 +1437,7 @@ img[data-media][hidden]{display:none}
 .img-row:empty{display:none}
 .img-thumb{max-width:120px;max-height:90px;border-radius:var(--r-sm);border:1px solid var(--line-strong);object-fit:cover}
 .pic-mark{color:var(--accent-text);font-size:.85em}
+.type-mark svg{width:1em;height:1em;vertical-align:-.15em}
 
 /* Sounds on cards (audio.js plays them; card-editor.js adds them): a row of ▶ buttons under a side's text */
 .snd-row{display:flex;align-items:center;justify-content:center;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 0}

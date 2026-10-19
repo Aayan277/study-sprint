@@ -8,7 +8,8 @@ import { dayStart, dayEnd } from './days.js';
 import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, RELEARNING } from './queue.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
-import { canType, checkTyped } from './match.js';
+import { checkTyped } from './match.js';
+import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
@@ -153,13 +154,11 @@ const deckOf = card => R.effective.get(card.deckId);
 // is shown the same way (its steps are the elements, kind 'elements', no final answer). → { kind, intro, steps, final } or null.
 const stepsOf = card => (hasBlank(card) || hasMasks(card) ? null : parseStructured(card.back, { mask: maskMath }));
 const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.current.card); return sp ? sp.steps.length - R.stepShown : 0; };
-// Is this card answered by typing? Typing must be on and the answer short; a box of an image-occlusion picture needs a
-// label to type (without one you flip, saying it in your head).
-const typesAnswer = card => {
-  if (!R.typing || stepsOf(card)) return false;
-  const label = hasMasks(card) ? occLabel(card.occlusion.masks, card.occlusion.n) : null;
-  return label !== null ? !!label && canType(answerText(label)) : canType(answerText(card.back));
-};
+// How is this card asked? The card's own setting (typeIn), else its deck's, else the Today switch (R.typing): see type-in.js.
+// A step or elements card, a box with no label, and a back with nothing to type are flipped; so is an answer too long to type.
+const modeOf = card => answerMode(card, typeFacts(card), !!deckOf(card)?.typeAnswers, R.typing);
+const typesAnswer = card => modeOf(card).type;
+const FLIP_NOTE = { structured: 'Elements card: recall them in your head, then flip.', nolabel: 'No label on this box: say it in your head, then flip.', long: 'Long answer: say it in your head, then flip.' };
 // Read the side showing (the back once flipped) in the deck's language.
 // A side with sounds plays them (one after another) instead of reading the text out; any other side is read out.
 function readAloud() {
@@ -228,7 +227,8 @@ function renderSession(el, enter = false) {
   const kept = pad && padKey === R.shownAt && pad.hasInk() ? pad.canvas : null;
   destroyPad();
   // Formatting (bold, lists…) is shown on the card; typed answers are checked against the plain text.
-  const typeThis = typesAnswer(card);
+  const mode = modeOf(card);
+  const typeThis = mode.type;
   const occ = hasMasks(card);
   const frontLen = occ ? 0 : answerText(card.front).length;          // measured as words, not as LaTeX
   const size = frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
@@ -298,7 +298,7 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${R.typing && !typeThis && (!sp || sp.kind === 'elements') && !R.flipped ? `<p class="note center" id="longNote">${sp ? 'Elements card: recall them in your head, then flip.' : occ && !label ? 'No label on this box: say it in your head, then flip.' : 'Long answer: say it in your head, then flip.'}</p>` : ''}
+    ${mode.wanted && FLIP_NOTE[mode.why] && !R.flipped && (!sp || sp.kind === 'elements') ? `<p class="note center" id="longNote">${FLIP_NOTE[mode.why]}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? typingKeys() : keyLine)}</p>`;
   drawSessionPage(el, stripKeys(head), stripKeys(body));

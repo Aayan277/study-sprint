@@ -170,3 +170,23 @@ test('the switch: shown, checked, or replaced by its note while steps are on', (
   const blocked = reverseSwitchHTML('ac', { blocked: true });
   assert.ok(/id="acRevRow" hidden/.test(blocked) && /id="acRevNote" >/.test(blocked) && /can't be reversed/.test(blocked));
 });
+
+// ---------- typing cards ----------
+test('reverseOf drops typeIn: each direction has its own value', () => {
+  const r = reverseOf(fwd({ typeIn: true }), 'r');
+  assert.equal(Object.hasOwn(r, 'typeIn'), false);
+  assert.equal(reverseOf(fwd({ typeIn: false }), 'r2').typeIn, undefined);
+});
+
+test('pairPlan keeps the partner\'s own typeIn, and deletes a value that is not a boolean', () => {
+  const [f, r] = pair({ typeIn: true }, { typeIn: false });
+  const [a, b] = pairPlan(f, r, { back: 'Division' });
+  assert.equal(a.typeIn, true);
+  assert.equal(b.typeIn, false);
+  const [a2] = pairPlan(f, r, { typeIn: null });
+  assert.equal(Object.hasOwn(a2, 'typeIn'), false);
+  const [a3] = pairPlan(f, r, { typeIn: 'yes' });
+  assert.equal(Object.hasOwn(a3, 'typeIn'), false);
+  const [a4, b4] = pairPlan(f, r, { typeIn: false });
+  assert.deepEqual([a4.typeIn, b4.typeIn], [false, false]);
+});

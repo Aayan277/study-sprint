@@ -20,7 +20,8 @@ import { savePracticeAnswer, markLeechIfDue, practicedToday, scheduleSummaryHTML
 import { loadAll } from './study-data.js';
 import { pickPlayDeck } from './exam.js';
 import { giveBackNewFor } from './queue.js';
-import { subtreeIds, deckChoices, deckPath } from './deck-tree.js';
+import { subtreeIds, deckChoices, deckPath, effectiveDeck } from './deck-tree.js';
+import { isTypingCard } from './type-in.js';
 import { openCardPanel } from './browse.js';
 import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
@@ -146,7 +147,8 @@ export async function renderPlay(el) {
     const pool = cards.filter(c => inside.has(c.deckId));
     // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
     const picked = prefs.qtypeByDeck[prefs.deckId];
-    prefs.qtype = picked || defaultQuestionType(pool);
+    const typeDefault = new Map(decks.map(d => [d.id, !!effectiveDeck(decks, d.id)?.typeAnswers]));
+    prefs.qtype = picked || defaultQuestionType(pool, c => isTypingCard(c, typeDefault.get(c.deckId) ?? false));
     const suggested = !picked && prefs.qtype === 'back';
     // Cloze and image-occlusion cards can't be asked back → front, so with some in the deck that choice only needs the other cards to fit.
     const hasCloze = pool.some(isFrontOnly);
@@ -154,6 +156,7 @@ export async function renderPlay(el) {
     const mcOk = mcFront && (mcBack || hasCloze);
     if (hasCloze && !mcBack && prefs.qtype === 'back') prefs.qtype = 'front';
     const typeCount = playableCards(pool, 'typing').length;
+    if (!picked && prefs.qtype === 'typing' && !typeCount) prefs.qtype = defaultQuestionType(pool);      // (nothing to type after all)
     if (!mcOk && prefs.qtype !== 'typing') prefs.qtype = 'typing';
     const best = settings.playBest?.[bestKey(prefs)];
     const typing = prefs.qtype === 'typing';
