@@ -1,0 +1,347 @@
+{
+ "name": "Chemistry",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Define a Brønsted–Lowry acid",
+   "back": "A proton (H+) donor",
+   "topic": "acid"
+  },
+  {
+   "id": "c2",
+   "front": "Define a Brønsted–Lowry base",
+   "back": "A proton (H+) acceptor",
+   "topic": "acid"
+  },
+  {
+   "id": "c3",
+   "front": "What is pH?",
+   "back": "pH = −log[H+]",
+   "topic": "acid"
+  },
+  {
+   "id": "c4",
+   "front": "What is the pH of a 0.01 mol dm⁻³ HCl solution?",
+   "back": "2 (strong acid, fully dissociates)",
+   "topic": "acid"
+  },
+  {
+   "id": "c5",
+   "front": "What is a strong acid?",
+   "back": "An acid that fully dissociates in water, e.g. HCl, HNO3, H2SO4",
+   "topic": "acid"
+  },
+  {
+   "id": "c6",
+   "front": "What is a weak acid?",
+   "back": "An acid that only partially dissociates in water, e.g. ethanoic acid",
+   "topic": "acid"
+  },
+  {
+   "id": "c7",
+   "front": "Expression for Ka",
+   "back": "Ka = [H+][A−]/[HA]",
+   "topic": "acid"
+  },
+  {
+   "id": "c8",
+   "front": "What is pKa?",
+   "back": "pKa = −log Ka; smaller pKa = stronger acid",
+   "topic": "acid"
+  },
+  {
+   "id": "c9",
+   "front": "What is a buffer solution?",
+   "back": "A solution that resists change in pH when small amounts of acid or base are added",
+   "topic": "acid"
+  },
+  {
+   "id": "c10",
+   "front": "How is an acidic buffer made?",
+   "back": "A weak acid and a salt of its conjugate base, e.g. ethanoic acid + sodium ethanoate",
+   "topic": "acid"
+  },
+  {
+   "id": "c11",
+   "front": "What is Kw and its value at 25 °C?",
+   "back": "Ionic product of water, [H+][OH−] = 1.0 × 10⁻¹⁴ mol² dm⁻⁶",
+   "topic": "acid"
+  },
+  {
+   "id": "c12",
+   "front": "What is the equivalence point in a titration?",
+   "back": "The point where moles of acid and base have exactly reacted",
+   "topic": "acid"
+  },
+  {
+   "id": "c13",
+   "front": "Which indicator for a strong acid–weak base titration?",
+   "back": "Methyl orange (changes in the acidic range)",
+   "topic": "acid"
+  },
+  {
+   "id": "c14",
+   "front": "Which indicator for a weak acid–strong base titration?",
+   "back": "Phenolphthalein",
+   "topic": "acid"
+  },
+  {
+   "id": "c15",
+   "front": "What is a conjugate base?",
+   "back": "The species formed when an acid loses a proton",
+   "topic": "acid"
+  },
+  {
+   "id": "c16",
+   "front": "What is the general formula of the alkanes?",
+   "back": "CnH2n+2",
+   "topic": "org"
+  },
+  {
+   "id": "c17",
+   "front": "What is the general formula of the alkenes?",
+   "back": "CnH2n",
+   "topic": "org"
+  },
+  {
+   "id": "c18",
+   "front": "What type of reaction do alkenes undergo with bromine?",
+   "back": "Electrophilic addition; bromine water decolourises",
+   "topic": "org"
+  },
+  {
+   "id": "c19",
+   "front": "What is a nucleophile?",
+   "back": "An electron pair donor that attacks a δ+ carbon",
+   "topic": "org"
+  },
+  {
+   "id": "c20",
+   "front": "What is an electrophile?",
+   "back": "An electron pair acceptor",
+   "topic": "org"
+  },
+  {
+   "id": "c21",
+   "front": "Mechanism of a halogenoalkane with OH⁻",
+   "back": "Nucleophilic substitution; OH⁻ attacks the δ+ carbon and the halide leaves",
+   "topic": "org"
+  },
+  {
+   "id": "c22",
+   "front": "What is a structural isomer?",
+   "back": "Same molecular formula, different structural formula",
+   "topic": "org"
+  },
+  {
+   "id": "c23",
+   "front": "What is E/Z isomerism?",
+   "back": "Stereoisomerism from restricted rotation about a C=C double bond",
+   "topic": "org"
+  },
+  {
+   "id": "c24",
+   "front": "What is optical isomerism?",
+   "back": "Molecules with a chiral carbon form non-superimposable mirror images (enantiomers)",
+   "topic": "org"
+  },
+  {
+   "id": "c25",
+   "front": "How is an alcohol oxidised to a carboxylic acid?",
+   "back": "Heat under reflux with acidified potassium dichromate; orange → green",
+   "topic": "org"
+  },
+  {
+   "id": "c26",
+   "front": "What does a primary alcohol give with distillation and acidified dichromate?",
+   "back": "An aldehyde",
+   "topic": "org"
+  },
+  {
+   "id": "c27",
+   "front": "How do you test for an aldehyde?",
+   "back": "Tollens' reagent gives a silver mirror; Fehling's solution goes from blue to brick-red",
+   "topic": "org"
+  },
+  {
+   "id": "c28",
+   "front": "What is esterification?",
+   "back": "Carboxylic acid + alcohol → ester + water, with a concentrated sulfuric acid catalyst",
+   "topic": "org"
+  },
+  {
+   "id": "c29",
+   "front": "What is the functional group of a ketone?",
+   "back": "C=O within the carbon chain (carbonyl not at the end)",
+   "topic": "org"
+  },
+  {
+   "id": "c30",
+   "front": "What is cracking?",
+   "back": "Breaking long-chain alkanes into shorter alkanes and alkenes using heat and a catalyst",
+   "topic": "org"
+  },
+  {
+   "id": "c31",
+   "front": "What is free-radical substitution?",
+   "back": "Reaction of an alkane with a halogen in UV light: initiation, propagation, termination",
+   "topic": "org"
+  },
+  {
+   "id": "c32",
+   "front": "What is addition polymerisation?",
+   "back": "Alkene monomers join to form a polymer chain, e.g. ethene → poly(ethene)",
+   "topic": "org"
+  },
+  {
+   "id": "c33",
+   "front": "What is an ionic bond?",
+   "back": "Electrostatic attraction between oppositely charged ions",
+   "topic": "bond"
+  },
+  {
+   "id": "c34",
+   "front": "What is a covalent bond?",
+   "back": "A shared pair of electrons between two atoms",
+   "topic": "bond"
+  },
+  {
+   "id": "c35",
+   "front": "What is a dative covalent bond?",
+   "back": "A covalent bond where both electrons come from one atom",
+   "topic": "bond"
+  },
+  {
+   "id": "c36",
+   "front": "What is metallic bonding?",
+   "back": "Attraction between positive metal ions and delocalised electrons",
+   "topic": "bond"
+  },
+  {
+   "id": "c37",
+   "front": "Define electronegativity",
+   "back": "The ability of an atom to attract the bonding pair of electrons in a covalent bond",
+   "topic": "bond"
+  },
+  {
+   "id": "c38",
+   "front": "What is the shape of a molecule with 4 bonding pairs and no lone pairs?",
+   "back": "Tetrahedral, 109.5°",
+   "topic": "bond"
+  },
+  {
+   "id": "c39",
+   "front": "Shape and angle of water",
+   "back": "Bent; 104.5° (2 bonding pairs, 2 lone pairs)",
+   "topic": "bond"
+  },
+  {
+   "id": "c40",
+   "front": "Shape of ammonia",
+   "back": "Trigonal pyramidal; 107°",
+   "topic": "bond"
+  },
+  {
+   "id": "c41",
+   "front": "What are van der Waals forces?",
+   "back": "Weak induced dipole–dipole forces between all molecules",
+   "topic": "bond"
+  },
+  {
+   "id": "c42",
+   "front": "What is hydrogen bonding?",
+   "back": "Strong intermolecular force between H on N, O or F and a lone pair on N, O or F",
+   "topic": "bond"
+  },
+  {
+   "id": "c43",
+   "front": "Why does ice float?",
+   "back": "Hydrogen bonds hold molecules in an open lattice, so ice is less dense than water",
+   "topic": "bond"
+  },
+  {
+   "id": "c44",
+   "front": "Why does graphite conduct electricity?",
+   "back": "Delocalised electrons between the layers can move",
+   "topic": "bond"
+  },
+  {
+   "id": "c45",
+   "front": "What is activation energy?",
+   "back": "The minimum energy needed for a reaction to occur",
+   "topic": "kin"
+  },
+  {
+   "id": "c46",
+   "front": "What does a catalyst do?",
+   "back": "Provides an alternative reaction pathway with lower activation energy; not used up",
+   "topic": "kin"
+  },
+  {
+   "id": "c47",
+   "front": "What does a Maxwell–Boltzmann distribution show?",
+   "back": "The distribution of molecular energies in a gas at a given temperature",
+   "topic": "kin"
+  },
+  {
+   "id": "c48",
+   "front": "Why does increasing temperature increase the rate of reaction?",
+   "back": "More molecules have energy ≥ activation energy, so more successful collisions",
+   "topic": "kin"
+  },
+  {
+   "id": "c49",
+   "front": "What is the rate equation?",
+   "back": "rate = k[A]^m[B]^n",
+   "topic": "kin"
+  },
+  {
+   "id": "c50",
+   "front": "What is the order of reaction?",
+   "back": "The power a concentration is raised to in the rate equation",
+   "topic": "kin"
+  },
+  {
+   "id": "c51",
+   "front": "What is the rate-determining step?",
+   "back": "The slowest step in a reaction mechanism",
+   "topic": "kin"
+  },
+  {
+   "id": "c52",
+   "front": "What is the half-life of a first-order reaction?",
+   "back": "Constant, independent of concentration",
+   "topic": "kin"
+  },
+  {
+   "id": "c53",
+   "front": "What is the Arrhenius equation?",
+   "back": "k = Ae^(−Ea/RT)",
+   "topic": "kin"
+  },
+  {
+   "id": "c54",
+   "front": "State Le Chatelier's principle",
+   "back": "If a system at equilibrium is disturbed, the equilibrium shifts to oppose the change",
+   "topic": "kin"
+  },
+  {
+   "id": "c55",
+   "front": "What is Kc?",
+   "back": "Equilibrium constant in terms of concentrations of products over reactants",
+   "topic": "kin"
+  },
+  {
+   "id": "c56",
+   "front": "Effect of a catalyst on equilibrium position",
+   "back": "None; it speeds up forward and reverse reactions equally",
+   "topic": "kin"
+  },
+  {
+   "id": "c57",
+   "front": "What is dynamic equilibrium?",
+   "back": "Forward and reverse reactions happen at the same rate; concentrations stay constant",
+   "topic": "kin"
+  }
+ ]
+}

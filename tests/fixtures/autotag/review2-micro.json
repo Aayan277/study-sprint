@@ -1,0 +1,377 @@
+{
+ "name": "NURS 210 Microbiology",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "Gram-positive bacteria cell wall",
+   "back": "Thick peptidoglycan layer, stains purple",
+   "tags": []
+  },
+  {
+   "id": "c2",
+   "front": "Gram-negative bacteria cell wall",
+   "back": "Thin peptidoglycan plus outer membrane with LPS, stains pink",
+   "tags": []
+  },
+  {
+   "id": "c3",
+   "front": "Steps of the Gram stain",
+   "back": "Crystal violet, iodine, alcohol decolorizer, safranin",
+   "tags": []
+  },
+  {
+   "id": "c4",
+   "front": "What is endotoxin?",
+   "back": "Lipid A part of LPS in gram-negative bacteria; causes fever and septic shock",
+   "tags": []
+  },
+  {
+   "id": "c5",
+   "front": "What is exotoxin?",
+   "back": "Protein toxin secreted by bacteria (e.g. tetanus, botulinum)",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "Shapes of bacteria",
+   "back": "Cocci (spheres), bacilli (rods), spirilla (spirals)",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "Bacterial spores",
+   "back": "Dormant resistant forms (Bacillus, Clostridium); killed by autoclave",
+   "tags": []
+  },
+  {
+   "id": "c8",
+   "front": "Bacterial capsule",
+   "back": "Polysaccharide layer that helps bacteria evade phagocytosis",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "Bacterial growth curve phases",
+   "back": "Lag, log (exponential), stationary, death",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "Binary fission",
+   "back": "How bacteria reproduce asexually by splitting in two",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "Staphylococcus aureus",
+   "back": "Gram-positive cocci in clusters; causes skin infections, MRSA",
+   "tags": []
+  },
+  {
+   "id": "c12",
+   "front": "Streptococcus pyogenes",
+   "back": "Gram-positive cocci in chains; strep throat, rheumatic fever",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "Escherichia coli",
+   "back": "Gram-negative rod; most common cause of UTI",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "Clostridioides difficile",
+   "back": "Spore-forming bacteria causing diarrhea after antibiotics; use soap and water, not alcohol gel",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "Mycobacterium tuberculosis",
+   "back": "Acid-fast bacillus; airborne precautions, N95 respirator",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "Pseudomonas aeruginosa",
+   "back": "Gram-negative rod; burns and wound infections, blue-green pus",
+   "tags": []
+  },
+  {
+   "id": "c17",
+   "front": "What is a virus?",
+   "back": "Non-living infectious particle: nucleic acid in a protein capsid, needs a host cell to replicate",
+   "tags": []
+  },
+  {
+   "id": "c18",
+   "front": "Viral replication steps",
+   "back": "Attachment, penetration, uncoating, biosynthesis, assembly, release",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "Retrovirus",
+   "back": "RNA virus that uses reverse transcriptase to make DNA (e.g. HIV)",
+   "tags": []
+  },
+  {
+   "id": "c20",
+   "front": "HIV targets which cells?",
+   "back": "CD4 helper T cells",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "Influenza virus",
+   "back": "Enveloped RNA virus; antigenic drift and shift; droplet precautions",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "Hepatitis B virus transmission",
+   "back": "Blood and body fluids; vaccine available",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "Herpes simplex virus",
+   "back": "Causes cold sores (HSV-1) and genital herpes (HSV-2); latent in nerve ganglia",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "Varicella zoster virus",
+   "back": "Chickenpox, reactivates as shingles; airborne and contact precautions",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "Fungal infections",
+   "back": "Mycoses, e.g. Candida albicans (thrush, yeast infection)",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "Candida albicans",
+   "back": "Yeast; opportunistic infection in immunocompromised patients",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "Protozoa example",
+   "back": "Plasmodium (malaria), Giardia (diarrhea)",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "Prion",
+   "back": "Misfolded infectious protein; causes CJD",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "Chain of infection",
+   "back": "Infectious agent, reservoir, portal of exit, mode of transmission, portal of entry, susceptible host",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "Standard precautions",
+   "back": "Hand hygiene, PPE, safe injection practices for all patients",
+   "tags": []
+  },
+  {
+   "id": "c31",
+   "front": "Contact precautions",
+   "back": "Gown and gloves; for MRSA, VRE, C. diff",
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "Droplet precautions",
+   "back": "Surgical mask within 3 feet; for influenza, pertussis",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "Airborne precautions",
+   "back": "N95 respirator, negative pressure room; for TB, measles, varicella",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "Hand hygiene",
+   "back": "Most important way to prevent healthcare-associated infections",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "Healthcare-associated infection (HAI)",
+   "back": "Infection acquired during care in a facility, e.g. CAUTI, CLABSI",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "Sterilization vs disinfection",
+   "back": "Sterilization kills all microbes including spores; disinfection kills most pathogens",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "Autoclave",
+   "back": "Steam under pressure (121 °C) used for sterilization",
+   "tags": []
+  },
+  {
+   "id": "c38",
+   "front": "Normal flora",
+   "back": "Microbes that live on the body without causing disease and protect against pathogens",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "Opportunistic infection",
+   "back": "Infection caused by organisms that don't usually cause disease in a healthy host",
+   "tags": []
+  },
+  {
+   "id": "c40",
+   "front": "Antibiotic resistance",
+   "back": "Bacteria survive antibiotic treatment through mutation or gene transfer",
+   "tags": []
+  },
+  {
+   "id": "c41",
+   "front": "MRSA",
+   "back": "Methicillin-resistant Staphylococcus aureus; contact precautions",
+   "tags": []
+  },
+  {
+   "id": "c42",
+   "front": "VRE",
+   "back": "Vancomycin-resistant Enterococcus",
+   "tags": []
+  },
+  {
+   "id": "c43",
+   "front": "Penicillin mechanism",
+   "back": "Inhibits bacterial cell wall synthesis",
+   "tags": []
+  },
+  {
+   "id": "c44",
+   "front": "Broad-spectrum antibiotic",
+   "back": "Acts on many types of bacteria, both gram-positive and gram-negative",
+   "tags": []
+  },
+  {
+   "id": "c45",
+   "front": "Culture and sensitivity",
+   "back": "Lab test that identifies the organism and which antibiotics work; collect before giving antibiotics",
+   "tags": []
+  },
+  {
+   "id": "c46",
+   "front": "Innate immunity",
+   "back": "Nonspecific first line: skin, mucous membranes, phagocytes, inflammation, fever",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "Adaptive immunity",
+   "back": "Specific response by T cells and B cells, with memory",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "Antibodies (immunoglobulins)",
+   "back": "Proteins made by plasma cells that bind antigens",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "IgG",
+   "back": "Most abundant antibody; crosses the placenta",
+   "tags": []
+  },
+  {
+   "id": "c50",
+   "front": "IgM",
+   "back": "First antibody made in an infection",
+   "tags": []
+  },
+  {
+   "id": "c51",
+   "front": "IgE",
+   "back": "Antibody involved in allergies and parasites",
+   "tags": []
+  },
+  {
+   "id": "c52",
+   "front": "Active vs passive immunity",
+   "back": "Active: body makes its own antibodies (infection, vaccine); passive: receives antibodies (breast milk, IVIG)",
+   "tags": []
+  },
+  {
+   "id": "c53",
+   "front": "Vaccine",
+   "back": "Antigen that stimulates active immunity without causing disease",
+   "tags": []
+  },
+  {
+   "id": "c54",
+   "front": "Phagocytosis",
+   "back": "Engulfing and digesting microbes by neutrophils and macrophages",
+   "tags": []
+  },
+  {
+   "id": "c55",
+   "front": "Signs of local infection",
+   "back": "Redness, heat, swelling, pain, loss of function",
+   "tags": []
+  },
+  {
+   "id": "c56",
+   "front": "Sepsis",
+   "back": "Life-threatening organ dysfunction caused by the response to infection",
+   "tags": []
+  },
+  {
+   "id": "c57",
+   "front": "Urinary tract infection (UTI)",
+   "back": "Usually E. coli; dysuria, frequency, urgency",
+   "tags": []
+  },
+  {
+   "id": "c58",
+   "front": "Pneumonia common bacterial cause",
+   "back": "Streptococcus pneumoniae",
+   "tags": []
+  },
+  {
+   "id": "c59",
+   "front": "Incubation period",
+   "back": "Time between exposure and the first symptoms",
+   "tags": []
+  },
+  {
+   "id": "c60",
+   "front": "Pathogen",
+   "back": "A microorganism that causes disease",
+   "tags": []
+  },
+  {
+   "id": "c61",
+   "front": "Virulence",
+   "back": "Degree of pathogenicity of a microbe",
+   "tags": []
+  },
+  {
+   "id": "c62",
+   "front": "Zoonosis",
+   "back": "Infection transmitted from animals to humans",
+   "tags": []
+  }
+ ]
+}

@@ -1,0 +1,734 @@
+{
+ "name": "Biology",
+ "cards": [
+  {
+   "id": "c0001",
+   "front": "What is the equation for photosynthesis?",
+   "back": "6CO2 + 6H2O + light → C6H12O6 + 6O2",
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0002",
+   "front": "Where does photosynthesis take place in a plant cell?",
+   "back": "In the chloroplasts",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0003",
+   "front": "Which pigment absorbs light in photosynthesis?",
+   "back": "Chlorophyll, which absorbs mostly red and blue light",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0004",
+   "front": "What are thylakoids?",
+   "back": "Flattened membrane sacs inside the chloroplast where the light reactions of photosynthesis occur",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0005",
+   "front": "What is a granum?",
+   "back": "A stack of thylakoids in the chloroplast",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0006",
+   "front": "What is the stroma?",
+   "back": "The fluid inside the chloroplast where the Calvin cycle takes place",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0007",
+   "front": "What are the products of the light reactions?",
+   "back": "ATP, NADPH and oxygen",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0008",
+   "front": "Where does the oxygen released in photosynthesis come from?",
+   "back": "From the splitting of water (photolysis)",
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0009",
+   "front": "What does the Calvin cycle do?",
+   "back": "Uses ATP and NADPH to fix carbon dioxide into sugar",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0010",
+   "front": "Which enzyme fixes carbon dioxide in the Calvin cycle?",
+   "back": "Rubisco",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0011",
+   "front": "What is carbon fixation?",
+   "back": "Attaching CO2 to RuBP in the chloroplast to make organic molecules",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0012",
+   "front": "What are stomata?",
+   "back": "Pores in the leaf epidermis that let CO2 in and water vapor out",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0013",
+   "front": "Which cells control the opening of stomata?",
+   "back": "Guard cells",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0014",
+   "front": "What is transpiration?",
+   "back": "Loss of water vapor from leaves, which pulls water up the xylem",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0015",
+   "front": "Which tissue carries water up from the roots?",
+   "back": "Xylem",
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0016",
+   "front": "Which tissue carries sugars around the plant?",
+   "back": "Phloem, by translocation",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0017",
+   "front": "What is photorespiration?",
+   "back": "Rubisco binds oxygen instead of CO2, wasting energy from photosynthesis",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0018",
+   "front": "How do C4 plants reduce photorespiration?",
+   "back": "They fix CO2 first in mesophyll cells and concentrate it in the bundle sheath cells",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0019",
+   "front": "What are CAM plants?",
+   "back": "Plants that open their stomata at night to save water, e.g. cacti",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0020",
+   "front": "What is the role of the cuticle?",
+   "back": "A waxy layer that reduces water loss from the leaf",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0021",
+   "front": "Which factors limit the rate of photosynthesis?",
+   "back": "Light intensity, CO2 concentration and temperature",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0022",
+   "front": "What is a photosystem?",
+   "back": "A cluster of chlorophyll and proteins in the thylakoid membrane that captures light",
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0023",
+   "front": "What does photosystem II do in the chloroplast?",
+   "back": "Splits water and passes electrons to the electron transport chain",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0024",
+   "front": "What is photophosphorylation?",
+   "back": "Making ATP in the chloroplast using the energy of light",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0025",
+   "front": "What is the role of NADP+ in photosynthesis?",
+   "back": "It accepts electrons to become NADPH",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0026",
+   "front": "What are the main parts of a leaf?",
+   "back": "Cuticle, epidermis, mesophyll, vascular bundle and stomata",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0027",
+   "front": "What is the function of the palisade mesophyll?",
+   "back": "It contains many chloroplasts to absorb light for photosynthesis",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0028",
+   "front": "What is chlorosis?",
+   "back": "Yellowing of leaves due to a lack of chlorophyll, often from iron or nitrogen deficiency",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0029",
+   "front": "What is the main source of nitrogen for a plant?",
+   "back": "Nitrate taken up from the soil by the roots",
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0030",
+   "front": "What is the role of root hairs?",
+   "back": "They increase the surface area for absorbing water and minerals",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0031",
+   "front": "What is mitosis?",
+   "back": "Division of the nucleus that produces two genetically identical daughter cells",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0032",
+   "front": "What is meiosis?",
+   "back": "Division that produces four haploid cells, each genetically different",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0033",
+   "front": "What are the stages of the cell cycle?",
+   "back": "G1, S, G2 and the mitotic phase",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0034",
+   "front": "What happens during interphase?",
+   "back": "The cell grows and copies its DNA before mitosis",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0035",
+   "front": "What happens in S phase?",
+   "back": "DNA replication, so each chromosome has two sister chromatids",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0036",
+   "front": "What happens in prophase of mitosis?",
+   "back": "Chromosomes condense and the spindle begins to form",
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0037",
+   "front": "What happens in metaphase of mitosis?",
+   "back": "Chromosomes line up along the middle of the cell",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0038",
+   "front": "What happens in anaphase of mitosis?",
+   "back": "Sister chromatids are pulled apart toward opposite poles",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0039",
+   "front": "What happens in telophase of mitosis?",
+   "back": "Nuclear envelopes re-form and the chromosomes uncoil, and the cell then divides",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0040",
+   "front": "What is cytokinesis?",
+   "back": "The division of the cytoplasm that splits the cell in two",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0041",
+   "front": "What is the centromere?",
+   "back": "The region where sister chromatids are joined",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0042",
+   "front": "What is the mitotic spindle made of in mitosis?",
+   "back": "Microtubules, which attach to the kinetochores",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0043",
+   "front": "What is a kinetochore?",
+   "back": "A protein structure on the centromere where spindle fibres attach",
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0044",
+   "front": "What are centrosomes?",
+   "back": "Organelles that organize the microtubules and form the spindle poles",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0045",
+   "front": "What is a checkpoint?",
+   "back": "A control point where the cycle can stop if something is wrong",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0046",
+   "front": "What does the G1 checkpoint check in the cell cycle?",
+   "back": "Cell size, nutrients and DNA damage",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0047",
+   "front": "What are cyclins?",
+   "back": "Proteins that activate kinases to drive the cell cycle forward",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0048",
+   "front": "What does p53 do?",
+   "back": "Stops the cycle for DNA repair or triggers apoptosis",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0049",
+   "front": "What is apoptosis?",
+   "back": "Programmed cell death",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0050",
+   "front": "How does cancer relate to the cell cycle?",
+   "back": "Cells ignore the checkpoints and divide without control",
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0051",
+   "front": "What is crossing over?",
+   "back": "Exchange of segments between homologous chromosomes in prophase I of meiosis",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0052",
+   "front": "Why does meiosis give genetic variation?",
+   "back": "Crossing over and independent assortment",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0053",
+   "front": "What is the difference between haploid and diploid?",
+   "back": "Haploid cells have one set of chromosomes, diploid cells have two",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0054",
+   "front": "What are homologous chromosomes?",
+   "back": "A pair, one from each parent, with the same genes",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0055",
+   "front": "What is nondisjunction?",
+   "back": "Chromosomes fail to separate in meiosis, giving the wrong number in the gametes",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0056",
+   "front": "What causes Down syndrome?",
+   "back": "An extra copy of chromosome 21",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0057",
+   "front": "How do plant cells divide the cytoplasm?",
+   "back": "By forming a cell plate",
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0058",
+   "front": "How do animal cells divide the cytoplasm?",
+   "back": "A cleavage furrow pinches the cell in two",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0059",
+   "front": "What is a tetrad?",
+   "back": "A pair of homologous chromosomes joined together in prophase I of meiosis",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0060",
+   "front": "What is G0?",
+   "back": "A resting state where the cell has left the cell cycle",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0061",
+   "front": "What is binary fission?",
+   "back": "How prokaryotic cells divide, with no spindle or mitosis",
+   "topic": "cell division"
+  },
+  {
+   "id": "c0062",
+   "front": "What is an allele?",
+   "back": "One version of a gene",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0063",
+   "front": "What is a genotype?",
+   "back": "The combination of alleles an organism has",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0064",
+   "front": "What is a phenotype?",
+   "back": "The observable trait that results from the genotype",
+   "tags": [
+    "week1"
+   ],
+   "topic": "genetics"
+  },
+  {
+   "id": "c0065",
+   "front": "What does dominant mean?",
+   "back": "The allele that shows in the phenotype when present",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0066",
+   "front": "What does recessive mean?",
+   "back": "The allele that shows only when two copies are present",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0067",
+   "front": "What is a heterozygote?",
+   "back": "An individual with two different alleles of a gene",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0068",
+   "front": "What is a homozygote?",
+   "back": "An individual with two identical alleles of a gene",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0069",
+   "front": "What does a Punnett square show?",
+   "back": "The possible offspring of a cross and their probabilities",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0070",
+   "front": "What was Mendel's law of segregation?",
+   "back": "Each parent passes on only one of its two alleles",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0071",
+   "front": "What is independent assortment?",
+   "back": "Alleles of different genes are sorted into gametes independently",
+   "tags": [
+    "week1"
+   ],
+   "topic": "genetics"
+  },
+  {
+   "id": "c0072",
+   "front": "What is a test cross?",
+   "back": "Crossing an unknown dominant phenotype with a homozygous recessive",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0073",
+   "front": "What is incomplete dominance?",
+   "back": "The heterozygote shows a blend of the two phenotypes",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0074",
+   "front": "What is codominance?",
+   "back": "Both alleles are fully expressed, as in AB blood",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0075",
+   "front": "Which blood group alleles are there?",
+   "back": "IA, IB and i",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0076",
+   "front": "What is a sex-linked trait?",
+   "back": "A trait whose gene lies on the X chromosome",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0077",
+   "front": "Why are males more often colour blind?",
+   "back": "The gene is on the X and they have only one copy",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0078",
+   "front": "What is a carrier?",
+   "back": "Someone who has one copy of a recessive allele but shows no trait",
+   "tags": [
+    "week1"
+   ],
+   "topic": "genetics"
+  },
+  {
+   "id": "c0079",
+   "front": "What is a pedigree?",
+   "back": "A family tree used to trace how a trait is inherited",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0080",
+   "front": "What is a mutation?",
+   "back": "A change in the DNA sequence",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0081",
+   "front": "What is a point mutation?",
+   "back": "A change of a single base",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0082",
+   "front": "What is a codon?",
+   "back": "Three bases in mRNA that code for one amino acid",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0083",
+   "front": "What is transcription?",
+   "back": "Copying a gene's DNA into mRNA",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0084",
+   "front": "What is translation?",
+   "back": "Building a protein from the mRNA at the ribosome",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0085",
+   "front": "What does DNA polymerase do?",
+   "back": "Builds new DNA strands during replication",
+   "tags": [
+    "week1"
+   ],
+   "topic": "genetics"
+  },
+  {
+   "id": "c0086",
+   "front": "What is a gene?",
+   "back": "A section of DNA that codes for a protein",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0087",
+   "front": "What is the F1 generation?",
+   "back": "The first generation of offspring from a cross",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0088",
+   "front": "What is a monohybrid cross?",
+   "back": "A cross that follows one gene",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0089",
+   "front": "What is a dihybrid cross?",
+   "back": "A cross that follows two genes, with a 9:3:3:1 ratio",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0090",
+   "front": "What is epistasis?",
+   "back": "One gene masks the effect of another",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0091",
+   "front": "What is genetic linkage?",
+   "back": "Genes close on the same chromosome tend to be inherited together",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0092",
+   "front": "Light energy is trapped by […] in the thylakoid membrane.",
+   "back": "chlorophyll",
+   "noteId": "n91",
+   "noteText": "Light energy is trapped by {{c1::chlorophyll}} in the {{c2::thylakoid}} membrane.",
+   "cloze": 1,
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0093",
+   "front": "Light energy is trapped by chlorophyll in the […] membrane.",
+   "back": "thylakoid",
+   "noteId": "n91",
+   "noteText": "Light energy is trapped by {{c1::chlorophyll}} in the {{c2::thylakoid}} membrane.",
+   "cloze": 2,
+   "tags": [
+    "week1"
+   ],
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0094",
+   "front": "The […] open and close to control gas exchange in the leaf.",
+   "back": "stomata",
+   "noteId": "n93",
+   "noteText": "The {{c1::stomata}} open and close to control gas exchange in the leaf.",
+   "cloze": 1,
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0095",
+   "front": "In […] the sister chromatids separate and move to opposite poles.",
+   "back": "anaphase",
+   "noteId": "n94",
+   "noteText": "In {{c1::anaphase}} the sister chromatids separate and move to opposite poles.",
+   "cloze": 1,
+   "topic": "cell division"
+  },
+  {
+   "id": "c0096",
+   "front": "Crossing over happens during […] of meiosis.",
+   "back": "prophase I",
+   "noteId": "n95",
+   "noteText": "Crossing over happens during {{c1::prophase I}} of {{c2::meiosis}}.",
+   "cloze": 1,
+   "topic": "cell division"
+  },
+  {
+   "id": "c0097",
+   "front": "Crossing over happens during prophase I of […].",
+   "back": "meiosis",
+   "noteId": "n95",
+   "noteText": "Crossing over happens during {{c1::prophase I}} of {{c2::meiosis}}.",
+   "cloze": 2,
+   "topic": "cell division"
+  },
+  {
+   "id": "c0098",
+   "front": "A […] individual has two different alleles for a gene.",
+   "back": "heterozygous",
+   "noteId": "n97",
+   "noteText": "A {{c1::heterozygous}} individual has two different alleles for a gene.",
+   "cloze": 1,
+   "topic": "genetics"
+  },
+  {
+   "id": "c0099",
+   "front": "The […] predicts the genotypes of offspring from a cross.",
+   "back": "Punnett square",
+   "noteId": "n98",
+   "noteText": "The {{c1::Punnett square}} predicts the genotypes of offspring from a cross.",
+   "cloze": 1,
+   "topic": "genetics"
+  },
+  {
+   "id": "c0100",
+   "front": "Rubisco",
+   "back": "The enzyme that fixes carbon dioxide in the Calvin cycle",
+   "noteId": "n99",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0101",
+   "front": "The enzyme that fixes carbon dioxide in the Calvin cycle",
+   "back": "Rubisco",
+   "noteId": "n99",
+   "reverse": true,
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0102",
+   "front": "Cytokinesis",
+   "back": "Division of the cytoplasm at the end of cell division",
+   "noteId": "n101",
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0103",
+   "front": "Division of the cytoplasm at the end of cell division",
+   "back": "Cytokinesis",
+   "noteId": "n101",
+   "reverse": true,
+   "tags": [
+    "week1"
+   ],
+   "topic": "cell division"
+  },
+  {
+   "id": "c0104",
+   "front": "Allele",
+   "back": "One version of a gene",
+   "noteId": "n103",
+   "topic": "genetics"
+  },
+  {
+   "id": "c0105",
+   "front": "One version of a gene",
+   "back": "Allele",
+   "noteId": "n103",
+   "reverse": true,
+   "topic": "genetics"
+  },
+  {
+   "id": "c0106",
+   "front": "Xylem",
+   "back": "The tissue that carries water up the plant",
+   "noteId": "n105",
+   "topic": "photosynthesis"
+  },
+  {
+   "id": "c0107",
+   "front": "The tissue that carries water up the plant",
+   "back": "Xylem",
+   "noteId": "n105",
+   "reverse": true,
+   "topic": "photosynthesis"
+  }
+ ]
+}

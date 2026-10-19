@@ -1,0 +1,512 @@
+{
+ "name": "Anatomy 1",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "The […] is formed from the anterior rami of C5–T1.",
+   "back": "brachial plexus",
+   "noteId": "n1",
+   "noteText": "The {{c1::brachial plexus}} is formed from the anterior rami of {{c2::C5–T1}}.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c2",
+   "front": "The brachial plexus is formed from the anterior rami of […].",
+   "back": "C5–T1",
+   "noteId": "n1",
+   "noteText": "The {{c1::brachial plexus}} is formed from the anterior rami of {{c2::C5–T1}}.",
+   "cloze": 2,
+   "topic": "limb"
+  },
+  {
+   "id": "c3",
+   "front": "The […] supplies biceps brachii, brachialis and coracobrachialis.",
+   "back": "musculocutaneous nerve",
+   "noteId": "n2",
+   "noteText": "The {{c1::musculocutaneous nerve}} supplies biceps brachii, brachialis and coracobrachialis.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c4",
+   "front": "The […] wraps around the surgical neck of the humerus and supplies deltoid and teres minor.",
+   "back": "axillary nerve",
+   "noteId": "n3",
+   "noteText": "The {{c1::axillary nerve}} wraps around the surgical neck of the humerus and supplies {{c2::deltoid}} and teres minor.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c5",
+   "front": "The axillary nerve wraps around the surgical neck of the humerus and supplies […] and teres minor.",
+   "back": "deltoid",
+   "noteId": "n3",
+   "noteText": "The {{c1::axillary nerve}} wraps around the surgical neck of the humerus and supplies {{c2::deltoid}} and teres minor.",
+   "cloze": 2,
+   "topic": "limb"
+  },
+  {
+   "id": "c6",
+   "front": "A fracture of the mid-shaft of the humerus can damage the […], causing wrist drop.",
+   "back": "radial nerve",
+   "noteId": "n4",
+   "noteText": "A fracture of the mid-shaft of the humerus can damage the {{c1::radial nerve}}, causing {{c2::wrist drop}}.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c7",
+   "front": "A fracture of the mid-shaft of the humerus can damage the radial nerve, causing […].",
+   "back": "wrist drop",
+   "noteId": "n4",
+   "noteText": "A fracture of the mid-shaft of the humerus can damage the {{c1::radial nerve}}, causing {{c2::wrist drop}}.",
+   "cloze": 2,
+   "topic": "limb"
+  },
+  {
+   "id": "c8",
+   "front": "The […] passes behind the medial epicondyle of the humerus.",
+   "back": "ulnar nerve",
+   "noteId": "n5",
+   "noteText": "The {{c1::ulnar nerve}} passes behind the medial epicondyle of the humerus.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c9",
+   "front": "The […] passes through the carpal tunnel and is compressed in carpal tunnel syndrome.",
+   "back": "median nerve",
+   "noteId": "n6",
+   "noteText": "The {{c1::median nerve}} passes through the carpal tunnel and is compressed in {{c2::carpal tunnel syndrome}}.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c10",
+   "front": "The median nerve passes through the carpal tunnel and is compressed in […].",
+   "back": "carpal tunnel syndrome",
+   "noteId": "n6",
+   "noteText": "The {{c1::median nerve}} passes through the carpal tunnel and is compressed in {{c2::carpal tunnel syndrome}}.",
+   "cloze": 2,
+   "topic": "limb"
+  },
+  {
+   "id": "c11",
+   "front": "The rotator cuff muscles are […], infraspinatus, teres minor and subscapularis.",
+   "back": "supraspinatus",
+   "noteId": "n7",
+   "noteText": "The rotator cuff muscles are {{c1::supraspinatus}}, {{c2::infraspinatus}}, {{c3::teres minor}} and {{c4::subscapularis}}.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c12",
+   "front": "The rotator cuff muscles are supraspinatus, […], teres minor and subscapularis.",
+   "back": "infraspinatus",
+   "noteId": "n7",
+   "noteText": "The rotator cuff muscles are {{c1::supraspinatus}}, {{c2::infraspinatus}}, {{c3::teres minor}} and {{c4::subscapularis}}.",
+   "cloze": 2,
+   "topic": "limb"
+  },
+  {
+   "id": "c13",
+   "front": "The rotator cuff muscles are supraspinatus, infraspinatus, […] and subscapularis.",
+   "back": "teres minor",
+   "noteId": "n7",
+   "noteText": "The rotator cuff muscles are {{c1::supraspinatus}}, {{c2::infraspinatus}}, {{c3::teres minor}} and {{c4::subscapularis}}.",
+   "cloze": 3,
+   "topic": "limb"
+  },
+  {
+   "id": "c14",
+   "front": "The rotator cuff muscles are supraspinatus, infraspinatus, teres minor and […].",
+   "back": "subscapularis",
+   "noteId": "n7",
+   "noteText": "The rotator cuff muscles are {{c1::supraspinatus}}, {{c2::infraspinatus}}, {{c3::teres minor}} and {{c4::subscapularis}}.",
+   "cloze": 4,
+   "topic": "limb"
+  },
+  {
+   "id": "c15",
+   "front": "[…] initiates the first 15° of abduction of the shoulder.",
+   "back": "Supraspinatus",
+   "noteId": "n8",
+   "noteText": "{{c1::Supraspinatus}} initiates the first 15° of abduction of the shoulder.",
+   "cloze": 1,
+   "topic": "limb"
+  },
+  {
+   "id": "c16",
+   "front": "Which nerve is damaged in \"claw hand\"?",
+   "back": "Ulnar nerve",
+   "topic": "limb"
+  },
+  {
+   "id": "c17",
+   "front": "Which nerve is damaged in \"ape hand\"?",
+   "back": "Median nerve",
+   "topic": "limb"
+  },
+  {
+   "id": "c18",
+   "front": "What muscle is the main flexor of the elbow?",
+   "back": "Brachialis (biceps brachii also flexes and supinates)",
+   "topic": "limb"
+  },
+  {
+   "id": "c19",
+   "front": "What are the boundaries of the cubital fossa?",
+   "back": "Brachioradialis laterally, pronator teres medially, a line between the epicondyles superiorly",
+   "topic": "limb"
+  },
+  {
+   "id": "c20",
+   "front": "Contents of the cubital fossa (lateral to medial)",
+   "back": "Radial nerve, biceps tendon, brachial artery, median nerve",
+   "topic": "limb"
+  },
+  {
+   "id": "c21",
+   "front": "What bones form the carpal tunnel?",
+   "back": "The carpal bones, roofed by the flexor retinaculum",
+   "topic": "limb"
+  },
+  {
+   "id": "c22",
+   "front": "The most commonly fractured carpal bone",
+   "back": "Scaphoid (risk of avascular necrosis)",
+   "topic": "limb"
+  },
+  {
+   "id": "c23",
+   "front": "Muscle that abducts the arm from 15° to 90°",
+   "back": "Deltoid",
+   "noteId": "n9",
+   "topic": "limb"
+  },
+  {
+   "id": "c24",
+   "front": "Deltoid",
+   "back": "Muscle that abducts the arm from 15° to 90°",
+   "noteId": "n9",
+   "reverse": true,
+   "topic": "limb"
+  },
+  {
+   "id": "c25",
+   "front": "Nerve that supplies the deltoid",
+   "back": "Axillary nerve",
+   "noteId": "n10",
+   "topic": "limb"
+  },
+  {
+   "id": "c26",
+   "front": "Axillary nerve",
+   "back": "Nerve that supplies the deltoid",
+   "noteId": "n10",
+   "reverse": true,
+   "topic": "limb"
+  },
+  {
+   "id": "c27",
+   "front": "The […] is the pacemaker of the heart, found in the wall of the right atrium.",
+   "back": "sinoatrial node",
+   "noteId": "n11",
+   "noteText": "The {{c1::sinoatrial node}} is the pacemaker of the heart, found in the wall of the {{c2::right atrium}}.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c28",
+   "front": "The sinoatrial node is the pacemaker of the heart, found in the wall of the […].",
+   "back": "right atrium",
+   "noteId": "n11",
+   "noteText": "The {{c1::sinoatrial node}} is the pacemaker of the heart, found in the wall of the {{c2::right atrium}}.",
+   "cloze": 2,
+   "topic": "heart"
+  },
+  {
+   "id": "c29",
+   "front": "The […] lies between the left atrium and the left ventricle.",
+   "back": "mitral valve",
+   "noteId": "n12",
+   "noteText": "The {{c1::mitral valve}} lies between the left atrium and the left ventricle.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c30",
+   "front": "The […] lies between the right atrium and the right ventricle.",
+   "back": "tricuspid valve",
+   "noteId": "n13",
+   "noteText": "The {{c1::tricuspid valve}} lies between the right atrium and the right ventricle.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c31",
+   "front": "The […] runs in the anterior interventricular groove.",
+   "back": "left anterior descending artery",
+   "noteId": "n14",
+   "noteText": "The {{c1::left anterior descending artery}} runs in the anterior interventricular groove.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c32",
+   "front": "Deoxygenated blood leaves the right ventricle through the […].",
+   "back": "pulmonary trunk",
+   "noteId": "n15",
+   "noteText": "Deoxygenated blood leaves the right ventricle through the {{c1::pulmonary trunk}}.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c33",
+   "front": "The […] drains venous blood from the heart into the right atrium.",
+   "back": "coronary sinus",
+   "noteId": "n16",
+   "noteText": "The {{c1::coronary sinus}} drains venous blood from the heart into the right atrium.",
+   "cloze": 1,
+   "topic": "heart"
+  },
+  {
+   "id": "c34",
+   "front": "What are the layers of the heart wall?",
+   "back": "Endocardium, myocardium, epicardium",
+   "topic": "heart"
+  },
+  {
+   "id": "c35",
+   "front": "What is the pericardium?",
+   "back": "The double-walled sac around the heart: fibrous and serous layers",
+   "topic": "heart"
+  },
+  {
+   "id": "c36",
+   "front": "Which coronary artery usually supplies the SA node?",
+   "back": "Right coronary artery (in ~60%)",
+   "topic": "heart"
+  },
+  {
+   "id": "c37",
+   "front": "What are the chordae tendineae?",
+   "back": "Fibrous cords connecting the AV valve cusps to the papillary muscles",
+   "topic": "heart"
+  },
+  {
+   "id": "c38",
+   "front": "Where is the apex beat felt?",
+   "back": "5th intercostal space, midclavicular line",
+   "topic": "heart"
+  },
+  {
+   "id": "c39",
+   "front": "Order of conduction through the heart",
+   "back": "SA node → AV node → bundle of His → bundle branches → Purkinje fibres",
+   "topic": "heart"
+  },
+  {
+   "id": "c40",
+   "front": "Valve between the left ventricle and the aorta",
+   "back": "Aortic valve",
+   "noteId": "n17",
+   "topic": "heart"
+  },
+  {
+   "id": "c41",
+   "front": "Aortic valve",
+   "back": "Valve between the left ventricle and the aorta",
+   "noteId": "n17",
+   "reverse": true,
+   "topic": "heart"
+  },
+  {
+   "id": "c42",
+   "front": "Muscle ridges on the inner wall of the ventricles",
+   "back": "Trabeculae carneae",
+   "noteId": "n18",
+   "topic": "heart"
+  },
+  {
+   "id": "c43",
+   "front": "Trabeculae carneae",
+   "back": "Muscle ridges on the inner wall of the ventricles",
+   "noteId": "n18",
+   "reverse": true,
+   "topic": "heart"
+  },
+  {
+   "id": "c44",
+   "front": "The […] carries voluntary motor signals and decussates in the medulla.",
+   "back": "corticospinal tract",
+   "noteId": "n19",
+   "noteText": "The {{c1::corticospinal tract}} carries voluntary motor signals and decussates in the {{c2::medulla}}.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c45",
+   "front": "The corticospinal tract carries voluntary motor signals and decussates in the […].",
+   "back": "medulla",
+   "noteId": "n19",
+   "noteText": "The {{c1::corticospinal tract}} carries voluntary motor signals and decussates in the {{c2::medulla}}.",
+   "cloze": 2,
+   "topic": "neuro"
+  },
+  {
+   "id": "c46",
+   "front": "The […] carry fine touch, vibration and proprioception.",
+   "back": "dorsal columns",
+   "noteId": "n20",
+   "noteText": "The {{c1::dorsal columns}} carry fine touch, vibration and proprioception.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c47",
+   "front": "The […] carries pain and temperature and decussates in the spinal cord.",
+   "back": "spinothalamic tract",
+   "noteId": "n21",
+   "noteText": "The {{c1::spinothalamic tract}} carries pain and temperature and decussates in the {{c2::spinal cord}}.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c48",
+   "front": "The spinothalamic tract carries pain and temperature and decussates in the […].",
+   "back": "spinal cord",
+   "noteId": "n21",
+   "noteText": "The {{c1::spinothalamic tract}} carries pain and temperature and decussates in the {{c2::spinal cord}}.",
+   "cloze": 2,
+   "topic": "neuro"
+  },
+  {
+   "id": "c49",
+   "front": "Cerebrospinal fluid is produced by the […].",
+   "back": "choroid plexus",
+   "noteId": "n22",
+   "noteText": "Cerebrospinal fluid is produced by the {{c1::choroid plexus}}.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c50",
+   "front": "The spinal cord ends at the level of […] in adults, at the conus medullaris.",
+   "back": "L1–L2",
+   "noteId": "n23",
+   "noteText": "The spinal cord ends at the level of {{c1::L1–L2}} in adults, at the {{c2::conus medullaris}}.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c51",
+   "front": "The spinal cord ends at the level of L1–L2 in adults, at the […].",
+   "back": "conus medullaris",
+   "noteId": "n23",
+   "noteText": "The spinal cord ends at the level of {{c1::L1–L2}} in adults, at the {{c2::conus medullaris}}.",
+   "cloze": 2,
+   "topic": "neuro"
+  },
+  {
+   "id": "c52",
+   "front": "A lumbar puncture is done between […] or L4/L5 to avoid the spinal cord.",
+   "back": "L3/L4",
+   "noteId": "n24",
+   "noteText": "A lumbar puncture is done between {{c1::L3/L4}} or L4/L5 to avoid the spinal cord.",
+   "cloze": 1,
+   "topic": "neuro"
+  },
+  {
+   "id": "c53",
+   "front": "What are the three meninges, outer to inner?",
+   "back": "Dura mater, arachnoid mater, pia mater",
+   "topic": "neuro"
+  },
+  {
+   "id": "c54",
+   "front": "Where is the cerebrospinal fluid found?",
+   "back": "In the subarachnoid space and the ventricles",
+   "topic": "neuro"
+  },
+  {
+   "id": "c55",
+   "front": "What does the cerebellum do?",
+   "back": "Coordinates movement, balance and posture",
+   "topic": "neuro"
+  },
+  {
+   "id": "c56",
+   "front": "Which lobe contains the primary motor cortex?",
+   "back": "Frontal lobe (precentral gyrus)",
+   "topic": "neuro"
+  },
+  {
+   "id": "c57",
+   "front": "Which lobe contains the primary visual cortex?",
+   "back": "Occipital lobe",
+   "topic": "neuro"
+  },
+  {
+   "id": "c58",
+   "front": "Broca's area: function and lobe",
+   "back": "Speech production; frontal lobe (usually left)",
+   "topic": "neuro"
+  },
+  {
+   "id": "c59",
+   "front": "Wernicke's area: function and lobe",
+   "back": "Speech comprehension; temporal lobe (usually left)",
+   "topic": "neuro"
+  },
+  {
+   "id": "c60",
+   "front": "What is the circle of Willis?",
+   "back": "A ring of arteries at the base of the brain joining the carotid and vertebral systems",
+   "topic": "neuro"
+  },
+  {
+   "id": "c61",
+   "front": "What does the cranial nerve VII supply?",
+   "back": "Facial nerve: muscles of facial expression, taste to the anterior 2/3 of the tongue",
+   "topic": "neuro"
+  },
+  {
+   "id": "c62",
+   "front": "Which cranial nerve supplies the lateral rectus?",
+   "back": "Abducens nerve (CN VI)",
+   "topic": "neuro"
+  },
+  {
+   "id": "c63",
+   "front": "Fluid-filled spaces inside the brain",
+   "back": "Ventricles",
+   "noteId": "n25",
+   "topic": "neuro"
+  },
+  {
+   "id": "c64",
+   "front": "Ventricles",
+   "back": "Fluid-filled spaces inside the brain",
+   "noteId": "n25",
+   "reverse": true,
+   "topic": "neuro"
+  },
+  {
+   "id": "c65",
+   "front": "Bundle of fibres joining the two cerebral hemispheres",
+   "back": "Corpus callosum",
+   "noteId": "n26",
+   "topic": "neuro"
+  },
+  {
+   "id": "c66",
+   "front": "Corpus callosum",
+   "back": "Bundle of fibres joining the two cerebral hemispheres",
+   "noteId": "n26",
+   "reverse": true,
+   "topic": "neuro"
+  }
+ ]
+}

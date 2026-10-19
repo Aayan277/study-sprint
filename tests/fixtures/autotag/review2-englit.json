@@ -1,0 +1,299 @@
+{
+ "name": "ENG 12 Lit Exam",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "\"Fair is foul, and foul is fair\" — who says it and why?",
+   "back": "The witches, Macbeth Act 1 Scene 1; appearance vs reality, moral confusion",
+   "tags": []
+  },
+  {
+   "id": "c2",
+   "front": "\"Is this a dagger which I see before me\"",
+   "back": "Macbeth, Act 2; hallucination before killing Duncan, guilt and ambition",
+   "tags": []
+  },
+  {
+   "id": "c3",
+   "front": "\"Out, damned spot! out, I say!\"",
+   "back": "Lady Macbeth sleepwalking, Act 5; guilt she can't wash away",
+   "tags": []
+  },
+  {
+   "id": "c4",
+   "front": "\"Look like th' innocent flower, but be the serpent under't\"",
+   "back": "Lady Macbeth to Macbeth; deception, appearance vs reality",
+   "tags": []
+  },
+  {
+   "id": "c5",
+   "front": "\"Unsex me here\"",
+   "back": "Lady Macbeth calls on spirits to remove her femininity; gender and ambition",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "\"I have no spur to prick the sides of my intent, but only vaulting ambition\"",
+   "back": "Macbeth, Act 1 Scene 7; ambition as his fatal flaw",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "\"Life's but a walking shadow\"",
+   "back": "Macbeth on hearing of Lady Macbeth's death; nihilism, meaninglessness of life",
+   "tags": []
+  },
+  {
+   "id": "c8",
+   "front": "\"Will all great Neptune's ocean wash this blood clean from my hand?\"",
+   "back": "Macbeth after the murder; blood imagery and guilt",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "\"Stars, hide your fires; let not light see my black and deep desires\"",
+   "back": "Macbeth, Act 1; light and dark imagery, hidden ambition",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "Theme of ambition in Macbeth",
+   "back": "Unchecked ambition leads to tyranny and downfall; Macbeth and Lady Macbeth",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "Theme of guilt in Macbeth",
+   "back": "Shown through hallucinations, sleepwalking, blood imagery",
+   "tags": []
+  },
+  {
+   "id": "c12",
+   "front": "Role of the witches in Macbeth",
+   "back": "Prophecies spark ambition; question of fate vs free will",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "Banquo's role",
+   "back": "Foil to Macbeth; hears the prophecy but doesn't act on it",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "Macduff",
+   "back": "Kills Macbeth; \"not of woman born\" (born by C-section)",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "Kingship in Macbeth",
+   "back": "Duncan and Edward the Confessor as good kings vs Macbeth the tyrant",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "Blood imagery in Macbeth",
+   "back": "Symbol of guilt and violence that grows through the play",
+   "tags": []
+  },
+  {
+   "id": "c17",
+   "front": "Sleep imagery in Macbeth",
+   "back": "\"Macbeth does murder sleep\"; loss of innocence and peace",
+   "tags": []
+  },
+  {
+   "id": "c18",
+   "front": "\"So we beat on, boats against the current, borne back ceaselessly into the past\"",
+   "back": "Final line of The Great Gatsby; impossibility of repeating the past",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "\"Can't repeat the past? Why of course you can!\"",
+   "back": "Gatsby to Nick; his obsession with recreating the past with Daisy",
+   "tags": []
+  },
+  {
+   "id": "c20",
+   "front": "\"Her voice is full of money\"",
+   "back": "Gatsby about Daisy; wealth, class and desire",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "\"I hope she'll be a fool — that's the best thing a girl can be in this world\"",
+   "back": "Daisy about her daughter; role of women in the 1920s",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "\"They were careless people, Tom and Daisy\"",
+   "back": "Nick's judgement; moral emptiness of the rich",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "The green light",
+   "back": "Gatsby's hope and longing for Daisy; the American Dream",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "The valley of ashes",
+   "back": "Moral and social decay between West Egg and New York",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "Eyes of Doctor T. J. Eckleburg",
+   "back": "Billboard; God watching, moral judgement in a godless world",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "Theme of the American Dream in Gatsby",
+   "back": "Corrupted by wealth and materialism; Gatsby fails to reach it",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "Theme of class in Gatsby",
+   "back": "Old money (East Egg) vs new money (West Egg); Tom vs Gatsby",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "Nick Carraway as narrator",
+   "back": "Claims to be non-judgmental but is unreliable; both inside and outside the story",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "Daisy Buchanan",
+   "back": "Gatsby's lost love; represents wealth and the unattainable dream",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "Tom Buchanan",
+   "back": "Old money, racist, violent; has an affair with Myrtle",
+   "tags": []
+  },
+  {
+   "id": "c31",
+   "front": "Myrtle Wilson",
+   "back": "Tom's mistress; wants to escape the valley of ashes; killed by Daisy driving Gatsby's car",
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "Gatsby's parties",
+   "back": "Excess and loneliness of the Jazz Age",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "\"It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife\"",
+   "back": "Opening line of Pride and Prejudice; irony about marriage and money",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "\"I could easily forgive his pride, if he had not mortified mine\"",
+   "back": "Elizabeth about Darcy; pride and wounded vanity",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "Theme of marriage in Pride and Prejudice",
+   "back": "Marriage for love vs for money (Charlotte and Collins)",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "Theme of pride in Pride and Prejudice",
+   "back": "Darcy's pride in class, Elizabeth's pride in her judgement",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "Theme of prejudice in Pride and Prejudice",
+   "back": "Elizabeth's first impressions of Darcy and Wickham",
+   "tags": []
+  },
+  {
+   "id": "c38",
+   "front": "Mr Darcy",
+   "back": "Proud wealthy gentleman who changes after Elizabeth rejects him",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "Elizabeth Bennet",
+   "back": "Witty, independent heroine who learns to question her first judgement",
+   "tags": []
+  },
+  {
+   "id": "c40",
+   "front": "Mr Collins",
+   "back": "Pompous clergyman; marries Charlotte for security",
+   "tags": []
+  },
+  {
+   "id": "c41",
+   "front": "Lady Catherine de Bourgh",
+   "back": "Represents class snobbery; tries to stop Elizabeth marrying Darcy",
+   "tags": []
+  },
+  {
+   "id": "c42",
+   "front": "Free indirect discourse",
+   "back": "Austen's narrative style blending narrator and character voice",
+   "tags": []
+  },
+  {
+   "id": "c43",
+   "front": "Dramatic irony",
+   "back": "Audience knows more than the characters (e.g. Duncan trusts Macbeth)",
+   "tags": []
+  },
+  {
+   "id": "c44",
+   "front": "Soliloquy",
+   "back": "A character speaks thoughts alone on stage",
+   "tags": []
+  },
+  {
+   "id": "c45",
+   "front": "Foil",
+   "back": "A character who contrasts with another to highlight traits",
+   "tags": []
+  },
+  {
+   "id": "c46",
+   "front": "Motif",
+   "back": "A recurring image or idea that develops a theme",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "Pathetic fallacy",
+   "back": "Weather or nature reflecting human emotion (storm on the night of Duncan's murder)",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "Unreliable narrator",
+   "back": "A narrator whose account can't be fully trusted (Nick)",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "Tragic hero",
+   "back": "A noble character with a fatal flaw (hamartia) leading to downfall",
+   "tags": []
+  }
+ ]
+}

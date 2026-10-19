@@ -1,0 +1,293 @@
+{
+ "name": "Computer Science",
+ "cards": [
+  {
+   "id": "c0320",
+   "front": "What is an array?",
+   "back": "A fixed-size, contiguous block of elements accessed by index in constant time",
+   "topic": "structures"
+  },
+  {
+   "id": "c0321",
+   "front": "What is a linked list?",
+   "back": "A chain of nodes where each node points to the next one",
+   "topic": "structures"
+  },
+  {
+   "id": "c0322",
+   "front": "What is a stack?",
+   "back": "A last-in, first-out collection with push and pop operations",
+   "topic": "structures"
+  },
+  {
+   "id": "c0323",
+   "front": "What is a queue?",
+   "back": "A first-in, first-out collection with enqueue and dequeue operations",
+   "topic": "structures"
+  },
+  {
+   "id": "c0324",
+   "front": "What is a hash table?",
+   "back": "A structure that maps keys to values using a hash function for average constant-time lookup",
+   "topic": "structures"
+  },
+  {
+   "id": "c0325",
+   "front": "What is a hash collision?",
+   "back": "Two keys producing the same hash, handled by chaining or open addressing",
+   "topic": "structures"
+  },
+  {
+   "id": "c0326",
+   "front": "What is a binary tree?",
+   "back": "A tree in which every node has at most two children",
+   "topic": "structures"
+  },
+  {
+   "id": "c0327",
+   "front": "What is a binary search tree?",
+   "back": "A binary tree where the left subtree holds smaller keys and the right subtree larger ones",
+   "topic": "structures"
+  },
+  {
+   "id": "c0328",
+   "front": "What is a heap?",
+   "back": "A complete binary tree where every parent is ordered against its children, used for priority queues",
+   "topic": "structures"
+  },
+  {
+   "id": "c0329",
+   "front": "What is a graph?",
+   "back": "A set of vertices joined by edges, which may be directed or weighted",
+   "topic": "structures"
+  },
+  {
+   "id": "c0330",
+   "front": "What is the time complexity of binary search?",
+   "back": "O(log n), because the search range halves each step",
+   "topic": "structures"
+  },
+  {
+   "id": "c0331",
+   "front": "What is Big O notation?",
+   "back": "A way to describe how running time grows with the size of the input",
+   "topic": "structures"
+  },
+  {
+   "id": "c0332",
+   "front": "What is recursion?",
+   "back": "A function that solves a problem by calling itself on a smaller input",
+   "topic": "structures"
+  },
+  {
+   "id": "c0333",
+   "front": "What does a base case do in recursion?",
+   "back": "Stops the function calling itself forever",
+   "topic": "structures"
+  },
+  {
+   "id": "c0334",
+   "front": "What is bubble sort?",
+   "back": "Repeatedly swapping adjacent elements that are out of order, O(n squared)",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0335",
+   "front": "What is merge sort?",
+   "back": "Splits the list in half, sorts each half and merges them, O(n log n)",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0336",
+   "front": "What is quicksort?",
+   "back": "Picks a pivot, partitions the list around it and sorts each part recursively",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0337",
+   "front": "What is breadth-first search?",
+   "back": "Visits the graph level by level using a queue",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0338",
+   "front": "What is depth-first search?",
+   "back": "Follows one path as far as it goes before backtracking, using a stack",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0339",
+   "front": "What is Dijkstra's algorithm?",
+   "back": "Finds the shortest path from one vertex to all others in a weighted graph with no negative edges",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0340",
+   "front": "What is dynamic programming?",
+   "back": "Solving a problem by storing the answers to overlapping subproblems",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0341",
+   "front": "What is a greedy algorithm?",
+   "back": "Makes the locally best choice at each step hoping to reach the best overall answer",
+   "topic": "algorithms"
+  },
+  {
+   "id": "c0342",
+   "front": "What does TCP provide?",
+   "back": "Reliable, ordered delivery of a stream of bytes using acknowledgements",
+   "topic": "networks"
+  },
+  {
+   "id": "c0343",
+   "front": "What does UDP provide?",
+   "back": "Fast, connectionless delivery with no guarantee of arrival",
+   "topic": "networks"
+  },
+  {
+   "id": "c0344",
+   "front": "What is an IP address?",
+   "back": "A number that identifies a device on a network",
+   "topic": "networks"
+  },
+  {
+   "id": "c0345",
+   "front": "What does DNS do?",
+   "back": "Translates a domain name into an IP address",
+   "topic": "networks"
+  },
+  {
+   "id": "c0346",
+   "front": "What is HTTP?",
+   "back": "The protocol a browser uses to request web pages from a server",
+   "topic": "networks"
+  },
+  {
+   "id": "c0347",
+   "front": "What does HTTPS add to HTTP?",
+   "back": "Encryption using TLS so the traffic cannot be read in transit",
+   "topic": "networks"
+  },
+  {
+   "id": "c0348",
+   "front": "What is a router?",
+   "back": "A device that forwards packets between networks",
+   "topic": "networks"
+  },
+  {
+   "id": "c0349",
+   "front": "What is a packet?",
+   "back": "A small chunk of data with a header that carries its destination address",
+   "topic": "networks"
+  },
+  {
+   "id": "c0350",
+   "front": "What is latency?",
+   "back": "The delay between sending a packet and its arrival",
+   "topic": "networks"
+  },
+  {
+   "id": "c0351",
+   "front": "What is a firewall?",
+   "back": "Software or hardware that filters network traffic by rules",
+   "topic": "networks"
+  },
+  {
+   "id": "c0352",
+   "front": "What is a primary key?",
+   "back": "A column that uniquely identifies each row in a table",
+   "topic": "databases"
+  },
+  {
+   "id": "c0353",
+   "front": "What is a foreign key?",
+   "back": "A column that refers to the primary key of another table",
+   "topic": "databases"
+  },
+  {
+   "id": "c0354",
+   "front": "What does SQL stand for?",
+   "back": "Structured Query Language",
+   "topic": "databases"
+  },
+  {
+   "id": "c0355",
+   "front": "What does a JOIN do in SQL?",
+   "back": "Combines rows from two tables that share a matching column value",
+   "topic": "databases"
+  },
+  {
+   "id": "c0356",
+   "front": "What is normalisation?",
+   "back": "Organising tables to remove redundancy and update anomalies",
+   "topic": "databases"
+  },
+  {
+   "id": "c0357",
+   "front": "What is a transaction?",
+   "back": "A group of database operations that either all succeed or all fail",
+   "topic": "databases"
+  },
+  {
+   "id": "c0358",
+   "front": "What does ACID stand for?",
+   "back": "Atomicity, consistency, isolation and durability",
+   "topic": "databases"
+  },
+  {
+   "id": "c0359",
+   "front": "What is an index in a database?",
+   "back": "A structure that speeds up queries on a column at the cost of slower writes",
+   "topic": "databases"
+  },
+  {
+   "id": "c0360",
+   "front": "What is a NoSQL database?",
+   "back": "A database that does not use fixed table schemas, such as a document store",
+   "topic": "databases"
+  },
+  {
+   "id": "c0361",
+   "front": "What is an operating system?",
+   "back": "Software that manages hardware and runs programs",
+   "topic": "systems"
+  },
+  {
+   "id": "c0362",
+   "front": "What is a process?",
+   "back": "A running program with its own memory space",
+   "topic": "systems"
+  },
+  {
+   "id": "c0363",
+   "front": "What is a thread?",
+   "back": "A path of execution inside a process that shares its memory",
+   "topic": "systems"
+  },
+  {
+   "id": "c0364",
+   "front": "What is a deadlock?",
+   "back": "Two processes each waiting for a resource the other holds",
+   "topic": "systems"
+  },
+  {
+   "id": "c0365",
+   "front": "What is virtual memory?",
+   "back": "Using disk space to extend the memory a program can address",
+   "topic": "systems"
+  },
+  {
+   "id": "c0366",
+   "front": "What is a compiler?",
+   "back": "A program that translates source code into machine code before it runs",
+   "topic": "systems"
+  },
+  {
+   "id": "c0367",
+   "front": "What is an interpreter?",
+   "back": "A program that executes source code line by line",
+   "topic": "systems"
+  }
+ ]
+}

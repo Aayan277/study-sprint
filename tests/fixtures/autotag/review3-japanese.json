@@ -1,0 +1,693 @@
+{
+ "name": "Japanese N5",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "食べる (たべる)",
+   "back": "to eat — ru-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c2",
+   "front": "飲む (のむ)",
+   "back": "to drink — u-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c3",
+   "front": "水 (みず)",
+   "back": "water",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c4",
+   "front": "ご飯 (ごはん)",
+   "back": "cooked rice; meal",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c5",
+   "front": "魚 (さかな)",
+   "back": "fish",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c6",
+   "front": "肉 (にく)",
+   "back": "meat",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c7",
+   "front": "野菜 (やさい)",
+   "back": "vegetables",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c8",
+   "front": "果物 (くだもの)",
+   "back": "fruit",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c9",
+   "front": "朝ご飯 (あさごはん)",
+   "back": "breakfast",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c10",
+   "front": "晩ご飯 (ばんごはん)",
+   "back": "dinner",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c11",
+   "front": "お茶 (おちゃ)",
+   "back": "green tea",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c12",
+   "front": "卵 (たまご)",
+   "back": "egg",
+   "tags": [
+    "N5"
+   ],
+   "topic": "food"
+  },
+  {
+   "id": "c13",
+   "front": "父 (ちち)",
+   "back": "(my) father — humble",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c14",
+   "front": "お父さん (おとうさん)",
+   "back": "(someone's) father — polite",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c15",
+   "front": "母 (はは)",
+   "back": "(my) mother — humble",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c16",
+   "front": "お母さん (おかあさん)",
+   "back": "(someone's) mother — polite",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c17",
+   "front": "兄 (あに)",
+   "back": "(my) older brother — humble",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c18",
+   "front": "お兄さん (おにいさん)",
+   "back": "(someone's) older brother — polite",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c19",
+   "front": "姉 (あね)",
+   "back": "(my) older sister — humble",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c20",
+   "front": "お姉さん (おねえさん)",
+   "back": "(someone's) older sister — polite",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c21",
+   "front": "妹 (いもうと)",
+   "back": "(my) younger sister",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c22",
+   "front": "弟 (おとうと)",
+   "back": "(my) younger brother",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c23",
+   "front": "家族 (かぞく)",
+   "back": "family",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c24",
+   "front": "両親 (りょうしん)",
+   "back": "parents",
+   "tags": [
+    "N5",
+    "genki::L7"
+   ],
+   "topic": "family"
+  },
+  {
+   "id": "c25",
+   "front": "今日 (きょう)",
+   "back": "today",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c26",
+   "front": "明日 (あした)",
+   "back": "tomorrow",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c27",
+   "front": "昨日 (きのう)",
+   "back": "yesterday",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c28",
+   "front": "毎日 (まいにち)",
+   "back": "every day",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c29",
+   "front": "週末 (しゅうまつ)",
+   "back": "weekend",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c30",
+   "front": "午前 (ごぜん)",
+   "back": "a.m.; in the morning",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c31",
+   "front": "午後 (ごご)",
+   "back": "p.m.; in the afternoon",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c32",
+   "front": "今 (いま)",
+   "back": "now",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c33",
+   "front": "来週 (らいしゅう)",
+   "back": "next week",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c34",
+   "front": "先週 (せんしゅう)",
+   "back": "last week",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c35",
+   "front": "時間 (じかん)",
+   "back": "time; hours",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c36",
+   "front": "毎朝 (まいあさ)",
+   "back": "every morning",
+   "tags": [
+    "N5"
+   ],
+   "topic": "time"
+  },
+  {
+   "id": "c37",
+   "front": "行く (いく)",
+   "back": "to go — u-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c38",
+   "front": "来る (くる)",
+   "back": "to come — irregular verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c39",
+   "front": "帰る (かえる)",
+   "back": "to go back, to return home — u-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c40",
+   "front": "見る (みる)",
+   "back": "to see, to watch — ru-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c41",
+   "front": "聞く (きく)",
+   "back": "to listen; to ask — u-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c42",
+   "front": "読む (よむ)",
+   "back": "to read — u-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c43",
+   "front": "書く (かく)",
+   "back": "to write — u-verb",
+   "tags": [
+    "N5"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c44",
+   "front": "話す (はなす)",
+   "back": "to speak, to talk — u-verb",
+   "tags": [
+    "N5"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c45",
+   "front": "買う (かう)",
+   "back": "to buy — u-verb",
+   "tags": [
+    "N5"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c46",
+   "front": "起きる (おきる)",
+   "back": "to get up, to wake up — ru-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c47",
+   "front": "寝る (ねる)",
+   "back": "to sleep, to go to bed — ru-verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c48",
+   "front": "する",
+   "back": "to do — irregular verb",
+   "tags": [
+    "N5",
+    "genki::L3"
+   ],
+   "topic": "verb"
+  },
+  {
+   "id": "c49",
+   "front": "大きい (おおきい)",
+   "back": "big, large — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c50",
+   "front": "小さい (ちいさい)",
+   "back": "small, little — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c51",
+   "front": "高い (たかい)",
+   "back": "expensive; tall — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c52",
+   "front": "安い (やすい)",
+   "back": "cheap, inexpensive — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c53",
+   "front": "新しい (あたらしい)",
+   "back": "new — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c54",
+   "front": "古い (ふるい)",
+   "back": "old (not for people) — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c55",
+   "front": "暑い (あつい)",
+   "back": "hot (weather) — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c56",
+   "front": "寒い (さむい)",
+   "back": "cold (weather) — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c57",
+   "front": "おいしい",
+   "back": "delicious — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c58",
+   "front": "面白い (おもしろい)",
+   "back": "interesting; funny — i-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c59",
+   "front": "静か (しずか)",
+   "back": "quiet — na-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c60",
+   "front": "元気 (げんき)",
+   "back": "healthy, energetic — na-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c61",
+   "front": "きれい",
+   "back": "pretty, beautiful; clean — na-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c62",
+   "front": "好き (すき)",
+   "back": "fond of, to like — na-adjective",
+   "tags": [
+    "N5",
+    "genki::L5"
+   ],
+   "topic": "adj"
+  },
+  {
+   "id": "c63",
+   "front": "学校 (がっこう)",
+   "back": "school",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c64",
+   "front": "駅 (えき)",
+   "back": "station",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c65",
+   "front": "病院 (びょういん)",
+   "back": "hospital",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c66",
+   "front": "図書館 (としょかん)",
+   "back": "library",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c67",
+   "front": "銀行 (ぎんこう)",
+   "back": "bank",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c68",
+   "front": "郵便局 (ゆうびんきょく)",
+   "back": "post office",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c69",
+   "front": "大学 (だいがく)",
+   "back": "college; university",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c70",
+   "front": "会社 (かいしゃ)",
+   "back": "company",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c71",
+   "front": "部屋 (へや)",
+   "back": "room",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  },
+  {
+   "id": "c72",
+   "front": "店 (みせ)",
+   "back": "shop, store",
+   "tags": [
+    "N5"
+   ],
+   "topic": "place"
+  }
+ ]
+}

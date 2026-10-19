@@ -1,0 +1,295 @@
+{
+ "name": "French",
+ "cards": [
+  {
+   "id": "c0218",
+   "front": "la maison",
+   "back": "house"
+  },
+  {
+   "id": "c0219",
+   "front": "le chat",
+   "back": "cat"
+  },
+  {
+   "id": "c0220",
+   "front": "le chien",
+   "back": "dog"
+  },
+  {
+   "id": "c0221",
+   "front": "la voiture",
+   "back": "car"
+  },
+  {
+   "id": "c0222",
+   "front": "le livre",
+   "back": "book"
+  },
+  {
+   "id": "c0223",
+   "front": "la table",
+   "back": "table"
+  },
+  {
+   "id": "c0224",
+   "front": "la chaise",
+   "back": "chair"
+  },
+  {
+   "id": "c0225",
+   "front": "la fenêtre",
+   "back": "window"
+  },
+  {
+   "id": "c0226",
+   "front": "la porte",
+   "back": "door"
+  },
+  {
+   "id": "c0227",
+   "front": "le jardin",
+   "back": "garden"
+  },
+  {
+   "id": "c0228",
+   "front": "l'école",
+   "back": "school"
+  },
+  {
+   "id": "c0229",
+   "front": "le professeur",
+   "back": "teacher"
+  },
+  {
+   "id": "c0230",
+   "front": "l'élève",
+   "back": "pupil"
+  },
+  {
+   "id": "c0231",
+   "front": "le café",
+   "back": "coffee"
+  },
+  {
+   "id": "c0232",
+   "front": "le pain",
+   "back": "bread"
+  },
+  {
+   "id": "c0233",
+   "front": "le fromage",
+   "back": "cheese"
+  },
+  {
+   "id": "c0234",
+   "front": "le lait",
+   "back": "milk"
+  },
+  {
+   "id": "c0235",
+   "front": "l'eau",
+   "back": "water"
+  },
+  {
+   "id": "c0236",
+   "front": "la pomme",
+   "back": "apple"
+  },
+  {
+   "id": "c0237",
+   "front": "la fraise",
+   "back": "strawberry"
+  },
+  {
+   "id": "c0238",
+   "front": "manger",
+   "back": "to eat"
+  },
+  {
+   "id": "c0239",
+   "front": "boire",
+   "back": "to drink"
+  },
+  {
+   "id": "c0240",
+   "front": "parler",
+   "back": "to speak"
+  },
+  {
+   "id": "c0241",
+   "front": "écouter",
+   "back": "to listen"
+  },
+  {
+   "id": "c0242",
+   "front": "regarder",
+   "back": "to watch"
+  },
+  {
+   "id": "c0243",
+   "front": "aimer",
+   "back": "to like"
+  },
+  {
+   "id": "c0244",
+   "front": "habiter",
+   "back": "to live"
+  },
+  {
+   "id": "c0245",
+   "front": "travailler",
+   "back": "to work"
+  },
+  {
+   "id": "c0246",
+   "front": "voyager",
+   "back": "to travel"
+  },
+  {
+   "id": "c0247",
+   "front": "acheter",
+   "back": "to buy"
+  },
+  {
+   "id": "c0248",
+   "front": "rouge",
+   "back": "red"
+  },
+  {
+   "id": "c0249",
+   "front": "bleu",
+   "back": "blue"
+  },
+  {
+   "id": "c0250",
+   "front": "vert",
+   "back": "green"
+  },
+  {
+   "id": "c0251",
+   "front": "jaune",
+   "back": "yellow"
+  },
+  {
+   "id": "c0252",
+   "front": "grand",
+   "back": "big"
+  },
+  {
+   "id": "c0253",
+   "front": "petit",
+   "back": "small"
+  },
+  {
+   "id": "c0254",
+   "front": "content",
+   "back": "happy"
+  },
+  {
+   "id": "c0255",
+   "front": "triste",
+   "back": "sad"
+  },
+  {
+   "id": "c0256",
+   "front": "fatigué",
+   "back": "tired"
+  },
+  {
+   "id": "c0257",
+   "front": "rapide",
+   "back": "fast"
+  },
+  {
+   "id": "c0258",
+   "front": "lundi",
+   "back": "Monday"
+  },
+  {
+   "id": "c0259",
+   "front": "mardi",
+   "back": "Tuesday"
+  },
+  {
+   "id": "c0260",
+   "front": "mercredi",
+   "back": "Wednesday"
+  },
+  {
+   "id": "c0261",
+   "front": "jeudi",
+   "back": "Thursday"
+  },
+  {
+   "id": "c0262",
+   "front": "vendredi",
+   "back": "Friday"
+  },
+  {
+   "id": "c0263",
+   "front": "samedi",
+   "back": "Saturday"
+  },
+  {
+   "id": "c0264",
+   "front": "dimanche",
+   "back": "Sunday"
+  },
+  {
+   "id": "c0265",
+   "front": "le matin",
+   "back": "morning"
+  },
+  {
+   "id": "c0266",
+   "front": "le soir",
+   "back": "evening"
+  },
+  {
+   "id": "c0267",
+   "front": "bonjour",
+   "back": "hello"
+  },
+  {
+   "id": "c0268",
+   "front": "merci",
+   "back": "thank you"
+  },
+  {
+   "id": "c0269",
+   "front": "s'il vous plaît",
+   "back": "please"
+  },
+  {
+   "id": "c0270",
+   "front": "au revoir",
+   "back": "goodbye"
+  },
+  {
+   "id": "c0271",
+   "front": "la famille",
+   "back": "family"
+  },
+  {
+   "id": "c0272",
+   "front": "le frère",
+   "back": "brother"
+  },
+  {
+   "id": "c0273",
+   "front": "la sœur",
+   "back": "sister"
+  },
+  {
+   "id": "c0274",
+   "front": "la mère",
+   "back": "mother"
+  },
+  {
+   "id": "c0275",
+   "front": "le père",
+   "back": "father"
+  }
+ ]
+}

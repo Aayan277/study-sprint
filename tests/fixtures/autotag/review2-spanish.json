@@ -1,0 +1,446 @@
+{
+ "name": "Español 2 – Unidad 4-6",
+ "cards": [
+  {
+   "id": "n1a",
+   "noteId": "n1",
+   "front": "el aeropuerto",
+   "back": "the airport",
+   "tags": []
+  },
+  {
+   "id": "n1b",
+   "noteId": "n1",
+   "front": "the airport",
+   "back": "el aeropuerto",
+   "reverse": true,
+   "tags": []
+  },
+  {
+   "id": "n2a",
+   "noteId": "n2",
+   "front": "la maleta",
+   "back": "the suitcase",
+   "tags": []
+  },
+  {
+   "id": "n2b",
+   "noteId": "n2",
+   "front": "the suitcase",
+   "back": "la maleta",
+   "reverse": true,
+   "tags": []
+  },
+  {
+   "id": "n3a",
+   "noteId": "n3",
+   "front": "el pasaporte",
+   "back": "the passport",
+   "tags": []
+  },
+  {
+   "id": "n3b",
+   "noteId": "n3",
+   "front": "the passport",
+   "back": "el pasaporte",
+   "reverse": true,
+   "tags": []
+  },
+  {
+   "id": "n4a",
+   "noteId": "n4",
+   "front": "el boleto de ida y vuelta",
+   "back": "the round-trip ticket",
+   "tags": []
+  },
+  {
+   "id": "n4b",
+   "noteId": "n4",
+   "front": "the round-trip ticket",
+   "back": "el boleto de ida y vuelta",
+   "reverse": true,
+   "tags": []
+  },
+  {
+   "id": "c5",
+   "front": "el vuelo",
+   "back": "the flight",
+   "tags": []
+  },
+  {
+   "id": "c6",
+   "front": "la puerta de embarque",
+   "back": "the boarding gate",
+   "tags": []
+  },
+  {
+   "id": "c7",
+   "front": "facturar el equipaje",
+   "back": "to check luggage",
+   "tags": []
+  },
+  {
+   "id": "c8",
+   "front": "la aduana",
+   "back": "customs",
+   "tags": []
+  },
+  {
+   "id": "c9",
+   "front": "el andén",
+   "back": "the (train) platform",
+   "tags": []
+  },
+  {
+   "id": "c10",
+   "front": "la estación de tren",
+   "back": "the train station",
+   "tags": []
+  },
+  {
+   "id": "c11",
+   "front": "¿A qué hora sale el tren?",
+   "back": "What time does the train leave?",
+   "tags": []
+  },
+  {
+   "id": "c12",
+   "front": "¿Dónde está la parada de autobús?",
+   "back": "Where is the bus stop?",
+   "tags": []
+  },
+  {
+   "id": "c13",
+   "front": "el hotel",
+   "back": "the hotel",
+   "tags": []
+  },
+  {
+   "id": "c14",
+   "front": "la habitación doble",
+   "back": "the double room",
+   "tags": []
+  },
+  {
+   "id": "c15",
+   "front": "Tengo una reserva a nombre de...",
+   "back": "I have a reservation under the name...",
+   "tags": []
+  },
+  {
+   "id": "c16",
+   "front": "la llave",
+   "back": "the key",
+   "tags": []
+  },
+  {
+   "id": "c17",
+   "front": "el ascensor",
+   "back": "the elevator",
+   "tags": []
+  },
+  {
+   "id": "c18",
+   "front": "¿Está incluido el desayuno?",
+   "back": "Is breakfast included?",
+   "tags": []
+  },
+  {
+   "id": "c19",
+   "front": "la cuenta, por favor",
+   "back": "the check, please",
+   "tags": []
+  },
+  {
+   "id": "c20",
+   "front": "el camarero / la camarera",
+   "back": "the waiter / the waitress",
+   "tags": []
+  },
+  {
+   "id": "c21",
+   "front": "el menú del día",
+   "back": "the set menu of the day",
+   "tags": []
+  },
+  {
+   "id": "c22",
+   "front": "el plato principal",
+   "back": "the main course",
+   "tags": []
+  },
+  {
+   "id": "c23",
+   "front": "el postre",
+   "back": "dessert",
+   "tags": []
+  },
+  {
+   "id": "c24",
+   "front": "la cuchara",
+   "back": "the spoon",
+   "tags": []
+  },
+  {
+   "id": "c25",
+   "front": "el tenedor",
+   "back": "the fork",
+   "tags": []
+  },
+  {
+   "id": "c26",
+   "front": "el cuchillo",
+   "back": "the knife",
+   "tags": []
+  },
+  {
+   "id": "c27",
+   "front": "Quisiera pedir...",
+   "back": "I would like to order...",
+   "tags": []
+  },
+  {
+   "id": "c28",
+   "front": "¿Qué me recomienda?",
+   "back": "What do you recommend?",
+   "tags": []
+  },
+  {
+   "id": "c29",
+   "front": "Soy alérgico a los mariscos",
+   "back": "I'm allergic to shellfish",
+   "tags": []
+  },
+  {
+   "id": "c30",
+   "front": "la propina",
+   "back": "the tip",
+   "tags": []
+  },
+  {
+   "id": "n31a",
+   "noteId": "n31",
+   "front": "el médico",
+   "back": "the doctor",
+   "tags": []
+  },
+  {
+   "id": "n31b",
+   "noteId": "n31",
+   "front": "the doctor",
+   "back": "el médico",
+   "reverse": true,
+   "tags": []
+  },
+  {
+   "id": "c32",
+   "front": "la farmacia",
+   "back": "the pharmacy",
+   "tags": []
+  },
+  {
+   "id": "c33",
+   "front": "Me duele la cabeza",
+   "back": "My head hurts / I have a headache",
+   "tags": []
+  },
+  {
+   "id": "c34",
+   "front": "Me duele el estómago",
+   "back": "My stomach hurts",
+   "tags": []
+  },
+  {
+   "id": "c35",
+   "front": "Tengo fiebre",
+   "back": "I have a fever",
+   "tags": []
+  },
+  {
+   "id": "c36",
+   "front": "la receta",
+   "back": "the prescription",
+   "tags": []
+  },
+  {
+   "id": "c37",
+   "front": "la tos",
+   "back": "the cough",
+   "tags": []
+  },
+  {
+   "id": "c38",
+   "front": "estar resfriado",
+   "back": "to have a cold",
+   "tags": []
+  },
+  {
+   "id": "c39",
+   "front": "la cita",
+   "back": "the appointment",
+   "tags": []
+  },
+  {
+   "id": "c40",
+   "front": "la sala de emergencias",
+   "back": "the emergency room",
+   "tags": []
+  },
+  {
+   "id": "c41",
+   "front": "el brazo",
+   "back": "the arm",
+   "tags": []
+  },
+  {
+   "id": "c42",
+   "front": "la pierna",
+   "back": "the leg",
+   "tags": []
+  },
+  {
+   "id": "c43",
+   "front": "la garganta",
+   "back": "the throat",
+   "tags": []
+  },
+  {
+   "id": "c44",
+   "front": "el tobillo",
+   "back": "the ankle",
+   "tags": []
+  },
+  {
+   "id": "c45",
+   "front": "romperse el brazo",
+   "back": "to break one's arm",
+   "tags": []
+  },
+  {
+   "id": "c46",
+   "front": "torcerse el tobillo",
+   "back": "to sprain one's ankle",
+   "tags": []
+  },
+  {
+   "id": "c47",
+   "front": "pretérito de ir",
+   "back": "fui, fuiste, fue, fuimos, fuisteis, fueron",
+   "tags": []
+  },
+  {
+   "id": "c48",
+   "front": "pretérito de tener",
+   "back": "tuve, tuviste, tuvo, tuvimos, tuvisteis, tuvieron",
+   "tags": []
+  },
+  {
+   "id": "c49",
+   "front": "pretérito de hacer",
+   "back": "hice, hiciste, hizo, hicimos, hicisteis, hicieron",
+   "tags": []
+  },
+  {
+   "id": "c50",
+   "front": "pretérito de estar",
+   "back": "estuve, estuviste, estuvo, estuvimos, estuvisteis, estuvieron",
+   "tags": []
+  },
+  {
+   "id": "c51",
+   "front": "pretérito de poder",
+   "back": "pude, pudiste, pudo, pudimos, pudisteis, pudieron",
+   "tags": []
+  },
+  {
+   "id": "c52",
+   "front": "imperfecto vs pretérito",
+   "back": "Imperfect for ongoing/habitual past; preterite for completed actions",
+   "tags": []
+  },
+  {
+   "id": "c53",
+   "front": "imperfecto de ser",
+   "back": "era, eras, era, éramos, erais, eran",
+   "tags": []
+  },
+  {
+   "id": "c54",
+   "front": "imperfecto de ir",
+   "back": "iba, ibas, iba, íbamos, ibais, iban",
+   "tags": []
+  },
+  {
+   "id": "c55",
+   "front": "Cuando era niño, iba a la playa",
+   "back": "When I was a child, I used to go to the beach",
+   "tags": []
+  },
+  {
+   "id": "c56",
+   "front": "Ayer fui al médico",
+   "back": "Yesterday I went to the doctor",
+   "tags": []
+  },
+  {
+   "id": "c57",
+   "front": "la playa",
+   "back": "the beach",
+   "tags": []
+  },
+  {
+   "id": "c58",
+   "front": "la montaña",
+   "back": "the mountain",
+   "tags": []
+  },
+  {
+   "id": "c59",
+   "front": "el mapa",
+   "back": "the map",
+   "tags": []
+  },
+  {
+   "id": "c60",
+   "front": "a la derecha",
+   "back": "to the right",
+   "tags": []
+  },
+  {
+   "id": "c61",
+   "front": "a la izquierda",
+   "back": "to the left",
+   "tags": []
+  },
+  {
+   "id": "c62",
+   "front": "todo recto",
+   "back": "straight ahead",
+   "tags": []
+  },
+  {
+   "id": "c63",
+   "front": "¿Cuánto cuesta?",
+   "back": "How much does it cost?",
+   "tags": []
+  },
+  {
+   "id": "c64",
+   "front": "¿Me puede ayudar?",
+   "back": "Can you help me?",
+   "tags": []
+  },
+  {
+   "id": "c65",
+   "front": "No entiendo",
+   "back": "I don't understand",
+   "tags": []
+  },
+  {
+   "id": "c66",
+   "front": "¿Puede hablar más despacio?",
+   "back": "Can you speak more slowly?",
+   "tags": []
+  }
+ ]
+}

@@ -1,0 +1,783 @@
+{
+ "name": "MKTG1010 final!!!",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "4 Ps of marketing",
+   "back": "product, price, place, promotion",
+   "tags": [
+    "lec2",
+    "marketing-mix"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c2",
+   "front": "4Ps",
+   "back": "Product Price Place Promotion (McCarthy 1960)",
+   "tags": [
+    "lec2"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c3",
+   "front": "7 Ps (services marketing mix)",
+   "back": "the 4 Ps + people, process, physical evidence",
+   "tags": [
+    "lec2",
+    "marketing-mix"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "n4c1",
+   "noteId": "n4",
+   "cloze": 1,
+   "noteText": "The {{c1::marketing mix}} is the set of controllable tools a firm uses to get the response it wants from the {{c2::target market}}",
+   "front": "The [...] is the set of controllable tools a firm uses to get the response it wants from the target market",
+   "back": "",
+   "tags": [
+    "lec2",
+    "marketing-mix"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "n4c2",
+   "noteId": "n4",
+   "cloze": 2,
+   "noteText": "The {{c1::marketing mix}} is the set of controllable tools a firm uses to get the response it wants from the {{c2::target market}}",
+   "front": "The marketing mix is the set of controllable tools a firm uses to get the response it wants from the [...]",
+   "back": "",
+   "tags": [
+    "lec2",
+    "marketing-mix"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c5",
+   "front": "Place (distribution)",
+   "back": "how the product gets to customers - channels, intermediaries, logistics, retail coverage",
+   "tags": [
+    "lec2"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c6",
+   "front": "promotion mix",
+   "back": "advertising, personal selling, sales promotion, PR, direct marketing",
+   "tags": [
+    "lec2",
+    "marketing-mix"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c7",
+   "front": "push vs pull strategy",
+   "back": "push = promote to intermediaries (trade promotion, personal selling) so they push the product to consumers. pull = promote to end consumers (advertising) so they ask for it",
+   "tags": [
+    "lec2"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c8",
+   "front": "intensive vs selective vs exclusive distribution",
+   "back": "intensive = everywhere possible (snacks), selective = some outlets (appliances), exclusive = very few outlets (luxury cars)",
+   "tags": [
+    "lec2"
+   ],
+   "topic": "mix"
+  },
+  {
+   "id": "c9",
+   "front": "STP",
+   "back": "segmentation, targeting, positioning",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c10",
+   "front": "market segmentation",
+   "back": "dividing a market into distinct groups of buyers with different needs, characteristics or behaviours",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c11",
+   "front": "4 bases of segmentation",
+   "back": "geographic, demographic, psychographic, behavioural",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c12",
+   "front": "psychographic segmentation",
+   "back": "by lifestyle, personality, values",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c13",
+   "front": "behavioural segmentation",
+   "back": "by occasion, benefits sought, user status, usage rate, loyalty",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c14",
+   "front": "demographic segmentation",
+   "back": "age, gender, income, education, family life cycle",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c15",
+   "front": "requirements for effective segmentation",
+   "back": "measurable, accessible, substantial, differentiable, actionable",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "n16c1",
+   "noteId": "n16",
+   "cloze": 1,
+   "noteText": "{{c1::Positioning}} is arranging for a product to occupy a clear, distinctive and desirable place in the minds of {{c2::target consumers}}",
+   "front": "[...] is arranging for a product to occupy a clear, distinctive and desirable place in the minds of target consumers",
+   "back": "",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "n16c2",
+   "noteId": "n16",
+   "cloze": 2,
+   "noteText": "{{c1::Positioning}} is arranging for a product to occupy a clear, distinctive and desirable place in the minds of {{c2::target consumers}}",
+   "front": "Positioning is arranging for a product to occupy a clear, distinctive and desirable place in the minds of [...]",
+   "back": "",
+   "tags": [
+    "lec3",
+    "stp"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c17",
+   "front": "perceptual map",
+   "back": "a chart showing how consumers see brands on 2 attributes (e.g. price vs quality); used for positioning",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c18",
+   "front": "undifferentiated vs differentiated vs concentrated targeting",
+   "back": "undifferentiated = one offer for the whole market. differentiated = separate offers for several segments. concentrated (niche) = one or a few small segments",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c19",
+   "front": "value proposition",
+   "back": "the full positioning of a brand – the mix of benefits on which it is positioned",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c20",
+   "front": "value proposition",
+   "back": "the full positioning of a brand – the mix of benefits on which it is positioned",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c21",
+   "front": "brand equity",
+   "back": "the differential effect that knowing the brand name has on customer response to the product",
+   "tags": [
+    "lec4",
+    "branding"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c22",
+   "front": "Keller's brand equity pyramid (CBBE)",
+   "back": "salience -> performance & imagery -> judgements & feelings -> resonance",
+   "tags": [
+    "lec4",
+    "branding"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c23",
+   "front": "brand extension",
+   "back": "using a successful brand name to launch a new product in a new category (e.g. Honda lawnmowers)",
+   "tags": [
+    "lec4",
+    "branding"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c24",
+   "front": "line extension",
+   "back": "extending an existing brand name to new forms, colours, sizes, flavours in the same category",
+   "tags": [
+    "lec4",
+    "branding"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c25",
+   "front": "co-branding",
+   "back": "two established brands from different companies used on the same product",
+   "tags": [
+    "lec4"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c26",
+   "front": "brand personality",
+   "back": "human traits attributed to a brand - sincerity, excitement, competence, sophistication, ruggedness (Aaker)",
+   "tags": [
+    "lec4",
+    "branding"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c27",
+   "front": "brand loyalty",
+   "back": "repeat purchase driven by a strong preference for the brand",
+   "tags": [
+    "lec4"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c28",
+   "front": "private label / store brand",
+   "back": "brand created and owned by a reseller (e.g. supermarket own brand)",
+   "tags": [
+    "lec4"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c29",
+   "front": "brand equity",
+   "back": "the differential effect that knowing the brand name has on customer response",
+   "tags": [
+    "lec4"
+   ],
+   "topic": "brand"
+  },
+  {
+   "id": "c30",
+   "front": "penetration pricing",
+   "back": "set a low initial price to gain market share fast",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c31",
+   "front": "price skimming",
+   "back": "set a high initial price then lower it over time to skim revenue from each segment. e.g. new iPhones",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c32",
+   "front": "cost-plus pricing",
+   "back": "add a standard markup to the cost of the product",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c33",
+   "front": "value-based pricing",
+   "back": "price set on buyers' perceptions of value, not the seller's cost",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c34",
+   "front": "psychological pricing",
+   "back": "e.g. $9.99 instead of $10 - price signals something about the product",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c35",
+   "front": "price elasticity of demand",
+   "back": "how responsive demand is to a change in price. elastic = demand changes a lot",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "n36c1",
+   "noteId": "n36",
+   "cloze": 1,
+   "noteText": "{{c1::Captive product pricing}} – setting a price for products that must be used with the main product, e.g. razor blades, printer ink",
+   "front": "[...] – setting a price for products that must be used with the main product, e.g. razor blades, printer ink",
+   "back": "",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c37",
+   "front": "loss leader",
+   "back": "product priced below cost to attract customers into the store",
+   "tags": [
+    "lec5"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c38",
+   "front": "dynamic pricing",
+   "back": "adjusting prices continually to meet the characteristics and needs of individual customers and situations (airlines, Uber surge)",
+   "tags": [
+    "lec5",
+    "pricing"
+   ],
+   "topic": "price"
+  },
+  {
+   "id": "c39",
+   "front": "consumer buying decision process",
+   "back": "need recognition → information search → evaluation of alternatives → purchase decision → post-purchase behaviour",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c40",
+   "front": "cognitive dissonance",
+   "back": "buyer discomfort caused by post-purchase conflict - \"did I make the right choice?\"",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c41",
+   "front": "Maslow's hierarchy of needs",
+   "back": "physiological, safety, social, esteem, self-actualisation",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c42",
+   "front": "reference group",
+   "back": "a group that serves as a point of comparison in forming a person's attitudes or behaviour",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c43",
+   "front": "opinion leader",
+   "back": "person in a reference group who exerts social influence on others because of special skills, knowledge or personality",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c44",
+   "front": "high involvement vs low involvement purchase",
+   "back": "high = expensive, risky, infrequent (car); low = cheap routine (milk) - habitual buying behaviour",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c45",
+   "front": "factors influencing consumer behaviour",
+   "back": "cultural, social, personal, psychological",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "n46c1",
+   "noteId": "n46",
+   "cloze": 1,
+   "noteText": "{{c1::Selective perception}}: people filter out most of the information they are exposed to",
+   "front": "[...]: people filter out most of the information they are exposed to",
+   "back": "",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c47",
+   "front": "Cognitive dissonance",
+   "back": "post-purchase discomfort/doubt",
+   "tags": [
+    "lec6"
+   ],
+   "topic": "consumer"
+  },
+  {
+   "id": "c48",
+   "front": "SEO",
+   "back": "search engine optimisation - improving organic ranking in search results",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c49",
+   "front": "SEM / PPC",
+   "back": "paid search ads; advertiser pays per click",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c50",
+   "front": "influencer marketing",
+   "back": "paying people with large social media followings to promote a brand",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c51",
+   "front": "content marketing",
+   "back": "creating and sharing valuable content (blogs, videos) to attract and engage customers",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c52",
+   "front": "conversion rate",
+   "back": "% of website visitors who complete a desired action (purchase, sign-up)",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c53",
+   "front": "CTR",
+   "back": "click-through rate = clicks / impressions",
+   "tags": [
+    "lec8",
+    "digital"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c54",
+   "front": "earned vs owned vs paid media",
+   "back": "earned = word of mouth, press, shares. owned = your website, social accounts. paid = ads",
+   "tags": [
+    "lec8"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c55",
+   "front": "email marketing - why still important",
+   "back": "high ROI, direct, personalised, owned channel; watch GDPR consent",
+   "tags": [
+    "lec8"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c56",
+   "front": "customer acquisition cost (CAC)",
+   "back": "total sales & marketing spend / number of new customers",
+   "tags": [
+    "lec8"
+   ],
+   "topic": "digital"
+  },
+  {
+   "id": "c57",
+   "front": "product life cycle stages",
+   "back": "introduction, growth, maturity, decline",
+   "tags": [
+    "lec7",
+    "plc"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c58",
+   "front": "introduction stage",
+   "back": "slow sales growth, high costs, little or no profit; build awareness",
+   "tags": [
+    "lec7",
+    "plc"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c59",
+   "front": "growth stage",
+   "back": "rapid sales growth, profits rise, new competitors enter",
+   "tags": [
+    "lec7",
+    "plc"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c60",
+   "front": "maturity stage",
+   "back": "sales growth slows, most competition, longest stage; modify market, product or mix",
+   "tags": [
+    "lec7",
+    "plc"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c61",
+   "front": "decline stage",
+   "back": "sales and profits fall; maintain, harvest or drop the product",
+   "tags": [
+    "lec7",
+    "plc"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c62",
+   "front": "BCG matrix",
+   "back": "stars, cash cows, question marks, dogs. axes = market growth rate vs relative market share",
+   "tags": [
+    "lec7"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c63",
+   "front": "new product development process",
+   "back": "idea generation, screening, concept testing, marketing strategy, business analysis, product development, test marketing, commercialisation",
+   "tags": [
+    "lec7"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c64",
+   "front": "diffusion of innovations adopter categories",
+   "back": "innovators 2.5%, early adopters 13.5%, early majority 34%, late majority 34%, laggards 16%",
+   "tags": [
+    "lec7"
+   ],
+   "topic": "plc"
+  },
+  {
+   "id": "c65",
+   "front": "primary vs secondary data",
+   "back": "primary = collected for the specific purpose at hand. secondary = already exists, collected for another purpose",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c66",
+   "front": "exploratory vs descriptive vs causal research",
+   "back": "exploratory = gather preliminary info, define problems. descriptive = describe things like market potential. causal = test cause-and-effect",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c67",
+   "front": "focus group",
+   "back": "6–10 people talk with a trained moderator about a product or service; qualitative",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c68",
+   "front": "survey research",
+   "back": "most widely used method for collecting primary data; descriptive info on attitudes, preferences, behaviour",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c69",
+   "front": "sampling plan - 3 decisions",
+   "back": "sampling unit (who), sample size (how many), sampling procedure (how chosen)",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c70",
+   "front": "qualitative vs quantitative research",
+   "back": "qual = small samples, in depth, why (interviews, focus groups). quant = large samples, numbers, how many (surveys)",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "c71",
+   "front": "NPS",
+   "back": "net promoter score: % promoters (9-10) minus % detractors (0-6) on \"how likely to recommend\"",
+   "tags": [
+    "lec9"
+   ],
+   "topic": "research"
+  },
+  {
+   "id": "r72a",
+   "noteId": "r72",
+   "front": "product",
+   "back": "anything that can be offered to a market that might satisfy a want or need",
+   "tags": [],
+   "topic": "mix"
+  },
+  {
+   "id": "r72b",
+   "noteId": "r72",
+   "reverse": true,
+   "front": "anything that can be offered to a market that might satisfy a want or need",
+   "back": "product",
+   "tags": [],
+   "topic": "mix"
+  },
+  {
+   "id": "r73a",
+   "noteId": "r73",
+   "front": "brand",
+   "back": "a name, term, sign, symbol or design that identifies the products of one seller",
+   "tags": [],
+   "topic": "brand"
+  },
+  {
+   "id": "r73b",
+   "noteId": "r73",
+   "reverse": true,
+   "front": "a name, term, sign, symbol or design that identifies the products of one seller",
+   "back": "brand",
+   "tags": [],
+   "topic": "brand"
+  },
+  {
+   "id": "r74a",
+   "noteId": "r74",
+   "front": "marketing research",
+   "back": "systematic design, collection, analysis and reporting of data relevant to a specific marketing situation",
+   "tags": [],
+   "topic": "research"
+  },
+  {
+   "id": "r74b",
+   "noteId": "r74",
+   "reverse": true,
+   "front": "systematic design, collection, analysis and reporting of data relevant to a specific marketing situation",
+   "back": "marketing research",
+   "tags": [],
+   "topic": "research"
+  },
+  {
+   "id": "c75",
+   "front": "niche marketing",
+   "back": "= concentrated marketing",
+   "tags": [
+    "lec3"
+   ],
+   "topic": "stp"
+  },
+  {
+   "id": "c76",
+   "front": "skimming",
+   "back": "see price skimming",
+   "tags": [],
+   "topic": "price"
+  }
+ ]
+}
