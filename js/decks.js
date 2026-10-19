@@ -497,7 +497,7 @@ async function openExport(deck, decks, deckCards) {
       toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
     } catch (err) {
       console.error(err);
-      showFieldError(null, $('exErr'), navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
+      showFieldError(null, $('exErr'), err?.code === 'no-wasm' ? err.message : navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
       btn.disabled = false;
       btn.querySelector('b').textContent = 'Anki deck (.apkg)';
     }

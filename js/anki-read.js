@@ -184,6 +184,7 @@ export function loadSqlJs() {
         if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly');
         return await window.initSqlJs({ wasmBinary: wasm });
       } catch (err) {
+        if (!(typeof WebAssembly !== 'undefined' && err instanceof WebAssembly.CompileError) && !/WebAssembly|wasm|CSP|Content Security|unsafe-eval|EvalError/i.test(String(err?.message))) throw err;      // (only the "this phone cannot run WebAssembly" failures)
         throw Object.assign(new Error(NO_WASM_MESSAGE), { code: 'no-wasm', cause: err });
       }
     })().catch(err => { sqlPromise = null; throw err; });     // let a later try (e.g. back online) start again

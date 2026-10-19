@@ -9,7 +9,7 @@ import { chromium } from './pw.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-upd-'));
-for (const f of ['index.html', 'sw.js', 'manifest.webmanifest']) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
+for (const f of ['index.html', 'sw.js', 'manifest.webmanifest', 'privacy.html', 'terms.html']) if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
 for (const d of ['css', 'js', 'icons', 'fonts']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
 let version = 2000;
 const publish = () => { const f = path.join(SITE, 'sw.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/study-sprint-v\d+/, 'study-sprint-v' + (++version))); };
@@ -150,10 +150,8 @@ ok(await reloaded(), 'leaving it for Decks restarts');
   ok(await waiting(), 'the new version is still waiting');
   ok((await cacheNames()).includes(oldCache), 'and the old files are still there for the busy tab');
   ok(await tabB.locator('#updateBar:not([hidden])').count() === 1, 'the idle tab shows "Update ready" too');
-  // the busy tab finishes its round; its bar then switches both tabs. (Left to restart by itself on the next screen change, Chromium sometimes
-  // does not activate the waiting worker while the old one is still loading that screen's modules, so the test taps the bar after a quiet moment.)
-  await page.evaluate(async () => { (await import('./js/ui.js')).setFocusMode(false); });
-  await sleep(1500); await page.locator('#updateBar').click();
+  // the busy tab finishes its round and lands on Today: after a short settle delay it switches both tabs by itself
+  await page.evaluate(async () => { (await import('./js/ui.js')).setFocusMode(false); location.hash = '#/today'; });
   ok(await reloaded(), 'when the busy tab is free, the switch happens');
   for (let t = Date.now(); loadsB < 1 && Date.now() - t < 12000; ) await sleep(100);
   ok(loadsB >= 1, 'and the other tab restarts as well');

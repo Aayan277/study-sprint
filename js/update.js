@@ -18,28 +18,46 @@
 export const CHECK_GAP = 60 * 60 * 1000;          // asking again when the app comes back to the front: at most this often
 export const CHECK_EVERY = 6 * 60 * 60 * 1000;    // and while it stays open
 export const UPDATE_READY_TEXT = 'Update ready — tap to restart';
+export const SETTLE_MS = 1500;                 // after landing on Today or Decks, wait this long before asking the worker to switch (the screen is still loading files)
+export const ACCEPT_WINDOW = 10 * 1000;         // a switch that follows the person's (or a good moment's) go within this long may reload without asking again
+export const WATCHDOG_MS = 5000;               // no controller change this long after asking: the switch is stuck, so show the bar again
 export const isRestSpot = name => name === 'today' || name === 'decks';      // routes where an update waiting may restart the app by itself
 
-export function createUpdater({ busy, reload, skipWaiting = () => false, show = () => {}, hide = () => {}, update = () => {}, now = () => Date.now() }) {
+export function createUpdater({ busy, reload, skipWaiting = () => false, show = () => {}, hide = () => {}, update = () => {}, now = () => Date.now(), settleMs = SETTLE_MS, watchdogMs = WATCHDOG_MS }) {
   let pending = false;       // an update is ready and was held back
   let accepted = false;      // the person (or a good moment) said go: the next controller change reloads whatever is open
+  let acceptedAt = 0;
+  let lastRoute = '', settle = null, watchdog = null;
   let lastCheck = now();
   const defer = () => { if (!pending) { pending = true; show(); } };
   // Take the update: tell the waiting worker to take over (the reload follows when the controller changes), or reload now if none is waiting.
   const go = () => {
-    pending = false; accepted = true; hide();
-    if (!skipWaiting()) reload();
+    pending = false; accepted = true; acceptedAt = now(); hide(); clearTimeout(settle); clearTimeout(watchdog);
+    if (!skipWaiting()) { reload(); return; }
+    // (If the worker never takes over, e.g. it is held up by files still loading, the bar comes back and a tap asks again.)
+    watchdog = setTimeout(() => { if (accepted) { accepted = false; defer(); } }, watchdogMs);
+    watchdog?.unref?.();
   };
   const check = () => { lastCheck = now(); try { return Promise.resolve(update()).catch(() => {}); } catch { return Promise.resolve(); } };
   return {
     // Another page was refused when it asked the new version to take over (this page, or another, has work open): show the bar, don't ask again.
-    held() { accepted = false; defer(); },
+    held() { clearTimeout(watchdog); accepted = false; defer(); },
     // A new version is installed and waiting.
     waiting() { if (busy()) defer(); else go(); },
     // A new version has taken over (this page is still the old one).
-    changed() { if (accepted || !busy()) { pending = false; accepted = true; hide(); reload(); } else defer(); },
+    changed() {
+      clearTimeout(watchdog);
+      // Reload if nothing is open, or if this page itself asked a moment ago. A switch that happens long after (another page's, or a stalled one
+      // that finally went through) must not cut off work that began since.
+      if (!busy() || (accepted && now() - acceptedAt <= ACCEPT_WINDOW)) { pending = false; accepted = true; hide(); reload(); }
+      else { accepted = false; defer(); }
+    },
     // The screen changed. `name` is the route ('today', 'decks'...). Call it once the screen is drawn.
-    routed(name) { if (pending && isRestSpot(name) && !busy()) go(); },
+    routed(name) {
+      lastRoute = name; clearTimeout(settle);
+      if (pending && isRestSpot(name) && !busy()) settle = setTimeout(() => { if (pending && isRestSpot(lastRoute) && !busy()) go(); }, settleMs);
+      settle?.unref?.();
+    },
     tap: go,
     // The app came back to the front: look for a new version, at most once an hour.
     visible() { if (now() - lastCheck >= CHECK_GAP) return check(); return Promise.resolve(); },
