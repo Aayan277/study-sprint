@@ -124,6 +124,64 @@ for (const ui of ['clinical', 'original']) {
   await p.context().close();
 }
 
+// H4: Today's choice is respected: with Today limited to deck C, finishing C does not offer decks Today leaves out
+{
+  const p = await open(PHONE);
+  await seedDecks(p);
+  await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewDecks', ['C']); });
+  await go(p, '#/today', '#startBtn'); await p.click('#startBtn');
+  await p.waitForSelector('#showBtn'); await p.click('#showBtn'); await p.click('.rate.r4');
+  await p.waitForSelector('.finish-next');
+  ok(await p.locator('#keepBtn').count() === 0 && await p.$eval('#againBtn', b => b.classList.contains('primary')), 'H4: Today limited to deck C, other decks due: no Continue (Today says all done), only Back to Today');
+  await p.context().close();
+}
+
+// ---------- M1: state edges still win over the shared dark outline ----------
+for (const ui of ['original', 'clinical']) {
+  const p = await open(PHONE, { ui });
+  await go(p, '#/deck/sample', '#deckMore');
+  await p.click('#deckMore'); await p.waitForSelector('#deckMenu:not([hidden])');
+  const r = await p.evaluate(() => {
+    const px = v => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;color:var(' + v + ')'; document.body.appendChild(d); const c = getComputedStyle(d).color; d.remove(); return c; };
+    const more = getComputedStyle(document.querySelector('#deckMore')).borderTopColor;
+    const host = document.createElement('div'); host.className = 'ys-exams'; host.innerHTML = '<button class="tchip on" type="button">x</button><button class="snd-btn playing" type="button">s</button><button class="occ-peek" aria-pressed="true" type="button">p</button>'; document.body.appendChild(host);
+    const [on, playing, peek] = [...host.children].map(e => getComputedStyle(e).borderTopColor);
+    host.remove();
+    return { more, strong: px('--line-strong'), accent: px('--accent'), on, playing, peek, accentLine: (() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;border:1px solid var(--accent-line)'; document.body.appendChild(d); const c = getComputedStyle(d).borderTopColor; d.remove(); return c; })() };
+  });
+  ok(r.more === r.strong, `M1 (${ui}, dark): the expanded ⋯ button keeps its own state edge (--line-strong), not the shared outline (${r.more})`);
+  ok(r.on === r.accent, `M1 (${ui}, dark): ".tchip.on" keeps the accent edge (${r.on})`);
+  ok(r.playing === r.accent, `M1 (${ui}, dark): a playing sound button keeps the accent edge`);
+  ok(r.peek === r.accentLine, `M1 (${ui}, dark): a pressed occlusion peek button keeps its accent-line edge`);
+  await p.context().close();
+}
+{
+  // a hovered ghost button keeps the 3:1 edge (it used to drop to the dimmer --line-strong), and a chip does not change width when selected
+  const d = await open(DESK);
+  await go(d, '#/deck/sample', '#testBtn');
+  await d.hover('#testBtn');
+  const hov = await maths(d, `const e = document.querySelector('#testBtn'); const outer = M.bgOf(e.parentElement); return M.ratio(M.over(M.rgba(getComputedStyle(e).borderTopColor), outer), outer);`);
+  ok(hov >= 3, 'M1: a hovered ghost button keeps a 3:1 outline (' + hov.toFixed(2) + ')');
+  await d.context().close();
+  const p = await open(PHONE);
+  await go(p, '#/today', '#optBtn'); await p.click('#optBtn'); await p.waitForSelector('#sheet[open] .tchip[aria-pressed="false"]');
+  const w1 = await p.$eval('#sheet .tchip[aria-pressed="false"]', c => c.getBoundingClientRect().width);
+  await p.tap('#sheet .tchip[aria-pressed="false"] >> nth=0');
+  await p.waitForTimeout(300);
+  const w2 = await p.evaluate(() => [...document.querySelectorAll('#sheet .tchip')].map(c => Math.round(c.getBoundingClientRect().width)));
+  ok(w2.includes(Math.round(w1)), 'M3: a chip keeps its width when selected (the check mark sits in its padding): ' + Math.round(w1) + ' → ' + w2.slice(0, 4));
+  await p.context().close();
+}
+
+// ---------- M5 (Original): the dark Young segment is 3:1 too ----------
+for (const skin of ['violet', 'ocean', 'forest', 'ember', 'rose']) {
+  const p = await open(PHONE);
+  await p.evaluate(s => document.documentElement.setAttribute('data-skin', s), skin);
+  const r = await maths(p, `const s1 = M.tok('--surface-1', M.tok('--bg')); return M.ratio(M.tok('--lv-young', s1), M.tok('--surface-3', s1));`);
+  ok(r >= 3, `M5 (Original dark, ${skin}): Young against its track is ${r.toFixed(2)}:1`);
+  await p.context().close();
+}
+
 // ---------- M7: the deck page's main button is "Review · N" when cards are due; Import is in the ⋯ menu ----------
 for (const [vp, label] of [[PHONE, '390'], [{ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true }, '320']]) {
   const p = await open(vp);

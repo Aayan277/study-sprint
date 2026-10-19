@@ -814,9 +814,11 @@ async function finish(el) {
   const chosen = allIds.includes(R.deckId) ? [R.deckId] : data.settings.reviewDecks.filter(id => allIds.includes(id));
   const scope = chosen.length ? chosen : allIds;
   const rest = countFor(data, scope);
-  // A session over one deck that left nothing there: the other decks may still have cards due, and finishing is the moment to offer them.
+  // A session over one deck that left nothing there: the other decks of Today's choice (all decks when none is chosen) may still have cards due,
+  // and finishing is the moment to offer them. Decks Today leaves out are not offered.
   const inScope = withSubdecks(data, scope);
-  const elseIds = rest.total ? [] : allIds.filter(id => !inScope.has(id));
+  const todayIds = data.settings.reviewDecks.filter(id => allIds.includes(id));
+  const elseIds = rest.total ? [] : (todayIds.length ? todayIds : allIds).filter(id => !inScope.has(id));
   const elsewhere = elseIds.length ? countFor(data, elseIds) : null;
   const goOn = rest.total ? { word: 'Keep going', total: rest.total, ids: chosen } : elsewhere?.total ? { word: 'Continue', total: elsewhere.total, ids: elseIds } : null;
   // Reviews due by the end of tomorrow (already studied, not suspended or buried), in the same decks.
