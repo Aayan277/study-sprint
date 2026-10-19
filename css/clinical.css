@@ -713,8 +713,7 @@
   /* --- page widths, centred --- */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{margin-inline:auto}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="decks"],[data-route="stats"]) > .view{max-width:1200px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{max-width:1280px}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] #browser{max-width:900px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{max-width:900px}   /* one centred column, like Original (from 1600px the three-column page below takes over) */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="browse"] > .view{max-width:900px;margin-inline:auto}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main:is([data-route="play"],[data-route="import"],[data-route="settings"]) > .view{max-width:760px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="review"] > .view{max-width:780px}
@@ -805,7 +804,7 @@
 @media (min-width:1600px){
   /* the deck page on a wide screen: the deck's name and buttons in a column on the left, with the counts panel under them
      staying in view as the cards scroll; subdecks and cards on the right (one 1280px list left a long empty gap in every row) */
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{display:grid;grid-template-columns:300px minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:40px;align-items:start;max-width:1440px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view{display:grid;grid-template-columns:300px minmax(0,900px);grid-template-rows:auto auto 1fr;column-gap:40px;align-items:start;max-width:1240px}   /* subdecks and cards share one 900px width */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > *{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > :is(.back,.screen-head,.deck-summary){grid-column:1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="deck"] > .view > .screen-head{grid-row:1}

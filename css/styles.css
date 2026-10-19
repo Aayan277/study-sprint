@@ -1083,10 +1083,11 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 @media (max-width:1023px){
   body.focus main[data-route="test"]{padding-bottom:0}
   .t-main{display:flex;flex-direction:column;min-height:calc(100dvh - 92px)}
-  .t-main > .t-step{margin-top:auto;position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:4;padding:var(--s-2) 0 var(--s-1);background:linear-gradient(to bottom,transparent,var(--bg) 25%)}
+  .t-main > .t-tools{order:1;margin-bottom:var(--s-3)}
+  .t-main > .t-step{order:2;margin-top:auto;position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:4;padding:var(--s-2) 0 var(--s-1);background:linear-gradient(to bottom,transparent,var(--bg) 25%)}
   body.focus .t-main > .t-step{bottom:0;margin-inline:-12px;padding:var(--s-2) 12px calc(var(--s-3) + env(safe-area-inset-bottom,0px))}
 }
-.t-tools{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
+.t-tools{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-4)}
 .t-tools .btn svg{width:16px;height:16px}
 .t-tools #tFlag[aria-pressed="true"]{border-color:var(--again);background:var(--again-tint)}
 .t-submit{margin-left:auto;border-color:var(--accent-line)}
@@ -1432,8 +1433,12 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .cloze-makes{margin:0;font-size:var(--fs-sm);color:var(--text-2);font-weight:500}
 .cloze-render{margin-top:var(--s-1);font-size:var(--fs-base);line-height:1.5;white-space:pre-line}
 .cloze-help{margin:0 0 var(--s-3)}
+.tchip small{white-space:nowrap}
 .more-tips{margin:0 0 var(--s-3)}
-.more-tips > summary{cursor:pointer;display:flex;align-items:center;min-height:44px;font-size:var(--fs-sm);font-weight:600;color:var(--accent-text)}
+.more-tips > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px;font-size:var(--fs-sm);font-weight:600;color:var(--accent-text)}
+.more-tips > summary::-webkit-details-marker{display:none}
+.more-tips-chev{flex:none;width:18px;height:18px;transition:transform var(--t-fast)}
+.more-tips[open] .more-tips-chev{transform:rotate(90deg)}
 .more-tips[open] > summary{color:var(--text-2)}
 .more-tips .cloze-help{margin:0}
 .ckind{display:inline-block;padding:0 6px;border-radius:var(--r-pill);background:var(--accent-tint);color:var(--accent-text);font-size:var(--fs-xs);font-weight:600;vertical-align:1px}
@@ -1561,7 +1566,7 @@ img[data-media][hidden]{display:none}
   main > .view{max-width:1120px;margin:0 auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
   main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
-  main[data-route="review"] > .view,main[data-route="browse"] > .view{max-width:780px}
+  main[data-route="review"] > .view{max-width:780px}
   main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
@@ -2508,6 +2513,9 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 /* The finish screen: the primary action, then a quiet row of links */
 .fin-links{display:flex;align-items:center;justify-content:flex-start;gap:var(--s-1);margin:var(--s-3) 0 0;color:var(--text-3)}
 .fin-links .link{display:inline-flex;align-items:center;text-decoration:none}
+.fin-links .link:first-child{padding-left:0}   /* the first link starts exactly where the buttons above it do */
+.res-actions.ahead{flex-wrap:nowrap}
+.res-actions.ahead .btn{flex:1 1 auto;white-space:nowrap;padding-inline:12px}
 .finish-more{margin-top:var(--s-4)}
 .finish-more[hidden]{display:none}
 @media (max-width:519px){.res-actions:has(#keepBtn) #keepBtn,.res-actions:has(#keepBtn) #againBtn{flex:1 1 100%}}

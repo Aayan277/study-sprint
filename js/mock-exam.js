@@ -96,15 +96,15 @@ function startTaking() {
           <div class="flash-front" id="tPrompt" role="heading" aria-level="2" tabindex="-1"></div>
         </div>
         <div id="tAnswer" class="t-answer"></div>
+        <div class="t-step">
+          <button class="btn ghost" id="tPrev" type="button">‹ Previous${keyHint(' <kbd class="key-hint">P</kbd>')}</button>
+          <button class="btn primary" id="tNext" type="button">Next ›</button>
+        </div>
         <div class="t-tools">
           <button class="btn ghost small" id="tFlag" type="button" aria-pressed="false">${icon('flag')}<span>Flag for review</span>${keyHint(' <kbd class="key-hint">F</kbd>')}</button>
           <button class="btn ghost small t-navbtn" id="tNavBtn" type="button">${icon('grid')}<span>Questions</span></button>
           <button class="btn ghost small" id="tClear" type="button" hidden>Clear answer</button>
           <button class="btn ghost small t-submit" id="tSubmit" type="button">Submit test</button>
-        </div>
-        <div class="t-step">
-          <button class="btn ghost" id="tPrev" type="button">‹ Previous${keyHint(' <kbd class="key-hint">P</kbd>')}</button>
-          <button class="btn primary" id="tNext" type="button">Next ›</button>
         </div>
       </div>
       <aside class="t-nav" aria-label="Question navigator">

@@ -332,16 +332,16 @@ for (const [w, h] of [[390, 844], [320, 640]]) {
 
 // ================= Second round: M8-M12, L1-L9 =================
 const DAYMS = 86400000;
-const seedHistory = p => p.evaluate(async () => {
+const seedHistory = (p, long = false) => p.evaluate(async long => {
   const db = await import('./js/db.js'); const now = Date.now(), DAY = 86400000;
   await db.addDeckWithCards({ id: 'H', name: 'History', color: '#3E63DD', created: now - 30 * DAY }, Array.from({ length: 16 }, (_, i) => ({ id: 'h' + i, deckId: 'H', front: 'Front ' + i, back: 'Back ' + i, tags: ['t' + (i % 2)], created: now - 30 * DAY + i })));
   const logs = [], states = [];
   for (let i = 0; i < 16; i++) {
-    for (let d = 20; d >= 2; d -= 3) logs.push({ cardId: 'h' + i, timestamp: now - d * DAY + i * 60000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true, reason: 'due' });
+    for (let d = long ? (i === 0 ? 360 : 2) : 20; d >= 2; d -= (long ? 7 : 3)) logs.push({ cardId: 'h' + i, timestamp: now - d * DAY + i * 60000, source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true, reason: 'due' });
     states.push({ cardId: 'h' + i, due: now + (i + 8) * DAY, stability: 12, difficulty: 5, reps: 5, lapses: 0, state: 2, lastReview: now - 2 * DAY });
   }
   await db.putMany('cardStates', states); await db.putMany('reviewLog', logs);
-});
+}, long);
 
 // ---------- M8: Settings: one row-title style (16px / 600) and real section headings (20px), in both styles ----------
 for (const ui of ['original', 'clinical']) {
@@ -396,6 +396,17 @@ for (const [vp, label, min] of [[PHONE, 'phone', 22], [DESK, 'desktop', 14]]) {
   await p.context().close();
 }
 
+// A year of history on a phone: 53 weeks cannot fit at 22px, so the squares stay 22px and the weeks scroll (newest on the right)
+{
+  const p = await open(PHONE);
+  await seedHistory(p, true);
+  await go(p, '#/stats', '.cal-card');
+  const c = await p.evaluate(() => { const b = document.querySelector('#calScroll'); return { w: Math.round(document.querySelector('#calGrid i[data-t]').getBoundingClientRect().width), n: document.querySelectorAll('#calGrid .cal-m').length, sc: b.scrollLeft, max: b.scrollWidth - b.clientWidth }; });
+  ok(c.n >= 52 && c.w === 22, `M10 (phone, a year): ${c.n} weeks, squares ${c.w}px (22px on touch)`);
+  ok(c.max > 0 && c.sc >= c.max - 2, `M10 (phone, a year): it opens scrolled to the newest weeks (${c.sc} of ${c.max})`);
+  await p.context().close();
+}
+
 // ---------- M11: the cloze add-card sheet keeps one hint inline, the rest behind "More tips" ----------
 for (const ui of ['original', 'clinical']) {
   const p = await open(PHONE, { ui });
@@ -412,15 +423,14 @@ for (const ui of ['original', 'clinical']) {
 {
   const p = await open(PHONE);
   await seedHistory(p);
-  await go(p, '#/deck/H', '#testBtn'); await p.click('#testBtn'); await p.waitForSelector('#ptForm'); await p.click('#ptStart'); await p.waitForSelector('#tPrompt');
-  let claim = null;
-  for (let i = 0; i < 15 && claim === null; i++) {
-    claim = await p.evaluate(() => document.querySelector('.t-claim-l')?.textContent ?? null);
-    if (claim === null) { await p.click('#tNext'); await p.waitForTimeout(60); }
-  }
-  ok(claim === null || claim === 'Proposed answer', `M12: a true/false question labels the shown answer "Proposed answer" (${claim === null ? 'no true/false question in this run' : claim})`);
+  await go(p, '#/deck/H', '#testBtn'); await p.click('#testBtn'); await p.waitForSelector('#ptForm');
+  for (const k of ['mc', 'typing']) if (await p.isChecked(`input[name=kind][value=${k}]`)) await p.locator(`.chip:has(input[name=kind][value=${k}])`).click();     // only true or false is left on
+  await p.click('#ptStart'); await p.waitForSelector('#tPrompt');
+  const claim = await p.evaluate(() => document.querySelector('.t-claim-l')?.textContent ?? null);
+  ok(claim === 'Proposed answer', `M12: a true/false question labels the shown answer "Proposed answer" (${claim})`);
   await p.evaluate(() => document.activeElement?.blur?.());
   const b = await p.evaluate(() => { const r = document.querySelector('.t-step').getBoundingClientRect(); return { bottom: Math.round(innerHeight - r.bottom), top: Math.round(r.top), h: innerHeight, pos: getComputedStyle(document.querySelector('.t-step')).position }; });
+  ok(await p.evaluate(() => { const n = document.querySelector('#tNext').getBoundingClientRect(), u = document.querySelector('#tSubmit').getBoundingClientRect(); return n.top > u.bottom + 8; }), 'M12: on a phone Submit and the other tools sit above Next with a gap');
   ok(b.pos === 'sticky' && b.bottom <= 24, `M12: Previous / Next sit at the bottom of the phone screen (${b.bottom}px from the bottom edge)`);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'M12: no sideways scroll in the practice test');
   await p.context().close();
@@ -503,7 +513,44 @@ for (const ui of ['original', 'clinical']) {
   const label = (await p.textContent('#aheadBtn')).trim();
   ok(/^Study ahead · \d+ cards?$/.test(label), `L9: a caught-up deck offers "${label}"`);
   await p.click('#aheadBtn'); await p.waitForSelector('#flash, #startBtn', { timeout: 10000 });
+  const want = +/(\d+) card/.exec(label)[1];
   ok(await p.evaluate(() => location.hash.startsWith('#/review')) && await p.locator('#flash, #startBtn').count() > 0, 'L9: it starts a session of cards from this deck');
+  const got = await p.evaluate(() => [...document.querySelectorAll('.rv-counts span')].reduce((a, e) => a + (+e.textContent || 0), 0));
+  ok(got === want, `L9: the session has the ${want} cards the button promised (${got})`);
+  await p.context().close();
+}
+
+
+// ---------- review fixes: desktop practice test spacing, the Clinical deck page's one width, finish and caught-up alignment ----------
+{
+  const d = await open(DESK);
+  await seedHistory(d);
+  await go(d, '#/deck/H', '#testBtn'); await d.click('#testBtn'); await d.waitForSelector('#ptForm'); await d.click('#ptStart'); await d.waitForSelector('#tPrompt');
+  const g = await d.evaluate(() => { const n = document.querySelector('#tNext').getBoundingClientRect(), u = document.querySelector('#tSubmit').getBoundingClientRect(); const order = [...document.querySelectorAll('#tPrev,#tNext,#tFlag,#tSubmit')].map(e => e.id); return { gap: Math.round(u.top - n.bottom), order: order.join() }; });
+  ok(g.gap >= 12 && g.order === 'tPrev,tNext,tFlag,tSubmit', `desktop practice test: Previous/Next come first (focus order ${g.order}) and Submit is ${g.gap}px below them`);
+  await d.context().close();
+}
+for (const w of [1280, 1440, 1680]) {
+  const d = await open({ viewport: { width: w, height: 900 } }, { ui: 'clinical' });
+  await d.evaluate(async () => { const db = await import('./js/db.js'); const now = Date.now();
+    await db.addDeckWithCards({ id: 'P', name: 'Parent', color: '#3E63DD', created: now }, []);
+    await db.addDeckWithCards({ id: 'P1', name: 'Child', parentId: 'P', color: '#3E63DD', created: now + 1 }, [1, 2, 3].map(i => ({ id: 'p' + i, deckId: 'P1', front: 'f' + i, back: 'b' + i, tags: [], created: i }))); });
+  await go(d, '#/deck/P', '.crow');
+  const r = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); const box = e => { const r = e?.getBoundingClientRect(); return r ? [Math.round(r.left), Math.round(r.right)] : null; };
+    return { main: [Math.round(m.left), Math.round(m.right)], sub: box(document.querySelector('.subdecks-page')), list: box(document.querySelector('#browser')), view: box(document.querySelector('main > .view')) }; });
+  ok(r.sub && r.list && r.sub[1] === r.list[1] && r.sub[0] === r.list[0], `Clinical deck page at ${w}px: Subdecks and Cards share one width (${r.sub}, ${r.list})`);
+  ok(r.list[1] - r.list[0] <= 900 && r.view[1] - r.view[0] <= 1240, `Clinical deck page at ${w}px: the column is at most 900px (${r.list[1] - r.list[0]}px)`);
+  const gl = r.view[0] - r.main[0], gr = r.main[1] - r.view[1];
+  ok(Math.abs(gl - gr) <= 2, `Clinical deck page at ${w}px: it is centred (${gl}px / ${gr}px)`);
+  await d.context().close();
+}
+{
+  const p = await open(PHONE);
+  await seedHistory(p);
+  await go(p, '#/review/H', '.empty');
+  const r = await p.evaluate(() => { const a = document.querySelector('#aheadBtn').getBoundingClientRect(), b = document.querySelector('.res-actions a.btn').getBoundingClientRect(), l = document.querySelector('.fin-links .link'); return { sameRow: Math.abs(a.top - b.top) < 2, link: l.tagName + ' ' + l.className, linkLeft: Math.round(l.getBoundingClientRect().left), btnLeft: Math.round(a.left) }; });
+  ok(r.sameRow && /^A link/.test(r.link), `caught-up screen at 390px: Study ahead and Back to Today share a row and Open deck is a text link (${r.link})`);
+  ok(r.linkLeft === r.btnLeft, `caught-up screen: "Open deck" starts where the button does (${r.linkLeft}px / ${r.btnLeft}px)`);
   await p.context().close();
 }
 

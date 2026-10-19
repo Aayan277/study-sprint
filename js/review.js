@@ -106,11 +106,11 @@ export async function renderReview(el, deckId) {
   el.innerHTML = `
     <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
     <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}${aheadN ? `<br>Want to get ahead? Study ahead goes over the ${plural(aheadN, 'card')} due ${aheadWhen}.` : ''}</div>
-    <div class="res-actions">
+    <div class="res-actions${aheadN ? ' ahead' : ''}">
       ${aheadN ? `<button class="btn primary" type="button" id="aheadBtn">Study ahead · ${plural(aheadN, 'card')}</button>
       <a class="btn ghost" href="#/today">Back to Today</a>` : '<a class="btn primary" href="#/today">Back to Today</a>'}
-      <a class="btn ghost" href="#/deck/${esc(deckId)}">Open deck</a>
-    </div>`;
+    </div>
+    <p class="fin-links"><a class="link" href="#/deck/${esc(deckId)}">Open deck</a></p>`;
   // (Not a one-deck launch: that would go to the address we are already on, and nothing would redraw.)
   $('aheadBtn')?.addEventListener('click', () => launchStudy({ deckIds: [deckId], kind: 'ahead', days: aheadDays }));
 }

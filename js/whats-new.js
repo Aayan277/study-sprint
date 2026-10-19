@@ -77,7 +77,7 @@ export async function drawWhatsNew(slot) {
     <span class="wn-icon" aria-hidden="true">${icon('bolt')}</span>
     <div class="wn-txt"><h2 id="wnTitle">New in Study Sprint ${esc(shown.version)}</h2>
       <ul>${shown.items.slice(0, CARD_LINES).map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-      <div class="wn-actions"><button class="btn primary small" type="button" id="wnOk">Got it</button><button class="link" type="button" id="wnAll">See all</button></div></div>
+      <div class="wn-actions"><button class="btn primary small" type="button" id="wnOk">Got it</button>${shown.items.length > CARD_LINES || recentNotes(3).length > 1 ? '<button class="link" type="button" id="wnAll">See all</button>' : ''}</div></div>
     <button class="inst-x" type="button" id="wnX" aria-label="Dismiss what’s new">${icon('x')}</button></section>`;
   const done = async () => {
     showing = null;
@@ -89,7 +89,7 @@ export async function drawWhatsNew(slot) {
   };
   slot.querySelector('#wnOk').addEventListener('click', done);
   slot.querySelector('#wnX').addEventListener('click', done);
-  slot.querySelector('#wnAll').addEventListener('click', openWhatsNewSheet);
+  slot.querySelector('#wnAll')?.addEventListener('click', openWhatsNewSheet);
   return true;
 }
 

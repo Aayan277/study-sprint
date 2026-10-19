@@ -9,7 +9,7 @@
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { hasMath, wrapMath, maskMath } from './math.js';
 import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
-import { esc, toast } from './ui.js';
+import { esc, toast, icon } from './ui.js';
 import { toolbarTarget } from './a11y.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
 import { canPlayType } from './audio.js';
@@ -460,7 +460,7 @@ export function clozeFields(p, text = '', extra = '') {
     ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The mitochondria makes ATP for the cell', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
     ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <details class="more-tips"><summary>More tips</summary>
+    <details class="more-tips"><summary>${icon('chevron', 'more-tips-chev')}More tips</summary>
       <p class="note cloze-help">Each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p></details>`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
