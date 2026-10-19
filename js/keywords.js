@@ -24,7 +24,7 @@ const WORD = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
 const TRAIL = /['’-]+$/;
 const NUMERIC = /^[\p{N}][\p{N}.,'’-]*$/u;
 const SENTENCE_GAP = /[.!?\n]/;
-const BREAK_GAP = /[.,;:!?()[\]{}"“”\n–—/|•]/;
+const BREAK_GAP = /[.,;:!?()[\]{}"“”\n–—/|•<>=+→←]/;
 
 // The words of a text: [{ w, raw, start, end, first, brk }]
 //   w     lower case, accents kept, ’ written as '

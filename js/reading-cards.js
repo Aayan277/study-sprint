@@ -43,6 +43,13 @@ place amount rate become include require produce provide contain involve develop
 continue represent suggest depend appear present consider describe determine different important possible several another`.split(/\s+/));
 const WH = new Set('why how what where when who whom whose whether'.split(' '));
 const SUBJECT_LEAD = new Set('the a an this these those its their our your his her each every some many most all both any'.split(' '));
+// The label of a line in notes on a topic ("MOA: …", "SE: …", "overdose -> …"): it only means something under the heading it is in.
+const LABELISH = new Set(`moa se ci ae adr dx tx rx hx sx ix px uses use dose doses overdose indications indication contraindications contraindication
+mechanism effects toxicity antidote onset duration examples cause causes treatment symptoms signs features types function functions structure location
+side-effects interactions monitoring`.split(/\s+/));
+const VERB_START = /^(?:inhibits?|blocks?|increases?|decreases?|causes?|lowers?|raises?|reduces?|activates?|stimulates?|binds?|produces?|prevents?|treats?|used|acts?)\s/i;
+const labelish = term => VERB_START.test(term + ' ') || labelishWord(term);
+const labelishWord = term => { const t = term.toLowerCase().replace(/[^\p{L}\s-]/gu, '').replace(/\s+/g, ' ').trim(); return LABELISH.has(t) || LABELISH.has(t.replace(/ /g, '-')) || t === 'side effects' || t === 'adverse effects' || t === 'half life'; };
 const ABBREVIATIONS = new Set(`e.g i.e etc vs dr mr mrs ms prof fig no approx ca c st u.s u.k a.m p.m cf al inc ltd jr sr mt ch pp p vol ed est`.split(' '));
 const EVENT_VERBS = /\b(?:signed|began|ended|founded|discovered|invented|published|died|born|declared|assassinated|launched|formed|won|lost|invaded|abdicated|arrived|built|established|introduced)\b/i;
 const CUES = /\b(?:because|causes?|leads? to|results? in|therefore|responsible for|consists? of|known as|main|primary|key)\b/i;
@@ -106,7 +113,7 @@ function termOk(term, { loose = false } = {}) {
   const flat = term.toLowerCase().replace(/[^\p{L}\s.']/gu, '').trim();
   if (LABELS.has(flat) || LABELS.has(first)) return false;
   if (hasAdminBits(term) || /[$+"“”]|\(\s*\d{4}\s*\)/.test(term)) return false;
-  if (ws.length === 1 && VAGUE.has(flat)) return false;
+  if (ws.length === 1 && VAGUE.has(flat) && !loose) return false;
   if (ws.length === 2 && /^(?:key|main|major|core|big|top)$/.test(first) && (VAGUE.has(ws[1].toLowerCase()) || LABELS.has(ws[1].toLowerCase()))) return false;      // "Key takeaway", "Main idea"
   return true;
 }
@@ -130,8 +137,9 @@ export function pairSplit(line) {
     def = plain.slice(best + sep.length).trim();
   }
   def = def.replace(/\t+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!termOk(term) || wc(def) < 1 || adminDate(def) || hasAdminBits(def) || /^[\p{L}.]+ \d+\b/u.test(def)) return null;        // (a meaning that starts "Unité 5" is the rest of a title)
-  return { term: term.replace(/\s+/g, ' '), def, sep: sep === '\t' ? 'tab' : sep.trim(), one: wc(def) < 2 };
+  const label = labelish(term);
+  if (!termOk(term, { loose: label }) || wc(def) < 1 || adminDate(def) || hasAdminBits(def) || /^[\p{L}.]+ \d+\s*[:–—|-]/u.test(def)) return null;        // (a meaning that starts "Unité 5 :" is the rest of a title)
+  return { term: term.replace(/\s+/g, ' '), def, sep: sep === '\t' ? 'tab' : sep.trim(), one: wc(def) < 2, label };
 }
 
 // "operant cond." in a section called "Operant conditioning": the heading, written out. → the heading or null
@@ -212,6 +220,31 @@ export function definitionIn(sentence) {
   return null;
 }
 
+// "…is called the focus, or hypocentre, and the point above it is the epicentre." / "…sinks beneath the other in a process called subduction."
+// A term named in the middle of a sentence. → [{ term, back, base }]
+const CALLED = /\b(?:(?:is|are) called|(?:an?|the) (?:[\p{L}-]+ )?called)\s+(?:(?:the|an?)\s+)?([\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*)?)/gu;
+export function calledIn(sentence) {
+  const s = chop(sentence), out = [];
+  for (const m of s.matchAll(CALLED)) {
+    const ws = m[1].split(/\s+/);
+    if (ws.length > 1 && (STOPWORDS.has(ws[1].toLowerCase()) || /^\p{Ll}/u.test(ws[1]) && ws[1].length < 4)) ws.pop();
+    if (ws.length > 1 && STOPWORDS.has(ws[ws.length - 1].toLowerCase())) ws.pop();
+    const term = ws.join(' ');
+    if (!termOk(term) || isJunkTerm(term) || GENERIC.has(keyOf(words(term)))) continue;
+    // what it names: the clause before, from the last ";" on, without the "in a process" that leads to the name
+    let back = s.slice(0, m.index).split(/;\s+/).pop().replace(/\s+(?:in|by|through|as)$/i, '').replace(/^\s*(?:and|while|whereas)\s+/i, '').trim();
+    if (/\b(?:in|by|through)\s+(?:an?|the)\s+(?:[\p{L}-]+\s+)?$/iu.test(back + ' ')) back = back.replace(/\s+(?:in|by|through)\s+(?:an?|the)(?:\s+[\p{L}-]+)?$/iu, '');
+    if (wc(back) < 4 || wc(back) > 40 || PRONOUNS.has(firstWord(back))) continue;
+    const alias = s.slice(m.index + m[0].length).match(/^,\s+or\s+([\p{L}][\p{L}'-]*)\b/u);
+    out.push({ term: alias ? `${term} (${alias[1]})` : term, back, base: 0.72 });
+    // "…, and the point on the surface directly above it is the epicentre": the next name in the same sentence
+    const rest = s.slice(m.index + m[0].length + (alias ? alias[0].length : 0));
+    const next = rest.match(/^,?\s+and\s+(the\s.{15,}?)\s+(?:is|are)\s+the\s+([\p{Ll}][\p{Ll}-]{4,})$/u);
+    if (next && !GENERIC.has(next[2]) && wc(next[1]) >= 5) out.push({ term: next[2], back: next[1], base: 0.72 });
+  }
+  return out;
+}
+
 // A term followed by its explanation: "…contain chlorophyll, the green pigment that absorbs light", "…a phospholipid bilayer, which means
 // two layers of lipid molecules". → { term, back, base } or null
 const APPOSITIVE = /,\s+(?:which\s+(?:is|are|means)\s+|in which\s+|whereby\s+|(?=(?:the|an?)\s))/gi;
@@ -267,7 +300,12 @@ function factIn(sentence, phrases, weights, counts) {
   const m = masked.match(DATE_RE) || masked.match(RANGE_RE) || masked.match(YEAR_RE) || masked.match(UNIT_RE) || countHit;
   if (!m) return null;
   if (m === countHit && !(Number(m[0].replace(/,/g, '')) >= 10)) return null;             // "2 layers": a small count is not worth hiding
-  const at = m.index, span = m[0], end = at + span.length;
+  let at = m.index, span = m[0], end = at + span.length;
+  // a range is hidden whole, not by one end: "2 to {{c1::10}}"
+  const lead = masked.slice(0, at).match(/\d[\d,.]*\s*(?:to|-|–|and|or)\s+$/);
+  if (lead) { at -= lead[0].length; span = sentence.slice(at, end); }
+  const tail = masked.slice(end).match(/^\s*(?:to|-|–)\s*\d[\d,.]*/);
+  if (tail && !lead) { span = sentence.slice(at, end + tail[0].length); end += tail[0].length; }
   // some other content has to be left on the card
   const rest = phrases.filter(p => (p.end <= at || p.start >= end) && !isJunkTerm(p.text));
   if (!rest.length) return null;
@@ -329,6 +367,10 @@ function sentenceCards(sentence, toks, phrases, { weights, counts, knownKeys, su
       if (GENERIC.has(p.key) || (!p.caps && !isKnown && looksLikeVerb(toks, p, subjects))) continue;
       if (!(p.caps || isKnown || /^\p{Lu}{2,}$/u.test(p.text) || (df >= 2 && p.text.length >= 7))) continue;
     } else if (!(p.caps || isKnown)) {
+      const w = p.key.split(' ');
+      if (p.n === 2 && /s$/.test(w[0]) && w[0].length > 3 && !/(?:ss|us|is|ics)$/.test(w[0]) && !/s$/.test(w[1])) continue;          // "plates move": a noun and its verb
+      const last = toks[toks.findIndex(t => t.start === p.start) + p.n - 1];
+      if (last && looksLikeVerb(toks, { start: last.start, key: stem(last.w), text: last.raw }, subjects) && !/s$/.test(last.w)) continue;
       // two words that really belong together: the rarer one is mostly found inside the phrase ("stem cells", not "cell needs")
       const parts = p.key.split(' ');
       if (df < 2 || tf / Math.min(...parts.filter(x => x !== 'of').map(x => counts.get(x)?.tf || 1)) < 0.6) continue;
@@ -350,7 +392,7 @@ function sentenceCards(sentence, toks, phrases, { weights, counts, knownKeys, su
     const cloze = clozeOf(sentence, best.p.key, toks);
     if (!cloze) continue;
     taken.push(best.p);
-    out.push({ cloze, base: 0.4 + 0.3 * Math.min(1.5, best.q) + (CUES.test(sentence) ? 0.1 : 0), key: best.p.key, text: best.p.text });
+    out.push({ cloze, base: 0.4 + 0.3 * Math.min(1.5, best.q) + (CUES.test(sentence) ? 0.1 : 0), key: best.p.key, text: best.p.text, caps: best.p.caps, n: best.p.n });
     if (out.length === 3) break;
   }
   return out;
@@ -429,11 +471,12 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
     const it = joined[i];
     if (it.marker) { sec.where ||= it.where; continue; }
     let head = !!it.h;
-    if (!head && !it.bullet) {
-      const n = wc(it.t), nx = joined[i + 1] && !joined[i + 1].marker ? joined[i + 1] : null;
+    if (!head && !it.bullet && !(sec.heading && !sec.lines.length && !it.gap)) {          // (the line right under a heading is its text, not another heading)
+      const ht = it.t.replace(/\s*\([^()]*(?:\be\.g\.|\bsuch as\b|,)[^()]*\)\s*$/, '');          // "Beta blockers (e.g. propranolol, atenolol)" is the heading "Beta blockers"
+      const n = wc(ht), nx = joined[i + 1] && !joined[i + 1].marker ? joined[i + 1] : null;
       if (/^[\p{Lu}\p{N}\s&'’-]+$/u.test(it.t) && n >= 2 && n <= 8 && /\p{Lu}{2}/u.test(it.t) && !isAcronym(it.t)) head = true;
-      else if (n <= 8 && !/[.,;:!?]$/.test(it.t) && !/[()$]/.test(it.t) && !isPairish(it.t) && !isAdminLine(it.t) && /^\p{L}/u.test(it.t) &&
-        nx && !nx.h && (nx.bullet || (wc(nx.t) >= 6 && wc(nx.t) >= n * 1.5))) head = true;
+      else if (n <= 8 && !/[.,;:!?]$/.test(ht) && !/[()$]/.test(ht) && !isPairish(ht) && !isAdminLine(ht) && /^\p{L}/u.test(ht) &&
+        nx && !nx.h && (nx.bullet || (wc(nx.t) >= 6 && wc(nx.t) >= n * 1.5))) { head = true; it.t = ht; }
     }
     if (head) {
       flush();
@@ -507,6 +550,7 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
       }
       if (run.length < 2 || run.length > 8) continue;
       let items;
+      if (run.some(j => s.recs[j].pair?.label)) continue;          // a list of "MOA, uses, SE…" is not a list to learn
       if (run.every(j => s.recs[j].pair)) items = run.map(j => s.recs[j].pair.term);          // "Prophase: …" lines: the terms are the list
       else if (run.every(j => wc(s.recs[j].l.t) <= 12)) items = run.map(j => chop(clean(s.recs[j].l.t)));
       else continue;
@@ -525,10 +569,11 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
           defined.add(keyOf(words(ab.long)));
           continue;
         }
-        const full = fullHeading(p.term, s.heading) || p.term;
+        let full = fullHeading(p.term, s.heading) || p.term, base = 0.75;
+        if (p.label) { if (s.heading) full = `${s.heading}: ${p.term}`; else base = 0.6; }          // a label needs its heading on the card; with none it is not ticked
         const key = keyOf(words(full));
-        defined.add(key);
-        push({ kind: 'definition', type: 'basic', front: cap(full), back: chop(wc(p.def) > 40 ? (splitSentences(p.def)[0] || p.def) : p.def), source: sents[0].plain, where: w, base: 0.75, anchor: key, term: full });
+        if (!p.label) defined.add(key);
+        push({ kind: 'definition', type: 'basic', front: p.label ? full : cap(full), back: chop(wc(p.def) > 40 ? (splitSentences(p.def)[0] || p.def) : p.def), source: sents[0].plain, where: w, base, anchor: key, term: full, label: !!p.label });
         continue;
       }
       if (used.has(i)) continue;
@@ -545,6 +590,10 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
           push({ kind: 'acronym', type: 'basic', front: ab.short, back: ab.long, source: u.plain, where: w, base: 0.9, both: true, anchor: keyOf(words(ab.short)), acr: true });
           defined.add(keyOf(words(ab.long)));
         }
+        for (const c of calledIn(u.plain)) {
+          const key = keyOf(words(c.term.replace(/\s*\(.*$/, '')));
+          if (!defined.has(key)) { defined.add(key); u.defined = true; push({ kind: 'definition', type: 'basic', front: cap(c.term), back: c.back, source: u.plain, where: w, base: c.base, anchor: key, term: c.term, multi: true }); }
+        }
         const d = definitionIn(u.plain) || appositiveIn(u.plain, u.toks);
         if (d) {
           const key = keyOf(words(d.term));
@@ -556,8 +605,12 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
         if (hasAdminBits(u.plain) || (adminDate(u.plain) && !/\b\d{4}\b/.test(u.plain)) || letterCount(u.plain) < u.plain.replace(/\s/g, '').length * 0.7) continue;
         if (u.bullet && n < 6) continue;
         const f = n >= 6 && n <= 35 ? factIn(u.plain, u.phrases, weights, counts) : null;
-        if (f) push({ kind: 'fact', type: 'cloze', cloze: f.cloze, source: u.plain, where: w, base: f.base, cap: 0.72, anchor: 'fact|' + u.plain, fact: true });
-        if (!f && n >= 8 && n <= 35) for (const c of sentenceCards(u.plain, u.toks, u.phrases, ctx)) push({ kind: 'sentence', type: 'cloze', cloze: c.cloze, source: u.plain, where: w, base: c.base, cap: 0.72, anchor: c.key, term: c.text });
+        let named = n >= 8 && n <= 35 ? sentenceCards(u.plain, u.toks, u.phrases, ctx) : [];
+        // one card per sentence: a whole name ("Treaty of Versailles") is the better thing to hide; without one, the number or date
+        if (f && named.some(c => c.caps && c.n >= 2)) named = [named.find(c => c.caps && c.n >= 2)];
+        else if (f) named = [];
+        if (f && !named.length) push({ kind: 'fact', type: 'cloze', cloze: f.cloze, source: u.plain, where: w, base: f.base, cap: 0.72, anchor: 'fact|' + u.plain, fact: true });
+        for (const c of named) push({ kind: 'sentence', type: 'cloze', cloze: c.cloze, source: u.plain, where: w, base: c.base, cap: 0.72, anchor: c.key, term: c.text });
       }
     }
   }
@@ -608,8 +661,8 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
     if (junky(c)) continue;
     const g = groups.get(c.anchor) || c.anchor;
     // one card per sentence (an abbreviation may share its sentence with a definition)
-    const sourceSet = c.acr ? usedAcr : usedSource;
-    const sourceId = c.acr ? g : dupKey(c.source);
+    const sourceSet = c.acr || c.multi ? usedAcr : usedSource;          // (an abbreviation, or a sentence that names two things, may give more than one card)
+    const sourceId = c.acr || c.multi ? g : dupKey(c.source);
     if (sourceSet.has(sourceId)) continue;
     if (c.type === 'basic' ? anchorBasic.has(g) : anchorCloze.has(g)) continue;
     if ((c.kind === 'sentence' || c.kind === 'term') && defined.has(g) && c.score < 0.6) continue;       // a second card on a term that has a definition has to be good

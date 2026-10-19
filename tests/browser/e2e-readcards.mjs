@@ -270,10 +270,10 @@ ok(await p4.locator('.prow.sug').count() > 10, `still works without workers: ${a
 await p4.goto('http://localhost:8123/#/decks'); await p4.waitForSelector('.deck');
 await p4.evaluate(() => sessionStorage.removeItem('study-sprint-import-draft'));
 await p4.goto('http://localhost:8123/#/import'); await p4.waitForSelector('#pasteBox');
-await p4.evaluate(t => { document.getElementById('pasteBox').value = t; }, big);
+await p4.evaluate(t => { document.getElementById('pasteBox').value = t; }, big + '\n\n' + big + '\n\n' + big);
 await p4.click('#suggestBtn');
 await p4.waitForSelector('#sugStatus:not([hidden])', { timeout: 10000 });
-await p4.click('#sugStop');
+await p4.evaluate(() => document.getElementById('sugStop').click());          // (a real click waits for the button to hold still, which a busy page may not let it do before the run is over)
 await p4.waitForSelector('#loadErr:not([hidden])');
 ok((await p4.textContent('#loadErr')) === 'Stopped. Press Suggest cards to try again.' && await p4.isVisible('#suggestBtn') && await p4.isHidden('#preview'), 'Stop: "Stopped. Press Suggest cards to try again."');
 await ctx4.close();
@@ -309,9 +309,10 @@ ok(writes <= 4, 'the summary is written only when it changes (' + writes + ' wri
 const rowsBefore = await p5.locator('.prow.sug').count();
 await p5.locator('.prow.sug .pick').first().evaluate(b => { b.click(); });
 const tickedBefore = await p5.locator('.prow.sug .pick:checked').count();
-await p5.evaluate(t => { const b = document.getElementById('pasteBox'); b.value = t; b.dispatchEvent(new Event('input', { bubbles: true })); }, big);
-await p5.waitForSelector('#sugStatus:not([hidden])', { timeout: 20000 });
-await p5.click('#sugStop');
+// (a text long enough that the run is still going when Stop is pressed, however fast the machine: a shorter one could finish first)
+await p5.evaluate(t => { const b = document.getElementById('pasteBox'); b.value = t; b.dispatchEvent(new Event('input', { bubbles: true })); }, big + '\n\n' + big + '\n\n' + big);
+await p5.waitForSelector('#sugStatus:not([hidden])', { timeout: 30000 });
+await p5.evaluate(() => document.getElementById('sugStop').click());
 await p5.waitForSelector('#sugNote:not([hidden])');
 ok((await p5.textContent('#sugNote')) === 'Stopped. Press Suggest cards to try again.' || (await p5.textContent('#sugNote')).startsWith('Stopped.'), 'Stop on a re-run: a note, not an error: ' + await p5.textContent('#sugNote'));
 ok(await p5.locator('.prow.sug').count() === rowsBefore && await p5.locator('.prow.sug .pick:checked').count() === tickedBefore && await p5.isVisible('#preview') && await p5.isHidden('#loadErr'), 'the suggestions and ticks stay');

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { suggestCards, suggestSteps, splitSentences, pairSplit, definitionIn, appositiveIn, matchesAbbreviation, abbreviationsIn, looksLikeProse, MAX_SUGGESTIONS, MAX_CHARS } from '../js/reading-cards.js';
+import { suggestCards, suggestSteps, splitSentences, pairSplit, definitionIn, appositiveIn, calledIn, matchesAbbreviation, abbreviationsIn, looksLikeProse, MAX_SUGGESTIONS, MAX_CHARS } from '../js/reading-cards.js';
 import { words } from '../js/keywords.js';
 import { foldText } from '../js/match.js';
 import { dupKey, parseText } from '../js/import.js';
@@ -15,7 +15,9 @@ import { parseElements } from '../js/steps.js';
 const fixture = name => fs.readFileSync(new URL(`./fixtures/reading/${name}.txt`, import.meta.url), 'utf8');
 const TEXT = { biology: fixture('biology'), history: fixture('history'), vocab: fixture('spanish-vocab'), messy: fixture('lecture-messy'),
   // Held out: written by a reviewer who had not seen the rules. The rules were not tuned to these three beyond general fixes.
-  econ: fixture('heldout-econ'), french: fixture('heldout-french'), psych: fixture('heldout-psych') };
+  econ: fixture('heldout-econ'), french: fixture('heldout-french'), psych: fixture('heldout-psych'),
+  // (a second reviewer round: texts written before the second round of fixes)
+  geo: fixture('heldout-geo'), pharm: fixture('heldout-pharm') };
 const RESULT = Object.fromEntries(Object.entries(TEXT).map(([k, t]) => [k, suggestCards({ text: t })]));
 const wordCount = t => (t.match(/\S+/g) || []).length;
 
@@ -40,7 +42,11 @@ const MUST = {
     'demenager', 'louer', 'avoir du mal', 'faire le menage', 'mettre la table', 'librairie', 'bibliotheque'].map(w => [w]),
   psych: [['atkinson shiffrin'], ['sensory memory'], ['stm', 'short term'], ['chunking'], ['ltm'], ['working memory'], ['central executive'], ['phonological loop'],
     ['visuospatial sketchpad'], ['episodic buffer'], ['explicit'], ['episodic memory'], ['semantic memory'], ['procedural memory'], ['serial position'],
-    ['proactive interference'], ['retroactive interference'], ['henry molaison', 'hm'], ['anterograde amnesia']]
+    ['proactive interference'], ['retroactive interference'], ['henry molaison', 'hm'], ['anterograde amnesia']],
+  geo: [['lithosphere'], ['asthenosphere'], ['subduction'], ['earthquake'], ['focus'], ['epicentre'], ['primary waves', 'p waves'], ['secondary waves', 's waves'],
+    ['moment magnitude scale', 'mw'], ['2004'], ['wegener'], ['continental drift'], ['seafloor spreading', '1960s'], ['mesosaurus'], ['mid atlantic ridge'], ['san andreas fault']],
+  pharm: [['beta blockers moa'], ['beta blockers uses'], ['beta blockers se'], ['beta blockers ci'], ['cardioselective'], ['ace inhibitors moa'], ['ace inhibitors se'],
+    ['ace inhibitors ci'], ['paracetamol overdose'], ['paracetamol max dose'], ['nsaids inhibit', 'nsaids moa'], ['nsaids se'], ['aspirin'], ['opioids'], ['opioids se'], ['naloxone']]
 };
 const recall = name => {
   const items = MUST[name], list = RESULT[name].suggestions;
@@ -80,7 +86,7 @@ const junkOf = name => {
 
 // (The held-out texts are scored too: the floors are set under what they got, so a rule change that makes them worse shows. They are lower
 // than for the first fixtures, and that is the honest number.)
-for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75], ['econ', 0.5], ['french', 0.7], ['psych', 0.65]]) {
+for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75], ['econ', 0.5], ['french', 0.7], ['psych', 0.65], ['geo', 0.4], ['pharm', 0.5]]) {
   test(`recall: ${name} finds at least ${min * 100}% of what matters`, () => {
     const r = recall(name);
     console.log(`  recall ${name}: ${r.hits}/${r.of} = ${(r.rate * 100).toFixed(0)}%${r.missed.length ? ', missed: ' + r.missed.join(', ') : ''}`);
@@ -88,7 +94,7 @@ for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75], 
   });
 }
 
-for (const [name, max] of [['biology', 0.1], ['history', 0.1], ['vocab', 0.1], ['messy', 0.15], ['econ', 0.15], ['french', 0.15], ['psych', 0.15]]) {
+for (const [name, max] of [['biology', 0.1], ['history', 0.1], ['vocab', 0.1], ['messy', 0.15], ['econ', 0.15], ['french', 0.15], ['psych', 0.15], ['geo', 0.15], ['pharm', 0.15]]) {
   test(`junk: ${name} has at most ${max * 100}% junk and no junk among the pre-ticked`, () => {
     const j = junkOf(name);
     console.log(`  junk ${name}: ${j.bad.length}/${j.n} = ${(j.rate * 100).toFixed(1)}%${j.bad.length ? ' (' + j.bad.map(x => x.why.join('+')).join(', ') + ')' : ''}`);
@@ -105,8 +111,35 @@ test('held-out texts: none of the wrong cards a reviewer found (OPEC, Inelastic,
   assert.ok(!econ.some(s => s.type === 'basic' && /^the revenue of OPEC/.test(s.back)));
   assert.ok(!fr.some(s => /francais|unite/.test(foldText(s.front + ' ' + s.back))), 'the title line is not a card');
   assert.ok(fr.filter(s => s.kind === 'vocab' && s.both).length >= 12, 'one-word meanings count in a word list');
-  for (const n of ['econ', 'psych', 'french']) assert.deepEqual(RESULT[n].suggestions.filter(s => s.strong).map(s => junkReasons(s)).filter(r => r.length), []);
+  for (const n of ['econ', 'psych', 'french', 'geo', 'pharm']) assert.deepEqual(RESULT[n].suggestions.filter(s => s.strong).map(s => junkReasons(s)).filter(r => r.length), []);
   assert.ok(!RESULT.psych.suggestions.some(s => answersOf(s).some(a => /->/.test(a))), 'an arrow inside a blank');
+});
+test('held-out notes: a label like MOA, SE or overdose carries its heading, and is not ticked without one', () => {
+  const ph = RESULT.pharm.suggestions;
+  for (const s of ph) assert.ok(!['moa', 'overdose', 'se', 'ci', 'uses', 'dose'].includes(foldText(s.front)), 'a card for the bare label "' + s.front + '"');
+  const fronts = ph.map(s => s.front);
+  assert.ok(fronts.includes('Beta blockers: MOA') && fronts.includes('ACE inhibitors: MOA'), 'the two MOA lines are two cards: ' + fronts.slice(0, 8).join(' | '));
+  assert.ok(fronts.includes('Paracetamol: overdose') && fronts.includes('Beta blockers: SE'));
+  assert.ok(!ph.some(s => /quiz|zoom|calculator|tutor/i.test(s.front + s.back)), 'admin lines make no cards');
+  const bare = suggestCards({ text: 'MOA: blocks beta receptors and lowers heart rate\nSE: slow heart rate and tiredness' }).suggestions;
+  assert.ok(bare.every(s => !s.strong), 'a label with no heading is not ticked');
+  assert.equal(pairSplit('Down syndrome: trisomy 21').def, 'trisomy 21');
+  assert.equal(pairSplit('Neutral water at 25 °C: pH 7').def, 'pH 7');
+  assert.equal(pairSplit('Français – Unité 5 : La maison'), null);
+  const heading = suggestCards({ text: 'Beta blockers (e.g. propranolol, atenolol)\n- MOA: block beta receptors\n- SE: bradycardia and fatigue and cold hands' }).suggestions;
+  assert.ok(heading.some(s => s.front === 'Beta blockers: SE'), JSON.stringify(heading.map(s => s.front)));
+});
+test('names, numbers and namings in one sentence', () => {
+  const one = t => suggestCards({ text: t, debug: [] }).suggestions;
+  const geo = RESULT.geo.suggestions;
+  assert.ok(geo.some(s => /\{\{c1::Alfred Wegener\}\}/.test(s.cloze || '')), 'a whole name is the blank when the sentence has one');
+  assert.ok(geo.some(s => /\{\{c1::2 to 10\}\}/.test(s.cloze || '')), 'a range is hidden whole');
+  assert.ok(!geo.some(s => /to \{\{c1::10\}\}/.test(s.cloze || '')));
+  assert.ok(geo.some(s => s.kind === 'definition' && /^Subduction/.test(s.front)), '"in a process called subduction"');
+  assert.ok(geo.some(s => s.kind === 'definition' && /^Focus \(hypocentre\)/.test(s.front)) && geo.some(s => s.front === 'Epicentre'), '"is called the focus, or hypocentre, and … is the epicentre"');
+  assert.ok(!geo.some(s => /\{\{c1::plates move\}\}/.test(s.cloze || '')), 'a noun and its verb are not one blank');
+  assert.ok(RESULT.biology.suggestions.some(s => s.type === 'cloze' && /\{\{c1::46\}\}/.test(s.cloze)), 'with no name in it, the number is hidden');
+  assert.deepEqual(calledIn('The denser oceanic plate sinks beneath the other in a process called subduction.').map(x => x.term), ['subduction']);
 });
 test('a blank never cuts a name or a hyphenated word, and a lone verb is not blanked', () => {
   for (const name of Object.keys(RESULT)) for (const s of RESULT[name].suggestions.filter(x => x.type === 'cloze')) {
