@@ -12,7 +12,7 @@ const noHScroll = async w => ok(await page.evaluate(() => document.documentEleme
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 // open the sample deck, go to import from there
 await page.click('.deck-open'); await page.waitForSelector('.crow');
-await page.click('a[href^="#/import/"]'); await page.waitForSelector('#pasteBox');
+await page.click('#deckMore'); await page.click('#importHere'); await page.waitForSelector('#pasteBox');      // (Import is in the deck's ⋯ menu)
 ok((await page.$eval('#deckSel', s => s.selectedOptions[0].textContent)).includes('Psychology'), 'deck preselected from deck page');
 await noHScroll('import empty');
 
@@ -42,7 +42,7 @@ ok((await page.locator('.crow').count()) === 13, 'saved into sample deck (12 + 1
 ok((await page.locator('.crow .b').last().textContent()) === 'belief', 'edited back saved');
 
 // Claude button
-await page.click('a[href^="#/import/"]'); await page.waitForSelector('#pasteBox');
+await page.click('#deckMore'); await page.click('#importHere'); await page.waitForSelector('#pasteBox');      // (Import is in the deck's ⋯ menu)
 await page.fill('#pasteBox', 'Notes about the brain');
 await page.click('#claudeBtn');
 const clip = await page.evaluate(() => navigator.clipboard.readText());

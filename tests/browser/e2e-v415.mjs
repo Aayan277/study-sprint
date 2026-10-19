@@ -214,7 +214,8 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   const answers = await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'review' && l.cardId.startsWith('a')).length);
   ok(done[0].startsWith('3') && answers > 3, `the finish screen counts cards (3), not answers (${answers}): ${done[0]}`);
   ok((await norm(p, '.note')).includes(`${answers} answers on 3 cards`), `and says "${answers} answers on 3 cards": ` + (await norm(p, '.note')));
-  ok(await p.locator('#keepBtn').count() === 0, 'Deck B still has cards due, but Keep going is not offered after finishing Deck A (it counts this deck): ' + await norm(p, '.res-actions'));
+  // (UI audit H4: Keep going still counts this deck only; cards due in other decks are offered as "Continue · N cards")
+  ok(await p.locator('#keepBtn').count() === 1 && /^Continue · \d+ cards?$/.test((await p.textContent('#keepBtn')).trim()) && !/Keep going/.test(await p.textContent('#keepBtn')), 'Deck B still has cards due: after finishing Deck A the button says Continue (not Keep going, which counts this deck): ' + await norm(p, '.res-actions'));
 
   // End early: Keep going counts what is left in this deck, not every deck.
   await go(p, '#/review/B', '#flash');

@@ -98,13 +98,13 @@ ok(found.includes('Found 4 cards') && found.includes('plus 1 cloze note') && !fo
 const badges = await p.$$eval('.prow .badge:not([hidden])', b => b.map(x => x.textContent));
 ok(badges.length === 2 && badges.every(t => /^Cloze card c\d/.test(t)) && !badges.some(t => t.includes('Missing a side')), 'the cloze rows are badged, no "Missing a side": ' + badges);
 ok((await p.textContent('#clozeToggle')) === 'Keep {{c1::…}} lines as plain cards', 'the link to keep them as plain cards');
-ok((await p.textContent('#saveBtn')) === 'Add 4 cards' && await p.isVisible('#saveHint') && (await p.textContent('#saveHint')) === 'Name the new deck above', 'unnamed new deck: "Add 4 cards" and the hint');
+ok((await p.textContent('#saveBtn')) === 'Name the deck to add 4 cards' && !(await p.$('#saveHint')), 'unnamed new deck: the button asks "Name the deck to add 4 cards" (no hint line above it: it overlapped the page)');
 await p.screenshot({ path: SHOTS + '/1d-import-newdeck-375-dark.png', fullPage: true });
 await p.evaluate(() => document.getElementById('preview').scrollIntoView());
 await p.screenshot({ path: SHOTS + '/1d-import-preview-375-dark.png' });
 await p.fill('#newName', 'Cells');
-ok((await p.textContent('#saveBtn')) === 'Add 4 cards to “Cells”' && await p.isHidden('#saveHint'), 'named: Add 4 cards to “Cells”');
-for (const t of [await p.textContent('#saveBtn'), await p.textContent('#saveHint'), await p.textContent('#found')]) ok(!/new deck/i.test(t) || t === 'Name the new deck above', 'wording: no "new deck" in ' + JSON.stringify(t.slice(0, 40)));
+ok((await p.textContent('#saveBtn')) === 'Add 4 cards to “Cells”', 'named: Add 4 cards to “Cells”');
+for (const t of [await p.textContent('#saveBtn'), await p.textContent('#found')]) ok(!/new deck/i.test(t), 'wording: no "new deck" in ' + JSON.stringify(t.slice(0, 40)));
 await p.click('#clozeToggle');
 await p.waitForFunction(() => document.querySelector('#found').textContent.includes('Found 3 cards'));
 ok((await p.textContent('#found')).includes('Found 3 cards') && (await p.locator('.prow .badge:not([hidden])').count()) === 0, 'keep as plain cards: the lines are plain cards');
@@ -122,7 +122,7 @@ const cellsId = await p.evaluate(async () => (await (await import('./js/db.js'))
 await go(p, '#/import/' + cellsId, '#pasteBox');
 ok((await p.$eval('#deckSel', s => s.selectedOptions[0].dataset.name)) === 'Cells' && await p.isHidden('#newName'), 'opened from the deck page, that deck is chosen');
 await paste(p, 'a - b', 'Found 1 card');
-ok((await p.textContent('#saveBtn')) === 'Add 1 card to “Cells”' && await p.isHidden('#saveHint'), 'existing deck: Add 1 card to “Cells”');
+ok((await p.textContent('#saveBtn')) === 'Add 1 card to “Cells”', 'existing deck: Add 1 card to “Cells”');
 // a deck that no longer exists is not preselected
 await p.evaluate(async () => { const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.name === 'Cells'); await db.deleteDeck(d.id); });
 await go(p, '#/import/' + cellsId, '#pasteBox');

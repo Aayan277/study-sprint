@@ -63,6 +63,7 @@ await p.screenshot({ path: SP + '/finish-keep-1440-light.png' });
 // ---------- 2. Nothing left: Back to Today is the primary, "Nice work", Due tomorrow once ----------
 p = await open({ width: 375, height: 740 }, { isMobile: true, hasTouch: true });
 await seedDecks(p, ['C']);
+await p.evaluate(async () => { const db = await import('./js/db.js'); for (const id of ['B', 'sample']) await db.deleteDeck(id); });      // (cards due in another deck now get "Continue · N cards": e2e-uipolish)
 await goToday(p);
 await p.click('#startBtn'); await p.waitForSelector('#flash');
 ok(await p.locator('#undoBtn').count() === 0, 'phone bar: no Undo button before the first answer');
@@ -79,7 +80,8 @@ await p.screenshot({ path: SP + '/finish-done-375.png', fullPage: true });
 await p.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
 await p.screenshot({ path: SP + '/finish-done-375-light.png', fullPage: true });
 
-// Keep going when there is more, at 375
+// Keep going when there is more, at 375 (Deck B was deleted above to leave nothing due elsewhere: put it back)
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'B', name: 'Second', color: '#E5484D', created: Date.now() + 1 }, [1, 2, 3, 4].map(i => ({ id: 'b' + i, deckId: 'B', front: 'B front ' + i, back: 'B back ' + i, tags: [], created: i }))); });
 await p.evaluate(() => { location.hash = '#/today'; });
 await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('reviewDecks', ['B']); });
 await goToday(p);

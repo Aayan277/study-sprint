@@ -416,11 +416,21 @@ function publishLive() {
     : null;
 }
 
+// When the exam's limit moved what Hard, Good or Easy show (a card due long before the exam is not touched), say so in one quiet
+// line: otherwise three buttons showing the same gap look like a bug. Nothing is said when the limit changed nothing.
+function examCapNote(state, opts, ivl, cardId, now) {
+  if (!(opts.maxDue > now)) return '';
+  const free = previewIntervals(state, { ...opts, maxDue: null }, now, cardId);
+  if (![Rating.Hard, Rating.Good, Rating.Easy].some(r => formatInterval(free[r]) !== formatInterval(ivl[r]))) return '';
+  return `<p class="rate-note" id="rateNote">Capped by your exam on ${new Date(opts.maxDue).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</p>`;
+}
+
 function rateButtonsHTML() {
-  const ivl = previewIntervals(R.statesById.get(R.current.card.id), schedFor(R.current.card), Date.now(), R.current.card.id);
+  const card = R.current.card, state = R.statesById.get(card.id), opts = schedFor(card), now = Date.now();
+  const ivl = previewIntervals(state, opts, now, card.id);
   return `<div class="rates">${RATINGS.map(({ rating, label, key }) => `
     <button type="button" class="rate r${rating}${R.suggest === rating ? ' suggested' : ''}" data-rate="${rating}" aria-keyshortcuts="${key}" aria-label="${label}, next review in ${formatIntervalLong(ivl[rating])}${R.suggest === rating ? ', suggested' : ''}">
-      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>`;
+      <b>${label}</b><span class="mono">${formatInterval(ivl[rating])}</span>${R.suggest === rating && stepsOf(R.current.card)?.kind === 'elements' ? '<small class="sug-l">Suggested</small>' : ''}<kbd class="key-hint" aria-hidden="true">${key}</kbd></button>`).join('')}</div>${examCapNote(state, opts, ivl, card.id, now)}`;
 }
 
 function typedResultHTML() {
@@ -804,8 +814,15 @@ async function finish(el) {
   const chosen = allIds.includes(R.deckId) ? [R.deckId] : data.settings.reviewDecks.filter(id => allIds.includes(id));
   const scope = chosen.length ? chosen : allIds;
   const rest = countFor(data, scope);
+  // A session over one deck that left nothing there: the other decks of Today's choice (all decks when none is chosen) may still have cards due,
+  // and finishing is the moment to offer them. Decks Today leaves out are not offered.
+  const inScope = withSubdecks(data, scope);
+  const todayIds = data.settings.reviewDecks.filter(id => allIds.includes(id));
+  const elseIds = rest.total ? [] : (todayIds.length ? todayIds : allIds).filter(id => !inScope.has(id));
+  const elsewhere = elseIds.length ? countFor(data, elseIds) : null;
+  const goOn = rest.total ? { word: 'Keep going', total: rest.total, ids: chosen } : elsewhere?.total ? { word: 'Continue', total: elsewhere.total, ids: elseIds } : null;
   // Reviews due by the end of tomorrow (already studied, not suspended or buried), in the same decks.
-  const inScope = withSubdecks(data, scope), tomorrowEnd = dayEnd(Date.now(), 1);
+  const tomorrowEnd = dayEnd(Date.now(), 1);
   const dueTomorrow = data.cards.filter(c => {
     const st = data.statesById.get(c.id);
     return inScope.has(c.deckId) && st && st.state !== NEW && st.due <= tomorrowEnd;
@@ -828,8 +845,8 @@ async function finish(el) {
     </div>
     <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}. ` : ''}Accuracy counts every rating except Again.</p>
     <div class="res-actions">
-      ${rest.total
-        ? `<button class="btn primary" type="button" id="keepBtn" aria-label="Keep going: ${plural(rest.total, 'card')}">Keep going · ${plural(rest.total, 'card')}</button>
+      ${goOn
+        ? `<button class="btn primary" type="button" id="keepBtn" aria-label="${goOn.word}: ${plural(goOn.total, 'card')}">${goOn.word} · ${plural(goOn.total, 'card')}</button>
            <button class="btn ghost" type="button" id="againBtn">Back to Today</button>`
         : '<button class="btn primary" type="button" id="againBtn">Back to Today</button>'}
     </div>
@@ -843,9 +860,9 @@ async function finish(el) {
     R = null; publishLive();
     const { startStudy } = await import('./today.js');
     const before = location.hash;
-    await startStudy({ deckIds: chosen });
+    await startStudy({ deckIds: goOn.ids });
     // Today's Start with one deck goes to #/review/<deck>: the address we are already on, so nothing would redraw. Do it here.
-    if (location.hash === before && el.isConnected) renderReview(el, chosen.length === 1 ? chosen[0] : undefined);
+    if (location.hash === before && el.isConnected) renderReview(el, goOn.ids.length === 1 ? goOn.ids[0] : undefined);
   });
   $('undoLast')?.addEventListener('click', () => undo(el));
   const slot = $('finishMore'), cardIds = [...R.answered], leechIds = [...R.leeches];

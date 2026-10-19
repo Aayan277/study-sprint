@@ -148,8 +148,9 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); await db.s
 const iso = n => { const d = new Date(2026, 9, 14 + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 await setDeck(p, 'Chem', { examDate: iso(9) });
 await go(p, '#/deck/Chem', '#prepBtn');
-ok(await p.locator('.head-actions #prepBtn.primary').count() === 1, 'exam within 14 days: Exam prep is the main button');
-ok(await p.locator('#reviewBtn.ghost').count() === 1 && await p.locator('#reviewBtn.primary').count() === 0, 'and Review steps back');
+// (UI audit M7: with cards due, "Review · N" is the main button and Exam prep the second; Exam prep is main only when nothing is due: e2e-uipolish)
+ok(await p.locator('.head-actions #reviewBtn.primary').count() === 1 && /^Review · \d+$/.test((await p.textContent('#reviewBtn')).trim()), 'exam within 14 days, cards due: "Review · N" is the main button');
+ok(await p.locator('#prepBtn.ghost').count() === 1 && await p.locator('#prepBtn.primary').count() === 0, 'and Exam prep steps back to the second button');
 ok(await p.locator('.exam-line #prepBtn').count() === 0, 'no second Exam prep link in the sentence');
 ok(!(await p.isVisible('#editDeck')) && !(await p.isVisible('#addSub')) && !(await p.isVisible('#exportDeck')), 'Edit, Add subdeck and Export are tucked away');
 await p.click('#deckMore');
@@ -185,7 +186,7 @@ ok(!(await p.textContent('main')).includes('LIBRARY') && (await p.locator('.scre
 await setDeck(p, 'Chem', { examDate: iso(9) });
 await go(p, '#/deck/Chem', '#prepBtn');
 const hb = await p.evaluate(() => [...document.querySelectorAll('.head-actions > *')].map(e => { const r = e.getBoundingClientRect(); return { id: e.id || e.className, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), r: Math.round(r.right) }; }));
-ok(hb.every(b => b.r <= 375 - 12) && hb[0].w > 300, 'phone: header buttons fit with a 16px gutter and the main one is full width: ' + JSON.stringify(hb.map(b => [b.id, b.w])));
+ok(hb.every(b => b.r <= 375 - 12) && hb.find(b => b.id === 'reviewBtn').w > 300, 'phone: header buttons fit with a 16px gutter and the main one is full width: ' + JSON.stringify(hb.map(b => [b.id, b.w])));
 await noHScroll(p, 'deck page, phone');
 await p.screenshot({ path: SP + '/c-deck-375.png', fullPage: true });
 await p.click('#deckMore'); await p.waitForSelector('#deckMenu:not([hidden])');
