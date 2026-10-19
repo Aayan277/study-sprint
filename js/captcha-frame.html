@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<!-- This page's own Content-Security-Policy (the app's, in index.html, does not reach into a frame loaded from an address). It runs one inline
+     script (allowed by its fingerprint: tests/csp.test.js checks it) and the provider's script, and lets the box talk to its provider. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZQU9tGRDGN/IZPEHn7XPOP7Zi0T+AtriYER2Vtf/JJg=' https://challenges.cloudflare.com https://js.hcaptcha.com https://*.hcaptcha.com https://hcaptcha.com; frame-src https://challenges.cloudflare.com https://*.hcaptcha.com https://hcaptcha.com; connect-src https://challenges.cloudflare.com https://*.hcaptcha.com https://hcaptcha.com; style-src 'unsafe-inline' https://*.hcaptcha.com https://hcaptcha.com; img-src data: https://challenges.cloudflare.com https://*.hcaptcha.com https://hcaptcha.com; base-uri 'none'; form-action 'none'">
 <title>Check</title>
 <style>
   html, body { margin: 0; background: transparent; overflow: hidden; }

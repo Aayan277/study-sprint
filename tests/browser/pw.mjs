@@ -16,11 +16,28 @@ function mapRequests(ctx) {
   for (const m of ['fetch', 'get', 'post', 'put', 'patch', 'delete', 'head']) { const f = r[m].bind(r); r[m] = (url, ...a) => f(toPort(url), ...a); }
   return ctx;
 }
+// Content-Security-Policy violations (index.html): every browser window in every test file watches for them. A page that is blocked from
+// loading or running something prints a FAIL line (run.mjs counts it as a problem) and the file exits non-zero, so a feature the policy
+// breaks cannot pass quietly. `securitypolicyviolation` events are caught in every page and frame; the browser's own "Refused to..." console
+// messages also catch workers. A test that triggers one on purpose sets `ctx.expectCspViolations = true` (e2e-csp.mjs).
+const CSP_TEXT = /^CSP-VIOLATION|Content[ -]Security[ -]Policy|Refused to (load|connect|execute|apply|create|frame|run|evaluate|start)/i;
+function watchCsp(ctx) {
+  ctx.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', e => console.error(`CSP-VIOLATION ${e.violatedDirective} blocked ${e.blockedURI} at ${e.sourceFile || document.URL}:${e.lineNumber}`));
+  }).catch(() => {});
+  ctx.on('console', m => {
+    const text = m.text();
+    if (!CSP_TEXT.test(text) || ctx.expectCspViolations) return;
+    console.log('FAIL Content-Security-Policy violation: ' + text.slice(0, 300));
+    process.exitCode = 1;
+  });
+  return ctx;
+}
 async function launchMapped(opts, ...rest) {
   const browser = await pw.chromium.launch(withPortMap(opts), ...rest);
   const newContext = browser.newContext.bind(browser), newPage = browser.newPage.bind(browser);
-  browser.newContext = async (...a) => mapRequests(await newContext(...a));
-  browser.newPage = async (...a) => { const page = await newPage(...a); mapRequests(page.context()); return page; };
+  browser.newContext = async (...a) => watchCsp(mapRequests(await newContext(...a)));
+  browser.newPage = async (...a) => { const page = await newPage(...a); watchCsp(mapRequests(page.context())); return page; };
   return browser;
 }
 // CPU_THROTTLE=4 slows every page's main thread 4x (CDP Emulation.setCPUThrottlingRate) to reproduce a loaded machine.
@@ -39,15 +56,27 @@ export const realChromium = { launch: launchMapped };
 // gives every new browser window the "skip onboarding" flag in localStorage (the app also accepts
 // ?skipOnboarding in the address). e2e-onboarding.mjs uses `realChromium` to see the real first run.
 const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } };
+// Signing in on a device that has cards of its own asks first ("Add these N cards to your account" / "Start fresh" / "Cancel"), and a
+// test that meets that question unexpectedly should fail, not have it tapped away. A test that builds a device with cards and then
+// signs in on purpose to merge them opts in: `chromium.launch({ autoAddCards: true })` (all its windows) or
+// `browser.newContext({ autoAddCards: true })` (one). Then "Add these cards" is tapped when the question appears.
+// e2e-devices.mjs tests the question itself and never opts in.
+const ADD_WHEN_ASKED = () => {
+  const tap = () => document.getElementById('devAdd')?.click();
+  document.addEventListener('DOMContentLoaded', () => new MutationObserver(tap).observe(document.documentElement, { childList: true, subtree: true }));
+};
 export const chromium = {
-  launch: async (...args) => {
-    const browser = await realChromium.launch(...args);
+  launch: async (opts = {}, ...rest) => {
+    const { autoAddCards: allAuto = false, ...launchOpts } = opts || {};
+    const browser = await realChromium.launch(launchOpts, ...rest);
     const newContext = browser.newContext.bind(browser);
     // Reduced motion is on by default in the tests (the motion code skips its effects, so screens, sheets and counts settle at
     // once and the checks are deterministic). e2e-motion.mjs asks for 'no-preference' to test the effects themselves.
     browser.newContext = async (opts = {}, ...rest) => {
-      const ctx = await newContext({ reducedMotion: 'reduce', ...opts }, ...rest);
+      const { autoAddCards = allAuto, ...ctxOpts } = opts || {};
+      const ctx = await newContext({ reducedMotion: 'reduce', ...ctxOpts }, ...rest);
       await ctx.addInitScript(SKIP);
+      if (autoAddCards) await ctx.addInitScript(ADD_WHEN_ASKED);
       cpuThrottle(ctx);
       return ctx;
     };

@@ -80,19 +80,23 @@ const start = async (fake, o) => { const A = await device('A', fake, o); await s
 {
   const fake = fakeSupabase();
   const A = await start(fake);
+  await addCards(A, [['pre-0', 'Already on the server']]);
+  await syncNow(A);
+  const writes = () => fake.log.filter(l => l.startsWith('POST /rest/v1/sync_items')).length;
   fake.setDataLimit('me@example.com', 5 * MB);
   fake.setDataUsed('me@example.com', 5 * MB - fake.dataUsed('me@example.com') - 1500);    // room for about 3 small cards
   await addCards(A, Array.from({ length: 10 }, (_, i) => [`d-${i}`, `Data card ${i}`, 200]));
+  const w0 = writes();
   const st = await syncNow(A);
   const onServer = Array.from({ length: 10 }, (_, i) => `d-${i}`).filter(id => serverHas(fake, id)).length;
-  ok(onServer > 0 && onServer < 10, `some rows went, the rest are held (${onServer} of 10)`);
+  ok(onServer === 0 && writes() - w0 === 1, `a refusal for space stops the sending: one request, nothing went, all 10 are held (${onServer} on the server, ${writes() - w0} write request)`);
   ok(/^Your account's synced data is full \(5 MB of 5 MB\)\. New changes are saved on this device/.test(st.note || ''), 'the message: ' + st.note);
   await openSettings(A);
   await A.waitForFunction(() => /of 5 MB/.test(document.querySelector('#usageLine')?.textContent || ''));
   ok((await A.textContent('#usageLine')).includes('data 5 MB of 5 MB'), 'the usage line shows the data limit: ' + await A.textContent('#usageLine'));
   ok(/Synced data: .* of 5 MB|synced data is full/.test(await A.textContent('#usageNote')), 'with a note under it (amber from 80%): ' + await A.textContent('#usageNote'));
   // deleting always goes through, even when full
-  const onId = Array.from({ length: 10 }, (_, i) => `d-${i}`).find(id => serverHas(fake, id));
+  const onId = 'pre-0';
   await run(A, async id => { await (await import('./js/db.js')).deleteCards([id]); }, onId);
   await syncNow(A);
   ok(fake.userRows('me@example.com').some(r => r.id === onId && r.deleted), 'a delete is accepted while the account is full');

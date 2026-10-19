@@ -1,7 +1,7 @@
 import { chromium } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ autoAddCards: true })      // builds devices with cards, then signs in on purpose to merge them (pw.mjs);
 const fake = fakeSupabase();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
@@ -59,6 +59,8 @@ await C.waitForSelector('#fpOk');
 ok(fake.recoveries.at(-1)?.email === 'me@example.com' && fake.recoveries.at(-1).redirectTo === APP, 'reset email requested, linking back to the app: ' + fake.recoveries.at(-1)?.redirectTo);
 await C.screenshot({ path: SP + '/s3-forgot.png' });
 await C.click('#fpOk');
+// (C holds a deck of its own: only the sample deck would not count as cards, and a device like that does sign in)
+await run(C, async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'c-own', name: 'C own deck', color: '#3E63DD', created: Date.now() }, [{ id: 'c-own-0', deckId: 'c-own', front: 'q', back: 'a', tags: [], created: Date.now() }]); });
 // opening the link from the email
 await C.goto(fake.recoveryLink('me@example.com', APP));
 await C.waitForSelector('#pwForm');
@@ -69,7 +71,7 @@ ok((await C.textContent('#pwErr')).includes("don't match"), 'mismatched password
 await C.screenshot({ path: SP + '/s3-newpw.png' });
 const rowsBefore = fake.userRows('me@example.com').length;
 await C.fill('#pw2', 'newpass456'); await C.click('button[type=submit][form=pwForm]');
-// C has the sample deck and never signed in: the password is set, but it must not sign in and send that deck
+// C has a deck of its own and never signed in: the password is set, but it must not sign in and send that deck
 await C.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('Password saved for me@example.com'));
 ok((await toastText(C)).includes('sign in from Settings') && fake.users.get('me@example.com').password === 'newpass456', 'never-synced device with data: password saved, told to sign in from Settings');
 {

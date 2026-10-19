@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
+import { browseCards, rangeIds, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
 import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -54,7 +54,7 @@ export async function renderBrowseAll(el, filter) {
 // data (optional): what loadAll() just read (decks, allCards, statesById), for the first draw, so the deck page does not read every card
 // and schedule a second time. Later reloads (after a change) read the database again.
 export async function mountBrowser(box, { deckId, onChange = () => {}, filter, data = null }) {
-  const B = { deckId, selecting: false, selected: new Set(), shown: PAGE, ...memory };
+  const B = { deckId, selecting: false, selected: new Set(), anchor: null, shown: PAGE, ...memory };
   if (filter && FILTERS.some(([k]) => k === filter)) B.filter = filter;      // a link to a filter (#/browse/leech) starts on it
   let decks, cards, statesById, inside;
 
@@ -109,7 +109,8 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
       <span id="brSel" class="mono" aria-live="polite"></span>
       <button class="btn ghost small" type="button" id="brAll">Select all</button>
       <button class="btn primary small" type="button" id="brActions">Actions…</button>
-    </div></div>`;
+    </div>
+    <p class="note br-hint" id="brHint" hidden></p></div>`;
 
   // Which deck a row is in: the full path in All cards; on a deck's page, the subdeck below it (if any).
   const where = card => {
@@ -140,6 +141,12 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     }).join('') : `<li class="empty">${cards.length ? 'No cards match.' : 'No cards yet. Tap + Add card, or import some.'}</li>`;
     $('brMore').hidden = list.length <= B.shown;
     $('brBulk').hidden = !B.selecting;
+    $('brHint').hidden = !B.selecting;
+    if (B.selecting) {      // (chosen each time Select mode is entered or the list is drawn: the device can change, e.g. a tablet's keyboard)
+      $('brHint').textContent = matchMedia('(pointer: coarse)').matches ? 'Tip: press and hold a card to select everything up to it' : 'Tip: Shift-click or Shift+Space to select a range; Ctrl+A for all';
+      $('brList').setAttribute('aria-describedby', 'brHint');
+    } else $('brList').removeAttribute('aria-describedby');
+    $('brList').classList.toggle('selecting', B.selecting);
     $('brSelect').textContent = B.selecting ? 'Cancel' : 'Select';
     selCount();
   };
@@ -154,30 +161,101 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
 
   const remember = () => Object.assign(memory, { query: B.query, filter: B.filter, sort: B.sort });
   let typing = 0;      // (the timer checks box.isConnected: leaving Browse within the 150 ms must not draw into a box that is gone)
-  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; remember(); draw(); }, 150); });
-  $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; remember(); draw(); });
+  $('brQuery').addEventListener('input', e => { clearTimeout(typing); typing = setTimeout(() => { if (!box.isConnected) return; B.query = e.target.value; B.shown = PAGE; B.anchor = null; remember(); draw(); }, 150); });
+  $('brFilter').addEventListener('change', e => { B.filter = e.target.value; B.shown = PAGE; B.anchor = null; remember(); draw(); });
   $('brSort').addEventListener('change', e => { B.sort = e.target.value; remember(); draw(); });
   $('brMore').addEventListener('click', () => { B.shown += PAGE; draw(); });
-  $('brSelect').addEventListener('click', () => { B.selecting = !B.selecting; B.selected.clear(); draw(); });
+  $('brSelect').addEventListener('click', () => { B.selecting = !B.selecting; B.selected.clear(); B.anchor = null; draw(); });
   $('brAll').addEventListener('click', () => {
     const all = B.visible.map(x => x.card.id);
     const every = all.every(id => B.selected.has(id));
     all.forEach(id => (every ? B.selected.delete(id) : B.selected.add(id)));
     draw();
   });
-  $('brList').addEventListener('click', e => {
+
+  // ----- selecting rows (all of this changes the rows where they stand: a redraw would drop the focus and the screen reader's "checked / not checked") -----
+  // "Tip" under the bulk bar: which way to select a range depends on the device.
+  // Make every drawn row match B.selected. (Rows past the drawn page are only in B.selected; "Show more" draws them already ticked.)
+  const syncRows = () => $('brList').querySelectorAll('.crow').forEach(r => {
+    const on = B.selected.has(r.dataset.id);
+    if (r.classList.contains('selected') === on) return;      // (only the rows that changed)
+    r.classList.toggle('selected', on);
+    r.querySelector('.crow-btn')?.setAttribute('aria-checked', String(on));
+  });
+  const rowBtn = id => $('brList').querySelector(`.crow[data-id="${CSS.escape(id)}"] .crow-btn`);
+  // A plain click: flip one row, and it becomes the anchor for the next range.
+  const toggleRow = id => {
+    B.selected.has(id) ? B.selected.delete(id) : B.selected.add(id);
+    B.anchor = id;
+    syncRows(); selCount();
+  };
+  // A range: every row between the anchor and `id` (in the order shown, hidden rows not counted) takes the anchor's state.
+  const rangeTo = id => {
+    const ids = B.visible.slice(0, B.shown).map(x => x.card.id);      // (only rows that are drawn: a range never takes in rows you cannot see)
+    if (!B.anchor || !ids.includes(B.anchor) || !ids.includes(id)) { toggleRow(id); return; }
+    const on = B.selected.has(B.anchor);
+    rangeIds(ids, B.anchor, id).forEach(i => (on ? B.selected.add(i) : B.selected.delete(i)));
+    syncRows(); selCount();
+  };
+  const selectAllShown = () => { B.visible.forEach(x => B.selected.add(x.card.id)); syncRows(); selCount(); };
+
+  const list = $('brList');
+  // Shift+click would start a text selection; stop that before it starts.
+  list.addEventListener('mousedown', e => { if (e.shiftKey && e.target.closest('.crow')) e.preventDefault(); });
+  list.addEventListener('contextmenu', e => { if (B.selecting && e.target.closest('.crow')) e.preventDefault(); });      // (touch: a long-press must not open the browser's menu)
+  let held = false;      // a long-press just did its job: the click that follows the lift is ignored
+  list.addEventListener('click', e => {
     const row = e.target.closest('.crow'); if (!row) return;
+    if (held) { held = false; return; }
     const id = row.dataset.id;
     if (B.selecting) {
-      // The row is changed where it stands: redrawing the list would drop the focus and the screen reader's "checked / not checked".
-      B.selected.has(id) ? B.selected.delete(id) : B.selected.add(id);
-      row.classList.toggle('selected', B.selected.has(id));
-      row.querySelector('.crow-btn')?.setAttribute('aria-checked', String(B.selected.has(id)));
-      selCount();
+      e.shiftKey ? rangeTo(id) : toggleRow(id);
+      if (e.shiftKey) { getSelection()?.removeAllRanges(); rowBtn(id)?.focus(); }
+      return;
+    }
+    if (e.shiftKey) {      // Shift+click outside Select mode starts Select mode with this card ticked
+      B.selecting = true; B.selected.clear(); B.selected.add(id); B.anchor = id;
+      getSelection()?.removeAllRanges();
+      draw(); rowBtn(id)?.focus();
       return;
     }
     guardedGo(() => openCardPanel(cards.find(c => c.id === id), { decks, statesById, refresh }));      // (asks first if the open panel holds unsaved edits)
   });
+  // Keyboard: Shift+Space / Shift+Enter on a row = a range; Ctrl/Cmd+A = everything shown. (Modifier combos, so the single-key setting does not apply.)
+  list.addEventListener('keydown', e => {
+    held = false;
+    if (!B.selecting) return;
+    const row = e.target.closest('.crow');
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === ' ' || e.key === 'Enter') && row) {
+      e.preventDefault(); held = false;
+      rangeTo(row.dataset.id);
+    }
+  });
+  // Ctrl/Cmd+A anywhere in the card list area (rows, bulk bar, Select/Cancel) selects everything shown; text boxes keep their own.
+  box.addEventListener('keydown', e => {
+    if (!B.selecting || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'a') return;
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+    e.preventDefault();
+    selectAllShown();
+  });
+  list.addEventListener('keyup', e => { if (B.selecting && e.shiftKey && e.key === ' ' && e.target.closest('.crow')) e.preventDefault(); });      // (a Space click fires on key-up: Shift+Space was already handled)
+  // Touch: hold a row about half a second to select the range from the anchor to it.
+  let press = null;
+  const endPress = () => { clearTimeout(press?.timer); press = null; };
+  list.addEventListener('pointerdown', e => {
+    held = false;
+    const row = e.target.closest('.crow');
+    if (!B.selecting || !row || e.pointerType === 'mouse') return;
+    endPress();
+    press = { x: e.clientX, y: e.clientY, timer: setTimeout(() => {
+      press = null; held = true;
+      rangeTo(row.dataset.id);
+      rowBtn(row.dataset.id)?.focus();
+    }, 450) };
+  });
+  list.addEventListener('pointermove', e => { if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) endPress(); });
+  list.addEventListener('pointerup', () => { endPress(); if (held) setTimeout(() => { held = false; }, 400); });      // (the click that follows the lift comes at once; if it never does, the flag must not stay)
+  list.addEventListener('pointercancel', () => { endPress(); held = false; });
   $('brAdd').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brAddFirst').addEventListener('click', () => openAddCard({ decks, deckId, refresh }));
   $('brTags').addEventListener('click', () => openTools(cards, { scope: deckId ? 'this deck' : 'all decks', refresh }));
@@ -222,12 +300,22 @@ export async function openCardPanel(card, ctx) {
     </form>
     ${partner ? `<p class="note rev-line">${card.reverse ? 'Reverse card' : 'Has a reverse card'} · <button class="link" type="button" id="revOpen">Open the other direction</button></p>` : ''}
 
-    <div class="act-grid">
-      <button class="btn ghost small" type="button" data-act="suspend">${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</button>
-      <button class="btn ghost small" type="button" data-act="bury">${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')} Duplicate</button>
-      <button class="btn ghost small" type="button" data-act="reset" ${studied ? '' : 'disabled'}>Reset to new</button>
-      <button class="btn danger small" type="button" data-act="delete">Delete…</button>
+    <div class="pa-group" role="group" aria-labelledby="paSched"><span class="pa-lbl" id="paSched">Schedule</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="suspend">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span></button>
+        <button class="act-row" type="button" data-act="bury">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span></button>
+        <button class="act-row" type="button" data-act="reset" ${studied ? '' : 'disabled'}>${icon('undo')}<span>Reset to new</span></button>
+      </div>
+    </div>
+    <div class="pa-group" role="group" aria-labelledby="paCard"><span class="pa-lbl" id="paCard">Card</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="duplicate" title="${isClozeCard(card) || hasMasks(card) ? 'Copies the whole note, all its cards' : partner ? 'Copies the pair, both directions' : 'Makes a new copy of this card'}">${icon('plus')}<span>Duplicate</span></button>
+      </div>
+    </div>
+    <div class="pa-group pa-danger">
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="delete">${icon('trash')}<span>Delete…</span></button>
+      </div>
     </div>
     <div id="ceConfirm"></div>
 
@@ -252,7 +340,7 @@ export async function openCardPanel(card, ctx) {
         <dt>Answers</dt><dd>${logs.length} (${logs.filter(l => l.correct).length} right)</dd>
       </dl>
       ${logs.length ? `<table class="history"><thead><tr><th>When</th><th>Where</th><th>Answer</th><th>Time</th></tr></thead><tbody>
-        ${logs.slice(-30).reverse().map(l => `<tr><td>${shortDate(l.timestamp)}</td><td>${{ play: 'Play', anki: 'Anki' }[l.source] || 'Review'}</td>
+        ${logs.slice(-30).reverse().map(l => `<tr><td>${shortDate(l.timestamp)}</td><td>${{ play: 'Play', test: 'Test', anki: 'Anki' }[l.source] || 'Review'}</td>
           <td class="${l.correct ? 'ok' : 'no'}">${RATING[l.rating] || (l.correct ? 'Right' : 'Wrong')}</td><td class="mono">${l.ms ? (l.ms / 1000).toFixed(1) + 's' : ''}</td></tr>`).join('')}
       </tbody></table>${logs.length > 30 ? '<p class="note">Showing the last 30.</p>' : ''}` : '<p class="note">No answers yet.</p>'}
     </details>`, { side: true });
@@ -649,18 +737,28 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
   const studied = selected.filter(c => statesById.get(c.id)?.state > 0);
   openSheet(`
     <h2 id="sheetTitle">${plural(n, 'card')} selected</h2>
-    <div class="act-grid">
-      <button class="btn ghost small" type="button" data-act="suspend">Suspend</button>
-      <button class="btn ghost small" type="button" data-act="unsuspend">Unsuspend</button>
-      <button class="btn ghost small" type="button" data-act="bury">Bury until tomorrow</button>
-      <button class="btn ghost small" type="button" data-act="unbury">Unbury</button>
-      <button class="btn ghost small" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards, a reverse pair in both directions">${icon('plus')} Duplicate</button>
-      <button class="btn ghost small" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>Reset to new</button>
-      <button class="btn ghost small" type="button" data-act="reverse">Both directions</button>
-      <button class="btn danger small" type="button" data-act="delete">Delete…</button>
+    <div class="pa-group" role="group" aria-labelledby="paSched"><span class="pa-lbl" id="paSched">Schedule</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="suspend">${icon('pause')}<span>Suspend</span></button>
+        <button class="act-row" type="button" data-act="unsuspend">${icon('pause')}<span>Unsuspend</span></button>
+        <button class="act-row" type="button" data-act="bury">${icon('moon')}<span>Bury until tomorrow</span></button>
+        <button class="act-row" type="button" data-act="unbury">${icon('moon')}<span>Unbury</span></button>
+        <button class="act-row" type="button" data-act="reset" ${studied.length ? '' : 'disabled'}>${icon('undo')}<span>Reset to new</span></button>
+      </div>
+    </div>
+    <div class="pa-group" role="group" aria-labelledby="paCard"><span class="pa-lbl" id="paCard">Card</span>
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="duplicate" title="Makes new copies; a cloze or picture note is copied with all its cards, a reverse pair in both directions">${icon('plus')}<span>Duplicate</span></button>
+        <button class="act-row" type="button" data-act="reverse">${icon('swap')}<span>Both directions</span></button>
+      </div>
+    </div>
+    <div class="pa-group pa-danger">
+      <div class="pa-list">
+        <button class="act-row" type="button" data-act="delete">${icon('trash')}<span>Delete…</span></button>
+      </div>
     </div>
     <div id="ceConfirm"></div>
-    <div class="field"><span>Flag</span>${flagButtons(-1)}</div>
+    <div class="field"><span id="flagLbl">Flag</span>${flagButtons(-1)}</div>
     <div class="field"><span>Move to deck</span>${moveRow(decks, null)}</div>
     <details class="card-info" id="frBox">
       <summary>Find and replace</summary>
@@ -977,8 +1075,8 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
 // ---------- shared pieces ----------
 function flagButtons(current) {
   return `<div class="flags" role="group" aria-labelledby="flagLbl">
-    <button type="button" class="flagbtn" data-flag="0" aria-pressed="${current === 0}">None</button>
-    ${FLAGS.map(f => `<button type="button" class="flagbtn" data-flag="${f.id}" aria-pressed="${current === f.id}"><i style="background:${f.color}"></i>${f.name}</button>`).join('')}
+    <button type="button" class="flagbtn" data-flag="0"${current < 0 ? '' : ` aria-pressed="${current === 0}"`} aria-label="None (no flag)"><i class="none" aria-hidden="true"></i>None</button>
+    ${FLAGS.map(f => `<button type="button" class="flagbtn" data-flag="${f.id}"${current < 0 ? '' : ` aria-pressed="${current === f.id}"`} aria-label="${f.name} flag"><i style="background:${f.color}" aria-hidden="true"></i>${f.name}</button>`).join('')}
   </div>`;
 }
 function wireFlags(fn) {

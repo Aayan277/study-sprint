@@ -11,8 +11,8 @@ import { entriesFrom } from './glossary.js';
 const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
 import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
 import { initPanelResize } from './panel-resize.js';
-import { clearDraft } from './import-draft.js';
-import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError } from './ui.js';
+import { clearDraft, takeDraft } from './import-draft.js';
+import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError, sheetDirty } from './ui.js';
 import * as sync from './sync.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
@@ -27,13 +27,18 @@ import { checkPassword, passwordOk, passwordMissing } from './password.js';
 import { watchMath } from './math.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
+import { damagedNote } from './sync-merge.js';
 import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
+import { contactHTML, legalLinksHTML } from './legal.js';
+import { initUpdates, showUpdateRequired } from './update.js';
+import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
-// Shown at the bottom of Settings, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.36';
+// Shown in Settings → About, so you can tell whether your phone has the newest version.
+const APP_VERSION = '4.37';
 
 let settings = { ...db.DEFAULT_SETTINGS };
+let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
 
 // ---------- settings ----------
@@ -257,7 +262,13 @@ async function renderSettings(el) {
       </details>
     </section>
 
-    <p class="note mono">Study Sprint ${APP_VERSION}</p>`;
+    <section class="section" aria-labelledby="aboutTitle">
+      <h2 id="aboutTitle">About</h2>
+      <div class="set-row" id="aboutRow">
+        <div><b>Study Sprint ${APP_VERSION}</b>
+          <p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · Contact: ${contactHTML()}</p></div>
+      </div>
+    </section>`;
 
   wireSettingsRow($('installRow'));
   wireReminders(el, { decks, settings });
@@ -699,8 +710,9 @@ async function drawSync() {
         ${rulesList('syncRules')}
         <div id="captchaBox" hidden></div>
         <p class="err" id="syncErr" role="alert" hidden></p>
+        <p class="note" id="legalNote">By creating an account you agree to the ${legalLinksHTML()}. Your cards are stored on Supabase servers, managed by the app’s developer.</p>
         <div class="sheet-actions">
-          <button class="btn ghost" type="button" id="syncCreate">Create account</button>
+          <button class="btn ghost" type="button" id="syncCreate" aria-describedby="legalNote">Create account</button>
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
@@ -719,7 +731,8 @@ async function drawSync() {
       try {
         // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
         const captcha = await captchaToken();
-        const made = await (create ? sync.createAccount(email, pw, captcha) : sync.signIn(email, pw, captcha));
+        const opts = { onConflict: askAboutDevice };      // cards here from someone else (or from no account) are never merged without a choice
+        const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
           box.querySelectorAll('button').forEach(b => { b.disabled = false; });
           openSheet(`
@@ -734,6 +747,7 @@ async function drawSync() {
         drawSync();
       } catch (e) {
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        if (e.code === 'cancelled') return;           // (the person chose Cancel when asked about the cards on this device)
         showFieldError(pwF, err, e.message);          // (a refused sign-in: the password is the likeliest thing to fix)
       }
     };
@@ -753,7 +767,7 @@ async function drawSync() {
         await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
-          <p>If there's an account for <b>${esc(email)}</b>, Supabase has sent it a password reset link.</p>
+          <p>If there's an account for <b>${esc(email)}</b>, we've sent it a password reset link.</p>
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
           <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
@@ -763,7 +777,8 @@ async function drawSync() {
   }
   box.innerHTML = `
     <div class="set-row">
-      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p></div>
+      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p>
+        <p class="note" id="damagedNote" hidden></p></div>
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
     <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
@@ -786,10 +801,11 @@ async function drawSync() {
       <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
     </div>
     <div class="set-row">
-      <div><b>Delete my synced data</b><p>Removes everything stored in your account on the server. Your devices keep their own copy.</p></div>
+      <div><b>Delete my synced data</b><p>Removes your cards, progress, settings, pictures and sounds from the server. Your account (your email address) stays until you use Delete my account. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
     </div>`;
   showSyncStatus(acct.lastSync);
+  drawDamaged();
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
   $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
   $('keepAllMedia').addEventListener('change', async e => {
@@ -801,6 +817,60 @@ async function drawSync() {
   $('signOutBtn').addEventListener('click', confirmSignOut);
   $('delServerBtn').addEventListener('click', confirmDeleteServer);
   $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
+}
+
+// Records from the server that were damaged are skipped, not fatal (sync-merge.js badRow). Say so quietly, once: the note stays
+// under "Signed in" until Dismiss, and comes back only for records skipped after that.
+async function drawDamaged() {
+  const el = $('damagedNote');
+  if (!el) return;
+  const log = (await db.getSettings()).syncDamaged;
+  if (!el.isConnected) return;
+  const text = damagedNote(log);
+  el.hidden = !text;
+  if (!text) return;
+  el.innerHTML = `${esc(text)} <button class="link" type="button" id="damagedOk" style="padding:0 2px;min-height:0">Dismiss</button>`;
+  $('damagedOk').addEventListener('click', async () => { await db.setSetting('syncDamaged', { ...log, seen: log.count }); drawDamaged(); });
+}
+
+// Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
+// Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
+function askAboutDevice(v) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
+    const things = v.cards ? plural(v.cards, 'card') : v.decks ? plural(v.decks, 'deck') : 'progress and settings';
+    openSheet(v.kind === 'other' ? `
+      <h2 id="sheetTitle">This device has cards from another account</h2>
+      <div class="confirm">
+        <p>The ${esc(things)} on this device belong to someone else's account. To sign in here, they have to be removed from this device first. They stay safe in their own account.</p>
+        ${v.pending ? `<p class="note warn">${esc(plural(v.pending, 'change'))} on this device ${v.pending === 1 ? "hasn't" : "haven't"} synced yet and would be lost.</p>` : ''}
+        <div class="sheet-actions stack">
+          <button class="btn danger solid" type="button" id="devRemove">Remove them and sign in</button>
+          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
+        </div>
+      </div>` : `
+      <h2 id="sheetTitle">This device has cards that aren't in an account</h2>
+      <div class="confirm">
+        <p>You have ${esc(things)} on this device that were never synced. You can add them to the account you're signing in to, or start fresh with what is already in that account.</p>
+        <div class="sheet-actions stack">
+          <button class="btn primary" type="button" id="devAdd">Add these ${esc(things)} to your account</button>
+          <button class="btn danger" type="button" id="devFresh">Start fresh (remove them)</button>
+          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
+        </div>
+      </div>`);
+    $('sheet').addEventListener('close', () => finish('cancel'), { once: true });
+    const wipeThen = async () => {
+      // (wipeThisDevice clears first and sets up again after: if it fails, some of the data may already be gone.)
+      try { await wipeThisDevice(); } catch (e) { console.error(e); toast("Couldn't finish clearing this device. Some local data may have been cleared. You are not signed in."); finish('cancel'); closeSheet(); drawSidebar(); return; }
+      drawSidebar();
+      finish('go'); closeSheet();
+    };
+    $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
+    $('devRemove')?.addEventListener('click', wipeThen);
+    $('devFresh')?.addEventListener('click', wipeThen);
+    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
+  });
 }
 
 // Settings → Your data → "In your account: data … · pictures and sounds … of …" (only when signed in, and the
@@ -978,7 +1048,7 @@ function confirmDeleteServer() {
   openSheet(`
     <h2 id="sheetTitle">Delete your synced data?</h2>
     <div class="confirm">
-      <p>This removes <b>everything stored in your account on the server</b>: decks, cards, progress, settings, pictures and sounds. It can't be undone.</p>
+      <p>This removes your <b>decks, cards, progress, settings, pictures and sounds from the server</b>. It can't be undone. Your account (your email address) stays until you use Delete my account.</p>
       <p class="note">This device and your other devices keep their own copy of the cards. Of the pictures and sounds, each device keeps only those it has already downloaded: on a device that doesn't hold them all, turn on <b>Keep all pictures and sounds on this device</b> (Settings > Sync) and let it sync first. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
       <p class="note" id="dsNote" hidden></p>
       <div class="sheet-actions">
@@ -1114,7 +1184,7 @@ let warnedStale = false;
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
-  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') drawUsage(); } }
+  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') { drawUsage(); drawDamaged(); } } }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.
@@ -1184,6 +1254,7 @@ const ROUTES = {
   welcome: async (el, arg) => (await lazy('./onboarding.js')).renderWelcome(el, arg, { seedSample: () => seedSampleDeck(true), finish: markOnboarded }),
   review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
   play: async el => (await lazy('./play.js')).renderPlay(el),
+  test: async (el, deckId) => (await lazy('./mock-exam.js')).renderTest(el, deckId),
   decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
   deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
@@ -1216,7 +1287,7 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' ? 'decks' : name === 'review' ? 'today' : name;
+  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -1224,7 +1295,7 @@ async function route() {
   // After a Review or Play round, or an import, the sidebar's counts are out of date (Today hands over its own fresh data).
   // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
   const sidebarStale = name !== prevRoute && name !== 'today'
-    && (prevRoute === 'import' || (['review', 'play'].includes(prevRoute) && document.body.classList.contains('focus')));
+    && (prevRoute === 'import' || (['review', 'play', 'test'].includes(prevRoute) && document.body.classList.contains('focus')));
   releaseBack();                // a session's hold on the back gesture ends when you leave it (a running one asks again as it redraws)
   stashDraft();             // unsaved edits in a card panel are kept for when it is opened again
   closeSheet();
@@ -1254,13 +1325,13 @@ async function route() {
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); }
+  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); updates?.routed(name); }      // (an update waiting for a quiet moment restarts the app on Today or Decks)
   if (resetLink) showResetLink(resetLink);
 }
 
 // Tell screen readers the screen changed: the page title follows the screen (a deck shows its own name) and
 // focus moves to the screen's main heading.
-const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
+const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', test: 'Practice test', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
 let firstScreen = true;
 function announceScreen(el, name) {
   const h1 = el.querySelector('h1');
@@ -1358,6 +1429,22 @@ function tidyMediaWhenIdle() {
   else setTimeout(run, 3000);
 }
 
+// The server can name the oldest version allowed to sync (js/app-config.js). Asked once, after the first screen, only when signed in (a device that
+// never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
+async function checkMinClient() {
+  if (syncHeld(APP_VERSION)) return;                      // "Keep using offline" was chosen for this version: sync stays off until the app updates
+  if (!(await sync.account())) { setSyncGate(false); return; }
+  const min = await fetchMinClient();
+  if (min) rememberMinClient(min);
+  if (!min || !isTooOld(APP_VERSION, min)) { setSyncGate(false); return; }
+  setSyncGate(true);                                      // no syncing while this version is too old
+  if (await updates?.tryUpdate()) await new Promise(r => setTimeout(r, 2500));      // a new version is on its way: it restarts the app by itself
+  showUpdateRequired({
+    onUpdate: async () => { await updates?.tryUpdate(); updates?.updater.tap(); },
+    onOffline: () => { holdSync(APP_VERSION); setSyncGate(true); toast('Sync is off until Study Sprint updates. Studying works as usual.', { ms: 6000 }); }
+  });
+}
+
 async function start() {
   initSheet();
   initPanelResize();
@@ -1387,6 +1474,7 @@ async function start() {
   applyCardAlign(settings.cardAlign);
   fx.configure(settings); configureShortcuts(settings);
   const firstRun = await checkFirstRun();
+  setSyncGate(syncHeld(APP_VERSION) || isTooOld(APP_VERSION, cachedMinClient()));      // closed before sync starts if this version is known to be too old (checkMinClient, below, asks the server)
   sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
@@ -1400,6 +1488,7 @@ async function start() {
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();
+  checkMinClient().catch(err => console.error(err));
   // Reloaded (e.g. to update) while a reset link was waiting for a new password: show it again.
   if (!resetShown) { const kept = keptResetLink(); if (kept) showResetLink(kept); }
 
@@ -1407,21 +1496,34 @@ async function start() {
   navigator.storage?.persist?.().catch(() => {});
 }
 
+// Is there something a reload would lose? Then an update waits (js/update.js): an edited card, a Review or Play round or Practice test (they hide
+// the header and tabs: body.focus), or Add cards holding text or cards that aren't saved.
+function updateBusy() {
+  if (sheetDirty()) return true;
+  if ($('sheet')?.open) return true;          // any sheet that is open (a form, a question) would be closed by a reload
+  if (document.body.classList.contains('focus')) return true;
+  if (/^#\/test(\/|$)/.test(location.hash) || currentRoute === 'test') return true;      // a Practice test (it keeps its own state; a reload must not cut it off)
+  if (currentRoute === 'import') {
+    return !!($('pasteBox')?.value || '').trim() || !!$('preview') && !$('preview').hidden || !!$('docBox') && !$('docBox').hidden || !!takeDraft();
+  }
+  return false;
+}
+
 // Offline support and "Add to Home Screen" need the service worker.
 if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {}));
-  // When a new version has installed, reload once so it shows straight away
-  // (instead of only after closing and reopening the app a second time).
-  const hadController = !!navigator.serviceWorker.controller;
+  // When a new version has installed and nothing would be lost, reload once so it shows straight away (instead of only after closing and
+  // reopening the app a second time). With unsaved work open it waits for a tap or a quiet moment: see js/update.js.
   let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloaded) return;   // first ever install: nothing old to replace
+  // Not while nav is stepping through history (a reload then can be cancelled); and once more if the page is still here a second later.
+  const reload = () => {
+    if (reloaded) return;
     reloaded = true;
-    // Not while nav is stepping through history (a reload then can be cancelled); and once more if the page is still here a second later.
-    const reload = () => whenIdle().then(() => location.reload());
-    reload();
-    setTimeout(reload, 1000);
-  });
+    const again = () => whenIdle().then(() => location.reload());
+    again();
+    setTimeout(again, 1000);
+  };
+  updates = initUpdates({ busy: updateBusy, reload, getRoute: () => currentRoute });
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => updates.watch(reg)).catch(() => {}));
 }
 
 start();

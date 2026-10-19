@@ -15,7 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const OUT = path.join(HERE, 'out');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain', '.md': 'text/plain; charset=utf-8' };
+  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.txt': 'text/plain', '.md': 'text/plain; charset=utf-8' };
 
 // Output folder, with the input files the tests read from out/files.
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -48,6 +48,7 @@ for (const t of tests) {
     const timer = setTimeout(() => { child.kill(); text += '\nFAIL timed out after 5 minutes'; }, 5 * 60 * 1000);
     child.on('close', code => { clearTimeout(timer); resolve({ text, code }); });
   });
+  if (process.env.VERBOSE) console.log(out.text);      // VERBOSE=1: everything a file printed, not just its problems
   const passes = (out.text.match(/^PASS/gm) || []).length;
   // Problems: FAIL and ERROR(S) lines, any "Error:", and a file that checked nothing (a silent file proves nothing).
   const problems = out.text.split('\n').filter(l => /^FAIL|^ERROR|Error:/.test(l));

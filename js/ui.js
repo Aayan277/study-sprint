@@ -84,6 +84,7 @@ const ICON_PATHS = {
   share: '<path d="M12 3v12M8 7l4-4 4 4"/><path d="M7 11H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/>',
   download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   swap: '<path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.2 1 2 2 2.2C10.5 8.5 11 5.5 12 3z"/>',
@@ -106,6 +107,8 @@ const ICON_PATHS = {
   down: '<path d="M6 9l6 6 6-6"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
   snow: '<path d="M12.0 3.0L12.0 21.0M4.2 7.5L19.8 16.5M4.2 16.5L19.8 7.5"/><path d="M12.0 5.6L10.5 7.4M12.0 5.6L13.5 7.4M6.5 8.8L7.3 11.1M6.5 8.8L8.8 8.4M6.5 15.2L8.8 15.6M6.5 15.2L7.3 12.9M12.0 18.4L13.5 16.6M12.0 18.4L10.5 16.6M17.5 15.2L16.7 12.9M17.5 15.2L15.2 15.6M17.5 8.8L15.2 8.4M17.5 8.8L16.7 11.1"/>',
+  flag: '<path d="M6 21V4.5M6 5h11.5l-2.2 3.8 2.2 3.7H6"/>',
+  grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 export const icon = (name, cls = '') =>

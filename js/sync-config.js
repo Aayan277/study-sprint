@@ -9,3 +9,8 @@ export const SUPABASE_KEY = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWHPL9r';
 // 'hcaptcha', paste its SITE key here, and turn on Captcha protection in Supabase with the matching SECRET key.
 // The site key is public by design; the secret key goes only in Supabase, never here.
 export const CAPTCHA = { provider: 'turnstile', siteKey: '' };
+
+// Where people can reach the app's developer (used by privacy.html, terms.html and Settings → About).
+// contactEmail: the Study Sprint email address, once it exists (see docs/owner-launch-checklist.md step 3). While it is empty,
+// the pages say "Contact: see the project page" and link to projectUrl instead.
+export const SITE = { contactEmail: '', projectUrl: 'https://github.com/aayan277/study-sprint' };

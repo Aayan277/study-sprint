@@ -3,7 +3,7 @@
 import { chromium, deckMenu } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 const SP = process.argv[2];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ autoAddCards: true })      // builds devices with cards, then signs in on purpose to merge them (pw.mjs);
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
 const APP = 'http://localhost:8123/';
@@ -12,7 +12,9 @@ const fake = fakeSupabase();
 // Sound playback is spied on: play() records which sound it was asked to play (not the silent clip that unlocks iOS), and "ends" at once.
 // speechSynthesis.speak is recorded too. window.__block makes play() refuse, like a browser that wants a tap first.
 const spies = () => {
-  window.__plays = []; window.__speaks = []; window.__block = false;
+  window.__plays = []; window.__speaks = []; window.__block = false; window.__blobs = new Map();
+  const mk = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = b => { const u = mk(b); window.__blobs.set(u, b); return u; };
   HTMLMediaElement.prototype.play = function () {
     if (String(this.src).startsWith('data:')) return Promise.resolve();
     if (window.__block) return Promise.reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
@@ -46,7 +48,8 @@ async function device(name, { width = 375, height = 740, colorScheme = 'dark' } 
 const page = await device('A');
 const run = (fn, arg) => page.evaluate(fn, arg);
 const toastText = () => page.textContent('#toast');
-const playSizes = async () => run(async () => Promise.all(window.__plays.map(async u => (await (await fetch(u)).blob()).size)));
+// (A sound's blob: address cannot be fetched under the page's policy, so the blobs are kept when they are made.)
+const playSizes = async () => run(() => window.__plays.map(u => window.__blobs.get(u)?.size));
 const reset = () => run(() => { window.__plays.length = 0; window.__speaks.length = 0; window.__block = false; });
 const deckRows = async name => run(async n => {
   const db = await import('./js/db.js'); const d = (await db.getDecks()).find(x => x.name === n);

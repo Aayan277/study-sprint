@@ -5,6 +5,10 @@ import { dayStart, dayEnd } from './days.js';
 
 // FSRS card states (same numbers as the ts-fsrs library).
 export const NEW = 0, LEARNING = 1, REVIEW = 2, RELEARNING = 3;
+
+// Practice answers: Play rounds (source 'play') and Practice test answers (source 'test', js/mock-exam.js). Both follow the same rules
+// (autograde.js), so a reader of the review log that treats Play specially asks this. A test row has the same fields as a Play row.
+export const isPracticeSource = source => source === 'play' || source === 'test';
 const isLearning = s => s === LEARNING || s === RELEARNING;
 
 // A learning card due within this long is shown now rather than making you wait (Anki does the same).
@@ -163,7 +167,7 @@ export function answeredNotes(logs, cards, now = Date.now()) {
   const noteOf = new Map(cards.filter(c => c.noteId).map(c => [c.id, c.noteId]));
   const out = new Map();
   for (const l of logs) {
-    if (l.timestamp < start || !(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    if (l.timestamp < start || !(l.source === 'review' || (isPracticeSource(l.source) && l.applied))) continue;
     const note = noteOf.get(l.cardId);
     if (note) (out.get(note) || out.set(note, new Set()).get(note)).add(l.cardId);
   }
@@ -200,7 +204,7 @@ export function reviewLimits({ perDay, decks, logs, deckOf, now = Date.now(), ch
   const done = new Map();
   let total = 0;
   for (const l of logs) {
-    if (l.timestamp < start || l.state !== REVIEW || !(l.source === 'review' || (l.source === 'play' && l.applied))) continue;
+    if (l.timestamp < start || l.state !== REVIEW || !(l.source === 'review' || (isPracticeSource(l.source) && l.applied))) continue;
     total++;
     const d = deckOf.get(l.cardId);
     if (d !== undefined) for (const a of chains?.get(d) || [d]) done.set(a, (done.get(a) || 0) + 1);
@@ -253,7 +257,7 @@ function countUpChains(ids, deckOf, chains) {
 export function newLimits({ perDay, decks, logs, deckOf, extra = 0, now = Date.now(), chains }) {
   const start = dayStart(now);
   // Play answers that were only logged (not applied) did not start a card, so they don't use up a new-card slot.
-  logs = logs.filter(l => l.source !== 'play' || l.applied);
+  logs = logs.filter(l => !isPracticeSource(l.source) || l.applied);
   const ids = new Set(logs.filter(l => l.timestamp >= start && l.state === NEW).map(l => l.cardId));   // new cards studied today
   const studied = countUpChains(ids, deckOf, chains);
   const byDeck = new Map();

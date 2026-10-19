@@ -69,11 +69,11 @@ test('older Play logs without a reason count when they changed the schedule', ()
 });
 
 test('reviews per day, split by source', () => {
-  const rows = reviewsPerDay([log(0), log(0, { source: 'play' }), log(2), log(31), log(0, { source: 'test' })], NOW);
+  const rows = reviewsPerDay([log(0), log(0, { source: 'play' }), log(2), log(31), log(0, { source: 'test' }), log(0, { source: 'other' })], NOW);   // a practice test counts with Play; an unknown source is ignored
   assert.equal(rows.length, 30);
-  assert.deepEqual(rows[29], { time: daysAgoStart(0, NOW), review: 1, play: 1, total: 2 });
+  assert.deepEqual(rows[29], { time: daysAgoStart(0, NOW), review: 1, play: 2, total: 3 });
   assert.equal(rows[27].total, 1);
-  assert.equal(rows.reduce((n, r) => n + r.total, 0), 3);
+  assert.equal(rows.reduce((n, r) => n + r.total, 0), 4);
 });
 
 test('due forecast for the next 7 days', () => {

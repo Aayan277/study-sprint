@@ -21,6 +21,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   let recordMax = MAX_RECORD, serverFull = false, mediaFull = false;     // serverFull / mediaFull: the whole project is over its ceiling for synced data / files
   const rowSize = r => 120 + (r.data ? JSON.stringify(r.data).length : 0);
   const dataUsed = uid => (dataOffsets.get(uid) || 0) + [...rows.values()].filter(r => r.user_id === uid).reduce((n, r) => n + rowSize(r), 0);
+  let appConfig, appConfigCalls = 0;      // what app_config() returns (undefined = the function is not installed yet: 404)
   let rateLimited = false, limitsSql = true;      // limitsSql false = limits.sql not run yet (no my_usage, no record size check)
   const deleted = [];           // emails of accounts removed with delete_my_account()
   const mediaUsed = uid => [...files].filter(([k]) => k.startsWith(uid + '/')).reduce((n, [, f]) => n + f.data.length, 0);
@@ -28,6 +29,9 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   // With captcha protection on, a request needs a token (any non-empty one passes here).
   const needsCaptcha = body => { if (!captcha) return false; const t = body?.gotrue_meta_security?.captcha_token; if (t) captchaTokens.push(t); return !t; };
   const files = new Map();      // storage: `${uid}/${id}` → { type, data }
+  let listCap = Infinity, rowsDeleteFails = false;     // the Storage API lists at most this many names a page; DELETE of the rows fails with a 500
+  let mediaServerFull = 0;      // 0 = no; else the status the Storage API gives when the trigger on storage.objects raises 'media_server_full' (400 or 500)
+  let mediaStuck = false, listBlind = false;     // storage delete that quietly removes nothing; a file list that shows nothing
   let bucket = true;            // false = media.sql not run yet
   let audio = true;             // false = the bucket's file types are the old list (media.sql from before sounds): audio uploads are turned away
   const uploads = [];           // every upload that was accepted, in order: { path, type }
@@ -106,6 +110,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         if (m[1] !== uid) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
         if (!audio && String(h['content-type']).startsWith('audio/')) return json(route, 415, { statusCode: '415', error: 'invalid_mime_type', message: `mime type ${h['content-type']} is not supported` });
         uploads.push({ path: `${m[1]}/${m[2]}`, type: h['content-type'] });
+        if (mediaServerFull) return json(route, mediaServerFull, { statusCode: String(mediaServerFull), error: mediaServerFull === 500 ? 'Internal' : 'Bad Request', message: 'media_server_full' });
         if (req.postDataBuffer().length > MAX_FILE) return json(route, 413, { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' });
         // limits.sql: no new files once the folder is at or above the limit (the file being added isn't counted)
         if (mediaFull || mediaUsed(uid) + req.postDataBuffer().length > limitOf(uid)) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
@@ -118,13 +123,19 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         return route.fulfill({ status: 200, contentType: f.type, headers: { 'access-control-allow-origin': '*' }, body: f.data });
       }
       if (req.method() === 'DELETE' && p === 'object/media') {
-        for (const k of body.prefixes) if (k.startsWith(uid + '/')) files.delete(k);
+        if (!mediaStuck) for (const k of body.prefixes) if (k.startsWith(uid + '/')) files.delete(k);
         return json(route, 200, []);
       }
       if (req.method() === 'POST' && p === 'object/list/media') {
-        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + (body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
+        if (listBlind) return json(route, 200, []);
+        return json(route, 200, [...files.keys()].filter(k => k.startsWith(body.prefix)).sort().slice(body.offset || 0, (body.offset || 0) + Math.min(listCap, body.limit ?? 100)).map(k => ({ name: k.slice(body.prefix.length) })));
       }
       return json(route, 400, { message: 'unknown storage call ' + p });
+    }
+    if (url.pathname === '/rest/v1/rpc/app_config') {
+      appConfigCalls++;
+      if (appConfig === undefined) return json(route, 404, { code: 'PGRST202', message: 'Could not find the function public.app_config in the schema cache' });
+      return json(route, 200, appConfig);
     }
     if (url.pathname === '/rest/v1/rpc/my_usage' || url.pathname === '/rest/v1/rpc/delete_my_account') {
       const uid = tokens.get((h.authorization || '').replace('Bearer ', ''));
@@ -133,7 +144,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       if (url.pathname.endsWith('my_usage')) {
         return json(route, 200, { data_bytes: dataUsed(uid), data_limit: dataLimits.get(uid) ?? DEFAULT_DATA_LIMIT, media_bytes: mediaUsed(uid), media_limit: limitOf(uid) });
       }
-      for (const k of [...files.keys()]) if (k.startsWith(uid + '/')) files.delete(k);
+      // limits.sql: delete_my_account() refuses while files remain in the account's folder (the app removes them first)
+      if ([...files.keys()].some(k => k.startsWith(uid + '/'))) return json(route, 400, { code: 'P0001', message: 'media_left' });
       for (const [k, r] of rows) if (r.user_id === uid) rows.delete(k);
       for (const [t, id] of tokens) if (id === uid) tokens.delete(t);
       for (const [t, id] of refreshTokens) if (id === uid) refreshTokens.delete(t);
@@ -177,6 +189,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
         return json(route, 201);
       }
       if (req.method() === 'DELETE') {
+        if (rowsDeleteFails) return json(route, 500, { message: 'boom' });
         for (const [k, r] of rows) if (r.user_id === uid) rows.delete(k);
         return json(route, 204);
       }
@@ -187,6 +200,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     handle, rows, users, log, recoveries, files, uploads, confirmations, captchaTokens, deleted, mediaUsed,
     setLimit(email, bytes) { limits.set(users.get(email).id, bytes); },
     setLimitsSql(v) { limitsSql = v; },
+    setAppConfig(v) { appConfig = v; },
+    appConfigCalls: () => appConfigCalls,
     setDataLimit(email, bytes) { dataLimits.set(users.get(email).id, bytes); },
     setDataUsed(email, bytes) { dataOffsets.set(users.get(email).id, bytes); },
     dataUsed: email => dataUsed(users.get(email).id),
@@ -197,7 +212,14 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     // The person opened the link in the confirmation email: confirmed, and (as the real link does) sent back to the app.
     confirm(email) { users.get(email).confirmed = true; },
     confirmLink(email, base) { users.get(email).confirmed = true; const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=signup`; },
+    // A row exactly as given (even a malformed one), as if it were already in the project: for tests of what the app does with junk.
+    inject(email, row) { const uid = users.get(email).id; rows.set(`${uid}|${row.store}|${row.id}`, { user_id: uid, deleted: false, updated_at: Date.now(), ...row, seq: ++seq }); },
     setBucket(v) { bucket = v; },
+    setMediaStuck(v) { mediaStuck = v; },
+    setListCap(n) { listCap = n; },
+    setRowsDeleteFails(v) { rowsDeleteFails = v; },
+    setMediaServerFull(status) { mediaServerFull = status; },
+    setListBlind(v) { listBlind = v; },
     setAudio(v) { audio = v; },
     // The link in a reset email: a fresh sign-in for that account, after the #.
     recoveryLink(email, base) { const t = session(users.get(email).id); return `${base}#access_token=${t.access_token}&expires_at=${t.expires_at}&expires_in=3600&refresh_token=${t.refresh_token}&token_type=bearer&type=recovery`; },

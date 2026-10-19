@@ -2,7 +2,7 @@
 # about it: docs/sync-setup.md ("Get a warning when space runs low (GitHub)").
 #
 # It reads three totals from the database and compares each with its limit:
-#   data      everyone's synced data, against the 'sync' fuse in the table global_limits (about 420 MB)
+#   data      everyone's synced data, against the 'sync' fuse in the table global_limits (about 300 MB)
 #   pictures  everyone's pictures and sounds, against the 'media' fuse (about 900 MB)
 #   database  the whole database size, against the free plan's 500 MB
 # The first two are counted the same way supabase/limits.sql counts them, so the numbers match what the fuse enforces.
@@ -72,15 +72,15 @@ jobs:
         run: |
           set -euo pipefail
           # One read-only query; it prints one line: data_bytes|data_limit|media_bytes|media_limit|db_bytes|bypassrls.
-          # "data" adds up sync_usage, which is what the data fuse counts (limits.sql, _total_sync_bytes). "pictures" adds
-          # up the files in the media bucket (limits.sql, _total_media_bytes). The limits come from global_limits, with the
+          # "data" adds up sync_usage, which is what the data fuse counts (limits.sql keeps private.usage_totals equal to it). "pictures" adds
+          # up the files in the media bucket (limits.sql keeps private.usage_totals equal to it). The limits come from global_limits, with the
           # same fallbacks limits.sql uses. The database limit is the free plan's 500 MB. Only totals, nothing per person.
-          # (postgres:17 image, like the backup job: it has psql. The address is passed as an environment variable.)
-          docker run --rm -i -e SUPABASE_DB_URL postgres:17 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt
+          # (postgres:17 image, pinned by digest, like the backup job: it has psql. The address is passed as an environment variable.)
+          docker run --rm -i -e SUPABASE_DB_URL postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt
           set default_transaction_read_only = on;
           select
             coalesce((select sum(u.bytes) from public.sync_usage u), 0)::bigint,
-            coalesce((select g.bytes from public.global_limits g where g.name = 'sync'), 440401920)::bigint,
+            coalesce((select g.bytes from public.global_limits g where g.name = 'sync'), 314572800)::bigint,
             coalesce((select sum((o.metadata ->> 'size')::bigint) from storage.objects o where o.bucket_id = 'media'), 0)::bigint,
             coalesce((select g.bytes from public.global_limits g where g.name = 'media'), 943718400)::bigint,
             pg_database_size(current_database())::bigint,

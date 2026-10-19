@@ -6,7 +6,7 @@ import { chromium, deckMenu } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
 import { execFileSync } from 'node:child_process';
 const SP = process.argv[2];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ autoAddCards: true })      // builds devices with cards, then signs in on purpose to merge them (pw.mjs);
 const fake = fakeSupabase();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];

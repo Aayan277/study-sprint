@@ -101,7 +101,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 - **Auto-grading (only when Settings > "Count Play answers as reviews" is on; it is off by default, so Play is practice only and changes no schedule, stats or streak):** a Play answer on a due card counts as its review (fast, normal, slow or wrong becomes Easy, Good, Hard or Again). Once you have about 50 right answers in a mode, "fast" and "slow" are judged against your own usual speed for that much text instead of the timer. A right multiple-choice answer on a due card counts at most as Hard, since picking an answer is easier than recalling it. A miss on a card that isn't due still brings it back, but doesn't count toward the leech limit, and a Survival timeout with under 3 seconds allowed is only logged. In a deck with an exam coming up, a new card's first Play answer is its first review too (within the new-cards-per-day limit).
 - **Works on phones and computers:** on a computer (1024px and wider) the tabs become a sidebar, lists and Stats use the full width, a card's panel opens beside the card list (1200px+), and Review shows a bigger card with its keyboard shortcuts. From 1200px a deck's page has three columns: the tree of decks on the left, the deck in the middle, and the card editor docked on the right. Phones keep the bottom tabs and pop-up sheets.
 - **Sheets:** every pop-up has the same frame: the title and a × at the top right, and the buttons in a footer that stays in view (the main button on the right, Cancel beside it). On a phone, drag the sheet down by its grab bar to close it.
-- **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) delete your synced data and delete your account (type DELETE; the device keeps its copy) are all in Settings → Sync. Anyone can make an account (with email confirmation); each account has 180 MB for pictures and sounds, and Settings → Your data shows how much is used. Setup: [docs/sync-setup.md](docs/sync-setup.md).
+- **Sync** (Settings → Sync): sign in with the same email and password on each device, and your decks, cards, progress, review history and study settings stay the same everywhere. Works offline and catches up when you're back online; the newest change wins, and a delete on one device deletes everywhere. Theme stays per device. Forgot password, change password, sign out (keep or remove this device's copy) delete your synced data and delete your account (type DELETE; the device keeps its copy) are all in Settings → Sync. Anyone can make an account (with email confirmation); each account has 50 MB for pictures and sounds, and Settings → Your data shows how much is used. Setup: [docs/sync-setup.md](docs/sync-setup.md).
 - **Stats:** (the readiness number is an estimate, with a "How sure is this?" note saying so: it uses the standard FSRS memory model until you have your own, and assumes you stop reviewing now)
   - day streak (with its streak freeze and days off) and retention (recall answers only: flipping, typing and Anki, not multiple choice)
   - a study calendar: a year of study days as squares (darker = more answers), with your best streak. Days a streak freeze covered have a diagonal hatch, days off a dotted pattern
@@ -205,6 +205,14 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
 The full plan, including what's planned next, is in [PLAN.md](PLAN.md).
+
+## Before you share it
+
+Everything the owner has to do before inviting other people is one checklist, click by click: [docs/owner-launch-checklist.md](docs/owner-launch-checklist.md). What the app stores and who can see it is written for users in [privacy.html](privacy.html) and [terms.html](terms.html).
+
+## Licence
+
+The licence for Study Sprint's own code has **not been decided yet**, so until it is, nobody else has permission to reuse it. The free libraries it loads keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Running it on your computer
 

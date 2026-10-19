@@ -23,7 +23,7 @@ import { normaliseLayout, visibleOrder, pairRows, widths, cardInfo } from './sta
 import { esc, plural, icon, foldOpen, saveFold, ring, weekDotsHTML } from './ui.js';
 
 // Where an answer came from, for tooltips.
-const SOURCE_NAMES = { review: 'Review', play: 'Play', anki: 'Anki' };
+const SOURCE_NAMES = { review: 'Review', play: 'Play', test: 'Test', anki: 'Anki' };
 
 const LEVELS = [['mature', 'Mature'], ['young', 'Young'], ['learning', 'Learning'], ['new', 'New']];
 const LEVEL_NOTE = {
@@ -312,6 +312,7 @@ export async function renderStats(el) {
         <details class="fine ready-fine"><summary>How sure is this?</summary><p>${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
         <div class="ready-acts">
           ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
+          <button class="btn ghost small" type="button" id="readyTest">Practice test</button>
           <a class="btn ghost small" href="#/deck/${esc(course.id)}">Open deck</a>
         </div>
       </div>
@@ -520,6 +521,7 @@ export async function renderStats(el) {
     onPick: async id => { deckFilter = id || 'all'; selected = null; await renderStats(el); if (edit?.el === el) el.querySelector('#sDeckBtn')?.focus({ preventScroll: true }); }
   }));
   q('readyPrep')?.addEventListener('click', () => startStudy({ deckIds: [course.id], deckId: course.id, kind: 'prep' }));
+  q('readyTest')?.addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(course.id));
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).

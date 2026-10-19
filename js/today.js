@@ -11,7 +11,7 @@ import { deckSchedulerOptions } from './sched-settings.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, nextDueText, typicalCardMs, sameDayStep, loadStreak, todayRing, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
 import { lastStatus } from './sync.js';
-import { examInfo, countdown, badgeClass, newPerDayToFinish } from './exam.js';
+import { examInfo, countdown, badgeClass, newPerDayToFinish, MOCK_DAYS } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
@@ -126,6 +126,7 @@ export async function renderToday(el) {
           <div class="exam-row" style="--deck:${esc(deck.color)}">
             <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}">${esc(countdown(info))}</span></a>
             <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
+            ${info.daysLeft <= MOCK_DAYS ? `<button class="btn ghost small" type="button" data-mock="${esc(deck.id)}">Take a mock exam</button>` : ''}
             ${newPlanHTML(deck, info)}
           </div>`).join('')}</div>
       </section>` : ''}
@@ -287,6 +288,8 @@ export async function renderToday(el) {
     el.querySelectorAll('[data-setnew]').forEach(b => b.addEventListener('click', () => askSetNew(b.dataset.setnew)));
     el.querySelectorAll('[data-addexam]').forEach(b => b.addEventListener('click', () => openExamSheet(b.dataset.addexam, () => renderToday(el))));
     el.querySelectorAll('[data-prep]').forEach(b => b.addEventListener('click', () => launch({ deckIds: [b.dataset.prep], deckId: b.dataset.prep, kind: 'prep' })));
+    // Exam week: a mock exam on the deck (js/mock-exam-sheet.js loads when first needed).
+    el.querySelectorAll('[data-mock]').forEach(b => b.addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(b.dataset.mock, { mock: true })));
   };
 
   // ----- Options (a sheet): decks, answer by, custom study -----

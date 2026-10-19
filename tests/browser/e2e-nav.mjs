@@ -16,7 +16,7 @@ const errors = [];
 const URL = 'http://localhost:8123/';
 
 async function open() {
-  const ctx = await browser.newContext({ viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push('pageerror ' + e.message));
   p.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
@@ -256,7 +256,7 @@ const secs = async p => { const t = await p.textContent('#hudClock'); const m = 
 }
 {
   // Repro B (desktop): Review, card panel, End, panel closed: the first Back is not dead.
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
+  const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push('pageerror ' + e.message));
   await p.goto('about:blank');
@@ -323,7 +323,7 @@ for (const [fmt, what] of [['lightning', 'Lightning'], ['survival', 'Survival'],
 }
 {
   // close-and-navigate in the same tick (the side panel's x, then a sidebar link)
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
+  const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: 1400, height: 900 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push('pageerror ' + e.message));
   await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(800);
@@ -339,7 +339,7 @@ for (const [fmt, what] of [['lightning', 'Lightning'], ['survival', 'Survival'],
 }
 {
   // The occlusion editor: Back asks "Discard your changes?" (like Esc), Back with nothing drawn just closes.
-  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, serviceWorkers: 'block' });
+  const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: 1200, height: 800 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push('pageerror ' + e.message));
   await p.goto(URL + '#/decks'); await p.waitForSelector('.deck'); await p.waitForTimeout(300);

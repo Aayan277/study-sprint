@@ -8,7 +8,7 @@ import { dayEnd } from './days.js';
 import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
-import { examInfo, countdown, badgeClass } from './exam.js';
+import { examInfo, countdown, badgeClass, MOCK_DAYS } from './exam.js';
 import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
@@ -293,11 +293,12 @@ export async function renderDeck(el, deckId) {
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then.${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}</p>`
+        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then.${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
         ${soon ? '<button class="btn primary small" type="button" id="prepBtn">Exam prep</button>' : ''}
         ${s.total ? `<a class="btn ${soon ? 'ghost' : 'primary'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
+        ${s.total ? '<button class="btn ghost small" type="button" id="testBtn">Practice test</button>' : ''}
         <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
         <div class="more-wrap">
           <button class="icon-btn more-btn" type="button" id="deckMore" aria-haspopup="menu" aria-expanded="false" aria-controls="deckMenu" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>
@@ -331,6 +332,9 @@ export async function renderDeck(el, deckId) {
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
+  // A calm mock exam on this deck and its subdecks (js/mock-exam-sheet.js loads when first needed).
+  $('testBtn')?.addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(deck.id));
+  $('mockBtn')?.addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(deck.id, { mock: true }));
   $('editDeck').addEventListener('click', () => openDeckEditor(deck, saved => {
     if (saved === 'deleted') navGo(parent ? `#/deck/${parent.id}` : '#/decks'); else renderDeck(el, deckId);
   }));
@@ -497,7 +501,7 @@ async function openExport(deck, decks, deckCards) {
       toast(`Exported ${plural(cards.length, 'card')} as an Anki deck`);
     } catch (err) {
       console.error(err);
-      showFieldError(null, $('exErr'), navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
+      showFieldError(null, $('exErr'), err?.code === 'no-wasm' ? err.message : navigator.onLine ? "Couldn't make the Anki deck. Try again." : 'Making an Anki deck needs an internet connection the first time.');
       btn.disabled = false;
       btn.querySelector('b').textContent = 'Anki deck (.apkg)';
     }
