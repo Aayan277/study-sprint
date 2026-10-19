@@ -1,0 +1,17 @@
+Chapter 4: Elasticity
+
+4.1 Price Elasticity of Demand
+
+Price elasticity of demand measures how much the quantity demanded of a good responds to a change in the price of that good. It is computed as the percentage change in quantity demanded divided by the percentage change in price. Demand for a good is said to be elastic if the quantity demanded responds substantially to changes in the price. Demand is said to be inelastic if the quantity demanded responds only slightly to changes in the price.
+
+What determines whether demand is elastic or inelastic? Goods with close substitutes tend to have more elastic demand because it is easier for consumers to switch. Necessities tend to have inelastic demands, whereas luxuries have elastic demands. When the price of a doctor's visit rises, people will not dramatically reduce the number of times they go to the doctor.
+
+Total revenue is the amount paid by buyers and received by sellers of a good, computed as the price of the good times the quantity sold. When demand is inelastic, a price increase raises total revenue. When demand is elastic, a price increase reduces total revenue.
+
+4.2 Other Demand Elasticities
+
+The income elasticity of demand is a measure of how much the quantity demanded of a good responds to a change in consumers' income. Normal goods are goods for which an increase in income raises the quantity demanded. Inferior goods, such as bus rides, are goods for which an increase in income reduces the quantity demanded. The cross-price elasticity of demand measures how the quantity demanded of one good responds to a change in the price of another good. Substitutes have positive cross-price elasticities, while complements, such as computers and software, have negative cross-price elasticities.
+
+In 1973, the Organization of Petroleum Exporting Countries (OPEC) cut production, and the price of crude oil rose by about 50 percent. Because the short-run demand for oil is inelastic, the revenue of OPEC members rose sharply. Over the long run, however, consumers found substitutes, and by 1986 the real price of oil had fallen back to its earlier level.
+
+Key takeaway: the elasticity of supply depends on the flexibility of sellers to change the amount of the good they produce. A perfectly inelastic supply curve is vertical.

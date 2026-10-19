@@ -141,6 +141,7 @@ export async function drawSync() {
   const w = acct ? syncWording(acct.lastSync) : null;
   el.className = 'side-sync' + (!acct ? ' out' : w.warn ? ' warn' : '');
   el.innerHTML = `<i aria-hidden="true"></i><span>${esc(acct ? w.text : 'Sign in to sync')}</span>`;
+  el.href = acct ? '#/settings' : '#/settings/sync';        // signed out: straight to the Sync form
   el.title = acct ? w.text : '';
   el.dataset.tip = acct ? w.text : 'Sign in to sync';
   // In the rail the sync line is hidden: a dot on the Settings icon says something needs a look.

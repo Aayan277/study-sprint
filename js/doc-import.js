@@ -60,22 +60,47 @@ export function resolvePath(base, target) {
   return parts.join('/');
 }
 
-const textOfParagraphs = xml => {
+const textOfParagraphs = (xml, marks = false) => {
   const lines = [];
   for (const p of xml.matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g)) {
     let line = '';
     for (const t of p[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?>/g)) line += t[0].startsWith('<a:br') ? '\n' : xmlText(t[1]);
     line = line.replace(/[ \t]+\n/g, '\n').trim();
-    if (line) lines.push(line);
+    if (!line) continue;
+    lines.push(marks ? markParagraph(p[1], line) : line);
   }
   return lines;
 };
+// A paragraph with its bold runs marked: "the **bold** words", or "## the whole paragraph" when all of it is bold (that is a heading).
+// Used by "Suggest cards", which takes **bold** as a key term and ## as a heading (js/reading-cards.js).
+function markParagraph(inner, plain) {
+  const parts = [];
+  for (const r of inner.matchAll(/<a:(r|fld)\b[^>]*>([\s\S]*?)<\/a:\1>|<a:br\b[^>]*\/?>/g)) {
+    if (r[0].startsWith('<a:br')) { parts.push({ text: '\n', bold: false }); continue; }
+    const text = [...r[2].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>/g)].map(t => xmlText(t[1])).join('');
+    if (text) parts.push({ text, bold: /<a:rPr\b[^>]*\sb="(?:1|true)"/.test(r[2]) });
+  }
+  const words = parts.filter(x => x.text.trim());
+  if (!words.length) return plain;
+  if (words.every(x => x.bold)) return '## ' + plain.replace(/\n+/g, ' ');
+  let out = '';
+  for (let i = 0; i < parts.length; i++) {
+    const x = parts[i];
+    if (!x.bold || !x.text.trim()) { out += x.text; continue; }
+    let text = x.text;
+    while (parts[i + 1] && (parts[i + 1].bold || !parts[i + 1].text.trim()) && parts.slice(i + 1).some(y => y.bold && y.text.trim())) { i++; text += parts[i].text; }
+    const lead = text.match(/^\s*/)[0], trail = text.match(/\s*$/)[0];
+    out += lead + '**' + text.trim() + '**' + trail;
+  }
+  return out.replace(/[ \t]+\n/g, '\n').trim();
+}
 // The text boxes (<p:sp>) of a slide. Slide numbers, dates and footers are page furniture, not content.
 const shapes = xml => [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].map(m => m[0]);
 const placeholder = sp => { const m = sp.match(/<p:ph\b[^>]*>/); return m ? attrs(m[0]).type || 'body' : null; };
 
 // The text of one slide, one paragraph per line, in the order it is in the file (which is the reading order PowerPoint saves).
-export function slideLines(xml) {
+// With marks: true, bold runs are written **like this** and a paragraph that is all bold as "## heading".
+export function slideLines(xml, { marks = false } = {}) {
   xml = String(xml);
   const lines = [];
   // Anything outside a <p:sp> (tables in graphic frames) is read too, after the plain text boxes.
@@ -83,9 +108,9 @@ export function slideLines(xml) {
   for (const sp of shapes(xml)) {
     const ph = placeholder(sp);
     if (ph === 'sldNum' || ph === 'ftr' || ph === 'dt' || ph === 'hdr') continue;
-    lines.push(...textOfParagraphs(sp));
+    lines.push(...textOfParagraphs(sp, marks));
   }
-  lines.push(...textOfParagraphs(rest));
+  lines.push(...textOfParagraphs(rest, marks));
   return lines;
 }
 export const slideText = xml => slideLines(xml).join('\n');
@@ -115,12 +140,14 @@ export function pptxPages(files) {
     order = Object.keys(files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p)).sort((a, b) => parseInt(a.match(/(\d+)\.xml$/)[1], 10) - parseInt(b.match(/(\d+)\.xml$/)[1], 10));
   }
   return order.map((path, i) => {
-    const lines = slideLines(read(path));
+    const xml = read(path);
+    const lines = slideLines(xml), marked = slideLines(xml, { marks: true });
     const noteFile = notesTarget(path, read(path.replace(/([^/]*)$/, '_rels/$1.rels')));
     const notes = noteFile && files[noteFile] ? notesText(read(noteFile)) : '';
     // The first line of a slide is almost always its title: it goes in the label, so the card's front says what the slide is about.
     const title = lines.length > 1 && lines[0].length <= 80 && !/\n/.test(lines[0]) ? lines[0] : '';
-    return { label: `Slide ${i + 1}${title ? ': ' + title : ''}`, text: (title ? lines.slice(1) : lines).join('\n'), notes };
+    // (`md` is the same text with the bold and heading marks that "Suggest cards" reads; the title is in the label, so it is not in it)
+    return { label: `Slide ${i + 1}${title ? ': ' + title : ''}`, text: (title ? lines.slice(1) : lines).join('\n'), md: (title ? marked.slice(1) : marked).join('\n'), notes };
   });
 }
 
@@ -148,6 +175,35 @@ export function pdfPageText(items) {
     s += it.str + (it.hasEOL ? '\n' : '');
   }
   return tidy(s);
+}
+
+// The lines of one PDF page with the size of their letters: [{ text, size }]. A line ends where pdf.js says (hasEOL); its size is the
+// largest letter height on it (item.height, or the scale in item.transform when pdf.js gives no height).
+export function pdfPageLines(items) {
+  const lines = [];
+  let text = '', size = 0;
+  const end = () => { const t = text.replace(/[ \t\u00a0]+/g, ' ').trim(); if (t) lines.push({ text: t, size }); text = ''; size = 0; };
+  for (const it of items) {
+    if (typeof it.str !== 'string') continue;
+    if (it.str.trim()) size = Math.max(size, Number(it.height) || Math.abs(Number(it.transform?.[3])) || 0);
+    text += it.str;
+    if (it.hasEOL) end();
+  }
+  end();
+  return lines;
+}
+// A line is a heading when its letters are 1.2 times the page's usual size or more, it is 12 words or fewer and 80 characters or fewer,
+// and it does not end in a full stop. (No letter sizes: no headings; the cards are found all the same.)
+export function pdfHeadings(lines) {
+  const sizes = lines.map(l => l.size).filter(x => x > 0).sort((a, b) => a - b);
+  if (!sizes.length) return lines.map(() => false);
+  const median = sizes[Math.floor(sizes.length / 2)];
+  return lines.map(l => l.size >= median * 1.2 && l.text.split(/\s+/).length <= 12 && l.text.length <= 80 && !/\.$/.test(l.text));
+}
+// The page's text with its headings marked "## " (what "Suggest cards" reads).
+export function pdfPageMarkdown(items) {
+  const lines = pdfPageLines(items), heads = pdfHeadings(lines);
+  return tidy(lines.map((l, i) => (heads[i] ? '## ' : '') + l.text).join('\n'));
 }
 
 // Trim each line, drop blank ones and a hyphen at a line end that split a word ("meta-\nbolism" → "metabolism").
@@ -188,7 +244,10 @@ export async function readPdf(bytes, onProgress = () => {}, lib, signal) {
     for (let n = 1; n <= total; n++) {
       if (signal?.aborted) throw aborted();
       const page = await doc.getPage(n);
-      try { pages.push({ label: `Page ${n}`, text: pdfPageText((await page.getTextContent()).items), notes: '' }); } finally { page.cleanup(); }
+      try {
+        const items = (await page.getTextContent()).items;
+        pages.push({ label: `Page ${n}`, text: pdfPageText(items), md: pdfPageMarkdown(items), notes: '' });
+      } finally { page.cleanup(); }
       onProgress(n, total);
       if (n % 5 === 0) await pause();
     }
@@ -206,6 +265,12 @@ export function pageBlock(p, withNotes = true) {
 
 // All the pages, blocks separated by a blank line. The Import screen reads this as "first line of each block is the front".
 export const pagesToText = (pages, withNotes = true) => pages.map(p => pageBlock(p, withNotes)).filter(Boolean).join('\n\n');
+
+// The same with the headings and bold terms marked, for "Suggest cards" (a page without marks gives its plain text).
+export const pagesToMarkdown = (pages, withNotes = true) => pages.map(p => pageBlock({ ...p, text: p.md ?? p.text }, withNotes)).filter(Boolean).join('\n\n');
+
+// Pasted text as "pages" for the AI parts view: one per paragraph (blocks separated by blank lines) → [{ label: 'Paragraph 3', text, notes: '' }]
+export const textPages = text => String(text ?? '').replace(/\r\n?/g, '\n').split(/\n[ \t]*\n+/).map(t => t.trim()).filter(Boolean).map((t, i) => ({ label: `Paragraph ${i + 1}`, text: t, notes: '' }));
 
 export const charCount = (pages, withNotes = true) => pages.reduce((n, p) => n + pageBlock(p, withNotes).length, 0);
 export const hasText = pages => pages.some(p => p.text.trim() || p.notes.trim());
@@ -244,9 +309,9 @@ export function splitParts(pages, max = PART_CHARS, withNotes = true) {
   flush();
   return parts;
 }
-// "Page 3" and "Page 9" → "Pages 3–9"; "Slide 2: Title" and "Slide 5: Other" → "Slides 2–5".
-function rangeLabel(first, last) {
-  const num = l => l.match(/^(Page|Slide) (\d+)/);
+// "Page 3" and "Page 9" → "Pages 3–9"; "Slide 2: Title" and "Slide 5: Other" → "Slides 2–5"; "Paragraph 3" … "Paragraph 9" → "Paragraphs 3–9".
+export function rangeLabel(first, last) {
+  const num = l => l.match(/^(Page|Slide|Paragraph) (\d+)/);
   const a = num(first), b = num(last);
   if (!a || !b) return first === last ? first : `${first} to ${last}`;
   return a[2] === b[2] ? `${a[1]} ${a[2]}` : `${a[1]}s ${a[2]}–${b[2]}`;

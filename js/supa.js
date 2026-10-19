@@ -18,10 +18,11 @@ const timedOut = () => new SupaError("The sync server took too long to answer. I
 export const MEDIA_LEFT = 'Couldn’t remove your pictures from the server. Nothing was deleted. Try again.';
 
 export class SupaError extends Error {
-  constructor(message, { status = 0, code = '' } = {}) {
+  constructor(message, { status = 0, code = '', retryAfter = 0 } = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;          // seconds to wait, when the server said ("you can only request this after N seconds")
   }
 }
 
@@ -55,20 +56,27 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
   if (!res.ok) {
     // (The server's own refusals, supabase/limits.sql: a person's synced data is full, or the whole project is.)
     const code = (/sync_data_full|sync_server_full|media_left/.exec(json?.message || '') || [])[0] || json?.error_code || json?.code || json?.error || '';
-    throw new SupaError(explain(res.status, code, json?.msg || json?.message || json?.error_description || text), { status: res.status, code });
+    const raw = json?.msg || json?.message || json?.error_description || text;
+    throw new SupaError(explain(res.status, code, raw), { status: res.status, code, retryAfter: Number((/only request this after (\d+) seconds/.exec(raw || '') || [])[1]) || 0 });
   }
   return json;
 }
 
 // Supabase's error codes, in plain words.
 function explain(status, code, raw) {
+  // GoTrue's one-email-a-minute rule says how long is left; that is worth more than the general "too many emails".
+  const wait = /only request this after (\d+) seconds/.exec(raw || '');
+  if (wait) return `Wait ${wait[1]} seconds, then try again.`;
   const known = {
-    invalid_credentials: 'Wrong email or password.',
-    invalid_grant: 'Wrong email or password.',
-    user_already_exists: 'There’s already an account with that email. Sign in instead.',
-    email_exists: 'There’s already an account with that email. Sign in instead.',
+    invalid_credentials: 'Wrong email or password. Check both, or tap Forgot password? below.',
+    invalid_grant: 'Wrong email or password. Check both, or tap Forgot password? below.',
+    user_already_exists: 'There’s already an account with that email. Tap Sign in instead, or Forgot password? if you don’t remember the password.',
+    email_exists: 'There’s already an account with that email. Tap Sign in instead, or Forgot password? if you don’t remember the password.',
     signup_disabled: 'New accounts can’t be made right now. Sign in with your existing account.',
-    captcha_failed: 'Couldn’t confirm you’re not a robot. Try again.',
+    captcha_failed: 'The “are you a person?” check didn’t go through. Try again.',
+    email_address_not_authorized: 'Study Sprint can’t send emails to that address yet. Please tell the person who shared the app with you.',
+    user_banned: 'This account has been blocked. See Settings → About to contact the developer.',
+    email_provider_disabled: 'New accounts can’t be made right now. Sign in with your existing account.',
     sync_items_data_size: 'One of your cards is too big to sync (over 64 KB). Shorten its text and try again.',
     sync_data_full: 'Your account’s synced data is full. New changes are kept on this device and will sync when there’s room.',
     sync_server_full: 'The sync server is full right now. Everything is safe on this device and will sync when there’s room.',
@@ -78,7 +86,7 @@ function explain(status, code, raw) {
     weak_password: 'That password is too weak. Use at least 8 characters, with a letter and a number.',
     email_address_invalid: 'That email address doesn’t look right.',
     validation_failed: 'Check the email and password.',
-    email_not_confirmed: 'This account is waiting for email confirmation. Open the link in the email we sent you, then sign in. (No email? Check your spam folder, or tap Create account again to send it again.)',
+    email_not_confirmed: 'Confirm your email first: open the link we sent to this address (check your spam folder too), then sign in here.',
     over_request_rate_limit: 'Too many tries from this network. Wait a few minutes and try again.',
     over_email_send_rate_limit: 'Too many emails were sent just now. Wait a few minutes (it can take up to an hour) and try again.',
     over_signup_rate_limit: 'Too many new accounts from this network. Wait a few minutes and try again.',
@@ -123,7 +131,39 @@ export async function signUp(email, password, { captcha, redirectTo } = {}) {
   const query = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
   const json = await call('/auth/v1/signup' + query, { method: 'POST', body: withCaptcha({ email, password }, captcha) });
   const s = session(json);
-  return s ? { session: s } : { pending: true };
+  if (s) return { session: s };
+  // With "Confirm email" on, Supabase answers 200 for an address that already has an account, with a made-up user whose
+  // identities list is empty, and sends no email. Say so instead of "Check your email".
+  // (Telling someone that an address already has an account is a deliberate choice: the alternative, "Check your email" with no email ever
+  // coming, leaves a stranger stuck. It does let anyone test whether an address is registered; sign-in and reset answers still don't.)
+  const ids = json?.identities ?? json?.user?.identities;
+  if (Array.isArray(ids) && ids.length === 0) {
+    throw new SupaError(explain(422, 'user_already_exists'), { status: 422, code: 'user_already_exists' });
+  }
+  return { pending: true };
+}
+
+// Which box on the sign-in form an error is about: 'email', 'password' or null (not about one box).
+export function authErrorField(code) {
+  if (/^(email_address_invalid|user_already_exists|email_exists|email_not_confirmed|user_not_found|email_address_not_authorized)$/.test(code || '')) return 'email';
+  if (/^(invalid_credentials|invalid_grant|weak_password|same_password)$/.test(code || '')) return 'password';
+  return null;
+}
+// The words for an error from sign-in, create account or forgot password. (The sync status keeps its own wording: there,
+// cards are already on the device and "will sync when it's back" is true.)
+export function authMessage(err, { online = true } = {}) {
+  if (err?.code === 'network') {
+    return online
+      ? 'Couldn’t reach the sync server. Check your connection and try again. You can keep studying meanwhile.'
+      : 'You’re offline. Connect to the internet to sign in. You can keep studying while offline.';
+  }
+  if (err?.code === 'timeout') return 'The sync server took too long to answer. Try again in a moment.';
+  return err?.message || 'Something went wrong. Try again.';
+}
+// Sends the confirmation email again (Supabase allows one a minute per address).
+export async function resendSignup(email, { captcha, redirectTo } = {}) {
+  const query = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+  await call('/auth/v1/resend' + query, { method: 'POST', body: withCaptcha({ type: 'signup', email }, captcha) });
 }
 export async function signIn(email, password, { captcha } = {}) {
   return session(await call('/auth/v1/token?grant_type=password', { method: 'POST', body: withCaptcha({ email, password }, captcha) }));

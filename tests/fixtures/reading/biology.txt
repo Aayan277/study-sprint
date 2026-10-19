@@ -1,0 +1,37 @@
+## Cells and how substances move
+
+Every living thing is made of cells, and the cell membrane controls what goes in and out of them. The membrane is built from a phospholipid bilayer, which means two layers of lipid molecules whose water-loving heads face outwards and whose water-hating tails face each other in the middle. Proteins are embedded in this bilayer, and some of them form channels that let particular molecules through. Because the membrane lets some substances cross more easily than others, it is described as selectively permeable.
+
+Diffusion is the net movement of particles from a region where they are highly concentrated to a region where they are less concentrated. The particles move because they have kinetic energy, and no extra energy from the cell is needed. Oxygen, for example, diffuses into a cell when the oxygen concentration outside is higher than inside. The rate of diffusion increases with temperature, and it is faster over a short distance than over a long one.
+
+Osmosis is the movement of water across a partially permeable membrane from a dilute solution to a more concentrated solution. In an animal cell placed in pure water, water enters by osmosis and the cell may burst. A plant cell does not burst in the same situation because the rigid cell wall pushes back, so the cell becomes firm or turgid instead. Students often mix up osmosis and diffusion, but osmosis is only about water and always involves a membrane.
+
+Sometimes a cell needs to take in a substance that is already more concentrated inside than outside. Active transport moves substances against their concentration gradient, from low concentration to high concentration, and it needs energy from respiration. Root hair cells use active transport to take up mineral ions such as nitrate from the soil, even though the soil water contains very few of them. Carrier proteins in the membrane pick up the ion and release it on the other side.
+
+The nucleus holds the genetic material of the cell. Genetic material is made of DNA (deoxyribonucleic acid), a long molecule shaped like a twisted ladder, or double helix. A gene is a short section of DNA that codes for one protein. In humans the nucleus of a normal body cell contains 46 chromosomes arranged in 23 pairs, and each chromosome is one very long molecule of DNA wrapped around proteins.
+
+Proteins are assembled in the cytoplasm by ribosomes. Ribosomes read the instructions copied from the DNA and join amino acids together in the right order. Cells that make a lot of protein, such as those in the pancreas, have large numbers of ribosomes. Some are attached to a network of membranes while others float freely in the cytoplasm.
+
+## Energy in cells
+
+Cells need a constant supply of energy to build molecules, move things and keep their shape. Most of this energy is released in the mitochondria, which are small rod-shaped organelles found in the cytoplasm. Mitochondria are where the later stages of aerobic respiration take place. Cells with high energy demands, like muscle cells and sperm cells, contain many more mitochondria than cells with low demands.
+
+The energy released in respiration is not used directly. It is stored in a small molecule called ATP (adenosine triphosphate). When the cell needs energy, ATP is broken down and releases energy for the reaction that needs it. ATP is then rebuilt during respiration, so each molecule is recycled thousands of times a day. You can think of it as a rechargeable battery that is carried to wherever it is needed.
+
+Plants get their energy in a different way. The process by which plants make glucose from carbon dioxide and water using light energy is called photosynthesis. It takes place in the chloroplasts, mainly in the leaf cells. Chloroplasts contain chlorophyll, the green pigment that absorbs light, mostly from the red and blue parts of the spectrum. The glucose made in photosynthesis can be used for respiration, converted to starch for storage, or used to build cellulose for cell walls. Oxygen is released as a by-product, which is why plants are so important for life on Earth.
+
+Photosynthesis depends on several factors. The rate goes up as the light intensity rises, until some other factor such as the amount of carbon dioxide or the temperature becomes the limit. Above about 40 degrees the enzymes involved begin to be damaged and the rate falls quickly. Farmers who grow crops in greenhouses can control all of these, which is one reason greenhouse yields are so high.
+
+## Cell division
+
+Organisms grow by making more cells, and damaged tissue is repaired in the same way. Cells divide by mitosis, which produces two daughter cells that are genetically identical to the parent cell. Before mitosis begins, the cell copies its DNA so that each daughter cell receives a full set of chromosomes. Mitosis is also how single-celled organisms and some plants reproduce asexually.
+
+The stages of mitosis happen in a fixed order:
+- Prophase: the chromosomes condense and become visible, and the nuclear membrane breaks down.
+- Metaphase: the chromosomes line up along the middle of the cell.
+- Anaphase: the copies of each chromosome are pulled apart to opposite ends of the cell.
+- Telophase: new nuclear membranes form around each set of chromosomes, and the cell then divides in two.
+
+Mitosis is tightly controlled. If the controls fail and a cell keeps dividing when it should not, a tumour can form. Cancer is the name given to a tumour whose cells spread to other parts of the body. Many cancer treatments work by interfering with cell division, which is why they also affect healthy cells that divide quickly, such as hair follicle cells.
+
+Stem cells are unspecialised cells that can divide again and again and can become many different types of cell. In an early embryo all the cells are stem cells. In adults, stem cells in the bone marrow keep producing new blood cells throughout life. Scientists hope that they could one day be used to replace damaged tissue, for instance in people with diabetes or spinal injuries, but there are still ethical and technical problems to solve.

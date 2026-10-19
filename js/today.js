@@ -17,6 +17,7 @@ import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
 import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, streakHTML } from './ui.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { drawCard as drawInstallCard } from './install.js';
+import { drawWhatsNew } from './whats-new.js';
 import { drawPrompt as drawRemindPrompt, stepAside as stepAsideRemind } from './reminders.js';
 import { openExamSheet } from './exam-sheet.js';
 import * as fx from './fx.js';
@@ -116,6 +117,7 @@ export async function renderToday(el) {
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
       </section>
       ${rescueHTML()}
+      <div id="whatsNewSlot"></div>
       <div id="installSlot"></div>
       <div id="remindSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
@@ -143,8 +145,12 @@ export async function renderToday(el) {
     wire(c);
     if (tr.state === 'nothing') el.querySelector('.today-hero .ring')?.classList.add('is-full');    // calm, no "you did it" pop when there was nothing to do
     else fx.goalRing(el, tr.n, tr.of);
-    drawInstallCard($('installSlot'));        // only after a finished Review session, see install.js
-    drawRemindPrompt($('remindSlot'));        // also after the first finished session, and never beside the install card (reminders.js)
+    // One card at a time: what's new (once after an update) goes first, the install and reminder cards wait for the next visit.
+    drawWhatsNew($('whatsNewSlot')).then(shown => {
+      if (shown || !el.isConnected) return;
+      drawInstallCard($('installSlot'));      // only after a finished Review session, see install.js
+      drawRemindPrompt($('remindSlot'));      // also after the first finished session, and never beside the install card (reminders.js)
+    });
   };
 
   // "Back from a break": a banner offering to spread the overdue cards over a few days, or the line for the running plan.
@@ -444,7 +450,7 @@ export async function renderToday(el) {
 
   draw();
   // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
-  const onInstall = () => { if (el.isConnected) { drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
+  const onInstall = () => { if (el.isConnected) { if ($('whatsNewSlot')?.firstChild) return; drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
   window.addEventListener('install-change', onInstall);
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant. Not while this screen is
   // still being drawn and made ready: when the browser is idle (at the latest after 4 s), or as soon as a finger or the pointer is on Start.

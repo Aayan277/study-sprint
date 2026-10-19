@@ -6,7 +6,7 @@
 //         professional look (css/clinical.css, which only acts under html[data-ui="clinical"])
 //   skin  which accent color set (stored on <html data-skin="...">): violet (the default), ocean, forest, ember, rose.
 //         In Clinical they are shown as Indigo, Blue, Green, Rust and Plum (the ids stay the same, so saved themes keep working)
-//   mode  'dark' (the default), 'light', or 'auto' to follow the device's light/dark setting.
+//   mode  'auto' (the default: follows the device's light/dark setting), 'light' or 'dark'.
 //         The page always gets a plain data-theme="light" or "dark" (auto is worked out here).
 //   oled  true = pure black page background in dark mode (<html data-oled="on">)
 
@@ -43,7 +43,7 @@ export const isAlwaysDark = skin => ALWAYS_DARK.includes(skin);
 export function cleanTheme(theme) {
   const saved = theme?.skin;
   const skin = SKINS[saved] ? saved : (OLD_NAMES[saved] || 'violet');
-  let mode = ['light', 'dark', 'auto'].includes(theme?.mode) ? theme.mode : 'dark';
+  let mode = ['light', 'dark', 'auto'].includes(theme?.mode) ? theme.mode : 'auto';   // (nothing saved: follow the device)
   if (ALWAYS_DARK.includes(saved)) mode = 'dark';
   const oled = theme?.oled === true || ['onyx', 'kuro'].includes(saved);
   return { ui: cleanUi(theme?.ui), skin, mode, oled };

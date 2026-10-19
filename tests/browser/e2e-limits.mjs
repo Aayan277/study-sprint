@@ -193,7 +193,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await A.click('#pendOk');
   // signing in before confirming
   await A.click('#syncForm button[type=submit]');
-  await A.waitForFunction(() => /waiting for email confirmation/.test(document.querySelector('#syncErr')?.textContent || ''));
+  await A.waitForFunction(() => /Confirm your email first/.test(document.querySelector('#syncErr')?.textContent || ''));
   ok(true, 'signing in before confirming says it is waiting for the email: ' + await A.textContent('#syncErr'));
   // asking again sends it again
   await A.click('#syncCreate'); await A.waitForSelector('#pendOk');
@@ -201,8 +201,9 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await A.click('#pendOk');
   // opening the link
   await A.goto(fake.confirmLink('me@example.com', APP));
-  await A.waitForFunction(() => /Email confirmed/.test(document.querySelector('#toast')?.textContent || ''));
+  await A.waitForFunction(() => document.querySelector('#sheet[open] h2')?.textContent === 'Email confirmed');
   ok(new URL(A.url()).hash === '#/settings', 'the confirm link: the sign-in is taken out of the address');
+  await A.click('#cfLater');
   ok(!(await run(A, async () => !!(await (await import('./js/db.js')).getSettings()).syncAuth)), 'and it does not sign this device in by itself');
   await A.waitForSelector('#syncEmail'); await fill(A); await A.click('#syncForm button[type=submit]'); await waitSynced(A);
   ok(true, 'after confirming, signing in works');
@@ -249,7 +250,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await run(D, async () => { (await import('./js/sync-config.js')).CAPTCHA.siteKey = 'test-site-key-123'; });
   await signInUI(D, { create: true });
   await D.waitForFunction(() => !document.querySelector('#syncErr')?.hidden);
-  ok(/The bot check didn’t load\. Try again, or contact the site owner/.test(await D.textContent('#syncErr')), 'if the box cannot load, a clear message appears: ' + await D.textContent('#syncErr'));
+  ok(/The “are you a person\?” check didn’t load\. Check your connection and try again/.test(await D.textContent('#syncErr')), 'if the box cannot load, a clear message appears: ' + await D.textContent('#syncErr'));
   ok(!(await D.$eval('#syncCreate', b => b.disabled)), 'and the buttons work again');
   await D.context().close();
 

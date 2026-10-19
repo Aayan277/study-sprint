@@ -1,0 +1,30 @@
+PSYC201 wk 6 notes - memory
+(missed first 10 min - ask Priya for slides!!)
+quiz on friday, covers wk4-6
+reminder: lab report due 14/11 via moodle
+
+Atkinson-Shiffrin model (1968) - multi-store model: sensory memory -> STM -> LTM
+sensory memory lasts < 1 sec for visual (iconic), ~2-4 sec for auditory (echoic)
+STM capacity 7 +/- 2 items (Miller, 1956), duration approx 18-30 sec w/o rehearsal
+chunking = grouping info into meaningful units to increase STM capacity
+LTM - basically unlimited capacity
+
+Working memory model (Baddeley & Hitch 1974)
+  - central executive: controls attention, coordinates the slave systems
+  - phonological loop: holds verbal / auditory info (inner voice)
+  - visuospatial sketchpad: visual + spatial info (inner eye)
+  - episodic buffer (added 2000) - links info across domains
+
+types of LTM:
+explicit (declarative) vs implicit (non-declarative)
+episodic memory - personal experiences, e.g. your 10th birthday
+semantic memory - general facts / knowledge e.g. Paris is capital of France
+procedural memory - skills, like riding a bike
+
+serial position effect: better recall of items at start (primacy) and end (recency) of a list
+proactive interference - old info disrupts new learning
+retroactive interference - new info disrupts recall of old
+
+HM (Henry Molaison) - bilateral medial temporal lobectomy 1953, couldnt form new explicit LTMs -> anterograde amnesia
+
+TODO: reread ch 7 pp 210-235

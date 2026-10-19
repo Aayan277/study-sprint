@@ -56,10 +56,10 @@ await p.context().close();
 p = await open(real);
 await p.goto(URL); await p.waitForSelector('#wlSkip'); await p.click('#wlSkip'); await p.waitForSelector('.empty');
 const txt = await p.textContent('.empty');
-ok(/Nothing to study yet/.test(txt) && await p.locator('.empty a:has-text("Paste notes")').isVisible() && await p.locator('#trySample').isVisible() && await p.locator('.fr-how').isVisible(), 'Skip lands on an empty Today with Paste notes, Try sample cards and How it works');
-await p.click('.fr-how'); await p.waitForSelector('#wlNext');
-ok(p.url().endsWith('#/welcome/again') && !(await p.locator('.tabs').isVisible()), 'How it works re-opens the welcome screen');
-await p.click('#wlSkip'); await p.waitForSelector('.empty');
+ok(/Nothing to study yet/.test(txt) && await p.locator('.empty a:has-text("Add cards")').isVisible() && await p.locator('#trySample').isVisible() && await p.locator('.fr-how').isVisible(), 'Skip lands on an empty Today with Add cards, Try sample cards and How it works');
+await p.click('.fr-how'); await p.waitForSelector('h1:has-text("Help")');
+ok(p.url().endsWith('#/help') && await p.locator('.tabs').isVisible(), 'How it works opens the Help page, with the tabs still showing');
+await p.goBack(); await p.waitForSelector('.empty');
 await p.click('#trySample'); await p.waitForSelector('.guide #showBtn');
 ok(p.url().endsWith('#/welcome/review/sample') && (await p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).length)) === 12, 'Try sample cards adds the 12 sample cards and starts the guided review');
 for (let i = 0; i < 3; i++) { await p.click('#showBtn'); await p.click('.rate.r3'); await p.waitForTimeout(80); }

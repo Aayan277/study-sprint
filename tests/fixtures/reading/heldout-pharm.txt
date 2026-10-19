@@ -1,0 +1,30 @@
+PHARM 2 - week 3 - autonomic drugs + analgesics
+** pharm quiz moved to THURS 9am, bring calculator **
+zoom link on canvas
+
+Beta blockers (e.g. propranolol, atenolol, metoprolol)
+- MOA: block beta-adrenergic receptors -> decrease HR + contractility
+- uses: hypertension, angina, post-MI, arrhythmias, anxiety (propranolol)
+- SE: bradycardia, fatigue, cold extremities, bronchospasm
+- CI: asthma (non-selective ones esp.), heart block
+- cardioselective = beta1 selective (atenolol, metoprolol) -> safer in asthma but still caution
+
+ACE inhibitors (-pril e.g. ramipril, lisinopril)
+MOA: inhibit angiotensin converting enzyme (ACE) -> less angiotensin II -> vasodilation + less aldosterone
+SE: dry cough (bradykinin build up!!), hyperkalaemia, angioedema, first dose hypotension
+CI pregnancy - teratogenic
+
+Paracetamol
+max dose 4g / 24h in adults
+overdose -> hepatotoxicity, treat w/ N-acetylcysteine (NAC) ideally within 8 hrs
+
+NSAIDs (ibuprofen, naproxen, aspirin)
+- inhibit COX-1 and COX-2 -> less prostaglandins
+- SE: GI bleeding/ulcers, renal impairment, asthma exacerbation
+aspirin is irreversible COX inhibitor -> antiplatelet effect lasts the life of the platelet (~7-10 days)
+
+Opioids - morphine is the prototype mu receptor agonist
+SE: constipation (no tolerance develops!), resp depression, nausea, miosis
+naloxone = opioid antagonist used to reverse overdose (short half life so may need repeat doses)
+
+Q for tutor: why does warfarin interact with so many drugs??

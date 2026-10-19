@@ -2,7 +2,7 @@
 // editable preview, then save them into a deck. The actual format detection lives in import.js.
 
 import * as db from './db.js';
-import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, sheetsCsvUrl, claudePrompt } from './import.js';
+import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
@@ -19,7 +19,11 @@ import { sizeText } from './media.js';
 import { $, esc, plural, toast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
 import { sharedKind } from './share-logic.js';
-import { readDocument, isDocFile, pagesToText, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
+import { readDocument, isDocFile, pagesToText, pagesToMarkdown, textPages, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
+import { runKeywordJob } from './keywords-job.js';
+import { looksLikeProse } from './reading-cards.js';
+import * as RS from './reading-suggest.js';
+import { entriesFrom } from './glossary.js';
 import { importWarnings, tooBigNotes, splitTooBig, tooLargeNote, cardsWarning, passedCardsWarning } from './quota.js';
 
 // SheetJS reads Excel files. It's big, so it only downloads when someone picks an .xlsx file.
@@ -34,7 +38,8 @@ const rememberDeck = id => { try { localStorage.setItem(LAST_DECK, id); } catch 
 
 // The pasted text is kept for this tab (with how it is read: pages, AI answer, plain cards) while it is on the screen, so Back (or a swipe)
 // and then returning to Import finds it again. It goes when the cards are saved or Clear is pressed (js/import-draft.js).
-const saveDraft = text => keepDraft({ text, blocks: S?.blocks, aiMade: S?.aiMade, noCloze: S?.noCloze });
+// In suggest mode it also keeps which suggestions were unticked or edited (until the new suggestions are there, what the last draft had).
+const saveDraft = text => keepDraft({ text, blocks: S?.blocks, aiMade: S?.aiMade, noCloze: S?.noCloze, suggest: S?.suggest, sug: S?.suggest ? (S.cards.some(c => c.sug) ? RS.changesOf(S.cards) : S.restoreSug) : null });
 
 // Everything the screen is working with.
 let S = null;
@@ -62,7 +67,14 @@ export async function renderImport(el, arg) {
     withNotes: true,       // the "Include speaker notes" switch
     blocks: false,         // the text in the paste box is a PDF's or slides' text: read it as one block per page, not by separators
     aiMade: false,         // the cards come from an AI's answer to the "Make cards with AI" prompt: they get the ai-made tag
-    part: 0                // the part of the material the Copy-and-open buttons copy
+    part: 0,               // the part of the material the Copy-and-open buttons copy
+    suggest: false,        // "Suggest cards" is on: the text is read for definitions, lists and facts, and the preview shows suggestions to tick
+    sugJob: null,          // the job finding the suggestions ({ cancel })
+    sugSeq: 0,             // which run is the latest (an older one that finishes late says nothing)
+    sugTimer: 0,           // the wait before suggestions are found again after the text changed
+    sugStats: null,        // { words, byKind, total, shown, cut } of the suggestions on the screen
+    restoreSug: null,      // changes made to the suggestions, brought back with the draft, to put on the new ones
+    filter: 'all'          // what the "Show" box has chosen
   };
 
   // (The deck the last import went into, if it is still there, comes first.)
@@ -92,9 +104,12 @@ export async function renderImport(el, arg) {
       <textarea id="pasteBox" rows="8" spellcheck="false" aria-label="Paste your cards or notes"
         placeholder="Paste cards, one per line:&#10;Mitosis - cell division into 2 identical cells&#10;Meiosis - division into 4 gametes&#10;&#10;Tabs, | : = and commas work too, as do Quizlet exports and tables from Notion."></textarea>
       <div class="pane-actions">
+        <button class="btn ghost small" type="button" id="suggestBtn">Suggest cards</button>
         <button class="btn ghost small" type="button" id="claudeBtn">Make cards with Claude</button>
         <button class="btn ghost small" type="button" id="clearBtn">Clear</button>
       </div>
+      <p class="note" id="proseNote" hidden>This looks like notes or an article, not cards. <button class="link" type="button" id="proseSuggest">Suggest cards from it</button></p>
+      <p class="note sug-status" id="sugStatus" hidden><span id="sugStatusText">Finding cards…</span> <button class="btn ghost small" type="button" id="sugStop">Stop</button></p>
       <p class="note" id="aiNote" hidden>Paste the AI's answer in the box above. The cards get an <b>ai-made</b> tag, so you can find them and check them.</p>
       <p class="note" id="claudeNote" hidden>Copied a prompt with your notes. Paste it into a chat at <a href="https://claude.ai/new" target="_blank" rel="noopener">claude.ai</a>, then paste Claude's answer back in the box above (replacing your notes).</p>
     </section>
@@ -111,20 +126,11 @@ export async function renderImport(el, arg) {
         <label class="adv-row switch-row prog-row" id="docNotesRow" hidden><span><b>Include speaker notes</b></span>
           <input id="docNotes" type="checkbox" class="switch" checked></label>
         <div class="pane-actions">
-          <button class="btn primary small" type="button" id="docAi">Make cards with AI</button>
+          <button class="btn primary small" type="button" id="docSuggest">Suggest cards</button>
+          <button class="btn ghost small" type="button" id="docAi">Make cards with AI</button>
           <button class="btn ghost small" type="button" id="docRaw">Use the text as it is</button>
         </div>
-        <p class="note">AI makes better cards from lecture text. You paste the text into your own chat. Nothing is sent from here. Or use the text as it is and tidy it in the preview.</p>
-        <div id="aiView" hidden>
-          <h3 class="doc-h">Make cards with AI</h3>
-          <p class="note" id="aiHow"></p>
-          <ol class="doc-parts" id="aiParts"></ol>
-          <p class="note" id="aiCur" aria-live="polite"></p>
-          <div class="pane-actions" id="aiSites">
-            ${AI_SITES.map(a => `<a class="btn ghost small" href="${a.url}" target="_blank" rel="noopener" data-site="${a.id}">Copy and open ${a.name}</a>`).join('')}
-          </div>
-          <div class="pane-actions"><button class="btn primary small" type="button" id="aiBack">I have the answer</button></div>
-        </div>
+        <p class="note">Suggest cards finds definitions, lists and key facts, right here on your device. AI usually makes better cards: you paste the text into your own chat, and nothing is sent from here. Or use the text as it is and tidy it in the preview.</p>
       </div>
       <label class="field" id="sheetPickRow" hidden style="margin-top:12px"><span id="sheetPickLbl">Sheet</span><select id="sheetPick"></select></label>
     </section>
@@ -137,12 +143,35 @@ export async function renderImport(el, arg) {
       <p class="note">In Google Sheets, tap <b>Share</b> and set it to <b>Anyone with the link</b> (or use File → Share → Publish to web), then paste the link here. Column A becomes the front and column B the back; you can change that below.</p>
     </section>
 
+    <section class="ai-view" id="aiView" hidden aria-labelledby="aiTitle">
+      <h3 class="doc-h" id="aiTitle">Make cards with AI</h3>
+      <p class="note" id="aiHow"></p>
+      <ol class="doc-parts" id="aiParts"></ol>
+      <p class="note" id="aiCur" aria-live="polite"></p>
+      <div class="pane-actions" id="aiSites">
+        ${AI_SITES.map(a => `<a class="btn ghost small" href="${a.url}" target="_blank" rel="noopener" data-site="${a.id}">Copy and open ${a.name}</a>`).join('')}
+      </div>
+      <div class="pane-actions"><button class="btn primary small" type="button" id="aiBack">I have the answer</button></div>
+    </section>
+
     <p class="err" id="loadErr" role="alert" hidden></p>
     <p class="note" id="readyMade"><a href="#/decks/starters">Ready-made decks</a> (JLPT kanji) are in Decks → Starter decks.</p>
 
     <section id="preview" class="section" hidden aria-labelledby="pvTitle">
-      <h2 id="pvTitle" style="margin-top:22px">Preview</h2>
+      <h2 id="pvTitle" tabindex="-1" style="margin-top:22px">Preview</h2>
       <p class="found" id="found" aria-live="polite"></p>
+      <p class="note err-note" id="sugNote" role="status" hidden></p>
+      <div class="sug-bar" id="sugBar" hidden>
+        <label class="field"><span>Show</span><select id="sugKind"></select></label>
+        <div class="pane-actions">
+          <button class="btn ghost small" type="button" id="sugAll">Tick all shown</button>
+          <button class="btn ghost small" type="button" id="sugNone">Untick all shown</button>
+        </div>
+        <div class="pane-actions">
+          <button class="btn ghost small" type="button" id="sugAi">Use an AI chat instead</button>
+          <button class="link" type="button" id="sugExit">Read it as cards instead</button>
+        </div>
+      </div>
       <div class="cols" id="cols" hidden>
         <label class="field"><span>Front</span><select id="frontCol"></select></label>
         <label class="field"><span>Back</span><select id="backCol"></select></label>
@@ -184,6 +213,7 @@ export async function renderImport(el, arg) {
   wireDoc();
   wireSheet();
   wirePreview();
+  wireSuggest();
   if (firstTab === 'file') $('tab-file').click();
   await loadDeckFronts();
   if (shared) await takeShared();
@@ -193,7 +223,8 @@ export async function renderImport(el, arg) {
     Object.assign(S, { blocks: d.blocks, aiMade: d.aiMade, noCloze: d.noCloze });      // read the way it was before
     $('aiNote').hidden = !d.aiMade;
     $('pasteBox').value = d.text;
-    showText(d.text);
+    if (d.suggest) { S.restoreSug = d.sug; setSuggest(true); runSuggest(); }          // the suggestions are found again, and what was unticked or edited is put back
+    else showText(d.text);
     toast('Brought back the text you pasted');
   }
 }
@@ -224,6 +255,7 @@ function wireTabs() {
       $(`tab-${x}`).setAttribute('aria-selected', String(x === t));
       $(`pane-${x}`).hidden = x !== t;
     });
+    if (t === 'sheet') $('aiView').hidden = true;          // the AI view is about text, not a sheet
   }));
 }
 
@@ -235,17 +267,22 @@ function wirePaste() {
     clearTimeout(timer);
     S.noCloze = false;                 // new text: cloze lines count again
     saveDraft($('pasteBox').value);
-    timer = setTimeout(() => showText($('pasteBox').value), 250);
+    timer = setTimeout(() => { if ($('pasteBox')?.isConnected) showText($('pasteBox').value); }, 250);        // (not after the screen was left)
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
   $('pasteBox').addEventListener('paste', () => {
     const b = $('pasteBox');
-    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) { S.blocks = false; saveDraft(b.value); }
+    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) {
+      S.blocks = false;
+      if (S.aiPending) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
+      saveDraft(b.value);
+    }
   });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(timer);
-    S.blocks = false; S.aiMade = false; $('aiNote').hidden = true;
+    setSuggest(false);
+    S.blocks = false; S.aiMade = false; S.aiPending = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
     $('pasteBox').value = '';
     keepDraft(null);
     showResult(null);
@@ -263,11 +300,17 @@ function wirePaste() {
 function showText(text) {
   S.pasted = text;
   saveDraft(text);          // however the text got here (typed, a file, a sheet, shared, read as pages), with how it is read
+  if (S.suggest) {          // suggest mode: the suggestions are found again a moment after the text stops changing
+    clearTimeout(S.sugTimer);
+    S.sugTimer = setTimeout(() => runSuggest(), 600);
+    return;
+  }
   const parse = S.blocks ? parseBlocks : parseText;
   let result = S.noCloze ? parse(text) : withClozeLines(text, parse).result;
   if (S.noCloze && result.clozes) { const { clozes, noteExtras, ...rest } = result; result = rest; }      // a spreadsheet's "Cloze note" column too
   // Cards from an AI's answer carry the ai-made tag (same tag for every row; the preview says "Tags come along too").
   if (S.aiMade && result.rows.length) result = { ...result, tags: result.rows.map((_, i) => [...new Set([...(result.tags?.[i] || []), 'ai-made'])]) };
+  $('proseNote').hidden = !looksLikeProse(text, result);          // notes or an article: suggest cards from them
   showResult(result, false, text);
 }
 
@@ -291,6 +334,7 @@ function wireFile() {
     $('fileName').textContent = file.name;
     suggestName(file.name.replace(/\.[^.]+$/, ''));
     $('sheetPickRow').hidden = true;
+    setSuggest(false);
     hideDoc();
     try {
       if (isDocFile(file)) { await readDoc(file); return; }
@@ -322,7 +366,7 @@ async function explainJson(file) {
 const docWord = (n, what) => (what === 'PDF' ? plural(n, 'page') : plural(n, 'slide'));
 
 function hideDoc() {
-  S.doc = null; S.aiMade = false; S.blocks = false; $('aiNote').hidden = true;
+  S.doc = null; S.aiMade = false; S.blocks = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
   $('docBox').hidden = true; $('aiView').hidden = true; $('docStatus').hidden = true;
 }
 
@@ -374,10 +418,20 @@ function wireDoc() {
     S.withNotes = e.target.checked;
     if (!S.doc) return;
     showDocInfo();
-    if (!$('aiView').hidden) showAiView();
+    if (!$('aiView').hidden && aiFromDoc) showAiView(S.doc.pages);
+  });
+  // The text with its headings and bold terms marked goes in the paste box, and the suggestions are found from it.
+  $('docSuggest').addEventListener('click', () => {
+    if (!S.doc || !hasText(S.doc.pages)) return;
+    S.aiMade = false; S.blocks = false; S.noCloze = false;
+    $('aiNote').hidden = true; $('aiView').hidden = true;
+    $('pasteBox').value = pagesToMarkdown(S.doc.pages, S.withNotes);
+    $('tab-paste').click();
+    startSuggest();
   });
   $('docRaw').addEventListener('click', () => {
     if (!S.doc || !hasText(S.doc.pages)) return;
+    setSuggest(false);
     S.aiMade = false; S.blocks = true; S.noCloze = false;
     $('aiNote').hidden = true;
     $('pasteBox').value = pagesToText(S.doc.pages, S.withNotes);
@@ -385,7 +439,7 @@ function wireDoc() {
     showText($('pasteBox').value);
     $('pasteBox').scrollIntoView({ block: 'nearest' });
   });
-  $('docAi').addEventListener('click', () => { S.part = 0; showAiView(); $('aiView').scrollIntoView({ block: 'nearest' }); });
+  $('docAi').addEventListener('click', () => { S.part = 0; showAiView(S.doc.pages, true); $('aiView').scrollIntoView({ block: 'nearest' }); });
   // Copy a part (its own button), or copy the chosen part and follow the link to the AI site (the link opens by itself).
   $('aiParts').addEventListener('click', async e => {
     const b = e.target.closest('[data-part]'); if (!b) return;
@@ -399,17 +453,23 @@ function wireDoc() {
   });
   $('aiBack').addEventListener('click', () => {
     $('tab-paste').click();
+    $('aiView').hidden = true;
     $('aiNote').hidden = false;
     $('pasteBox').focus();
   });
 }
 
-let aiParts = [];
-function showAiView() {
-  aiParts = splitParts(S.doc.pages, undefined, S.withNotes);
-  S.aiMade = true; S.blocks = false;
+// The AI view: the material in prompt-sized parts to copy into the person's own chat. It is for a PDF or slides (pages) and for pasted
+// text (its paragraphs). Nothing is sent from here: it is the clipboard and plain links.
+let aiParts = [], aiFromDoc = false;
+function showAiView(pages, fromDoc = aiFromDoc, markAi = true) {
+  aiFromDoc = fromDoc;
+  aiParts = splitParts(pages, undefined, S.withNotes);
+  S.blocks = false;
+  // The cards get the ai-made tag once the AI's answer is in the box. From pasted notes that is only when a paste replaces them (the paste
+  // handler); from a PDF's pages the box is not the material, so it counts straight away.
+  if (markAi) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; } else S.aiPending = true;
   saveDraft($('pasteBox').value);
-  $('aiNote').hidden = false;
   S.part = Math.min(S.part, aiParts.length - 1);
   $('aiHow').textContent = aiParts.length > 1
     ? `This is a lot of text, so it is in ${aiParts.length} parts. Copy a part, paste it into a chat, and send it. Do the next part in the same chat.`
@@ -548,6 +608,7 @@ function wireSheet() {
       const text = await res.text();
       // A private sheet sends back a Google sign-in page (HTML) instead of CSV.
       if (!res.ok || /^\s*</.test(text)) throw new Error('not shared');
+      setSuggest(false);
       hideDoc();
       S.noCloze = false; showText(text);
     } catch (err) {
@@ -581,6 +642,8 @@ function showResult(result, keepError = false, pasted = '') {
   S.result = result && result.rows.length ? result : null;
   S.frontCol = 0; S.backCol = 1;
   $('preview').hidden = $('savebar').hidden = !S.result;
+  $('pvTitle').textContent = S.result?.suggest ? 'Suggestions' : 'Preview';
+  $('sugBar').hidden = !S.result?.suggest;
   if (!S.result) { S.cards = []; return; }
 
   // More than 2 columns: let the user choose which ones are the front and back.
@@ -593,6 +656,12 @@ function showResult(result, keepError = false, pasted = '') {
   }
   S.hasFields = hasKeptFields(S.result, S.frontCol, S.backCol);
   S.cards = build();
+  if (S.result.suggest) {         // suggestions: ticked to begin with when strong, and not already in the deck; the last run's ticks and edits come back
+    const onDeck = new Set(S.deckFronts.map(dupKey));
+    S.cards.forEach(c => RS.decorate(c, S.result.suggest[c.row], onDeck.has(dupKey(c.front))));
+    RS.applyChanges(S.cards, S.carry);
+    S.carry = null;
+  }
   renderList();
 }
 
@@ -636,9 +705,19 @@ function wirePreview() {
   $('plist').addEventListener('input', e => {
     const box = e.target.closest('textarea'); if (!box) return;
     const i = +box.closest('li').dataset.i;
-    S.cards[i][box.dataset.side] = box.value;
+    if (box.dataset.side === 'cloze') RS.editCloze(S.cards[i], box.value);       // (an edit that takes the {{c1::…}} away makes it a card that is skipped)
+    else S.cards[i][box.dataset.side] = box.value;
     autosize(box);
     refreshFlags();
+    if (S.suggest) saveDraft(S.pasted);
+  });
+  $('plist').addEventListener('change', e => {
+    const box = e.target.closest('.pick'); if (!box) return;
+    const c = S.cards[+box.closest('li').dataset.i];
+    c.pick = box.checked;
+    box.closest('li').classList.toggle('off', !c.pick);
+    refreshFlags();
+    saveDraft(S.pasted);
   });
   $('plist').addEventListener('click', e => {
     const del = e.target.closest('[data-del]'); if (!del) return;
@@ -664,9 +743,12 @@ function wirePreview() {
 
 // The card as it will be saved: without its sounds when "Bring sounds" is off.
 const live = c => (S.bringSounds || !c.sounds ? c : { ...c, sounds: undefined });
+// Does the card count? Every card does, except a suggestion that is not ticked. (Cards of an ordinary import have no tick: pick is undefined.)
+const inUse = c => c.pick !== false;
 
 // Draw the editable list of cards.
 function renderList() {
+  if (S.result?.suggest) { renderSuggestions(); return; }
   const shown = S.cards.slice(0, MAX_SHOWN);
   $('plist').innerHTML = shown.map((c, i) => `
     <li class="prow" data-i="${i}">
@@ -704,15 +786,31 @@ function autosizeAll(boxes) {
 // Update the "Found N cards" line, duplicate badges and the save button.
 function refreshFlags() {
   if (!S.result) return;
-  S.flags = findDuplicates(S.cards, S.deckFronts);
-  const complete = S.cards.filter(c => isComplete(live(c))).length;
-  const pairN = S.cards.filter(c => isComplete(live(c)) && makesReverse(c)).length;       // cards that also make a reverse card
-  const missing = S.cards.length - complete;
+  const sug = !!S.result.suggest;
+  // (a suggestion that is not ticked is not a card: it takes no part in the counts or the duplicate check)
+  S.flags = findDuplicates(S.cards.map(c => (inUse(c) ? c : { ...c, front: '' })), S.deckFronts);
+  const used = S.cards.filter(inUse);
+  const complete = used.filter(c => isComplete(live(c))).length;
+  const pairN = used.filter(c => isComplete(live(c)) && makesReverse(c)).length;       // cards that also make a reverse card
+  const missing = used.length - complete;
   const dups = S.flags.filter(Boolean).length;
+  const onDeck = sug ? new Set(S.deckFronts.map(dupKey)) : null;
 
   $('plist').querySelectorAll('.prow').forEach(row => {
     const i = +row.dataset.i, c = S.cards[i], flag = S.flags[i];
     const badge = row.querySelector('.badge');
+    if (sug) {
+      const ok = isComplete(live(c));
+      const text = !inUse(c) ? (onDeck.has(dupKey(c.front)) ? 'Already in this deck' : '')
+        : c.cloze && !ok ? 'No {{c1::…}} blank, so it will be skipped' : !ok ? 'Missing a side, will be skipped'
+        : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card' : makesReverse(c) ? 'Both directions: makes 2 cards' : '';
+      row.classList.toggle('incomplete', inUse(c) && !ok);
+      row.classList.toggle('dup', inUse(c) && !!flag);
+      row.classList.toggle('off', !inUse(c));
+      badge.hidden = !text;
+      badge.textContent = text;
+      return;
+    }
     // A card with maths in it shows the drawn formulas under its boxes (only redrawn when its text changed).
     const pv = row.querySelector('.pv-math'), mathSrc = hasMath(c.front) || hasMath(c.back) ? `${c.front}\u0000${c.back}` : '';
     if (pv && pv.dataset.src !== mathSrc) {
@@ -729,7 +827,7 @@ function refreshFlags() {
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 
-  const parts = [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
+  const parts = sug ? [RS.summaryHtml({ cards: S.cards, stats: S.sugStats })] : [`Found <b>${plural(complete, 'card')}</b>, ${esc(S.result.format.label)}.`];
   if (S.result.headerSkipped) parts.push('The header row was skipped.');
   if (S.result.images) {
     parts.push(`${plural(S.result.images, 'note')} ${S.result.images === 1 ? 'has' : 'have'} pictures, which come along too${S.result.extraImages ? ' (the first one on each side)' : ''}.`);
@@ -778,15 +876,15 @@ function refreshFlags() {
   }
   if (fields.more) parts.push(`<span class="warn">${plural(fields.more, 'note')} ${fields.more === 1 ? 'has' : 'have'} more card types in Anki (like a listening card); only the first card of each comes in.</span>`);
   // Cloze notes: how many notes the cards come from.
-  const notesN = new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
+  const notesN = sug ? 0 : new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
   if (S.result.format.skipped) parts.push(`<span class="warn">${plural(S.result.format.skipped, 'line')} without a blank ${S.result.format.skipped === 1 ? 'was' : 'were'} left out.</span>`);
   // Cloze lines are included automatically; the link keeps them as plain cards (or brings the notes back).
-  const hasBlanks = !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'table';
+  const hasBlanks = !sug && !!S.pasted && hasClozeLines(S.pasted) && S.result.format.id !== 'table';
   $('clozeNote').hidden = !hasBlanks;
   if (hasBlanks) $('clozeToggle').textContent = S.noCloze ? 'Turn {{c1::…}} lines into cloze notes' : 'Keep {{c1::…}} lines as plain cards';
-  if (S.result.format.id !== 'anki' && S.result.tags?.some(t => t.length)) parts.push('Tags come along too.');
-  $('swapBtn').hidden = S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion);          // nothing to swap in cloze or occlusion cards
+  if (!sug && S.result.format.id !== 'anki' && S.result.tags?.some(t => t.length)) parts.push('Tags come along too.');
+  $('swapBtn').hidden = sug || (S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion));          // nothing to swap in cloze or occlusion cards, or in suggestions
   // Image-occlusion notes: how many notes the cards come from.
   const occNotes = new Set(S.cards.filter(c => c.occlusion).map(c => c.occlusion.noteKey)).size;
   if (occNotes) parts.push(`${plural(occNotes, 'image-occlusion note')} make${occNotes === 1 ? 's' : ''} these cards: one card per box. Every box is hidden and you name the highlighted one; Review shows one a day.`);
@@ -803,8 +901,11 @@ function refreshFlags() {
   if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to, like in Anki. Off = everything goes in that one deck.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
-  $('found').innerHTML = parts.join(' ');
-  $('dupBtn').hidden = !dups;
+  // (written only when it changed, so a screen reader does not read it out again at every tick)
+  const foundHtml = parts.join(' ');
+  if ($('found').dataset.src !== foundHtml || !$('found').textContent) { $('found').innerHTML = foundHtml; $('found').dataset.src = foundHtml; }
+  $('dupBtn').hidden = !dups || sug;
+  if (sug) fillFilter();
 
   // The button says where the cards go: the deck's name once it has one. A new deck without a name asks for it above.
   const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].dataset.name).replace(/\s+/g, ' ');
@@ -815,11 +916,154 @@ function refreshFlags() {
   $('saveBtn').disabled = !complete;
 }
 
+// Leaving the screen while suggestions are being found stops the job (the worker would otherwise run on to its end).
+addEventListener('hashchange', () => setTimeout(() => {
+  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); S.sugJob?.cancel(); S.sugJob = null; }
+}, 300));
+
+// ---------- suggest cards ----------
+// "Suggest cards" reads the text in the paste box for definitions, lists, abbreviations and facts (js/reading-cards.js, in a worker) and shows
+// what it found in the preview, with a tick box on each one. The strongest start ticked. What is ticked is saved like any other import,
+// with the tag "suggested". The rows and the wording are in js/reading-suggest.js. It all happens on this device.
+
+// Turn suggest mode on or off. Off stops a job that is running and forgets what was kept for the draft.
+function setSuggest(on) {
+  S.suggest = on;
+  $('suggestBtn').hidden = on;
+  if (on) return;
+  clearTimeout(S.sugTimer);
+  S.sugJob?.cancel(); S.sugJob = null;
+  S.sugSeq++;                          // a run that finishes after this says nothing
+  $('sugStatus').hidden = true; $('sugNote').hidden = true;
+  S.restoreSug = null; S.sugStats = null;
+}
+
+// The Suggest cards button (and the choice for a PDF or slides, and the note under a paste that looks like an article).
+function startSuggest() {
+  const text = $('pasteBox').value;
+  if (!text.trim()) { toast('Paste some text first'); return; }
+  S.aiMade = false; S.aiPending = false; S.blocks = false; S.noCloze = false;
+  $('aiNote').hidden = true; $('claudeNote').hidden = true; $('proseNote').hidden = true; $('aiView').hidden = true;
+  setSuggest(true);
+  S.pasted = text;
+  saveDraft(text);
+  runSuggest({ focus: true });
+}
+
+// Find the suggestions. A run that is overtaken by a newer one (the text changed, Stop, leaving the screen) says nothing.
+async function runSuggest({ focus = false } = {}) {
+  if (!$('pasteBox')?.isConnected) return;                 // (a timer that fired after the screen was left)
+  const text = $('pasteBox').value;
+  if (!text.trim()) { setSuggest(false); showResult(null); return; }
+  S.sugJob?.cancel();
+  const st = S, mine = ++st.sugSeq;
+  const stale = () => S !== st || mine !== st.sugSeq || !$('pasteBox')?.isConnected;
+  // What was unticked or edited is carried over to the new suggestions (by their keys), and so is what a kept draft brought back.
+  const rerun = S.cards.some(c => c.sug);
+  S.carry = rerun ? RS.changesOf(S.cards) : S.restoreSug;
+  if (!rerun) {         // the first run: show where the suggestions will appear
+    $('loadErr').hidden = true;
+    S.cards = []; S.result = null;
+    $('preview').hidden = false; $('savebar').hidden = true; $('sugBar').hidden = true;
+    $('pvTitle').textContent = 'Suggestions';
+    $('plist').innerHTML = ''; $('moreNote').hidden = true;
+    $('found').textContent = 'Finding cards in your text…'; $('found').dataset.src = '';
+    $('sugNote').hidden = true;
+  }
+  const bar = $('sugStatus'), label = $('sugStatusText');
+  const timer = setTimeout(() => { if (!stale()) { label.textContent = 'Finding cards… 0%'; bar.hidden = false; } }, 300);
+  let known = [...S.deckFronts];
+  try { known = [...entriesFrom(await db.getSettings()).flatMap(e => [e.term, ...(e.aliases || [])]), ...known]; } catch { /* no glossary: the deck's fronts will do */ }
+  if (stale()) { clearTimeout(timer); return; }
+  const job = runKeywordJob('reading', { text, known }, {
+    onProgress: p => { if (!stale() && !bar.hidden) label.textContent = `Finding cards… ${Math.round((p.progress || 0) * 100)}%`; }
+  });
+  S.sugJob = job;
+  const out = await job.promise;
+  clearTimeout(timer);
+  if (stale()) return;
+  S.sugJob = null;
+  bar.hidden = true;
+  // Stopped, too long, an error or nothing found: the first time that ends suggest mode with a message; when suggestions are already
+  // on the screen (the text was edited) they stay, with their ticks and edits, and the message is a note above them.
+  const fail = msg => {
+    if (rerun) { $('sugNote').textContent = msg; $('sugNote').hidden = false; S.carry = null; return; }
+    setSuggest(false); showError(msg);
+  };
+  if (out.status === 'done') {
+    const { suggestions, stats } = out.result;
+    if (!suggestions.length) { fail(RS.NONE_FOUND); return; }
+    S.sugStats = stats;
+    $('sugNote').hidden = true;
+    showResult(RS.toResult(suggestions), false, text);
+    S.restoreSug = null;
+    performance.mark('suggest-done');
+    if (focus) $('pvTitle').focus();          // the heading is the start of the list; Tab goes on from there
+    return;
+  }
+  if (out.status === 'error') console.error(out.message);
+  fail(out.status === 'cancelled' ? RS.STOPPED : out.status === 'timeout' ? RS.TIMED_OUT : RS.FAILED);
+}
+
+function wireSuggest() {
+  $('suggestBtn').addEventListener('click', startSuggest);
+  $('proseSuggest').addEventListener('click', startSuggest);
+  $('sugStop').addEventListener('click', () => S.sugJob?.cancel());
+  $('sugExit').addEventListener('click', () => {
+    setSuggest(false);
+    showText($('pasteBox').value);
+    if (!$('preview').hidden) $('pvTitle').focus();
+  });
+  // The same AI view as for a PDF, with the pasted text in parts. Nothing is sent from here.
+  $('sugAi').addEventListener('click', () => {
+    const text = $('pasteBox').value;
+    setSuggest(false);
+    showResult(null);
+    S.part = 0;
+    showAiView(textPages(text), false, false);
+    $('aiView').scrollIntoView({ block: 'nearest' });
+  });
+  $('sugKind').addEventListener('change', e => { S.filter = e.target.value; applyFilter(); });
+  const tickShown = on => {
+    $('plist').querySelectorAll('.prow:not([hidden])').forEach(row => {
+      const c = S.cards[+row.dataset.i];
+      c.pick = on;
+      row.querySelector('.pick').checked = on;
+      row.classList.toggle('off', !on);
+    });
+    refreshFlags();
+    saveDraft(S.pasted);
+  };
+  $('sugAll').addEventListener('click', () => tickShown(true));
+  $('sugNone').addEventListener('click', () => tickShown(false));
+}
+
+// The suggestions as rows with tick boxes.
+function renderSuggestions() {
+  $('plist').innerHTML = S.cards.map((c, i) => RS.rowHtml(c, i)).join('');
+  autosizeAll($('plist').querySelectorAll('textarea'));
+  $('moreNote').hidden = true;
+  fillFilter();
+  applyFilter();
+  refreshFlags();
+}
+// The "Show" box: All, Ticked and each kind that is there, with how many (the numbers follow the ticks).
+function fillFilter() {
+  const opts = RS.filterOptions(S.cards), sel = $('sugKind');
+  if (!opts.some(o => o.value === S.filter)) S.filter = 'all';
+  if ([...sel.options].map(o => o.value).join() === opts.map(o => o.value).join()) opts.forEach((o, i) => { if (sel.options[i].textContent !== o.label) sel.options[i].textContent = o.label; });
+  else sel.innerHTML = opts.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+  sel.value = S.filter;
+}
+function applyFilter() {
+  $('plist').querySelectorAll('.prow').forEach(row => { row.hidden = !RS.shownBy(S.cards[+row.dataset.i], S.filter); });
+}
+
 // ---------- saving ----------
 const CARDS_WARNED_KEY = 'study-sprint-cards-warned';       // the 50,000-card heads-up is shown once
 const cardsWarnedBefore = () => { try { return localStorage.getItem(CARDS_WARNED_KEY) === '1'; } catch { return false; } };
 async function save() {
-  let toAdd = S.cards.map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
+  let toAdd = S.cards.filter(inUse).map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;

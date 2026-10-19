@@ -70,7 +70,7 @@ function draw(el, api) {
 // ----- 1. the pitch -----
 // The mini card shows what a rating does: the gaps are what the scheduler gives a brand-new card with the default
 // settings (learning steps 1m and 10m). It is a picture of the product, so it is the same for everyone.
-const DEMO = [['r1', 'Again', '1m'], ['r2', 'Hard', '6m'], ['r3', 'Good', '10m'], ['r4', 'Easy', '7d']];
+const DEMO = [['r1', 'Again', '1m'], ['r2', 'Hard', '6m'], ['r3', 'Good', '10m'], ['r4', 'Easy', '8d']];
 const demoHTML = () => `
   <div class="lp-card lp-back" aria-hidden="true"></div>
   <div class="lp-card"><span class="lp-deck">Cell Biology</span><b class="lp-q">Mitochondria</b><i class="lp-line"></i><span class="lp-a">Makes ATP for the cell</span></div>
@@ -91,10 +91,10 @@ function drawPitch(el, api) {
             <li>${icon('calendar')}<span><b>Set your exam date.</b> Everything comes back in time.</span></li>
             <li>${icon('bolt')}<span><b>Cram with games.</b> Timed rounds to drill any deck.</span></li>
           </ul>
-          <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Try it: 30 seconds</button></div>
+          <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Get started</button></div>
           <p class="lp-free">Free · no account · works offline</p>
           <p class="lp-imports">Bring your cards: <span>Anki .apkg</span><span>Quizlet</span><span>CSV</span><span>Excel</span></p>
-          <p class="wl-foot lp-signin">Already use Study Sprint? <a href="#/settings" id="wlSignIn">Sign in or restore a backup</a></p>
+          <p class="wl-foot lp-signin">Already use Study Sprint? <a href="#/settings/sync" id="wlSignIn">Sign in or restore a backup</a></p>
         </div>
         <div class="lp-stage lp-desk-only" aria-hidden="true"><div class="lp-phone"><div class="lp-screen">
           <div class="lp-ph-head"><span class="lp-pill"><i>New</i> 4 <i>Learn</i> 1 <i>Due</i> 7</span><span class="lp-dots">${icon('more')}</span></div>
@@ -165,7 +165,7 @@ function drawAdd(el, api) {
           <span class="wl-opt-d">Review 3 psychology cards to feel how it works. Your ${esc(flow.name)} deck stays ready for your own cards.</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlPaste">
           <span class="wl-opt-t">Paste your notes</span>
-          <span class="wl-opt-d">Copy from your notes, Quizlet or a table. The format is worked out for you.</span>${icon('chevron')}</button>
+          <span class="wl-opt-d">One card per line, like “Mitosis - cell division”. Quizlet exports and tables work too.</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlFile">
           <span class="wl-opt-t">Import a file or Anki deck</span>
           <span class="wl-opt-d">A spreadsheet (.csv, .xlsx) or an Anki deck (.apkg).</span>${icon('chevron')}</button>
@@ -238,7 +238,7 @@ function drawGuide() {
     <div class="welcome guide">
       <div class="wl-top"><span class="wl-count mono">Card ${i + 1} of ${cards.length}</span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
       <p class="coach" id="coach" role="status">${flipped
-        ? '<b>2</b> Now rate how well you knew it. This tells the app when to show the card again.'
+        ? '<b>2</b> Now rate how well you knew it. This tells the app when to show the card again.<br><span class="coach-key">Again: forgot · Hard: barely · Good: got it · Easy: instantly</span>'
         : '<b>1</b> Read the question, try to recall the answer, then tap the card to flip it.'}</p>
       <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" tabindex="-1">
         <div class="rv-turn">
@@ -330,7 +330,7 @@ async function drawGuideDone() {
       <div class="wl-done fr-done" aria-hidden="true">${icon('check')}</div>
       <h1 tabindex="-1">That's the whole trick.</h1>
       <p class="lede">${saved
-        ? `Cards you know drift further away. Cards you miss come back sooner. Here's when you'll see ${seen.length === 1 ? 'this one' : 'these'} again:`
+        ? `New cards come back a few times today. Each time you remember one, the wait grows: days, then weeks. Here’s when you’ll see ${seen.length === 1 ? 'this one' : 'these'} again:`
         : `That is how a review works. Come back each day: <b>Today</b> shows what is due, and you rate each card the same way.`}</p>
       ${seen.length ? `<ul class="fr-when">${seen.map(x => `<li><b>${esc(plainText(x.card.front))}</b><span>${comesBack(x.due)}</span></li>`).join('')}</ul>` : ''}
       ${saved < cards.length ? '<p class="note">The scheduler could not load, so nothing was saved. Connect to the internet and review these cards from Today.</p>' : ''}
@@ -343,7 +343,7 @@ async function drawGuideDone() {
           <li>${icon('bolt')}<span><b>Play</b> turns your cards into timed rounds for cramming.</span></li>
         </ul>`}
       <button class="btn ${sample ? 'ghost' : 'primary'} wide cta" type="button" id="wlGo">${sample ? 'See today’s plan' : 'Go to Today'}</button>
-      <p class="wl-foot"><a href="#/deck/${esc(deckId)}">See the deck</a></p>
+      <p class="wl-foot"><a href="#/deck/${esc(deckId)}">See the deck</a> · <a href="#/help/scheduling">How the app picks your cards</a></p>
     </div>`;
   el.querySelector('h1').focus({ preventScroll: true });
   $('wlGo').addEventListener('click', () => leave(api));

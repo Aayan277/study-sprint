@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {
   xmlText, slideOrder, resolvePath, slideLines, notesText, notesTarget, pptxPages, pdfPageText, tidy,
   pageBlock, pagesToText, splitParts, docPrompt, hasText, charCount, PART_CHARS, NO_TEXT_MESSAGE, tooManyMessage,
-  readPptx, readPdf, isDocFile, isPdfFile, isPptxFile, PPTX_TYPE
+  readPptx, readPdf, isDocFile, isPdfFile, isPptxFile, PPTX_TYPE, pdfPageLines, pdfHeadings, pdfPageMarkdown, pagesToMarkdown, textPages, rangeLabel
 } from '../js/doc-import.js';
 import { parseBlocks, parseText } from '../js/import.js';
 
@@ -190,4 +190,66 @@ test('a PDF or slides file is recognised by its name or its type', () => {
   assert.ok(isPdfFile({ name: 'a.PDF', type: '' }) && isPdfFile({ name: 'download', type: 'application/pdf' }) && !isPdfFile({ name: 'a.txt', type: 'text/plain' }));
   assert.ok(isPptxFile({ name: 'deck.pptx', type: '' }) && isPptxFile({ name: 'deck', type: PPTX_TYPE }) && !isPptxFile({ name: 'a.ppt', type: '' }));
   assert.ok(isDocFile({ name: 'x', type: 'application/pdf' }) && !isDocFile({ name: 'x.csv', type: 'text/csv' }));
+});
+
+// ---------- marks for "Suggest cards": headings, bold terms, paragraphs ----------
+
+const item = (str, height, hasEOL = true) => ({ str, height, hasEOL });
+
+test('pdfPageLines: the lines of a page with the size of their letters', () => {
+  const lines = pdfPageLines([item('Cell ', 20, false), item('division', 20), item('Mitosis makes two cells.', 10), item('', 0), item('  ', 10)]);
+  assert.deepEqual(lines, [{ text: 'Cell division', size: 20 }, { text: 'Mitosis makes two cells.', size: 10 }]);
+  assert.equal(pdfPageLines([{ str: 'x', transform: [1, 0, 0, -12, 0, 0], hasEOL: true }])[0].size, 12, 'no height: the scale in the transform');
+  assert.deepEqual(pdfPageLines([{ str: 'x', hasEOL: true }]), [{ text: 'x', size: 0 }]);
+});
+
+test('pdfHeadings: bigger letters, 12 words or fewer, 80 characters or fewer, no full stop', () => {
+  const body = n => Array.from({ length: n }, (_, i) => ({ text: `Body line number ${i} with some words in it`, size: 10 }));
+  const lines = [{ text: 'The cell cycle', size: 14 }, ...body(5), { text: 'Ends with a full stop.', size: 14 }, { text: 'x '.repeat(14).trim(), size: 14 }, { text: 'Slightly bigger', size: 11 }];
+  assert.deepEqual(pdfHeadings(lines), [true, false, false, false, false, false, false, false, false]);
+  assert.deepEqual(pdfHeadings([{ text: 'No sizes', size: 0 }, { text: 'anywhere', size: 0 }]), [false, false]);
+});
+
+test('pdfPageMarkdown: headings get "## " and the rest is as pdfPageText', () => {
+  const items = [item('Photosynthesis', 20), item('Plants make glucose from light.', 10), item('Chlorophyll is green.', 10), item('It absorbs red light.', 10)];
+  assert.equal(pdfPageMarkdown(items), '## Photosynthesis\nPlants make glucose from light.\nChlorophyll is green.\nIt absorbs red light.');
+  assert.equal(pdfPageText(items), 'Photosynthesis\nPlants make glucose from light.\nChlorophyll is green.\nIt absorbs red light.');
+});
+
+test('slides: bold runs are marked, a paragraph that is all bold is a heading, plain text is unchanged', () => {
+  const xml = `<p:sp><p:txBody>
+    <a:p><a:r><a:rPr b="1"/><a:t>Whole title</a:t></a:r></a:p>
+    <a:p><a:r><a:t>The </a:t></a:r><a:r><a:rPr lang="en" b="1"/><a:t>ribosomes</a:t></a:r><a:r><a:t> build proteins</a:t></a:r></a:p>
+    <a:p><a:r><a:rPr b="0"/><a:t>Not bold</a:t></a:r></a:p>
+    <a:p><a:r><a:rPr b="1"/><a:t>two </a:t></a:r><a:r><a:rPr b="1"/><a:t>bold</a:t></a:r><a:r><a:t> words</a:t></a:r></a:p>
+  </p:txBody></p:sp>`;
+  assert.deepEqual(slideLines(xml, { marks: true }), ['## Whole title', 'The **ribosomes** build proteins', 'Not bold', '**two bold** words']);
+  assert.deepEqual(slideLines(xml), ['Whole title', 'The ribosomes build proteins', 'Not bold', 'two bold words'], 'without marks nothing changes');
+  const pages = pptxPages({ 'ppt/slides/slide1.xml': new TextEncoder().encode(`<p:sp><p:txBody><a:p><a:r><a:t>Cells</a:t></a:r></a:p><a:p><a:r><a:t>The </a:t></a:r><a:r><a:rPr b="1"/><a:t>nucleus</a:t></a:r><a:r><a:t> holds DNA</a:t></a:r></a:p></p:txBody></p:sp>`) });
+  assert.equal(pages[0].label, 'Slide 1: Cells');
+  assert.equal(pages[0].text, 'The nucleus holds DNA');
+  assert.equal(pages[0].md, 'The **nucleus** holds DNA');
+});
+
+test('pagesToMarkdown: the marked text when a page has it, the plain text when not; pagesToText is unchanged', () => {
+  const pages = [{ label: 'Page 1', text: 'Cells\nA cell.', md: '## Cells\nA cell.', notes: '' }, { label: 'Slide 2: X', text: 'plain', notes: 'n' }];
+  assert.equal(pagesToMarkdown(pages), 'Page 1\n## Cells\nA cell.\n\nSlide 2: X\nplain\nNotes: n');
+  assert.equal(pagesToMarkdown(pages, false), 'Page 1\n## Cells\nA cell.\n\nSlide 2: X\nplain');
+  assert.equal(pagesToText(pages, false), 'Page 1\nCells\nA cell.\n\nSlide 2: X\nplain');
+  assert.equal(pagesToMarkdown([{ label: 'Page 3', text: '', notes: '' }]), '');
+  // the slides fixture goes through "Suggest cards" without a slide number becoming a card
+  assert.ok(pagesToMarkdown(pptxPages(fixture)).includes('Slide 1: Cell cycle'));
+});
+
+test('textPages: pasted text as paragraphs for the AI parts view; their labels read "Paragraphs 3–9"', () => {
+  const pages = textPages('First para\nsecond line\n\n\nSecond para\r\n\r\nThird');
+  assert.deepEqual(pages.map(p => p.label), ['Paragraph 1', 'Paragraph 2', 'Paragraph 3']);
+  assert.equal(pages[0].text, 'First para\nsecond line');
+  assert.deepEqual(textPages('  \n\n '), []);
+  assert.equal(rangeLabel('Paragraph 3', 'Paragraph 9'), 'Paragraphs 3–9');
+  assert.equal(rangeLabel('Paragraph 3', 'Paragraph 3'), 'Paragraph 3');
+  assert.equal(rangeLabel('Page 1', 'Page 8'), 'Pages 1–8');
+  const many = Array.from({ length: 40 }, (_, i) => 'Paragraph number ' + (i + 1) + ' ' + 'word '.repeat(60)).join('\n\n');
+  const parts = splitParts(textPages(many), 3000);
+  assert.ok(parts.length > 1 && /^Paragraphs 1–\d+$/.test(parts[0].label), parts[0].label);
 });

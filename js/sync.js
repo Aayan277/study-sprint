@@ -65,6 +65,7 @@ export async function createAccount(email, password, captcha, opts = {}) {
   await signedIn(made.session, opts);
   return { pending: false };
 }
+export const resendConfirmation = (email, captcha) => supa.resendSignup(email.trim(), { captcha, redirectTo: appUrl() });
 export async function signIn(email, password, captcha, opts = {}) { return signedIn(await supa.signIn(email.trim(), password, { captcha }), opts); }
 
 // ---------- whose cards are on this device ----------
@@ -112,6 +113,7 @@ async function signedIn(session, { onConflict } = {}) {
   }
   const { syncState } = await db.getSettings();
   await db.setSetting('syncAuth', session);
+  await db.setSetting('pendingSignup', null);          // signed in by any route: nothing is waiting for an email link any more
   // A different account than last time on this device (or the first): start from the beginning, so
   // everything here is sent and everything on the server is merged in.
   if (!syncState || syncState.userId !== session.user.id) {

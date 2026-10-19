@@ -13,7 +13,7 @@
        docs.google.com, googleusercontent  importing a Google Sheet (it redirects to googleusercontent.com)
      Fonts are served from this site (fonts/), so Google Fonts is not listed. js/captcha-frame.html has its own policy.
      This tag cannot set frame-ancestors (only a header can), and GitHub Pages sends none. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://cdn.sheetjs.com 'sha256-bCDjMwPWv1Z8vcG4lEtfcA20XsxBPrWAjzM2gmF205Y=' 'sha256-QnnbmGPxz5ctBTQjDXlXK4rGxjVIgTdoN0YLAXmq+bg=' 'sha256-N9ljtNdPunMu8jQC914uqna5JDrm3FyOiw+f/WBrjnY='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' https://lakxeftzlpvydzulxrbi.supabase.co https://cdn.jsdelivr.net https://cdn.sheetjs.com https://docs.google.com https://*.googleusercontent.com; worker-src 'self' blob:; frame-src 'self'; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://cdn.sheetjs.com 'sha256-AFMk7ZjQuIKCBdkGCuR7kZMj8KVjoWUxayTpMYRPxsE=' 'sha256-QnnbmGPxz5ctBTQjDXlXK4rGxjVIgTdoN0YLAXmq+bg=' 'sha256-N9ljtNdPunMu8jQC914uqna5JDrm3FyOiw+f/WBrjnY='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' https://lakxeftzlpvydzulxrbi.supabase.co https://cdn.jsdelivr.net https://cdn.sheetjs.com https://docs.google.com https://*.googleusercontent.com; worker-src 'self' blob:; frame-src 'self'; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Study Sprint</title>
 <meta name="description" content="Free flashcards with real spaced repetition, exam mode and timed games. Works offline.">
 <link rel="canonical" href="https://aayan277.github.io/study-sprint/">
@@ -45,7 +45,7 @@
 <script>
   // Apply the saved theme before anything is drawn, so there's no flash of the wrong colors.
   // This mirrors cleanTheme() in js/themes.js (keep the two in step): unknown or old theme names become
-  // Violet, and with nothing saved the app is Original Violet Dark, even when the device is set to light.
+  // Violet, and with nothing saved the app is Original Violet and follows the device's light or dark setting.
   // (The catch below also sets data-ui, so a broken saved value never leaves the page without one.)
   try {
     var t = JSON.parse(localStorage.getItem('study-sprint-theme') || '{}'), r = document.documentElement;
@@ -53,7 +53,7 @@
     var old = { sage: 'forest', matcha: 'forest', cobalt: 'ocean', shinkansen: 'ocean', blossom: 'rose', sakura: 'rose' };
     var skin = skins[t.skin] ? t.skin : (old[t.skin] || 'violet');
     var dark = ['neon', 'onyx', 'kuro'].indexOf(t.skin) >= 0;
-    var mode = dark ? 'dark' : (t.mode === 'light' || t.mode === 'auto') ? t.mode : 'dark';
+    var mode = dark ? 'dark' : (t.mode === 'light' || t.mode === 'dark') ? t.mode : 'auto';
     if (mode === 'auto') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     r.setAttribute('data-ui', t.ui === 'clinical' ? 'clinical' : 'original');
     r.setAttribute('data-skin', skin);
@@ -138,6 +138,7 @@
 <link rel="modulepreload" href="js/legal.js">
 <link rel="modulepreload" href="js/password.js">
 <link rel="modulepreload" href="js/install.js">
+<link rel="modulepreload" href="js/whats-new.js">
 <link rel="modulepreload" href="js/reminders.js">
 <link rel="modulepreload" href="js/badge.js">
 <link rel="modulepreload" href="js/badge-logic.js">
@@ -191,6 +192,7 @@
     <a class="side-streak" id="sideStreak" href="#/stats"></a>
     <a class="side-sync" id="sideSync" href="#/settings"></a>
     <div class="side-tools">
+      <a class="side-help" id="sideHelp" href="#/help" data-tip="Help" aria-label="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg><span>Help</span></a>
       <a class="side-set" id="sideSet" href="#/settings" data-tab="settings" data-tip="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
       <span class="side-ver" id="sideVer"></span>
       <button class="side-ib" id="sideMode" type="button"></button>
