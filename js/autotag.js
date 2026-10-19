@@ -192,7 +192,7 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     const ws = key.split(' ');
     if (e.df < minDf || e.df > maxDf) continue;
     const first = ws[0], last = ws[ws.length - 1];
-    const prefixed = ws.length === 2 && first.length === 1 && /^[a-z]$/.test(first);      // "i-adjective": one hyphenated word with a one-letter start
+    const prefixed = ws.length === 2 && first.length === 1 && [...e.forms.keys()].some(f => /^\p{L}-/u.test(f));      // "i-adjective": a hyphenated word with a one-letter start (not "a priori")
     if (NOT_TERMS.test(key) || ws.some(w => NOT_TERMS.test(w))) continue;                // months and weekdays say when, not what
     if (ws.length === 1) {
       if (first.length < 4 || looseWord(first) || isGeneric(first) || dw.has(first) || /\d/.test(first)) continue;
@@ -283,23 +283,21 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   const pick = (list, n) => list.length <= n ? list : Array.from({ length: n }, (_, i) => list[Math.floor(i * list.length / n)]);
   const meanSim = (list, skip) => { let s = 0, c = 0; for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { s += sim(list[a], list[b], skip); c++; } return c ? s / c : 0; };
   const base = meanSim(pick(Array.from({ length: N }, (_, i) => i), BASE_NOTES), new Set()) || 0.01;
-  // A tag the student already has, as a folder ("mktg::pricing"), is the same tag as the leaf "pricing": the cards join it.
-  const have = new Set(), leafOf = new Map();
-  for (const t of existingTags) {
-    const full = normTag(t), leaf = full.split('::').pop();
-    have.add(full);
-    if (leaf !== full && !leafOf.has(leaf)) leafOf.set(leaf, full);
-  }
-  const tagged = notes.map(n => new Set((n.tags || []).flatMap(t => [t, t.split('::').pop()])));
+  // A tag the student already has is a tag of the collection ("have"). One kept in a folder ("mktg::pricing") is the same tag as "pricing" when most of
+  // THIS tag's own cards carry that one path: then the cards join it (see judge). Folders of other decks, or two folders that tie, change nothing.
+  const have = new Set([...existingTags].map(t => normTag(t)));
+  const tagged = notes.map(n => new Set(n.tags || []));
   const judge = c => {
     c.name = slugTag(c.label);
-    const leaf = c.name;
-    if (!have.has(leaf) && leafOf.has(leaf)) c.name = leafOf.get(leaf);
+    const leaf = c.name, byPath = new Map();
+    for (const d of c.docs) for (const t of tagged[d]) if (t.includes('::') && t.split('::').pop() === leaf) byPath.set(t, (byPath.get(t) || 0) + 1);
+    const top = [...byPath].sort((a, b) => b[1] - a[1]);
+    if (top.length && top[0][1] >= c.docs.length / 2 && (top.length === 1 || top[1][1] < top[0][1])) c.name = top[0][0];
     c.frontShare = Math.min(1, c.front / c.docs.length);
     c.cohesion = null; c.sure = false;
     const place = c.n === 1 && c.key.split(' ').some(w => PLACES.has(w));
     if (place || c.docs.length < MIN_SURE_NOTES || c.frontShare < MIN_FRONT) return;
-    if (have.has(c.name) && c.docs.filter(d => tagged[d].has(leaf)).length < c.docs.length / 2) return;
+    if (have.has(c.name) && c.docs.filter(d => tagged[d].has(c.name)).length < c.docs.length / 2) return;
     const own = new Set(c.key.split(' '));
     c.cohesion = meanSim(pick(c.docs, PAIRS_FROM), own) / base;
     // On nearly every front is enough without the cohesion, unless it is the end of many different compounds ("demand curve", "supply curve",

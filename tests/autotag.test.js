@@ -368,3 +368,35 @@ test('a vague word on few fronts with little in common is not ticked (patch); "i
   assert.equal(notesOf([{ id: 'a', front: 'Sale: $9.99 instead of $10', back: 'price' }])[0].front, 'Sale: $9.99 instead of $10');
   assert.equal(notesOf([{ id: 'b', front: 'Solve $x^2$ now', back: 'b' }])[0].front.includes('x^2'), false);
 });
+
+test('folder tags: only this deck\'s own cards decide, a tie or a stranger folder renames nothing', () => {
+  const T = ['kidney', 'spleen', 'thyroid', 'pancreas'], NB = ['function', 'location', 'damage', 'origin', 'repair', 'growth', 'scan', 'disease', 'surgery', 'hormone'];
+  // 40 notes, 10 on each organ; tagOf(organ, k) is the tag of the k-th note on that organ
+  const make = tagOf => Array.from({ length: 40 }, (_, i) => { const o = T[i % 4], k = Math.floor(i / 4); return { id: 'c' + i, front: `Describe the ${o} ${NB[k]} for case ${'abcdefghij'[k]}${i}z`, back: `Answer${'qwxz'[i % 4]}${i}y`, tags: tagOf(o, k) ? [tagOf(o, k)] : [] }; });
+  const run2 = (cards, extra = []) => autotag({ notes: notesOf(cards), deckWords: [], existingTags: [...new Set([...cards.flatMap(c => c.tags), ...extra])] }).tags;
+  const tie = run2(make((o, k) => (o === 'kidney' ? (k % 2 ? 'a::kidney' : 'b::kidney') : null)));
+  assert.ok(tie.some(t => t.name === 'kidney') && !tie.some(t => t.name.includes('::')), 'a tie renames nothing: ' + tie.map(t => t.name));
+  const win = run2(make((o, k) => (o === 'kidney' ? (k < 7 ? 'a::kidney' : 'b::kidney') : null)));
+  assert.ok(win.some(t => t.name === 'a::kidney' && t.exists) && !win.some(t => t.name === 'b::kidney'), win.map(t => t.name).join());
+  // the original case: all on one folder
+  const one = run2(make((o, k) => (o === 'kidney' && k < 8 ? 'renal::kidney' : null)));
+  assert.ok(one.some(t => t.name === 'renal::kidney' && t.exists) && !one.some(t => t.name === 'kidney'));
+  // a folder elsewhere in the collection (no card of this deck has it) changes nothing
+  const plain = make(() => null), base = run2(plain), other = run2(plain, ['psych::defence::kidney', 'chem::titration::spleen']);
+  assert.deepEqual(other.map(t => [t.name, t.exists, t.sure]), base.map(t => [t.name, t.exists, t.sure]));
+  assert.ok(base.some(t => t.name === 'kidney') && base.some(t => t.name === 'spleen'));
+  // a plain existing tag still matches
+  assert.ok(run2(make((o, k) => (o === 'kidney' ? 'kidney' : null))).some(t => t.name === 'kidney' && t.exists));
+});
+
+test('the real decks: another deck\'s folder does not rename or hide tags', () => {
+  const stats = notesOf(deck('review3-stats').cards);
+  const base = autotag({ notes: stats, deckWords: [], existingTags: [] }).tags, other = autotag({ notes: stats, deckWords: [], existingTags: ['psych::defence::regression', 'chem::titration::residual'] }).tags;
+  assert.deepEqual(other.map(t => [t.name, t.exists, t.sure]), base.map(t => [t.name, t.exists, t.sure]));
+  assert.ok(base.some(t => t.name === 'residual') && base.some(t => t.name === 'regression'));
+});
+
+test('"a priori" is not a hyphenated one-letter prefix', () => {
+  const notes = Array.from({ length: 12 }, (_, i) => ({ id: 'n' + i, front: `What is a priori knowledge ${'abcdefghijkl'[i]}${i}x?`, text: `Answer${'qwxz'[i % 4]}${i}y`, cardIds: ['c' + i] }));
+  assert.ok(!autotag({ notes }).tags.some(t => t.name === 'a-priori'));
+});
