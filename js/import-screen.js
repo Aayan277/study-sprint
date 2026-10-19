@@ -682,7 +682,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}), ...(c.reversed ? { typeIn: c.reversed.typeIn, reversed: { ...c.reversed, typeIn: c.typeIn } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -1063,7 +1063,7 @@ function applyFilter() {
 const CARDS_WARNED_KEY = 'study-sprint-cards-warned';       // the 50,000-card heads-up is shown once
 const cardsWarnedBefore = () => { try { return localStorage.getItem(CARDS_WARNED_KEY) === '1'; } catch { return false; } };
 async function save() {
-  let toAdd = S.cards.filter(inUse).map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, reverse: makesReverse(c) ? c.reversed : null }));
+  let toAdd = S.cards.filter(inUse).map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, typeIn: c.typeIn, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -1114,6 +1114,7 @@ async function save() {
     let cards = toAdd.map((c, i) => {
       const card = { id: db.newId(), deckId: null, front: c.front, back: c.back, tags: c.tags, created: now + i };
       if (c.ankiGuid) card.ankiGuid = c.ankiGuid;
+      if (c.typeIn) card.typeIn = true;
       if (c.noteFields?.length && !c.occlusion) card.noteFields = c.noteFields;       // an Anki note's other fields, shown folded (note-fields.js)
       if (c.cloze) {
         if (!noteIds.has(c.cloze.noteKey)) noteIds.set(c.cloze.noteKey, db.newId());
@@ -1237,6 +1238,7 @@ async function save() {
       card.noteEditedAt = now;
       const rev = reverseOf(card, db.newId());
       rev.noteEditedAt = now;
+      if (r.typeIn) rev.typeIn = true;
       reverses.push(rev);
       ankiOf.set(rev.id, r.ankiId);
     });

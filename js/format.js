@@ -88,8 +88,8 @@ export function spokenCard(front, back, max = 160) {
 
 // A list row as one phrase: the card (spokenCard), then what the row shows only in pictures or badges: Reverse / Cloze, a picture or sound,
 // the deck it is in, its status and flag. Each part ends in a full stop unless it already ends in punctuation. About 160 characters of card text.
-export function spokenRow({ front, back, reverse = false, cloze = 0, pic = false, sound = false, where = '', status = '', flag = '' }) {
-  const parts = [reverse ? 'Reverse card' : '', cloze > 0 ? `Cloze card, blank ${cloze}` : '', spokenCard(front, back, 70), pic ? 'Has a picture' : '', sound ? 'Has a sound' : '',
+export function spokenRow({ front, back, reverse = false, cloze = 0, pic = false, sound = false, typing = false, where = '', status = '', flag = '' }) {
+  const parts = [reverse ? 'Reverse card' : '', cloze > 0 ? `Cloze card, blank ${cloze}` : '', spokenCard(front, back, 70), pic ? 'Has a picture' : '', sound ? 'Has a sound' : '', typing ? 'Typing card' : '',
     where ? `In ${where}` : '', status, flag ? `${flag} flag` : ''].filter(Boolean);
   return parts.map((p, i) => (i < parts.length - 1 && !/[.!?…:]$/.test(p) ? `${p}.` : p)).join(' ');
 }

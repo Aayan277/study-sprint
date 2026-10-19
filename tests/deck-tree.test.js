@@ -64,3 +64,16 @@ test('a searchable deck tree keeps matches and the decks they sit inside', () =>
   assert.deepEqual(deckTreeRows(decks, 'unit').map(r => [r.id, r.context]), [['psy', true], ['u1', false], ['u2', false]]);
   assert.deepEqual(deckTreeRows(decks, 'zzz'), []);
 });
+
+test('typeAnswers: a subdeck follows its parent unless it sets its own; junk is ignored', () => {
+  const ds = [
+    { id: 'p', name: 'P', parentId: '', typeAnswers: true },
+    { id: 'c1', name: 'C1', parentId: 'p', typeAnswers: null },
+    { id: 'c2', name: 'C2', parentId: 'p', typeAnswers: false },
+    { id: 'c3', name: 'C3', parentId: 'c2' },
+    { id: 'c4', name: 'C4', parentId: 'p', typeAnswers: 'yes' },
+    { id: 'top', name: 'Top', parentId: '' },
+  ];
+  const t = id => effectiveDeck(ds, id).typeAnswers;
+  assert.deepEqual(['p', 'c1', 'c2', 'c3', 'c4', 'top'].map(t), [true, true, false, false, true, false]);
+});

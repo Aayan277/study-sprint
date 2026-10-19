@@ -625,6 +625,7 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-danger{padding-top:14px}
 .confirm{background:var(--again-tint);border:1px solid var(--again-line);border-radius:var(--r-md);padding:14px;display:grid;gap:var(--s-3)}
 .confirm p{margin:0}
+.confirm.neutral{background:var(--surface-2);border-color:var(--line)}
 .err{color:var(--again);font-size:var(--fs-base);margin:12px 0 0}
 .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
 /* "Update ready — tap to restart": stays until tapped (or the app restarts itself at a safe moment). Above the tab bar; above the answer bar in a round. */
@@ -1454,6 +1455,7 @@ img[data-media][hidden]{display:none}
 .img-row:empty{display:none}
 .img-thumb{max-width:120px;max-height:90px;border-radius:var(--r-sm);border:1px solid var(--line-strong);object-fit:cover}
 .pic-mark{color:var(--accent-text);font-size:.85em}
+.type-mark svg{width:1em;height:1em;vertical-align:-.15em}
 
 /* Sounds on cards (audio.js plays them; card-editor.js adds them): a row of ▶ buttons under a side's text */
 .snd-row{display:flex;align-items:center;justify-content:center;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 0}

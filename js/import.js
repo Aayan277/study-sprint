@@ -415,6 +415,7 @@ export function buildCards(result, frontCol = 0, backCol = 1, { keepFields = tru
     ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
     ...extrasOf(result, i, frontCol, backCol, keepFields),
     ...(result.guids?.[i] ? { ankiGuid: result.guids[i] } : {}),
+    ...(result.typeIns?.[i] ? { typeIn: true } : {}),          // the Anki card asks for the answer to be typed (anki.js typedOrds); other cards follow their deck
     // A basic note that has a reverse card too (Anki "Basic (and reversed card)", or "yes" in the CSV's Both directions column).
     ...(!result.clozes?.[i] && !result.occlusions?.[i] && (result.reversed?.[i] || result.both?.[i]) ? { reversed: result.reversed?.[i] || {} } : {})
   }));

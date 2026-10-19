@@ -30,6 +30,7 @@ import { dayStart, dayEnd } from './days.js';
 import { validOcclusion } from './occlusion.js';
 import { validFields, cleanFields } from './note-fields.js';
 import { cleanAccept } from './accept.js';
+import { cleanTypeIn } from './type-in.js';
 
 export const DEFAULT_SETTINGS = {
   theme: { ui: 'original', skin: 'violet', mode: 'auto', oled: false }, // (a new install follows the device's light or dark setting; a saved choice is kept) ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
@@ -817,7 +818,7 @@ export async function importAll(data, { everywhere = false } = {}) {
       for (const x of data[name]) {
         let rec = upgradeRecord(name, x, now);
         if (name === 'reviewLog') rec = cleanMixedWith(rec);
-        if (name === 'cards') rec = cleanAccept(rec);
+        if (name === 'cards') rec = cleanTypeIn(cleanAccept(rec));
         if (everywhere) { rec = { ...rec, updatedAt: now }; delete rec.syncedAt; }
         tx.objectStore(name).put(rec);
         tx.objectStore('deleted').delete(tombstoneKey(name, rec[SYNC_ID[name]]));   // an old delete marker would delete it again when syncing
@@ -1028,7 +1029,7 @@ export async function applyRemote(rows) {
         deleted.put({ ...tombstone(row.store, row.id, row.updated_at), synced: true });
       } else {
         let record = recordFromRow(row);
-        if (row.store === 'cards') record = cleanAccept(record);      // a bad accepted-answers list from another device is dropped
+        if (row.store === 'cards') record = cleanTypeIn(cleanAccept(record));      // a bad accepted-answers list or typing value from another device is dropped
         if (row.store === 'reviewLog') { if (local) record.id = local.id; else delete record.id; }
         os.put(record);
         if (tomb) deleted.delete(tomb.key);

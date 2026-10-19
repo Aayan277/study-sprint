@@ -618,7 +618,10 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b>
         <span>In Review: the front's sounds when a card appears, the back's when you flip.</span></span>
-        <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>`}
+        <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Type the answers</b>
+        <span>In Review, this deck's cards (and its subdecks') show a box to type the answer when it is 40 characters or less. To set one card differently, use Answer by in its editor.</span></span>
+        <input id="deckTypeIn" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).typeAnswers ? 'checked' : ''}></label>`}
       <p class="err" id="deckErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
@@ -657,6 +660,8 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     const ttsAuto = parentId && auto === inherited()?.ttsAuto ? null : auto;
     const soundOn = !!$('deckSoundAuto')?.checked;
     const soundAuto = soundOn === (parentId ? inherited()?.soundAuto : true) ? null : soundOn;      // (nothing stored = the default, on)
+    const typeOn = !!$('deckTypeIn')?.checked;
+    const typeAnswers = typeOn === (parentId ? !!inherited()?.typeAnswers : false) ? null : typeOn;      // (nothing stored = follow the deck it's inside, else off)
     // This deck's own new-card limit: blank = none (only the overall limit applies).
     const raw = $('deckNew')?.value.trim();
     const newPerDay = raw ? Math.max(0, Math.min(999, Math.round(Number(raw) || 0))) : null;
@@ -671,7 +676,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     const saved = isNew
       ? { id: db.newId(), name, course, color, parentId, created: Date.now(), ...($('deckExam').value ? { examDate: $('deckExam').value } : {}) }
       : { ...deck, name, course, color, parentId, newPerDay, reviewPerDay: options.reviewPerDay, options: options.options,
-        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto, soundAuto };
+        examDate: $('deckExam')?.value || null, ttsLang: $('deckTts')?.value || '', ttsAuto, soundAuto, typeAnswers };
     // A new exam date (its own, or from the deck it's moved into) brings forward the cards scheduled after it: see
     // commitDeck in exam-sheet.js, which the short "Add exam date" sheet uses too. (A new deck has no cards to move yet.)
     let moved;
