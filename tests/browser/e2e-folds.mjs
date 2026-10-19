@@ -70,9 +70,9 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   const p = await open(375, 812);
   await p.goto('http://localhost:8123/#/browse'); await p.waitForSelector('#brFilter');
   const groups = await p.$$eval('#brFilter optgroup', g => g.map(x => x.label));
-  ok(JSON.stringify(groups) === '["Status","Flags","Problems"]', 'card filters are grouped: ' + groups);
+  ok(JSON.stringify(groups) === '["Status","Flags","Answer","Problems"]', 'card filters are grouped: ' + groups);
   const opts = await p.$$eval('#brFilter option', o => o.map(x => x.value));
-  ok(opts.length === 14 && opts[0] === 'all' && opts.includes('leech') && opts.includes('dupes') && opts.includes('flag4') && opts.includes('buried'), 'every filter is still there (' + opts.length + ')');
+  ok(opts.length === 15 && opts.includes("typing") && opts[0] === 'all' && opts.includes('leech') && opts.includes('dupes') && opts.includes('flag4') && opts.includes('buried'), 'every filter is still there (' + opts.length + ')');
   await p.selectOption('#brFilter', 'new'); ok(await p.inputValue('#brFilter') === 'new', 'a grouped filter still works');
   await p.screenshot({ path: SP + '/folds-filter.png' });
   await p.context().close();

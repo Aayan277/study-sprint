@@ -221,3 +221,19 @@ test('accept: a backup or another device cannot bring bad data in', async () => 
   const plain = { id: 'a', front: 'f' };
   assert.equal(cleanAccept(plain), plain);
 });
+
+// A / between digits is part of the number, not a separator: the formula ½ reads "1/2", and typing just "2" or "1" must not pass.
+test('a / between digits does not split the answer (1/2 is not "1" or "2")', async () => {
+  const { answerTargets } = await import('../js/format.js');
+  const targets = answerTargets('$\\frac{1}{2}$');
+  assert.equal(checkTyped('2', targets).correct, false);
+  assert.equal(checkTyped('1', targets).correct, false);
+  assert.equal(checkTyped('1/2', targets).correct, true);
+  assert.equal(checkTyped('\\frac{1}{2}', targets).correct, true);
+  assert.deepEqual(acceptedAnswers('3/4/2020'), ['3 4 2020']);
+  assert.equal(checkAnswer('2020', '3/4/2020').correct, false);
+  // ...while a / between words, or beside a number and a space, still separates alternates
+  assert.equal(checkAnswer('scarlet', 'red / scarlet').correct, true);
+  assert.equal(checkAnswer('b', 'a/b').correct, true);
+  assert.equal(checkAnswer('7', '24 / 7').correct, true);
+});

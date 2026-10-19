@@ -9,7 +9,8 @@ import { hasBlank, clozeCard } from './cloze.js';
 import { isOcclusion, hasMasks, ankiOcclusionText, groupsOf, occLabel } from './occlusion.js';
 import { isPair } from './reverse.js';
 import { toDetails } from './note-fields.js';
-import { ancestors } from './deck-tree.js';
+import { ancestors, effectiveDeck } from './deck-tree.js';
+import { isTypingCard } from './type-in.js';
 
 // ---------- CSV ----------
 // One row per card: front, back, tags. Cells with commas, quotes or line breaks are quoted.
@@ -62,7 +63,11 @@ export const fileName = (name, ext) => {
 // A deck's cards ready to export or share: each with its deck named from the exported deck down ("Unit 1::Lecture 3"), oldest first.
 export function cardsForExport(deck, decks, deckCards) {
   const nameOf = id => { const chain = ancestors(decks, id); return chain.slice(0, chain.findIndex(d => d.id === deck.id) + 1).reverse().map(d => d.name).join('::'); };
-  return deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId) })).sort((a, b) => a.created - b.created);
+  // typed: Review types this card's answer (its own setting or its deck's). Anki has no deck default, so the effective value is written
+  // on each card: it comes back in Study Sprint as a card of its own (see ankiContents, anki.js typedOrds).
+  const typesByDeck = new Map();
+  const dflt = id => { if (!typesByDeck.has(id)) typesByDeck.set(id, !!effectiveDeck(decks, id)?.typeAnswers); return typesByDeck.get(id); };
+  return deckCards.map(c => ({ ...c, deckName: nameOf(c.deckId), typed: isTypingCard(c, dflt(c.deckId)) })).sort((a, b) => a.created - b.created);
 }
 
 // ---------- Anki ----------
@@ -93,6 +98,9 @@ const BASIC_ID = 1_600_000_000_001;   // the note type's id (fixed, so re-export
 const CLOZE_ID = 1_600_000_000_002;   // the Cloze note type
 const IO_ID = 1_600_000_000_003;      // the Image Occlusion note type
 const BASIC_REV_ID = 1_600_000_000_004;   // Basic (and reversed card): a card with its reverse card is one note with two cards
+const BASIC_TYPE_ID = 1_600_000_000_005;  // Basic (type in the answer): the question side has a box to type the Back
+const CLOZE_TYPE_ID = 1_600_000_000_006;  // Cloze (type in the answer)
+const REV_TYPE_IDS = { '10': 1_600_000_000_007, '01': 1_600_000_000_008, '11': 1_600_000_000_009 };      // reversed card with card 1 / card 2 / both typed
 const ANKI_CSS = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n';
 
 // Anki's own Image Occlusion note type (rslib/src/image_occlusion/notetype.rs, Anki 23.10+): a cloze type whose
@@ -181,10 +189,10 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     const lost = g.cards.filter(c => !ok.includes(c.occlusion.n));
     if (!lost.length) continue;
     g.cards = g.cards.filter(c => ok.includes(c.occlusion.n));
-    groups.push(...lost.map(card => ({ cloze: false, card })));
+    groups.push(...lost.map(card => ({ cloze: false, card: { ...card, typed: false } })));
   }
   groups = groups.filter(g => !g.occ || g.cards.length);
-  const usesCloze = cards.some(hasBlank);
+  const usesCloze = groups.some(g => g.cloze && !g.cards.some(c => c.typed));      // (a note with a typed card uses the typed Cloze type instead)
   // Anki's own Cloze note type (type 1): the Text field has the blanks, "{{cloze:Text}}" shows one at a time.
   const clozeModel = {
     ...model, id: CLOZE_ID, name: 'Study Sprint Cloze', type: 1, sortf: 0,
@@ -202,7 +210,31 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     flds: ['Front', 'Back', 'Back Extra'].map((name, ord) => ({ name, ord, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] })),
     req: [[0, 'any', [0]], [1, 'any', [1]]]
   };
-  const usesRev = groups.some(g => g.pair);
+  // Typing cards (type-in.js): the question side has a {{type:…}} box. In a Basic type the Back field holds only the answer (the back's picture,
+  // sounds, hook and other fields are in Back Extra), or Anki would ask for all of it to be typed.
+  const typedQ = (shown, typed) => `{{${shown}}}\n\n{{type:${typed}}}`;
+  const typedA = (shown, typed) => `{{${shown}}}\n\n<hr id=answer>\n\n{{type:${typed}}}<br>\n{{Back Extra}}`;
+  const extraField = name => ({ name, ord: 2, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] });
+  const typeModel = {
+    ...model, id: BASIC_TYPE_ID, name: 'Study Sprint Basic (type in the answer)',
+    tmpls: [{ name: 'Card 1', ord: 0, qfmt: typedQ('Front', 'Back'), afmt: typedA('Front', 'Back'), did: null, bqfmt: '', bafmt: '' }],
+    flds: [...model.flds, extraField('Back Extra')]
+  };
+  const typeClozeModel = {
+    ...clozeModel, id: CLOZE_TYPE_ID, name: 'Study Sprint Cloze (type in the answer)',
+    tmpls: [{ name: 'Cloze', ord: 0, qfmt: '{{cloze:Text}}\n\n{{type:cloze:Text}}', afmt: '{{cloze:Text}}\n\n{{type:cloze:Text}}<br>\n{{Back Extra}}', did: null, bqfmt: '', bafmt: '' }]
+  };
+  // A reversed card with card 1 and/or card 2 typed: the typed card's box is the field it answers with (card 1: Back; card 2: Front).
+  const revTypeModel = key => ({
+    ...revModel, id: REV_TYPE_IDS[key], name: `Study Sprint Basic (and reversed card, type in the answer on ${key === '10' ? 'card 1' : key === '01' ? 'card 2' : 'both cards'})`,
+    tmpls: [key[0] === '1' ? { ...revModel.tmpls[0], qfmt: typedQ('Front', 'Back'), afmt: typedA('Front', 'Back') } : revModel.tmpls[0],
+      key[1] === '1' ? { ...revModel.tmpls[1], qfmt: typedQ('Back', 'Front'), afmt: typedA('Back', 'Front') } : revModel.tmpls[1]]
+  });
+  const pairKey = g => `${g.cards.find(x => !x.reverse)?.typed ? 1 : 0}${g.cards.find(x => x.reverse)?.typed ? 1 : 0}`;
+  const usedRevKeys = [...new Set(groups.filter(g => g.pair).map(pairKey))];
+  const usesRev = usedRevKeys.includes('00');
+  const usesTypedBasic = groups.some(g => !g.cloze && !g.occ && !g.pair && g.card.typed);
+  const usesTypedCloze = groups.some(g => g.cloze && g.cards.some(c => c.typed));
   const usesOcc = groups.some(g => g.occ);
   // Anki's Image Occlusion type (a cloze type, "original stock kind" 6). Sorted by Header, which is also what sfld holds.
   const occModel = {
@@ -219,7 +251,9 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const conf = { activeDecks: [1], curDeck: 1, newSpread: 0, collapseTime: 1200, timeLim: 0, estTimes: true, dueCounts: true, curModel: String(BASIC_ID), nextPos: cards.length + 1, sortType: 'noteFld', sortBackwards: false };
   const col = {
     id: 1, crt: secs - (secs % 86400), mod: now, scm: now, ver: 11, dty: 0, usn: 0, ls: 0,
-    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesRev ? { [BASIC_REV_ID]: revModel } : {}), ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}), ...(usesOcc ? { [IO_ID]: occModel } : {}) }),
+    conf: JSON.stringify(conf), models: JSON.stringify({ [BASIC_ID]: model, ...(usesRev ? { [BASIC_REV_ID]: revModel } : {}), ...(usesCloze ? { [CLOZE_ID]: clozeModel } : {}), ...(usesOcc ? { [IO_ID]: occModel } : {}),
+      ...(usesTypedBasic ? { [BASIC_TYPE_ID]: typeModel } : {}), ...(usesTypedCloze ? { [CLOZE_TYPE_ID]: typeClozeModel } : {}),
+      ...Object.fromEntries(usedRevKeys.filter(k => k !== '00').map(k => [REV_TYPE_IDS[k], revTypeModel(k)])) }),
     decks: JSON.stringify(Object.fromEntries([[1, deckRow(1, 'Default')], ...names.map(n => [deckIds.get(n), deckRow(deckIds.get(n), n)])])),
     dconf: JSON.stringify(dconf), tags: '{}'
   };
@@ -253,7 +287,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
     } else if (g.cloze) {
       const text = withSounds(withPic(toAnkiHTML(first.noteText), g.cards.find(c => c.frontImageFile)?.frontImageFile), g.cards.find(c => c.frontSoundFiles?.length)?.frontSoundFiles);
       const extra = withSounds(withPic(toAnkiHTML(first.noteExtra || ''), g.cards.find(c => c.backImageFile)?.backImageFile) + fieldsHTML(first), g.cards.find(c => c.backSoundFiles?.length)?.backSoundFiles);
-      note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
+      note = { id: noteId, guid: first.ankiGuid || ankiGuid(first.noteId), mid: g.cards.some(c => c.typed) ? CLOZE_TYPE_ID : CLOZE_ID, mod: secs, usn: -1, tags: tagsOf(first),
         flds: `${text}\x1f${extra}`, sfld: plainText(first.noteText), csum: await ankiChecksum(plainText(first.noteText)), flags: 0, data: '' };
       // Blank number n is Anki card number n - 1.
       for (const c of g.cards.slice().sort((a, b) => a.cloze - b.cloze)) {
@@ -266,7 +300,11 @@ export async function ankiContents(deck, cards, now = Date.now()) {
       const front = withSounds(withPic(toAnkiHTML(c.front), c.frontImageFile), c.frontSoundFiles);
       let back = withPic(toAnkiHTML(c.back), c.backImageFile);
       let flds;
-      if (g.pair) {
+      if (!g.pair && c.typed) {
+        // A typing card: Back is only the answer; its picture, hook, other fields and sounds go in Back Extra (shown with the answer).
+        const hook = c.noteExtra && String(c.noteExtra).trim() ? toAnkiHTML(c.noteExtra) : '';
+        flds = `${front}\x1f${toAnkiHTML(c.back)}\x1f${withSounds(withPic(hook, c.backImageFile) + fieldsHTML(c), c.backSoundFiles)}`;
+      } else if (g.pair) {
         // The hook, the other fields and the back's sounds go in Back Extra, so the reverse card's question is the Back field alone.
         const hook = c.noteExtra && String(c.noteExtra).trim() ? toAnkiHTML(c.noteExtra) : '';
         flds = `${front}\x1f${back}\x1f${withSounds(hook + fieldsHTML(c), c.backSoundFiles)}`;
@@ -275,7 +313,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
         if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
         flds = `${front}\x1f${withSounds(back + fieldsHTML(c), c.backSoundFiles)}`;
       }
-      note = { id: noteId, guid: c.ankiGuid || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? BASIC_REV_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
+      note = { id: noteId, guid: c.ankiGuid || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? (pairKey(g) === '00' ? BASIC_REV_ID : REV_TYPE_IDS[pairKey(g)]) : c.typed ? BASIC_TYPE_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order. Card 1 is the forward card, card 2 the reverse one.
       for (const [ord, x] of (g.pair ? [c, g.cards.find(y => y.reverse)] : [c]).entries()) {

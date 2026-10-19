@@ -33,7 +33,7 @@ export function normalizeAnswer(s) {
 const unbracketed = s => s.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
 function wordings(back, wholeFirst = false) {
   const raw = String(back ?? '');
-  const pieces = raw.split(/[;/]/);
+  const pieces = raw.split(/;|(?<!\d)\/|\/(?!\d)/);          // (a / between digits is not a separator: the formula ½ reads "1/2", and typing "2" must not pass)
   const whole = [raw, unbracketed(raw)];
   const list = wholeFirst ? [...whole, ...pieces.flatMap(p => [p, unbracketed(p)])] : [...pieces, ...pieces.map(unbracketed), ...whole];
   return list.map(t => t.trim());

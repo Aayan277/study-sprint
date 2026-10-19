@@ -87,7 +87,9 @@ export function playableCards(cards, qtype) {
 // than spotting the one definition that's about the right topic. Short-back decks start on Front → back.
 export const LONG_BACK = 40;
 // (Cloze and image-occlusion cards don't count: they can't be asked back → front.)
-export function defaultQuestionType(cards) {
+// A deck whose cards are mostly typing cards (type-in.js) starts on Typing. isTyping(card) says whether a card is one; without it, none are.
+export function defaultQuestionType(cards, isTyping = null) {
+  if (isTyping && cards.length && cards.filter(isTyping).length > cards.length / 2) return 'typing';
   cards = cards.filter(c => !isFrontOnly(c));
   const long = cards.filter(c => String(c.back ?? '').length > LONG_BACK).length;
   return cards.length && long > cards.length / 2 ? 'back' : 'front';

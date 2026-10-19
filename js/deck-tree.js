@@ -47,7 +47,7 @@ export function treeOrder(decks) {
 export const canNest = (decks, id, parentId) => !parentId || !subtreeIds(decks, id).has(parentId);
 
 // A deck with the settings it inherits filled in: its own if set, otherwise the nearest ancestor's.
-//   options (study options), examDate, ttsLang, ttsAuto, soundAuto
+//   options (study options), examDate, ttsLang, ttsAuto, soundAuto, typeAnswers (Review asks for the answer to be typed)
 export function effectiveDeck(decks, id) {
   const chain = ancestors(decks, id);
   if (!chain.length) return null;
@@ -58,7 +58,8 @@ export function effectiveDeck(decks, id) {
     examDate: first('examDate', v => !!v) ?? null,
     ttsLang: first('ttsLang', v => !!v) ?? '',
     ttsAuto: first('ttsAuto', v => typeof v === 'boolean') ?? false,
-    soundAuto: first('soundAuto', v => typeof v === 'boolean') ?? true          // sounds play by themselves unless a deck says false
+    soundAuto: first('soundAuto', v => typeof v === 'boolean') ?? true,         // sounds play by themselves unless a deck says false
+    typeAnswers: first('typeAnswers', v => typeof v === 'boolean') ?? false     // type the answers (cards with their own typeIn aside)
   };
 }
 

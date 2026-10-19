@@ -1042,3 +1042,11 @@ test('listing the account\'s files: a page cap below the limit asked for does no
   assert.equal(ids.length, 251);
   assert.ok(ids.includes('sub/deep.png') && ids.includes('f249'));
 });
+
+test('typing cards travel with the card and the deck as they are', () => {
+  const card = { id: 'c1', deckId: 'd', front: 'f', back: 'b', typeIn: true, updatedAt: 5 };
+  assert.equal(recordFromRow(rowFromRecord('cards', card)).typeIn, true);
+  assert.equal(recordFromRow(rowFromRecord('cards', { ...card, typeIn: false })).typeIn, false);
+  const deck = { id: 'd', name: 'D', typeAnswers: true, updatedAt: 5 };
+  assert.equal(recordFromRow(rowFromRecord('decks', deck)).typeAnswers, true);
+});

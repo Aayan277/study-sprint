@@ -8,6 +8,10 @@ import { esc, icon } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.39', items: [
+    'Typing cards: set a card, or a whole deck, to type the answer instead of flipping. The app shows which letters were wrong.',
+    'Anki cards with a “type in the answer” box now come in as typing cards.'
+  ] },
   { version: '4.38', items: [
     'New Help page (Settings → Help): how scheduling works, what Again, Hard, Good and Easy mean, and how your data is kept.',
     'Clearer messages when you sign in or create an account.',

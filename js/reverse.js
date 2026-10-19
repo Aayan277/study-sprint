@@ -46,7 +46,7 @@ const withoutSides = card => { const out = { ...card }; for (const k of SIDE_FIE
 // forward card's, so the two sit side by side in the new-card order.
 export function reverseOf(card, id, created = (card.created || 0) + 0.5) {
   const out = { ...withoutSides(card), ...swappedSides(card), id, created, reverse: true };
-  for (const k of ['suspended', 'buriedUntil', 'flag', 'updatedAt', 'syncedAt', 'uid']) delete out[k];      // the card's own state is not copied
+  for (const k of ['suspended', 'buriedUntil', 'flag', 'updatedAt', 'syncedAt', 'uid', 'typeIn']) delete out[k];      // the card's own state is not copied
   return out;
 }
 
@@ -56,6 +56,7 @@ export function pairPlan(card, partner, edits = {}) {
   const a = { ...card, ...edits };
   for (const k of ['frontImage', 'backImage', 'frontSounds', 'backSounds']) if (a[k] === null || a[k] === '' || (Array.isArray(a[k]) && !a[k].length)) delete a[k];
   if (Array.isArray(a.acceptAnswers) && !a.acceptAnswers.length) delete a.acceptAnswers;
+  if (typeof a.typeIn !== 'boolean') delete a.typeIn;
   const b = { ...withoutSides(partner), ...swappedSides(a) };
   return [a, b];
 }

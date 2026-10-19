@@ -15,6 +15,7 @@ import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS,
 import { canPlayType } from './audio.js';
 import * as db from './db.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
+import { typeFacts, typeNote } from './type-in.js';
 import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
@@ -718,3 +719,37 @@ document.addEventListener('paste', e => {
   e.preventDefault();
   pickPicture(p, file);
 });
+
+// ---------- "Answer by": typing or flipping (type-in.js) ----------
+// A choice for the card: the deck's way (nothing stored), typing, or flipping. p is the form's id prefix; the note under it
+// (#pTypeNote) explains what the choice means for this card.
+export function typeInFieldHTML(p, { value = null, deckDefault = false } = {}) {
+  const sel = v => (value === v ? 'selected' : '');
+  return `<label class="field"><span>Answer by</span><select id="${p}TypeIn" class="select">
+        <option value="" ${value === null ? 'selected' : ''}>Same as the deck (${deckDefault ? 'typing' : 'flipping'})</option>
+        <option value="1" ${sel(true)}>Typing the answer</option><option value="0" ${sel(false)}>Flipping the card</option></select></label>
+      <p class="note" id="${p}TypeNote" aria-live="polite" hidden></p>`;
+}
+// '1' → true, '0' → false, '' → null
+export const readTypeIn = p => { const v = document.getElementById(p + 'TypeIn')?.value; return v === '1' ? true : v === '0' ? false : null; };
+// Keep the note (and the disabled state) of the choice up to date as the form changes.
+//   ctx  { kind(): 'basic'|'cloze'|'occlusion', deckDefault(): boolean, answer(): the answer as typed, both(): boolean }
+// Returns the function that redraws the choice (call it when ctx changes without an input event, such as a new deck).
+export function wireTypeIn(p, form, ctx) {
+  const update = () => {
+    const sel = document.getElementById(p + 'TypeIn'), note = document.getElementById(p + 'TypeNote');
+    if (!sel || !note) return;
+    const kind = ctx.kind(), deckDefault = ctx.deckDefault();
+    const structured = kind === 'basic' && stepsOn(p);
+    sel.disabled = structured;
+    sel.options[0].textContent = `Same as the deck (${deckDefault ? 'typing' : 'flipping'})`;
+    const length = kind === 'basic' && !structured ? typeFacts({ back: ctx.answer() }).answer.length : 0;
+    const text = typeNote({ kind, value: readTypeIn(p), length, structured, deckDefault, both: kind === 'basic' && !structured && ctx.both() });
+    if (note.textContent !== text) note.textContent = text;      // (only a changed note is announced, not one that is the same on every keystroke)
+    note.hidden = !text;
+  };
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+  return update;
+}

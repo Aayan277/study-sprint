@@ -135,3 +135,8 @@ test('Play untimed: grade on accuracy alone, a right answer is Good, and it stay
   assert.equal(speedProfiles([...mk(SPEED.minN, {}), ...mk(300, { untimed: true, ms: 90000 })]).get('front'), 2000 / (SPEED.c0 + 10));
   assert.equal(speedProfiles(mk(SPEED.minN, { untimed: true })).size, 0);
 });
+
+test('spokenRow: a typing card says so after the sound and before the deck', () => {
+  assert.equal(spokenRow({ front: 'Q', back: 'A', sound: true, typing: true, where: 'Bio', status: 'New' }), 'Q. Answer: A. Has a sound. Typing card. In Bio. New');
+  assert.equal(spokenRow({ front: 'Q', back: 'A', status: 'New' }), 'Q. Answer: A. New');
+});

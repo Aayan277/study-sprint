@@ -172,7 +172,7 @@ test('every filter is in exactly one dropdown group', () => {
   const grouped = FILTER_GROUPS.flatMap(([, keys]) => keys);
   assert.deepEqual([...grouped].sort(), FILTERS.map(([k]) => k).sort());
   assert.equal(new Set(grouped).size, grouped.length);
-  assert.deepEqual(FILTER_GROUPS.map(([g]) => g), [null, 'Status', 'Flags', 'Problems']);
+  assert.deepEqual(FILTER_GROUPS.map(([g]) => g), [null, 'Status', 'Flags', 'Answer', 'Problems']);
 });
 
 test('leeches: Play misses on cards that were not due do not count', () => {
@@ -315,4 +315,12 @@ test('rangeIds: anchor to target, either direction, inclusive, in shown order', 
   assert.deepEqual(rangeIds(v, 'a', 'zzz'), []);           // target not shown
   assert.deepEqual(rangeIds([], 'a', 'b'), []);
   assert.deepEqual(rangeIds(['x', 'c', 'a'], 'x', 'a'), ['x', 'c', 'a']);   // follows the shown order, not id order
+});
+
+test('typing filter: with a predicate it follows the deck default; without one it is the cards set to type', () => {
+  const cs = [{ id: 'a', front: 'a', back: 'x', created: 1, typeIn: true }, { id: 'b', front: 'b', back: 'y', created: 2 }, { id: 'c', front: 'c', back: 'z', created: 3, typeIn: false }];
+  const ids2 = list => list.map(x => x.card.id);
+  assert.deepEqual(ids2(browseCards(cs, new Map(), { filter: 'typing', sort: 'added-old' })), ['a']);
+  assert.deepEqual(ids2(browseCards(cs, new Map(), { filter: 'typing', sort: 'added-old', typing: c => c.typeIn !== false })), ['a', 'b']);
+  assert.equal(browseCards(cs, new Map(), { filter: 'all' }).length, 3);
 });

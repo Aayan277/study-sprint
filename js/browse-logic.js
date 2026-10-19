@@ -53,6 +53,7 @@ export const FILTERS = [
   ['buried', 'Buried'],
   ['flagged', 'Any flag'],
   ...FLAGS.map(f => [`flag${f.id}`, `${f.name} flag`]),
+  ['typing', 'Typing cards'],
   ['leech', 'Leeches'],
   ['dupes', 'Duplicates (same front)']
 ];
@@ -62,6 +63,7 @@ export const FILTER_GROUPS = [
   [null, ['all']],
   ['Status', ['new', 'learning', 'due', 'review', 'suspended', 'buried']],
   ['Flags', ['flagged', ...FLAGS.map(f => `flag${f.id}`)]],
+  ['Answer', ['typing']],
   ['Problems', ['leech', 'dupes']]
 ];
 
@@ -131,7 +133,8 @@ function sortedCards(cards, sort) {
 // `tag:<path>` (for example tag:#uworld::step) keeps the cards with that tag or any tag below it; it combines with other words.
 // The cards array and the cards in it are treated as unchanging while a list is on screen (callers pass a fresh array after a change):
 // the sorted order is remembered per array.
-export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now() } = {}) {
+// typing(card) says whether Review types the card's answer (type-in.js isTypingCard, with its deck's default); without it, a card counts when it is set to typing itself.
+export function browseCards(cards, statesById, { query = '', filter = 'all', sort = 'added-new', now = Date.now(), typing = null } = {}) {
   const { text, tags: tagTerms } = parseTagSearch(query);
   const match = cardMatcher(text);
   // Narrow by tag and search first (cheap, and usually leaves fewer cards), then work out each remaining card's status.
@@ -143,8 +146,9 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
   for (const path of tagTerms) found = found.filter(card => hasTagUnder(card, path));
   if (match) found = found.filter(match);
   let list = found.map(card => ({ card, state: statesById.get(card.id), status: null }));
-  if (filter !== 'all' && filter !== 'dupes') for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
+  if (filter !== 'all' && filter !== 'dupes' && filter !== 'typing') for (const x of list) x.status = cardStatus(x.card, x.state, now).key;
   if (filter === 'flagged') list = list.filter(x => x.card.flag);
+  else if (filter === 'typing') list = list.filter(x => (typing ? typing(x.card) : x.card.typeIn === true));
   else if (/^flag\d$/.test(filter)) list = list.filter(x => x.card.flag === +filter.slice(4));
   else if (filter === 'leech') list = list.filter(x => (x.card.tags || []).includes('leech'));
   else if (filter === 'dupes') {
