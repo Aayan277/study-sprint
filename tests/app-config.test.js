@@ -89,3 +89,12 @@ test('the sync gate turns requests to the sync server into a plain "update" answ
   assert.equal((await fetch(base + '/rest/v1/sync_items')).status, 200, 'open again');
   assert.equal(calls.length, 3);
 });
+
+test('the app\'s own version is not behind the newest release in PLAN.md (so min_client can be raised to a release that exists)', async () => {
+  const fs = await import('node:fs');
+  const app = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/const APP_VERSION = '([^']+)'/)[1];
+  const plan = fs.readFileSync(new URL('../PLAN.md', import.meta.url), 'utf8');
+  const released = [...plan.matchAll(/^- \*\*v(\d+(?:\.\d+)+)[,:]/gm)].map(m => m[1]);
+  assert.ok(released.length > 3, 'release notes found');
+  for (const v of released) assert.notEqual(compareVersions(app, v), -1, `APP_VERSION ${app} is behind the release note for v${v}`);
+});

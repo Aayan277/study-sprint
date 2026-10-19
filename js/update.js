@@ -32,6 +32,8 @@ export function createUpdater({ busy, reload, skipWaiting = () => false, show = 
   };
   const check = () => { lastCheck = now(); try { return Promise.resolve(update()).catch(() => {}); } catch { return Promise.resolve(); } };
   return {
+    // Another page was refused when it asked the new version to take over (this page, or another, has work open): show the bar, don't ask again.
+    held() { accepted = false; defer(); },
     // A new version is installed and waiting.
     waiting() { if (busy()) defer(); else go(); },
     // A new version has taken over (this page is still the old one).
@@ -80,7 +82,13 @@ export function initUpdates({ busy, reload, getRoute = () => '' }) {
     update: () => reg?.update()
   });
   // The worker asks every open page before it decides whether to take over at once. This page can wait for a good moment.
-  sw.addEventListener('message', e => { if (e.data?.type === 'update-handled-by-page?') e.ports?.[0]?.postMessage({ handled: true }); });
+  // Before the new version takes over (because any page asked) every page is asked whether now is all right. Busy pages say no, and then every page is told to wait.
+  sw.addEventListener('message', e => {
+    const type = e.data?.type;
+    if (type === 'update-handled-by-page?') e.ports?.[0]?.postMessage({ handled: true });
+    else if (type === 'ok-to-switch?') e.ports?.[0]?.postMessage({ ok: !busy() });
+    else if (type === 'update-held') updater.held();
+  });
   // (The first time a worker takes over a page that had none, on the very first visit, there is nothing old to replace.)
   let controlled = !!sw.controller;
   sw.addEventListener('controllerchange', () => { if (!controlled) { controlled = true; return; } updater.changed(); });
@@ -94,10 +102,9 @@ export function initUpdates({ busy, reload, getRoute = () => '' }) {
       reg = registration;
       const note = () => { if (reg.waiting && sw.controller) updater.waiting(); };
       note();
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        w?.addEventListener('statechange', () => { if (w.state === 'installed') note(); });
-      });
+      const track = w => w.addEventListener('statechange', () => { if (w.state === 'installed') note(); });
+      if (reg.installing) track(reg.installing);        // (one that started installing before this page looked)
+      reg.addEventListener('updatefound', () => { if (reg.installing) track(reg.installing); });
     },
     routed: name => updater.routed(name),
     // Ask the browser for a new version now and wait (up to `wait` ms) for it to finish installing. true when one is on its way: the page then

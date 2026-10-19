@@ -33,6 +33,7 @@ test('scripts: no unsafe-inline, no unsafe-eval; WebAssembly and blob scripts ar
   assert.ok(!s.includes("'unsafe-inline'") && !s.includes("'unsafe-eval'") && !s.includes('*') && !s.includes('https:'));
   assert.ok(s.includes("'wasm-unsafe-eval'") && s.includes('blob:') && s.includes("'self'"));
   assert.equal(policy['default-src'].join(), "'self'");
+  assert.equal(policy['child-src'].join(' '), "'self' blob:", 'older Safari uses child-src for workers');
   assert.equal(policy['object-src'].join(), "'none'");
   assert.equal(policy['base-uri'].join(), "'self'");
   assert.equal(policy['form-action'].join(), "'self'");

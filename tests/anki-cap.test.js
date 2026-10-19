@@ -27,3 +27,13 @@ test('unzstd stops counting at the cap, it does not unpack the rest first', () =
   assert.throws(() => unzstd(z, new Uint8Array(1), 95), e => e.code === 'too-big');
   assert.equal(pushed, 10);
 });
+
+test('the sql.js version and its two fingerprints are pinned together (change all three, from the npm package, or none)', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../js/anki-read.js', import.meta.url), 'utf8');
+  assert.match(src, /sql\.js@1\.12\.0\/dist\//);
+  assert.match(src, /SQLJS_JS_INTEGRITY = 'sha384-1fHJox8K973mCCD3PTAOc0ljrAGXD2VeK8zf\+vNIdx55pWPULNlpxKMkU8bF4nUd'/);
+  assert.match(src, /SQLJS_WASM_INTEGRITY = 'sha384-R\/MwdqDq6\/VfWyY\+p8u2RAFr\+3gVOgzxeJqDeDxCnpQaVqOc9tEFLu4wdQfoDpb5'/);
+  const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.ok(sw.includes('sql.js@1.12.0/'), 'sw.js pins the same version');
+});

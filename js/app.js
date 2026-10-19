@@ -1432,6 +1432,7 @@ async function start() {
 // the header and tabs: body.focus), or Add cards holding text or cards that aren't saved.
 function updateBusy() {
   if (sheetDirty()) return true;
+  if ($('sheet')?.open) return true;          // any sheet that is open (a form, a question) would be closed by a reload
   if (document.body.classList.contains('focus')) return true;
   if (/^#\/test(\/|$)/.test(location.hash) || currentRoute === 'test') return true;      // a Practice test (it keeps its own state; a reload must not cut it off)
   if (currentRoute === 'import') {

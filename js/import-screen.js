@@ -301,7 +301,7 @@ function wireFile() {
     } catch (err) {
       console.error(err);
       $('fileName').textContent = file.name;          // (clears "reading…")
-      if (err?.code === 'too-big') { showError(err.message); return; }      // an Anki file that unpacks huge (anki-read.js): it says why
+      if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; }      // an Anki file that unpacks huge (anki-read.js): it says why
       const anki = /\.(apkg|colpkg)$/i.test(file.name);
       showError(`Couldn't read ${file.name}. ${!navigator.onLine ? `${anki ? 'Anki' : 'Excel'} files need an internet connection the first time.`
         : anki ? 'Is it an Anki deck exported from Anki (File → Export → Anki Deck Package)?' : 'Is it a .csv, .txt or .xlsx file?'}`);
@@ -464,7 +464,7 @@ async function takeShared() {
       else if (kind === 'json') await explainJson(file);
       else if (kind === 'unknown') showError("Study Sprint can't read that kind of file. Share a deck file (.apkg), PDF, PowerPoint or text.");
       else { S.noCloze = false; showText(await file.text()); }
-    } catch (err) { console.error(err); $('fileName').textContent = file.name; if (err?.code === 'too-big') { showError(err.message); return; } showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
+    } catch (err) { console.error(err); $('fileName').textContent = file.name; if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; } showError(`Couldn't read ${file.name}. Is it a deck file shared from Study Sprint or Anki?`); }
     return;
   }
   // Text, a link, or only a title (some apps put what they share in the title).
@@ -925,13 +925,19 @@ async function save() {
       const ids = new Map();                                                                  // name → the saved sound's id
       for (let i = 0; i < names.length; i += 40) {
         saveBtn.textContent = `Adding sounds: ${Math.min(i + 40, names.length)} of ${names.length}…`;
-        const batch = names.slice(i, i + 40), found = await S.ankiMedia.getMany(batch);
-        for (const name of batch) {
-          try {
-            const got = found.get(name);
-            if (!got) throw new Error('not in the file');
-            ids.set(name, (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id);     // (a copy: a view would drag the whole package along)
-          } catch (err) { console.error('Skipped a sound', name, err); if (err?.code === 'too_big') tooBig.sounds++; else soundsSkipped++; }
+        // (getMany unpacks at most 100 MB per call; names it leaves for later come back in `deferred` and are asked for again.)
+        let todo = names.slice(i, i + 40);
+        while (todo.length) {
+          const found = await S.ankiMedia.getMany(todo), later = new Set(found.deferred || []);
+          for (const name of todo) {
+            if (later.has(name)) continue;
+            try {
+              const got = found.get(name);
+              if (!got) throw new Error('not in the file');
+              ids.set(name, (await saveSound({ name, type: got.type, data: new Uint8Array(got.data).buffer })).id);     // (a copy: a view would drag the whole package along)
+            } catch (err) { console.error('Skipped a sound', name, err); if (err?.code === 'too_big') tooBig.sounds++; else soundsSkipped++; }
+          }
+          todo = todo.length > later.size ? todo.filter(n => later.has(n)) : [];       // (always some progress: a call handles at least one name)
         }
       }
       for (const [sn, card] of withSounds) {

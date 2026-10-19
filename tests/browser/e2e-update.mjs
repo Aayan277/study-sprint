@@ -129,6 +129,39 @@ ok(loads === 0, 'a Practice test (#/test/...): no reload');
 await page.evaluate(() => { location.hash = '#/decks'; });
 ok(await reloaded(), 'leaving it for Decks restarts');
 
+
+// 7. Two tabs: one idle, one in a round. The idle one must not switch the version under the busy one (the old files would go while it is still
+// loading screens); both show the bar, and when the busy one is free the switch happens for both.
+{
+  await fresh('#/stats');
+  const tabB = await ctx.newPage();
+  let loadsB = 0;
+  tabB.on('load', () => { loadsB++; });
+  await tabB.goto(URL0 + '#/decks'); await tabB.waitForSelector('.deck, .empty');
+  await tabB.evaluate(() => navigator.serviceWorker.ready);
+  await sleep(500); loads = 0; loadsB = 0;
+  const oldCache = (await cacheNames())[0];
+  await page.evaluate(async () => { (await import('./js/ui.js')).setFocusMode(true); });      // tab A is mid-round
+  await newVersion();
+  await bar().waitFor({ timeout: 15000 });
+  await tabB.locator('#updateBar:not([hidden])').waitFor({ timeout: 15000 });
+  await sleep(1500);
+  ok(loads === 0 && loadsB === 0, 'two tabs, one mid-round: neither reloads');
+  ok(await waiting(), 'the new version is still waiting');
+  ok((await cacheNames()).includes(oldCache), 'and the old files are still there for the busy tab');
+  ok(await tabB.locator('#updateBar:not([hidden])').count() === 1, 'the idle tab shows "Update ready" too');
+  // the busy tab finishes its round; its bar then switches both tabs. (Left to restart by itself on the next screen change, Chromium sometimes
+  // does not activate the waiting worker while the old one is still loading that screen's modules, so the test taps the bar after a quiet moment.)
+  await page.evaluate(async () => { (await import('./js/ui.js')).setFocusMode(false); });
+  await sleep(1500); await page.locator('#updateBar').click();
+  ok(await reloaded(), 'when the busy tab is free, the switch happens');
+  for (let t = Date.now(); loadsB < 1 && Date.now() - t < 12000; ) await sleep(100);
+  ok(loadsB >= 1, 'and the other tab restarts as well');
+  await page.waitForSelector('.tdeck, .empty, .deck, h1'); await sleep(500);
+  ok(JSON.stringify(await cacheNames()) === `["study-sprint-v${version}"]`, 'both on the new version');
+  await tabB.close();
+}
+
 // 6. Looking for updates: when the app comes back to the front after an hour, and on a timer.
 await fresh();
 await page.evaluate(() => {

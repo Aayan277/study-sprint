@@ -428,6 +428,15 @@ on that job: Keep scheduled jobs on leaves jobs that you switched off yourself a
 
 **If you make the repository private** the 60-day rule no longer applies, and this job becomes harmless but unneeded.
 
+## 8e. Make very old copies of the app update (optional, "min_client")
+
+The server can name the oldest version of the app that may sync, in the `app_config()` function (its `min_client` value). A copy older than that looks for an update and, if there is none, shows "Study Sprint needs an update to keep syncing safely" with two buttons: Update now, or Keep using offline (studying works; nothing syncs until the app has updated). If the function does not exist, or the answer is missing or an error, there is no minimum.
+
+Two rules when you raise it:
+
+1. **Deploy the new build first, then raise `min_client`.** If you raise it before the new version is on the website, everyone sees the screen and "Update now" has nothing to update to.
+2. **Write it with the same number of digits as the app's version: `'4.40'`, not `'4.4'`.** Versions are compared as numbers part by part, so 4.9 is older than 4.36, and `'4.4'` means "4, then 4", which is older than 4.36 (it would let nearly everyone through). `tests/app-config.test.js` also fails if the app's own version (`APP_VERSION` in `js/app.js`) falls behind the newest release in `PLAN.md`, so a release can't ship with an old number.
+
 ## 9. Looking after it
 
 - **Look at the Actions tab once a month.** All jobs should be listed without a "disabled" banner and the last

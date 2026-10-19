@@ -66,5 +66,27 @@ await p3.goto('http://localhost:8123/#/import'); await p3.waitForSelector('#tab-
 await p3.setInputFiles('#fileIn', process.argv[2] + '/files/anki-new.apkg');
 await p3.waitForSelector('#loadErr:not([hidden])', { timeout: 30000 });
 ok((await p3.textContent('#loadErr')).includes("Couldn't read anki-new.apkg"), 'a changed sql-wasm.wasm is refused');
+
+// Many big files in one batch: one getMany call unpacks at most 100 MB in all; the rest come back as "deferred" and are fetched by the next call.
+import fs from 'node:fs';
+const legacy = fs.readFileSync(process.argv[2] + '/files/anki-legacy.apkg').toString('base64');
+const p4 = await browser.newPage();
+await p4.goto('http://localhost:8123/#/decks'); await p4.waitForSelector('.deck');
+const batch = await p4.evaluate(async b64 => {
+  const { readAnkiFile, FFLATE_URL } = await import('./js/anki-read.js');
+  const { unzipSync, zipSync } = await import(FFLATE_URL);
+  const files = unzipSync(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+  for (const k of Object.keys(files)) if (/^\d+$/.test(k)) delete files[k];
+  const big = new Uint8Array(40 * 1024 * 1024);
+  Object.assign(files, { 0: big, 1: big, 2: big, media: new TextEncoder().encode(JSON.stringify({ 0: 'a.mp3', 1: 'b.mp3', 2: 'c.mp3' })) });
+  const res = await readAnkiFile(new File([zipSync(files)], 'many.apkg'));
+  const first = await res.media.getMany(['a.mp3', 'b.mp3', 'c.mp3']);
+  const second = await res.media.getMany(first.deferred);
+  return { first: [...first.keys()], deferred: first.deferred, second: [...second.keys()], secondDeferred: second.deferred, size: first.get('a.mp3')?.data.length };
+}, legacy);
+ok(batch.first.length === 2 && batch.deferred.length === 1 && batch.size === 40 * 1024 * 1024, 'three 40 MB files in one call: two unpacked, one left for later ' + JSON.stringify({ first: batch.first, deferred: batch.deferred }));
+ok(batch.second.length === 1 && batch.secondDeferred.length === 0 && batch.deferred[0] === batch.second[0], 'and the next call brings the rest');
+await p4.close();
+
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
