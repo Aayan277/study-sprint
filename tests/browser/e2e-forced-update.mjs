@@ -2,6 +2,8 @@
 // syncing safely" with Update now / Keep using offline; no answer, an error or no function means no minimum. Uses the fake server.
 import { chromium } from './pw.mjs';
 import { fakeSupabase } from './fake-supabase.mjs';
+import fs from 'node:fs';
+const APP_VERSION = fs.readFileSync(new URL('../../js/app.js', import.meta.url), 'utf8').match(/const APP_VERSION = '([^']+)'/)[1];
 const browser = await chromium.launch();
 const fake = fakeSupabase();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
@@ -63,7 +65,7 @@ await page.screenshot({ path: process.argv[2] + '/forced-update.png' });
 await page.click('#urOffline');
 ok(await page.locator('#updateRequired').count() === 0, 'Keep using offline closes the screen');
 ok(!(await page.evaluate(() => document.querySelector('main').hasAttribute('inert'))), 'and the app works again');
-ok(await page.evaluate(() => localStorage.getItem('study-sprint-sync-hold')) === '4.36', 'the choice is remembered for this version');
+ok(await page.evaluate(() => localStorage.getItem('study-sprint-sync-hold')) === APP_VERSION, 'the choice is remembered for this version');
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
   await db.addDeckWithCards({ id: 'off', name: 'Offline deck', color: '#3E63DD', created: Date.now() }, [{ id: 'o0', deckId: 'off', front: 'Q', back: 'A', tags: [], created: 1 }]);

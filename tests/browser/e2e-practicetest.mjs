@@ -10,7 +10,8 @@ page.on('pageerror', e => errors.push('pageerror ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.text()); });
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const URL = 'http://localhost:8123/';
-const iso = d => { const x = new Date(Date.now() + d * 86400000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+// Counted from the app's study day, which starts at 4am (so the test also passes between midnight and 4am).
+const iso = d => { const x = new Date(Date.now() - 4 * 3600000 + d * 86400000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
