@@ -21,6 +21,7 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
   let recordMax = MAX_RECORD, serverFull = false, mediaFull = false;     // serverFull / mediaFull: the whole project is over its ceiling for synced data / files
   const rowSize = r => 120 + (r.data ? JSON.stringify(r.data).length : 0);
   const dataUsed = uid => (dataOffsets.get(uid) || 0) + [...rows.values()].filter(r => r.user_id === uid).reduce((n, r) => n + rowSize(r), 0);
+  let appConfig, appConfigCalls = 0;      // what app_config() returns (undefined = the function is not installed yet: 404)
   let rateLimited = false, limitsSql = true;      // limitsSql false = limits.sql not run yet (no my_usage, no record size check)
   const deleted = [];           // emails of accounts removed with delete_my_account()
   const mediaUsed = uid => [...files].filter(([k]) => k.startsWith(uid + '/')).reduce((n, [, f]) => n + f.data.length, 0);
@@ -131,6 +132,11 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
       }
       return json(route, 400, { message: 'unknown storage call ' + p });
     }
+    if (url.pathname === '/rest/v1/rpc/app_config') {
+      appConfigCalls++;
+      if (appConfig === undefined) return json(route, 404, { code: 'PGRST202', message: 'Could not find the function public.app_config in the schema cache' });
+      return json(route, 200, appConfig);
+    }
     if (url.pathname === '/rest/v1/rpc/my_usage' || url.pathname === '/rest/v1/rpc/delete_my_account') {
       const uid = tokens.get((h.authorization || '').replace('Bearer ', ''));
       if (!uid) return json(route, 401, { code: 'PGRST301', message: 'JWT expired' });
@@ -194,6 +200,8 @@ export function fakeSupabase({ key = 'sb_publishable_LEdkCU7O5RdatxRtT44I_Q_1rWH
     handle, rows, users, log, recoveries, files, uploads, confirmations, captchaTokens, deleted, mediaUsed,
     setLimit(email, bytes) { limits.set(users.get(email).id, bytes); },
     setLimitsSql(v) { limitsSql = v; },
+    setAppConfig(v) { appConfig = v; },
+    appConfigCalls: () => appConfigCalls,
     setDataLimit(email, bytes) { dataLimits.set(users.get(email).id, bytes); },
     setDataUsed(email, bytes) { dataOffsets.set(users.get(email).id, bytes); },
     dataUsed: email => dataUsed(users.get(email).id),

@@ -75,8 +75,8 @@ jobs:
           # "data" adds up sync_usage, which is what the data fuse counts (limits.sql keeps private.usage_totals equal to it). "pictures" adds
           # up the files in the media bucket (limits.sql keeps private.usage_totals equal to it). The limits come from global_limits, with the
           # same fallbacks limits.sql uses. The database limit is the free plan's 500 MB. Only totals, nothing per person.
-          # (postgres:17 image, like the backup job: it has psql. The address is passed as an environment variable.)
-          docker run --rm -i -e SUPABASE_DB_URL postgres:17 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt
+          # (postgres:17 image, pinned by digest, like the backup job: it has psql. The address is passed as an environment variable.)
+          docker run --rm -i -e SUPABASE_DB_URL postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3 sh -c 'psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 -At' <<'SQL' > totals.txt
           set default_transaction_read_only = on;
           select
             coalesce((select sum(u.bytes) from public.sync_usage u), 0)::bigint,

@@ -3,6 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Content-Security-Policy: the page may only run and load what it needs, so a script slipped into a card or an imported file has nowhere to
+     go. 'self' is this site. The three inline scripts below (theme, import map, Clinical style) are allowed by their SHA-256 fingerprint;
+     tests/csp.test.js recomputes them and fails if one is edited without updating this list.
+       cdn.jsdelivr.net, cdn.sheetjs.com   the libraries (maths, PDF, Excel, zip...), also checked by the import map's fingerprints
+       blob:                               pdf.js's worker, KaTeX and sql.js are run from a checked copy (js/doc-import.js, js/math.js, js/anki-read.js)
+       'wasm-unsafe-eval'                  sql.js and pdf.js run WebAssembly (nothing else may use eval)
+       supabase.co                         sync (js/sync-config.js: tests/csp.test.js checks this is that address)
+       docs.google.com, googleusercontent  importing a Google Sheet (it redirects to googleusercontent.com)
+     Fonts are served from this site (fonts/), so Google Fonts is not listed. js/captcha-frame.html has its own policy.
+     This tag cannot set frame-ancestors (only a header can), and GitHub Pages sends none. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://cdn.sheetjs.com 'sha256-bCDjMwPWv1Z8vcG4lEtfcA20XsxBPrWAjzM2gmF205Y=' 'sha256-QnnbmGPxz5ctBTQjDXlXK4rGxjVIgTdoN0YLAXmq+bg=' 'sha256-N9ljtNdPunMu8jQC914uqna5JDrm3FyOiw+f/WBrjnY='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' https://lakxeftzlpvydzulxrbi.supabase.co https://cdn.jsdelivr.net https://cdn.sheetjs.com https://docs.google.com https://*.googleusercontent.com; worker-src 'self' blob:; frame-src 'self'; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Study Sprint</title>
 <meta name="description" content="Free flashcards with real spaced repetition, exam mode and timed games. Works offline.">
 <link rel="canonical" href="https://aayan277.github.io/study-sprint/">
@@ -69,12 +80,8 @@
   }
 }
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- The font stylesheet does not hold up the first paint: it loads as "print" and is switched to "all" when it arrives
-     (the page shows in the fallback font meanwhile, as font-display: swap would anyway). -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap"></noscript>
+<!-- The app's font is served from fonts/ (declared in css/styles.css); the main Latin piece is fetched at once so the first screen is not drawn twice. -->
+<link rel="preload" href="fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
 <!-- The Clinical style (Settings → Appearance → Style) is only loaded when it is on: written in here before the first paint when the saved
      style is Clinical (so no flash of the Original look), and added by js/themes.js (applyTheme) when it is switched on later.
@@ -142,6 +149,8 @@
 <link rel="modulepreload" href="js/panel-resize.js">
 <link rel="modulepreload" href="js/reverse.js">
 <link rel="modulepreload" href="js/steps.js">
+<link rel="modulepreload" href="js/update.js">
+<link rel="modulepreload" href="js/app-config.js">
 <script type="module" src="js/app.js"></script>
 </head>
 <body>

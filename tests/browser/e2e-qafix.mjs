@@ -12,7 +12,7 @@ const URL = 'http://localhost:8123/';
 const SEED = `(() => { let s = 20261014; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })();`;
 const open = async ({ w = 375, h = 800, scheme = 'light', ui = 'original', hash = '#/decks', route = null, rail = '0' } = {}) => {
   const touch = w < 600;
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: 'block', isMobile: touch, hasTouch: touch, colorScheme: scheme });
+  const ctx = await browser.newContext({ bypassCSP: true, /* (this file builds code from text inside the page, which the policy refuses; the other files check the policy) */ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: 'block', isMobile: touch, hasTouch: touch, colorScheme: scheme });
   await ctx.addInitScript(SEED);
   await ctx.addInitScript(([ui, scheme, rail]) => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui, skin: ui === 'clinical' ? 'ocean' : 'violet', mode: scheme })); localStorage.setItem('study-sprint-rail', rail); } catch { /* fine */ } }, [ui, scheme, rail]);
   if (route) await ctx.route(...route);

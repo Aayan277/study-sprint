@@ -10,12 +10,12 @@ import { chromium } from './pw.mjs';
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-sw-'));
 for (const f of ['index.html', 'privacy.html', 'terms.html', 'sw.js', 'manifest.webmanifest']) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
-for (const d of ['css', 'js', 'icons']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
+for (const d of ['css', 'js', 'icons', 'fonts']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
 const probe = v => fs.appendFileSync(path.join(SITE, 'js/sample.js'), `\nexport const PROBE = '${v}';\n`);
 const setProbe = v => { const f = path.join(SITE, 'js/sample.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/export const PROBE = '.*';/, `export const PROBE = '${v}';`)); };
 probe('A');
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
   const file = path.join(SITE, p.endsWith('/') ? p + 'index.html' : p);

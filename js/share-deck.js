@@ -85,7 +85,7 @@ export async function openShareDeck(deck, decks, deckCards) {
     } catch (err) {
       console.error(err);
       status(kind === 'csv' ? "Couldn't make the spreadsheet. Try again."
-        : navigator.onLine ? "Couldn't make the deck file. Try again." : 'Making a deck file needs an internet connection the first time.', true);
+        : err?.code === 'no-wasm' ? err.message : navigator.onLine ? "Couldn't make the deck file. Try again." : 'Making a deck file needs an internet connection the first time.', true);
       buttons.forEach(b => { b.disabled = false; });
       label(btn, orig);
     }

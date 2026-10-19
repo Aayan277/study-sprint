@@ -13,24 +13,58 @@ export const FFLATE_URL = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser
 const FZSTD_URL = 'https://cdn.jsdelivr.net/npm/fzstd@0.1.1/esm/index.mjs';
 const SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/';
 
+// A "zip bomb" is a small file that unpacks to something huge. What is unpacked from a deck file (the database and the list of
+// pictures: together, and each picture or sound later on) and what the zstd unpacker writes out may not pass this, the same
+// 100 MB as a .pptx (js/doc-import.js). The file is then refused with a message that says why.
+export const MAX_UNPACKED = 100 * 1024 * 1024;
+export const ankiTooBigMessage = () => "That Anki file unpacks to more than 100 MB of cards, so it can't be opened here. Export a smaller deck from Anki (a few decks at a time) and try again.";
+const tooBig = () => Object.assign(new Error('too-big'), { code: 'too-big', message: ankiTooBigMessage() });
+
+// fzstd's decompress() with a ceiling: it is run as a stream so the size is counted as each block comes out, and the file is
+// refused at once when it passes the cap (a file can claim a small size and still unpack huge). `zstd` is the fzstd module.
+export function unzstd(zstd, bytes, cap = MAX_UNPACKED) {
+  const parts = [];
+  let size = 0;
+  const stream = new zstd.Decompress(chunk => {
+    size += chunk.length;
+    if (size > cap) throw tooBig();
+    parts.push(chunk);
+  });
+  stream.push(bytes, true);
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
 export async function readAnkiFile(file) {
   const { unzipSync } = await import(FFLATE_URL);
   const zip = new Uint8Array(await file.arrayBuffer());
   let files;
   const entrySizes = new Map();      // zip member name → its size when unpacked (older files; in newer ones the list says)
+  let unpacked = 0;
   try {
     // Unpack just the database and the list of pictures for now: the pictures themselves can be large,
     // so they're unpacked one by one later, only the ones the cards use (see media.get below).
     // (The filter also sees every file's size on the way, which is how the sounds' sizes are known without unpacking them.)
-    files = unzipSync(zip, { filter: f => { entrySizes.set(f.name, f.originalSize); return /^(collection\.anki2(1b?)?|media)$/.test(f.name); } });
+    files = unzipSync(zip, {
+      filter: f => {
+        entrySizes.set(f.name, f.originalSize);
+        if (!/^(collection\.anki2(1b?)?|media)$/.test(f.name)) return false;
+        unpacked += f.originalSize;
+        if (unpacked > MAX_UNPACKED) throw tooBig();
+        return true;
+      }
+    });
   } catch (err) {
+    if (err?.code === 'too-big') throw err;
     throw new Error('not-anki');
   }
   // Newest format first. Newer files also hold an old-format collection.anki2 that only says "please update Anki".
   const newFormat = !!files['collection.anki21b'];
   const zstd = newFormat ? await import(FZSTD_URL) : null;
   let bytes = null;
-  if (newFormat) bytes = zstd.decompress(files['collection.anki21b']);
+  if (newFormat) bytes = unzstd(zstd, files['collection.anki21b']);
   else bytes = files['collection.anki21'] || files['collection.anki2'];
   if (!bytes) throw new Error('not-anki');
 
@@ -48,12 +82,18 @@ export async function readAnkiFile(file) {
   const members = new Map();      // picture name → zip member name
   const sizes = new Map();        // picture name → its size in bytes, when known
   try {
-    if (newFormat && files.media) mediaList(zstd.decompress(files.media)).forEach((name, i) => { members.set(name.name, name.zipName ?? String(i)); if (name.size) sizes.set(name.name, name.size); });
+    if (newFormat && files.media) mediaList(unzstd(zstd, files.media)).forEach((name, i) => { members.set(name.name, name.zipName ?? String(i)); if (name.size) sizes.set(name.name, name.size); });
     else if (files.media) Object.entries(JSON.parse(new TextDecoder().decode(files.media))).forEach(([member, name]) => members.set(name, member));
   } catch (err) {
+    if (err?.code === 'too-big') throw err;
     console.error('Could not read the list of pictures', err);
   }
   result.mediaBytes = [...members].reduce((n, [name, member]) => n + (sizes.get(name) ?? entrySizes.get(member) ?? 0), 0);   // about how much the deck's pictures and sounds take (for the size warning)
+  // One picture or sound's bytes, or null when it unpacks to more than `cap` bytes. (`cap` is what is left of the budget of one getMany call.)
+  const unpackMedia = (bytes, cap = MAX_UNPACKED) => {
+    if (!newFormat) return bytes.length > cap ? null : bytes;
+    try { return unzstd(zstd, bytes, cap); } catch (err) { if (err?.code === 'too-big') return null; throw err; }
+  };
   result.media = {
     has: name => members.has(name),
     // { size, type } of a picture or sound without unpacking it, or null when the file isn't in the package.
@@ -64,14 +104,31 @@ export async function readAnkiFile(file) {
     },
     // Several files at once, in one pass over the zip (it is searched once for the whole batch, not once for each file):
     // a Map name → { data, type } of the ones found. Ask for a few dozen at a time, so they don't all sit in memory together.
+    // One call unpacks at most MAX_UNPACKED bytes in all (a running total, so a batch of big files cannot add up to gigabytes). Names left
+    // for the next call because the budget ran out are in the result's `deferred` list: ask for those again. A file that alone is over the
+    // cap is not found (and not deferred), as in get().
     async getMany(names) {
       const wanted = new Map();                    // zip member → names that use it
       for (const name of names) { const m = members.get(name); if (m !== undefined) wanted.set(m, [...(wanted.get(m) || []), name]); }
-      const got = wanted.size ? unzipSync(zip, { filter: f => wanted.has(f.name) }) : {};
+      const later = new Set();                     // members that did not fit in this call's budget
+      let used = 0;
+      const got = wanted.size ? unzipSync(zip, {
+        filter: f => {
+          if (!wanted.has(f.name) || f.originalSize > MAX_UNPACKED) return false;
+          if (used + f.originalSize > MAX_UNPACKED) { later.add(f.name); return false; }
+          used += f.originalSize;
+          return true;
+        }
+      }) : {};
       const out = new Map();
+      out.deferred = [];
+      let unpacked = 0;                            // zstd output so far (the zip's own sizes are of the packed files)
       for (const [member, list] of wanted) {
+        if (later.has(member)) { out.deferred.push(...list); continue; }
         if (!got[member]) continue;
-        const data = newFormat ? zstd.decompress(got[member]) : got[member];
+        const data = unpackMedia(got[member], MAX_UNPACKED - unpacked);
+        if (!data) { if (unpacked > 0) out.deferred.push(...list); continue; }      // (past the budget with others already unpacked: next call; alone it is just too big)
+        if (newFormat) unpacked += data.length;
         for (const name of list) out.set(name, { data, type: fileType(name) });
       }
       return out;
@@ -80,9 +137,10 @@ export async function readAnkiFile(file) {
     async get(name) {
       const member = members.get(name);
       if (member === undefined) return null;
-      const got = unzipSync(zip, { filter: f => f.name === member })[member];
+      const got = unzipSync(zip, { filter: f => f.name === member && f.originalSize <= MAX_UNPACKED })[member];
       if (!got) return null;
-      return { data: newFormat ? zstd.decompress(got) : got, type: fileType(name) };
+      const data = unpackMedia(got);
+      return data ? { data, type: fileType(name) } : null;
     }
   };
   return result;
@@ -94,17 +152,42 @@ export const audioType = name => ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', mp4: 'a
 const fileType = name => audioType(name) || imageType(name);
 const imageType = name => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' })[String(name).split('.').pop().toLowerCase()] || 'application/octet-stream';
 
-// sql.js isn't an ES module, so it's added as a <script> once. (Also used to make Anki files: export.js.)
+// sql.js isn't an ES module, so it can't be imported like the other libraries (and so the import map in index.html can't check it).
+// Both of its files are fetched with their SHA-384 fingerprint, which the browser checks (a different file is refused), the script is
+// run from a blob and the checked .wasm bytes are handed straight to it: the same way as the pdf.js worker (js/doc-import.js).
+// Nothing the CDN could swap is ever run. The fingerprints are of the 1.12.0 files; version in SQLJS_BASE: tests/anki-cap.test.js pins the version and both fingerprints together. (Also used to make Anki files: export.js.)
+export const NO_WASM_MESSAGE = 'Anki files need iOS 16 or newer (or use a computer).';
+export const SQLJS_JS_INTEGRITY = 'sha384-1fHJox8K973mCCD3PTAOc0ljrAGXD2VeK8zf+vNIdx55pWPULNlpxKMkU8bF4nUd';
+export const SQLJS_WASM_INTEGRITY = 'sha384-R/MwdqDq6/VfWyY+p8u2RAFr+3gVOgzxeJqDeDxCnpQaVqOc9tEFLu4wdQfoDpb5';
 let sqlPromise = null;
 export function loadSqlJs() {
   if (!sqlPromise) {
-    sqlPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = SQLJS_BASE + 'sql-wasm.js';
-      s.onload = () => window.initSqlJs({ locateFile: f => SQLJS_BASE + f }).then(resolve, reject);
-      s.onerror = () => reject(new Error('Could not load sql.js'));
-      document.head.append(s);
-    }).catch(err => { sqlPromise = null; throw err; });     // let a later try (e.g. back online) start again
+    sqlPromise = (async () => {
+      const get = async (file, integrity) => {
+        const res = await fetch(SQLJS_BASE + file, { integrity, mode: 'cors' });
+        if (!res.ok) throw new Error('Could not load sql.js');
+        return res.arrayBuffer();
+      };
+      const [js, wasm] = await Promise.all([get('sql-wasm.js', SQLJS_JS_INTEGRITY), get('sql-wasm.wasm', SQLJS_WASM_INTEGRITY)]);
+      const url = URL.createObjectURL(new Blob([js], { type: 'text/javascript' }));
+      try {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = url;
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('Could not load sql.js'));
+          document.head.append(s);
+        });
+      } finally { URL.revokeObjectURL(url); }
+      // iOS 15 and older do not know the policy's 'wasm-unsafe-eval' and refuse to run WebAssembly: say so instead of a generic error.
+      try {
+        if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly');
+        return await window.initSqlJs({ wasmBinary: wasm });
+      } catch (err) {
+        if (!(typeof WebAssembly !== 'undefined' && err instanceof WebAssembly.CompileError) && !/WebAssembly|wasm|CSP|Content Security|unsafe-eval|EvalError/i.test(String(err?.message))) throw err;      // (only the "this phone cannot run WebAssembly" failures)
+        throw Object.assign(new Error(NO_WASM_MESSAGE), { code: 'no-wasm', cause: err });
+      }
+    })().catch(err => { sqlPromise = null; throw err; });     // let a later try (e.g. back online) start again
   }
   return sqlPromise;
 }

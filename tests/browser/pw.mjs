@@ -16,11 +16,28 @@ function mapRequests(ctx) {
   for (const m of ['fetch', 'get', 'post', 'put', 'patch', 'delete', 'head']) { const f = r[m].bind(r); r[m] = (url, ...a) => f(toPort(url), ...a); }
   return ctx;
 }
+// Content-Security-Policy violations (index.html): every browser window in every test file watches for them. A page that is blocked from
+// loading or running something prints a FAIL line (run.mjs counts it as a problem) and the file exits non-zero, so a feature the policy
+// breaks cannot pass quietly. `securitypolicyviolation` events are caught in every page and frame; the browser's own "Refused to..." console
+// messages also catch workers. A test that triggers one on purpose sets `ctx.expectCspViolations = true` (e2e-csp.mjs).
+const CSP_TEXT = /^CSP-VIOLATION|Content[ -]Security[ -]Policy|Refused to (load|connect|execute|apply|create|frame|run|evaluate|start)/i;
+function watchCsp(ctx) {
+  ctx.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', e => console.error(`CSP-VIOLATION ${e.violatedDirective} blocked ${e.blockedURI} at ${e.sourceFile || document.URL}:${e.lineNumber}`));
+  }).catch(() => {});
+  ctx.on('console', m => {
+    const text = m.text();
+    if (!CSP_TEXT.test(text) || ctx.expectCspViolations) return;
+    console.log('FAIL Content-Security-Policy violation: ' + text.slice(0, 300));
+    process.exitCode = 1;
+  });
+  return ctx;
+}
 async function launchMapped(opts, ...rest) {
   const browser = await pw.chromium.launch(withPortMap(opts), ...rest);
   const newContext = browser.newContext.bind(browser), newPage = browser.newPage.bind(browser);
-  browser.newContext = async (...a) => mapRequests(await newContext(...a));
-  browser.newPage = async (...a) => { const page = await newPage(...a); mapRequests(page.context()); return page; };
+  browser.newContext = async (...a) => watchCsp(mapRequests(await newContext(...a)));
+  browser.newPage = async (...a) => { const page = await newPage(...a); watchCsp(mapRequests(page.context())); return page; };
   return browser;
 }
 // CPU_THROTTLE=4 slows every page's main thread 4x (CDP Emulation.setCPUThrottlingRate) to reproduce a loaded machine.
