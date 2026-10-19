@@ -42,3 +42,14 @@ test('the two styles, and the Clinical accent names (same ids as the skins)', ()
   assert.equal(accentTitle('clinical'), 'Accent colour');
   assert.equal(accentTitle('original'), 'Theme');
 });
+
+test('a new install follows the device (auto); a saved light or dark choice is kept', async () => {
+  const { DEFAULT_SETTINGS } = await import('../js/db.js');
+  assert.equal(DEFAULT_SETTINGS.theme.mode, 'auto');
+  assert.equal(cleanTheme(DEFAULT_SETTINGS.theme).mode, 'auto');
+  assert.equal(cleanTheme(null).mode, 'auto');
+  assert.equal(cleanTheme({ mode: 'junk' }).mode, 'auto');
+  assert.equal(cleanTheme({ mode: 'dark' }).mode, 'dark');
+  assert.equal(cleanTheme({ mode: 'light' }).mode, 'light');
+  assert.equal(cleanTheme({ skin: 'neon' }).mode, 'dark');       // always-dark skins stay dark
+});

@@ -8,7 +8,7 @@ const errors = [];
 const DAY = 86400000;
 const URL = 'http://localhost:8123/';
 const open = async (w, h, { touch = false, init = null } = {}) => {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block', isMobile: touch, hasTouch: touch });
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, serviceWorkers: 'block', colorScheme: 'dark', isMobile: touch, hasTouch: touch });
   if (init) await ctx.addInitScript(init);
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push('pageerror ' + e.message));
@@ -162,7 +162,7 @@ ok(ver === 'v' + (await p.textContent('#aboutRow b')).match(/(\d+(?:\.\d+)+)/)[1
 await p.click('#sideSet'); await p.waitForSelector('.deck');
 ok(p.url().endsWith('#/decks') && (await p.getAttribute('#sideSet', 'aria-label')) === 'Settings', 'clicking it again closes Settings and goes back');
 
-// light / dark
+// light / dark (a new install follows the device; this one is set to dark)
 ok((await p.getAttribute('html', 'data-theme')) === 'dark' && (await p.getAttribute('#sideMode', 'aria-label')) === 'Switch to light mode', 'dark to begin with; the button offers light');
 await p.click('#sideMode');
 ok((await p.getAttribute('html', 'data-theme')) === 'light' && (await p.getAttribute('#sideMode', 'aria-label')) === 'Switch to dark mode', 'the toggle switches to light');
@@ -245,7 +245,7 @@ for (let i = 0; i < 40; i++) {
 }
 const ids = order.map(o => o.id.split(' ')[0]);
 ok(ids[0] === 'brand' && ids[1] === 'side-add' && ids.slice(2, 6).join() === 'today,decks,play,stats' && ids[6] === 'sideDecksH', 'Tab order: logo, Add cards, the four sections, the Decks heading: ' + ids.slice(0, 8));
-ok(ids.slice(-6).join() === 'new,sideStreak,sideSync,sideSet,sideMode,sideCollapse', 'then + New deck and the footer: streak, sync, Settings, light/dark, collapse: ' + ids.slice(-6));
+ok(ids.slice(-7).join() === 'new,sideStreak,sideSync,sideHelp,sideSet,sideMode,sideCollapse', 'then + New deck and the footer: streak, sync, Help, Settings, light/dark, collapse: ' + ids.slice(-7));
 ok(order.slice(1).every((o, i) => o.top >= order[i].top - 1), 'every Tab stop is at or below the one before (top to bottom): ' + order.length + ' stops');
 ok(await p.evaluate(() => !document.activeElement.closest('nav.tabs') && document.activeElement !== document.body), 'the stop after the sidebar is in the page');
 const mainFirst = await p.evaluate(() => { const a = document.activeElement; return a.closest('main') ? 'main' : a.tagName; });

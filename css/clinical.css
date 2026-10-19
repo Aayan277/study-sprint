@@ -215,6 +215,7 @@
   :root[data-ui="clinical"] .side-streak:hover,
   :root[data-ui="clinical"] .side-sync:hover,
   :root[data-ui="clinical"] .side-set:hover,
+  :root[data-ui="clinical"] .side-help:hover,
   :root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-6) var(--s-8)}
   :root[data-ui="clinical"] .th-big{font-size:2rem}
@@ -564,7 +565,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-foot{padding:12px 12px 12px 20px;border-top:1px solid var(--line-strong)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak{padding:4px 0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-sync{padding-left:0}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-set{padding:0;border-radius:var(--r-sm)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.side-set,.side-help){padding:0;border-radius:var(--r-sm)}
 
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main{padding:32px 40px 56px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main > .view{max-width:1120px;margin:0 auto}

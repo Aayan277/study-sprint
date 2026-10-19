@@ -14,6 +14,8 @@ import { initPanelResize } from './panel-resize.js';
 import { clearDraft, takeDraft } from './import-draft.js';
 import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError, sheetDirty } from './ui.js';
 import * as sync from './sync.js';
+import { initWhatsNew } from './whats-new.js';
+import { authErrorField, authMessage } from './supa.js';
 import { takeLaunch, clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import { configureShortcuts } from './shortcuts.js';
@@ -56,7 +58,7 @@ async function renderSettings(el) {
   if (!el.isConnected) return;
   const { ui, skin, mode, oled } = settings.theme;
   el.innerHTML = `
-    <div class="screen-head"><div><h1>Settings</h1></div></div>
+    <div class="screen-head"><div><h1>Settings</h1></div><div class="head-actions"><a class="btn ghost small" id="helpTop" href="#/help">Help</a></div></div>
     <nav class="set-nav" id="setNav" aria-label="Jump to a section">
       <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a>
     </nav>
@@ -264,6 +266,14 @@ async function renderSettings(el) {
 
     <section class="section" aria-labelledby="aboutTitle">
       <h2 id="aboutTitle">About</h2>
+      <div class="set-row" id="helpRow">
+        <div><b>Help and questions</b><p>How scheduling works, what the buttons mean, and keeping your data safe.</p></div>
+        <a class="btn ghost small" href="#/help">Open Help</a>
+      </div>
+      <div class="set-row" id="newRow">
+        <div><b>What’s new</b><p>The changes in the latest versions.</p></div>
+        <button class="btn ghost small" type="button" id="newBtn">See what’s new</button>
+      </div>
       <div class="set-row" id="aboutRow">
         <div><b>Study Sprint ${APP_VERSION}</b>
           <p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · Contact: ${contactHTML()}</p></div>
@@ -311,6 +321,12 @@ async function renderSettings(el) {
     redrawSkins();
   });
   drawSync();
+  $('newBtn').addEventListener('click', async () => {
+    const { recentNotes, notesHTML } = await import('./whats-new.js');
+    openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
+      <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
+    $('newOk').addEventListener('click', closeSheet);
+  });
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
   fillMediaInfo();
@@ -701,7 +717,8 @@ async function drawSync() {
   drawUsage();
   if (!acct) {
     box.innerHTML = `
-      <p class="note" style="margin-top:0">Keep your decks, cards and progress the same on all your devices: sign in with the same account on each one. Anyone can make an account; each account only ever sees its own data.</p>
+      <p class="note" style="margin-top:0"><b>Optional.</b> Study Sprint works fully without an account, offline too: your cards stay in this browser. An account lets you use the same cards on your phone and laptop. It’s free, and each account only ever sees its own data.</p>
+      <div class="pend-box" id="pendBox" hidden></div>
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
           <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
@@ -716,8 +733,20 @@ async function drawSync() {
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">First time? Use <b>Create account</b> once (we email you a link to confirm it), then <b>Sign in</b> on your other devices.
-        <button class="link" type="button" id="forgotBtn" style="padding:0 2px;min-height:0">Forgot password?</button></p>`;
+      <p class="note">New here? Type your email and pick a password, then tap <b>Create account</b>. We email you a link to confirm it; after that, use <b>Sign in</b> on each device.
+        <button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
+    // A sign-up waiting for its email link (kept on this device for 7 days): the address comes back filled in, with a way to ask again.
+    const wait = (await db.getSettings()).pendingSignup;
+    if (!box.isConnected) return;
+    const fillPending = email => {
+      const pb = $('pendBox');
+      pb.hidden = false;
+      pb.innerHTML = `<p>Waiting for you to confirm <b>${esc(email)}</b>. Open the link in that email, then sign in here.</p>
+        <button class="btn ghost small" type="button" id="pendResend">Send the link again</button>`;
+      wireResend($('pendResend'), email, $('syncErr'));
+    };
+    if (wait && Date.now() - wait.at < PENDING_DAYS * 864e5 && wait.email) { $('syncEmail').value = wait.email; fillPending(wait.email); }
+    else if (wait) db.setSetting('pendingSignup', null);
     const go = async create => {
       const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
       const err = $('syncErr'), emailF = $('syncEmail'), pwF = $('syncPw');
@@ -735,20 +764,27 @@ async function drawSync() {
         const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
         if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
           box.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          await db.setSetting('pendingSignup', { email, at: Date.now() });
+          fillPending(email);
           openSheet(`
             <h2 id="sheetTitle">Check your email</h2>
             <p>We sent a link to <b>${esc(email)}</b>. Open it to confirm your account, then come back here and <b>sign in</b> with your email and password.</p>
-            <p class="note">No email after a few minutes? Look in your spam folder, or tap Create account again to send it again.</p>
-            <div class="sheet-actions"><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
+            <p class="note">No email after a few minutes? Look in your spam folder, or ask for it again.</p>
+            <div class="sheet-actions"><button class="btn ghost" type="button" id="pendResend2">Send the link again</button><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
           $('pendOk').addEventListener('click', closeSheet);
+          wireResend($('pendResend2'), email, null);
           return;
         }
+        db.setSetting('pendingSignup', null);
         toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
         drawSync();
       } catch (e) {
         box.querySelectorAll('button').forEach(b => { b.disabled = false; });
         if (e.code === 'cancelled') return;           // (the person chose Cancel when asked about the cards on this device)
-        showFieldError(pwF, err, e.message);          // (a refused sign-in: the password is the likeliest thing to fix)
+        // The message goes on the box it is about (email, password), or on neither: a rate limit or a lost connection is not the person's typing.
+        const which = authErrorField(e.code);
+        showFieldError(which === 'email' ? emailF : which === 'password' ? pwF : null, err, authMessage(e, { online: navigator.onLine !== false }));
+        if (e.code === 'email_not_confirmed') { db.setSetting('pendingSignup', { email, at: Date.now() }); fillPending(email); }       // the button replaces "tap Create account again"
       }
     };
     wireRules('syncPw', 'syncRules');
@@ -761,9 +797,9 @@ async function drawSync() {
     }
     $('forgotBtn').addEventListener('click', async () => {
       const email = $('syncEmail').value.trim(), err = $('syncErr');
+      clearFieldError($('syncPw'), err); clearFieldError($('syncEmail'), err);
       if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError($('syncEmail'), err, 'Type your email above first, then tap Forgot password.'); return; }
       try {
-        clearFieldError($('syncEmail'), err);
         await sync.sendPasswordReset(email, await captchaToken());
         openSheet(`
           <h2 id="sheetTitle">Check your email</h2>
@@ -771,7 +807,10 @@ async function drawSync() {
           <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
           <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
         $('fpOk').addEventListener('click', closeSheet);
-      } catch (e) { showFieldError($('syncEmail'), err, e.message); }
+      } catch (e) {
+        // (not the password box: nothing was typed wrong there)
+        showFieldError(authErrorField(e.code) === 'email' ? $('syncEmail') : null, err, authMessage(e, { online: navigator.onLine !== false }));
+      }
     });
     return;
   }
@@ -819,6 +858,36 @@ async function drawSync() {
   $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
 }
 
+// "Send the link again": the confirmation email once more. Supabase allows one a minute per address, so the button rests for 60 s
+// (it keeps resting if Settings is redrawn). Errors go to `errEl` (the form's message line) or, in the sheet, a toast.
+const PENDING_DAYS = 7;
+let resendRestUntil = 0;
+function restResend() {
+  const left = resendRestUntil - Date.now();
+  document.querySelectorAll('.resend-link').forEach(btn => {
+    btn.disabled = left > 0;
+    btn.textContent = left > 0 ? 'Sent ✓' : 'Send the link again';
+  });
+  if (left > 0) setTimeout(restResend, Math.min(left, 1000));
+}
+function wireResend(btn, email, errEl) {
+  if (!btn) return;
+  btn.classList.add('resend-link');
+  restResend();
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await sync.resendConfirmation(email, await captchaToken());
+      resendRestUntil = Date.now() + 60000;
+      toast('Sent. Check your inbox and spam folder.');
+    } catch (e) {
+      const text = authMessage(e, { online: navigator.onLine !== false });
+      if (errEl?.isConnected) showFieldError(null, errEl, text); else toast(text);
+    }
+    restResend();
+  });
+}
+
 // Records from the server that were damaged are skipped, not fatal (sync-merge.js badRow). Say so quietly, once: the note stays
 // under "Signed in" until Dismiss, and comes back only for records skipped after that.
 async function drawDamaged() {
@@ -829,7 +898,7 @@ async function drawDamaged() {
   const text = damagedNote(log);
   el.hidden = !text;
   if (!text) return;
-  el.innerHTML = `${esc(text)} <button class="link" type="button" id="damagedOk" style="padding:0 2px;min-height:0">Dismiss</button>`;
+  el.innerHTML = `${esc(text)} <button class="link inline-btn" type="button" id="damagedOk">Dismiss</button>`;
   $('damagedOk').addEventListener('click', async () => { await db.setSetting('syncDamaged', { ...log, seen: log.count }); drawDamaged(); });
 }
 
@@ -840,6 +909,8 @@ function askAboutDevice(v) {
     let settled = false;
     const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
     const things = v.cards ? plural(v.cards, 'card') : v.decks ? plural(v.decks, 'deck') : 'progress and settings';
+    const count = v.cards || v.decks || 0;
+    const addLabel = !count ? 'Add your progress to your account' : `${count === 1 ? 'Add this' : 'Add these'} ${things} to your account`;
     openSheet(v.kind === 'other' ? `
       <h2 id="sheetTitle">This device has cards from another account</h2>
       <div class="confirm">
@@ -853,8 +924,9 @@ function askAboutDevice(v) {
       <h2 id="sheetTitle">This device has cards that aren't in an account</h2>
       <div class="confirm">
         <p>You have ${esc(things)} on this device that were never synced. You can add them to the account you're signing in to, or start fresh with what is already in that account.</p>
+        <p class="note">New account? Choose Add: a new account is empty, so nothing is lost.</p>
         <div class="sheet-actions stack">
-          <button class="btn primary" type="button" id="devAdd">Add these ${esc(things)} to your account</button>
+          <button class="btn primary" type="button" id="devAdd">${esc(addLabel)}</button>
           <button class="btn danger" type="button" id="devFresh">Start fresh (remove them)</button>
           <button class="btn ghost" type="button" id="devCancel">Cancel</button>
         </div>
@@ -1223,8 +1295,13 @@ async function checkFirstRun() {
   // Upgrades: anyone who opened the app before has `seeded` set (the old first-run flag) or has data.
   const hasData = settings.seeded || (await db.getDecks()).length || (await db.getAll('cards')).length || (await db.getAll('reviewLog')).length;
   if (hasData) { await markOnboarded(); return false; }
-  if (skipFlag()) { await seedSampleDeck(); await markOnboarded(); return false; }
+  if (skipFlag()) { await seedSampleDeck(); await markOnboarded(); await markWhatsNewSeen(); return false; }
+  await markWhatsNewSeen();            // a brand-new install has no "what's new": everything is new to it
   return true;
+}
+async function markWhatsNewSeen() {
+  settings.whatsNewSeen = APP_VERSION;
+  await db.setSetting('whatsNewSeen', APP_VERSION);
 }
 async function markOnboarded() {
   if (settings.onboarded) return;
@@ -1260,7 +1337,8 @@ const ROUTES = {
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),
   stats: async el => (await lazy('./stats.js')).renderStats(el),
-  settings: el => renderSettings(el)
+  settings: el => renderSettings(el),
+  help: async (el, arg) => (await lazy('./help.js')).renderHelp(el, arg)
 };
 
 // Remembered so the gear can take you back to where you were.
@@ -1287,7 +1365,7 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name;
+  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
@@ -1325,13 +1403,21 @@ async function route() {
     }
     el.innerHTML = `<div class="empty"><b>Something went wrong.</b><br>${esc(err.message || err)}</div>`;
   }
-  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); updates?.routed(name); }      // (an update waiting for a quiet moment restarts the app on Today or Decks)
+  if (el.isConnected) { scrollTo(0, 0); announceScreen(el, name); updates?.routed(name); }
+  // #/settings/sync (the welcome page's "Sign in" link, the sidebar, the email-confirmed sheet): land on the Sync section, after the
+  // scroll to the top above. Focus goes to its heading, not the email box, so a phone doesn't open its keyboard.
+  if (el.isConnected && name === 'settings' && arg === 'sync' && $('syncTitle')) {
+    const t = $('syncTitle');
+    t.tabIndex = -1;
+    t.scrollIntoView({ block: 'start' });
+    t.focus({ preventScroll: true });
+  }      // (an update waiting for a quiet moment restarts the app on Today or Decks)
   if (resetLink) showResetLink(resetLink);
 }
 
 // Tell screen readers the screen changed: the page title follows the screen (a deck shows its own name) and
 // focus moves to the screen's main heading.
-const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', test: 'Practice test', stats: 'Stats', settings: 'Settings', welcome: 'Welcome' };
+const SCREEN_NAMES = { today: 'Today', decks: 'Decks', deck: 'Deck', browse: 'All cards', import: 'Add cards', review: 'Review', play: 'Play', test: 'Practice test', stats: 'Stats', settings: 'Settings', help: 'Help', welcome: 'Welcome' };
 let firstScreen = true;
 function announceScreen(el, name) {
   const h1 = el.querySelector('h1');
@@ -1389,7 +1475,18 @@ async function showResetLink(link) {
   resetShown = true;
   const forget = () => { try { sessionStorage.removeItem('resetLink'); } catch { /* ignore */ } };
   if (link.error) { forget(); toast(link.error); return; }
-  if (link.confirmed) { toast('Email confirmed. Now sign in with your email and password.'); return; }
+  if (link.confirmed) {
+    forget();
+    openSheet(`
+      <h2 id="sheetTitle">Email confirmed</h2>
+      <p>Your account is ready. Sign in with your email and password to start syncing.</p>
+      <p class="note">Made the account in the Study Sprint app on your home screen? Open it there and sign in. This link may have opened in a different browser.</p>
+      <div class="sheet-actions"><button class="btn ghost" type="button" id="cfLater">Not now</button><button class="btn primary" type="button" id="cfSignIn">Sign in</button></div>`);
+    $('cfSignIn').focus();
+    $('cfLater').addEventListener('click', closeSheet);
+    $('cfSignIn').addEventListener('click', () => { closeSheet(); navGo('#/settings/sync'); });
+    return;
+  }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
   let user;
   try { user = await sync.lookUpResetLink(link.session); } catch (err) {
@@ -1451,6 +1548,7 @@ async function start() {
   initTapGuard();
   wireGear();
   initSidebar({ version: APP_VERSION });
+  initWhatsNew({ version: APP_VERSION });
   watchMath();       // draws the maths on cards (js/math.js) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
   document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });

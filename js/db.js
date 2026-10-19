@@ -7,7 +7,7 @@
 //   cardStates  FSRS schedule for a card    { cardId, due, stability, difficulty, reps, lapses, state, lastReview, updatedAt, fsrs7? }
 //                                           (fsrs7 = the FSRS-7 memory, only on cards FSRS-7 scheduled; see srs7.js)
 //   reviewLog   one row per answer          { id (auto), uid, cardId, timestamp, source, mode, correct, ms, rating, updatedAt }
-//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'violet', mode: 'dark', oled: false }
+//   settings    simple key → value pairs    e.g. 'theme' → { skin: 'violet', mode: 'auto', oled: false }
 //   deleted     what was deleted, and when  { key, store, id, deletedAt }
 //   media       pictures on cards           { id, type, data (the file's bytes), size, created, uploaded }
 //               (a card points to its pictures with frontImage / backImage = a media id, and to its sounds with
@@ -32,7 +32,7 @@ import { validFields, cleanFields } from './note-fields.js';
 import { cleanAccept } from './accept.js';
 
 export const DEFAULT_SETTINGS = {
-  theme: { ui: 'original', skin: 'violet', mode: 'dark', oled: false }, // ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
+  theme: { ui: 'original', skin: 'violet', mode: 'auto', oled: false }, // (a new install follows the device's light or dark setting; a saved choice is kept) ui: 'original' or 'clinical' (css/clinical.css); mode: 'dark', 'light', or 'auto' (follows the device); see themes.js
   cardAlign: 'auto', // card text alignment on this device: 'auto' (short text centred, long answers left), 'center' or 'left'. Never synced, like the theme
   compactDecks: true,    // Decks: search, sort, subdecks folded under their course and small play buttons (off = the old list). This device only
   ratingFeedback: true,  // Review: a ring on the pressed button, the interval floating up and an outline of the old card leaving. This device only
@@ -63,6 +63,7 @@ export const DEFAULT_SETTINGS = {
   extraNew: null,    // { day, n }: extra new cards added for one day with Custom study
   appBadge: false,       // Settings → Study → Reminders: show the due count on the app icon (badge.js). This device only
   reminderTime: '19:00', // the time last used for the daily calendar reminder (reminders.js). This device only
+  whatsNewSeen: null, // the newest version whose "What's new" card was shown or dismissed on this device (whats-new.js). This device only
   seeded: false,     // true once the sample deck has been added on first open
   onboarded: false   // true once the first-run start (js/onboarding.js) was finished or skipped (kept in backups)
 };
@@ -888,8 +889,10 @@ export async function deleteEverything() {
 //   mediaRefs  { userId, ids }: the files cards used at the last sweep, so a card deleted before this device held its picture still gets that file marked (media-sweep.js droppedRefs)
 //   keepAllMedia  "Keep all pictures and sounds on this device" (Settings → Sync): sync downloads every file, not only what is needed soon (lazy-media.js)
 //   appBadge, reminderTime, reminderUid  "Cards due on the app icon" and the daily reminder's time (Settings → Study → Reminders): a badge and a calendar belong to one device (badge.js, reminders.js)
+//   whatsNewSeen  the newest version whose "What's new" card was seen on this device (whats-new.js): each device tells its own story
+//   pendingSignup  { email, at }: an account was made and its confirmation email has not been followed yet (Settings → Sync shows it for 7 days)
 //   mediaTotals, mediaIndexed, mp:<id>   book-keeping for pictures and sounds (see "pictures" below): sizes, and which files are not uploaded yet
-export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'mediaBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid'];
+export const LOCAL_ONLY = ['syncAuth', 'syncState', 'mediaTotals', 'mediaIndexed', 'resendPending', 'resendTries', 'resendFailed', 'syncDamaged', 'pushBackoff', 'mediaBackoff', 'lastBackup', 'mediaCleanedAt', 'keepAllMedia', 'mediaRefs', 'appBadge', 'reminderTime', 'reminderUid', 'whatsNewSeen', 'pendingSignup'];
 // (Media deletion marks, "mdel:<id>", do sync but are left out of backups; "mseen:<id>" never leaves the device: see media-sweep.js.)
 export const isLocalOnly = k => LOCAL_ONLY.includes(k) || String(k).startsWith(PENDING) || isMarkKey(k) || isSeenKey(k);
 

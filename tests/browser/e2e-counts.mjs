@@ -212,7 +212,7 @@ await p.screenshot({ path: SP + '/c-decks-375.png', fullPage: true });
 // the empty Decks screen is the shared start block
 await p.evaluate(async () => { const db = await import('./js/db.js'); for (const d of await db.getDecks()) await db.deleteDeck(d.id); });
 await go(p, '#/decks', '.empty-first');
-ok(await p.locator('.empty-first #trySample').count() === 1 && await p.locator('.empty-first a:has-text("Paste notes")').count() === 1, 'no decks: the shared "Nothing to study yet" block with Paste notes and Try sample cards');
+ok(await p.locator('.empty-first #trySample').count() === 1 && await p.locator('.empty-first a:has-text("Add cards")').count() === 1, 'no decks: the shared "Nothing to study yet" block with Paste notes and Try sample cards');
 await noHScroll(p, 'empty decks, phone');
 await p.screenshot({ path: SP + '/c-decks-empty-375.png' });
 

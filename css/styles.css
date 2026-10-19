@@ -307,6 +307,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .link:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
 .link:disabled{opacity:.4;cursor:default}
 .link.more{min-width:38px;color:var(--text-2);font-size:1.2rem;line-height:1}
+.link.inline-btn{min-height:24px;padding:2px 4px}
 .hint{display:block;text-align:center;font:var(--fs-2xs) var(--f-num);color:var(--text-3);margin-top:10px}
 .key-hint{display:none}
 .key-line{display:none;margin:var(--s-2) 0 0;text-align:center;font:var(--fs-2xs) var(--f-num);color:var(--text-3)}
@@ -1689,6 +1690,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 /* The hint above the card in the guided review */
 .coach{margin:0;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border:1px solid var(--accent-line);color:var(--text);font-size:var(--fs-base);line-height:1.4}
 .coach b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 var(--fs-xs) var(--f-num)}
+.coach-key{display:block;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .guide .flash{min-height:min(50dvh,420px)}
 .wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line);box-shadow:0 0 28px -6px var(--glow)}
 .wl-done .ico{width:30px;height:30px}
@@ -2207,12 +2209,14 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-sync.warn{color:var(--exam)}
   .side-sync.warn i{background:var(--exam)}
   .side-tools{display:flex;align-items:center;gap:2px;margin-top:2px}
-  .side-set{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:var(--r-sm);color:var(--text-2);font:500 var(--fs-sm)/1 var(--f-ui);text-decoration:none}
-  .side-set{position:relative}
-  .side-set svg{width:16px;height:16px;flex:none}
+  .side-set,.side-help{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:var(--r-sm);color:var(--text-2);font:500 var(--fs-sm)/1 var(--f-ui);text-decoration:none}
+  .side-set,.side-help{position:relative}
+  .side-set svg,.side-help svg{width:16px;height:16px;flex:none}
   .side-set::after{content:"";display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--exam);box-shadow:0 0 0 2px var(--bg)}
   html[data-rail="on"] .side-set.warn::after{display:block}
-  .side-set:hover,.side-set[aria-current="page"]{background:var(--surface-2);color:var(--text)}
+  .side-set:hover,.side-set[aria-current="page"],.side-help:hover,.side-help[aria-current="page"]{background:var(--surface-2);color:var(--text)}
+  .side-help{width:32px;padding:0;justify-content:center}
+  .side-help span{display:none}
   .side-ver{margin-left:2px;font:500 var(--fs-2xs)/1 var(--f-num);color:var(--text-3)}
   .side-ib{all:unset;box-sizing:border-box;display:grid;place-items:center;width:32px;height:32px;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer}
   #sideMode{margin-left:auto}
@@ -2255,7 +2259,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   html[data-rail="on"] .side-st,html[data-rail="on"] .side-sync,html[data-rail="on"] .side-ver{display:none}
   html[data-rail="on"] .side-tools{flex-direction:column;gap:4px;margin:0}
   html[data-rail="on"] #sideMode{margin-left:0}
-  html[data-rail="on"] .side-set{width:32px;padding:0;justify-content:center;font-size:0;gap:0}
+  html[data-rail="on"] .side-set,html[data-rail="on"] .side-help{width:32px;padding:0;justify-content:center;font-size:0;gap:0}
 
   /* one tooltip for the rail, placed by sidebar.js */
   .side-tip{display:block;position:fixed;z-index:20;pointer-events:none;padding:7px 10px;border-radius:var(--r-sm);background:var(--surface-3);color:var(--text);
@@ -2950,3 +2954,36 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 
 /* Links to Privacy, Terms and Contact in Settings → About and under the sign-up form */
 .set-row p a,#legalNote a{color:var(--accent-text);text-decoration:underline;text-underline-offset:2px}
+
+/* ---- Help page (#/help, js/help.js) ---- */
+a.back{text-decoration:none}
+.help-lede{margin:0 0 var(--s-4)}
+.help-sec{margin-top:var(--s-5)}
+.help-q{border-bottom:1px solid var(--line)}
+.help-q > summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);min-height:48px;padding:10px 2px;font-weight:600;line-height:1.35}
+.help-q > summary::-webkit-details-marker{display:none}
+.help-q > summary::after{content:"";flex:none;width:9px;height:9px;border-right:2px solid var(--text-2);border-bottom:2px solid var(--text-2);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .15s}
+.help-q[open] > summary::after{transform:rotate(-135deg);margin-top:4px}
+.help-q > summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
+.help-a{padding:0 2px var(--s-4);color:var(--text-2);font-size:var(--fs-base);line-height:1.55;overflow-wrap:anywhere}
+.help-a p{margin:0 0 var(--s-3)}
+.help-a ul{margin:0 0 var(--s-3);padding-left:1.2em}
+.help-a li{margin-bottom:4px}
+.help-a b{color:var(--text)}
+.help-a code{font-family:var(--f-num);font-size:.92em;background:var(--surface-2);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+.help-foot{margin-top:var(--s-5)}
+@media (prefers-reduced-motion:reduce){.help-q > summary::after{transition:none}}
+
+/* ---- What's new card on Today (js/whats-new.js): looks like the install card (.inst), but is its own class so tests can count them ---- */
+.wn{position:relative;display:flex;gap:14px;align-items:flex-start;margin:0 0 var(--s-4);padding:14px 44px 14px 14px;border-radius:var(--r-lg);background:var(--surface-1);box-shadow:var(--e-1)}
+.wn-icon{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;background:var(--accent-tint);color:var(--accent-text);box-shadow:0 0 0 1px var(--accent-line)}
+.wn-icon .ico{width:20px;height:20px}
+.wn-txt{min-width:0}
+.wn-txt h2{margin:0;font-size:var(--fs-base);letter-spacing:-.01em}
+.wn-txt ul{margin:6px 0 10px;padding-left:1.1em;font-size:var(--fs-sm);color:var(--text-2);line-height:1.45}
+.wn-txt li{margin-bottom:3px}
+.wn .inst-x{min-width:32px;min-height:32px}
+
+/* ---- a sign-up waiting for its email link (Settings → Sync) ---- */
+.pend-box{margin:0 0 var(--s-3);padding:var(--s-3) var(--s-4);border-radius:var(--r-md);background:var(--accent-tint);border:1px solid var(--accent-line)}
+.pend-box p{margin:0 0 var(--s-2);font-size:var(--fs-sm);line-height:1.45}

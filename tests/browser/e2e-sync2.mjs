@@ -57,7 +57,7 @@ await run(B, async () => {
 });
 await signInUI(B, { pw: 'wrongpass' });
 await B.waitForSelector('#syncErr:not([hidden])');
-ok((await B.textContent('#syncErr')) === 'Wrong email or password.', 'wrong password explained');
+ok((await B.textContent('#syncErr')).startsWith('Wrong email or password.'), 'wrong password explained');
 await B.screenshot({ path: SP + '/sync-signin.png', fullPage: true });
 await B.fill('#syncPw', 'secret123'); await B.click('#syncCreate');
 await B.waitForFunction(() => document.querySelector('#syncErr')?.textContent.includes('already an account'));

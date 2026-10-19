@@ -55,7 +55,7 @@ export const realChromium = { launch: launchMapped };
 // Almost every test wants the old behaviour (the sample deck is there on first load), so `chromium` here
 // gives every new browser window the "skip onboarding" flag in localStorage (the app also accepts
 // ?skipOnboarding in the address). e2e-onboarding.mjs uses `realChromium` to see the real first run.
-const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); } catch { /* fine */ } };
+const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-skip-whatsnew', '1'); } catch { /* fine */ } };
 // Signing in on a device that has cards of its own asks first ("Add these N cards to your account" / "Start fresh" / "Cancel"), and a
 // test that meets that question unexpectedly should fail, not have it tapped away. A test that builds a device with cards and then
 // signs in on purpose to merge them opts in: `chromium.launch({ autoAddCards: true })` (all its windows) or

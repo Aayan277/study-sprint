@@ -155,7 +155,7 @@ const start = async (fake, o) => { const A = await device('A', fake, o); await s
   await run(D, async () => { const c = (await import('./js/sync-config.js')).CAPTCHA; c.siteKey = 'test-site-key-123'; c.waitMs = 1500; });
   await signInUI(D, { create: true });
   await D.waitForFunction(() => !document.querySelector('#syncErr')?.hidden, null, { timeout: 8000 });
-  ok(await D.textContent('#syncErr') === 'The bot check didn’t load. Try again, or contact the site owner.', 'no token in time: ' + await D.textContent('#syncErr'));
+  ok(await D.textContent('#syncErr') === 'The “are you a person?” check didn’t load. Check your connection and try again.', 'no token in time: ' + await D.textContent('#syncErr'));
   ok(!(await D.$eval('#syncCreate', b => b.disabled)) && !(await D.$('#captchaBox iframe')), 'the buttons work again and the box is gone');
   await D.context().close();
 }

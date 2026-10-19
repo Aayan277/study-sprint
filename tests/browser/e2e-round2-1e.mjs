@@ -110,7 +110,7 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
   await go(p, '#/stats', '.pgrid');
   await p.evaluate(async () => { const db = await import('./js/db.js'); for (const d of await db.getDecks()) await db.deleteDeck(d.id); });
   await go(p, '#/stats', '.empty-first');
-  ok(await p.locator('.empty-first #trySample').count() === 1 && await p.locator('.empty-first a:has-text("Paste notes")').count() === 1 && /Nothing to study yet/.test(await p.textContent('.empty-first')), 'empty Stats shows the shared "Nothing to study yet" block');
+  ok(await p.locator('.empty-first #trySample').count() === 1 && await p.locator('.empty-first a:has-text("Add cards")').count() === 1 && /Nothing to study yet/.test(await p.textContent('.empty-first')), 'empty Stats shows the shared "Nothing to study yet" block');
   ok(await p.locator('.eyebrow').count() === 0, 'empty Stats: no eyebrow');
   await noHScroll(p, 'empty stats 375');
   await p.screenshot({ path: `${SHOTS}/r2-1e-stats-empty-375.png` });

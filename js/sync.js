@@ -65,6 +65,7 @@ export async function createAccount(email, password, captcha, opts = {}) {
   await signedIn(made.session, opts);
   return { pending: false };
 }
+export const resendConfirmation = (email, captcha) => supa.resendSignup(email.trim(), { captcha, redirectTo: appUrl() });
 export async function signIn(email, password, captcha, opts = {}) { return signedIn(await supa.signIn(email.trim(), password, { captcha }), opts); }
 
 // ---------- whose cards are on this device ----------

@@ -3,7 +3,7 @@ import { chromium } from './pw.mjs';
 const browser = await chromium.launch();
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const errors = [];
-const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block', isMobile: true, hasTouch: true });
+const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block', isMobile: true, colorScheme: 'dark', hasTouch: true });
 const p = await ctx.newPage();
 p.on('pageerror', e => errors.push(e.stack));
 const align = sel => p.$eval(sel, e => getComputedStyle(e).textAlign);

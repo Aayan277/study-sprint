@@ -16,7 +16,7 @@ export const captchaOn = () => PROVIDERS.includes(CAPTCHA.provider) && /^[A-Za-z
 
 const WAIT = 20 * 1000;           // the frame should say "ready" within seconds: after this it is called failed, never a silent hang
 const SOLVE = 5 * 60 * 1000;      // once it is ready, the person gets this long to solve it (a visible puzzle can take a while)
-export const CAPTCHA_FAILED = 'The bot check didn’t load. Try again, or contact the site owner.';
+export const CAPTCHA_FAILED = 'The “are you a person?” check didn’t load. Check your connection and try again.';
 
 // Show the check inside `container` and give back its token (a string, good for one request).
 // Rejects with an Error whose message is ready to show.
