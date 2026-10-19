@@ -8,6 +8,11 @@ import { esc, icon } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.42', items: [
+    'Dark mode is easier to read: buttons and boxes have clearer edges, and the selected choice is easy to spot.',
+    'On a deck’s page, Review is now the big button when cards are due. Finishing a deck offers to continue with your other due cards.',
+    'Bigger buttons on phones, and tapped items no longer stay highlighted.'
+  ] },
   { version: '4.41', items: [
     'Fixed: switching the scheduler in Settings no longer stretches the page.'
   ] },
