@@ -203,7 +203,7 @@ for (const [file, name] of [['anki-reversed-new.apkg', 'Reversed new'], ['anki-r
   ok(await page.isVisible('#revRow') && (await page.textContent('#revRow')).includes('Make the reverse cards too') && await page.isChecked('#makeReverse'), `${file}: the "Make the reverse cards too" switch is on`);
   const badges = await page.locator('.prow .badge', { hasText: 'Both directions: makes 2 cards' }).count();
   ok(badges === 3, `${file}: three rows say "Both directions: makes 2 cards" (${badges})`);
-  ok((await page.textContent('#saveBtn')).startsWith('Add 10 cards'), `${file}: the Add button counts both cards: ${await page.textContent('#saveBtn')}`);
+  ok(/\b10 cards\b/.test(await page.textContent('#saveBtn')), `${file}: the Add button counts both cards: ${await page.textContent('#saveBtn')}`);
   ok((await page.textContent('#progInfo')).startsWith('6 reviews on 3 cards'), `${file}: history of the reverse cards counts too: ${await page.textContent('#progInfo')}`);
   if (file.includes('new')) { await page.screenshot({ path: SP + '/rev-import-375.png', fullPage: true }); await noHScroll('import preview'); }
   await page.selectOption('#deckSel', '__new'); await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
@@ -254,7 +254,7 @@ await page.goto(APP + '#/import'); await page.waitForSelector('#pasteBox'); awai
 await page.selectOption('#deckSel', '__new');
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Found 7 cards'));
 const csvBadges = await page.locator('.prow .badge', { hasText: 'Both directions: makes 2 cards' }).count();
-ok(await page.isVisible('#revRow') && csvBadges === 3 && (await page.textContent('#saveBtn')).startsWith('Add 10 cards'), `CSV: importing it shows the pairs again (${csvBadges} rows, ${await page.textContent('#saveBtn')})`);
+ok(await page.isVisible('#revRow') && csvBadges === 3 && /\b10 cards\b/.test(await page.textContent('#saveBtn')), `CSV: importing it shows the pairs again (${csvBadges} rows, ${await page.textContent('#saveBtn')})`);
 await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'From CSV'); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });
 rt = await cardsIn('From CSV');
 ok(rt.length === 10 && rt.filter(c => c.reverse).length === 3, 'CSV: and saving makes the reverse cards');

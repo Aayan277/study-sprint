@@ -63,7 +63,7 @@
   --heat-4:var(--accent-hover);
 
   /* ----- dark mode (the default), same for every accent ----- */
-  --line:rgb(255 255 255 / .07); --line-strong:rgb(255 255 255 / .13); --hi:rgb(255 255 255 / .06);
+  --line:rgb(255 255 255 / .14); --line-strong:rgb(255 255 255 / .22); --hi:rgb(255 255 255 / .06);
   /* Rating colors. Fixed: they do not change with the accent. Again is crimson, so it differs from Ember's orange. */
   --again:#FF5C7A; --again-tint:rgb(255 92 122 / .13); --again-line:rgb(255 92 122 / .4);
   --hard:#FFC53D;  --hard-tint:rgb(255 197 61 / .12);  --hard-line:rgb(255 197 61 / .34);
@@ -221,7 +221,8 @@ main:focus{outline:none}
 .brand{font-weight:650;font-size:var(--fs-md);letter-spacing:-.02em;margin-right:auto;color:var(--text);text-decoration:none;padding:4px 0;cursor:pointer;display:flex;align-items:center;gap:9px}
 .brand-mark{width:24px;height:24px;flex:none;filter:drop-shadow(0 0 10px var(--glow-soft))}
 .icon-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-md);background:none;border:1px solid transparent;color:var(--text-2);cursor:pointer;padding:0}
-.icon-btn:hover,.icon-btn[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--surface-2)}
+.icon-btn[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.icon-btn:hover{color:var(--text);border-color:var(--line);background:var(--surface-2)}}
 .icon-btn svg{width:22px;height:22px}
 main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-inset-bottom,0px))}
 
@@ -254,9 +255,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:var(--fs-base);letter-spacing:-.01em;padding:10px 18px;min-height:44px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent;text-decoration:none;transition:background var(--t-fast),box-shadow var(--t-fast),transform var(--t-fast)}
 .btn:active:not(:disabled){transform:scale(.98)}
 .btn.primary{background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 1px rgb(255 255 255 / .12) inset,0 6px 20px -6px var(--glow)}
-.btn.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 1px rgb(255 255 255 / .16) inset,0 8px 26px -6px var(--glow)}
+@media (hover:hover) and (pointer:fine){.btn.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 1px rgb(255 255 255 / .16) inset,0 8px 26px -6px var(--glow)}}
 .btn.ghost{background:var(--surface-2);color:var(--text);border-color:var(--line)}
-.btn.ghost:hover{background:var(--surface-3);border-color:var(--line-strong)}
+@media (hover:hover) and (pointer:fine){.btn.ghost:hover{background:var(--surface-3);border-color:var(--line-strong)}}
 .btn.small{padding:6px 12px;font-size:var(--fs-sm);min-height:34px;border-radius:var(--r-sm)}
 .btn.danger{color:var(--again);background:var(--surface-2);border-color:var(--line)}
 .btn.danger.armed,.btn.danger.solid{background:var(--again);color:var(--on-role);border-color:var(--again)}
@@ -268,7 +269,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .chip input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 /* One pill shape for every chip-like button */
 .chip span,.tchip,.flagbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--r-pill);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);font-size:var(--fs-sm);font-weight:500}
-.chip:hover span,.tchip:hover{border-color:var(--accent-line)}
+@media (hover:hover) and (pointer:fine){.chip:hover span,.tchip:hover{border-color:var(--accent-line)}}
 .chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 14px -4px var(--glow)}
 .chip:has(input:focus-visible) span{outline:2px solid var(--accent);outline-offset:2px}
 .chip input:disabled + span{opacity:.45;cursor:not-allowed}
@@ -304,7 +305,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .card{background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-4);min-width:0}
 .section{margin-bottom:var(--s-6)}
 .link{text-decoration:none;background:none;border:0;color:var(--text-2);cursor:pointer;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm);padding:8px 9px;min-height:40px}
-.link:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.link:hover:not(:disabled){background:var(--surface-2);color:var(--text)}}
 .link:disabled{opacity:.4;cursor:default}
 .link.more{min-width:38px;color:var(--text-2);font-size:1.2rem;line-height:1}
 .link.inline-btn{min-height:24px;padding:2px 4px}
@@ -320,10 +321,10 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .screen-head .lede{margin-top:6px;max-width:60ch}
 .head-actions{display:flex;gap:var(--s-2);flex-wrap:wrap}
 .back{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;background:none;border:0;color:var(--text-2);font-weight:500;font-size:var(--fs-sm);padding:6px 0;margin-bottom:var(--s-1);cursor:pointer}
-.back:hover{color:var(--text)}
+@media (hover:hover) and (pointer:fine){.back:hover{color:var(--text)}}
 .back-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}      /* a long unbroken parent name shortens with … instead of stretching the button */
 .crumbs a{color:var(--text-2);text-decoration:none}
-.crumbs a:hover{color:var(--accent-text)}
+@media (hover:hover) and (pointer:fine){.crumbs a:hover{color:var(--accent-text)}}
 
 /* ---------- 7. Today, and the deck library ---------- */
 /* Decks: a slim summary row above the tiles (the big numbers live on Today) */
@@ -394,7 +395,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .exam-add > *{flex:none;white-space:nowrap}
 .exam-add .link{padding:4px 6px;min-height:32px}
 .exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
-.exam-chip:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.exam-chip:hover{background:var(--surface-2)}}
 .exam-chip .ico{width:15px;height:15px;color:var(--accent-text)}
 .exam-chip i{width:8px;height:8px;border-radius:50%;flex:none}
 .exam-line .exam-chip{margin:0}
@@ -403,7 +404,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
-.tdeck:hover{background:var(--surface-2);box-shadow:var(--e-2)}
+@media (hover:hover) and (pointer:fine){.tdeck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .tdeck:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .td-main{flex:1;min-width:0;display:grid;gap:2px}
 .td-name{font-weight:600;font-size:var(--fs-md);letter-spacing:-.02em;line-height:1.3;overflow-wrap:anywhere}
@@ -425,7 +426,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .deck-search input{width:100%;min-width:0;height:42px;padding:0 12px 0 38px;border-radius:var(--r-md);border:1px solid var(--control);background:var(--surface-sunken);color:var(--text);font-size:var(--fs-md)}
 .deck-sort{display:flex;gap:2px;padding:3px;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1)}
 .deck-sort button{border:0;background:none;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);padding:0 12px;min-height:36px;border-radius:7px;cursor:pointer;white-space:nowrap}
-.deck-sort button:hover{color:var(--text)}
+@media (hover:hover) and (pointer:fine){.deck-sort button:hover{color:var(--text)}}
 .deck-sort button[aria-pressed="true"]{background:var(--surface-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-strong)}
 @media (max-width:520px){.deck-sort{flex:1 1 100%}.deck-sort button{flex:1}}
 .decks.compact .deck{padding-bottom:var(--s-3)}
@@ -446,7 +447,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .decks{display:grid;gap:var(--s-2)}
 .deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
 .deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
-.deck:hover{background:var(--surface-2);box-shadow:var(--e-2)}
+@media (hover:hover) and (pointer:fine){.deck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .deck-open{all:unset;cursor:pointer;min-width:0;display:block}
 .deck-open:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
 .deck-name{display:block;font-weight:600;font-size:var(--fs-md);letter-spacing:-.02em;line-height:1.3;margin-top:1px;overflow-wrap:anywhere}
@@ -466,7 +467,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .subdecks summary{cursor:pointer;font-size:var(--fs-sm);font-weight:600;color:var(--text-2);padding:4px 0}
 .subdeck{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:40px;padding:6px 4px 6px calc(10px + var(--depth,0) * 18px);border-radius:6px;position:relative}
 .subdeck::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--deck);flex:none}
-.subdeck:hover{background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.subdeck:hover{background:var(--surface-3)}}
 .subdeck:focus-visible{outline:2px solid var(--accent)}
 .sd-name{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere}
 .sd-counts{font-size:var(--fs-xs);color:var(--text-2);white-space:nowrap;display:flex;gap:10px}
@@ -488,7 +489,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .browse-all a{color:var(--accent-text);font-weight:500;font-size:var(--fs-sm);text-decoration:none}
 .starters{margin-top:var(--s-6)}
 .starters > summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-2);font-size:var(--fs-sm);font-weight:500;min-height:40px;padding:0 4px;border-radius:var(--r-sm)}
-.starters > summary:hover{color:var(--text)}
+@media (hover:hover) and (pointer:fine){.starters > summary:hover{color:var(--text)}}
 .starters[open] > summary{margin-bottom:var(--s-1)}
 .starters .note{margin:0 0 var(--s-3)}
 .starter{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);background:var(--surface-1);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);box-shadow:var(--e-1);border-radius:var(--r-md);margin-bottom:var(--s-2)}
@@ -529,7 +530,7 @@ main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;g
 .crows .empty{padding:20px}
 .crow-btn{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:54px;padding:var(--s-2) var(--s-4);background:transparent;border:0;border-radius:0;color:var(--text);text-align:left;cursor:pointer;transition:background var(--t-fast)}
 .crow + .crow .crow-btn{background-image:linear-gradient(var(--line),var(--line));background-size:calc(100% - 16px) 1px;background-position:16px 0;background-repeat:no-repeat}
-.crow-btn:hover{background-color:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.crow-btn:hover{background-color:var(--surface-2)}}
 .crow.selected .crow-btn,.crow.sel .crow-btn{background-color:var(--accent-tint);box-shadow:inset 2px 0 0 var(--accent)}
 .tick{flex:none;width:22px;height:22px;border-radius:6px;border:2px solid var(--control);background:var(--surface-sunken);display:grid;place-items:center}
 .crow.selected .tick{background:var(--accent);border-color:var(--accent)}
@@ -572,7 +573,7 @@ dialog.sheet[open]{animation:sheet-in var(--t-med) var(--ease)}
 dialog.sheet.side .sheet-head::before{display:none}
 .sheet-head h2{flex:1;min-width:0;margin:6px 0 0;font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:var(--s-2)}
 .sheet-x{flex:none;display:grid;place-items:center;width:40px;height:40px;margin-top:4px;padding:0;border-radius:50%;border:0;background:var(--surface-2);color:var(--text-2);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
-.sheet-x:hover{color:var(--text);background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.sheet-x:hover{color:var(--text);background:var(--surface-3)}}
 .sheet-x .ico{width:18px;height:18px}
 .sheet-in{padding:var(--s-3) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom,0px));display:grid;gap:var(--s-4)}
 dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;padding-top:var(--s-3);padding-bottom:var(--s-4)}
@@ -582,7 +583,8 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-foot.stack{flex-direction:column;align-items:stretch}
 /* Your own glossary (item 12): underlined terms on cards, their popover, and the list in the glossary sheet */
 .gl-term{display:inline;padding:0;margin:0;border:0;background:none;color:inherit;font:inherit;letter-spacing:inherit;cursor:help;text-decoration:underline dotted;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:var(--accent);-webkit-user-select:text;user-select:text}
-.gl-term:hover,.gl-term[aria-expanded="true"]{background:var(--accent-tint)}
+.gl-term[aria-expanded="true"]{background:var(--accent-tint)}
+@media (hover:hover) and (pointer:fine){.gl-term:hover{background:var(--accent-tint)}}
 .gl-term:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 .gl-pop{position:fixed;z-index:60;max-width:min(320px,calc(100vw - 16px));max-height:50dvh;overflow:auto;padding:var(--s-3) var(--s-4);border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);box-shadow:var(--e-3);font:400 var(--fs-sm) var(--f-ui);line-height:1.45;text-align:left;white-space:normal}
 .gl-pop:focus{outline:none}
@@ -645,7 +647,7 @@ body.focus .update-bar{bottom:calc(160px + env(safe-area-inset-bottom,0px))}
 .act-list,.pa-list{display:grid;background:var(--surface-2);border-radius:var(--r-lg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
 .act-row{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 16px;background:none;border:0;color:var(--text);font:500 var(--fs-md) var(--f-ui);text-align:left;cursor:pointer;width:100%}
 .act-row + .act-row{box-shadow:inset 0 1px 0 var(--line)}
-button.act-row:hover{background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){button.act-row:hover{background:var(--surface-3)}}
 .act-row > .ico{width:20px;height:20px;color:var(--text-2);flex:none}
 .act-row > span{flex:1;min-width:0;display:grid}
 .act-row small{font-size:var(--fs-xs);color:var(--text-2);font-weight:400}
@@ -662,7 +664,7 @@ button.act-row:hover{background:var(--surface-3)}
 .pa-lbl{font-size:var(--fs-sm);color:var(--text-2)}
 .pa-list .act-row{min-height:44px;padding:6px 14px;gap:12px;font-size:var(--fs-base)}
 .pa-list .act-row:disabled{opacity:.5;cursor:not-allowed}
-button.act-row:disabled:hover{background:none}
+@media (hover:hover) and (pointer:fine){button.act-row:disabled:hover{background:none}}
 .pa-danger{margin-top:var(--s-2)}
 #ceConfirm:empty{display:none}
 .pa-danger .act-row,.pa-danger .act-row > .ico{color:var(--again)}
@@ -703,7 +705,8 @@ main[data-route="import"] > .view > .savebar{order:5}
 .pane-actions{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:10px}
 .pane .note a{color:var(--accent-text)}
 .drop{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:28px var(--s-4);border:1px dashed var(--control);border-radius:var(--r-lg);background:var(--surface-1);text-align:center;cursor:pointer}
-.drop:hover,.drop:focus-within{border-color:var(--accent)}
+.drop:focus-within{border-color:var(--accent)}
+@media (hover:hover) and (pointer:fine){.drop:hover{border-color:var(--accent)}}
 .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .drop .mono{font-size:var(--fs-sm);color:var(--accent-text);overflow-wrap:anywhere}
 .row-form{display:flex;gap:var(--s-2)}
@@ -777,7 +780,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-head .link{width:40px;height:40px;min-height:40px;padding:0;display:grid;place-items:center;border-radius:var(--r-md);background:var(--surface-1);box-shadow:var(--e-1);color:var(--text-2)}
 .rv-head .link{flex:none}
 .rv-head .link.more{min-width:0}
-.rv-head .link:hover:not(:disabled){background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.rv-head .link:hover:not(:disabled){background:var(--surface-2)}}
 .rv-head .link .ico,.rv-head .link svg{width:19px;height:19px}
 #endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
 /* Progress: done ÷ (done + left), relearning cards included. It lives outside what is redrawn per card. */
@@ -867,7 +870,8 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rate.r2{color:var(--hard);background:linear-gradient(to bottom,var(--hard-tint),transparent 80%),var(--surface-1)}
 .rate.r3{color:var(--good);background:linear-gradient(to bottom,var(--good-tint),transparent 80%),var(--surface-1)}
 .rate.r4{color:var(--easy);background:linear-gradient(to bottom,var(--easy-tint),transparent 80%),var(--surface-1)}
-.rate:hover{border-color:currentColor;box-shadow:0 0 22px -6px currentColor}
+@media (hover:hover) and (pointer:fine){.rate:hover{border-color:currentColor;box-shadow:0 0 22px -6px currentColor}}
+.rate-note{margin:var(--s-2) 0 0;text-align:center;font-size:var(--fs-xs);color:var(--text-2)}
 .rate:active{transform:scale(.97)}
 .rate.suggested{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}
 .stats4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));background:var(--surface-1);box-shadow:var(--e-1);border-radius:var(--r-lg);overflow:hidden;margin-bottom:10px}
@@ -945,7 +949,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .how-score b{color:var(--text)}
 .mode,.opt,.skin{border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-1)}
 .mode{position:relative;display:flex;flex-direction:column;gap:2px;padding:14px var(--s-4);cursor:pointer;min-width:0}
-.mode:hover,.skin:hover,.opt:hover:not(:disabled){border-color:var(--accent-line)}
+@media (hover:hover) and (pointer:fine){.mode:hover,.skin:hover,.opt:hover:not(:disabled){border-color:var(--accent-line)}}
 .mode input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .mode:has(input:checked),.skin[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 22px -8px var(--glow)}
 .mode:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
@@ -1080,7 +1084,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .t-nav-h{margin:0 0 var(--s-2);font-size:var(--fs-md)}
 .t-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:6px}
 .t-q{position:relative;display:grid;place-items:center;min-width:44px;min-height:44px;padding:0;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:600 var(--fs-sm) var(--f-num);cursor:pointer}
-.t-q:hover{border-color:var(--accent-line)}
+@media (hover:hover) and (pointer:fine){.t-q:hover{border-color:var(--accent-line)}}
 .t-q.answered{background:var(--accent-tint);border-color:var(--accent-line)}
 .t-q.current{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent)}
 .t-q.flagged::after{content:"";position:absolute;top:3px;right:3px;border:5px solid transparent;border-top-color:var(--again);border-right-color:var(--again)}
@@ -1160,7 +1164,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
   .t-q.answered{border:4px double Highlight}
   .t-q.current{box-shadow:none;outline:3px solid Highlight;outline-offset:2px}
   .t-q.flagged::after{border-top-color:LinkText;border-right-color:LinkText}
-  .t-q:hover{border-color:Highlight}
+  @media (hover:hover) and (pointer:fine){.t-q:hover{border-color:Highlight}}
   .t-tools #tFlag[aria-pressed="true"]{border:3px solid Highlight}
   .t-bar i,.t-bar-t i{forced-color-adjust:none;background:Highlight}
   .t-bar,.t-bar-t{border:1px solid ButtonText}
@@ -1172,7 +1176,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 /* One course in Stats (Settings → Appearance → Exam readiness in Stats): a deck picker button, then a readiness header */
 .stats-scope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:var(--s-3)}
 .pick-btn{display:inline-flex;align-items:center;gap:10px;min-height:44px;max-width:100%;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:600 var(--fs-md) var(--f-ui);cursor:pointer;box-shadow:var(--e-1)}
-.pick-btn:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.pick-btn:hover{background:var(--surface-2)}}
 .pick-btn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-btn .ico{width:17px;height:17px;color:var(--text-2);flex:none}
 .pick-btn .dot{width:10px;height:10px;border-radius:50%;flex:none}
@@ -1193,7 +1197,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 /* The deck picker sheet (js/deck-picker.js) */
 .pick-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
 .pick-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px 0 calc(10px + var(--depth,0) * 18px);border:0;border-radius:var(--r-sm);background:none;color:var(--text);font:500 var(--fs-base) var(--f-ui);text-align:left;cursor:pointer}
-.pick-row:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.pick-row:hover{background:var(--surface-2)}}
 .pick-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .pick-row[aria-selected="true"]{background:var(--surface-3);box-shadow:inset 2px 0 0 var(--accent)}
 .pick-row.ctx{color:var(--text-2)}
@@ -1238,7 +1242,8 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .col{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;background:none;border:0;padding:0;cursor:pointer;border-radius:4px}
 .col:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 70%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
-.col:last-child .bar,.col:hover .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}
+.col:last-child .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}
+@media (hover:hover) and (pointer:fine){.col:hover .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}}
 .cap{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font:500 .625rem var(--f-num);color:var(--text-2);white-space:nowrap}
 .chart-x{display:flex;gap:0;margin:6px 0 0 26px;font:.625rem var(--f-num);color:var(--text-2)}
 /* Each label is centered under its column; the first and last are pinned to the chart's edges so they never stick out. */
@@ -1401,7 +1406,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .fmt-head label{cursor:default}
 .fmt-tools{display:inline-flex;gap:4px}
 .fmt-tools button{min-width:36px;min-height:32px;padding:0 8px;border:0;border-radius:var(--r-xs);background:transparent;color:var(--text-2);font:600 .95rem var(--f-ui);cursor:pointer}
-.fmt-tools button:hover{background:var(--surface-3);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.fmt-tools button:hover{background:var(--surface-3);color:var(--text)}}
 .fmt-tools button svg{display:block}
 .fmt-preview{padding:8px 12px;border-left:3px solid var(--accent-line);color:var(--text);font-size:var(--fs-base);overflow-wrap:anywhere}
 .fmt-preview ul,.rich ul{margin:.2em 0;padding-left:1.3em}
@@ -1460,7 +1465,7 @@ img[data-media][hidden]{display:none}
 /* Sounds on cards (audio.js plays them; card-editor.js adds them): a row of ▶ buttons under a side's text */
 .snd-row{display:flex;align-items:center;justify-content:center;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 0}
 .snd-btn{display:inline-grid;place-items:center;min-width:44px;height:44px;padding:0 var(--s-3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--surface-2);color:var(--accent-text);font:inherit;font-size:var(--fs-base);line-height:1;cursor:pointer}
-.snd-btn:hover{background:var(--accent-tint);border-color:var(--accent-line)}
+@media (hover:hover) and (pointer:fine){.snd-btn:hover{background:var(--accent-tint);border-color:var(--accent-line)}}
 .snd-btn.playing{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .snd-btn.missing,.snd-btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 .snd-btn.loading{opacity:.6}
@@ -1532,7 +1537,7 @@ img[data-media][hidden]{display:none}
   .tabs-in{display:flex;flex-direction:column;gap:1px;max-width:none;padding:0 10px}
   .tab{flex-direction:row;justify-content:flex-start;gap:10px;min-height:36px;padding:0 10px;border-radius:var(--r-sm);font-size:var(--fs-sm);font-weight:500;color:var(--text-2)}
   .tab svg{width:17px;height:17px}
-  .tab:hover{background:var(--surface-2);color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.tab:hover{background:var(--surface-2);color:var(--text)}}
   .tab[aria-current="page"]{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
   .tab[aria-current="page"]::before{top:9px;bottom:9px;left:0;right:auto;width:2px;height:auto;border-radius:0 2px 2px 0}
   /* Pages: next to the sidebar, roomier. Lists and Stats use the full width; the rest stay readable. */
@@ -1647,12 +1652,12 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   .dt-row{display:flex;align-items:center;gap:2px;padding-left:calc(2px + var(--depth) * 14px);border-radius:var(--r-sm)}
   .dt-row.cur{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line),inset 2px 0 0 var(--deck)}
   .dt-tw{all:unset;box-sizing:border-box;flex:none;display:grid;place-items:center;width:24px;height:30px;color:var(--text-3);cursor:pointer;border-radius:var(--r-xs)}
-  button.dt-tw:hover{color:var(--text)}
+  @media (hover:hover) and (pointer:fine){button.dt-tw:hover{color:var(--text)}}
   button.dt-tw:focus-visible{outline:2px solid var(--accent)}
   .dt-tw .ico{width:14px;height:14px;transition:transform var(--t-fast)}
   .dt-tw[aria-expanded="true"] .ico{transform:rotate(90deg)}
   .dt-node{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:34px;padding:0 8px 0 2px;color:var(--text-2);text-decoration:none;font-size:var(--fs-sm);font-weight:500;border-radius:var(--r-sm)}
-  .dt-node:hover{color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.dt-node:hover{color:var(--text)}}
   .dt-node:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   .dt-row.cur .dt-node{color:var(--text)}
   .dt-row.ctx .dt-node{color:var(--text-2)}
@@ -1660,7 +1665,7 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   .dt-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dt-n{flex:none;min-width:20px;padding:1px 6px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);font-size:var(--fs-2xs);text-align:center}
   .dt-all{display:inline-flex;align-items:center;gap:2px;margin:14px 8px 0;font-size:var(--fs-sm);color:var(--text-2);text-decoration:none}
-  .dt-all:hover{color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.dt-all:hover{color:var(--text)}}
   .dt-all .ico{width:14px;height:14px}
   :root:has(main[data-route="deck"]) dialog.sheet.side{box-shadow:none;border-left:1px solid var(--line)}
 
@@ -1670,7 +1675,8 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   :root:has(main[data-route="deck"]) body.has-side #panelResizer,
   :root:has(main[data-route="browse"]) body.has-side #panelResizer{display:block;position:fixed;top:0;bottom:0;right:calc(var(--panel) - 6px);width:12px;z-index:7;cursor:col-resize;touch-action:none}
   #panelResizer::before{content:"";position:absolute;top:0;bottom:0;left:5px;width:2px;border-radius:2px;background:transparent;transition:background var(--t-fast)}
-  #panelResizer:hover::before,#panelResizer:focus-visible::before,body.panel-resizing #panelResizer::before{background:var(--accent)}
+  #panelResizer:focus-visible::before,body.panel-resizing #panelResizer::before{background:var(--accent)}
+@media (hover:hover) and (pointer:fine){#panelResizer:hover::before{background:var(--accent)}}
   #panelResizer:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:var(--r-xs)}
   body.panel-resizing{user-select:none;-webkit-user-select:none;cursor:col-resize}
   body.panel-resizing dialog.sheet.side{pointer-events:none}
@@ -1700,7 +1706,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .wl-foot a{color:var(--accent-text)}
 .wl-opts{display:grid;gap:var(--s-3)}
 .wl-opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--s-3);align-items:center;text-align:left;padding:var(--s-4);background:var(--surface-1);color:var(--text);border:1px solid var(--line-strong);border-radius:var(--r-md);cursor:pointer;box-shadow:var(--e-1)}
-.wl-opt:hover:not(:disabled){border-color:var(--accent-line);background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.wl-opt:hover:not(:disabled){border-color:var(--accent-line);background:var(--surface-2)}}
 .wl-opt:disabled{opacity:.6}
 .wl-opt .ico{grid-column:2;grid-row:1 / span 2;color:var(--text-2)}
 .wl-opt-t{font-weight:600;font-size:var(--fs-md)}
@@ -1722,7 +1728,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 /* ---------- 17. Folds: "More stats", "Customise", "Danger zone" ---------- */
 /* A button that shows and hides a section (aria-expanded), styled like a card row */
 .more-toggle,.fold-toggle{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:52px;padding:var(--s-3) var(--s-4);margin:0 0 var(--s-2);background:var(--surface-1);color:var(--text);border:0;border-radius:var(--r-lg);box-shadow:var(--e-1);font:inherit;font-weight:600;text-align:left;cursor:pointer}
-.more-toggle:hover,.fold-toggle:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.more-toggle:hover,.fold-toggle:hover{background:var(--surface-2)}}
 .more-toggle > .muted,.fold-toggle > .muted{margin-left:auto;font-weight:400;text-align:right;min-width:0}
 .more-toggle .ico,.fold-toggle .ico{flex:none;transition:transform var(--t-fast);color:var(--text-2)}
 .more-toggle[aria-expanded="true"] .ico,.fold-toggle[aria-expanded="true"] .ico{transform:rotate(90deg)}
@@ -2017,7 +2023,7 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .occ-tag-up{transform:translate(-50%,-100%);margin-top:-6px}
 .occ-tag-in{margin-top:0;transform:translateX(-50%)}
 .occ-zoom{position:absolute;top:6px;right:6px;z-index:3;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:rgb(0 0 0 / .62);color:#fff;cursor:pointer}
-.occ-zoom:hover{background:rgb(0 0 0 / .78)}
+@media (hover:hover) and (pointer:fine){.occ-zoom:hover{background:rgb(0 0 0 / .78)}}
 .occ-head{margin:0 0 var(--s-2);font-size:var(--fs-sm);font-weight:600;color:var(--text-2);text-align:center;overflow-wrap:anywhere}
 .flash-back.occ-back{display:grid;justify-items:center;gap:var(--s-2)}
 .occ-label{margin:var(--s-1) 0 0;font-size:clamp(1.15rem,5vw,1.5rem);font-weight:600;line-height:1.3;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere}
@@ -2072,7 +2078,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 }
 .occ-ed-bar{display:flex;align-items:center;gap:var(--s-2);flex:none;padding:max(var(--s-2),env(safe-area-inset-top)) max(var(--s-3),env(safe-area-inset-right)) var(--s-2) max(var(--s-3),env(safe-area-inset-left));background:var(--surface-1);border-bottom:1px solid var(--line)}
 .occ-ed-x{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface-2);color:var(--text);cursor:pointer}
-.occ-ed-x:hover{background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.occ-ed-x:hover{background:var(--surface-3)}}
 .occ-ed .ico{width:22px;height:22px}
 .occ-ed-head{flex:1;min-width:0;text-align:center}
 .occ-ed-head h2{margin:0;font-size:var(--fs-md);font-weight:650;letter-spacing:-.01em;line-height:1.25}
@@ -2109,7 +2115,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .occ-ed-tools{flex:none;display:flex;gap:0;padding:6px max(4px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left));background:var(--surface-1);border-top:1px solid var(--line)}
 .occ-ed-tool{flex:1 1 0;min-width:44px;min-height:52px;display:grid;justify-items:center;align-content:center;gap:3px;padding:4px 0;border:0;border-radius:var(--r-md);background:none;color:var(--text);font:600 11px/1.1 var(--f-ui);cursor:pointer;-webkit-user-select:none;user-select:none}
 .occ-ed-tool i{display:grid;font-style:normal}
-.occ-ed-tool:hover:not(:disabled){background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.occ-ed-tool:hover:not(:disabled){background:var(--surface-3)}}
 .occ-ed-tool:active:not(:disabled){background:var(--accent-tint)}
 .occ-ed-tool.on{background:var(--accent-tint);color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent-line)}
 .occ-ed-tool:disabled{opacity:.36;cursor:default}
@@ -2133,7 +2139,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .occ-pick-btn b{font-size:var(--fs-md);font-weight:650}
 .occ-pick-btn span{font-size:var(--fs-sm);color:var(--text-2)}
 .occ-pick-btn svg{color:var(--accent-text)}
-.occ-pick-btn:hover:not(:disabled),.occ-pick.drag .occ-pick-btn{border-color:var(--accent);background:var(--accent-tint)}
+.occ-pick.drag .occ-pick-btn{border-color:var(--accent);background:var(--accent-tint)}
+@media (hover:hover) and (pointer:fine){.occ-pick-btn:hover:not(:disabled){border-color:var(--accent);background:var(--accent-tint)}}
 .occ-pick-btn:disabled{opacity:.7;cursor:progress}
 .occ-form-row{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}
 .occ-form-row .cloze-makes{margin:0;min-width:0}
@@ -2169,7 +2176,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-add{display:flex;align-items:center;gap:8px;margin:6px 10px 10px;height:36px;padding:0 10px;border-radius:var(--r-sm);flex:none;
     background:var(--surface-1);box-shadow:var(--e-1);color:var(--text);font:500 var(--fs-sm)/1 var(--f-ui);text-decoration:none;cursor:pointer;
     transition:background var(--t-fast),box-shadow var(--t-fast)}
-  .side-add:hover{background:var(--surface-2);box-shadow:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong)}
+  @media (hover:hover) and (pointer:fine){.side-add:hover{background:var(--surface-2);box-shadow:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong)}}
   .side-add svg{width:16px;height:16px;color:var(--accent-text);flex:none}
 
   /* badges on the Today and Decks links */
@@ -2184,7 +2191,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-decks{display:flex;flex-direction:column;min-height:96px;flex:0 1 auto;margin-top:18px}
   .side-head{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;margin:0 10px 4px;padding:4px 10px;border-radius:var(--r-xs);flex:none;
     font:600 var(--fs-2xs)/1.4 var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);cursor:pointer}
-  .side-head:hover{color:var(--text-2)}
+  @media (hover:hover) and (pointer:fine){.side-head:hover{color:var(--text-2)}}
   .side-head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .side-head svg{width:12px;height:12px;margin-left:-2px;transition:transform var(--t-fast)}
   .side-decks.folded .side-head svg{transform:rotate(-90deg)}
@@ -2195,7 +2202,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-deck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:8px;min-height:32px;padding:0 8px 0 37px;border-radius:var(--r-sm);flex:none;
     color:var(--text-2);font:500 var(--fs-sm)/1.2 var(--f-ui);cursor:pointer}
   .side-deck:not(.side-new)::before{content:"";position:absolute;left:17px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--deck)}
-  .side-deck:hover{background:var(--surface-2);color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.side-deck:hover{background:var(--surface-2);color:var(--text)}}
   .side-deck:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   .side-deck[aria-current="page"]{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
   .side-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2206,12 +2213,12 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-due.zero{visibility:hidden}
   .side-new{color:var(--text-3);padding-left:10px;gap:10px}
   .side-new .ico{width:15px;height:15px}
-  .side-new:hover{color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.side-new:hover{color:var(--text)}}
 
   /* the footer */
   .side-foot{display:grid;flex:none;margin-top:auto;border-top:1px solid var(--line);padding:10px 10px 12px;gap:2px}
   .side-streak{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r-sm);color:var(--text);text-decoration:none}
-  .side-streak:hover{background:var(--surface-2)}
+  @media (hover:hover) and (pointer:fine){.side-streak:hover{background:var(--surface-2)}}
   .side-streak .ring-in .ico{width:13px;height:13px;color:var(--text-3)}
   .side-streak.kept .ring-in .ico{color:var(--hard);filter:drop-shadow(0 0 4px var(--hard-line))}
   .side-streak .ring-fg{filter:none}
@@ -2220,7 +2227,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-st span{font-size:var(--fs-xs);color:var(--text-2);font-variant-numeric:tabular-nums}
   .side-sync{display:flex;align-items:center;gap:8px;padding:5px 8px 5px 12px;border-radius:var(--r-sm);font-size:var(--fs-xs);color:var(--text-2);text-decoration:none;min-width:0}
   .side-sync span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .side-sync:hover{background:var(--surface-2);color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.side-sync:hover{background:var(--surface-2);color:var(--text)}}
   .side-sync i{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none}
   .side-sync.out i{background:none;box-shadow:inset 0 0 0 1.5px var(--control)}
   .side-sync.out{color:var(--accent-text)}
@@ -2232,15 +2239,16 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-set svg,.side-help svg{width:16px;height:16px;flex:none}
   .side-set::after{content:"";display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--exam);box-shadow:0 0 0 2px var(--bg)}
   html[data-rail="on"] .side-set.warn::after{display:block}
-  .side-set:hover,.side-set[aria-current="page"],.side-help:hover{background:var(--surface-2);color:var(--text)}
+  .side-set[aria-current="page"]{background:var(--surface-2);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.side-set:hover,.side-help:hover{background:var(--surface-2);color:var(--text)}}
   .side-help{width:32px;padding:0;justify-content:center}
   .side-help span{display:none}
   .side-ver{margin-left:2px;font:500 var(--fs-2xs)/1 var(--f-num);color:var(--text-3)}
   .side-ib{all:unset;box-sizing:border-box;display:grid;place-items:center;width:32px;height:32px;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer}
   #sideMode{margin-left:auto}
-  .side-ib:hover{background:var(--surface-2);color:var(--text)}
+  @media (hover:hover) and (pointer:fine){.side-ib:hover{background:var(--surface-2);color:var(--text)}}
   .side-ib[aria-disabled="true"]{opacity:.4;cursor:not-allowed}
-  .side-ib[aria-disabled="true"]:hover{background:none;color:var(--text-2)}
+  @media (hover:hover) and (pointer:fine){.side-ib[aria-disabled="true"]:hover{background:none;color:var(--text-2)}}
   .side-ib:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .side-ib svg{width:17px;height:17px}
 
@@ -2322,7 +2330,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 /* Today: the streak is a button that opens "Your streak" */
 .streak-btn{appearance:none;position:relative;width:calc(100% + 16px);margin:calc(var(--s-4) - 6px) -8px calc(var(--s-5) - 6px);padding:6px 32px 6px 8px;border:0;border-radius:var(--r-md);background:none;
   font:inherit;font-size:var(--fs-sm);text-align:left;color:var(--text-2);cursor:pointer;min-height:44px;transition:background var(--t-fast)}
-.streak-btn:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.streak-btn:hover{background:var(--surface-2)}}
 .streak .sb-go{position:absolute;right:8px;top:50%;width:16px;height:16px;margin-top:-8px;color:var(--text-3);filter:none}
 .streak.kept .sb-go{color:var(--text-3);filter:none}
 /* the freeze note under the streak line */
@@ -2418,7 +2426,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .dr-cap{font-size:var(--fs-2xs);line-height:1;color:var(--text-2)}
 .deck .icon-btn{grid-column:3;grid-row:1}
 .deck-go.add{width:auto;height:40px;padding:0 16px;border-radius:var(--r-pill);font:600 var(--fs-sm) var(--f-ui);white-space:nowrap;text-decoration:none}
-.deck-go.add:hover{background:var(--accent-line)}
+@media (hover:hover) and (pointer:fine){.deck-go.add:hover{background:var(--accent-line)}}
 /* A deck page's numbers: what is held back until tomorrow, and the shared-limit note */
 .held-note{margin:var(--s-2) 0 0;font-size:var(--fs-sm);color:var(--text-2)}
 .held-note span{color:var(--text-2)}
@@ -2431,13 +2439,15 @@ main[data-route="deck"] .screen-head .head-actions .btn{flex:1 1 0;min-width:0;m
 main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;order:-1;min-height:46px;font-size:var(--fs-base)}
 .more-wrap{position:relative;display:flex;flex:none}
 .more-btn{width:40px;height:auto;min-height:40px;border:1px solid var(--line);background:var(--surface-2);border-radius:var(--r-sm)}
-.more-btn:hover,.more-btn[aria-expanded="true"]{background:var(--surface-3);border-color:var(--line-strong);color:var(--text)}
+.more-btn[aria-expanded="true"]{background:var(--surface-3);border-color:var(--line-strong);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.more-btn:hover{background:var(--surface-3);border-color:var(--line-strong);color:var(--text)}}
 .more-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .more-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:8;min-width:190px;display:grid;padding:6px;background:var(--surface-3);border-radius:var(--r-md);box-shadow:var(--e-2),0 18px 40px -12px rgb(0 0 0 / .5)}
 .more-menu[hidden]{display:none}
 .more-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:var(--r-sm);font:500 var(--fs-base) var(--f-ui);color:var(--text);cursor:pointer;white-space:nowrap}
 .more-menu button .ico{width:18px;height:18px;color:var(--text-2)}
-.more-menu button:hover,.more-menu button:focus-visible{background:var(--surface-2)}
+.more-menu button:focus-visible{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.more-menu button:hover{background:var(--surface-2)}}
 .more-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 @media (min-width:1024px){
   main[data-route="deck"] .screen-head .head-actions .btn{flex:none;padding:6px 14px}
@@ -2451,9 +2461,8 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 #newNameRow{margin-top:var(--s-3)}
 #clozeNote{margin:var(--s-2) 0 0}
 #clozeNote .link{padding:8px 0;min-height:36px;color:var(--accent-text);text-align:left}
-#clozeNote .link:hover:not(:disabled){background:none;text-decoration:underline}
+@media (hover:hover) and (pointer:fine){#clozeNote .link:hover:not(:disabled){background:none;text-decoration:underline}}
 /* The save button names the deck; a new deck without a name asks for it just above the button */
-.savebar .save-hint{margin:0 0 var(--s-2);text-align:center;font-size:var(--fs-sm);color:var(--text-2)}
 .savebar .btn{white-space:normal;line-height:1.25;padding-block:10px;overflow-wrap:anywhere}
 /* The add-card panel: one gap (--s-3) between every field, whichever type is showing, and a body that keeps its height
    when the type changes, so the buttons below don't jump */
@@ -2487,7 +2496,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 @media (max-width:519px){.res-actions:has(#keepBtn) #keepBtn,.res-actions:has(#keepBtn) #againBtn{flex:1 1 100%}}
 /* Read aloud sits in the card's corner (the top bar keeps the counts, Undo when there is something to undo, ⋯ and End) */
 .rv-speak{position:absolute;z-index:2;top:var(--s-2);right:var(--s-2);display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:var(--r-md);background:transparent;color:var(--text-3);cursor:pointer}
-.rv-speak:hover{background:var(--surface-2);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.rv-speak:hover{background:var(--surface-2);color:var(--text)}}
 .rv-speak svg{width:19px;height:19px}
 .rv-card:has(.rv-speak) .flash-deck{padding-right:40px}
 /* An image-occlusion card: the picture is the card, so it grows (to 70% of the window's height), the header reads like a heading, and the covers are dark enough to see */
@@ -2502,7 +2511,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .set-nav::-webkit-scrollbar{display:none}
 .set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:550 var(--fs-sm) var(--f-ui);text-decoration:none}
 @media (max-width:359px){.set-nav{gap:6px}.set-nav a{padding:0 8px;font-size:var(--fs-xs)}}
-.set-nav a:hover{border-color:var(--accent-line);background:var(--accent-tint)}
+@media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--accent-line);background:var(--accent-tint)}}
 main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57px) + 60px)}
 .set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-sm);color:var(--text-2);font-weight:600}
 #appearTitle + .set-sub{margin-top:var(--s-2)}
@@ -2577,7 +2586,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .rv-card.scratching .rv-speak,.rv-card.scratching .occ-zoom{visibility:hidden}
 .scratch-tools{padding:4px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:var(--e-2),0 0 0 1px var(--line-strong)}
 .scratch-tool{min-width:40px;height:40px;padding:0 10px;border-radius:var(--r-sm);border:1px solid transparent;background:transparent;color:var(--text-2);font:600 var(--fs-xs) var(--f-ui);cursor:pointer;touch-action:manipulation}
-.scratch-tool:hover{background:var(--surface-3);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.scratch-tool:hover{background:var(--surface-3);color:var(--text)}}
 .scratch-tool[aria-pressed="true"]{background:var(--accent-tint);color:var(--accent-text);border-color:var(--accent-line)}
 .scratch-tool[data-tool="close"]{color:var(--text)}
 @media (max-width:420px){.scratch-tool{padding:0 7px;min-width:36px}}
@@ -2611,9 +2620,9 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-in:focus{outline:2px solid var(--accent);outline-offset:1px}
 .step-tools{grid-column:2;display:flex;justify-content:flex-end;gap:4px}
 .step-btn{display:grid;place-items:center;width:36px;height:36px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface-1);color:var(--text-2);font-size:var(--fs-md);line-height:1;cursor:pointer;touch-action:manipulation}
-.step-btn:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
+@media (hover:hover) and (pointer:fine){.step-btn:hover:not(:disabled){background:var(--surface-2);color:var(--text)}}
 .step-btn:disabled{opacity:.35;cursor:default}
-.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}
+@media (hover:hover) and (pointer:fine){.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}}
 @media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
 /* The Basic form grew (steps switch, memory hook): the fixed body height grows with it so switching card types does not jump */
 .ac-form .kind-body{min-height:38.5rem}
@@ -2672,7 +2681,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .radio-row{display:flex;align-items:center;gap:var(--s-2);min-height:36px}
 .partner-list{list-style:none;margin:var(--s-3) 0 0;padding:0;display:grid;gap:var(--s-2)}
 .partner-pick{width:100%;text-align:left;display:grid;gap:2px;padding:var(--s-3);background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text);cursor:pointer;min-width:0}
-.partner-pick:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.partner-pick:hover{background:var(--surface-2)}}
 .hard-fix{margin:var(--s-3) 0 0;font-size:var(--fs-sm)}
 /* Settings → Your data: how much of the account's space is used (amber from 80%, red when full) */
 .usage-line.warn{color:var(--exam)}
@@ -2867,7 +2876,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .sl-name{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .sl-moves{display:flex;gap:6px;flex:none}
 .sl-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);cursor:pointer;padding:0}
-.sl-btn:hover{background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.sl-btn:hover{background:var(--surface-3)}}
 .sl-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .sl-btn[aria-disabled="true"],#slReset[aria-disabled="true"]{opacity:.4;cursor:default}
 .sl-btn .ico{width:20px;height:20px}
@@ -2953,16 +2962,16 @@ main[data-route="stats"] .ed-unit .ed-body .card{padding-top:calc(var(--s-4) + 2
 /* A half card with no half partner: the true grid shows the empty half */
 .ed-slot{display:grid;place-items:center;min-height:120px;padding:var(--s-3);border:2px dashed var(--line-strong);border-radius:var(--r-lg);color:var(--text-2);font-size:var(--fs-sm);text-align:center}
 .ed-add{box-sizing:border-box;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:96px;margin-top:var(--s-2);padding:var(--s-3);border:2px dashed var(--accent-line);border-radius:var(--r-lg);background:none;color:var(--accent-text);font:600 var(--fs-base) var(--f-ui);cursor:pointer}
-.ed-add:hover{background:var(--accent-tint)}
+@media (hover:hover) and (pointer:fine){.ed-add:hover{background:var(--accent-tint)}}
 .ed-add .ico{width:22px;height:22px}
 .ed-add[aria-disabled="true"]{border-color:var(--line-strong);color:var(--text-2);cursor:default}
-.ed-add[aria-disabled="true"]:hover{background:none}
+@media (hover:hover) and (pointer:fine){.ed-add[aria-disabled="true"]:hover{background:none}}
 .ed-add:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Add widget sheet */
 .aw-note{margin:0 0 var(--s-3)}
 .aw-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
 .aw-item{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:64px;padding:var(--s-2) var(--s-3);text-align:left;background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text);cursor:pointer;font:inherit}
-.aw-item:hover{border-color:var(--accent-line);background:var(--accent-tint)}
+@media (hover:hover) and (pointer:fine){.aw-item:hover{border-color:var(--accent-line);background:var(--accent-tint)}}
 .aw-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .aw-thumb{flex:none;display:grid;place-items:center;width:56px;height:56px;border-radius:var(--r-sm);background:var(--accent-tint);color:var(--accent-text)}
 .aw-svg{width:40px;height:40px}
@@ -3020,3 +3029,38 @@ a.back{text-decoration:none}
 .tag-sugs .ts-cards label{display:flex;align-items:flex-start;gap:var(--s-2);min-height:44px;padding:8px 2px;font-size:var(--fs-sm);cursor:pointer}
 .tag-sugs .ts-cards input{margin:2px 0 0;flex:none;width:18px;height:18px;accent-color:var(--accent)}
 .tag-sugs .ts-cards span{min-width:0;overflow-wrap:anywhere}
+
+/* ---- Dark mode finishing (UI audit): control edges, selected chips, primary buttons ----
+   Everything here is dark only (":root:not([data-theme="light"])"), so light mode looks as before. */
+/* The edge of a secondary button, an unselected chip and the like is the --control color (3:1 against the page), so a control can be
+   found in the dark. Selected chips keep their accent edge. Cards and dividers stay on the softer --line / --line-strong. */
+:root:not([data-theme="light"]) :is(.btn.ghost,.btn.danger:not(.armed,.solid),.more-btn,.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"]),.flagbtn:not([aria-pressed="true"]),.pick-btn,.set-nav a,.stepper .icon-btn,.step-btn,.sl-btn,.snd-btn,.img-retry,.occ-peek){border-color:var(--control)}
+@media (hover:hover) and (pointer:fine){
+  :root:not([data-theme="light"]) :is(.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"])):hover{border-color:var(--accent-line)}
+}
+/* A selected chip: a clear tinted fill, the accent edge drawn twice as thick, and a check mark (so it is not color alone) */
+:root:not([data-theme="light"]) :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:rgb(var(--acc) / .3);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.chip input:checked + span::after,.tchip[aria-pressed="true"]::after{content:"";order:-1;flex:none;width:5px;height:9px;margin:-2px 3px 0 1px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg)}
+/* Primary buttons (Show answer, Start...): no glow, and a fill a little deeper than the accent so it is not the brightest thing on the page.
+   The dark text on it stays above 4.5:1 in every accent. Clinical already has no glow and keeps its own fill. */
+:root:not([data-theme="light"]) .btn.primary{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .1)}
+:root:not([data-theme="light"]):not([data-ui="clinical"]) .btn.primary{background:color-mix(in srgb,var(--accent) 85%,var(--bg))}
+@media (hover:hover) and (pointer:fine){
+  :root:not([data-theme="light"]) .btn.primary:hover{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .14)}
+  :root:not([data-theme="light"]):not([data-ui="clinical"]) .btn.primary:hover{background:var(--accent)}
+}
+:root:not([data-theme="light"]) .deck-go.lead{box-shadow:none}
+
+/* ---- Touch screens (UI audit): small buttons get a 44px tap height, the editor toolbar 40x40 ---- */
+@media (pointer:coarse){
+  .btn.small,main[data-route="deck"] .screen-head .head-actions .btn{min-height:44px}
+  .back{min-height:44px;padding-block:0}
+  .exam-chip,.deck-sort button{min-height:44px}
+  .fmt-tools button{min-width:40px;min-height:40px}
+  #forgotBtn,#planRest{display:inline-flex;align-items:center;min-height:44px}
+  /* the round "i" keeps its 24px ring; the button around it is 44px */
+  .info-fold summary{width:44px;height:44px;border:0;background:none}
+  .info-fold summary > span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1.5px solid currentColor}
+  .info-fold[open] summary{background:none}
+  .info-fold[open] summary > span{background:var(--accent-tint)}
+}

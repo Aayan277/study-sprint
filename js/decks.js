@@ -284,8 +284,10 @@ export async function renderDeck(el, deckId) {
   const parent = parents.at(-1);
   const exam = examInfo(effectiveDeck(decks, deckId));
   const kids = inside(list, deckId);
-  // Exam within two weeks: Exam prep is the main button and Review steps back.
+  // Exam within two weeks: Exam prep is the main button and Review steps back, unless cards are due: then Review ("Review · 6", the
+  // number Review will show) is the main one and Exam prep is the second button.
   const soon = !!exam && exam.daysLeft <= 14;
+  const reviewFirst = !soon || counts.total > 0;
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   el.innerHTML = `
@@ -296,15 +298,15 @@ export async function renderDeck(el, deckId) {
         ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then.${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
-        ${soon ? '<button class="btn primary small" type="button" id="prepBtn">Exam prep</button>' : ''}
-        ${s.total ? `<a class="btn ${soon ? 'ghost' : 'primary'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review</a>` : ''}
-        ${s.total ? '<button class="btn ghost small" type="button" id="testBtn">Practice test</button>' : ''}
-        <a class="btn ghost small" href="#/import/${esc(deck.id)}">Import</a>
+        ${soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : ''}
+        ${s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review${counts.total ? ` · ${counts.total}` : ''}</a>` : ''}
+        ${s.total ? '<button class="btn ghost small" type="button" id="testBtn">Practice test</button>' : '<a class="btn ghost small" href="#/import/' + esc(deck.id) + '">Import</a>'}
         <div class="more-wrap">
           <button class="icon-btn more-btn" type="button" id="deckMore" aria-haspopup="menu" aria-expanded="false" aria-controls="deckMenu" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>
           <div class="more-menu" id="deckMenu" role="menu" aria-label="${esc(deck.name)}" hidden>
             <button type="button" role="menuitem" tabindex="-1" id="editDeck">${icon('edit')} Edit deck</button>
             <button type="button" role="menuitem" tabindex="-1" id="addSub">${icon('plus')} Add subdeck</button>
+            ${s.total ? `<button type="button" role="menuitem" tabindex="-1" id="importHere">${icon('upload')} Import cards</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
             ${cards.length >= 10 ? `<button type="button" role="menuitem" tabindex="-1" id="autoTag">${icon('tag')} Suggest tags</button>` : ''}
@@ -328,6 +330,7 @@ export async function renderDeck(el, deckId) {
   $('back').addEventListener('click', () => { up(parent ? `#/deck/${parent.id}` : '#/decks'); });
   el.querySelectorAll('.subdecks-page [data-open]').forEach(b => b.addEventListener('click', () => { navGo(`#/deck/${b.dataset.open}`); }));
   $('addSub').addEventListener('click', () => openDeckEditor(null, saved => { navGo(`#/deck/${saved.id}`); }, { parentId: deckId }));
+  $('importHere')?.addEventListener('click', () => navGo(`#/import/${deck.id}`));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
   // Topic tags worked out from the cards' text (js/autotag-sheet.js loads when first needed); nothing is added until you confirm.

@@ -18,7 +18,7 @@ const noHScroll = async w => ok(await page.evaluate(() => document.documentEleme
 const fold = s => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const rows = () => page.locator('.prow.sug');
 const ticked = () => page.locator('.prow.sug .pick:checked').count();
-const label = async () => Number(((await page.textContent('#saveBtn')).match(/Add (\d+) card/) || [])[1] || 0);
+const label = async () => Number(((await page.textContent('#saveBtn')).match(/(?:Add|to add) (\d+) card/) || [])[1] || 0);
 const openImport = async () => { await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck'); await page.evaluate(() => sessionStorage.removeItem('study-sprint-import-draft')); await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#pasteBox'); };
 const fillText = async text => { await page.evaluate(t => { const b = document.getElementById('pasteBox'); b.value = t; b.dispatchEvent(new Event('input', { bubbles: true })); }, text); };
 const suggested = () => page.waitForSelector('.prow.sug', { timeout: 30000 });
@@ -153,7 +153,7 @@ ok(await rows().count() >= 28, `${await rows().count()} word pairs`);
 ok(await page.locator('.prow.sug[data-kind=vocab]').count() === await rows().count() && await page.locator('.prow.sug textarea[data-side=cloze]').count() === 0, 'all word pairs, no cloze rows');
 ok(await page.locator('.prow.sug .badge:text-is("Both directions: makes 2 cards")').count() >= 28, 'rows show "Both directions: makes 2 cards"');
 ok(await page.isVisible('#revRow'), 'the reverse switch is shown');
-ok(/\b(\d\d) cards? to/.test(await page.textContent('#saveBtn')) && (await label()) >= 56 || (await label()) >= 28, 'the button counts the reverse cards: ' + await page.textContent('#saveBtn'));
+ok(/\b(\d\d) cards?\b/.test(await page.textContent('#saveBtn')) && (await label()) >= 56 || (await label()) >= 28, 'the button counts the reverse cards: ' + await page.textContent('#saveBtn'));
 
 // ---- 8. slides ----
 await openImport();

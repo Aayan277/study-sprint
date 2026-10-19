@@ -201,7 +201,6 @@ export async function renderImport(el, arg) {
     </section>
 
     <div class="savebar" id="savebar" hidden>
-      <p class="save-hint" id="saveHint" hidden>Name the new deck above</p>
       <button class="btn primary" type="button" id="saveBtn">Add cards</button>
     </div>`;
 
@@ -911,8 +910,7 @@ function refreshFlags() {
   const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].dataset.name).replace(/\s+/g, ' ');
   const shown = name.length > 32 ? name.slice(0, 31) + '…' : name;
   const total = complete + pairN;          // a reverse card is a card too
-  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(total, 'card')} to “${shown}”` : `Add ${plural(total, 'card')}`;
-  $('saveHint').hidden = !complete || !!name;
+  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(total, 'card')} to “${shown}”` : `Name the deck to add ${plural(total, 'card')}`;   // (the ask is in the button itself: a hint above it overlapped the page)
   $('saveBtn').disabled = !complete;
 }
 

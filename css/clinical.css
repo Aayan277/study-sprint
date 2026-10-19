@@ -64,9 +64,9 @@
 /* --- buttons and controls: solid fills, no glow --- */
 :root[data-ui="clinical"] .btn{font-weight:550;letter-spacing:0}
 :root[data-ui="clinical"] .btn.primary{box-shadow:none}
-:root[data-ui="clinical"] .btn.primary:hover{box-shadow:none}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.primary:hover{box-shadow:none}}
 :root[data-ui="clinical"] .btn.ghost{background:var(--surface-1);border-color:var(--line-strong)}
-:root[data-ui="clinical"] .btn.ghost:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.ghost:hover{background:var(--surface-2)}}
 :root[data-ui="clinical"] .btn:active:not(:disabled){transform:none}
 :root[data-ui="clinical"] .btn.big{min-height:48px;font-size:var(--fs-base)}
 :root[data-ui="clinical"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"],.mode:has(input:checked),.skin[aria-pressed="true"]){box-shadow:none}
@@ -76,15 +76,15 @@
 :root[data-ui="clinical"] :is(.field input,.field select,.field textarea,.br-controls input,.br-controls select,.row-form input,#pasteBox,.typeform input,.rich,.adv-row input,.pcells textarea):focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 :root[data-ui="clinical"] .set-nav{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
 :root[data-ui="clinical"] .set-nav a{border-radius:var(--r-sm);background:var(--surface-1);font-weight:500}
-:root[data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);border-color:var(--line-strong)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);border-color:var(--line-strong)}}
 :root[data-ui="clinical"] .set-sub{color:var(--text-2);font-weight:600;font-size:var(--fs-xs);letter-spacing:.02em;text-transform:uppercase}
 :root[data-ui="clinical"] dialog.sheet::backdrop{backdrop-filter:none}
 
 :root[data-ui="clinical"] :is(.chip span,.tchip,.flagbtn){border-radius:var(--r-sm);background:var(--surface-1)}
 :root[data-ui="clinical"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:var(--surface-2);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-:root[data-ui="clinical"] .chip:hover span,:root[data-ui="clinical"] .tchip:hover{border-color:var(--control)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .chip:hover span,:root[data-ui="clinical"] .tchip:hover{border-color:var(--control)}}
 :root[data-ui="clinical"] .mode:has(input:checked){background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--accent)}
-:root[data-ui="clinical"] :is(.mode,.skin,.opt):hover{border-color:var(--control)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] :is(.mode,.skin,.opt):hover{border-color:var(--control)}}
 
 /* --- Today --- */
 :root[data-ui="clinical"] .today-hero{background:var(--surface-1);box-shadow:var(--e-1)}
@@ -98,7 +98,7 @@
 :root[data-ui="clinical"] :is(.td-name,.deck-name)::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-right:8px;vertical-align:1px}
 :root[data-ui="clinical"] .exam-link .ico{color:var(--deck)}
 :root[data-ui="clinical"] :is(.tdeck,.deck,.exam-row){padding-left:var(--s-4)}
-:root[data-ui="clinical"] :is(.tdeck,.deck):hover{box-shadow:var(--e-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] :is(.tdeck,.deck):hover{box-shadow:var(--e-2)}}
 :root[data-ui="clinical"] .td-name,:root[data-ui="clinical"] .deck-name{letter-spacing:-.01em}
 /* Due counts: plain text, not glowing pills */
 :root[data-ui="clinical"] :is(.td-counts,.deck-counts) .due{padding:0;background:none;box-shadow:none;color:var(--text-2)}
@@ -107,8 +107,7 @@
 /* Round play buttons become quiet outlined buttons; the "next up" one is solid */
 :root[data-ui="clinical"] .td-go .ico,
 :root[data-ui="clinical"] .deck-go{background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text-2)}
-:root[data-ui="clinical"] .tdeck:hover .td-go .ico,
-:root[data-ui="clinical"] .deck-go:hover{color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .tdeck:hover .td-go .ico,:root[data-ui="clinical"] .deck-go:hover{color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}}
 :root[data-ui="clinical"] .deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:none}
 :root[data-ui="clinical"] :is(.tdeck.done .td-go .ico,.deck-go.done){background:none;box-shadow:inset 0 0 0 1px var(--line);color:var(--good)}
 /* Exams: quiet outlined badge, amber text */
@@ -130,7 +129,7 @@
 :root[data-ui="clinical"] .mbar{height:6px;border-radius:var(--r-xs)}
 :root[data-ui="clinical"] .mbar span{border-radius:1px}
 :root[data-ui="clinical"] .more-menu{background:var(--surface-1);box-shadow:var(--e-3)}
-:root[data-ui="clinical"] .more-menu button:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .more-menu button:hover{background:var(--surface-2)}}
 :root[data-ui="clinical"] .more-btn{background:var(--surface-1);border-color:var(--line-strong)}
 :root[data-ui="clinical"] .bulkbar{border-color:var(--line-strong)}
 
@@ -151,7 +150,7 @@
 :root[data-ui="clinical"] .rate::before{display:none}
 :root[data-ui="clinical"] .rate b{color:inherit;font-weight:600}
 :root[data-ui="clinical"] .rate span{color:var(--text-2);font-weight:500}
-:root[data-ui="clinical"] .rate:hover{background:var(--surface-2);border-color:currentColor;box-shadow:none}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .rate:hover{background:var(--surface-2);border-color:currentColor;box-shadow:none}}
 :root[data-ui="clinical"] .rate:active{transform:none}
 :root[data-ui="clinical"] .rate.suggested{box-shadow:inset 0 0 0 1px currentColor}
 :root[data-ui="clinical"] .savebar{background:var(--bg)}
@@ -165,8 +164,8 @@
 
 /* --- Stats: flat bars and tiles --- */
 :root[data-ui="clinical"] .bar{background:color-mix(in srgb,var(--accent) 72%,var(--surface-1));border-radius:2px 2px 0 0}
-:root[data-ui="clinical"] .col:last-child .bar,
-:root[data-ui="clinical"] .col:hover .bar{background:var(--accent);box-shadow:none}
+:root[data-ui="clinical"] .col:last-child .bar{background:var(--accent);box-shadow:none}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .col:hover .bar{background:var(--accent);box-shadow:none}}
 :root[data-ui="clinical"] .pgrid .pc-streak{background:var(--surface-1)}
 :root[data-ui="clinical"] .pgrid .pc-streak .big{text-shadow:none}
 :root[data-ui="clinical"] .pgrid .card h2{letter-spacing:.02em;font-weight:600}
@@ -199,7 +198,7 @@
   :root[data-ui="clinical"] .tab{color:var(--text-2)}
   :root[data-ui="clinical"] .tab[aria-current="page"]{background:var(--side-on);color:var(--text);box-shadow:none}
   :root[data-ui="clinical"] .tab[aria-current="page"] svg{color:var(--text)}
-  :root[data-ui="clinical"] .tab:hover{background:var(--side-on)}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .tab:hover{background:var(--side-on)}}
   :root[data-ui="clinical"] .side-add{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
   :root[data-ui="clinical"] .side-add svg{color:var(--text-2)}
   :root[data-ui="clinical"] .side-badge,
@@ -207,16 +206,12 @@
   :root[data-ui="clinical"] .side-head{letter-spacing:.02em;color:var(--text-2)}
   :root[data-ui="clinical"] .side-deck:not(.side-new)::before{left:16px;top:50%;bottom:auto;width:7px;height:7px;margin-top:-3.5px;border-radius:50%}
   :root[data-ui="clinical"] .side-deck[aria-current="page"]{background:var(--side-on);box-shadow:none}
-  :root[data-ui="clinical"] .side-deck:hover{background:var(--side-on)}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .side-deck:hover{background:var(--side-on)}}
   :root[data-ui="clinical"] .side-exam{background:none;box-shadow:none;color:var(--exam);font-weight:550;padding:0 2px}
   :root[data-ui="clinical"] .side-exam.soon{background:none;box-shadow:none;color:var(--again)}
   :root[data-ui="clinical"] .side-dot{box-shadow:none}
   :root[data-ui="clinical"] .side-streak.kept .ring-in .ico{filter:none}
-  :root[data-ui="clinical"] .side-streak:hover,
-  :root[data-ui="clinical"] .side-sync:hover,
-  :root[data-ui="clinical"] .side-set:hover,
-  :root[data-ui="clinical"] .side-help:hover,
-  :root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .side-streak:hover,:root[data-ui="clinical"] .side-sync:hover,:root[data-ui="clinical"] .side-set:hover,:root[data-ui="clinical"] .side-help:hover,:root[data-ui="clinical"] .side-ib:hover{background:var(--side-on)}}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-6) var(--s-8)}
   :root[data-ui="clinical"] .th-big{font-size:2rem}
 }
@@ -250,7 +245,7 @@
   --bg:#131416; --surface-1:#1B1C1F; --surface-2:#222327; --surface-3:#2B2D31; --surface-sunken:#151618;
   --side-bg:#17181A; --side-on:#26272B;
   --text:#ECEDEF; --text-2:#A8ADB6; --text-3:#90959E; --control:#6C727C;
-  --line:#2A2C30; --line-strong:#383A40;
+  --line:#3A3D43; --line-strong:#4A4D55;        /* hairlines and card edges: clearly there, still quiet (were #2A2C30 / #383A40, about 1.2:1 on the card) */
   --e-1:0 0 0 1px var(--line);
   --e-2:0 0 0 1px var(--line-strong);
   --e-3:0 0 0 1px var(--line-strong),0 20px 48px -16px rgb(0 0 0 / .7);
@@ -330,7 +325,7 @@
 :root[data-ui="clinical"] .th-done p{font-size:var(--fs-sm);color:var(--text-2);margin:0 0 var(--s-3)}
 :root[data-ui="clinical"] .th-done .th-extra{color:var(--accent-text)}
 :root[data-ui="clinical"] .th-done .th-extra.btn{min-height:40px;padding:8px 16px;color:var(--text);font-size:var(--fs-sm);font-weight:550;background:var(--surface-1);border:1px solid var(--line-strong)}
-:root[data-ui="clinical"] .th-done .th-extra.btn:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .th-done .th-extra.btn:hover{background:var(--surface-2)}}
 /* The rating buttons' coloured top edge and the tinted fills are gone in every variant */
 :root[data-ui="clinical"] :is(.rate.r1,.rate.r2,.rate.r3,.rate.r4){background:var(--surface-1)}
 :root[data-ui="clinical"] .ring-bg{stroke:var(--surface-3)}
@@ -368,8 +363,8 @@
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exams,.tdecks){gap:0;border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line);background:var(--surface-1);overflow:hidden}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck){border-radius:0;box-shadow:none;background:var(--surface-1)}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck) + :is(.exam-row,.tdeck){box-shadow:inset 0 1px 0 var(--line)}
-:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
-:root[data-ui="clinical"][data-ui="clinical"] .tdeck + .tdeck:hover{box-shadow:inset 0 1px 0 var(--line)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
+  :root[data-ui="clinical"][data-ui="clinical"] .tdeck + .tdeck:hover{box-shadow:inset 0 1px 0 var(--line)}}
 :root[data-ui="clinical"][data-ui="clinical"] .tdeck{min-height:64px;padding:10px 12px 10px 16px}
 :root[data-ui="clinical"][data-ui="clinical"] .td-name{font-size:var(--fs-base);font-weight:600}
 :root[data-ui="clinical"][data-ui="clinical"] .td-go .ico{width:32px;height:32px;padding:8px}
@@ -378,7 +373,7 @@
 
 /* ---------- Decks ---------- */
 :root[data-ui="clinical"][data-ui="clinical"] .deck{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-lg)}
-:root[data-ui="clinical"][data-ui="clinical"] .deck:hover{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .deck:hover{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-fg{stroke:var(--accent)}
 :root[data-ui="clinical"][data-ui="clinical"] .dr-cap{color:var(--text-2)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-search input{background:var(--surface-1);border-color:var(--line-strong)}
@@ -474,7 +469,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-go .ico{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .td-go::after{content:"Study";font-size:var(--fs-sm);font-weight:600;color:var(--accent-text)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck.done .td-go::after{content:"Done";font-weight:500;color:var(--text-2)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck:hover .td-go::after{text-decoration:underline;text-underline-offset:3px}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tdeck:hover .td-go::after{text-decoration:underline;text-underline-offset:3px}}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go{width:auto!important;height:30px;padding:0 10px;border-radius:var(--r-sm)!important;font:600 var(--fs-xs)/1 var(--f-ui)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go .ico{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-go::after{content:"Study"}
@@ -553,16 +548,20 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-add{margin:4px 16px 14px 20px;justify-content:center;height:34px;box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-sm)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tabs-in{padding:0 0 0 0;gap:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab{min-height:34px;padding:0 16px 0 20px;border-radius:0;font-size:var(--fs-base);color:var(--text-2);background:none!important;box-shadow:none!important}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab:hover{color:var(--text);text-decoration:underline;text-underline-offset:3px}}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab[aria-current="page"]{color:var(--text);font-weight:650}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab[aria-current="page"]::before{display:block;left:0;top:6px;bottom:6px;width:3px;border-radius:0;background:var(--accent);box-shadow:none}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-head{margin:0 16px 4px 20px;padding:4px 0;letter-spacing:.04em}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-list{padding:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-deck{border-radius:0;padding:0 16px 0 36px;min-height:30px;box-shadow:none!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-deck:not(.side-new)::before{left:20px!important;width:8px!important;height:8px!important;margin-top:-4px!important}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-deck:hover{background:none;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-deck:hover{background:none;color:var(--text);text-decoration:underline;text-underline-offset:3px}}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-new{padding-left:20px!important}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-foot{padding:12px 12px 12px 20px;border-top:1px solid var(--line-strong)}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-foot{padding:12px 10px 12px 20px;border-top:1px solid var(--line-strong)}
+  /* The tools row (help, Settings and its version, light/dark, collapse) is 208px wide at the usual sizes: it is trimmed to fit the 185px between the footer's padding, so the collapse button is not cut off */
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]:not([data-rail="on"]) .side-tools{gap:0;min-width:0}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]:not([data-rail="on"]) .side-tools :is(.side-help,.side-ib){width:26px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"]:not([data-rail="on"]) .side-set{gap:6px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-streak{padding:4px 0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .side-sync{padding-left:0}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] :is(.side-set,.side-help){padding:0;border-radius:var(--r-sm)}
@@ -688,10 +687,10 @@
 /* ---- a .btn with no kind (e.g. "Reload" on "Couldn't load this screen") got the browser's grey button face, which reads as
    disabled in dark mode: it is an ordinary outlined button here ---- */
 :root[data-ui="clinical"] .btn:not(.primary,.ghost,.danger,.cta,.solid,.link){background:var(--surface-1);border-color:var(--line-strong);color:var(--text)}
-:root[data-ui="clinical"] .btn:not(.primary,.ghost,.danger,.cta,.solid,.link):hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn:not(.primary,.ghost,.danger,.cta,.solid,.link):hover{background:var(--surface-2)}}
 /* ---- the sheet's close button: square like everything else, not a circle ---- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x{border-radius:var(--r-sm);background:var(--surface-1);box-shadow:inset 0 0 0 1px var(--line-strong)}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .sheet-x:hover{background:var(--surface-2)}}
 
 /* ===============================================================   6. Desktop page widths and wide screens (tier 2; the owner's desktop review after v4.14)
    Every page sits in a column centred in the space next to the sidebar, with a width that suits it, so nothing is
@@ -798,7 +797,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .screen-head{grid-column:1 / -1}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] > .view > .set-nav{grid-column:1;grid-row:2 / span 999;align-self:start;position:sticky;top:24px;display:grid;gap:2px;margin:0;padding:0;border:0;background:none;overflow:visible}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a{min-height:34px;padding:0 12px;margin-left:-12px;border:0;border-radius:var(--r-sm);background:none;color:var(--text-2);font-weight:500}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}
+  @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .set-nav a:hover{background:var(--surface-2);color:var(--text)}}
 }
 @media (min-width:1600px){
   /* the deck page on a wide screen: the deck's name and buttons in a column on the left, with the counts panel under them
@@ -821,7 +820,8 @@
 
 /* ---- Browse / deck page: the draggable divider between the list and the card editor (js/panel-resize.js). Flat: a thin rule that is always there, accent on hover and while dragging ---- */
 :root[data-ui="clinical"] #panelResizer::before{left:5px;width:1px;border-radius:0;background:var(--line-strong)}
-:root[data-ui="clinical"] #panelResizer:hover::before,:root[data-ui="clinical"] #panelResizer:focus-visible::before,:root[data-ui="clinical"] body.panel-resizing #panelResizer::before{left:4px;width:3px;background:var(--accent)}
+:root[data-ui="clinical"] #panelResizer:focus-visible::before,:root[data-ui="clinical"] body.panel-resizing #panelResizer::before{left:4px;width:3px;background:var(--accent)}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] #panelResizer:hover::before{left:4px;width:3px;background:var(--accent)}}
 
 /* ======================================================================
    7. Phones (under 600px): fewer boxes (audit 2026-10, prototype)
@@ -894,3 +894,15 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill{flex-basis:100%}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .streak .frz-pill::before{content:none}
 }
+
+/* ======================================================================
+   7. Dark mode finishing (UI audit). Dark only; light is untouched.
+   Edges of secondary buttons, chips and the like are drawn in styles.css (the --control color, 3:1): this adds the places
+   Clinical styles itself, plus the selected-chip fill and the mastery bar.
+   ====================================================================== */
+/* A selected chip: a clear tinted fill (styles.css adds the check mark) */
+:root[data-ui="clinical"][data-theme="dark"] :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:color-mix(in srgb,var(--accent) 30%,var(--surface-1))}
+/* Buttons Clinical gives its own edge (a longer selector than the shared rule can beat) */
+:root[data-ui="clinical"][data-theme="dark"] :is(.th-done .th-extra.btn,.stats-scope .pick-btn,#claudeBtn,.skin:not([aria-pressed="true"])){border-color:var(--control)}
+/* Mastery bar: "Young" has to be 3:1 against the track (it was 1.5:1), so it is a lighter step of the accent, and "Mature" the light accent above it */
+:root[data-ui="clinical"][data-theme="dark"]{--lv-young:color-mix(in srgb,var(--accent) 90%,white); --lv-mature:var(--accent-text)}
