@@ -1,0 +1,377 @@
+{
+ "name": "Modern History",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "What event triggered the outbreak of the First World War?",
+   "back": "The assassination of Archduke Franz Ferdinand in Sarajevo, 28 June 1914",
+   "topic": "ww1"
+  },
+  {
+   "id": "c2",
+   "front": "Who assassinated Franz Ferdinand?",
+   "back": "Gavrilo Princip, a Bosnian Serb linked to the Black Hand",
+   "topic": "ww1"
+  },
+  {
+   "id": "c3",
+   "front": "What was the Schlieffen Plan?",
+   "back": "Germany's plan to defeat France quickly by going through Belgium, then turn east to fight Russia",
+   "topic": "ww1"
+  },
+  {
+   "id": "c4",
+   "front": "Why did Britain enter the war in August 1914?",
+   "back": "Germany invaded neutral Belgium; Britain had guaranteed Belgian neutrality (Treaty of London 1839)",
+   "topic": "ww1"
+  },
+  {
+   "id": "c5",
+   "front": "What were the two alliance blocs before 1914?",
+   "back": "Triple Entente (Britain, France, Russia) and Triple Alliance (Germany, Austria-Hungary, Italy)",
+   "topic": "ww1"
+  },
+  {
+   "id": "c6",
+   "front": "What was the significance of the Battle of the Marne (1914)?",
+   "back": "Halted the German advance on Paris; led to trench warfare on the Western Front",
+   "topic": "ww1"
+  },
+  {
+   "id": "c7",
+   "front": "What happened at the Battle of the Somme?",
+   "back": "1916 British/French offensive; 57,000 British casualties on the first day; little ground gained",
+   "topic": "ww1"
+  },
+  {
+   "id": "c8",
+   "front": "Why was Verdun significant?",
+   "back": "1916 German attempt to \"bleed France white\"; ~10 months long; symbol of French resistance",
+   "topic": "ww1"
+  },
+  {
+   "id": "c9",
+   "front": "What was the Gallipoli campaign?",
+   "back": "1915 Allied attempt to take the Dardanelles from the Ottoman Empire; failed with heavy ANZAC losses",
+   "topic": "ww1"
+  },
+  {
+   "id": "c10",
+   "front": "What was unrestricted submarine warfare?",
+   "back": "German U-boats sinking all ships, including neutral ones, in the war zone around Britain",
+   "topic": "ww1"
+  },
+  {
+   "id": "c11",
+   "front": "What was the Zimmermann Telegram?",
+   "back": "1917 German offer to Mexico of an alliance against the USA; helped bring the US into the war",
+   "topic": "ww1"
+  },
+  {
+   "id": "c12",
+   "front": "When did the USA enter the First World War?",
+   "back": "April 1917",
+   "topic": "ww1"
+  },
+  {
+   "id": "c13",
+   "front": "What was the Treaty of Brest-Litovsk?",
+   "back": "March 1918 peace between Bolshevik Russia and Germany; Russia lost huge territory",
+   "topic": "ww1"
+  },
+  {
+   "id": "c14",
+   "front": "When was the armistice signed?",
+   "back": "11 November 1918",
+   "topic": "ww1"
+  },
+  {
+   "id": "c15",
+   "front": "What was the War Guilt Clause?",
+   "back": "Article 231 of the Treaty of Versailles; Germany accepted responsibility for the war",
+   "topic": "ww1"
+  },
+  {
+   "id": "c16",
+   "front": "Name three terms of the Treaty of Versailles",
+   "back": "Reparations (£6.6bn), army limited to 100,000, loss of Alsace-Lorraine and colonies, demilitarised Rhineland",
+   "topic": "ww1"
+  },
+  {
+   "id": "c17",
+   "front": "What were Wilson's Fourteen Points?",
+   "back": "US President Wilson's peace aims: self-determination, open diplomacy, free trade, League of Nations",
+   "topic": "ww1"
+  },
+  {
+   "id": "c18",
+   "front": "What was the League of Nations?",
+   "back": "International body set up in 1920 after the war to keep peace; USA never joined",
+   "topic": "ww1"
+  },
+  {
+   "id": "c19",
+   "front": "What new weapons were used on the Western Front?",
+   "back": "Poison gas, tanks, machine guns, aircraft, heavy artillery",
+   "topic": "ww1"
+  },
+  {
+   "id": "c20",
+   "front": "What was trench warfare like?",
+   "back": "Stalemate; mud, rats, trench foot, shelling; no man's land between front lines",
+   "topic": "ww1"
+  },
+  {
+   "id": "c21",
+   "front": "When did the French Revolution begin?",
+   "back": "1789",
+   "topic": "frev"
+  },
+  {
+   "id": "c22",
+   "front": "What were the three Estates of the Ancien Régime?",
+   "back": "First Estate: clergy; Second Estate: nobility; Third Estate: everyone else (~97%)",
+   "topic": "frev"
+  },
+  {
+   "id": "c23",
+   "front": "Why did Louis XVI call the Estates-General in 1789?",
+   "back": "France was bankrupt after wars (incl. American War of Independence) and needed new taxes",
+   "topic": "frev"
+  },
+  {
+   "id": "c24",
+   "front": "What was the Tennis Court Oath?",
+   "back": "20 June 1789: the Third Estate (now the National Assembly) swore not to separate until France had a constitution",
+   "topic": "frev"
+  },
+  {
+   "id": "c25",
+   "front": "Why is 14 July 1789 remembered?",
+   "back": "Storming of the Bastille, a royal prison and symbol of royal tyranny",
+   "topic": "frev"
+  },
+  {
+   "id": "c26",
+   "front": "What was the Declaration of the Rights of Man and of the Citizen?",
+   "back": "August 1789 statement of liberty, equality before the law and popular sovereignty",
+   "topic": "frev"
+  },
+  {
+   "id": "c27",
+   "front": "What was the Great Fear?",
+   "back": "Summer 1789 peasant panic and attacks on noble châteaux in the countryside",
+   "topic": "frev"
+  },
+  {
+   "id": "c28",
+   "front": "What was the Flight to Varennes?",
+   "back": "June 1791: Louis XVI and Marie Antoinette tried to escape France and were caught; trust in the king collapsed",
+   "topic": "frev"
+  },
+  {
+   "id": "c29",
+   "front": "Who were the Jacobins?",
+   "back": "Radical revolutionary club led by Robespierre; dominated the Convention 1793-94",
+   "topic": "frev"
+  },
+  {
+   "id": "c30",
+   "front": "Who were the Girondins?",
+   "back": "More moderate republicans; favoured war in 1792; purged by the Jacobins in 1793",
+   "topic": "frev"
+  },
+  {
+   "id": "c31",
+   "front": "When was Louis XVI executed?",
+   "back": "21 January 1793, by guillotine",
+   "topic": "frev"
+  },
+  {
+   "id": "c32",
+   "front": "What was the Reign of Terror?",
+   "back": "1793-94: the Committee of Public Safety executed ~17,000 \"enemies of the revolution\"",
+   "topic": "frev"
+  },
+  {
+   "id": "c33",
+   "front": "What was the Committee of Public Safety?",
+   "back": "Executive body of the Convention during the Terror, led by Robespierre",
+   "topic": "frev"
+  },
+  {
+   "id": "c34",
+   "front": "What was the Law of Suspects?",
+   "back": "September 1793 law allowing arrest of anyone suspected of opposing the revolution",
+   "topic": "frev"
+  },
+  {
+   "id": "c35",
+   "front": "What was Thermidor?",
+   "back": "July 1794: Robespierre overthrown and executed; end of the Terror",
+   "topic": "frev"
+  },
+  {
+   "id": "c36",
+   "front": "What was the Directory?",
+   "back": "Government of France 1795-99; five directors; weak and corrupt",
+   "topic": "frev"
+  },
+  {
+   "id": "c37",
+   "front": "How did Napoleon come to power?",
+   "back": "Coup of 18 Brumaire (November 1799); became First Consul",
+   "topic": "frev"
+  },
+  {
+   "id": "c38",
+   "front": "Who were the sans-culottes?",
+   "back": "Working-class Parisian radicals who wore trousers rather than knee breeches",
+   "topic": "frev"
+  },
+  {
+   "id": "c39",
+   "front": "What was the Civil Constitution of the Clergy?",
+   "back": "1790 law making priests state employees; split the Church and turned many Catholics against the revolution",
+   "topic": "frev"
+  },
+  {
+   "id": "c40",
+   "front": "What was the Levée en masse?",
+   "back": "August 1793 mass conscription of all able-bodied men into the army",
+   "topic": "frev"
+  },
+  {
+   "id": "c41",
+   "front": "When did the Cold War begin, roughly?",
+   "back": "After 1945; tensions clear by 1947 (Truman Doctrine)",
+   "topic": "cold"
+  },
+  {
+   "id": "c42",
+   "front": "What was the Truman Doctrine?",
+   "back": "1947 US promise to support free peoples resisting communism (Greece, Turkey); policy of containment",
+   "topic": "cold"
+  },
+  {
+   "id": "c43",
+   "front": "What was the Marshall Plan?",
+   "back": "US economic aid to rebuild Western Europe after 1945 (~$13bn), to stop the spread of communism",
+   "topic": "cold"
+  },
+  {
+   "id": "c44",
+   "front": "What was the Berlin Blockade?",
+   "back": "1948-49 Soviet blockade of West Berlin; answered by the Berlin Airlift",
+   "topic": "cold"
+  },
+  {
+   "id": "c45",
+   "front": "When was NATO founded?",
+   "back": "1949: Western military alliance (USA, Britain, France and others)",
+   "topic": "cold"
+  },
+  {
+   "id": "c46",
+   "front": "What was the Warsaw Pact?",
+   "back": "1955 military alliance of the USSR and its Eastern European satellite states",
+   "topic": "cold"
+  },
+  {
+   "id": "c47",
+   "front": "What was the Iron Curtain?",
+   "back": "Churchill's 1946 phrase for the division of Europe between the Soviet bloc and the West",
+   "topic": "cold"
+  },
+  {
+   "id": "c48",
+   "front": "When was the Berlin Wall built and when did it fall?",
+   "back": "Built August 1961; fell November 1989",
+   "topic": "cold"
+  },
+  {
+   "id": "c49",
+   "front": "What was the Cuban Missile Crisis?",
+   "back": "October 1962: 13-day standoff over Soviet nuclear missiles in Cuba; Kennedy vs Khrushchev",
+   "topic": "cold"
+  },
+  {
+   "id": "c50",
+   "front": "How was the Cuban Missile Crisis resolved?",
+   "back": "Khrushchev removed missiles from Cuba; USA promised not to invade Cuba and secretly removed missiles from Turkey",
+   "topic": "cold"
+  },
+  {
+   "id": "c51",
+   "front": "What was the Hungarian Uprising?",
+   "back": "1956 revolt against Soviet control; crushed by Soviet tanks",
+   "topic": "cold"
+  },
+  {
+   "id": "c52",
+   "front": "What was the Prague Spring?",
+   "back": "1968 reforms by Dubček in Czechoslovakia; ended by Warsaw Pact invasion",
+   "topic": "cold"
+  },
+  {
+   "id": "c53",
+   "front": "What was the Brezhnev Doctrine?",
+   "back": "Soviet right to intervene in any Warsaw Pact country where communism was threatened",
+   "topic": "cold"
+  },
+  {
+   "id": "c54",
+   "front": "What was détente?",
+   "back": "Easing of Cold War tensions in the 1970s: SALT I, Helsinki Accords",
+   "topic": "cold"
+  },
+  {
+   "id": "c55",
+   "front": "What was SALT I?",
+   "back": "1972 Strategic Arms Limitation Treaty limiting nuclear missiles",
+   "topic": "cold"
+  },
+  {
+   "id": "c56",
+   "front": "What was the arms race?",
+   "back": "Competition between the USA and USSR to build more and better nuclear weapons",
+   "topic": "cold"
+  },
+  {
+   "id": "c57",
+   "front": "What was MAD?",
+   "back": "Mutually Assured Destruction: nuclear war would destroy both sides, so neither would start one",
+   "topic": "cold"
+  },
+  {
+   "id": "c58",
+   "front": "Why did the USSR invade Afghanistan?",
+   "back": "1979, to support the communist government; ended détente",
+   "topic": "cold"
+  },
+  {
+   "id": "c59",
+   "front": "What were glasnost and perestroika?",
+   "back": "Gorbachev's policies of openness and economic restructuring in the 1980s",
+   "topic": "cold"
+  },
+  {
+   "id": "c60",
+   "front": "When did the Soviet Union collapse?",
+   "back": "December 1991",
+   "topic": "cold"
+  },
+  {
+   "id": "c61",
+   "front": "What was the Korean War?",
+   "back": "1950-53: communist North (backed by China, USSR) vs South (UN, USA); ended at the 38th parallel",
+   "topic": "cold"
+  },
+  {
+   "id": "c62",
+   "front": "What was the Space Race?",
+   "back": "US-Soviet competition in space: Sputnik 1957, Gagarin 1961, Moon landing 1969",
+   "topic": "cold"
+  }
+ ]
+}

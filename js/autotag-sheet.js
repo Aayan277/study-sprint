@@ -16,6 +16,7 @@ import { $, esc, plural, toast, openSheet, closeSheet, guardSheet, askClose } fr
 const MAX_SHOWN = 100;                   // cards listed under a tag
 export const NONE_FOUND = 'No clear topics found in these cards. Tags work best when cards share words like ‘kidney’ or ‘cell cycle’.';
 const INTRO = "Topics found in this deck's cards. Rename them, untick what you don't want, then add them. Tags you already have stay as they are.";
+const LESS_SURE = 'Broader words that may mix topics, or that name places. Tick the ones you want.';
 const SAME_NAME = "Same name as another tag: they'll be one tag";
 
 const num = n => n.toLocaleString('en');
@@ -34,7 +35,7 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
   const cards = all.filter(c => (inScope ? inScope.has(c.id) : tree ? tree.has(c.deckId) : true));
   const notes = notesOf(cards), byNote = new Map(notes.map(n => [n.id, n]));
   let job = null, tags = [];
-  const ticked = new Set(), off = new Map();            // tag index → ticked; tag index → note ids unticked
+  const off = new Map();            // tag index → note ids unticked under it
 
   openSheet(`
     <h2 id="sheetTitle" tabindex="-1">Suggest tags</h2>
@@ -56,7 +57,7 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
     <button class="btn ghost small" type="button" id="atStop">Stop</button>`;
   live(`Reading ${num(total)} ${total === 1 ? 'card' : 'cards'}`);
   const say = msg => { if (!alive()) return; $('atBody').innerHTML = `<p class="note" id="atMsg">${esc(msg)}</p>`; live(msg); };
-  $('atStop').addEventListener('click', () => { stop(); say('Stopped. Close this and try again when you are ready.'); });
+  $('atStop').addEventListener('click', () => { stop(); say('Stopped. Close this and try again when you are ready.'); $('atMsg')?.setAttribute('tabindex', '-1'); $('atMsg')?.focus(); });
 
   const existing = new Set(all.flatMap(c => tagWords(c.tags).map(normTag)));
   job = runKeywordJob('autotag', { notes: notes.map(n => ({ id: n.id, front: n.front, text: n.text, cardIds: n.cardIds })), deckWords: deckId ? deckWordsOf(decks, deckId) : [], existingTags: [...existing] }, {
@@ -71,11 +72,11 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
   if (outcome.status === 'error') { say("Couldn't find tags in these cards."); return; }
   tags = outcome.result.tags;
   if (!tags.length) { say(NONE_FOUND); return; }
-  tags.forEach((_, i) => ticked.add(i));
+  const anySure = tags.some(t => t.sure);
 
   // ---------- the list ----------
-  const rowHtml = (t, i) => `<li data-i="${i}">
-      <div class="ts-name"><label class="pick-wrap"><input type="checkbox" class="pick" checked aria-label="Use tag ${esc(t.name)}"></label>
+  const rowHtml = (t, i) => `<li data-i="${i}" data-sure="${t.sure ? 1 : 0}">
+      <div class="ts-name"><label class="pick-wrap"><input type="checkbox" class="pick"${t.sure ? ' checked' : ''} aria-label="Use tag ${esc(t.name)}"></label>
         <input class="tag-name" value="${esc(t.name)}" aria-label="Tag name" autocapitalize="off" autocomplete="off" spellcheck="false" data-was="${esc(t.name)}"></div>
       <div class="ts-meta"><span class="muted small ts-count">${plural(t.count, 'card')}</span>
         ${t.exists ? '<span class="muted small">Already a tag: these cards are added to it</span>' : ''}
@@ -83,21 +84,26 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
       <p class="ts-err small" hidden></p>
       <div class="ts-cards" id="tc-${i}" hidden></div>
     </li>`;
-  $('atBody').innerHTML = `<p class="note" style="margin-top:0">${esc(INTRO)}</p>
+  const firstLess = tags.findIndex(t => !t.sure);
+  const list = (from, to) => `<ul class="tag-sugs" aria-label="${from ? 'Less sure tags' : 'Suggested tags'}">${tags.slice(from, to).map((t, k) => rowHtml(t, from + k)).join('')}</ul>`;
+  $('atBody').innerHTML = `<p class="note" style="margin-top:0">${esc(anySure ? INTRO : NONE_FOUND)}</p>
     <label class="field"><span>Put them in a folder (optional)</span><input id="tagFolder" placeholder="e.g. renal" autocapitalize="off" autocomplete="off"></label>
-    <ul class="tag-sugs" aria-label="Suggested tags">${tags.map(rowHtml).join('')}</ul>`;
-  live(`Found ${plural(tags.length, 'tag')}`);
+    ${anySure ? list(0, firstLess < 0 ? tags.length : firstLess) : ''}
+    ${firstLess >= 0 ? `<h3 class="tool-h" id="atLess">Less sure</h3><p class="note" style="margin-top:0">${esc(LESS_SURE)}</p>${list(firstLess, tags.length)}` : ''}`;
+  live(anySure ? `Found ${plural(tags.filter(t => t.sure).length, 'tag')}${firstLess >= 0 ? ` and ${tags.length - tags.filter(t => t.sure).length} less sure` : ''}` : NONE_FOUND);
   if ($('atBody').contains(document.activeElement) || document.activeElement === document.body) $('sheetTitle').focus({ preventScroll: true });
 
   const rows = () => [...document.querySelectorAll('#atBody .tag-sugs li')];
+  const idx = li => +li.dataset.i;
   // The cards a tag would go on: its cards, less the notes unticked under it.
   const cardsOf = i => { const skip = off.get(i); return skip ? tags[i].noteIds.filter(n => !skip.has(n)).flatMap(n => byNote.get(n).cardIds) : tags[i].cardIds; };
-  const dirty = () => rows().some((li, i) => !li.querySelector('.pick').checked || li.querySelector('.tag-name').value !== li.querySelector('.tag-name').dataset.was) || off.size > 0 || !!$('tagFolder')?.value.trim();
+  const dirty = () => rows().some(li => li.querySelector('.pick').checked !== (li.dataset.sure === '1') || li.querySelector('.tag-name').value !== li.querySelector('.tag-name').dataset.was) || off.size > 0 || !!$('tagFolder')?.value.trim();
 
   // The plan as it stands: [{ name, cardIds }], rows with the same name made one, and the problems found.
   const plan = () => {
     const by = new Map(), problems = new Map(), f = $('tagFolder').value;
-    rows().forEach((li, i) => {
+    rows().forEach(li => {
+      const i = idx(li);
       if (!li.querySelector('.pick').checked) return;
       const input = li.querySelector('.tag-name');
       const name = fullName(input.value, f);
@@ -116,12 +122,13 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
     const add = $('atAdd');
     add.textContent = list.length ? `Add ${plural(list.length, 'tag')} to ${plural(n, 'card')}` : 'Add tags';
     add.disabled = !list.length || broken;
-    rows().forEach((li, i) => {
+    rows().forEach(li => {
+      const i = idx(li);
       const err = li.querySelector('.ts-err'), msg = problems.get(i) || '';
       err.textContent = msg; err.hidden = !msg;
       li.classList.toggle('off', !li.querySelector('.pick').checked);
     });
-    rows().forEach((li, i) => { li.querySelector('.ts-count').textContent = plural(cardsOf(i).length, 'card'); });
+    rows().forEach(li => { li.querySelector('.ts-count').textContent = plural(cardsOf(idx(li)).length, 'card'); });
   };
   guardSheet(dirty);
   refreshFooter();
@@ -163,7 +170,7 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
   $('atAdd').addEventListener('click', async () => {
     const { list, problems } = plan();
     const bad = [...problems].find(([, m]) => m !== SAME_NAME);
-    if (bad) { const li = rows()[bad[0]]; li.querySelector('.tag-name').focus(); return; }
+    if (bad) { rows().find(li => idx(li) === bad[0]).querySelector('.tag-name').focus(); return; }
     if (!list.length) return;
     $('atAdd').disabled = true;
     const fresh = await db.getAll('cards');                                 // (read again: a card may have been edited while the sheet was open)

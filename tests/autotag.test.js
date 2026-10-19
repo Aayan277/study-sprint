@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { autotag, autotagSteps, notesOf, deckWordsOf, applyTags, undoTags, MAX_TAGS } from '../js/autotag.js';
+import { autotag, autotagSteps, notesOf, deckWordsOf, applyTags, undoTags, derives, MAX_TAGS, YIELD_EVERY } from '../js/autotag.js';
 import { isJunkTerm, keyOf, words } from '../js/keywords.js';
 
 const deck = name => JSON.parse(fs.readFileSync(new URL(`./fixtures/autotag/${name}.json`, import.meta.url), 'utf8'));
@@ -100,7 +100,8 @@ test('the notes: cloze siblings and reverse pairs are one note; a cloze note is 
   assert.deepEqual([notes[1].front, notes[1].text], ['Term', 'Meaning'], 'the front of the first, not the reverse');
   assert.deepEqual([notes[2].front, notes[2].text], ['Nephron', '']);
   assert.ok(!/\*\*|\$/.test(notes[3].front));
-  assert.equal(notes[3].text, 'Back\nMore');
+  assert.equal(notes[3].text, 'Back');
+  assert.equal(notes[3].extra, 'More', 'the extra text is kept apart: it is not read for tags');
 });
 
 test('deckWordsOf: the deck and its parents', () => {
@@ -204,7 +205,7 @@ test('undoTags removes only what was added, and keeps a tag the student added la
 
 // ---------- speed ----------
 
-test('5,000 cards in under 3 seconds, yielding often and in small steps', () => {
+test('5,000 cards: fast, yielding often and in small steps, in every stage', () => {
   let seed = 11; const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
   const syl = () => 'bcdfghklmnprstvz'[Math.floor(rnd() * 16)] + 'aeiou'[Math.floor(rnd() * 5)];
   const word = () => Array.from({ length: 4 }, syl).join('');
@@ -214,23 +215,98 @@ test('5,000 cards in under 3 seconds, yielding often and in small steps', () => 
     const body = Array.from({ length: 22 }, () => rnd() < 0.3 ? topics[i % 25][Math.floor(rnd() * 6)] : rnd() < 0.4 ? common[Math.floor(rnd() * common.length)] : vocab[Math.floor(rnd() * vocab.length)]);
     return { id: 'c' + i, front: 'What is ' + body.slice(0, 8).join(' ') + '?', back: body.slice(8).join(' ') + '.' };
   });
+  const notes = notesOf(cards), N = notes.length;
   const t0 = performance.now();
-  const it = autotagSteps({ notes: notesOf(cards), deckWords: [] });
-  let last = t0, gap = 0, yields = 0, r;
-  for (;;) { r = it.next(); const now = performance.now(); gap = Math.max(gap, now - last); last = now; if (r.done) break; yields++; }
+  const it = autotagSteps({ notes, deckWords: [] });
+  let last = t0, r; const gaps = [], seen = [];
+  for (;;) { r = it.next(); const now = performance.now(); gaps.push(now - last); last = now; if (r.done) break; seen.push(r.value); }
   const ms = performance.now() - t0;
-  console.log(`5,000 cards: ${Math.round(ms)} ms, ${yields} yields, longest step ${Math.round(gap)} ms, ${r.value.tags.length} tags`);
-  assert.ok(ms < 3000, ms + ' ms');
-  assert.ok(yields >= 20, yields + ' yields');
-  assert.ok(gap < 100, gap + ' ms between yields');
+  gaps.sort((a, b) => a - b);
+  const p95 = gaps[Math.floor(gaps.length * 0.95)], max = gaps.at(-1);
+  console.log(`5,000 cards: ${Math.round(ms)} ms, ${seen.length} yields, p95 ${Math.round(p95)} ms, longest step ${Math.round(max)} ms, ${r.value.tags.length} tags`);
+  // What matters is the work between two yields, which does not depend on how busy the machine is:
+  const reading = seen.filter(s => s.phase === 'reading').map(s => s.progress);
+  assert.ok(reading.length >= N / YIELD_EVERY - 1, 'a yield at least every ' + YIELD_EVERY + ' notes: ' + reading.length);
+  for (let i = 1; i < reading.length; i++) assert.ok(reading[i] - reading[i - 1] <= YIELD_EVERY / N * 0.7 + 1e-9, 'steps of at most ' + YIELD_EVERY + ' notes');
+  const stages = [0.8, 0.82, 0.84, 0.87, 0.93, 1];
+  for (const g of stages) assert.ok(seen.some(s => s.phase === 'choosing' && Math.abs(s.progress - g) < 1e-9), 'a yield at stage ' + g);
+  assert.ok(seen.length >= 20);
+  // The clock is only a loose check (the test runs beside others):
+  assert.ok(ms < 6000, ms + ' ms');
+  assert.ok(p95 < 100, 'p95 ' + p95);
+  assert.ok(max < 300, 'longest ' + max);
   assert.ok(r.value.tags.length >= 3 && r.value.tags.length <= MAX_TAGS);
 });
 
+const NB = ['function', 'location', 'history', 'damage', 'origin', 'repair', 'count'];
 test('a plural and its singular are one tag', () => {
   const T = [['ribosome', 'ribosomes'], ['nucleolus', 'nucleoli'], ['vacuole', 'vacuoles']];
-  const notes = Array.from({ length: 36 }, (_, i) => ({ id: 'n' + i, front: `Describe the ${T[i % 3][i % 2 ? 1 : 0]} membrane? Item${'abcdefghijklmnopqrstuvwxyz'[i % 26]}${i}x`, text: `Unique${'qwxz'[i % 4]}${i}y`, cardIds: ['c' + i] }));
+  const notes = Array.from({ length: 36 }, (_, i) => ({ id: 'n' + i, front: `Describe the ${T[i % 3][i % 2 ? 1 : 0]} ${NB[i % 5]}? Item${'abcdefghijklmnopqrstuvwxyz'[i % 26]}${i}x`, text: `Unique${'qwxz'[i % 4]}${i}y`, cardIds: ['c' + i] }));
   const names = autotag({ notes }).tags.map(t => t.name);
   assert.ok(names.includes('ribosome') || names.includes('ribosomes'), names.join());
   assert.equal(names.filter(n => n.startsWith('ribosome')).length, 1);
   assert.equal(names.filter(n => n.startsWith('vacuole')).length, 1);
+});
+
+// ---------- quality: what is ticked to begin with ----------
+
+const ALL = ['biology-mixed', 'pharmacology', 'geography', 'french-vocab', 'cardiovascular', 'spanish-vocab-deck', 'computer-science', 'geology', 'german-vocab-notes',
+  'review-anatomy', 'review-chemistry', 'review-econ', 'review-german', 'review-history', 'review-psych'];
+const RUNS = Object.fromEntries(ALL.map(n => [n, run(deck(n))]));
+
+test('every deck: the tags, ticked (sure) first, then the less sure ones (printed so a run shows them)', () => {
+  for (const [name, r] of Object.entries(RUNS)) {
+    console.log(`${name}: ${r.tags.map(t => (t.sure ? '[x] ' : '[ ] ') + t.name).join(', ') || '(none)'}${r.reason ? ' · reason ' + r.reason : ''}`);
+    const firstLess = r.tags.findIndex(t => !t.sure);
+    if (firstLess >= 0) assert.ok(r.tags.slice(firstLess).every(t => !t.sure), name + ': sure tags come first');
+    assert.equal(!!r.reason, !r.tags.some(t => t.sure), name + ': reason "none" exactly when nothing is sure');
+  }
+});
+
+test('broad, vague or misleading words are never ticked to begin with', () => {
+  const VAGUE = new Set(`price market government income muscles artery molecules reaction france german germany ventricle august november western negative aggregate cognitive
+    party plural pair alkanes soviet education`.split(/\s+/));
+  for (const [name, r] of Object.entries(RUNS)) for (const t of r.tags) if (t.sure) assert.ok(!VAGUE.has(t.name), `${name}: ${t.name} is ticked`);
+});
+
+test('months and weekdays, pieces of phrases, derived forms and words of another language are not tags at all', () => {
+  const all = Object.entries(RUNS).flatMap(([name, r]) => r.tags.map(t => [name, t.name]));
+  for (const [name, t] of all) {
+    assert.ok(!/^(?:january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/.test(t), `${name}: ${t}`);
+    assert.ok(!['aggregate', 'ich-habe', 'plural', 'party', 'bonding'].includes(t), `${name}: ${t}`);
+  }
+});
+
+test('alkene, alkane and alkyne are three words; ileum and ilium are two; a plural and a spelling variant are one', () => {
+  const T = ['alkene', 'alkane', 'alkyne'];
+  const notes = Array.from({ length: 30 }, (_, i) => ({ id: 'n' + i, front: `Name the ${T[i % 3]} ${NB[i % 7]} ${'abcdefghij'[i % 10]}${i}z`, text: `Unique${'qwxz'[i % 4]}${i}y`, cardIds: ['c' + i] }));
+  const keys = autotag({ notes }).tags.map(t => t.key);
+  assert.deepEqual(T.filter(k => keys.includes(k)).length, 3, keys.join());
+  const V = Array.from({ length: 30 }, (_, i) => ({ id: 'v' + i, front: `Describe the ${['colour', 'color', 'colours'][i % 3]} ${NB[i % 7]} of the ${['pigment', 'texture', 'density', 'lattice'][i % 4]} and ${['mixture', 'solvent', 'crystal', 'powder', 'liquid'][i % 5]} sample${'abcdefghij'[i % 10]}${i}z`, text: `Other${'qwxz'[i % 4]}${i}y`, cardIds: ['d' + i] }));
+  assert.equal(autotag({ notes: V }).tags.filter(t => /^colou?r/.test(t.key)).length, 1);
+});
+
+test('derived forms join the tag of the shorter word', () => {
+  assert.ok(derives('bond', 'bonding') && derives('ventricle', 'ventricular') && derives('history', 'historic') && derives('cell', 'cellular'));
+  assert.ok(!derives('cat', 'catalog') && !derives('port', 'portal x') && !derives('plate', 'plateau'));
+  const r = RUNS['review-chemistry'];
+  assert.ok(!r.tags.some(t => t.name === 'bonding'), 'bonding is not a tag of its own');
+  assert.ok(RUNS['cardiovascular'].tags.find(t => t.name === 'ventricle')?.aliases.includes('ventricular'), 'ventricular joined ventricle');
+  assert.ok(!RUNS['cardiovascular'].tags.some(t => t.name === 'ventricular'));
+});
+
+test('language decks: function words, [sound:] marks and grammar notes (the extra text) make no tags', () => {
+  const r = RUNS['german-vocab-notes'];
+  assert.ok(!r.tags.some(t => /sound|mp3|plural|grammar|dative|accusative|umlaut|noun|note/.test(t.name)), r.tags.map(t => t.name).join());
+  const notes = notesOf([{ id: 'a', front: 'der Hund', back: 'dog [sound:hund.mp3]', noteExtra: 'Grammar note: dative' }]);
+  assert.equal(notes[0].text.includes('sound'), false);
+  const F = Array.from({ length: 24 }, (_, i) => ({ id: 'f' + i, front: `ich habe ${['einen', 'eine', 'ein'][i % 3]} wort${'abcdefghij'[i % 10]}${i}x`, text: `und die das der ${i}`, cardIds: ['g' + i] }));
+  assert.deepEqual(autotag({ notes: F }).tags.map(t => t.name).filter(n => /ich|habe|und|die|das|der|ein/.test(n)), []);
+});
+
+test('what is ticked to begin with is almost never junk: every ticked tag has 4 or more cards and is on the front of half of them', () => {
+  let ticked = 0;
+  for (const [name, r] of Object.entries(RUNS)) for (const t of r.tags.filter(x => x.sure)) { ticked++; assert.ok(t.noteIds.length >= 4 && t.front >= 0.5, `${name}: ${t.name}`); }
+  console.log('ticked tags over all decks:', ticked);
+  assert.ok(ticked >= 8, 'some tags are still sure: ' + ticked);
 });

@@ -1,0 +1,263 @@
+{
+ "name": "Geology",
+ "cards": [
+  {
+   "id": "c0368",
+   "front": "What is an igneous rock?",
+   "back": "A rock formed when magma or lava cools and solidifies",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0369",
+   "front": "What is a sedimentary rock?",
+   "back": "A rock formed from compacted and cemented sediment",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0370",
+   "front": "What is a metamorphic rock?",
+   "back": "A rock changed by heat and pressure without melting",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0371",
+   "front": "What is granite?",
+   "back": "A coarse-grained intrusive igneous rock rich in quartz and feldspar",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0372",
+   "front": "What is basalt?",
+   "back": "A fine-grained extrusive igneous rock that forms oceanic crust",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0373",
+   "front": "What is limestone?",
+   "back": "A sedimentary rock made mainly of calcite, often from shells",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0374",
+   "front": "What is sandstone?",
+   "back": "A sedimentary rock made of cemented sand grains",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0375",
+   "front": "What is marble?",
+   "back": "A metamorphic rock formed from limestone",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0376",
+   "front": "What is slate?",
+   "back": "A fine-grained metamorphic rock formed from shale",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0377",
+   "front": "What is the rock cycle?",
+   "back": "The continuous change of rocks between igneous, sedimentary and metamorphic forms",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0378",
+   "front": "What is lithification?",
+   "back": "The process that turns loose sediment into solid rock",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0379",
+   "front": "What is foliation?",
+   "back": "Parallel layering in metamorphic rock caused by pressure",
+   "topic": "rocks"
+  },
+  {
+   "id": "c0380",
+   "front": "What is a mineral?",
+   "back": "A naturally occurring inorganic solid with a definite chemical composition and crystal structure",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0381",
+   "front": "What is the Mohs scale?",
+   "back": "A scale of mineral hardness from 1 (talc) to 10 (diamond)",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0382",
+   "front": "What is quartz?",
+   "back": "A hard mineral made of silicon dioxide that scratches glass",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0383",
+   "front": "What is cleavage in a mineral?",
+   "back": "The way a mineral splits along flat planes of weakness",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0384",
+   "front": "What is mineral lustre?",
+   "back": "How the surface of a mineral reflects light, such as metallic or glassy",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0385",
+   "front": "What is feldspar?",
+   "back": "The most abundant group of minerals in the Earth's crust",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0386",
+   "front": "What is calcite?",
+   "back": "A mineral of calcium carbonate that fizzes in dilute acid",
+   "topic": "minerals"
+  },
+  {
+   "id": "c0387",
+   "front": "What is plate tectonics?",
+   "back": "The theory that the lithosphere is broken into plates that move over the asthenosphere",
+   "topic": "plates"
+  },
+  {
+   "id": "c0388",
+   "front": "What happens at a divergent boundary?",
+   "back": "Plates move apart and new crust forms, as at a mid-ocean ridge",
+   "topic": "plates"
+  },
+  {
+   "id": "c0389",
+   "front": "What happens at a convergent boundary?",
+   "back": "Plates collide, producing mountains, trenches and volcanoes",
+   "topic": "plates"
+  },
+  {
+   "id": "c0390",
+   "front": "What is subduction?",
+   "back": "One plate sinking beneath another into the mantle",
+   "topic": "plates"
+  },
+  {
+   "id": "c0391",
+   "front": "What is a transform boundary?",
+   "back": "Plates slide past each other, as on the San Andreas Fault",
+   "topic": "plates"
+  },
+  {
+   "id": "c0392",
+   "front": "What is a fault?",
+   "back": "A fracture in rock along which movement has occurred",
+   "topic": "plates"
+  },
+  {
+   "id": "c0393",
+   "front": "What causes an earthquake?",
+   "back": "Sudden release of stored strain along a fault",
+   "topic": "plates"
+  },
+  {
+   "id": "c0394",
+   "front": "What does the Richter scale measure?",
+   "back": "The magnitude of an earthquake from the seismic waves it produces",
+   "topic": "plates"
+  },
+  {
+   "id": "c0395",
+   "front": "What are P waves and S waves?",
+   "back": "P waves are compressional and fastest, S waves are shear waves that cannot pass through liquid",
+   "topic": "plates"
+  },
+  {
+   "id": "c0396",
+   "front": "What is the focus of an earthquake?",
+   "back": "The point underground where the rock first breaks",
+   "topic": "plates"
+  },
+  {
+   "id": "c0397",
+   "front": "What is a volcano?",
+   "back": "An opening in the crust where magma, ash and gas escape",
+   "topic": "plates"
+  },
+  {
+   "id": "c0398",
+   "front": "What is a hotspot?",
+   "back": "A plume of hot mantle rising under a plate, such as under Hawaii",
+   "topic": "plates"
+  },
+  {
+   "id": "c0399",
+   "front": "What is continental drift?",
+   "back": "Wegener's idea that the continents have moved across the Earth",
+   "topic": "plates"
+  },
+  {
+   "id": "c0400",
+   "front": "What is a fossil?",
+   "back": "The preserved remains or traces of an organism from the past",
+   "topic": "time"
+  },
+  {
+   "id": "c0401",
+   "front": "What is the principle of superposition?",
+   "back": "In undisturbed layers the oldest rock is at the bottom",
+   "topic": "time"
+  },
+  {
+   "id": "c0402",
+   "front": "What is radiometric dating?",
+   "back": "Using the decay of radioactive isotopes to find the age of a rock",
+   "topic": "time"
+  },
+  {
+   "id": "c0403",
+   "front": "What is a half-life?",
+   "back": "The time taken for half of the atoms of a radioactive isotope to decay",
+   "topic": "time"
+  },
+  {
+   "id": "c0404",
+   "front": "What is an index fossil?",
+   "back": "A fossil of a species that lived briefly and widely, used to date rock layers",
+   "topic": "time"
+  },
+  {
+   "id": "c0405",
+   "front": "What is an unconformity?",
+   "back": "A gap in the rock record where erosion or no deposition occurred",
+   "topic": "time"
+  },
+  {
+   "id": "c0406",
+   "front": "What was the Cambrian explosion?",
+   "back": "A rapid diversification of animal life about 540 million years ago",
+   "topic": "time"
+  },
+  {
+   "id": "c0407",
+   "front": "What caused the extinction of the dinosaurs?",
+   "back": "An asteroid impact about 66 million years ago",
+   "topic": "time"
+  },
+  {
+   "id": "c0408",
+   "front": "What is weathering?",
+   "back": "The breakdown of rock at the Earth's surface by water, ice, wind and chemicals",
+   "topic": "time"
+  },
+  {
+   "id": "c0409",
+   "front": "What is erosion?",
+   "back": "The removal and transport of weathered material",
+   "topic": "time"
+  },
+  {
+   "id": "c0410",
+   "front": "What is deposition?",
+   "back": "The laying down of sediment when the transporting agent loses energy",
+   "topic": "time"
+  }
+ ]
+}

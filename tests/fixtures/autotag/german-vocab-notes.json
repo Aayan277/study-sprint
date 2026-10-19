@@ -1,0 +1,299 @@
+{
+ "name": "Deutsch Vokabeln",
+ "cards": [
+  {
+   "id": "c0411",
+   "front": "die Schule",
+   "back": "school",
+   "noteExtra": "Feminine noun. Plural: die Schulen. Remember: \"die Schule\" always takes the dative after \"in der\".",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0412",
+   "front": "der Lehrer",
+   "back": "teacher",
+   "noteExtra": "Masculine noun. Plural: die Lehrer. Weak noun? No. Grammar note: add -in for a woman.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0413",
+   "front": "das Buch",
+   "back": "book",
+   "noteExtra": "Neuter noun. Plural: die Bücher. Grammar note: umlaut in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0414",
+   "front": "die Hausaufgaben",
+   "back": "homework",
+   "noteExtra": "Always plural. Grammar note: after \"machen\" the accusative is used.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0415",
+   "front": "der Tisch",
+   "back": "table",
+   "noteExtra": "Masculine noun. Plural: die Tische. Grammar note: accusative den Tisch.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0416",
+   "front": "die Tasche",
+   "back": "bag",
+   "noteExtra": "Feminine noun. Plural: die Taschen. Grammar note: dative der Tasche.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0417",
+   "front": "der Stuhl",
+   "back": "chair",
+   "noteExtra": "Masculine noun. Plural: die Stühle. Grammar note: umlaut in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0418",
+   "front": "das Fenster",
+   "back": "window",
+   "noteExtra": "Neuter noun. Plural: die Fenster. Grammar note: no change in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0419",
+   "front": "die Tür",
+   "back": "door",
+   "noteExtra": "Feminine noun. Plural: die Türen. Grammar note: dative der Tür.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0420",
+   "front": "der Hund",
+   "back": "dog [sound:hund.mp3]",
+   "noteExtra": "Masculine noun. Plural: die Hunde. Grammar note: accusative den Hund.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0421",
+   "front": "die Katze",
+   "back": "cat [sound:katze.mp3]",
+   "noteExtra": "Feminine noun. Plural: die Katzen. Grammar note: dative der Katze.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0422",
+   "front": "das Pferd",
+   "back": "horse",
+   "noteExtra": "Neuter noun. Plural: die Pferde. Grammar note: dative dem Pferd.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0423",
+   "front": "der Vogel",
+   "back": "bird",
+   "noteExtra": "Masculine noun. Plural: die Vögel. Grammar note: umlaut in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0424",
+   "front": "das Auto",
+   "back": "car",
+   "noteExtra": "Neuter noun. Plural: die Autos. Grammar note: plural with s for loan words.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0425",
+   "front": "der Zug",
+   "back": "train",
+   "noteExtra": "Masculine noun. Plural: die Züge. Grammar note: umlaut in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0426",
+   "front": "das Fahrrad",
+   "back": "bicycle",
+   "noteExtra": "Neuter noun. Plural: die Fahrräder. Grammar note: umlaut in the plural.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0427",
+   "front": "der Bahnhof",
+   "back": "station [sound:bahnhof.mp3]",
+   "noteExtra": "Masculine noun. Plural: die Bahnhöfe. Grammar note: dative am Bahnhof.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0428",
+   "front": "die Straße",
+   "back": "street",
+   "noteExtra": "Feminine noun. Plural: die Straßen. Grammar note: dative auf der Straße.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0429",
+   "front": "essen",
+   "back": "to eat",
+   "noteExtra": "Strong verb. Grammar note: ich esse, du isst, er isst. Perfect with haben.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0430",
+   "front": "trinken",
+   "back": "to drink",
+   "noteExtra": "Strong verb. Grammar note: ich trinke, er trinkt. Perfect: getrunken.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0431",
+   "front": "schlafen",
+   "back": "to sleep",
+   "noteExtra": "Strong verb. Grammar note: du schläfst, er schläft with umlaut.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0432",
+   "front": "lesen",
+   "back": "to read",
+   "noteExtra": "Strong verb. Grammar note: du liest, er liest.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0433",
+   "front": "schreiben",
+   "back": "to write",
+   "noteExtra": "Strong verb. Grammar note: perfect geschrieben.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0434",
+   "front": "gehen",
+   "back": "to go",
+   "noteExtra": "Strong verb. Grammar note: perfect with sein: ich bin gegangen.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0435",
+   "front": "fahren",
+   "back": "to drive [sound:fahren.mp3]",
+   "noteExtra": "Strong verb. Grammar note: du fährst, perfect with sein.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0436",
+   "front": "spielen",
+   "back": "to play",
+   "noteExtra": "Weak verb. Grammar note: ich spiele, perfect gespielt.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0437",
+   "front": "arbeiten",
+   "back": "to work",
+   "noteExtra": "Weak verb. Grammar note: er arbeitet with an extra e.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0438",
+   "front": "wohnen",
+   "back": "to live [sound:wohnen.mp3]",
+   "noteExtra": "Weak verb. Grammar note: ich wohne in Berlin.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0439",
+   "front": "kaufen",
+   "back": "to buy",
+   "noteExtra": "Weak verb. Grammar note: perfect gekauft.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0440",
+   "front": "lernen",
+   "back": "to learn",
+   "noteExtra": "Weak verb. Grammar note: perfect gelernt.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0441",
+   "front": "heute",
+   "back": "today",
+   "noteExtra": "Adverb. Grammar note: time comes before place in a sentence.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0442",
+   "front": "morgen",
+   "back": "tomorrow",
+   "noteExtra": "Adverb. Grammar note: time comes before place in a sentence.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0443",
+   "front": "gestern",
+   "back": "yesterday",
+   "noteExtra": "Adverb. Grammar note: used with the perfect tense.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0444",
+   "front": "oft",
+   "back": "often",
+   "noteExtra": "Adverb. Grammar note: placed after the verb.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0445",
+   "front": "nie",
+   "back": "never",
+   "noteExtra": "Adverb. Grammar note: placed after the verb.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0446",
+   "front": "immer",
+   "back": "always",
+   "noteExtra": "Adverb. Grammar note: placed after the verb.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0447",
+   "front": "groß",
+   "back": "big",
+   "noteExtra": "Adjective. Grammar note: add -e after der, die, das.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0448",
+   "front": "klein",
+   "back": "small",
+   "noteExtra": "Adjective. Grammar note: add -e after der, die, das.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0449",
+   "front": "alt",
+   "back": "old",
+   "noteExtra": "Adjective. Grammar note: comparative älter with umlaut.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0450",
+   "front": "neu",
+   "back": "new",
+   "noteExtra": "Adjective. Grammar note: add -e after der, die, das.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0451",
+   "front": "schnell",
+   "back": "fast",
+   "noteExtra": "Adjective. Grammar note: comparative schneller.",
+   "topic": "vocab"
+  },
+  {
+   "id": "c0452",
+   "front": "langsam",
+   "back": "slow",
+   "noteExtra": "Adjective. Grammar note: comparative langsamer.",
+   "topic": "vocab"
+  }
+ ]
+}

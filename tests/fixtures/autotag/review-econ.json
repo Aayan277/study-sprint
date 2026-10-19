@@ -1,0 +1,347 @@
+{
+ "name": "Economics A-level",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "What is price elasticity of demand (PED)?",
+   "back": "% change in quantity demanded ÷ % change in price",
+   "topic": "micro"
+  },
+  {
+   "id": "c2",
+   "front": "What does PED > 1 mean?",
+   "back": "Demand is price elastic: quantity demanded is very responsive to price",
+   "topic": "micro"
+  },
+  {
+   "id": "c3",
+   "front": "Factors that affect PED",
+   "back": "Number of substitutes, proportion of income, necessity vs luxury, time period, habit",
+   "topic": "micro"
+  },
+  {
+   "id": "c4",
+   "front": "What is income elasticity of demand (YED)?",
+   "back": "% change in quantity demanded ÷ % change in income",
+   "topic": "micro"
+  },
+  {
+   "id": "c5",
+   "front": "What is an inferior good?",
+   "back": "A good with negative YED: demand falls as income rises",
+   "topic": "micro"
+  },
+  {
+   "id": "c6",
+   "front": "What is cross elasticity of demand (XED)?",
+   "back": "% change in quantity demanded of good A ÷ % change in price of good B",
+   "topic": "micro"
+  },
+  {
+   "id": "c7",
+   "front": "What is price elasticity of supply (PES)?",
+   "back": "% change in quantity supplied ÷ % change in price",
+   "topic": "micro"
+  },
+  {
+   "id": "c8",
+   "front": "What causes a shift in the demand curve?",
+   "back": "Change in income, tastes, price of substitutes or complements, population, advertising",
+   "topic": "micro"
+  },
+  {
+   "id": "c9",
+   "front": "What causes a movement along the supply curve?",
+   "back": "A change in the good's own price",
+   "topic": "micro"
+  },
+  {
+   "id": "c10",
+   "front": "What is consumer surplus?",
+   "back": "The difference between what consumers are willing to pay and what they actually pay",
+   "topic": "micro"
+  },
+  {
+   "id": "c11",
+   "front": "What is producer surplus?",
+   "back": "The difference between the price received and the minimum price producers would accept",
+   "topic": "micro"
+  },
+  {
+   "id": "c12",
+   "front": "What is a maximum price?",
+   "back": "A price ceiling set below equilibrium; causes excess demand / shortages",
+   "topic": "micro"
+  },
+  {
+   "id": "c13",
+   "front": "What is a minimum price?",
+   "back": "A price floor set above equilibrium, e.g. minimum wage; causes excess supply",
+   "topic": "micro"
+  },
+  {
+   "id": "c14",
+   "front": "Effect of an indirect tax on a market",
+   "back": "Supply shifts left; price rises, quantity falls; burden shared depending on elasticity",
+   "topic": "micro"
+  },
+  {
+   "id": "c15",
+   "front": "What is market failure?",
+   "back": "When the free market leads to a misallocation of resources",
+   "topic": "failure"
+  },
+  {
+   "id": "c16",
+   "front": "What is a negative externality?",
+   "back": "A cost to a third party not paid by the producer or consumer, e.g. pollution",
+   "topic": "failure"
+  },
+  {
+   "id": "c17",
+   "front": "What is a positive externality?",
+   "back": "A benefit to a third party, e.g. education, vaccination",
+   "topic": "failure"
+  },
+  {
+   "id": "c18",
+   "front": "What is a merit good?",
+   "back": "A good under-consumed in a free market because of information failure, e.g. healthcare",
+   "topic": "failure"
+  },
+  {
+   "id": "c19",
+   "front": "What is a demerit good?",
+   "back": "A good over-consumed in a free market, e.g. cigarettes",
+   "topic": "failure"
+  },
+  {
+   "id": "c20",
+   "front": "What is a public good?",
+   "back": "Non-rival and non-excludable, e.g. street lighting, national defence",
+   "topic": "failure"
+  },
+  {
+   "id": "c21",
+   "front": "What is the free-rider problem?",
+   "back": "People can benefit from a public good without paying, so the market will not provide it",
+   "topic": "failure"
+  },
+  {
+   "id": "c22",
+   "front": "What is information asymmetry?",
+   "back": "One party in a transaction knows more than the other, e.g. used cars",
+   "topic": "failure"
+  },
+  {
+   "id": "c23",
+   "front": "What is government failure?",
+   "back": "When government intervention makes resource allocation worse",
+   "topic": "failure"
+  },
+  {
+   "id": "c24",
+   "front": "What is a Pigouvian tax?",
+   "back": "A tax equal to the external cost, to internalise a negative externality",
+   "topic": "failure"
+  },
+  {
+   "id": "c25",
+   "front": "What are the four main macroeconomic objectives?",
+   "back": "Economic growth, low unemployment, low and stable inflation, balance of payments equilibrium",
+   "topic": "macro"
+  },
+  {
+   "id": "c26",
+   "front": "What is GDP?",
+   "back": "Gross Domestic Product: total value of goods and services produced in a country in a year",
+   "topic": "macro"
+  },
+  {
+   "id": "c27",
+   "front": "What is aggregate demand?",
+   "back": "AD = C + I + G + (X − M)",
+   "topic": "macro"
+  },
+  {
+   "id": "c28",
+   "front": "What shifts aggregate supply in the long run?",
+   "back": "Productivity, technology, labour force, education, infrastructure",
+   "topic": "macro"
+  },
+  {
+   "id": "c29",
+   "front": "What is demand-pull inflation?",
+   "back": "Inflation caused by aggregate demand growing faster than aggregate supply",
+   "topic": "macro"
+  },
+  {
+   "id": "c30",
+   "front": "What is cost-push inflation?",
+   "back": "Inflation caused by rising costs of production, e.g. oil prices, wages",
+   "topic": "macro"
+  },
+  {
+   "id": "c31",
+   "front": "How is inflation measured in the UK?",
+   "back": "Consumer Price Index (CPI), using a weighted basket of goods",
+   "topic": "macro"
+  },
+  {
+   "id": "c32",
+   "front": "What is cyclical unemployment?",
+   "back": "Unemployment caused by a lack of aggregate demand in a recession",
+   "topic": "macro"
+  },
+  {
+   "id": "c33",
+   "front": "What is structural unemployment?",
+   "back": "Unemployment from a mismatch of skills or location after industries decline",
+   "topic": "macro"
+  },
+  {
+   "id": "c34",
+   "front": "What is frictional unemployment?",
+   "back": "Short-term unemployment between jobs",
+   "topic": "macro"
+  },
+  {
+   "id": "c35",
+   "front": "What is the multiplier?",
+   "back": "An injection leads to a larger final increase in national income; k = 1/(1 − MPC)",
+   "topic": "macro"
+  },
+  {
+   "id": "c36",
+   "front": "What is a recession?",
+   "back": "Two consecutive quarters of negative economic growth",
+   "topic": "macro"
+  },
+  {
+   "id": "c37",
+   "front": "What is the Phillips curve?",
+   "back": "Short-run inverse relationship between inflation and unemployment",
+   "topic": "macro"
+  },
+  {
+   "id": "c38",
+   "front": "What is monetary policy?",
+   "back": "Use of interest rates and the money supply by the central bank to control inflation",
+   "topic": "policy"
+  },
+  {
+   "id": "c39",
+   "front": "Who sets interest rates in the UK?",
+   "back": "The Bank of England's Monetary Policy Committee (MPC)",
+   "topic": "policy"
+  },
+  {
+   "id": "c40",
+   "front": "What is the UK inflation target?",
+   "back": "2% CPI",
+   "topic": "policy"
+  },
+  {
+   "id": "c41",
+   "front": "What is quantitative easing?",
+   "back": "The central bank creates money to buy government bonds, lowering long-term interest rates",
+   "topic": "policy"
+  },
+  {
+   "id": "c42",
+   "front": "What is fiscal policy?",
+   "back": "Use of government spending and taxation to influence aggregate demand",
+   "topic": "policy"
+  },
+  {
+   "id": "c43",
+   "front": "What is a budget deficit?",
+   "back": "Government spending exceeds tax revenue in a year",
+   "topic": "policy"
+  },
+  {
+   "id": "c44",
+   "front": "What is the national debt?",
+   "back": "The total accumulated borrowing of the government",
+   "topic": "policy"
+  },
+  {
+   "id": "c45",
+   "front": "What are supply-side policies?",
+   "back": "Policies to increase long-run aggregate supply: education, deregulation, tax incentives",
+   "topic": "policy"
+  },
+  {
+   "id": "c46",
+   "front": "What is crowding out?",
+   "back": "Government borrowing raises interest rates and reduces private investment",
+   "topic": "policy"
+  },
+  {
+   "id": "c47",
+   "front": "What is a progressive tax?",
+   "back": "A tax where the proportion paid rises as income rises, e.g. income tax",
+   "topic": "policy"
+  },
+  {
+   "id": "c48",
+   "front": "What is perfect competition?",
+   "back": "Many firms, identical products, no barriers to entry, perfect information; firms are price takers",
+   "topic": "structure"
+  },
+  {
+   "id": "c49",
+   "front": "What is a monopoly?",
+   "back": "A single firm with over 25% market share (legal) or the only seller (pure)",
+   "topic": "structure"
+  },
+  {
+   "id": "c50",
+   "front": "What is an oligopoly?",
+   "back": "A market dominated by a few large firms that are interdependent",
+   "topic": "structure"
+  },
+  {
+   "id": "c51",
+   "front": "What is a natural monopoly?",
+   "back": "An industry where one firm can supply the market at lower cost than several, e.g. water",
+   "topic": "structure"
+  },
+  {
+   "id": "c52",
+   "front": "What are barriers to entry?",
+   "back": "Obstacles that stop new firms entering a market: economies of scale, patents, brand loyalty",
+   "topic": "structure"
+  },
+  {
+   "id": "c53",
+   "front": "What is collusion?",
+   "back": "Firms agreeing to fix prices or output; illegal cartels",
+   "topic": "structure"
+  },
+  {
+   "id": "c54",
+   "front": "What is the kinked demand curve?",
+   "back": "Oligopoly model explaining price rigidity",
+   "topic": "structure"
+  },
+  {
+   "id": "c55",
+   "front": "What is game theory?",
+   "back": "Analysis of strategic decision making between interdependent firms, e.g. the prisoners' dilemma",
+   "topic": "structure"
+  },
+  {
+   "id": "c56",
+   "front": "What is contestability?",
+   "back": "A market with low barriers to entry and exit, so the threat of new firms keeps prices low",
+   "topic": "structure"
+  },
+  {
+   "id": "c57",
+   "front": "What is monopolistic competition?",
+   "back": "Many firms, differentiated products, low barriers to entry, e.g. restaurants",
+   "topic": "structure"
+  }
+ ]
+}

@@ -62,7 +62,7 @@ const MONTHS = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|j
 const DAYS = 'mon(?:day)?|tue(?:s(?:day)?)?|wed(?:s|nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?';
 const DAYMONTH_RE = new RegExp(`\\b(?:${MONTHS}|${DAYS})\\b`, 'i');
 const ADMIN_RE = /\b(?:todo|midterm|office hours?|office hrs|deadline|homework|room \d+)\b|^(?:due|reminder|announcements?|see)\b|^next (?:time|week|class|lecture)\b|^(?:week|lecture|lec|module)\.? ?\d+\b/i;
-const NOT_TERMS = new RegExp(`^(?:${MONTH_NAMES}|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$`, 'i');
+export const NOT_TERMS = new RegExp(`^(?:${MONTH_NAMES}|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$`, 'i');
 
 const wc = s => (String(s).match(/\S+/g) || []).length;
 const alnumCount = s => (String(s).match(/[\p{L}\p{N}]/gu) || []).length;

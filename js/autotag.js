@@ -6,6 +6,10 @@
 // Tested by tests/autotag.test.js, with the fixtures in tests/fixtures/autotag/.
 //
 //   notesOf(cards)                 the cards as notes: one per note (cloze siblings and reverse pairs are one), with their text
+//
+// A tag is "sure" (ticked to begin with) only when it names what the cards are about: the word is on the front of at least half of them, and
+// they hang together (they share more other words than two cards of the deck do). A broad word that runs through several topics ("price",
+// "artery"), or sits in the answers only, is still offered, but unticked, under "Less sure".
 //   deckWordsOf(decks, deckId)     the words of a deck's name and its parents' names (never proposed as tags)
 //   autotagSteps(input)            a generator: yields { phase, progress } now and then, returns { tags, reason?, stats }
 //   autotag(input)                 the same, all at once (tests)
@@ -13,11 +17,12 @@
 //   undoTags(cards, added)         the cards that change when exactly what was added is taken away again
 
 import { words, stem, STOPWORDS, FILLER, newCounts, addPhrases, candidatePhrases, groupNear, bestForm, slugTag, isJunkTerm } from './keywords.js';
+import { NOT_TERMS } from './reading-cards.js';
 import { clozeFull, hasBlank } from './cloze.js';
 import { tagWords, normTag } from './tag-tree.js';
 
 export const MAX_TAGS = 15;
-const YIELD_EVERY = 100;            // notes between two yields (the worker passes on progress at most every 100 ms)
+export const YIELD_EVERY = 100;            // notes between two yields while counting (the worker passes on progress at most every 100 ms)
 const MAX_TOP_SHARE = 0.4;          // a word in more than this share of the notes is the subject of the deck, not a topic in it
 const MAX_JACCARD = 0.6;            // two tags whose cards overlap more than this are one tag
 const MIN_NEW = 0.01;               // leave out a tag that would only reach this share of the notes (at least 2) that no tag has yet
@@ -46,15 +51,48 @@ const PARTICIPLE = /[^e]ed$/;                 // ("located", "called"; not "spee
 const EVERYWHERE = 0.5;                        // a word in more than this share of the notes cannot make a phrase a topic ("ribosome membrane")
 const looseWord = w => w.length >= 5 && (ADVERB.test(w) || PARTICIPLE.test(w));
 
+// Function words of German, French and Spanish: in a language deck they are on every card and are never a topic.
+const FOREIGN = new Set(`ich du er sie es wir ihr der die das den dem des ein eine einen einem einer und oder aber nicht ist sind bin bist habe hast hat haben
+mit von zu zur zum auf für im an bei nach aus wie was wer wo auch noch nur sehr mein dein sein
+le la les un une des du de et ou est sont je tu il elle nous vous ils elles ne pas que qui dans sur avec pour au aux ce cette ces mon ma mes ton ta tes
+el los las unos unas y o son yo tú él ella nosotros ellos por para se lo al su sus mi tu`.split(/\s+/));
+// Places and peoples: a single one ("france", "german") is too broad to be a topic on its own.
+const PLACES = new Set(`america american britain british england english france french germany german italy italian spain spanish russia russian
+china chinese japan japanese india indian europe european africa african asia asian australia australian canada mexico brazil ireland irish scotland
+poland polish turkey turkish egypt egyptian greece greek rome roman austria hungary belgium netherlands dutch sweden norway denmark switzerland israel
+iran iraq korea vietnam cuba western eastern northern southern`.split(/\s+/));
+// A derived form of a word ("bonding", "ventricular", "historic"): the same topic, so it joins the tag of the shorter word.
+const SUFFIX = ['ing', 'ed', 'ar', 'ular', 'al', 'ial', 'ic', 'ical', 'ous'];
+export function derives(a, b) {
+  if (a.length > b.length) [a, b] = [b, a];
+  if (a.includes(' ') || b.includes(' ') || a.length < 4) return false;
+  for (const base of new Set([a, a.replace(/e$/, ''), a.replace(/y$/, ''), a.replace(/le$/, '')])) {
+    if (base.length >= 4 && b.startsWith(base) && SUFFIX.includes(b.slice(base.length))) return true;
+  }
+  return false;
+}
+// A spelling variant, not a different word: colour/color, analyse/analyze, oesophagus/esophagus (but alkene/alkane, ileum/ilium are two words).
+function variant(a, b) {
+  if (a.length < b.length) [a, b] = [b, a];
+  if (a.length === b.length) {
+    let d = -1;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { if (d >= 0) return false; d = i; }
+    return d < 0 || ('sz'.includes(a[d]) && 'sz'.includes(b[d]));
+  }
+  for (let i = 0; i < a.length; i++) if (a.slice(0, i) + a.slice(i + 1) === b) return (a[i] === 'u' && a[i + 1] === 'r') || ((a[i] === 'o' || a[i] === 'a') && a[i + 1] === 'e');
+  return false;
+}
+
 // ---------- the cards as notes ----------
 
-// Take away what is not words: **bold**, $maths$, {{c1::hidden}} marks and <tags>.
-const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\$[^$\n]*\$/g, ' ').replace(/\{\{c\d+::(.*?)(?:::[^}]*)?\}\}/g, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ');
+// Take away what is not words: **bold**, $maths$, {{c1::hidden}} marks, [sound:x.mp3] and <tags>.
+const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\]/g, ' ').replace(/\$[^$\n]*\$/g, ' ').replace(/\{\{c\d+::(.*?)(?:::[^}]*)?\}\}/g, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ');
 
-// The cards as notes: [{ id, front, text, cardIds }]. A note is its cards that share a noteId (the blanks of a cloze note, a card and its
+// The cards as notes: [{ id, front, text, extra, cardIds }]. A note is its cards that share a noteId (the blanks of a cloze note, a card and its
 // reverse); a card with no noteId is a note by itself.
 //   front   what names the thing (the front; for a cloze note the sentence with its blanks filled; for image occlusion the heading)
-//   text    the rest (the back and the note's extra text)
+//   text    the back
+//   extra   the note's extra text. It is NOT read for tags: it holds grammar notes, mnemonics and the like, not what the card is about.
 // An image-occlusion note is read from its heading only (the picture and the box labels say little).
 export function notesOf(cards) {
   const byNote = new Map();
@@ -71,8 +109,7 @@ export function notesOf(cards) {
     if (c.occlusion) front = plain(c.occlusion.header);
     else if (hasBlank(c)) front = plain(clozeFull(c.noteText));
     else { front = plain(c.front); text = plain(c.back); }
-    if (!c.occlusion) { const extra = plain(c.noteExtra); if (extra.trim()) text += '\n' + extra; }
-    out.push({ id, front: front.trim(), text: text.trim(), cardIds: list.map(x => x.id) });
+    out.push({ id, front: front.trim(), text: text.trim(), extra: c.occlusion ? '' : plain(c.noteExtra).trim(), cardIds: list.map(x => x.id) });
   }
   return out;
 }
@@ -95,13 +132,20 @@ const overlap = (a, b) => {                 // sorted arrays of note numbers →
   while (i < a.length && j < b.length) { if (a[i] === b[j]) { n++; i++; j++; } else if (a[i] < b[j]) i++; else j++; }
   return n;
 };
-const isGeneric = w => GENERIC.has(w) || STOPWORDS.has(w) || FILLER.has(w);
+const union = (a, b) => [...new Set([...a, ...b])].sort((x, y) => x - y);
+const isGeneric = w => GENERIC.has(w) || STOPWORDS.has(w) || FILLER.has(w) || FOREIGN.has(w);
 const sub = (small, big) => big.includes(' ' + small + ' ') || big.startsWith(small + ' ') || big.endsWith(' ' + small) || big === small;
+const MIN_COHESION = 1.5;                  // how much more the cards of a tag share than two cards of the deck do, to be "sure" (unless it is on nearly every front)
+const PIECE = 0.6;                         // a word that is this share of the time next to the same other word is not a topic of its own
+const MIN_SURE_NOTES = 4;                  // a tag on fewer notes than this is offered, but unticked
+const MIN_FRONT = 0.5;                     // the share of a tag's cards that have the word on the front (it names the thing)
+const PAIRS_FROM = 40, BASE_NOTES = 60;                 // notes looked at to measure it
 
 // input: { notes, deckWords = [], existingTags = [], max = 15 }   notes: from notesOf()
-// Yields { phase, progress } about every 250 notes. Returns { tags, reason?, stats }
-//   tag: { key, name, label, noteIds, cardIds, count, sample, exists }
-//   reason: 'none' when nothing clear was found
+// Yields { phase, progress } at least every 100 notes while counting and often in each later stage. Returns { tags, reason?, stats }
+//   tag: { key, name, label, noteIds, cardIds, count, sample, exists, sure, aliases }
+//   sure    the tag is ticked to begin with; the others are offered under "Less sure"
+//   reason: 'none' when no tag is sure (tags may still hold less sure ones)
 export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = MAX_TAGS }) {
   const N = notes.length;
   const none = { tags: [], reason: 'none', stats: { notes: N } };
@@ -110,24 +154,40 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
 
   // 1. Count the phrases of every note. A phrase counts once for a note, however often it is said.
   const counts = newCounts(), inFront = new Map();
+  const pairs = new Map();                              // "a b" → notes where b comes straight after a
   for (let i = 0; i < N; i++) {
     const n = notes[i];
-    const front = candidatePhrases(words(n.front), { text: n.front });
+    const ft = words(n.front), front = candidatePhrases(ft, { text: n.front });
     addPhrases(counts, front, i);
     for (const k of new Set(front.map(p => p.key))) inFront.set(k, (inFront.get(k) || 0) + 1);
-    if (n.text) addPhrases(counts, candidatePhrases(words(n.text), { text: n.text }), i);
+    const tt = n.text ? words(n.text) : [];
+    if (tt.length) addPhrases(counts, candidatePhrases(tt, { text: n.text }), i);
+    const pr = new Set();
+    for (const toks of [ft, tt]) for (let k = 0; k + 1 < toks.length; k++) {
+      const a = toks[k].w, b = toks[k + 1].w;
+      if (toks[k + 1].brk || STOPWORDS.has(a) || STOPWORDS.has(b) || a.includes('-') || b.includes('-')) continue;
+      pr.add(stem(a) + ' ' + stem(b));
+    }
+    for (const x of pr) pairs.set(x, (pairs.get(x) || 0) + 1);
     if (i % YIELD_EVERY === YIELD_EVERY - 1) yield { phase: 'reading', progress: (i + 1) / N * 0.7 };
   }
 
   // 2. The phrases that could be a tag: in enough notes but not nearly all, a topic word and not a filler.
   const dw = new Set(deckWords.map(w => stem(w)));
   const cand = [];
+  const followedBy = new Map(), precededBy = new Map();      // word → the most notes in which one other word comes straight after it / before it
+  for (const [x, df] of pairs) {
+    const sp = x.indexOf(' '), a = x.slice(0, sp), b = x.slice(sp + 1);
+    if (df > (followedBy.get(a) || 0)) followedBy.set(a, df);
+    if (df > (precededBy.get(b) || 0)) precededBy.set(b, df);
+  }
   let seen = 0;
   for (const [key, e] of counts) {
     if (++seen % 5000 === 0) yield { phase: 'choosing', progress: 0.7 + 0.1 * seen / counts.size };
-    if (e.df < minDf || e.df > maxDf) continue;
     const ws = key.split(' ');
+    if (e.df < minDf || e.df > maxDf) continue;
     const first = ws[0], last = ws[ws.length - 1];
+    if (NOT_TERMS.test(key) || ws.some(w => NOT_TERMS.test(w))) continue;                // months and weekdays say when, not what
     if (ws.length === 1) {
       if (first.length < 4 || looseWord(first) || isGeneric(first) || dw.has(first) || /\d/.test(first)) continue;
     } else {
@@ -136,6 +196,15 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     cand.push(key);
   }
   if (cand.length < 3) return none;
+  // A word that is mostly followed by the same other word is a modifier ("aggregate" in "aggregate demand"); one that mostly comes after the same
+  // other word is a piece of that phrase ("third party" → "party"). The phrases stay as candidates; the lone word goes.
+  for (let i = cand.length - 1; i >= 0; i--) {
+    const key = cand[i];
+    if (key.includes(' ')) continue;
+    const df = counts.get(key).df;
+    if ((followedBy.get(key) || 0) >= df * PIECE || (precededBy.get(key) || 0) >= df * PIECE) cand.splice(i, 1);
+  }
+  yield { phase: 'choosing', progress: 0.8 };
   // A word that mostly appears inside two different phrases ("cycle" in "cell cycle" and "calvin cycle") is not one topic: the phrases are.
   const phrasesOf = new Map();
   for (const key of cand) {
@@ -151,7 +220,11 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   };
   for (let i = cand.length - 1; i >= 0; i--) if (!cand[i].includes(' ') && ambiguous(cand[i])) cand.splice(i, 1);
   if (cand.length < 3) return none;
-  const group = groupNear(cand);
+  yield { phase: 'choosing', progress: 0.82 };
+  // Only plurals, hyphen forms and real spelling variants are one word; "alkene" and "alkane" are two.
+  const near = groupNear(cand);
+  const group = new Map(cand.map(k => { const r = near.get(k); return [k, k === r || k.includes(' ') || r.includes(' ') || variant(k, r) ? r : k]; }));
+  yield { phase: 'choosing', progress: 0.84 };
   const merged = new Map();                // the first key of each group → its notes and forms together
   for (const key of cand) {
     const root = group.get(key), e = counts.get(key);
@@ -162,29 +235,33 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     m.front += inFront.get(key) || 0;
   }
   const scored = [];
+  let k = 0;
   for (const m of merged.values()) {
+    if (++k % 2000 === 0) yield { phase: 'choosing', progress: 0.85 };
     const df = m.docs.size;
     if (df < minDf || df > maxDf) continue;
     // How specific it is (TF-IDF: more notes is better, but less so as it nears every note), a little more for a phrase, and for a word that
     // is often on the front of a card (the front names the thing).
     m.score = df * Math.log(N / df) * (1 + 0.3 * (m.n - 1)) * (1 + 0.5 * Math.min(1, m.front / df));
     m.docs = [...m.docs].sort((a, b) => a - b);
-    m.label = bestForm(m.forms);
+    m.label = bestForm(m.forms).replace(/['’]s\b/g, '');            // ("Earth's" is "earth")
     if (isJunkTerm(m.label) || !slugTag(m.label)) continue;
     scored.push(m);
   }
-  yield { phase: 'choosing', progress: 0.85 };
+  yield { phase: 'choosing', progress: 0.87 };
   if (scored.length < 3) return none;
   scored.sort((a, b) => b.score - a.score || (a.key < b.key ? -1 : 1));
 
   // 3. Pick the best, one at a time, leaving out what says the same as a tag already picked.
   const picked = [], covered = new Uint8Array(N);
-  let coveredN = 0;
+  let coveredN = 0, step = 0;
   for (const c of scored) {
+    if (++step % 200 === 0) yield { phase: 'choosing', progress: 0.9 };
     if (picked.length >= max) break;
     if (c.score < scored[0].score * MIN_SCORE_SHARE) break;
     let dup = false;
     for (const p of picked) {
+      if (derives(c.key, p.key)) { p.docs = union(p.docs, c.docs); p.aliases.push(c.label); dup = true; break; }      // "bonding" joins "bond"
       const both = overlap(c.docs, p.docs);
       if (both / (c.docs.length + p.docs.length - both) > MAX_JACCARD) { dup = true; break; }
       // a word of a picked phrase that is nearly always in it (or the other way round) is an alias of it
@@ -196,23 +273,54 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     for (const d of c.docs) if (!covered[d]) fresh++;
     if (fresh < Math.max(2, N * MIN_NEW)) continue;
     for (const d of c.docs) if (!covered[d]) { covered[d] = 1; coveredN++; }
+    c.aliases = [];
     picked.push(c);
   }
   if (!picked.length) return none;
+  for (const p of picked) for (const d of p.docs) if (!covered[d]) { covered[d] = 1; coveredN++; }       // (notes that only an alias reached)
+  yield { phase: 'choosing', progress: 0.93 };
 
+  // 4. How sure: do the cards of a tag hang together? Two cards of one topic share other words besides the tag's own ("preload", "afterload");
+  // a broad word ("price", "artery") sits on cards of different topics that share nothing. Measured against two cards of the deck at random.
+  const termsOf = new Map();
+  const terms = i => {
+    let t = termsOf.get(i);
+    if (!t) {
+      t = new Map();
+      for (const p of candidatePhrases(words(notes[i].front + '\n' + notes[i].text))) {
+        if (p.n !== 1 || p.key.length < 4 || isGeneric(p.key)) continue;
+        const df = counts.get(p.key)?.df ?? 0;
+        if (df >= 2 && df <= maxDf) t.set(p.key, Math.log(N / df));
+      }
+      termsOf.set(i, t);
+    }
+    return t;
+  };
+  const sim = (a, b, skip) => { let s = 0; const tb = terms(b); for (const [key, w] of terms(a)) if (tb.has(key) && !skip.has(key)) s += w; return s; };
+  const pick = (list, n) => list.length <= n ? list : Array.from({ length: n }, (_, i) => list[Math.floor(i * list.length / n)]);
+  const meanSim = (list, skip) => { let s = 0, c = 0; for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { s += sim(list[a], list[b], skip); c++; } return c ? s / c : 0; };
+  const base = meanSim(pick(Array.from({ length: N }, (_, i) => i), BASE_NOTES), new Set()) || 0.01;
   const have = new Set([...existingTags].map(t => normTag(t)));
   const tags = picked.map(p => {
     const name = slugTag(p.label);
     const ns = p.docs.map(i => notes[i]);
+    const own = new Set(p.key.split(' '));
+    for (const a of p.aliases) for (const w of a.toLowerCase().split(/[\s-]+/)) own.add(stem(w));
+    const cohesion = meanSim(pick(p.docs, PAIRS_FROM), own) / base;
+    const frontShare = Math.min(1, p.front / p.docs.length);
+    const place = p.key.split(' ').some(w => PLACES.has(w)) && p.n === 1;
     return {
-      key: p.key, name, label: p.label,
+      key: p.key, name, label: p.label, aliases: p.aliases,
       noteIds: ns.map(n => n.id), cardIds: ns.flatMap(n => n.cardIds), count: ns.reduce((t, n) => t + n.cardIds.length, 0),
       sample: ns.slice(0, 2).map(n => n.front.replace(/\s+/g, ' ').slice(0, 80)),
-      exists: have.has(name)
+      exists: have.has(name), cohesion: Math.round(cohesion * 10) / 10, front: Math.round(frontShare * 100) / 100,
+      sure: !place && ns.length >= MIN_SURE_NOTES && frontShare >= MIN_FRONT && (cohesion >= MIN_COHESION || frontShare >= 0.8)
     };
   });
+  tags.sort((a, b) => (b.sure ? 1 : 0) - (a.sure ? 1 : 0));          // (stable: the better score first within each kind)
   yield { phase: 'choosing', progress: 1 };
-  return { tags, stats: { notes: N, covered: coveredN, candidates: scored.length } };
+  const sure = tags.filter(t => t.sure).length;
+  return { tags, ...(sure ? {} : { reason: 'none' }), stats: { notes: N, covered: coveredN, candidates: scored.length, sure } };
 }
 
 export function autotag(input) {

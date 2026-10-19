@@ -1,0 +1,355 @@
+{
+ "name": "PSY101",
+ "cards": [
+  {
+   "id": "c1",
+   "front": "What is the multi-store model of memory?",
+   "back": "Atkinson & Shiffrin (1968): sensory register → short-term memory → long-term memory",
+   "topic": "memory",
+   "tags": [
+    "memory",
+    "ch3"
+   ]
+  },
+  {
+   "id": "c2",
+   "front": "Capacity of short-term memory (Miller)",
+   "back": "7 ± 2 items",
+   "topic": "memory",
+   "tags": [
+    "memory",
+    "ch3"
+   ]
+  },
+  {
+   "id": "c3",
+   "front": "Duration of short-term memory without rehearsal",
+   "back": "About 18–30 seconds (Peterson & Peterson)",
+   "topic": "memory",
+   "tags": [
+    "memory",
+    "ch3"
+   ]
+  },
+  {
+   "id": "c4",
+   "front": "What is the working memory model?",
+   "back": "Baddeley & Hitch (1974): central executive, phonological loop, visuospatial sketchpad, episodic buffer",
+   "topic": "memory",
+   "tags": [
+    "memory",
+    "ch3"
+   ]
+  },
+  {
+   "id": "c5",
+   "front": "What is the phonological loop?",
+   "back": "Component of working memory that holds sounds; includes the articulatory process",
+   "topic": "memory",
+   "tags": [
+    "memory",
+    "ch3"
+   ]
+  },
+  {
+   "id": "c6",
+   "front": "What is episodic memory?",
+   "back": "Long-term memory for personal events, time-stamped",
+   "topic": "memory",
+   "tags": [
+    "memory"
+   ]
+  },
+  {
+   "id": "c7",
+   "front": "What is semantic memory?",
+   "back": "Long-term memory for facts and knowledge",
+   "topic": "memory",
+   "tags": [
+    "memory"
+   ]
+  },
+  {
+   "id": "c8",
+   "front": "What is procedural memory?",
+   "back": "Long-term memory for skills and actions, e.g. riding a bike",
+   "topic": "memory",
+   "tags": [
+    "memory"
+   ]
+  },
+  {
+   "id": "c9",
+   "front": "What is proactive interference?",
+   "back": "Old learning disrupts the recall of new information",
+   "topic": "memory",
+   "tags": [
+    "ch3"
+   ]
+  },
+  {
+   "id": "c10",
+   "front": "What is retroactive interference?",
+   "back": "New learning disrupts the recall of old information",
+   "topic": "memory",
+   "tags": [
+    "ch3"
+   ]
+  },
+  {
+   "id": "c11",
+   "front": "What is retrieval failure?",
+   "back": "Forgetting because the right cues are missing (context- and state-dependent) |",
+   "topic": "memory"
+  },
+  {
+   "id": "c12",
+   "front": "What did Loftus and Palmer (1974) find?",
+   "back": "Leading questions (\"smashed\" vs \"hit\") changed speed estimates: eyewitness testimony is unreliable |",
+   "topic": "memory"
+  },
+  {
+   "id": "c13",
+   "front": "What is the cognitive interview?",
+   "back": "Police technique to improve eyewitness recall: report everything, reinstate context, change order, change perspective |",
+   "topic": "memory"
+  },
+  {
+   "id": "c14",
+   "front": "What is anterograde amnesia?",
+   "back": "Inability to form new long-term memories after brain damage (e.g. patient HM) |",
+   "topic": "memory"
+  },
+  {
+   "id": "c15",
+   "front": "What is conformity?",
+   "back": "Changing behaviour or beliefs to fit in with a group",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c16",
+   "front": "What did Asch (1951) show?",
+   "back": "75% of participants conformed at least once to a clearly wrong group answer on a line-length task",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c17",
+   "front": "What is informational social influence?",
+   "back": "Conforming because you believe the group is right",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c18",
+   "front": "What is normative social influence?",
+   "back": "Conforming to be liked or accepted by the group",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c19",
+   "front": "What did Milgram (1963) study?",
+   "back": "Obedience to authority: 65% gave the maximum 450V \"shock\"",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c20",
+   "front": "What is the agentic state?",
+   "back": "Seeing oneself as acting for an authority figure, so not responsible for one's actions",
+   "topic": "social",
+   "tags": [
+    "Social-Psych"
+   ]
+  },
+  {
+   "id": "c21",
+   "front": "What was the Stanford prison experiment?",
+   "back": "Zimbardo (1971): students given guard/prisoner roles; guards became abusive; stopped after 6 days |",
+   "topic": "social"
+  },
+  {
+   "id": "c22",
+   "front": "What is minority influence?",
+   "back": "A small group changes the majority's views through consistency, commitment and flexibility |",
+   "topic": "social"
+  },
+  {
+   "id": "c23",
+   "front": "What is the bystander effect?",
+   "back": "People are less likely to help when others are present (Darley & Latané) |",
+   "topic": "social"
+  },
+  {
+   "id": "c24",
+   "front": "What is diffusion of responsibility?",
+   "back": "Each bystander feels less responsible when others are present |",
+   "topic": "social"
+  },
+  {
+   "id": "c25",
+   "front": "What is the fundamental attribution error?",
+   "back": "Overestimating personality and underestimating the situation when explaining others' behaviour |",
+   "topic": "social"
+  },
+  {
+   "id": "c26",
+   "front": "What is cognitive dissonance?",
+   "back": "Discomfort from holding conflicting beliefs or acting against one's beliefs (Festinger) |",
+   "topic": "social"
+  },
+  {
+   "id": "c27",
+   "front": "What is groupthink?",
+   "back": "A group values agreement over good decisions, ignoring alternatives |",
+   "topic": "social"
+  },
+  {
+   "id": "c28",
+   "front": "What is attachment?",
+   "back": "A close two-way emotional bond between an infant and a caregiver",
+   "topic": "dev",
+   "tags": [
+    "dev"
+   ]
+  },
+  {
+   "id": "c29",
+   "front": "What did Ainsworth's Strange Situation measure?",
+   "back": "Infant attachment type: secure, insecure-avoidant, insecure-resistant",
+   "topic": "dev",
+   "tags": [
+    "dev"
+   ]
+  },
+  {
+   "id": "c30",
+   "front": "What is Bowlby's monotropy theory?",
+   "back": "Infants form one special attachment, usually with the mother, within a critical period",
+   "topic": "dev",
+   "tags": [
+    "dev"
+   ]
+  },
+  {
+   "id": "c31",
+   "front": "What did Harlow's monkeys show?",
+   "back": "Infant monkeys preferred a soft cloth mother over a wire mother with food: comfort matters more than food",
+   "topic": "dev",
+   "tags": [
+    "dev"
+   ]
+  },
+  {
+   "id": "c32",
+   "front": "What is imprinting (Lorenz)?",
+   "back": "Young geese followed the first moving object they saw after hatching",
+   "topic": "dev",
+   "tags": [
+    "dev"
+   ]
+  },
+  {
+   "id": "c33",
+   "front": "What are Piaget's four stages of cognitive development?",
+   "back": "Sensorimotor, preoperational, concrete operational, formal operational |",
+   "topic": "dev"
+  },
+  {
+   "id": "c34",
+   "front": "What is object permanence?",
+   "back": "Knowing an object still exists when it is out of sight (sensorimotor stage) |",
+   "topic": "dev"
+  },
+  {
+   "id": "c35",
+   "front": "What is conservation (Piaget)?",
+   "back": "Understanding that quantity stays the same when appearance changes; achieved in the concrete operational stage |",
+   "topic": "dev"
+  },
+  {
+   "id": "c36",
+   "front": "What is egocentrism (Piaget)?",
+   "back": "Inability to see the world from another's point of view (preoperational stage) |",
+   "topic": "dev"
+  },
+  {
+   "id": "c37",
+   "front": "What is the zone of proximal development?",
+   "back": "Vygotsky: the gap between what a child can do alone and with help |",
+   "topic": "dev"
+  },
+  {
+   "id": "c38",
+   "front": "What is scaffolding?",
+   "back": "Support from an adult that is reduced as the child learns |",
+   "topic": "dev"
+  },
+  {
+   "id": "c39",
+   "front": "What is the internal working model?",
+   "back": "Bowlby: the first attachment acts as a template for future relationships |",
+   "topic": "dev"
+  },
+  {
+   "id": "c40",
+   "front": "What does the sympathetic nervous system do?",
+   "back": "Fight or flight: increases heart rate, dilates pupils, releases adrenaline |",
+   "topic": "bio"
+  },
+  {
+   "id": "c41",
+   "front": "What does the parasympathetic nervous system do?",
+   "back": "Rest and digest: slows heart rate, returns the body to normal |",
+   "topic": "bio"
+  },
+  {
+   "id": "c42",
+   "front": "What is a neurotransmitter?",
+   "back": "A chemical that carries signals across the synapse, e.g. serotonin, dopamine |",
+   "topic": "bio"
+  },
+  {
+   "id": "c43",
+   "front": "What is synaptic transmission?",
+   "back": "Neurotransmitter released from the presynaptic neuron binds to receptors on the postsynaptic neuron |",
+   "topic": "bio"
+  },
+  {
+   "id": "c44",
+   "front": "What is localisation of function?",
+   "back": "Specific areas of the brain have specific functions, e.g. Broca's area for speech |",
+   "topic": "bio"
+  },
+  {
+   "id": "c45",
+   "front": "What is brain plasticity?",
+   "back": "The brain's ability to change and adapt with experience or after injury |",
+   "topic": "bio"
+  },
+  {
+   "id": "c46",
+   "front": "What are circadian rhythms?",
+   "back": "Biological rhythms of about 24 hours, e.g. the sleep–wake cycle |",
+   "topic": "bio"
+  },
+  {
+   "id": "c47",
+   "front": "What is the role of the hypothalamus in stress?",
+   "back": "Activates the HPA axis: CRH → ACTH → cortisol |",
+   "topic": "bio"
+  }
+ ]
+}

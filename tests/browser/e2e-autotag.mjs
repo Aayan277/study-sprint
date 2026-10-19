@@ -9,10 +9,12 @@ const BIO = fixture('biology-mixed').cards.filter(c => !c.cloze && !c.reverse);
 const LINES = BIO.map(c => `${c.front} - ${c.back}`).join('\n');
 const browser = await chromium.launch();
 const errors = [], requests = [];
+let workers = 0;
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const watch = p => {
   p.on('pageerror', e => errors.push('pageerror ' + e.message + ' @ ' + String(e.stack).split('\n').slice(1, 3).join(' | ')));
   p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push('console ' + m.text()); });
+  p.on('worker', () => { workers++; });
   p.on('request', r => { const u = r.url(); if (!/^(http:\/\/localhost:8123|data:|blob:|about:)/.test(u)) requests.push(u); });
 };
 const open = async ({ w = 1000, h = 800, init = null } = {}) => {
@@ -59,6 +61,11 @@ await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
 const rows = p.locator('.tag-sugs li');
 const nRows = await rows.count();
 ok(nRows >= 3 && nRows <= 15, `${nRows} suggested tags`);
+ok(workers >= 1, 'the reading ran in a worker (' + workers + ')');
+const sureRows = await p.locator('.tag-sugs li[data-sure="1"]').count(), lessRows = await p.locator('.tag-sugs li[data-sure="0"]').count();
+ok(sureRows >= 2 && lessRows >= 1, `${sureRows} sure tags and ${lessRows} less sure ones`);
+ok(await p.locator('.tag-sugs li[data-sure="1"] .pick:checked').count() === sureRows && await p.locator('.tag-sugs li[data-sure="0"] .pick:checked').count() === 0, 'the sure ones are ticked and the less sure ones are not');
+ok((await p.textContent('#atLess')) === 'Less sure' && await p.evaluate(() => { const h = document.getElementById('atLess'), l = document.querySelector('li[data-sure="1"]'); return !!(l.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'a "Less sure" heading comes after the sure ones');
 const names = await p.$$eval('.tag-sugs .tag-name', i => i.map(x => x.value));
 console.log('   tags:', names.join(', '));
 ok(names.every(n => /^[\p{L}-]+$/u.test(n) && n.length >= 4), 'every name is a clean word or phrase');
@@ -69,6 +76,12 @@ const countText = await rows.nth(0).locator('.ts-count').textContent();
 ok(/^\d+ cards?$/.test(countText), 'each row shows its cards: ' + countText);
 await p.screenshot({ path: SP + '/at-sheet.png', fullPage: true });
 
+const lessRow = p.locator('.tag-sugs li[data-sure="0"]').first();
+const label0 = await addLabel(p);
+await lessRow.locator('.pick').check();
+ok(await addLabel(p) !== label0, 'ticking a less sure tag changes the button: ' + label0 + ' → ' + await addLabel(p));
+await lessRow.locator('.pick').uncheck();
+ok(await addLabel(p) === label0, 'and unticking it puts it back');
 const before = await addLabel(p);
 // rename row 2, untick row 3, untick a card under row 1
 const row2Was = names[1], row3Was = names[2], row1Was = names[0];
@@ -101,8 +114,7 @@ ok(await p.isEnabled('#atAdd'), 'a good name turns Add back on');
 // ---- 3. leaving with changes asks first ----
 await p.keyboard.press('Escape');
 await p.waitForSelector('#discardKeep');
-ok((await p.textContent('.discard, #discardYes, #discardKeep').catch(() => '')) !== undefined && await p.isVisible('#discardKeep'), 'Esc with changes asks "Discard changes?"');
-ok((await p.textContent('body')).includes('Discard changes?'), 'it says Discard changes?');
+ok(await p.isVisible('#discardKeep') && (await p.textContent('body')).includes('Discard changes?'), 'Esc with changes asks "Discard changes?"');
 await p.click('#discardKeep');
 ok(await p.isVisible('#atAdd') && await rows.nth(1).locator('.tag-name').inputValue() === 'plant-biology-extra', 'Keep editing leaves the sheet as it was');
 
@@ -123,7 +135,6 @@ ok(!after.some(c => (c.tags || []).some(t => t.endsWith('::' + row2Was) || t ===
 ok(!after.some(c => (c.tags || []).some(t => t === 'bio-unit::' + row3Was)), 'the unticked tag was not added: ' + row3Was);
 const tagged = after.filter(c => (c.tags || []).some(t => t.startsWith('bio-unit::')));
 ok(tagged.length === +m[2] || Math.abs(tagged.length - +m[2]) === 0, `the button's number was right: ${tagged.length} of ${m[2]} cards`);
-const note1 = after.find(c => c.id === unNote);
 const unCard = after.find(c => (c.front || '').replace(/\s+/g, ' ').trim().startsWith(unCardText.slice(0, 40)));
 ok(unCard && !(unCard.tags || []).includes('bio-unit::' + row1Was), 'the unticked card did not get the first tag');
 ok(week1.every(id => (after.find(c => c.id === id).tags || []).includes('week1')), 'week1 is still on all ' + week1.length + ' cards that had it');
@@ -135,10 +146,8 @@ ok((await p.textContent('#sheet')).includes('bio-unit'), 'Browse → Tools shows
 await p.keyboard.press('Escape');
 
 // ---- 5. Undo ----
-await p.waitForSelector('#toast .toast-link', { timeout: 100 }).catch(() => {});
-if (!(await p.$('#toast .toast-link'))) { /* the toast timed out while the Tools sheet was open: add again to test Undo */ }
-const stillThere = !!(await p.$('#toast .toast-link:visible'));
-if (!stillThere) {
+// (the toast may have timed out while the Tools sheet was open: then add again to test Undo)
+if (!(await p.$('#toast .toast-link:visible'))) {
   await openSuggest(p);
   await p.click('#atAdd');
   await p.waitForSelector('#toast .toast-link');
@@ -157,7 +166,7 @@ for (let i = 0; i < 8 && await p.evaluate(() => document.activeElement.id) !== '
 ok(await p.evaluate(() => document.activeElement.id) === 'autoTag', 'arrow keys reach Suggest tags');
 await p.keyboard.press('Enter');
 await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
-ok(await p.evaluate(() => document.activeElement.id) === 'sheetTitle' || await p.evaluate(() => !!document.activeElement.closest('#sheet')), 'focus is inside the sheet');
+ok(await p.evaluate(() => !!document.activeElement.closest('#sheet')), 'focus is inside the sheet');
 const tabTo = async (test, max = 400) => { for (let i = 0; i < max; i++) { await p.keyboard.press('Tab'); if (await p.evaluate(test)) return true; } return false; };
 ok(await tabTo(() => document.activeElement.id === 'tagFolder'), 'Tab reaches the folder box');
 await p.keyboard.type('kb');
@@ -197,6 +206,15 @@ await p.goto('http://localhost:8123/#/deck/es'); await p.waitForSelector('.crow'
 await p.click('#deckMore'); await p.click('#autoTag');
 await p.waitForSelector('#atMsg', { timeout: 30000 });
 ok((await p.textContent('#atMsg')).startsWith('No clear topics found in these cards.') && await p.isDisabled('#atAdd'), 'a vocabulary deck: "No clear topics found…" and nothing to add');
+await p.keyboard.press('Escape');
+// nothing sure, but some less sure tags: the message, and the list unticked
+const GEO = fixture('geology').cards.map(c => ({ id: 'g' + c.id, deckId: 'geo', front: c.front, back: c.back, created: 1 }));
+await p.evaluate(async cards => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'geo', name: 'Geology', color: '#3E63DD', created: Date.now() + 7 }, cards); }, GEO);
+await p.goto('http://localhost:8123/#/deck/geo'); await p.waitForSelector('.crow');
+await p.click('#deckMore'); await p.click('#autoTag');
+await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
+ok((await p.textContent('#atBody')).startsWith('No clear topics found') && await p.isVisible('#atLess'), 'no sure tag: the "No clear topics" message, and the less sure ones below');
+ok(await p.locator('.tag-sugs .pick:checked').count() === 0 && await p.isDisabled('#atAdd'), 'none is ticked, so Add is off');
 await p.keyboard.press('Escape');
 await p.goto('http://localhost:8123/#/deck/tiny'); await p.waitForSelector('.crow');
 await p.click('#deckMore');
@@ -244,7 +262,7 @@ await p.waitForSelector('#atProg, #atMsg, .tag-sugs li');
 const prog = await p.textContent('#atProg').catch(() => '');
 ok(prog === '' || /^Reading 6,000 cards… \d+%$/.test(prog), 'while it reads: "' + prog + '"');
 await p.waitForSelector('#atMsg, .tag-sugs li', { timeout: 60000 });
-ok(true, 'the long deck finished');
+ok(await p.locator('.tag-sugs li').count() > 0 || (await p.textContent('#atMsg')).length > 0, 'the long deck finished with an answer');
 await p.context().close();
 p = await open();
 await p.evaluate(async () => {
@@ -259,6 +277,7 @@ await p.waitForSelector('#atStop', { timeout: 10000 });
 await p.click('#atStop');
 await p.waitForSelector('#atMsg');
 ok((await p.textContent('#atMsg')).startsWith('Stopped'), 'Stop ends the reading: ' + await p.textContent('#atMsg'));
+ok(await p.evaluate(() => document.activeElement.id) === 'atMsg', 'and focus moves to the message');
 await p.keyboard.press('Escape');
 await p.context().close();
 
