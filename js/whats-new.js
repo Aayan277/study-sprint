@@ -11,7 +11,7 @@ export const NOTES = [
   { version: '4.38', items: [
     'New Help page (Settings → Help): how scheduling works, what Again, Hard, Good and Easy mean, and how your data is kept.',
     'Clearer messages when you sign in or create an account.',
-    'Small fixes for phones and screen readers.'
+    'Suggest cards: paste notes or an article on the Import screen and the app suggests flashcards for you to check.'
   ] },
   { version: '4.37', items: [
     'Practice test: a calm mock exam from any deck’s page, marked at the end.',

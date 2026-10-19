@@ -32,7 +32,7 @@ export const SECTIONS = [
   { title: 'Your cards', items: [
     ['adding', 'How do I add my own cards?', `
       <p>Tap <b>Import</b> (on the Decks screen or on a deck’s page), or <b>Add cards</b> in the sidebar on a computer. Paste one card per line, with the front and back separated by a dash, tab, colon or comma, for example ${code('Mitosis - cell division into 2 identical cells')}. Quizlet exports and tables from Notion, Excel or Google Sheets work too, and so do .csv and .xlsx files and Anki decks (.apkg).</p>
-      <p>Notes written in paragraphs don’t split into cards by themselves. Use <b>Make cards with Claude</b> on the Add cards screen to turn them into cards first.</p>`],
+      <p>Notes written in paragraphs don’t split into cards by themselves. Tap <b>Suggest cards</b> and the app picks out definitions, lists, key terms and dates for you to tick and check (it works on your device), or use <b>Make cards with Claude</b> for an AI version.</p>`],
     ['share', 'Can I share a deck with a friend?', `
       <p>Yes. Open the deck and tap ⋯ → <b>Share</b>. It makes an Anki deck file (.apkg); your friend opens it in Study Sprint with Add cards → File, or in Anki. Only the cards are shared, not your progress.</p>`]
   ] },
