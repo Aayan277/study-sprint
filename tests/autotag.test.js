@@ -252,7 +252,8 @@ test('a plural and its singular are one tag', () => {
 
 const ALL = ['biology-mixed', 'pharmacology', 'geography', 'french-vocab', 'cardiovascular', 'spanish-vocab-deck', 'computer-science', 'geology', 'german-vocab-notes',
   'review-anatomy', 'review-chemistry', 'review-econ', 'review-german', 'review-history', 'review-psych',
-  'review2-acct', 'review2-englit', 'review2-messy', 'review2-micro', 'review2-physics', 'review2-spanish'];
+  'review2-acct', 'review2-englit', 'review2-messy', 'review2-micro', 'review2-physics', 'review2-spanish',
+  'review3-derm', 'review3-japanese', 'review3-mktg-messy', 'review3-music', 'review3-phil', 'review3-stats'];
 const RUNS = Object.fromEntries(ALL.map(n => [n, run(deck(n))]));
 
 test('every deck: the tags, ticked (sure) first, then the less sure ones (printed so a run shows them)', () => {
@@ -347,4 +348,23 @@ test('a tag the student already has starts unticked unless most of its cards alr
   const few = withTag(0.1), most = withTag(1);
   assert.ok(few && few.exists && !few.sure, 'few cards have it: unticked');
   assert.ok(most && most.exists && most.sure, 'all cards have it: ticked');
+});
+
+test('a tag the student already has as a folder ("mktg::pricing") is the same tag as "pricing": the cards join it', () => {
+  const d = deck('review3-mktg-messy');
+  const cards = d.cards.map(c => ({ ...c, tags: (c.tags || []).map(t => (t === 'pricing' ? 'mktg::pricing' : t)) }));
+  const existing = [...new Set(cards.flatMap(c => c.tags))];
+  const r = autotag({ notes: notesOf(cards), deckWords: [], existingTags: existing });
+  assert.ok(!r.tags.some(t => t.name === 'pricing'), 'no new top-level pricing: ' + r.tags.map(t => t.name));
+  const t = r.tags.find(x => x.name === 'mktg::pricing');
+  assert.ok(t && t.exists && t.sure, 'mktg::pricing is proposed, as an existing tag');
+});
+
+test('a vague word on few fronts with little in common is not ticked (patch); "i-adjective" is kept; "moral realism" is not blocked; $ prices are kept', () => {
+  assert.ok(!RUNS['review3-derm'].tags.some(t => t.sure && t.name === 'patch'));
+  assert.ok(RUNS['review3-japanese'].tags.some(t => t.name === 'i-adjective'), RUNS['review3-japanese'].tags.map(t => t.name).join());
+  const phil = RUNS['review3-phil'].tags.map(t => t.name).join();
+  assert.ok(/moral/.test(phil), phil);
+  assert.equal(notesOf([{ id: 'a', front: 'Sale: $9.99 instead of $10', back: 'price' }])[0].front, 'Sale: $9.99 instead of $10');
+  assert.equal(notesOf([{ id: 'b', front: 'Solve $x^2$ now', back: 'b' }])[0].front.includes('x^2'), false);
 });

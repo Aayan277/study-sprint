@@ -9,7 +9,7 @@
 //
 // A tag is "sure" (ticked to begin with) only when it names what the cards are about: the word is on the front of at least half of them, and
 // they hang together (they share more other words than two cards of the deck do). A broad word that runs through several topics ("price",
-// "artery"), or sits in the answers only, is still offered, but unticked, under "Less sure".
+// "artery"), or sits in the answers only, is still offered, but unticked, under "Other possible tags".
 //   deckWordsOf(decks, deckId)     the words of a deck's name and its parents' names (never proposed as tags)
 //   autotagSteps(input)            a generator: yields { phase, progress } now and then, returns { tags, reason?, stats }
 //   autotag(input)                 the same, all at once (tests)
@@ -45,7 +45,7 @@ source value variable measure sign symptom sample study test type version unit s
 beginning middle edge center centre inside outside inner outer upper lower left right front back
 usually often always never sometimes together also only just still even already again either neither
 become becomes known called using given based related involved caused produced formed made
-avoid monitor oral world theme quote character moral largest smallest highest lowest longest shortest deepest biggest greatest oldest newest best worst strongest weakest fastest slowest`.split(/\s+/).map(w => stem(w)));
+avoid monitor oral world theme quote character largest smallest highest lowest longest shortest deepest biggest greatest oldest newest best worst strongest weakest fastest slowest`.split(/\s+/).map(w => stem(w)));
 const ADVERB = /[^aeiou]ly$/;                 // ("quickly"; not "family")
 const PARTICIPLE = /[^e]ed$/;                 // ("located", "called"; not "speed")
 const EVERYWHERE = 0.5;                        // a word in more than this share of the notes cannot make a phrase a topic ("ribosome membrane")
@@ -87,7 +87,7 @@ function variant(a, b) {
 // ---------- the cards as notes ----------
 
 // Take away what is not words: **bold**, $maths$, {{c1::hidden}} marks, [sound:x.mp3] and <tags>.
-const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\]/g, ' ').replace(/\$[^$\n]*\$/g, ' ').replace(/\{\{c\d+::(.*?)(?:::[^}]*)?\}\}/g, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ');
+const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\]/g, ' ').replace(/\$(?!\d)[^$\n]*\$/g, ' ').replace(/\{\{c\d+::(.*?)(?:::[^}]*)?\}\}/g, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ');
 
 // The cards as notes: [{ id, front, text, extra, cardIds }]. A note is its cards that share a noteId (the blanks of a cloze note, a card and its
 // reverse); a card with no noteId is a note by itself.
@@ -146,7 +146,7 @@ const PAIRS_FROM = 40, BASE_NOTES = 60;                 // notes looked at to me
 // input: { notes, deckWords = [], existingTags = [], max = 15 }   notes: from notesOf()
 // Yields { phase, progress } at least every 100 notes while counting and often in each later stage. Returns { tags, reason?, stats }
 //   tag: { key, name, label, noteIds, cardIds, count, sample, exists, sure, aliases }
-//   sure    the tag is ticked to begin with; the others are offered under "Less sure"
+//   sure    the tag is ticked to begin with; the others are offered under "Other possible tags"
 //   reason: 'none' when no tag is sure (tags may still hold less sure ones)
 export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = MAX_TAGS }) {
   const N = notes.length;
@@ -192,9 +192,12 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     const ws = key.split(' ');
     if (e.df < minDf || e.df > maxDf) continue;
     const first = ws[0], last = ws[ws.length - 1];
+    const prefixed = ws.length === 2 && first.length === 1 && /^[a-z]$/.test(first);      // "i-adjective": one hyphenated word with a one-letter start
     if (NOT_TERMS.test(key) || ws.some(w => NOT_TERMS.test(w))) continue;                // months and weekdays say when, not what
     if (ws.length === 1) {
       if (first.length < 4 || looseWord(first) || isGeneric(first) || dw.has(first) || /\d/.test(first)) continue;
+    } else if (prefixed) {
+      if (isGeneric(last) || looseWord(last) || last.length < 4 || dw.has(last)) continue;
     } else {
       if (isGeneric(first) || isGeneric(last) || looseWord(first) || looseWord(last) || ws.some(w => (counts.get(w)?.df ?? 0) > N * EVERYWHERE) || ws.every(w => dw.has(w) || isGeneric(w)) || ws.some(w => /\d/.test(w) && !/[a-z]/.test(w))) continue;
     }
@@ -280,15 +283,23 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
   const pick = (list, n) => list.length <= n ? list : Array.from({ length: n }, (_, i) => list[Math.floor(i * list.length / n)]);
   const meanSim = (list, skip) => { let s = 0, c = 0; for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) { s += sim(list[a], list[b], skip); c++; } return c ? s / c : 0; };
   const base = meanSim(pick(Array.from({ length: N }, (_, i) => i), BASE_NOTES), new Set()) || 0.01;
-  const have = new Set([...existingTags].map(t => normTag(t)));
-  const tagged = notes.map(n => new Set(n.tags || []));
+  // A tag the student already has, as a folder ("mktg::pricing"), is the same tag as the leaf "pricing": the cards join it.
+  const have = new Set(), leafOf = new Map();
+  for (const t of existingTags) {
+    const full = normTag(t), leaf = full.split('::').pop();
+    have.add(full);
+    if (leaf !== full && !leafOf.has(leaf)) leafOf.set(leaf, full);
+  }
+  const tagged = notes.map(n => new Set((n.tags || []).flatMap(t => [t, t.split('::').pop()])));
   const judge = c => {
     c.name = slugTag(c.label);
+    const leaf = c.name;
+    if (!have.has(leaf) && leafOf.has(leaf)) c.name = leafOf.get(leaf);
     c.frontShare = Math.min(1, c.front / c.docs.length);
     c.cohesion = null; c.sure = false;
     const place = c.n === 1 && c.key.split(' ').some(w => PLACES.has(w));
     if (place || c.docs.length < MIN_SURE_NOTES || c.frontShare < MIN_FRONT) return;
-    if (have.has(c.name) && c.docs.filter(d => tagged[d].has(c.name)).length < c.docs.length / 2) return;
+    if (have.has(c.name) && c.docs.filter(d => tagged[d].has(leaf)).length < c.docs.length / 2) return;
     const own = new Set(c.key.split(' '));
     c.cohesion = meanSim(pick(c.docs, PAIRS_FROM), own) / base;
     // On nearly every front is enough without the cohesion, unless it is the end of many different compounds ("demand curve", "supply curve",
@@ -296,6 +307,7 @@ export function* autotagSteps({ notes, deckWords = [], existingTags = [], max = 
     const df = c.docs.length, key = c.key;
     const compoundEnd = c.n === 1 && (precededAll.get(key) || 0) >= df * 0.75 && (precededBy.get(key) || 0) <= df * 0.5;
     c.sure = c.cohesion >= MIN_COHESION || (c.frontShare >= 0.8 && !compoundEnd);
+    if (c.frontShare < 0.6 && c.cohesion < 2) c.sure = false;
   };
   const similar = (c, picked) => {
     for (const p of picked) {
