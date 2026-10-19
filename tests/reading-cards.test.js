@@ -13,7 +13,9 @@ import { dupKey, parseText } from '../js/import.js';
 import { parseElements } from '../js/steps.js';
 
 const fixture = name => fs.readFileSync(new URL(`./fixtures/reading/${name}.txt`, import.meta.url), 'utf8');
-const TEXT = { biology: fixture('biology'), history: fixture('history'), vocab: fixture('spanish-vocab'), messy: fixture('lecture-messy') };
+const TEXT = { biology: fixture('biology'), history: fixture('history'), vocab: fixture('spanish-vocab'), messy: fixture('lecture-messy'),
+  // Held out: written by a reviewer who had not seen the rules. The rules were not tuned to these three beyond general fixes.
+  econ: fixture('heldout-econ'), french: fixture('heldout-french'), psych: fixture('heldout-psych') };
 const RESULT = Object.fromEntries(Object.entries(TEXT).map(([k, t]) => [k, suggestCards({ text: t })]));
 const wordCount = t => (t.match(/\S+/g) || []).length;
 
@@ -31,7 +33,14 @@ const MUST = {
   history: [['franz ferdinand'], ['1914'], ['treaty of versailles'], ['1919'], ['triple entente'], ['triple alliance'],
     { list: ['militarism', 'alliances', 'imperialism', 'nationalism'] }, ['league of nations'], ['trench warfare'], ['schlieffen plan'], ['armistice', '11 november 1918'], ['total war']],
   messy: [['classical conditioning'], ['operant conditioning'], ['cs', 'conditioned stimulus'], ['ucs', 'unconditioned stimulus'], ['reinforcement'], ['punishment'],
-    { list: ['fixed ratio', 'variable ratio', 'fixed interval', 'variable interval'], intro: 'schedules of reinforcement' }, ['extinction'], ['spontaneous recovery']]
+    { list: ['fixed ratio', 'variable ratio', 'fixed interval', 'variable interval'], intro: 'schedules of reinforcement' }, ['extinction'], ['spontaneous recovery']],
+  econ: [['price elasticity of demand'], ['total revenue'], ['income elasticity of demand'], ['normal goods'], ['inferior goods'], ['cross price elasticity'],
+    ['opec', 'organization of petroleum exporting countries'], ['1973'], ['1986'], ['elasticity of supply'], ['substitutes']],
+  french: ['cuisine', 'chambre', 'salon', 'salle de bains', 'grenier', 'cave', 'escalier', 'jardin', 'toit', 'fenetre', 'mur', 'placard', 'ranger', 'nettoyer',
+    'demenager', 'louer', 'avoir du mal', 'faire le menage', 'mettre la table', 'librairie', 'bibliotheque'].map(w => [w]),
+  psych: [['atkinson shiffrin'], ['sensory memory'], ['stm', 'short term'], ['chunking'], ['ltm'], ['working memory'], ['central executive'], ['phonological loop'],
+    ['visuospatial sketchpad'], ['episodic buffer'], ['explicit'], ['episodic memory'], ['semantic memory'], ['procedural memory'], ['serial position'],
+    ['proactive interference'], ['retroactive interference'], ['henry molaison', 'hm'], ['anterograde amnesia']]
 };
 const recall = name => {
   const items = MUST[name], list = RESULT[name].suggestions;
@@ -69,7 +78,9 @@ const junkOf = name => {
   return { bad, rate: bad.length / Math.max(1, list.length), n: list.length };
 };
 
-for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75]]) {
+// (The held-out texts are scored too: the floors are set under what they got, so a rule change that makes them worse shows. They are lower
+// than for the first fixtures, and that is the honest number.)
+for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75], ['econ', 0.5], ['french', 0.7], ['psych', 0.65]]) {
   test(`recall: ${name} finds at least ${min * 100}% of what matters`, () => {
     const r = recall(name);
     console.log(`  recall ${name}: ${r.hits}/${r.of} = ${(r.rate * 100).toFixed(0)}%${r.missed.length ? ', missed: ' + r.missed.join(', ') : ''}`);
@@ -77,7 +88,7 @@ for (const [name, min] of [['biology', 0.8], ['history', 0.8], ['messy', 0.75]])
   });
 }
 
-for (const [name, max] of [['biology', 0.1], ['history', 0.1], ['vocab', 0.1], ['messy', 0.15]]) {
+for (const [name, max] of [['biology', 0.1], ['history', 0.1], ['vocab', 0.1], ['messy', 0.15], ['econ', 0.15], ['french', 0.15], ['psych', 0.15]]) {
   test(`junk: ${name} has at most ${max * 100}% junk and no junk among the pre-ticked`, () => {
     const j = junkOf(name);
     console.log(`  junk ${name}: ${j.bad.length}/${j.n} = ${(j.rate * 100).toFixed(1)}%${j.bad.length ? ' (' + j.bad.map(x => x.why.join('+')).join(', ') + ')' : ''}`);
@@ -86,6 +97,26 @@ for (const [name, max] of [['biology', 0.1], ['history', 0.1], ['vocab', 0.1], [
   });
 }
 
+test('held-out texts: none of the wrong cards a reviewer found (OPEC, Inelastic, Key takeaway, a title line)', () => {
+  const econ = RESULT.econ.suggestions, fr = RESULT.french.suggestions;
+  const opec = econ.find(s => s.kind === 'acronym' && s.front === 'OPEC');
+  assert.ok(opec && /^Organization of Petroleum/.test(opec.back), 'OPEC: ' + opec?.back);
+  for (const s of econ) assert.ok(!['inelastic', 'key takeaway', 'study'].includes(foldText(s.front)), 'a card for "' + s.front + '"');
+  assert.ok(!econ.some(s => s.type === 'basic' && /^the revenue of OPEC/.test(s.back)));
+  assert.ok(!fr.some(s => /francais|unite/.test(foldText(s.front + ' ' + s.back))), 'the title line is not a card');
+  assert.ok(fr.filter(s => s.kind === 'vocab' && s.both).length >= 12, 'one-word meanings count in a word list');
+  for (const n of ['econ', 'psych', 'french']) assert.deepEqual(RESULT[n].suggestions.filter(s => s.strong).map(s => junkReasons(s)).filter(r => r.length), []);
+  assert.ok(!RESULT.psych.suggestions.some(s => answersOf(s).some(a => /->/.test(a))), 'an arrow inside a blank');
+});
+test('a blank never cuts a name or a hyphenated word, and a lone verb is not blanked', () => {
+  for (const name of Object.keys(RESULT)) for (const s of RESULT[name].suggestions.filter(x => x.type === 'cloze')) {
+    assert.ok(!/[\p{L}\-–]\{\{c1::/u.test(s.cloze) && !/\}\}[\-–]\p{L}/u.test(s.cloze), name + ': ' + s.cloze);
+  }
+  const hb = suggestCards({ text: 'The Henderson–Hasselbalch equation relates the pH of a buffer to its pKa. A buffer resists change. The Henderson–Hasselbalch equation is used for buffers, and each buffer has a pKa.' });
+  assert.ok(!hb.suggestions.some(s => /\{\{c1::Henderson\}\}/.test(s.cloze || '')));
+  const verbs = RESULT.econ.suggestions.filter(s => s.type === 'cloze').flatMap(answersOf);
+  assert.ok(!verbs.includes('reduces') && !verbs.includes('demand measures'));
+});
 test('the messy notes make no card out of times, links, e-mail, admin lines, headers or footers', () => {
   const everything = RESULT.messy.suggestions.map(s => [s.front, s.back, s.cloze, ...answersOf(s)].join(' ').toLowerCase()).join('\n');
   for (const bad of ['midterm', 'room 204', 'office', 'todo', 'http', '@', '10:32', 'psyc 101', 'slide 4', 'lec 5']) assert.ok(!everything.includes(bad), `a card has "${bad}"`);

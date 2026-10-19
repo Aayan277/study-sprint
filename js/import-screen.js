@@ -160,6 +160,7 @@ export async function renderImport(el, arg) {
     <section id="preview" class="section" hidden aria-labelledby="pvTitle">
       <h2 id="pvTitle" tabindex="-1" style="margin-top:22px">Preview</h2>
       <p class="found" id="found" aria-live="polite"></p>
+      <p class="note err-note" id="sugNote" role="status" hidden></p>
       <div class="sug-bar" id="sugBar" hidden>
         <label class="field"><span>Show</span><select id="sugKind"></select></label>
         <div class="pane-actions">
@@ -254,6 +255,7 @@ function wireTabs() {
       $(`tab-${x}`).setAttribute('aria-selected', String(x === t));
       $(`pane-${x}`).hidden = x !== t;
     });
+    if (t === 'sheet') $('aiView').hidden = true;          // the AI view is about text, not a sheet
   }));
 }
 
@@ -271,12 +273,16 @@ function wirePaste() {
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
   $('pasteBox').addEventListener('paste', () => {
     const b = $('pasteBox');
-    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) { S.blocks = false; saveDraft(b.value); }
+    if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) {
+      S.blocks = false;
+      if (S.aiPending) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
+      saveDraft(b.value);
+    }
   });
   $('clearBtn').addEventListener('click', () => {
     clearTimeout(timer);
     setSuggest(false);
-    S.blocks = false; S.aiMade = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
+    S.blocks = false; S.aiMade = false; S.aiPending = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
     $('pasteBox').value = '';
     keepDraft(null);
     showResult(null);
@@ -447,6 +453,7 @@ function wireDoc() {
   });
   $('aiBack').addEventListener('click', () => {
     $('tab-paste').click();
+    $('aiView').hidden = true;
     $('aiNote').hidden = false;
     $('pasteBox').focus();
   });
@@ -455,12 +462,14 @@ function wireDoc() {
 // The AI view: the material in prompt-sized parts to copy into the person's own chat. It is for a PDF or slides (pages) and for pasted
 // text (its paragraphs). Nothing is sent from here: it is the clipboard and plain links.
 let aiParts = [], aiFromDoc = false;
-function showAiView(pages, fromDoc = aiFromDoc) {
+function showAiView(pages, fromDoc = aiFromDoc, markAi = true) {
   aiFromDoc = fromDoc;
   aiParts = splitParts(pages, undefined, S.withNotes);
-  S.aiMade = true; S.blocks = false;
+  S.blocks = false;
+  // The cards get the ai-made tag once the AI's answer is in the box. From pasted notes that is only when a paste replaces them (the paste
+  // handler); from a PDF's pages the box is not the material, so it counts straight away.
+  if (markAi) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; } else S.aiPending = true;
   saveDraft($('pasteBox').value);
-  $('aiNote').hidden = false;
   S.part = Math.min(S.part, aiParts.length - 1);
   $('aiHow').textContent = aiParts.length > 1
     ? `This is a lot of text, so it is in ${aiParts.length} parts. Copy a part, paste it into a chat, and send it. Do the next part in the same chat.`
@@ -892,7 +901,9 @@ function refreshFlags() {
   if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to, like in Anki. Off = everything goes in that one deck.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
-  $('found').innerHTML = parts.join(' ');
+  // (written only when it changed, so a screen reader does not read it out again at every tick)
+  const foundHtml = parts.join(' ');
+  if ($('found').dataset.src !== foundHtml || !$('found').textContent) { $('found').innerHTML = foundHtml; $('found').dataset.src = foundHtml; }
   $('dupBtn').hidden = !dups || sug;
   if (sug) fillFilter();
 
@@ -904,6 +915,11 @@ function refreshFlags() {
   $('saveHint').hidden = !complete || !!name;
   $('saveBtn').disabled = !complete;
 }
+
+// Leaving the screen while suggestions are being found stops the job (the worker would otherwise run on to its end).
+addEventListener('hashchange', () => setTimeout(() => {
+  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); S.sugJob?.cancel(); S.sugJob = null; }
+}, 300));
 
 // ---------- suggest cards ----------
 // "Suggest cards" reads the text in the paste box for definitions, lists, abbreviations and facts (js/reading-cards.js, in a worker) and shows
@@ -918,7 +934,7 @@ function setSuggest(on) {
   clearTimeout(S.sugTimer);
   S.sugJob?.cancel(); S.sugJob = null;
   S.sugSeq++;                          // a run that finishes after this says nothing
-  $('sugStatus').hidden = true;
+  $('sugStatus').hidden = true; $('sugNote').hidden = true;
   S.restoreSug = null; S.sugStats = null;
 }
 
@@ -926,7 +942,7 @@ function setSuggest(on) {
 function startSuggest() {
   const text = $('pasteBox').value;
   if (!text.trim()) { toast('Paste some text first'); return; }
-  S.aiMade = false; S.blocks = false; S.noCloze = false;
+  S.aiMade = false; S.aiPending = false; S.blocks = false; S.noCloze = false;
   $('aiNote').hidden = true; $('claudeNote').hidden = true; $('proseNote').hidden = true; $('aiView').hidden = true;
   setSuggest(true);
   S.pasted = text;
@@ -943,15 +959,16 @@ async function runSuggest({ focus = false } = {}) {
   const st = S, mine = ++st.sugSeq;
   const stale = () => S !== st || mine !== st.sugSeq || !$('pasteBox')?.isConnected;
   // What was unticked or edited is carried over to the new suggestions (by their keys), and so is what a kept draft brought back.
-  S.carry = S.cards.some(c => c.sug) ? RS.changesOf(S.cards) : S.restoreSug;
-  S.restoreSug = null;
-  if (!S.cards.some(c => c.sug)) {         // the first run: show where the suggestions will appear
+  const rerun = S.cards.some(c => c.sug);
+  S.carry = rerun ? RS.changesOf(S.cards) : S.restoreSug;
+  if (!rerun) {         // the first run: show where the suggestions will appear
     $('loadErr').hidden = true;
     S.cards = []; S.result = null;
     $('preview').hidden = false; $('savebar').hidden = true; $('sugBar').hidden = true;
     $('pvTitle').textContent = 'Suggestions';
     $('plist').innerHTML = ''; $('moreNote').hidden = true;
-    $('found').textContent = 'Finding cards in your text…';
+    $('found').textContent = 'Finding cards in your text…'; $('found').dataset.src = '';
+    $('sugNote').hidden = true;
   }
   const bar = $('sugStatus'), label = $('sugStatusText');
   const timer = setTimeout(() => { if (!stale()) { label.textContent = 'Finding cards… 0%'; bar.hidden = false; } }, 300);
@@ -967,12 +984,19 @@ async function runSuggest({ focus = false } = {}) {
   if (stale()) return;
   S.sugJob = null;
   bar.hidden = true;
-  const fail = msg => { setSuggest(false); showError(msg); };
+  // Stopped, too long, an error or nothing found: the first time that ends suggest mode with a message; when suggestions are already
+  // on the screen (the text was edited) they stay, with their ticks and edits, and the message is a note above them.
+  const fail = msg => {
+    if (rerun) { $('sugNote').textContent = msg; $('sugNote').hidden = false; S.carry = null; return; }
+    setSuggest(false); showError(msg);
+  };
   if (out.status === 'done') {
     const { suggestions, stats } = out.result;
     if (!suggestions.length) { fail(RS.NONE_FOUND); return; }
     S.sugStats = stats;
+    $('sugNote').hidden = true;
     showResult(RS.toResult(suggestions), false, text);
+    S.restoreSug = null;
     performance.mark('suggest-done');
     if (focus) $('pvTitle').focus();          // the heading is the start of the list; Tab goes on from there
     return;
@@ -988,7 +1012,7 @@ function wireSuggest() {
   $('sugExit').addEventListener('click', () => {
     setSuggest(false);
     showText($('pasteBox').value);
-    $('pvTitle').focus();
+    if (!$('preview').hidden) $('pvTitle').focus();
   });
   // The same AI view as for a PDF, with the pasted text in parts. Nothing is sent from here.
   $('sugAi').addEventListener('click', () => {
@@ -996,7 +1020,7 @@ function wireSuggest() {
     setSuggest(false);
     showResult(null);
     S.part = 0;
-    showAiView(textPages(text), false);
+    showAiView(textPages(text), false, false);
     $('aiView').scrollIntoView({ block: 'nearest' });
   });
   $('sugKind').addEventListener('change', e => { S.filter = e.target.value; applyFilter(); });

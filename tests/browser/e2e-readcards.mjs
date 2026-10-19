@@ -278,6 +278,67 @@ await p4.waitForSelector('#loadErr:not([hidden])');
 ok((await p4.textContent('#loadErr')) === 'Stopped. Press Suggest cards to try again.' && await p4.isVisible('#suggestBtn') && await p4.isHidden('#preview'), 'Stop: "Stopped. Press Suggest cards to try again."');
 await ctx4.close();
 
+// ---- 14. races: edit mid-run, leave mid-run, Stop on a re-run, the live region, the AI view's tabs ----
+const ctx5 = await browser.newContext({ viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true, permissions: ['clipboard-read', 'clipboard-write'] });
+await ctx5.addInitScript(() => {
+  window.__w = { made: 0, terminated: 0 };
+  const W = window.Worker;
+  window.Worker = class extends W { constructor(...a) { super(...a); window.__w.made++; } terminate() { window.__w.terminated++; return super.terminate(); } };
+});
+const p5 = await ctx5.newPage();
+p5.on('pageerror', e => errors.push('pageerror ' + e.message));
+const open5 = async () => { await p5.goto('http://localhost:8123/#/decks'); await p5.waitForSelector('.deck'); await p5.evaluate(() => sessionStorage.clear()); await p5.goto('http://localhost:8123/#/import'); await p5.waitForSelector('#pasteBox'); };
+const fill5 = t => p5.evaluate(t => { const b = document.getElementById('pasteBox'); b.value = t; b.dispatchEvent(new Event('input', { bubbles: true })); }, t);
+await open5();
+await p5.evaluate(t => { document.getElementById('pasteBox').value = t; }, big);
+await p5.click('#suggestBtn');
+await p5.waitForTimeout(200);
+await fill5(HISTORY);
+await p5.waitForSelector('.prow.sug', { timeout: 60000 });
+await p5.waitForFunction(() => [...document.querySelectorAll('.sug-src p')].some(p => /Versailles/.test(p.textContent)) && document.querySelectorAll('.prow.sug').length < 100, null, { timeout: 30000 });
+const srcs = await p5.$$eval('.prow.sug .sug-src p', x => x.map(y => y.textContent));
+ok(srcs.length > 0 && srcs.every(t => !/osmosis|mitochondri|conditioning/i.test(t)), `edit mid-run: only the new text's suggestions (${srcs.length})`);
+// the live region is not rewritten by a tick
+const writes = await p5.evaluate(async () => {
+  let n = 0; const mo = new MutationObserver(m => { n += m.length; }); mo.observe(document.getElementById('found'), { childList: true, subtree: true, characterData: true });
+  for (const b of [...document.querySelectorAll('.prow.sug .pick')].slice(0, 4)) { b.click(); await new Promise(r => setTimeout(r, 40)); }
+  mo.disconnect(); return n;
+});
+ok(writes <= 4, 'the summary is written only when it changes (' + writes + ' writes for 4 ticks)');
+// Stop on a re-run keeps the suggestions, the ticks and the mode
+const rowsBefore = await p5.locator('.prow.sug').count();
+await p5.locator('.prow.sug .pick').first().evaluate(b => { b.click(); });
+const tickedBefore = await p5.locator('.prow.sug .pick:checked').count();
+await p5.evaluate(t => { const b = document.getElementById('pasteBox'); b.value = t; b.dispatchEvent(new Event('input', { bubbles: true })); }, big);
+await p5.waitForSelector('#sugStatus:not([hidden])', { timeout: 20000 });
+await p5.click('#sugStop');
+await p5.waitForSelector('#sugNote:not([hidden])');
+ok((await p5.textContent('#sugNote')) === 'Stopped. Press Suggest cards to try again.' || (await p5.textContent('#sugNote')).startsWith('Stopped.'), 'Stop on a re-run: a note, not an error: ' + await p5.textContent('#sugNote'));
+ok(await p5.locator('.prow.sug').count() === rowsBefore && await p5.locator('.prow.sug .pick:checked').count() === tickedBefore && await p5.isVisible('#preview') && await p5.isHidden('#loadErr'), 'the suggestions and ticks stay');
+// the AI view goes away on the Sheets tab and after "I have the answer"; it does not tag the notes
+await p5.click('#sugAi');
+await p5.waitForSelector('#aiView:not([hidden])');
+await p5.click('#tab-sheet');
+ok(await p5.isHidden('#aiView'), 'the AI view is hidden on the Google Sheets tab');
+await p5.click('#tab-paste');
+await p5.click('#suggestBtn'); await p5.waitForSelector('.prow.sug');
+await p5.click('#sugAi'); await p5.waitForSelector('#aiView:not([hidden])');
+await p5.click('#aiBack');
+ok(await p5.isHidden('#aiView'), 'and after "I have the answer"');
+await fill5('Front one - back one\nFront two - back two');
+await p5.waitForSelector('.prow');
+ok(!(await p5.textContent('#found')).includes('Tags come along'), 'notes still in the box are not tagged ai-made');
+// leaving mid-run stops the worker
+await open5();
+await p5.evaluate(t => { document.getElementById('pasteBox').value = t; }, big);
+const w0 = await p5.evaluate(() => ({ ...window.__w }));
+await p5.click('#suggestBtn');
+await p5.waitForTimeout(150);
+await p5.goto('http://localhost:8123/#/decks'); await p5.waitForSelector('.deck');
+await p5.waitForFunction(w => window.__w.terminated - w.terminated >= 1, w0, { timeout: 5000 }).catch(() => {});
+ok((await p5.evaluate(() => window.__w.terminated)) - w0.terminated >= 1, 'leaving the screen mid-run stops the worker');
+await ctx5.close();
+
 // ---- no network, no errors ----
 const outside = [...new Set(requests.map(u => new URL(u).host))].filter(h => h !== 'cdn.jsdelivr.net');
 ok(outside.length === 0, 'nothing left the page except the CDN loads for slides: ' + (outside.join(', ') || [...new Set(requests.map(u => new URL(u).host))].join(', ') || 'none'));

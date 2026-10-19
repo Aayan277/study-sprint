@@ -33,7 +33,7 @@ const INTRO = new Set(`in on at by for as after before during with from to if wh
 among without until about against towards toward upon`.split(/\s+/));
 const LABELS = new Set(`note notes example examples e.g answer q a page slide figure fig table date time week lecture lec source reading homework
 hw todo nb ref midterm final exam quiz test due deadline room office hours announcement reminder remember tip hint warning summary conclusion
-agenda outline overview objective objectives aim goal question`.split(' '));
+agenda outline overview objective objectives aim goal question takeaway takeaways recap`.split(' '));
 // One word that alone says nothing ("Treatment: rest"): the heading of a note, not a term.
 const VAGUE = new Set(`treatment cause causes effect effects symptoms result results solution problem problems advantages disadvantages pros cons features
 types type definition meaning description reason reasons use uses method methods steps process idea ideas point points`.split(/\s+/));
@@ -107,6 +107,7 @@ function termOk(term, { loose = false } = {}) {
   if (LABELS.has(flat) || LABELS.has(first)) return false;
   if (hasAdminBits(term) || /[$+"“”]|\(\s*\d{4}\s*\)/.test(term)) return false;
   if (ws.length === 1 && VAGUE.has(flat)) return false;
+  if (ws.length === 2 && /^(?:key|main|major|core|big|top)$/.test(first) && (VAGUE.has(ws[1].toLowerCase()) || LABELS.has(ws[1].toLowerCase()))) return false;      // "Key takeaway", "Main idea"
   return true;
 }
 
@@ -129,8 +130,8 @@ export function pairSplit(line) {
     def = plain.slice(best + sep.length).trim();
   }
   def = def.replace(/\t+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!termOk(term) || wc(def) < 2 || adminDate(def) || hasAdminBits(def)) return null;
-  return { term: term.replace(/\s+/g, ' '), def, sep: sep === '\t' ? 'tab' : sep.trim() };
+  if (!termOk(term) || wc(def) < 1 || adminDate(def) || hasAdminBits(def) || /^[\p{L}.]+ \d+\b/u.test(def)) return null;        // (a meaning that starts "Unité 5" is the rest of a title)
+  return { term: term.replace(/\s+/g, ' '), def, sep: sep === '\t' ? 'tab' : sep.trim(), one: wc(def) < 2 };
 }
 
 // "operant cond." in a section called "Operant conditioning": the heading, written out. → the heading or null
@@ -144,6 +145,7 @@ function fullHeading(term, heading) {
 
 // ---------- abbreviations (Schwartz and Hearst) ----------
 
+const LITTLE = new Set('of the and for in on to a an at by with'.split(' '));
 const ACRONYM = /^[\p{Lu}][\p{L}\p{N}&]{1,7}$/u;
 const isAcronym = s => ACRONYM.test(s) && (s.match(/\p{Lu}/gu) || []).length >= 2;
 // Do the letters of `short` appear, in order, in `long`, with the first one starting a word? → the part of `long` that matches, or null.
@@ -153,7 +155,7 @@ export function matchesAbbreviation(short, long) {
   let si = s.length - 1, li = l.length - 1;
   while (si >= 0) {
     const c = s[si];
-    while (li >= 0 && (l[li] !== c || (si === 0 && li > 0 && /[\p{L}\p{N}]/u.test(l[li - 1])))) li--;
+    while (li >= 0 && (l[li] !== c || (si === 0 && ((li > 0 && /[\p{L}\p{N}]/u.test(l[li - 1])) || LITTLE.has((l.slice(li).match(/^[\p{L}]+/u) || [''])[0]))))) li--;
     if (li < 0) return null;
     si--; li--;
   }
@@ -194,7 +196,7 @@ function abbreviationPair(term, def) {
 
 // ---------- definitions in sentences ----------
 
-const DEF_IS = /\s(?:(?:is|are)\s+(?:defined as\s+)?(?=(?:an?|the|one of the|anything|something|someone|any)\s)|(?:refers to|means(?: that)?|meant(?: that)?|is defined as|describes|denotes)\s+)/gi;
+const DEF_IS = /\s(?:(?:is|are)\s+(?:defined as\s+)?(?=(?:an?|the|one of the|anything|something|someone|any)\s)|(?:refers to|means(?: that)?|meant(?: that)?|is defined as|describes|denotes|measures)\s+|(?:is|are)\s+(?=\p{L}+(?:\s\p{L}+)?\s+(?:that|which|who|for which|in which|whereby)\s))/giu;
 // A sentence that defines a term: "Osmosis is the movement of…", "X refers to…", "The process… is called photosynthesis."
 export function definitionIn(sentence) {
   const s = chop(sentence.replace(/^["“(]+/, ''));
@@ -231,7 +233,9 @@ export function appositiveIn(sentence, toks) {
     while (run.length > 1 && (run[0].w === 'of' || GENERIC.has(stem(run[0].w)) || (run[0].first && !/^\p{Lu}/u.test(run[1].raw)))) run.shift();
     if (!run.length) continue;
     const before = left.slice(0, left.length - run.length);
-    if (!/which|whereby/.test(m[0]) && before.length <= 3 && before.some(t => INTRO.has(t.w))) continue;             // "In practice, the rate…": not a term
+    if (!/which|whereby/.test(m[0]) && before.length <= 3 && before.some(t => INTRO.has(t.w))) continue;
+    const lead = firstWord(s);
+    if (!/which|whereby/.test(m[0]) && (STARTERS.has(lead) || INTRO.has(lead) || lead === 'according') && !s.slice(0, m.index).includes(',')) continue;             // "In practice, the rate…": not a term
     const term = s.slice(run[0].start, run[run.length - 1].end);
     const key = keyOf(run);
     if (!termOk(term) || isJunkTerm(term) || NOT_TERMS.test(term) || GENERIC.has(key) || VAGUE.has(key)) continue;
@@ -275,18 +279,37 @@ function factIn(sentence, phrases, weights, counts) {
 // ---------- key sentences ----------
 
 // Hide every occurrence of a phrase in a sentence: "The {{c1::Schlieffen Plan}} aimed…". → the cloze text or null
+const capBefore = t => { const m = t.match(/(\p{Lu}[\p{L}]*)(?: of)? $/u); return !!m && !STOPWORDS.has(m[1].toLowerCase()); };
 function clozeOf(sentence, key, toks) {
   const n = key.split(' ').length;
   const spans = [];
   for (let i = 0; i + n <= toks.length; i++) {
     const slice = toks.slice(i, i + n);
     if (slice.slice(1).some(t => t.brk)) continue;
-    if (keyOf(slice) === key) spans.push([slice[0].start, slice[n - 1].end]);
+    if (keyOf(slice) !== key) continue;
+    const a = slice[0].start, b = slice[n - 1].end, rest = sentence.slice(b);
+    if (/[\p{L}\p{N}\-–]/u.test(sentence[a - 1] || ' ') || /^[\-–]\p{L}/u.test(rest)) return null;
+    if (/^\p{Lu}/u.test(sentence.slice(a)) && (/^ (?:of )?\p{Lu}\p{Ll}/u.test(rest) || capBefore(sentence.slice(Math.max(0, a - 30), a)))) return null;
+    spans.push([a, b]);
   }
   if (!spans.length) return null;
   let out = '', at = 0;
   for (const [a, b] of spans) { if (a < at) continue; out += sentence.slice(at, a) + '{{c1::' + sentence.slice(a, b) + '}}'; at = b; }
   return out + sentence.slice(at);
+}
+
+// A plain word that reads as a verb where it stands: after "to", a modal or "not", or before "the", "that", "how"… ("reduces the", "measures how").
+const BEFORE_VERB = new Set('to can could will would may might must should shall not also then often usually never always'.split(' '));
+const AFTER_VERB = new Set('the a an that how whether to'.split(' '));
+function looksLikeVerb(toks, p, subjects) {
+  const i = toks.findIndex(t => t.start === p.start);
+  if (i < 0) return false;
+  if (i > 0 && BEFORE_VERB.has(toks[i - 1].w)) return true;
+  if (i + 1 < toks.length && AFTER_VERB.has(toks[i + 1].w) && !toks[i + 1].brk) return true;
+  // a noun usually comes after a little word ("the substances", "of ribosomes") or is what the text is about; a word right after another
+  // plain word ("price increase reduces total") is more often a verb
+  const prev = toks[i - 1];
+  return !!prev && !prev.brk && !STOPWORDS.has(prev.w) && !subjects.has(p.key) && !/^\p{Lu}/u.test(prev.raw) && p.text.endsWith('s');
 }
 
 // A sentence worth a cloze: it says something, and has a key term to hide. → up to 3 choices [{ cloze, base, key, text }], best first.
@@ -303,7 +326,7 @@ function sentenceCards(sentence, toks, phrases, { weights, counts, knownKeys, su
     if (wc(p.text) > 6 || NOT_TERMS.test(p.text) || isJunkTerm(p.text)) continue;
     if (p.start === toks[0].start && p.n === 1 && !isKnown) continue;                 // (a capital letter at the start of a sentence says nothing)
     if (p.n === 1) {
-      if (GENERIC.has(p.key)) continue;
+      if (GENERIC.has(p.key) || (!p.caps && !isKnown && looksLikeVerb(toks, p, subjects))) continue;
       if (!(p.caps || isKnown || /^\p{Lu}{2,}$/u.test(p.text) || (df >= 2 && p.text.length >= 7))) continue;
     } else if (!(p.caps || isKnown)) {
       // two words that really belong together: the rarer one is mostly found inside the phrase ("stem cells", not "cell needs")
@@ -382,11 +405,12 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
   // (admin lines, a time, a link, an e-mail address, "midterm…", "TODO…", are not study material)
   const lines = items.filter(it => it.marker || it.h || (!repeated.has(boiler(it.t)) && (wc(it.t) > 15 || !isAdminLine(it.t))));
   // wrapped lines (a PDF breaks lines at the page width): join a line that stops mid-sentence with the next one that starts in lower case
+  const lens = lines.filter(x => !x.h && !x.marker).map(x => x.t.length).sort((a, b) => a - b), wrapAt = 0.8 * (lens[Math.floor(lens.length * 0.9)] || 0);
   const joined = [];
   for (const it of lines) {
     if (++tick % 2000 === 0) yield { phase: 'Reading', progress: 0.04 };
     const prev = joined[joined.length - 1];
-    if (prev && !prev.marker && !prev.h && !prev.bullet && !it.marker && !it.h && !it.bullet && !it.gap && wc(prev.t) >= 7 && !/[.!?:;]$/.test(prev.t) &&
+    if (prev && !prev.marker && !prev.h && !prev.bullet && !it.marker && !it.h && !it.bullet && !it.gap && wc(prev.t) >= 7 && prev.t.length >= wrapAt && !SEPS.some(x => prev.t.includes(x)) && !/[.!?:;]$/.test(prev.t) &&
       /^\p{Ll}/u.test(it.t) && prev.t.length < 3000 && !pairSplit(prev.t) && !pairSplit(it.t)) {
       prev.t += ' ' + it.t;
       continue;
@@ -466,6 +490,7 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
       }
       continue;
     }
+    for (const r of s.recs) if (r.pair?.one) r.pair = null;          // a one-word meaning only counts in a list of word pairs
 
     // lists: a heading, or a line that ends in ":", followed by 2 to 8 bullets (under a slide title, short lines will do)
     for (let i = 0; i < s.recs.length; i++) {
@@ -532,7 +557,7 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
         if (u.bullet && n < 6) continue;
         const f = n >= 6 && n <= 35 ? factIn(u.plain, u.phrases, weights, counts) : null;
         if (f) push({ kind: 'fact', type: 'cloze', cloze: f.cloze, source: u.plain, where: w, base: f.base, cap: 0.72, anchor: 'fact|' + u.plain, fact: true });
-        if (n >= 8 && n <= 35) for (const c of sentenceCards(u.plain, u.toks, u.phrases, ctx)) push({ kind: 'sentence', type: 'cloze', cloze: c.cloze, source: u.plain, where: w, base: c.base, cap: 0.72, anchor: c.key, term: c.text });
+        if (!f && n >= 8 && n <= 35) for (const c of sentenceCards(u.plain, u.toks, u.phrases, ctx)) push({ kind: 'sentence', type: 'cloze', cloze: c.cloze, source: u.plain, where: w, base: c.base, cap: 0.72, anchor: c.key, term: c.text });
       }
     }
   }
@@ -575,15 +600,15 @@ export function* suggestSteps({ text = '', known = [], debug = null } = {}) {
   const groups = groupNear(cands.map(c => c.anchor));
   const sorted = [...cands].sort((a, b) => b.score - a.score || (a.kind === 'sentence') - (b.kind === 'sentence') || b.raw - a.raw || a.order - b.order);
   if (debug) debug.push(...sorted);
-  const usedSource = new Set(), usedFact = new Set(), usedAcr = new Set(), anchorBasic = new Set(), anchorCloze = new Set(), seen = new Set();
+  const usedSource = new Set(), usedAcr = new Set(), anchorBasic = new Set(), anchorCloze = new Set(), seen = new Set();
   const keep = [];
   let sentenceQuota = Math.max(1, Math.ceil(stats.words / 100));
   for (const c of sorted) {
     if (++step % 300 === 0) yield { phase: 'Choosing the best', progress: 0.97 };
     if (junky(c)) continue;
     const g = groups.get(c.anchor) || c.anchor;
-    // one card per sentence (an abbreviation may share its sentence with a definition, and a number or date with a key term)
-    const sourceSet = c.acr ? usedAcr : c.fact ? usedFact : usedSource;
+    // one card per sentence (an abbreviation may share its sentence with a definition)
+    const sourceSet = c.acr ? usedAcr : usedSource;
     const sourceId = c.acr ? g : dupKey(c.source);
     if (sourceSet.has(sourceId)) continue;
     if (c.type === 'basic' ? anchorBasic.has(g) : anchorCloze.has(g)) continue;

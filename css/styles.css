@@ -745,11 +745,12 @@ main[data-route="import"] > .view > .savebar{order:5}
 .prow.sug .pnum{padding-top:0;min-width:0;text-align:center}
 .pcells .sug-kind{justify-self:start;margin:6px 7px 0;font-size:var(--fs-xs);font-weight:600;color:var(--accent-text)}
 .sug-src{margin:0 7px;font-size:var(--fs-sm);color:var(--text-2)}
-.sug-src summary{cursor:pointer;display:flex;align-items:center;min-height:36px}
+.sug-src summary{cursor:pointer;display:flex;align-items:center;min-height:44px}
 .sug-src p{margin:2px 0 8px;overflow-wrap:anywhere}
 .sug-bar{display:grid;gap:var(--s-2);margin:0 0 var(--s-3)}
 .sug-bar .pane-actions{margin-top:0;align-items:center}
 .sug-bar .btn,.sug-status .btn{min-height:44px}
+.err-note{color:var(--again)}
 .sug-status{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
 .ai-view{margin-top:var(--s-3)}
 .ai-view .btn{min-height:44px}
