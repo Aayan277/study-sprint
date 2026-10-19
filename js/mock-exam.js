@@ -96,15 +96,15 @@ function startTaking() {
           <div class="flash-front" id="tPrompt" role="heading" aria-level="2" tabindex="-1"></div>
         </div>
         <div id="tAnswer" class="t-answer"></div>
-        <div class="t-step">
-          <button class="btn ghost" id="tPrev" type="button">‹ Previous${keyHint(' <kbd class="key-hint">P</kbd>')}</button>
-          <button class="btn primary" id="tNext" type="button">Next ›</button>
-        </div>
         <div class="t-tools">
           <button class="btn ghost small" id="tFlag" type="button" aria-pressed="false">${icon('flag')}<span>Flag for review</span>${keyHint(' <kbd class="key-hint">F</kbd>')}</button>
           <button class="btn ghost small t-navbtn" id="tNavBtn" type="button">${icon('grid')}<span>Questions</span></button>
           <button class="btn ghost small" id="tClear" type="button" hidden>Clear answer</button>
           <button class="btn ghost small t-submit" id="tSubmit" type="button">Submit test</button>
+        </div>
+        <div class="t-step">
+          <button class="btn ghost" id="tPrev" type="button">‹ Previous${keyHint(' <kbd class="key-hint">P</kbd>')}</button>
+          <button class="btn primary" id="tNext" type="button">Next ›</button>
         </div>
       </div>
       <aside class="t-nav" aria-label="Question navigator">
@@ -193,7 +193,7 @@ function drawAnswer(question, given) {
     box.innerHTML = `<div class="options t-options${question.options.length > 4 ? ' six' : ''}${long ? ' long' : ''}" role="radiogroup" aria-labelledby="tPrompt">
       ${question.options.map((o, j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${j}" ${given === j ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></label>`).join('')}</div>`;
   } else if (question.kind === 'tf') {
-    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Answer given</span><div class="t-claim-v" id="tClaim">${mathHTML(question.shown)}</div></div>
+    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Proposed answer</span><div class="t-claim-v" id="tClaim">${mathHTML(question.shown)}</div></div>
       <div class="options t-options" role="radiogroup" aria-labelledby="tPrompt tClaim">
         ${[['true', 'True'], ['false', 'False']].map(([v, label], j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${v}" ${given === (v === 'true') ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${label}</span></label>`).join('')}</div>`;
   } else {

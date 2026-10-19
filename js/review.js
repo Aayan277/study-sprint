@@ -26,7 +26,7 @@ import { mountScratch } from './scratchpad.js';
 import { deckSchedulerOptions, personalW20, usesFsrs7 } from './sched-settings.js';
 import { loadByDay } from './balance.js';
 import { examOptions, examSchedule } from './exam.js';
-import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live } from './study-data.js';
+import { loadAll, countFor, withSubdecks, nextDueText, customQueue, takeLaunch, loadStreak, scopeKey, live, launchStudy } from './study-data.js';
 import { isHidden, isNewLeechCounted, markLeech, buryUntil } from './browse-logic.js';
 import { openCardPanel } from './browse.js';
 import { deckPath, effectiveDeck } from './deck-tree.js';
@@ -100,13 +100,19 @@ export async function renderReview(el, deckId) {
       </div>`;
     return;
   }
+  // Caught up: Custom study's "Review ahead" is the way on. It looks 3 days ahead, then a week, then 2 weeks, for the first that has cards.
+  const [aheadDays, aheadN] = [3, 7, 14].map(d => [d, customQueue('ahead', data, c.cards, d).queue.length]).find(([, n]) => n) || [0, 0];
+  const aheadWhen = aheadDays === 3 ? 'in the next 3 days' : aheadDays === 7 ? 'in the next week' : 'in the next 2 weeks';
   el.innerHTML = `
     <div class="screen-head"><div><h1>${esc(deck.name)}</h1></div></div>
-    <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}</div>
+    <div class="empty"><b>All caught up.</b><br>Nothing is due in this deck right now. ${nextDueText(data, c.cards)}${aheadN ? `<br>Want to get ahead? Study ahead goes over the ${plural(aheadN, 'card')} due ${aheadWhen}.` : ''}</div>
     <div class="res-actions">
-      <a class="btn primary" href="#/today">Back to Today</a>
+      ${aheadN ? `<button class="btn primary" type="button" id="aheadBtn">Study ahead · ${plural(aheadN, 'card')}</button>
+      <a class="btn ghost" href="#/today">Back to Today</a>` : '<a class="btn primary" href="#/today">Back to Today</a>'}
       <a class="btn ghost" href="#/deck/${esc(deckId)}">Open deck</a>
     </div>`;
+  // (Not a one-deck launch: that would go to the address we are already on, and nothing would redraw.)
+  $('aheadBtn')?.addEventListener('click', () => launchStudy({ deckIds: [deckId], kind: 'ahead', days: aheadDays }));
 }
 
 // ---------- 2. session ----------

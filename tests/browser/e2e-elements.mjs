@@ -38,7 +38,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   // ---------- the editor ----------
   await p.goto('about:blank'); await p.goto(URL + '#/deck/T'); await p.waitForSelector('#brAdd');
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
-  ok(await p.locator('#acModeElements').count() === 1 && /Elements/.test(await p.textContent('.answer-mode')), `${tag}: the editor offers Elements`);
+  ok(await p.locator('#acModeElements').count() === 1 && /List of parts/.test(await p.textContent('.answer-mode')), `${tag}: the editor offers Elements`);
   await p.fill('#acFront', 'Battery');
   await p.click('.answer-mode .chip:has(#acModeElements)');
   ok(await p.locator('#acSteps').isVisible() && await p.locator('#acBackWrap').isHidden(), `${tag}: Elements shows element rows instead of Back`);

@@ -34,7 +34,8 @@ await run(async () => {
 await page.reload(); await page.waitForSelector('.tdeck');
 ok(await page.locator('.tdeck').count() === 2, 'a row per deck');
 const rowB = await page.locator('.tdeck', { hasText: 'Second' }).textContent();
-ok(/2\s*due/.test(rowB) && /2\s*new/.test(rowB) && rowB.includes('Exam in'), 'deck row: due, new and exam badge: ' + rowB.replace(/\s+/g, ' ').trim());
+// (UI audit L2, intended change: the exam countdown is said once, in Upcoming exams, so the deck row no longer repeats it)
+ok(/2\s*due/.test(rowB) && /2\s*new/.test(rowB) && !rowB.includes('Exam in') && (await page.locator('.exams').textContent()).includes('Exam in'), 'deck row: due and new; the exam countdown is in Upcoming exams, not repeated here: ' + rowB.replace(/\s+/g, ' ').trim());
 ok((await page.textContent('.exams')).includes('Second') && (await page.textContent('.exams')).includes('Exam in'), 'upcoming exams lists the deck');
 ok((await page.textContent('#startBtn')).includes('16 cards'), 'Start counts every deck: 16');
 

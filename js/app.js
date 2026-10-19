@@ -324,12 +324,7 @@ async function renderSettings(el) {
     redrawSkins();
   });
   drawSync();
-  $('newBtn').addEventListener('click', async () => {
-    const { recentNotes, notesHTML } = await import('./whats-new.js');
-    openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
-      <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
-    $('newOk').addEventListener('click', closeSheet);
-  });
+  $('newBtn').addEventListener('click', async () => (await import('./whats-new.js')).openWhatsNewSheet());
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
   fillMediaInfo();

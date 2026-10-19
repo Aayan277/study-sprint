@@ -233,7 +233,7 @@ document.addEventListener('paste', e => {
 });
 
 // ---------- Basic card: Front, Back (or steps, or elements) and a memory hook ----------
-// "Answer: Text | Steps | Elements". Steps and Elements swap the Back box for one box per step or element (+ Add, move up / down, delete)
+// "Answer: Plain text | Step by step | List of parts" (stored as text | steps | elements). Steps and Elements swap the Back box for one box per step or element (+ Add, move up / down, delete)
 // and an optional intro (Steps also has a Final answer). Saving writes them into the back as "Step 1: ..." or "Element 1: ..." lines
 // (steps.js joinSteps / joinElements), so the card needs nothing new in the data. Editing a card whose back has those lines opens in
 // the matching mode. The memory hook is the card's noteExtra.
@@ -241,7 +241,8 @@ document.addEventListener('paste', e => {
 //   readBack(p)       the back to save (from the rows when Steps or Elements is chosen)
 //   stepsOn(p)        is Steps or Elements chosen?      stepsProblem(p)   why they can't be saved ('' when they can)
 //   clearBasic(p)     empty the form after a card was added
-const MODES = [['text', 'Text'], ['steps', 'Steps'], ['elements', 'Elements']];
+// [stored value, wording on the chip, id suffix (kept, the tests and the form's ids use it)]
+const MODES = [['text', 'Plain text', 'Text'], ['steps', 'Step by step', 'Steps'], ['elements', 'List of parts', 'Elements']];
 const NOUN = { steps: 'Step', elements: 'Element' };
 const noun = p => NOUN[document.getElementById(p + 'Steps')?.dataset.mode] || 'Step';
 const stepRowHTML = (i, text = '', n = 3, word = 'Step') => `<li class="step-row" data-step-row>
@@ -260,8 +261,9 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
   return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
       <div class="chips answer-mode" role="radiogroup" aria-label="Answer">
         <span class="answer-mode-l">Answer:</span>
-        ${MODES.map(([k, l]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${l}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        ${MODES.map(([k, l, id]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${id}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
+      <p class="note answer-hint">Plain text is one box. Step by step and List of parts give each step or part its own box.</p>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
       <div class="steps-ed" id="${p}Steps" data-mode="${mode === 'text' ? 'steps' : mode}" data-cur="${mode}" ${parsed ? '' : 'hidden'}>
         <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro (optional)' : 'Intro (optional)'}</span><textarea id="${p}Intro" rows="2" placeholder="${mode === 'elements' ? 'Shown above the elements.' : 'Shown before the first step.'}">${esc(parsed?.intro || '')}</textarea></label>
@@ -458,7 +460,8 @@ export function clozeFields(p, text = '', extra = '') {
     ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The mitochondria makes ATP for the cell', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
     ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <p class="note cloze-help">Select a word and press New blank to hide it: each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p>`;
+    <details class="more-tips"><summary>More tips</summary>
+      <p class="note cloze-help">Each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p></details>`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
   ${text.trim() ? `<div class="cloze-render">${renderCloze(text, 0, 'all')}</div>` : ''}`;

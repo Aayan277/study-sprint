@@ -491,6 +491,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
 .starters > summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-2);font-size:var(--fs-sm);font-weight:500;min-height:40px;padding:0 4px;border-radius:var(--r-sm)}
 @media (hover:hover) and (pointer:fine){.starters > summary:hover{color:var(--text)}}
 .starters[open] > summary{margin-bottom:var(--s-1)}
+.starters > summary::-webkit-details-marker{display:none}
+.starters-chev{flex:none;width:18px;height:18px;transition:transform var(--t-fast)}
+.starters[open] .starters-chev{transform:rotate(90deg)}
 .starters .note{margin:0 0 var(--s-3)}
 .starter{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);background:var(--surface-1);padding:var(--s-2) var(--s-2) var(--s-2) var(--s-4);box-shadow:var(--e-1);border-radius:var(--r-md);margin-bottom:var(--s-2)}
 .starter > div{min-width:0}
@@ -602,8 +605,8 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .sheet-foot.stack .btn{flex:none;min-width:0;white-space:normal}
 .sheet-foot kbd{font:600 var(--fs-2xs)/1.5 var(--f-num);padding:0 5px;border-radius:4px;border:1px solid currentColor;margin-left:4px}
 @media (pointer:coarse){.sheet-foot kbd{display:none}}
-.swatches{display:flex;flex-wrap:wrap;gap:10px}
-.swatch{width:40px;height:40px;border-radius:50%;border:3px solid var(--surface-1);box-shadow:0 0 0 1.5px var(--control);cursor:pointer;padding:0;background:var(--c)}
+.swatches{display:grid;grid-template-columns:repeat(4,44px);gap:10px 14px}   /* 4 + 4: eight in a row do not fit a phone sheet or the side panel, and 7 + 1 looks like a mistake */
+.swatch{width:44px;height:44px;border-radius:50%;border:3px solid var(--surface-1);box-shadow:0 0 0 1.5px var(--control);cursor:pointer;padding:0;background:var(--c)}
 .swatch[aria-pressed="true"]{box-shadow:0 0 0 3px var(--text)}
 .sheet-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sheet-actions .btn{flex:1 1 auto}
@@ -1076,6 +1079,13 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .t-type input{width:100%;min-height:52px}
 .t-step{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .t-step .btn{min-height:48px}
+/* Phones: Previous and Next stay pinned to the bottom edge (thumb reach), with Flag, Questions and Submit just above them */
+@media (max-width:1023px){
+  body.focus main[data-route="test"]{padding-bottom:0}
+  .t-main{display:flex;flex-direction:column;min-height:calc(100dvh - 92px)}
+  .t-main > .t-step{margin-top:auto;position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:4;padding:var(--s-2) 0 var(--s-1);background:linear-gradient(to bottom,transparent,var(--bg) 25%)}
+  body.focus .t-main > .t-step{bottom:0;margin-inline:-12px;padding:var(--s-2) 12px calc(var(--s-3) + env(safe-area-inset-bottom,0px))}
+}
 .t-tools{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
 .t-tools .btn svg{width:16px;height:16px}
 .t-tools #tFlag[aria-pressed="true"]{border-color:var(--again);background:var(--again-tint)}
@@ -1422,6 +1432,10 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .cloze-makes{margin:0;font-size:var(--fs-sm);color:var(--text-2);font-weight:500}
 .cloze-render{margin-top:var(--s-1);font-size:var(--fs-base);line-height:1.5;white-space:pre-line}
 .cloze-help{margin:0 0 var(--s-3)}
+.more-tips{margin:0 0 var(--s-3)}
+.more-tips > summary{cursor:pointer;display:flex;align-items:center;min-height:44px;font-size:var(--fs-sm);font-weight:600;color:var(--accent-text)}
+.more-tips[open] > summary{color:var(--text-2)}
+.more-tips .cloze-help{margin:0}
 .ckind{display:inline-block;padding:0 6px;border-radius:var(--r-pill);background:var(--accent-tint);color:var(--accent-text);font-size:var(--fs-xs);font-weight:600;vertical-align:1px}
 .cloze-blank{display:inline-block;padding:0 .35em;border-radius:.3em;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);font-weight:650;white-space:normal}
 mark.cloze-ans{padding:0 .15em;border-radius:.25em;background:var(--accent-tint);color:var(--accent-text);font-weight:650;box-shadow:inset 0 -2px 0 var(--accent-line)}
@@ -1545,7 +1559,10 @@ img[data-media][hidden]{display:none}
   /* One content width for every screen (1120px), so the left edges line up when you switch tabs.
      Screens that read better narrow keep their content in a 760px column at the same left edge. */
   main > .view{max-width:1120px;margin:0 auto}
-  main[data-route="play"] > .view > *,main[data-route="settings"] > .view > *,main[data-route="import"] > .view > *{max-width:760px}
+  /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
+  main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
+  main[data-route="review"] > .view,main[data-route="browse"] > .view{max-width:780px}
+  main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
   .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
   body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
@@ -1639,7 +1656,7 @@ dialog.sheet.side .sheet-foot{padding:12px 22px}
   :root:has(main[data-route="browse"]){--panel:clamp(360px,var(--panel-user,440px),70vw)}
   main[data-route="deck"]{padding:28px 32px 56px}
   html[data-rail="on"] main[data-route="deck"]{margin-left:calc(var(--side) + 240px)}
-  main[data-route="deck"] > .view{max-width:none}
+  main[data-route="deck"] > .view{max-width:900px}   /* the card list reads best at about 900px; it is centred in what is left beside the side panel */
   main[data-route="deck"] .back{display:none}
   main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3)}
   main[data-route="deck"] .br-controls{grid-template-columns:1fr 1fr}
@@ -2489,7 +2506,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 
 /* ---------- 28. Review: the finish screen, the corner Speak button, the occlusion picture (js/review.js) ---------- */
 /* The finish screen: the primary action, then a quiet row of links */
-.fin-links{display:flex;align-items:center;justify-content:center;gap:var(--s-1);margin:var(--s-3) 0 0;color:var(--text-3)}
+.fin-links{display:flex;align-items:center;justify-content:flex-start;gap:var(--s-1);margin:var(--s-3) 0 0;color:var(--text-3)}
 .fin-links .link{display:inline-flex;align-items:center;text-decoration:none}
 .finish-more{margin-top:var(--s-4)}
 .finish-more[hidden]{display:none}
@@ -2512,8 +2529,11 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:550 var(--fs-sm) var(--f-ui);text-decoration:none}
 @media (max-width:359px){.set-nav{gap:6px}.set-nav a{padding:0 8px;font-size:var(--fs-xs)}}
 @media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--accent-line);background:var(--accent-tint)}}
-main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57px) + 60px)}
-.set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-sm);color:var(--text-2);font-weight:600}
+main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57px) + 60px);font-size:1.25rem;font-weight:650;letter-spacing:-.015em;line-height:1.25;margin-bottom:var(--s-2)}
+.set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-base);color:var(--text-2);font-weight:600}
+/* One row-title style (16px, 600) for every setting: plain rows, switch rows, the "Advanced" folds and the help rows. Small words in <b> inside a hint stay inline. */
+main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b,.advanced > summary){font-size:var(--fs-md);font-weight:600;color:var(--text);letter-spacing:-.005em}
+main[data-route="settings"] .advanced > summary .adv-sub{font-size:var(--fs-sm);font-weight:400}
 #appearTitle + .set-sub{margin-top:var(--s-2)}
 @media (min-width:1024px){
   .set-nav{top:0;margin-inline:0;padding-inline:0;background:color-mix(in srgb,var(--bg) 94%,transparent)}
@@ -2611,6 +2631,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-actions .key-hint{margin:0 0 0 8px;background:transparent;color:inherit;border-color:currentColor}
 /* Card editor: Answer in steps, Memory hook */
 .answer-mode{align-items:center;margin:var(--s-1) 0}
+.answer-hint{margin:calc(var(--s-1) * -1) 0 var(--s-1)}
 .answer-mode-l{font:600 var(--fs-sm) var(--f-ui);color:var(--text-2);margin-right:var(--s-1)}
 .steps-ed{display:grid;gap:var(--s-3)}
 .step-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
@@ -2624,8 +2645,8 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 .step-btn:disabled{opacity:.35;cursor:default}
 @media (hover:hover) and (pointer:fine){.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}}
 @media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
-/* The Basic form grew (steps switch, memory hook): the fixed body height grows with it so switching card types does not jump */
-.ac-form .kind-body{min-height:38.5rem}
+/* The Basic form grew (steps switch, its hint, memory hook): the fixed body height grows with it so switching card types does not jump */
+.ac-form .kind-body{min-height:43.5rem}
 
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}
@@ -3009,6 +3030,8 @@ a.back{text-decoration:none}
 .wn-txt h2{margin:0;font-size:var(--fs-base);letter-spacing:-.01em}
 .wn-txt ul{margin:6px 0 10px;padding-left:1.1em;font-size:var(--fs-sm);color:var(--text-2);line-height:1.45}
 .wn-txt li{margin-bottom:3px}
+.wn-actions{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap}
+.wn-actions .link{min-height:44px;display:inline-flex;align-items:center}
 .wn .inst-x{min-width:32px;min-height:32px}
 
 /* ---- a sign-up waiting for its email link (Settings → Sync) ---- */

@@ -3,16 +3,16 @@
 // is marked as up to date at the first run (app.js checkFirstRun), so it never sees notes about changes it never knew.
 import { parseVersion, compareVersions } from './app-config.js';
 import * as db from './db.js';
-import { esc, icon } from './ui.js';
+import { esc, icon, openSheet, closeSheet } from './ui.js';
 
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
   { version: '4.41', items: [
-    'Fixed: switching the scheduler in Settings no longer stretches the page.'
+    'Settings no longer stretches out of shape when you change how cards are scheduled.'
   ] },
   { version: '4.40', items: [
-    'Suggest tags: on a deck’s ⋯ menu, the app suggests topic tags for its cards. You choose which to add, and Undo puts them back.'
+    'Tag suggestions: open a deck’s ⋯ menu to get topic tags for its cards. You pick which to keep, and Undo takes them back.'
   ] },
   { version: '4.39', items: [
     'Typing cards: set a card, or a whole deck, to type the answer instead of flipping. The app shows which letters were wrong.',
@@ -29,6 +29,7 @@ export const NOTES = [
   ] }
 ];
 export const MAX_ITEMS = 5;
+export const CARD_LINES = 3;      // the card on Today shows this many lines; "See all" opens the rest
 
 // What to show for `version` when the last version seen here was `seen`: { version, items } or null.
 export function notesToShow({ seen, version, notes = NOTES }) {
@@ -70,8 +71,8 @@ export async function drawWhatsNew(slot) {
   slot.innerHTML = `<section class="wn" aria-labelledby="wnTitle">
     <span class="wn-icon" aria-hidden="true">${icon('bolt')}</span>
     <div class="wn-txt"><h2 id="wnTitle">New in Study Sprint ${esc(shown.version)}</h2>
-      <ul>${shown.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-      <button class="btn primary small" type="button" id="wnOk">Got it</button></div>
+      <ul>${shown.items.slice(0, CARD_LINES).map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+      <div class="wn-actions"><button class="btn primary small" type="button" id="wnOk">Got it</button><button class="link" type="button" id="wnAll">See all</button></div></div>
     <button class="inst-x" type="button" id="wnX" aria-label="Dismiss what’s new">${icon('x')}</button></section>`;
   const done = async () => {
     showing = null;
@@ -83,6 +84,7 @@ export async function drawWhatsNew(slot) {
   };
   slot.querySelector('#wnOk').addEventListener('click', done);
   slot.querySelector('#wnX').addEventListener('click', done);
+  slot.querySelector('#wnAll').addEventListener('click', openWhatsNewSheet);
   return true;
 }
 
@@ -92,4 +94,11 @@ export function recentNotes(count = 3, notes = NOTES) {
 }
 export function notesHTML(entries = recentNotes()) {
   return entries.map(n => `<h3>Version ${esc(n.version)}</h3><ul>${n.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('');
+}
+
+// The list of recent changes in a sheet (Settings → About → What's new, and "See all" on Today's card).
+export function openWhatsNewSheet() {
+  openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
+    <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
+  document.getElementById('newOk').addEventListener('click', closeSheet);
 }
