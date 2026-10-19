@@ -37,13 +37,15 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.40';
+const APP_VERSION = '4.41';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
 
 // ---------- settings ----------
+// Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
+const settingsView = () => $('screen').querySelector('.view') || $('screen');
 async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
@@ -457,7 +459,7 @@ function wireAdvanced(el) {
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
     if (currentRoute !== 'settings') return;
-    await renderSettings($('screen'));
+    await renderSettings(settingsView());
     $('advanced').open = true;
   };
   // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
@@ -503,7 +505,7 @@ function wireAdvanced(el) {
   });
   $('schedReset').addEventListener('click', async () => {
     for (const [k, v] of Object.entries(SCHED_DEFAULTS)) { settings[k] = v; await db.setSetting(k, v); }
-    await renderSettings($('screen'));
+    await renderSettings(settingsView());
     $('advanced').open = true;
     toast('Scheduling reset to defaults');
   });
@@ -577,7 +579,7 @@ async function exportBackup() {
   settings.lastBackup = Date.now();
   await db.setSetting('lastBackup', settings.lastBackup);
   toast(`Backup saved: ${plural(cardCount, 'card')}, ${plural(reviewCount, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
-  if (currentRoute === 'settings') renderSettings($('screen'));
+  if (currentRoute === 'settings') renderSettings(settingsView());
 }
 
 function downloadFile(file) {
