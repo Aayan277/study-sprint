@@ -106,12 +106,16 @@ const seed = page => page.evaluate(async () => {
   await page.click('#startBtn'); await page.waitForSelector('#pInput');
   const typedFor = { 'P-mito': 'mitocondria', 'P-hello': 'hallx', 'P-red': 'zzzzzzzz' };
   const seen = new Set();
+  // The questions come in a random order and a card can be asked more than once, so each kind of feedback is checked the FIRST time it is
+  // shown only (every run then makes the same checks); later asks are still answered and moved past.
+  const checked = new Set();
   for (let i = 0; i < 14; i++) {
     const prompt = (await page.textContent('#pPrompt')).trim();
     await page.fill('#pInput', typedFor[prompt]); await page.keyboard.press('Enter');
     await page.waitForSelector('.fb');
     seen.add(prompt);
-    if (prompt === 'P-mito') {
+    const first = !checked.has(prompt); checked.add(prompt);
+    if (!first) { /* asked again: nothing more to check */ } else if (prompt === 'P-mito') {
       ok((await page.textContent('.fb-mark')).includes('Correct') && await page.locator('#feedback ins.d-miss').count() === 1, 'Play: a forgiven typo shows the missing letter');
       await noHScroll(page, 'play correct diff'); await page.screenshot({ path: SP + '/f3-play-correct-375.png' });
     } else if (prompt === 'P-hello') {
