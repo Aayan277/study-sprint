@@ -79,8 +79,15 @@ export const SORTS = [
 // What search compares: lower case, Latin accents off (other marks stay, so か ≠ が), and punctuation as a space, but
 // symbols that mean something (+ # & % @ * and anything in \p{S}, emoji included) kept, so "c++" doesn't match "c".
 // A query with nothing else in it ("?!", "+", "🧠") is looked for as it is typed (lower case, spaces collapsed).
-const searchFold = s => String(s ?? '').toLowerCase().replace(/ς/g, 'σ').normalize('NFKD')
+export const searchFoldSlow = s => String(s ?? '').toLowerCase().replace(/ς/g, 'σ').normalize('NFKD')
   .replace(/[\u0300-\u036f\ufe00-\ufe0f]/g, '').replace(/[^\p{L}\p{N}\p{M}\p{S}#%&@*]+/gu, ' ').replace(/\s+/g, ' ').trim().normalize('NFC');
+// Pure ASCII needs no accent or normalisation work: the characters that survive are a-z, 0-9, the ASCII symbols ($ + < = > ^ ` | ~)
+// and # % & @ *; every run of anything else (space, controls, punctuation, _) becomes one space. Same output as searchFoldSlow.
+const ASCII = /^[\x00-\x7f]*$/;
+export const searchFold = s => {
+  const t = String(s ?? '');
+  return ASCII.test(t) ? t.toLowerCase().replace(/[^a-z0-9$+<=>^`|~#%&@*]+/g, ' ').trim() : searchFoldSlow(t);
+};
 const rawFold = s => String(s ?? '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
 export function searchMatcher(query) {
   const q = searchFold(query);
@@ -89,18 +96,35 @@ export function searchMatcher(query) {
   return raw ? text => rawFold(text).includes(raw) : null;
 }
 
-// The text search looks in for one card (front, back and tags), folded once and remembered per card object, so typing
-// another letter only does a substring check per card instead of re-folding every card's text. A card that was edited
-// in place (new front, back or tags) is folded again. Cards are normally replaced by copies when they change.
-const foldCache = { fold: new WeakMap(), raw: new WeakMap() };
+// The text search looks in for one card (front, back and tags), folded once and remembered per card id (Browse loads fresh copies of
+// the cards on every visit, so the card object is no key), so typing another letter only does a substring check per card instead of
+// re-folding every card's text. A card that was edited (new front, back or tags) is folded again.
+const foldCache = { fold: new Map(), raw: new Map() };
 function foldedCard(card, kind, fold) {
   const tags = (card.tags || []).join(' ');
-  let e = foldCache[kind].get(card);
+  let e = foldCache[kind].get(card.id);
   if (!e || e.front !== card.front || e.back !== card.back || e.tags !== tags) {
     e = { front: card.front, back: card.back, tags, text: fold(`${card.front} ${card.back} ${tags}`) };
-    foldCache[kind].set(card, e);
+    foldCache[kind].set(card.id, e);
   }
   return e.text;
+}
+// Fold every card's search text in the browser's idle time, in small chunks, so the first search finds it ready.
+// `alive()` says whether Browse is still on screen; the returned function cancels (also called when alive() turns false).
+export function prefoldIdle(cards, alive = () => true, env = globalThis) {
+  let i = 0, handle = null, stopped = false;
+  const ric = env.requestIdleCallback ? f => env.requestIdleCallback(f, { timeout: 2000 }) : f => env.setTimeout(f, 30);
+  const cancelRic = env.requestIdleCallback ? h => env.cancelIdleCallback?.(h) : h => env.clearTimeout(h);
+  const step = deadline => {
+    handle = null;
+    if (stopped || !alive()) { stopped = true; return; }
+    const t0 = Date.now();
+    const room = () => (deadline?.timeRemaining ? deadline.timeRemaining() > 2 : Date.now() - t0 < 8);
+    while (i < cards.length && room()) foldedCard(cards[i++], 'fold', searchFold);
+    if (i < cards.length) handle = ric(step);
+  };
+  handle = ric(step);
+  return () => { stopped = true; if (handle !== null) cancelRic(handle); handle = null; };
 }
 // Like searchMatcher, but takes a card and uses the remembered folded text. Same answers as
 // searchMatcher(query)(`${front} ${back} ${tags.join(' ')}`).
