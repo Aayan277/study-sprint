@@ -615,6 +615,17 @@ import { typedOrds } from '../js/anki.js';
     assert.deepEqual(buildCards(onlyDeck(r, 'Two')).map(c => c.front), ['c', 'e']);
   });
 
+  test('typedOrds: a conditional section follows Anki\'s empty rule: a picture is content, <br>/<div>/&nbsp; is not', () => {
+    const m = (cond) => ({ name: 'Opt', fields: ['Front', 'Back', 'Pic'], cloze: false, templates: [tmpl(0, `{{Front}}{{${cond}Pic}}{{type:Back}}{{/Pic}}`)] });
+    assert.deepEqual([...typedOrds(m('#'), ['f', 'b', '<img src="x.jpg">'])], [0], '{{#Pic}} with only a picture is filled');
+    assert.deepEqual([...typedOrds(m('^'), ['f', 'b', '<img src="x.jpg">'])], [], '{{^Pic}} with only a picture is not empty');
+    for (const empty of ['', ' ', '<br>', '<br />', '<div><br></div>', '&nbsp;', ' <div> </div>&nbsp;']) {
+      assert.deepEqual([...typedOrds(m('#'), ['f', 'b', empty])], [], 'empty: ' + JSON.stringify(empty));
+      assert.deepEqual([...typedOrds(m('^'), ['f', 'b', empty])], [0], 'empty: ' + JSON.stringify(empty));
+    }
+    assert.deepEqual([...typedOrds(m('#'), ['f', 'b', '<b>x</b>'])], [0]);
+  });
+
   test('typedOrds: only a box for the field that becomes the card\'s answer counts', () => {
     const vocab = { name: 'Vocab', fields: ['Expression', 'Meaning', 'Reading'], cloze: false, templates: [tmpl(0, '{{Expression}}<br>{{type:Reading}}')] };
     assert.deepEqual([...typedOrds(vocab)], [], 'the answer is Meaning, so typing the Reading is not a typing card');

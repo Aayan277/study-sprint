@@ -145,3 +145,9 @@ test('setTypeIn: typing skips step-by-step and elements cards and counts them', 
   assert.equal(f.changed.length, 3, 'flipping and "same as the deck" still apply to them');
   assert.equal(f.skipped, 0);
 });
+
+test('answerMode: a deck that types short answers also types "red; scarlet; crimson" listed as short alternatives', () => {
+  const part = 'x'.repeat(30);
+  assert.equal(mode({ back: `${part}; ${part}; ${part}` }, true).type, true);
+  assert.equal(mode({ back: `${part}; ${'x'.repeat(41)}` }, true).why, 'long');
+});

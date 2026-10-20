@@ -123,11 +123,14 @@ export function reverseModel(model) {
 // (say a Reading, when the back is the Meaning) leaves the card as it is. A box only on the answer side doesn't count either.
 // A box inside {{#F}}...{{/F}} counts only when field F has something in it for this note (given as `fields`, the note's field texts);
 // inside {{^F}}...{{/F}} only when it is empty. Without `fields` those conditions are taken as met. "type:" is lower case, as in Anki.
+// Anki's rule for a conditional section: a field is empty only when it is whitespace, <br>, <div> or </div> tags, or &nbsp;. A field
+// with a picture (<img>), a sound or any other content counts as filled.
+export const fieldIsEmpty = html => String(html ?? '').replace(/<br\s*\/?>|<\/?div\b[^>]*>|&nbsp;|[\s\u200b]/gi, '') === '';
 export function typedOrds(model, fields = null) {
   const out = new Set(), names = (model?.fields || []).map(f => String(f).trim());
   const filled = name => {
     const at = names.indexOf(name);
-    return at < 0 || !fields ? null : String(fields[at] ?? '').replace(/<[^>]*>|&nbsp;/g, '').trim() !== '';
+    return at < 0 || !fields ? null : !fieldIsEmpty(fields[at]);
   };
   (model?.templates || []).forEach((t, i) => {
     const ord = Number.isInteger(t?.ord) ? t.ord : i;
