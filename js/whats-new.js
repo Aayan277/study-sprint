@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.44', items: [
+    'Typing mode: an answer listing choices like “red; scarlet; crimson” can now be typed, as long as each choice is short.',
+    'Anki import: a field that holds only a picture now counts as filled, so those cards come in the same as in Anki.',
+    'Suggest tags no longer gives a card a second copy of a folder tag it already has.'
+  ] },
   { version: '4.43', items: [
     'Tidier screens on computers: Settings, Play, Import and Browse sit in a centred column, and Settings has clearer headings.',
     'A deck with nothing due now offers Study ahead. The Stats calendar is bigger and easier to tap.',
