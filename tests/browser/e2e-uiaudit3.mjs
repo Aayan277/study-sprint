@@ -24,6 +24,13 @@ async function open(width, { phone = true, scheme = 'dark' } = {}) {
 }
 const go = async (p, hash, sel) => { await p.goto(APP + hash); await p.reload(); await p.waitForSelector(sel, { timeout: 15000 }); };
 const noSideways = async (p, what) => ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && (() => { const s = document.getElementById('sheet'); return !s || s.scrollWidth <= s.clientWidth + 1; })()), `no sideways scroll ${what}`);
+// Waits until the pictures inside `scope` have loaded (or failed), the fonts are ready and two frames have drawn: what a fixed pause stood in for.
+const settled = (p, scope) => p.waitForFunction(async sel => {
+  const root = document.querySelector(sel); if (!root) return false;
+  if ([...root.querySelectorAll('img')].some(i => !i.complete)) return false;
+  await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return true;
+}, scope);
 const sizeOf = (p, sel) => p.locator(sel).first().evaluate(e => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
 const tall = async (p, sel, what) => { const [w, h] = await sizeOf(p, sel); ok(h >= 44, `${what} is at least 44px tall on a touch screen (${w}x${h})`); };
 const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-hint, kbd, .hint.keys')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; }).map(e => e.textContent.trim().slice(0, 20)));
@@ -98,14 +105,14 @@ for (const width of [390, 320]) {
     return true;
   });
   ok(seed, `${width}px: picture and occlusion decks made`);
-  const review = async deck => { await go(p, '#/review/' + deck, '#startBtn, #flash'); if (await p.$('#startBtn')) await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.waitForTimeout(400); };
+  const review = async deck => { await go(p, '#/review/' + deck, '#startBtn, #flash'); if (await p.$('#startBtn')) await p.click('#startBtn'); await p.waitForSelector('#flash'); await settled(p, '#flash'); };
   await review('pic'); await noSideways(p, `${width}px: picture card, front`);
   await p.click('#showBtn'); await p.waitForSelector('.rate'); await noSideways(p, `${width}px: picture card, back`);
   await review('occ'); await noSideways(p, `${width}px: occlusion card, front`);
   await p.click('#showBtn'); await p.waitForSelector('.rate'); await noSideways(p, `${width}px: occlusion card, back`);
   await go(p, '#/deck/occ', '.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceOccEdit');
   await noSideways(p, `${width}px: occlusion card editor`);
-  await p.click('#ceOccEdit'); await p.waitForSelector('dialog.occ-ed[open]'); await p.waitForTimeout(400);
+  await p.click('#ceOccEdit'); await p.waitForSelector('dialog.occ-ed[open]'); await settled(p, 'dialog.occ-ed[open]');
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog.occ-ed').scrollWidth <= innerWidth), `${width}px: no sideways scroll in the occlusion editor`);
   { const [w, h] = await sizeOf(p, '.occ-ed-tool'); ok(h >= 40 && w >= 40, `${width}px: an occlusion editor tool is at least 40x40 (${w}x${h})`); }
   await p.click('.occ-ed-x');

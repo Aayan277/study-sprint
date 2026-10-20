@@ -187,6 +187,24 @@ test('applyTags: a tag stored with a space in it is read as the separate tags it
   assert.deepEqual(changed[0].tags, ['one', 'two', 'three']);
 });
 
+test('applyTags: a note is never half tagged when one card is skipped for a same-word tag in another folder', () => {
+  const cards = [
+    { id: 'a', noteId: 'n1', tags: ['b::kidney'] }, { id: 'b', noteId: 'n1', reverse: true, tags: [] },     // siblings: only one has b::kidney
+    { id: 'c', noteId: 'n2', tags: [] }, { id: 'd', noteId: 'n2', reverse: true, tags: [] },                 // another note gets the tag as usual
+    { id: 'e', tags: ['b::kidney'] }, { id: 'f', tags: [] }                                                  // single cards are decided one by one
+  ];
+  const { changed, added } = applyTags(cards, [{ name: 'a::kidney', cardIds: ['a', 'b', 'c', 'd', 'e', 'f'] }]);
+  assert.ok(!added.has('a') && !added.has('b'), 'neither card of n1 gets a::kidney');
+  assert.deepEqual(added.get('c'), ['a::kidney']);
+  assert.deepEqual(added.get('d'), ['a::kidney']);
+  assert.ok(!added.has('e') && added.get('f')[0] === 'a::kidney');
+  assert.deepEqual(changed.map(c => c.id).sort(), ['c', 'd', 'f']);
+  // the skip is for that tag only: another tag of the plan still goes to both cards of n1
+  const two = applyTags(cards.slice(0, 2), [{ name: 'a::kidney', cardIds: ['a', 'b'] }, { name: 'renal', cardIds: ['b'] }]);
+  assert.deepEqual(two.added.get('a'), ['renal']);
+  assert.deepEqual(two.added.get('b'), ['renal']);
+});
+
 test('undoTags removes only what was added, and keeps a tag the student added later', () => {
   const cards = cardsOfBio();
   const plan = RESULT.tags.slice(0, 3).map(t => ({ name: t.name, cardIds: t.cardIds }));
