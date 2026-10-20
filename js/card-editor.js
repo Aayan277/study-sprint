@@ -16,6 +16,7 @@ import { canPlayType } from './audio.js';
 import * as db from './db.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
 import { typeFacts, typeNote } from './type-in.js';
+import { canType } from './match.js';
 import { occlusionHTML, groupsOf, groupIndex, occLabel, MAX_HEADER, MAX_LABEL } from './occlusion.js';
 
 const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
@@ -746,8 +747,8 @@ export function wireTypeIn(p, form, ctx) {
     const structured = kind === 'basic' && stepsOn(p);
     sel.disabled = structured;
     sel.options[0].textContent = `Same as the deck (${deckDefault ? 'typing' : 'flipping'})`;
-    const length = kind === 'basic' && !structured ? typeFacts({ back: ctx.answer() }).answer.length : 0;
-    const text = typeNote({ kind, value: readTypeIn(p), length, structured, deckDefault, both: kind === 'basic' && !structured && ctx.both() });
+    const answer = kind === 'basic' && !structured ? typeFacts({ back: ctx.answer() }).answer : '';
+    const text = typeNote({ kind, value: readTypeIn(p), length: answer.length, typeable: canType(answer), structured, deckDefault, both: kind === 'basic' && !structured && ctx.both() });
     if (note.textContent !== text) note.textContent = text;      // (only a changed note is announced, not one that is the same on every keystroke)
     note.hidden = !text;
   };

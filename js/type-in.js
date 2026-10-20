@@ -72,17 +72,18 @@ export function setTypeIn(selected, value, all = selected) {
 //   kind        'basic', 'cloze' or 'occlusion'
 //   value       true, false or null (the choice)
 //   length      characters in the answer as typed (basic cards)
+//   typeable    canType(answer): short enough to type (alternatives are judged one by one); follows length when not given
 //   structured  Answer is Steps or Elements
 //   deckDefault the deck types its short answers
 //   both        a reverse card goes with this card
-export function typeNote({ kind = 'basic', value = null, length = 0, structured = false, deckDefault = false, both = false } = {}) {
+export function typeNote({ kind = 'basic', value = null, length = 0, typeable = length <= TYPE_MAX, structured = false, deckDefault = false, both = false } = {}) {
   if (structured) return 'Step-by-step and elements cards are always flipped.';
   if (kind === 'cloze') return 'You type the hidden words. Blanks with the same number are typed together, separated by commas.';
   if (kind === 'occlusion') return 'You type the label of the hidden box. Boxes without a label are flipped.';
   const parts = [];
   if (value === true && length > TYPE_HARD_MAX) parts.push('Too long to type: Review will flip this card.');
-  else if (value === true && length > TYPE_MAX) parts.push("Long answer: you'll type all of it. Typing works best for a word or a short phrase.");
-  else if (value === null && deckDefault && length > TYPE_MAX) parts.push(`The deck only types answers of ${TYPE_MAX} characters or less. Pick Typing the answer to type this one anyway.`);
+  else if (value === true && !typeable) parts.push("Long answer: you'll type all of it. Typing works best for a word or a short phrase.");
+  else if (value === null && deckDefault && !typeable) parts.push(`The deck only types answers of ${TYPE_MAX} characters or less. Pick Typing the answer to type this one anyway.`);
   if (both) parts.push('Applies to this direction only.');
   return parts.join(' ');
 }

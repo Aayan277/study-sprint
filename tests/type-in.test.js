@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ownTypeIn, cleanTypeIn, typeFacts, answerMode, isTypingCard, setTypeIn, TYPE_HARD_MAX } from '../js/type-in.js';
+import { ownTypeIn, cleanTypeIn, typeFacts, typeNote, answerMode, isTypingCard, setTypeIn, TYPE_HARD_MAX } from '../js/type-in.js';
 import { checkTyped } from '../js/match.js';
 import { answerTargets } from '../js/format.js';
 
@@ -144,4 +144,17 @@ test('setTypeIn: typing skips step-by-step and elements cards and counts them', 
   const f = setTypeIn([s, e, n], false, [s, e, n]);
   assert.equal(f.changed.length, 3, 'flipping and "same as the deck" still apply to them');
   assert.equal(f.skipped, 0);
+});
+
+test('answerMode: a deck that types short answers also types "red; scarlet; crimson" listed as short alternatives', () => {
+  const part = 'x'.repeat(30);
+  assert.equal(mode({ back: `${part}; ${part}; ${part}` }, true).type, true);
+  assert.equal(mode({ back: `${part}; ${'x'.repeat(41)}` }, true).why, 'long');
+});
+
+test('typeNote: the editor hint agrees with canType (alternatives are judged one by one)', () => {
+  assert.equal(typeNote({ value: null, deckDefault: true, length: 70, typeable: true }), '', 'long list of short alternatives: no warning');
+  assert.match(typeNote({ value: null, deckDefault: true, length: 70, typeable: false }), /only types answers of 40/);
+  assert.match(typeNote({ value: true, length: 70, typeable: false }), /Long answer/);
+  assert.match(typeNote({ value: true, length: 50 }), /Long answer/, 'without typeable it follows the length');
 });

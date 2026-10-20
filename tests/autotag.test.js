@@ -400,3 +400,20 @@ test('"a priori" is not a hyphenated one-letter prefix', () => {
   const notes = Array.from({ length: 12 }, (_, i) => ({ id: 'n' + i, front: `What is a priori knowledge ${'abcdefghijkl'[i]}${i}x?`, text: `Answer${'qwxz'[i % 4]}${i}y`, cardIds: ['c' + i] }));
   assert.ok(!autotag({ notes }).tags.some(t => t.name === 'a-priori'));
 });
+
+test('a card in the minority folder gets no second "kidney" tag from the majority folder (and none it already has)', () => {
+  const cards = [
+    ...Array.from({ length: 7 }, (_, i) => ({ id: 'a' + i, noteId: 'a' + i, tags: ['a::kidney'] })),
+    ...Array.from({ length: 2 }, (_, i) => ({ id: 'b' + i, noteId: 'b' + i, tags: ['b::kidney'] })),
+    { id: 'p', noteId: 'p', tags: ['kidney'] }, { id: 'n', noteId: 'n', tags: ['other'] }
+  ];
+  const { changed, added } = applyTags(cards, [{ name: 'a::kidney', cardIds: cards.map(c => c.id) }]);
+  assert.deepEqual(changed.map(c => c.id), ['p', 'n'], 'the b:: cards and the a:: cards are left alone; a plain kidney joins the folder');
+  assert.deepEqual(changed[1].tags, ['other', 'a::kidney']);
+  assert.deepEqual([...added.keys()], ['p', 'n']);
+  // a tie renames nothing: the plain "kidney" does not double up on a card that is already in a folder
+  const r = applyTags([{ id: 'x', noteId: 'x', tags: ['b::kidney'] }, { id: 'y', noteId: 'y', tags: [] }], [{ name: 'kidney', cardIds: ['x', 'y'] }]);
+  assert.deepEqual(r.changed.map(c => [c.id, c.tags]), [['y', ['kidney']]]);
+  // different leaves are unaffected
+  assert.equal(applyTags([{ id: 'z', noteId: 'z', tags: ['a::spleen'] }], [{ name: 'a::kidney', cardIds: ['z'] }]).changed.length, 1);
+});

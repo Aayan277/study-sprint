@@ -8,7 +8,15 @@
 //   - typing is only offered when the back is 40 characters or less
 
 export const TYPE_MAX = 40;
-export const canType = back => String(back ?? '').trim().length <= TYPE_MAX;
+// The alternatives of a back, split the way checkAnswer reads them (; or /, but a / between digits is not a separator: the formula ½ reads "1/2", and typing "2" must not pass).
+const splitAlternatives = raw => String(raw ?? '').split(/;|(?<!\d)\/|\/(?!\d)/);
+// Short enough to type? A back that lists alternatives ("red; scarlet; crimson", "red / scarlet") is judged per alternative, since the student
+// types just one. Only ";" and a spaced " / " count as a list here: an incidental slash ("and/or", "http://…") does not make a long text short.
+const listed = /;|\s\/\s/;
+export const canType = back => {
+  const raw = String(back ?? '');
+  return (listed.test(raw) ? raw.split(/;|\s\/\s/) : [raw]).every(p => p.trim().length <= TYPE_MAX);
+};
 
 // What a text is compared by (shared with import.js dupKey, so duplicates and typed answers agree):
 // lower case (final sigma ς is σ), accents off (only the Latin combining marks U+0300 to U+036F: other marks such as
@@ -33,7 +41,7 @@ export function normalizeAnswer(s) {
 const unbracketed = s => s.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
 function wordings(back, wholeFirst = false) {
   const raw = String(back ?? '');
-  const pieces = raw.split(/;|(?<!\d)\/|\/(?!\d)/);          // (a / between digits is not a separator: the formula ½ reads "1/2", and typing "2" must not pass)
+  const pieces = splitAlternatives(raw);
   const whole = [raw, unbracketed(raw)];
   const list = wholeFirst ? [...whole, ...pieces.flatMap(p => [p, unbracketed(p)])] : [...pieces, ...pieces.map(unbracketed), ...whole];
   return list.map(t => t.trim());

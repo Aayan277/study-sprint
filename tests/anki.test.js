@@ -615,6 +615,18 @@ import { typedOrds } from '../js/anki.js';
     assert.deepEqual(buildCards(onlyDeck(r, 'Two')).map(c => c.front), ['c', 'e']);
   });
 
+  test('typedOrds: a conditional section follows Anki\'s empty rule: a picture is content, <br>/<div>/&nbsp; is not', () => {
+    const m = (cond) => ({ name: 'Opt', fields: ['Front', 'Back', 'Pic'], cloze: false, templates: [tmpl(0, `{{Front}}{{${cond}Pic}}{{type:Back}}{{/Pic}}`)] });
+    assert.deepEqual([...typedOrds(m('#'), ['f', 'b', '<img src="x.jpg">'])], [0], '{{#Pic}} with only a picture is filled');
+    assert.deepEqual([...typedOrds(m('^'), ['f', 'b', '<img src="x.jpg">'])], [], '{{^Pic}} with only a picture is not empty');
+    for (const empty of ['', ' ', '<br>', '<br />', '</br>', '<div><br></div>', ' <div> </div>\n']) {
+      assert.deepEqual([...typedOrds(m('#'), ['f', 'b', empty])], [], 'empty: ' + JSON.stringify(empty));
+      assert.deepEqual([...typedOrds(m('^'), ['f', 'b', empty])], [0], 'empty: ' + JSON.stringify(empty));
+    }
+    for (const filled of ['<b>x</b>', '&nbsp;', '<div class="x"></div>', '\u200b'])
+      assert.deepEqual([...typedOrds(m('#'), ['f', 'b', filled])], [0], 'filled: ' + JSON.stringify(filled));
+  });
+
   test('typedOrds: only a box for the field that becomes the card\'s answer counts', () => {
     const vocab = { name: 'Vocab', fields: ['Expression', 'Meaning', 'Reading'], cloze: false, templates: [tmpl(0, '{{Expression}}<br>{{type:Reading}}')] };
     assert.deepEqual([...typedOrds(vocab)], [], 'the answer is Meaning, so typing the Reading is not a typing card');
@@ -633,7 +645,7 @@ import { typedOrds } from '../js/anki.js';
     const yes = cond('{{Front}}{{#Flag}}{{type:Back}}{{/Flag}}'), no = cond('{{Front}}{{^Flag}}{{type:Back}}{{/Flag}}');
     assert.deepEqual([...typedOrds(yes, ['a', 'b', 'y'])], [0]);
     assert.deepEqual([...typedOrds(yes, ['a', 'b', ''])], []);
-    assert.deepEqual([...typedOrds(yes, ['a', 'b', '<br> &nbsp;'])], [], 'only markup is empty');
+    assert.deepEqual([...typedOrds(yes, ['a', 'b', '<br> <div></div>'])], [], 'only bare br/div markup is empty');
     assert.deepEqual([...typedOrds(no, ['a', 'b', ''])], [0]);
     assert.deepEqual([...typedOrds(no, ['a', 'b', 'y'])], []);
     const notes = [{ id: 'n1', mid: 'o', fields: ['q1', 'a1', 'y'], tags: [], deck: 'D', cards: { 0: 'x1' } }, { id: 'n2', mid: 'o', fields: ['q2', 'a2', ''], tags: [], deck: 'D', cards: { 0: 'x2' } }];

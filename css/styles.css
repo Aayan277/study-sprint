@@ -759,7 +759,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .sug-bar .pane-actions{margin-top:0;align-items:center}
 .sug-bar .btn,.sug-status .btn{min-height:44px}
 .err-note{color:var(--again)}
-.sug-status{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.sug-status{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap;font-variant-numeric:tabular-nums}
 .ai-view{margin-top:var(--s-3)}
 .ai-view .btn{min-height:44px}
 .savebar{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:4;padding:var(--s-4) 0 4px;background:linear-gradient(to bottom,transparent,var(--bg) 35%)}

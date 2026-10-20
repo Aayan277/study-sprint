@@ -378,6 +378,8 @@ export function autotag(input) {
 // Tags the cards have stay as they are, a tag a card already has (in any capitals) is not added again, and every card of a note gets the
 // tags of the note's other cards too, so that a cloze note or a reverse pair is never half tagged.
 export function applyTags(cards, plan) {
+  // (A card already in another folder for the same word, "b::kidney", is in the minority of the majority-folder tag "a::kidney": it keeps its own and gets no second one. A plain "kidney" does join the folder.)
+  const leafOf = t => normTag(t).split('::').pop();
   const want = new Map();                                         // card id → tags to add (in order)
   for (const { name, cardIds } of plan) {
     const tag = String(name ?? '').trim().toLowerCase();
@@ -396,7 +398,8 @@ export function applyTags(cards, plan) {
     if (!wanted) continue;
     const own = tagWords(c.tags), has = new Set(own.map(normTag));
     const add = [];
-    for (const t of wanted) { const k = normTag(t); if (!has.has(k)) { has.add(k); add.push(t); } }
+    const sameWord = t => own.some(o => { const n = normTag(o); return leafOf(o) === leafOf(t) && n !== normTag(t) && n.includes('::'); });
+    for (const t of wanted) { const k = normTag(t); if (!has.has(k) && !sameWord(t)) { has.add(k); add.push(t); } }
     if (!add.length) continue;
     changed.push({ ...c, tags: [...new Set([...own, ...add])] });
     added.set(c.id, add);

@@ -60,6 +60,18 @@ test('typing is only offered for backs of 40 characters or less', () => {
   assert.equal(canType('x'.repeat(41)), false);
 });
 
+test('a back listing alternatives is judged per alternative, split the way answers are checked', () => {
+  const part = 'x'.repeat(30);
+  assert.equal(canType('red; scarlet; crimson'), true);
+  assert.equal(canType(`${part}; ${part}; ${part}`), true, 'long in all, short each');
+  assert.equal(canType(`${part} / ${part}`), true);
+  assert.equal(canType(`${part}; ${'x'.repeat(41)}`), false, 'one alternative too long');
+  assert.equal(canType('1/2' + 'x'.repeat(40)), false, 'a / between digits is not a separator');
+  assert.equal(canType('x / y'), true, 'a spaced slash lists alternatives');
+  assert.equal(canType('ACE inhibitors and/or ARBs reduce proteinuria in diabetics'), false, 'an incidental slash is not a list');
+  assert.equal(canType('https://example.com/some/long/path/to/a/page'), false, 'a URL is not a list');
+});
+
 test('answerChoices: pieces, then pieces without brackets, then the whole back, de-duplicated by key', () => {
   assert.deepEqual(answerChoices('red / scarlet (dark red)'),
     [{ display: 'red', key: 'red' }, { display: 'scarlet (dark red)', key: 'scarletdarkred' }, { display: 'scarlet', key: 'scarlet' },
