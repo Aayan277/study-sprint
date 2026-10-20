@@ -56,14 +56,13 @@ const deckRows = async name => run(async n => {
   return Promise.all((await db.getCardsInDeck(d.id)).map(async c => ({ ...c, soundInfo: await Promise.all([...(c.frontSounds || []), ...(c.backSounds || [])].map(async id => { const m = await db.getMedia(id); return m && { id, type: m.type, size: m.size, bytes: m.data.byteLength, name: m.name, uploaded: m.uploaded }; })) })));
 }, name);
 
-// Opens the Import screen's File tab. Under a loaded full-suite run the route can take a while to draw, so wait for the screen itself
-// (the paste box is always there) with a longer limit, then for the tab. If the first load is dropped, load it once more.
+// Opens the Import screen's File tab. A sheet that was just closed pops its own history entry asynchronously; navigating before that
+// has finished would have the pop undo the new address too, so wait for the app's navigation to be idle (and off any overlay entry) first.
 const openFileTab = async pg => {
-  for (let tries = 0; ; tries++) {
-    await pg.goto(APP + '#/import');
-    try { await pg.waitForSelector('#pasteBox', { timeout: 20000 }); break; } catch (e) { if (tries >= 1) throw e; await pg.reload(); }
-  }
-  await pg.waitForSelector('#tab-file', { timeout: 20000 }); await pg.click('#tab-file');
+  await pg.evaluate(() => import('./js/nav.js').then(m => m.whenIdle())).catch(() => {});
+  await pg.waitForFunction(() => history.state?.k !== 'ov');
+  await pg.goto(APP + '#/import');
+  await pg.waitForSelector('#tab-file'); await pg.click('#tab-file');
 };
 const soundRowTexts = [];
 // ---------- 1. importing a deck with sounds (both Anki file layouts) ----------

@@ -27,8 +27,11 @@ const noSideways = async (p, what) => ok(await p.evaluate(() => document.documen
 // Waits until the pictures inside `scope` have loaded (or failed), the fonts are ready and two frames have drawn: what a fixed pause stood in for.
 const settled = (p, scope) => p.waitForFunction(async sel => {
   const root = document.querySelector(sel); if (!root) return false;
-  if ([...root.querySelectorAll('img')].some(i => !i.complete)) return false;
-  await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const inView = i => { const r = i.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
+  // (lazy pictures that are off screen never start loading, so they are not waited for)
+  if ([...root.querySelectorAll('img')].some(i => !i.complete && !(i.loading === 'lazy' && !inView(i)))) return false;
+  await document.fonts.ready; await Promise.all(document.getAnimations().map(a => a.finished.catch(() => {})));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   return true;
 }, scope);
 const sizeOf = (p, sel) => p.locator(sel).first().evaluate(e => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });

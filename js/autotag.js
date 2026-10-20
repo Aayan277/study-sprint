@@ -392,8 +392,11 @@ export function applyTags(cards, plan) {
     if (!byNote.has(c.noteId)) byNote.set(c.noteId, []);
     byNote.get(c.noteId).push(...want.get(c.id));
   }
+  for (const [id, list] of byNote) byNote.set(id, [...new Set(list)]);
   // The same-word rule is decided per note: if any card of the note would be skipped for a tag, no card of the note gets it (else siblings end up in different folders).
-  const sameWordOf = (c, t) => tagWords(c.tags).some(o => { const n = normTag(o); return leafOf(o) === leafOf(t) && n !== normTag(t) && n.includes('::'); });
+  const wordsOf = new Map();                                      // card → its tag words, read once
+  const wordsFor = c => { let w = wordsOf.get(c); if (!w) wordsOf.set(c, w = tagWords(c.tags)); return w; };
+  const sameWordOf = (c, t) => wordsFor(c).some(o => { const n = normTag(o); return leafOf(o) === leafOf(t) && n !== normTag(t) && n.includes('::'); });
   const blocked = new Map();                                      // note id → normalised tags that some card of the note would skip
   for (const c of cards) {
     if (!c.noteId || !byNote.has(c.noteId)) continue;
@@ -406,7 +409,7 @@ export function applyTags(cards, plan) {
   for (const c of cards) {
     const wanted = c.noteId && byNote.has(c.noteId) ? byNote.get(c.noteId) : want.get(c.id);
     if (!wanted) continue;
-    const own = tagWords(c.tags), has = new Set(own.map(normTag));
+    const own = wordsFor(c), has = new Set(own.map(normTag));
     const skip = (c.noteId && blocked.get(c.noteId)) || null;
     const add = [];
     for (const t of wanted) { const k = normTag(t); if (!has.has(k) && !(skip ? skip.has(k) : sameWordOf(c, t))) { has.add(k); add.push(t); } }
