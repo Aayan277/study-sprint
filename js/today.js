@@ -106,7 +106,7 @@ export async function renderToday(el) {
             <b class="th-big">${tr.state === 'todo' ? `${c.total} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
             ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>`}
             ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
-            ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> of ${tr.total} done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
+            ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>
         </div>
         ${streakHTML(streak, { button: true })}
@@ -140,7 +140,7 @@ export async function renderToday(el) {
       </div>` : ''}${exams.length || noExam.length ? '</div>' : ''}
       <section class="section" aria-labelledby="tdTitle">
         <div class="sec-head"><h2 id="tdTitle">Your decks</h2><a class="link" href="#/decks">All decks</a></div>
-        <div class="tdecks">${top.map(deckRow).join('')}</div>
+        <div class="tdecks">${top.map(d => deckRow(d, new Set(exams.map(e => e.deck.id)))).join('')}</div>
       </section>`}`;
     wire(c);
     if (tr.state === 'nothing') el.querySelector('.today-hero .ring')?.classList.add('is-full');    // calm, no "you did it" pop when there was nothing to do
@@ -244,9 +244,9 @@ export async function renderToday(el) {
   };
 
   // One course: counts for the deck and its subdecks. A tap starts it (or opens it, when nothing is due).
-  const deckRow = deck => {
+  const deckRow = (deck, shownExams = new Set()) => {
     const c = countFor(data, [deck.id]);
-    const info = examInfo(deck);
+    const info = shownExams.has(deck.id) ? null : examInfo(deck);   // (the countdown is said once: in Upcoming exams when the deck is listed there)
     // A course with no cards at all is not "done": it says so and offers Add cards (instead of a green tick).
     const inside = subtreeIds(data.decks, deck.id);
     const empty = !c.total && ![...data.deckOf.values()].some(id => inside.has(id));
@@ -311,10 +311,10 @@ export async function renderToday(el) {
             const dc = countFor(data, [d.id]);
             const depth = data.depth.get(d.id);
             return `<button type="button" class="tchip" data-deck="${esc(d.id)}" aria-pressed="${chosen.includes(d.id)}" ${depth ? `title="${esc(deckPath(data.decks, d.id))}"` : ''}>
-              ${depth ? `<span class="sub-mark" aria-hidden="true">${icon('sub')}</span>` : ''}<i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due}·${dc.fresh}</small></button>`;
+              ${depth ? `<span class="sub-mark" aria-hidden="true">${icon('sub')}</span>` : ''}<i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due} due · ${dc.fresh} new</small></button>`;
           }).join('')}
         </div>
-        <p class="note">Numbers show due · new for each deck (with its subdecks). You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
+        <p class="note">Each deck shows its due and new cards (with its subdecks). You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
       </section>
       <section class="section">
         <h3 class="label" id="optModeLbl">Answer by</h3>

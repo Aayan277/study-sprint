@@ -93,7 +93,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
         <button class="btn ghost" type="button" id="brAddFirst">${icon('plus')} Add one card</button></div></div>
     <div id="brMain">
     <div class="mhead br-head">
-      <h2>Cards <span class="count mono" id="brTotal"></span></h2>
+      <h2>Cards</h2>
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="brTags">Tools</button>
         <button class="btn ghost small" type="button" id="brSelect">Select</button>
@@ -129,7 +129,6 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
     B.visible = list;
-    $('brTotal').textContent = `(${cards.length})`;
     $('brCount').textContent = list.length === cards.length ? plural(list.length, 'card') : `Showing ${list.length} of ${plural(cards.length, 'card')}`;
     const now = Date.now();
     $('brList').innerHTML = list.length ? list.slice(0, B.shown).map(({ card, state }) => {

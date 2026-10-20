@@ -35,7 +35,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   // ---------- the editor: Answer in steps, Memory hook ----------
   await p.goto('about:blank'); await p.goto(URL + '#/deck/T'); await p.waitForSelector('#brAdd');
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
-  ok(await p.locator('#acModeSteps').count() === 1 && /Answer:\s*Text\s*Steps\s*Elements/.test(await p.textContent('.answer-mode')), `${tag}: Basic has an "Answer: Text | Steps | Elements" choice`);
+  ok(await p.locator('#acModeSteps').count() === 1 && /Answer:\s*Plain text\s*Step by step\s*List of parts/.test(await p.textContent('.answer-mode')), `${tag}: Basic has an "Answer: Plain text | Step by step | List of parts" choice`);
   ok(await p.locator('#acSteps').isHidden() && await p.locator('#acBackWrap').isVisible(), `${tag}: off = the normal Back box`);
   ok(/Memory hook \(optional\)/.test(await p.textContent('#acForm')), `${tag}: Basic has a "Memory hook (optional)" field`);
   await p.fill('#acFront', 'Solve 2x + 3 = 7');

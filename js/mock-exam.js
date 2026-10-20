@@ -193,7 +193,7 @@ function drawAnswer(question, given) {
     box.innerHTML = `<div class="options t-options${question.options.length > 4 ? ' six' : ''}${long ? ' long' : ''}" role="radiogroup" aria-labelledby="tPrompt">
       ${question.options.map((o, j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${j}" ${given === j ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></label>`).join('')}</div>`;
   } else if (question.kind === 'tf') {
-    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Answer given</span><div class="t-claim-v" id="tClaim">${mathHTML(question.shown)}</div></div>
+    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Proposed answer</span><div class="t-claim-v" id="tClaim">${mathHTML(question.shown)}</div></div>
       <div class="options t-options" role="radiogroup" aria-labelledby="tPrompt tClaim">
         ${[['true', 'True'], ['false', 'False']].map(([v, label], j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${v}" ${given === (v === 'true') ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${label}</span></label>`).join('')}</div>`;
   } else {

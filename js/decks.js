@@ -211,7 +211,7 @@ export async function renderLibrary(el, showStarters = false) {
     ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
     ${starters.length ? `
     <details class="starters" id="startersBox" ${showStarters ? 'open' : ''}>
-      <summary>Starter decks</summary>
+      <summary>${icon('chevron', 'starters-chev')}Starter decks</summary>
       <p class="note">Optional ready-made decks. Add one if it's useful to you.</p>
       ${starters.map(s => `
         <div class="starter">

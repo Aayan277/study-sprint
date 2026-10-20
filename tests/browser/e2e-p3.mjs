@@ -31,8 +31,8 @@ ok((await page.evaluate(async () => (await import('./js/db.js')).getDeck('B'))).
 
 const openOpts = async () => { await page.click('#optBtn'); await page.waitForSelector('#customBtn'); };
 await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#optBtn'); await openOpts();
-ok(await chip('Second') === '0·1', 'Second deck limited to 1 new card: ' + await chip('Second'));
-ok(await chip('Intro') === '0·9', 'sample deck: 9 new: ' + await chip('Intro'));
+ok(await chip('Second') === '0 due · 1 new', 'Second deck limited to 1 new card: ' + await chip('Second'));
+ok(await chip('Intro') === '0 due · 9 new', 'sample deck: 9 new: ' + await chip('Intro'));
 
 // custom study sheet
 await page.click('#customBtn'); await page.waitForSelector('#csAheadBtn');
@@ -44,7 +44,7 @@ await noH('custom study'); await page.screenshot({ path: SP + '/p3-custom.png', 
 await page.fill('#csNew', '5'); await page.dispatchEvent('#csNew', 'change'); await page.click('#csNewBtn');
 await page.waitForSelector('#sheet:not([open])', { state: 'attached' }); await openOpts();
 await page.waitForFunction(() => document.querySelector('#sheet .note')?.textContent.includes('+ 5 extra'));
-ok(await chip('Second') === '0·3' && await chip('Intro') === '0·9', 'extra new raises limits: ' + await chip('Second'));
+ok(await chip('Second') === '0 due · 3 new' && await chip('Intro') === '0 due · 9 new', 'extra new raises limits: ' + await chip('Second'));
 const s = await page.evaluate(async () => (await import('./js/db.js')).getSettings());
 ok(s.extraNew.n === 5, 'extra saved for today');
 

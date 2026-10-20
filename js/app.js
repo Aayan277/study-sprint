@@ -37,7 +37,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.42';
+const APP_VERSION = '4.43';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -324,12 +324,7 @@ async function renderSettings(el) {
     redrawSkins();
   });
   drawSync();
-  $('newBtn').addEventListener('click', async () => {
-    const { recentNotes, notesHTML } = await import('./whats-new.js');
-    openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
-      <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
-    $('newOk').addEventListener('click', closeSheet);
-  });
+  $('newBtn').addEventListener('click', async () => (await import('./whats-new.js')).openWhatsNewSheet());
   $('resetBtn').addEventListener('click', confirmReset);
   $('exportBtn').addEventListener('click', exportBackup);
   fillMediaInfo();

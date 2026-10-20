@@ -57,7 +57,9 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
   $('atBody').innerHTML = `<p id="atProg" aria-hidden="true">Reading ${num(total)} ${total === 1 ? 'card' : 'cards'}… 0%</p>
     <button class="btn ghost small" type="button" id="atStop">Stop</button>`;
   live(`Reading ${num(total)} ${total === 1 ? 'card' : 'cards'}`);
-  const say = msg => { if (!alive()) return; $('atBody').innerHTML = `<p class="note" id="atMsg">${esc(msg)}</p>`; live(msg); };
+  const say = msg => { if (!alive()) return; $('atBody').innerHTML = `<p class="note" id="atMsg">${esc(msg)}</p>`; live(msg); noAdd(); };
+  // A message and no list (nothing found, too long, stopped): there is nothing to add, so only Close is left.
+  const noAdd = () => { const add = $('atAdd'), cancel = $('atCancel'); if (add) add.hidden = true; if (cancel) cancel.textContent = 'Close'; };
   $('atStop').addEventListener('click', () => { stop(); say('Stopped. Close this and try again when you are ready.'); $('atMsg')?.setAttribute('tabindex', '-1'); $('atMsg')?.focus(); });
 
   const existing = new Set(all.flatMap(c => tagWords(c.tags).map(normTag)));

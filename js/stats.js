@@ -181,6 +181,20 @@ function wireCalendar(el) {
   const box = el.querySelector('#calScroll');
   if (!box) return;
   const grid = el.querySelector('#calGrid');
+  // Squares sized to the card: as big as fits the weeks shown (up to 30px), but never under 22px on a touch screen (14px with a mouse).
+  // A full year does not fit a phone at that size, so it scrolls, newest weeks first, as before.
+  const card = el.querySelector('.cal-card'), weeks = grid.querySelectorAll('.cal-m').length;
+  const sizeCells = () => {
+    const room = box.clientWidth;
+    if (!room || !weeks || !card) return false;
+    const min = matchMedia('(pointer:coarse)').matches ? 22 : 14;
+    const c = Math.max(min, Math.min(30, Math.floor((room - 3 * (weeks - 1) - 2) / weeks)));
+    if (card.style.getPropertyValue('--c') === c + 'px') return false;
+    card.style.setProperty('--c', c + 'px');
+    return true;
+  };
+  sizeCells();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (sizeCells()) box.scrollLeft = box.scrollWidth; }).observe(box);   // (back to the newest weeks only when the squares changed size)
   // Start scrolled to the newest weeks (on the right). A month name that starts before the left edge would show
   // as a cut-off "un", so those are hidden until you scroll back to them.
   const hideCutLabels = () => grid.querySelectorAll('.cal-m').forEach(m => { m.style.visibility = m.offsetLeft - grid.offsetLeft < box.scrollLeft - 1 ? 'hidden' : ''; });

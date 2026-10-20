@@ -97,8 +97,11 @@ for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.
   await go(d, h, s);
   edges[n] = await d.evaluate(() => { const v = document.querySelector('main > .view'), r = v.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(v.querySelector('h1').getBoundingClientRect().left)]; });
 }
-ok(Object.values(edges).every(e => e[0] === edges.today[0] && e[2] === edges.today[0]), 'every screen starts at the same left edge: ' + JSON.stringify(edges));
-ok(Object.values(edges).every(e => e[1] === 1120), 'every screen is 1120px wide');
+// (UI audit M9, intended change: the wide screens share one left edge and 1120px; the narrow columns (Play, Settings, Browse) are centred in the same space)
+const wide = ['today', 'decks', 'stats'].map(n => edges[n]);
+ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1120 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1120px wide: ' + JSON.stringify(wide));
+const mainBox = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); return [Math.round(m.left), Math.round(m.right)]; });
+ok(['play', 'settings', 'browse'].every(n => Math.abs((edges[n][0] - mainBox[0]) - (mainBox[1] - edges[n][0] - edges[n][1])) <= 2 && edges[n][1] <= 900), 'Play, Settings and Browse are narrow columns centred in the page: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
 await go(d, '#/play', '#startBtn');
 ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
 await go(d, '#/today', '.today-hero');
