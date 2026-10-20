@@ -3053,8 +3053,7 @@ a.back{text-decoration:none}
 .tag-sugs .ts-name{display:flex;align-items:center;gap:var(--s-2);min-width:0}
 .tag-sugs .pick{width:20px;height:20px;margin:0;flex:none;accent-color:var(--accent);cursor:pointer}
 .tag-sugs .tag-name{flex:1;min-width:0;width:100%;margin:0;font-weight:600;min-height:44px;font-size:var(--fs-md);padding:6px 10px}
-.tag-sugs .tag-name{border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color:var(--text)}
-.tag-sugs li.off .tag-name{color:var(--text-2)}
+.tag-sugs .tag-name{border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken)}
 .tag-sugs .ts-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px var(--s-2)}
 .tag-sugs .ts-meta .btn{margin-left:auto;min-height:44px}
 .tag-sugs .ts-err{margin:0;color:var(--again)}
@@ -3108,8 +3107,8 @@ a.back{text-decoration:none}
   .sec-head a.link{display:inline-flex;align-items:center}
   .deck .icon-btn{width:44px;height:44px}
   .starters > summary,.card-info summary,.how-score summary,.opt-fold summary,.chart-table > summary{min-height:44px}
-  .chart-table > summary{display:flex;align-items:center}
-  .deck-search input,.br-controls input,.br-controls select,.skin,#calPick,.cal-pick input,.adv-row input,.adv-row select,.easy-day select,input[type=date],input[type=time],input[type=number]{min-height:44px!important}
+  .chart-table > summary{display:list-item;padding-block:13px}
+  .deck-search input,.br-controls input,.br-controls select,.skin,#calPick,.cal-pick input,.adv-row input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.switch),.adv-row select,.easy-day select,.set-row :is(input[type=number],input[type=date],input[type=time]){min-height:44px!important}
   input[type=range]{min-height:44px}
 }
 /* Original dark: the "Young" mastery segment is 3:1 or more against its track (Clinical has its own, in clinical.css) */

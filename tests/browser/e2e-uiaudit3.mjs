@@ -36,17 +36,20 @@ const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-h
   await tall(p, 'a.brand', 'the Study Sprint header link');
   await tall(p, '.sec-head a.link', '"All decks" on Today');
   await go(p, '#/deck/sample', '.crow');
-  for (const [sel, what] of [['#brTags', 'Tools'], ['#brSelect', 'Select'], ['#brAdd', '+ Add card'], ['#back', '‹ Decks'], ['#addExam', 'Add exam date'], ['#testBtn', 'Practice test']]) if (await p.$(sel)) await tall(p, sel, what);
+  for (const [sel, what] of [['#brTags', 'Tools'], ['#brSelect', 'Select'], ['#brAdd', '+ Add card'], ['#back', '‹ Decks'], ['#addExam', 'Add exam date'], ['#testBtn', 'Practice test']]) { ok(await p.locator(sel).count() > 0, `${what} is on the deck page`); await tall(p, sel, what); }
   await go(p, '#/decks', '.deck');
   await tall(p, '.starters > summary', '"Starter decks"');
   { const [w, h] = await sizeOf(p, '.deck .icon-btn'); ok(w >= 40 && h >= 40, `the deck's edit icon is at least 40x40 (${w}x${h})`); }
   await go(p, '#/settings', '#exportBtn');
   await tall(p, '.set-nav a', 'a Settings section chip');
-  await p.evaluate(() => { const e = document.getElementById('syncEmail'); e && e.scrollIntoView(); }); if (await p.isVisible('.pw-show')) await tall(p, '.pw-show', 'Show password');
+  ok(await p.locator('#oled').count() === 1, 'the OLED black switch is in Settings');
+  { const [w, h] = await sizeOf(p, '#oled'); ok(h >= 20 && h <= 32 && w <= 56, `a toggle switch stays pill-sized on a touch screen (${w}x${h})`); }
+  await go(p, '#/settings/sync', '#syncEmail'); ok(await p.locator('.pw-show').count() === 1, 'Show password is on the sign-in form'); await tall(p, '.pw-show', 'Show password');
   await go(p, '#/import', '#pasteBox');
   await tall(p, '#tab-paste', 'the Import "Paste" tab');
   await go(p, '#/stats', '.chart');
   await tall(p, '.chart-table > summary', '"Show as table"');
+  ok(await p.locator('.chart-table > summary').first().evaluate(e => getComputedStyle(e).display === 'list-item'), '"Show as table" keeps its disclosure triangle');
   // the editor toolbar and Review's top buttons are icon buttons: at least 40x40
   await go(p, '#/deck/sample', '.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm');
   { const [w, h] = await sizeOf(p, '.fmt-tools button'); ok(w >= 40 && h >= 40, `an editor toolbar button is at least 40x40 (${w}x${h})`); }
@@ -60,8 +63,10 @@ const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-h
   ok((await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (Play setup)');
   await p.click('#startBtn'); await p.waitForSelector('#pCard');
   ok((await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (Play question)');
-  await go(p, '#/deck/sample', '.crow'); await p.locator('.crow').first().click({ button: 'right' }).catch(() => {});
-  ok((await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (card sheet)');
+  // the card actions sheet draws its key letters in the page, and hides them on touch (last: leaving it open, nothing navigates after)
+  await go(p, '#/review/sample', '#startBtn, #flash'); if (await p.$('#startBtn')) await p.click('#startBtn'); await p.waitForSelector('#flash');
+  await p.click('#moreBtn'); await p.waitForSelector('.act-row');
+  ok(await p.locator('.act-row kbd').count() > 0 && (await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (card actions sheet, which has them in the page)');
   await p.context().close();
 }
 
@@ -103,7 +108,8 @@ for (const width of [390, 320]) {
   await p.click('#ceOccEdit'); await p.waitForSelector('dialog.occ-ed[open]'); await p.waitForTimeout(400);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector('dialog.occ-ed').scrollWidth <= innerWidth), `${width}px: no sideways scroll in the occlusion editor`);
   { const [w, h] = await sizeOf(p, '.occ-ed-tool'); ok(h >= 40 && w >= 40, `${width}px: an occlusion editor tool is at least 40x40 (${w}x${h})`); }
-  await p.click('.occ-ed-x'); await p.waitForTimeout(300);
+  await p.click('.occ-ed-x');
+  await p.waitForFunction(() => !document.querySelector('dialog.occ-ed[open]') || document.querySelector('[data-act=discard]')?.offsetParent);
   if (await p.isVisible('[data-act=discard]')) await p.click('[data-act=discard]');
   await p.waitForFunction(() => !document.querySelector('dialog.occ-ed[open]'));
   await p.keyboard.press('Escape'); await sheetSettled(p);
