@@ -63,7 +63,7 @@ const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-h
   ok((await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (Play setup)');
   await p.click('#startBtn'); await p.waitForSelector('#pCard');
   ok((await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (Play question)');
-  // the card actions sheet draws its key letters in the page, and hides them on touch (last: leaving it open, nothing navigates after)
+  // the card actions sheet draws its key letters in the page, and hides them on touch (last step: a running Review holds its own 'ov' history entry, so sheetSettled does not apply)
   await go(p, '#/review/sample', '#startBtn, #flash'); if (await p.$('#startBtn')) await p.click('#startBtn'); await p.waitForSelector('#flash');
   await p.click('#moreBtn'); await p.waitForSelector('.act-row');
   ok(await p.locator('.act-row kbd').count() > 0 && (await visibleHints(p)).length === 0, 'no keyboard hints on a touch phone (card actions sheet, which has them in the page)');

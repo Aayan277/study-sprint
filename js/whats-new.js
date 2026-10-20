@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.45', items: [
+    'On phones, small buttons, tabs, chips and boxes are now at least 44 pixels tall, so they are easier to tap.',
+    'Suggest tags: the tag-name boxes look like the other fields, with a little more room around the list.'
+  ] },
   { version: '4.44', items: [
     'Typing mode: an answer listing choices like “red; scarlet; crimson” can now be typed, as long as each choice is short.',
     'Anki import: a field that holds only a picture now counts as filled, so those cards come in the same as in Anki.',
