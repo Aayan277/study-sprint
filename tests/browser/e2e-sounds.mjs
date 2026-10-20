@@ -56,10 +56,18 @@ const deckRows = async name => run(async n => {
   return Promise.all((await db.getCardsInDeck(d.id)).map(async c => ({ ...c, soundInfo: await Promise.all([...(c.frontSounds || []), ...(c.backSounds || [])].map(async id => { const m = await db.getMedia(id); return m && { id, type: m.type, size: m.size, bytes: m.data.byteLength, name: m.name, uploaded: m.uploaded }; })) })));
 }, name);
 
+// Opens the Import screen's File tab. A sheet that was just closed pops its own history entry asynchronously; navigating before that
+// has finished would have the pop undo the new address too, so wait for the app's navigation to be idle (and off any overlay entry) first.
+const openFileTab = async pg => {
+  await pg.evaluate(() => import('./js/nav.js').then(m => m.whenIdle())).catch(() => {});
+  await pg.waitForFunction(() => history.state?.k !== 'ov');
+  await pg.goto(APP + '#/import');
+  await pg.waitForSelector('#tab-file'); await pg.click('#tab-file');
+};
 const soundRowTexts = [];
 // ---------- 1. importing a deck with sounds (both Anki file layouts) ----------
 for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-sound-legacy.apkg', 'Sounds old']]) {
-  await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+  await openFileTab(page);
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
   const found = await page.textContent('#found');
@@ -90,7 +98,7 @@ ok(soundRowTexts.length === 2 && soundRowTexts[0] === soundRowTexts[1], `both An
 ok(await run(() => navigator.storage.persisted().then(p => typeof p === 'boolean')), 'storage.persist() was asked for (no prompt)');
 
 // ---------- 2. the switch off, and the free-space check ----------
-await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+await openFileTab(page);
 await page.setInputFiles('#fileIn', SP + '/files/anki-sound-new.apkg');
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 await page.uncheck('#ankiSounds');
@@ -103,7 +111,7 @@ ok(noSnd.length >= 7 && noSnd.every(c => !c.frontSounds && !c.backSounds), 'swit
 const tight = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block' });
 await tight.addInitScript(() => { navigator.storage.estimate = async () => ({ usage: 99.99 * 1024 * 1024, quota: 100 * 1024 * 1024 }); });
 const tp = await tight.newPage();
-await tp.goto(APP + '#/import'); await tp.waitForSelector('#tab-file'); await tp.click('#tab-file');
+await openFileTab(tp);
 await tp.setInputFiles('#fileIn', SP + '/files/anki-sound-new.apkg');
 await tp.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok(!(await tp.isChecked('#ankiSounds')) && /Not enough free space on this device for the sounds \(about [\d.]+ [KM]B needed, \d+ KB free\)\./.test(await tp.textContent('#found')), 'little free space: the switch starts off and says why');
@@ -407,7 +415,7 @@ await page.goto(APP + '#/deck/' + sid); await deckMenu(page); await page.click('
 ok((await page.textContent('#sheet')).includes('Sounds go in the Anki deck (a spreadsheet can only hold text).'), 'Export: the sheet says sounds go in the Anki deck, not the spreadsheet');
 const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('#exApkg')]);
 await dl.saveAs(SP + '/exports/with-sounds.apkg');
-await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+await openFileTab(page);
 await page.setInputFiles('#fileIn', SP + '/exports/with-sounds.apkg');
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 const again = await page.textContent('#found');

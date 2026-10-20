@@ -3067,12 +3067,16 @@ a.back{text-decoration:none}
 /* The edge of a secondary button, an unselected chip and the like is the --control color (3:1 against the page), so a control can be
    found in the dark. Selected chips keep their accent edge. Cards and dividers stay on the softer --line / --line-strong. */
 :root:not([data-theme="light"]) :where(.btn.ghost,.btn.danger:not(.armed,.solid),.more-btn:not([aria-expanded="true"]),.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"],.on),.flagbtn:not([aria-pressed="true"]),.pick-btn,.set-nav a,.stepper .icon-btn,.step-btn,.sl-btn,.snd-btn:not(.playing),.img-retry,.occ-peek:not([aria-pressed="true"])){border-color:var(--control)}
-/* (:where keeps this rule weak, so every state rule that sets its own edge still wins: selected, expanded, playing, hover.) A hovered ghost button
+/* (:where keeps this rule weak, so every state rule that sets its own edge still wins: selected, playing, hover.) A hovered ghost button
    or ⋯ button keeps the --control edge instead of dropping to the dimmer --line-strong. */
 @media (hover:hover) and (pointer:fine){
   :root:not([data-theme="light"]) :is(.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"])):hover{border-color:var(--accent-line)}
   :root:not([data-theme="light"]) :where(.btn.ghost,.more-btn:not([aria-expanded="true"])):hover{border-color:var(--control)}
+  /* A hovered sound button gets the light accent edge (its resting --control edge, with only the fill changing, was easy to miss). */
+  :root:not([data-theme="light"]) .snd-btn:not(.playing,.missing,[aria-disabled="true"]):hover{border-color:var(--accent-text)}
 }
+/* The open ⋯ menu button keeps the same 3:1 edge as the closed one (it used to drop to the dimmer --line-strong). Not :where, so it beats Clinical's own .more-btn edge too. */
+:root:not([data-theme="light"]) .more-btn[aria-expanded="true"]{border-color:var(--control)}
 /* A selected chip: a clear tinted fill, the accent edge drawn twice as thick, and a check mark (so it is not color alone). Same specificity as before on purpose: this is a state. */
 :root:not([data-theme="light"]) :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:rgb(var(--acc) / .3);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .chip span,.tchip{position:relative}

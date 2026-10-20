@@ -150,12 +150,31 @@ for (const ui of ['original', 'clinical']) {
     const host = document.createElement('div'); host.className = 'ys-exams'; host.innerHTML = '<button class="tchip on" type="button">x</button><button class="snd-btn playing" type="button">s</button><button class="occ-peek" aria-pressed="true" type="button">p</button>'; document.body.appendChild(host);
     const [on, playing, peek] = [...host.children].map(e => getComputedStyle(e).borderTopColor);
     host.remove();
-    return { more, strong: px('--line-strong'), accent: px('--accent'), on, playing, peek, accentLine: (() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;border:1px solid var(--accent-line)'; document.body.appendChild(d); const c = getComputedStyle(d).borderTopColor; d.remove(); return c; })() };
+    return { more, ctrl: px('--control'), accent: px('--accent'), on, playing, peek, accentLine: (() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;border:1px solid var(--accent-line)'; document.body.appendChild(d); const c = getComputedStyle(d).borderTopColor; d.remove(); return c; })() };
   });
-  ok(r.more === r.strong, `M1 (${ui}, dark): the expanded ⋯ button keeps its own state edge (--line-strong), not the shared outline (${r.more})`);
+  ok(r.more === r.ctrl, `M1 (${ui}, dark): the expanded ⋯ button has the same --control edge as the closed one, not the dimmer --line-strong (${r.more})`);
   ok(r.on === r.accent, `M1 (${ui}, dark): ".tchip.on" keeps the accent edge (${r.on})`);
   ok(r.playing === r.accent, `M1 (${ui}, dark): a playing sound button keeps the accent edge`);
   ok(r.peek === r.accentLine, `M1 (${ui}, dark): a pressed occlusion peek button keeps its accent-line edge`);
+  await p.context().close();
+}
+// ---------- M1b: the open ⋯ button and a hovered sound button have a 3:1 edge in dark, in both looks ----------
+for (const ui of ['original', 'clinical']) {
+  const p = await open(DESK, { ui });
+  await go(p, '#/deck/sample', '#deckMore');
+  const edgeOf = (sel) => maths(p, `const e = document.querySelector(${JSON.stringify(sel)}); const bg = M.bgOf(e.parentElement); return M.ratio(M.over(M.rgba(getComputedStyle(e).borderTopColor), bg), bg);`);
+  const closed = await edgeOf('#deckMore');
+  await p.click('#deckMore'); await p.waitForSelector('#deckMenu:not([hidden])'); await p.mouse.move(2, 2);
+  const opened = await edgeOf('#deckMore');
+  ok(closed >= 3 && opened >= 3 && opened >= closed - 0.01, `M1b (${ui}, dark): the open ⋯ button's edge is ${opened.toFixed(2)}:1, at least the closed one's (${closed.toFixed(2)}:1) and 3:1`);
+  await p.evaluate(() => { const h = document.createElement('div'); h.style.cssText = 'position:fixed;left:300px;top:300px;padding:20px'; h.innerHTML = '<button class="snd-btn" id="sndProbe" type="button">s</button>'; document.querySelector('main').appendChild(h); });
+  const rest = await edgeOf('#sndProbe');
+  const restColor = await p.evaluate(() => getComputedStyle(document.querySelector('#sndProbe')).borderTopColor);
+  await p.hover('#sndProbe');
+  await p.waitForFunction(c => getComputedStyle(document.querySelector('#sndProbe')).borderTopColor !== c, restColor, { timeout: 5000 })
+    .catch(() => { throw new Error(`M1b (${ui}): the hovered sound button's edge never changed from its resting colour ${restColor}`); });
+  const hov = await edgeOf('#sndProbe');
+  ok(rest >= 3 && hov >= 3 && hov > rest, `M1b (${ui}, dark): a hovered sound button's edge is ${hov.toFixed(2)}:1 (resting ${rest.toFixed(2)}:1), and stands out from the resting one`);
   await p.context().close();
 }
 {
