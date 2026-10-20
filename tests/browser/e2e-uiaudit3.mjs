@@ -30,7 +30,8 @@ const settled = (p, scope) => p.waitForFunction(async sel => {
   const inView = i => { const r = i.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
   // (lazy pictures that are off screen never start loading, so they are not waited for)
   if ([...root.querySelectorAll('img')].some(i => !i.complete && !(i.loading === 'lazy' && !inView(i)))) return false;
-  await document.fonts.ready; await Promise.all(document.getAnimations().map(a => a.finished.catch(() => {})));
+  await document.fonts.ready; // (endless animations, like the low-time pulse, never finish, so they are skipped)
+  await Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().endTime !== Infinity).map(a => a.finished.catch(() => {})));
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   return true;
 }, scope);
