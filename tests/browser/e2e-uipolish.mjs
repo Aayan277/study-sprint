@@ -553,6 +553,14 @@ for (const w of [1280, 1440, 1680]) {
   ok(r.linkLeft === r.btnLeft, `caught-up screen: "Open deck" starts where the button does (${r.linkLeft}px / ${r.btnLeft}px)`);
   await p.context().close();
 }
+{
+  const p = await open({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
+  await seedHistory(p);
+  await go(p, '#/review/H', '.empty');
+  const r = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth, right: Math.round(Math.max(...[...document.querySelectorAll('.res-actions .btn')].map(b => b.getBoundingClientRect().right))) }));
+  ok(r.sw <= r.w && r.right <= r.w, `caught-up screen at 320px: no sideways scroll, the buttons fit (${r.sw}/${r.w}, right edge ${r.right})`);
+  await p.context().close();
+}
 
 ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors[0] : ''));
 await browser.close();

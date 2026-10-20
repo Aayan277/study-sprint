@@ -2514,7 +2514,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 .fin-links{display:flex;align-items:center;justify-content:flex-start;gap:var(--s-1);margin:var(--s-3) 0 0;color:var(--text-3)}
 .fin-links .link{display:inline-flex;align-items:center;text-decoration:none}
 .fin-links .link:first-child{padding-left:0}   /* the first link starts exactly where the buttons above it do */
-.res-actions.ahead{flex-wrap:nowrap}
+.res-actions.ahead{flex-wrap:wrap}      /* one row when both fit; on narrow phones the second button wraps instead of pushing the page sideways */
 .res-actions.ahead .btn{flex:1 1 auto;white-space:nowrap;padding-inline:12px}
 .finish-more{margin-top:var(--s-4)}
 .finish-more[hidden]{display:none}
