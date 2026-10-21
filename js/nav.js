@@ -101,15 +101,18 @@ function goNow(hash) {
   if (hash !== location.hash) location.hash = hash;
 }
 export function toTab(hash) {
+  fresh = null;                        // the app's own navigation, made after the user's stray address, wins
   return queue(() => tabNow(hash));
 }
 // Go to an address: a tab destination replaces, anything else is one new entry.
 // When nothing is in flight this changes the address synchronously, like `location.hash = ...` did.
 export function go(hash) {
+  fresh = null;
   return queue(() => goNow(hash));
 }
 // Like go(), for a "back" button that has a known parent: if the entry underneath is that parent, really go back to it.
 export function up(hash) {
+  fresh = null;
   return queue(() => {
     if (cur.depth > 0 && cur.kind === 'page' && cur.from === hash && !isTabRoot(hash)) return traverse(-1);
     return goNow(hash);
@@ -117,10 +120,12 @@ export function up(hash) {
 }
 // A "back" button for a screen that can be opened from several places: step back if there is somewhere in the app, else go to `fallback`.
 export function back(fallback) {
+  fresh = null;
   return queue(() => (cur.depth > 0 && cur.kind === 'page' ? traverse(-1) : goNow(fallback)));
 }
 // Swap the address of the screen showing (a redirect: the entry is replaced, not added to).
 export function replace(hash) {
+  fresh = null;
   if (isTabRoot(hash)) return toTab(hash);
   return queue(() => {
     const old = lastHash;
@@ -208,7 +213,7 @@ function onPop() {
     const l = late; late = null;
     if (arrived && Date.now() < l.until && arrived.depth === l.from.depth + l.delta) { settle(); return; }
   }
-  if (busy && !arrived && history.length > glen) fresh = location.hash;   // a new entry (not one of the old ones we are passing) arrived mid-traversal
+  if (busy && !arrived && history.length > glen) fresh = location.hash;   // a new entry (not one of the old ones we are passing) arrived mid-traversal (not seen at the browser's history cap, where the length stays put: the old loss)
   if (!arrived || busy) return;                       // an entry the app did not tag yet: hashchange handles it
   if (arrived.depth < left.depth) {
     // Back went below some overlays' entries. The one we left, if it is a session, stays when Back moved exactly one entry

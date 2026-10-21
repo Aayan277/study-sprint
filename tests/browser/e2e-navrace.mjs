@@ -16,16 +16,16 @@ const hash = () => p.evaluate(() => location.hash);
 const left = () => p.url() === 'about:blank';
 const SHEET = '<h2 id="sheetTitle">Test sheet</h2><p>Hello</p><div class="sheet-actions"><button class="btn primary" type="button">Done</button></div>';
 
-const targets = ['#/stats', '#/decks', '#/play', '#/settings'];
+const targets = ['#/stats', '#/decks', '#/play', '#/settings', '#/browse', 'nav'];       // 'nav': a stray address, then the app's own go('#/stats') in the same tick: the app's, made later, wins
 let bad = 0, badBack = 0;
 for (let i = 0; i < 12; i++) {
-  const want = targets[i % targets.length];
-  await p.evaluate(async h => { (await import('http://localhost:8123/js/nav.js')).toTab('#/today'); }, '');
+  const mode = targets[i % targets.length], want = mode === 'nav' ? '#/stats' : mode;
+  await p.evaluate(async () => { (await import('http://localhost:8123/js/nav.js')).toTab('#/today'); });
   await idle(); await p.waitForTimeout(100);
   await p.evaluate(async html => { (await import('http://localhost:8123/js/ui.js')).openSheet(html); }, SHEET);
   await idle();
   // close the sheet and change the address in the same tick
-  await p.evaluate(async h => { (await import('http://localhost:8123/js/ui.js')).closeSheet(); location.hash = h; }, want);
+  await p.evaluate(async m => { const ui = await import('http://localhost:8123/js/ui.js'), nav = await import('http://localhost:8123/js/nav.js'); ui.closeSheet(); location.hash = m === 'nav' ? '#/browse' : m; if (m === 'nav') nav.go('#/stats'); }, mode);
   await idle(); await p.waitForTimeout(400); await idle();
   const got = await hash();
   const shown = await p.evaluate(() => document.getElementById('screen').dataset.route);
