@@ -26,7 +26,7 @@ import { initBadge, refreshBadgeNow } from './badge.js';
 import { examList } from './ics.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
 import { checkPassword, passwordOk, passwordMissing } from './password.js';
-import { watchMath } from './math.js';
+import { watchMath } from './math-watch.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
 import { usageLine, cardsWarning } from './quota.js';
 import { damagedNote } from './sync-merge.js';
@@ -1571,7 +1571,7 @@ async function start() {
   wireGear();
   initSidebar({ version: APP_VERSION });
   initWhatsNew({ version: APP_VERSION });
-  watchMath();       // draws the maths on cards (js/math.js) wherever it appears
+  watchMath();       // draws the maths on cards (js/math.js, loaded when the first formula appears) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
   document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
   // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.
