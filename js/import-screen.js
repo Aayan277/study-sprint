@@ -2,7 +2,7 @@
 // editable preview, then save them into a deck. The actual format detection lives in import.js.
 
 import * as db from './db.js';
-import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, sheetsCsvUrl, claudePrompt } from './import.js';
+import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, clearDupKeys, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
@@ -57,6 +57,7 @@ export async function renderImport(el, arg) {
     // The deck in the address (the import started from that deck's page), otherwise a new deck named after the file.
     deckId: decks.some(d => d.id === deckId) ? deckId : NEW_DECK,
     deckFronts: [],        // fronts already in the chosen deck, for duplicate checks
+    deckKeys: new Set(),   // the same fronts folded (dupKey), once per deck choice
     suggestedName: '',     // a deck name taken from the file name
     noCloze: false,        // "Keep {{c1::…}} lines as plain cards" was pressed (until the text changes)
     keepFields: true,      // the "Keep the other fields" switch (Anki notes with more than two fields)
@@ -241,9 +242,11 @@ function wireDeckPicker() {
 }
 async function loadDeckFronts() {
   // Duplicates are checked against the deck and its subdecks.
-  if (S.deckId === NEW_DECK) { S.deckFronts = []; return; }
+  clearDupKeys();
+  if (S.deckId === NEW_DECK) { S.deckFronts = []; S.deckKeys = new Set(); return; }
   const inside = subtreeIds(await db.getDecks(), S.deckId);
-  S.deckFronts = (await db.getAll('cards')).filter(c => inside.has(c.deckId)).map(c => c.front);
+  S.deckFronts = (await db.getAllCached('cards', { shared: true })).filter(c => inside.has(c.deckId)).map(c => c.front);
+  S.deckKeys = new Set(S.deckFronts.map(dupKey));
 }
 
 // ---------- Paste / File / Google Sheets tabs ----------
@@ -656,7 +659,7 @@ function showResult(result, keepError = false, pasted = '') {
   S.hasFields = hasKeptFields(S.result, S.frontCol, S.backCol);
   S.cards = build();
   if (S.result.suggest) {         // suggestions: ticked to begin with when strong, and not already in the deck; the last run's ticks and edits come back
-    const onDeck = new Set(S.deckFronts.map(dupKey));
+    const onDeck = S.deckKeys;
     S.cards.forEach(c => RS.decorate(c, S.result.suggest[c.row], onDeck.has(dupKey(c.front))));
     RS.applyChanges(S.cards, S.carry);
     S.carry = null;
@@ -787,13 +790,13 @@ function refreshFlags() {
   if (!S.result) return;
   const sug = !!S.result.suggest;
   // (a suggestion that is not ticked is not a card: it takes no part in the counts or the duplicate check)
-  S.flags = findDuplicates(S.cards.map(c => (inUse(c) ? c : { ...c, front: '' })), S.deckFronts);
+  S.flags = findDuplicates(S.cards.map(c => (inUse(c) ? c : { ...c, front: '' })), S.deckFronts, S.deckKeys);
   const used = S.cards.filter(inUse);
   const complete = used.filter(c => isComplete(live(c))).length;
   const pairN = used.filter(c => isComplete(live(c)) && makesReverse(c)).length;       // cards that also make a reverse card
   const missing = used.length - complete;
   const dups = S.flags.filter(Boolean).length;
-  const onDeck = sug ? new Set(S.deckFronts.map(dupKey)) : null;
+  const onDeck = sug ? S.deckKeys : null;
 
   $('plist').querySelectorAll('.prow').forEach(row => {
     const i = +row.dataset.i, c = S.cards[i], flag = S.flags[i];

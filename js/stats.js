@@ -224,17 +224,35 @@ function wireCalendar(el) {
 // One square per card, but only the first TILE_BUDGET are drawn at once: ten thousand buttons would freeze a phone.
 const tileHTML = (c, lvl) => `<button type="button" class="mtile lv-${lvl}" data-card="${esc(c.id)}" aria-pressed="${selected === c.id}" aria-label="${esc(plainText(c.front))}: ${lvl}"></button>`;
 const moreText = left => `Show ${left > TILE_STEP ? `${TILE_STEP.toLocaleString()} more (${left.toLocaleString()} left)` : plural(left, 'more card')}`;
-const deckCards = (cards, deckId) => cards.filter(c => c.deckId === deckId).sort((a, b) => a.created - b.created);
+// A deck's own cards, oldest first. All decks are grouped in one pass over the cards (kept per cards array); a deck is sorted only
+// when its tiles are drawn, so a deck that gets no tiles (the budget is used up) costs just its count.
+const deckGroups = new WeakMap();      // cards array -> Map(deckId -> { list, sorted })
+function groupOf(cards, deckId) {
+  let g = deckGroups.get(cards);
+  if (!g) {
+    g = new Map();
+    for (const c of cards) { let e = g.get(c.deckId); if (!e) g.set(c.deckId, e = { list: [], sorted: false }); e.list.push(c); }
+    deckGroups.set(cards, g);
+  }
+  return g.get(deckId) || { list: [], sorted: true };
+}
+const deckCount = (cards, deckId) => groupOf(cards, deckId).list.length;
+const deckCards = (cards, deckId) => {
+  const e = groupOf(cards, deckId);
+  if (!e.sorted) { e.list.sort((a, b) => a.created - b.created); e.sorted = true; }
+  return e.list;
+};
 function masteryGridHTML(decks, inside, cards, statesById) {
   let budget = TILE_BUDGET;
   return deckChoices(decks, inside).map(({ id }) => decks.find(d => d.id === id)).map(d => {
-    const dc = deckCards(cards, d.id);
-    if (!dc.length) return '';
-    const shown = Math.min(dc.length, budget);
+    const n = deckCount(cards, d.id);
+    if (!n) return '';
+    const shown = Math.min(n, budget);
     budget -= shown;
+    const dc = shown ? deckCards(cards, d.id) : [];       // (a deck with no tiles to draw is not sorted)
     return `<div class="mdeck" data-deck="${esc(d.id)}" data-shown="${shown}">${inside?.size === 1 ? '' : `<h3>${esc(deckPath(decks, d.id))}</h3>`}
       <div class="mtiles">${dc.slice(0, shown).map(c => tileHTML(c, cardLevel(statesById.get(c.id)))).join('')}</div>
-      ${shown < dc.length ? `<button type="button" class="btn ghost small mmore">${moreText(dc.length - shown)}</button>` : ''}</div>`;
+      ${shown < n ? `<button type="button" class="btn ghost small mmore">${moreText(n - shown)}</button>` : ''}</div>`;
   }).join('');
 }
 
@@ -539,11 +557,12 @@ export async function renderStats(el) {
   q('readyExam')?.addEventListener('click', () => openExamSheet(course.id, () => renderStats(el)));
   el.querySelectorAll('.chart').forEach(wireChart);
   // Retention vs target: read after the page is drawn (the split needs a longer stretch of the log).
+  let deckOfAll = null;       // (one card -> deck map, built once)
   if (q('retSplit')) loadRetentionLogs(logs).then(rows => {      // (not read at all when the card is hidden)
     const box = q('retSplit');
     if (!box || !el.isConnected) return;
     const mine = ids ? rows.filter(l => ids.has(l.cardId)) : rows;
-    const deckOf = new Map(allCards.map(c => [c.id, c.deckId]));
+    const deckOf = deckOfAll ||= new Map(allCards.map(c => [c.id, c.deckId]));
     const byDeck = new Map();
     const targetOf = id => {
       const deckId = deckOf.get(id);

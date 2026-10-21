@@ -18,6 +18,24 @@ export function chainMap(decks) {
   return new Map(decks.map(d => [d.id, ancestors(decks, d.id, map).map(a => a.id)]));
 }
 
+// Counts for every deck, each including its subdecks, in one pass: a card is looked at once and its numbers are added to its deck
+// and every deck above it (chains: see chainMap). Same numbers as summarising each deck's own list of cards, without building those lists.
+//   levelOf(card) -> 'new' | 'learning' | 'young' | 'mature'      hiddenOf(card) -> suspended or buried      dueOf(card, level) -> due today
+export function summariesByDeck(decks, cards, chains, { levelOf, hiddenOf, dueOf }) {
+  const out = new Map(decks.map(d => [d.id, { total: 0, due: 0, new: 0, learning: 0, young: 0, mature: 0, hidden: 0 }]));
+  for (const c of cards) {
+    const chain = chains.get(c.deckId);
+    if (!chain) continue;
+    const lvl = levelOf(c), hidden = hiddenOf(c), due = !hidden && lvl !== 'new' && dueOf(c, lvl);
+    for (const id of chain) {
+      const s = out.get(id);
+      s.total++; s[lvl]++;
+      if (hidden) s.hidden++; else if (due) s.due++;
+    }
+  }
+  return out;
+}
+
 // The ids of a deck and everything inside it.
 export function subtreeIds(decks, id) {
   const chains = chainMap(decks);

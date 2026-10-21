@@ -180,6 +180,10 @@ export async function getAllInPieces(name, size = 3000) {
 // arrives, so for a few milliseconds after it a kept read can still be the old one.
 // Only 'cards' and 'cardStates' are kept; any other store is read fresh.
 const KEPT = ['cards', 'cardStates'];
+// cardsGen goes up whenever a kept 'cards' array is changed in place (keptStill below only patches cardStates today). A cache built from
+// the kept card rows (study-data.js sortedCopies) includes it in its key, so such a patch could never leave it stale.
+let cardsGen = 0;
+export const cardsGeneration = () => cardsGen;
 const KEY_OF = { cards: 'id', cardStates: 'cardId' };
 const kept = new Map();      // name -> { version, rows (once read), promise }
 export async function getAllCached(name, { shared = false } = {}) {
@@ -213,6 +217,7 @@ function keptStillUnsafe(patches, unchanged) {
       const find = k => { let lo = 0, hi = rows.length; while (lo < hi) { const m = (lo + hi) >> 1; if (rows[m][key] < k) lo = m + 1; else hi = m; } return lo; };
       const ok = [...(patch.put || []), ...(patch.del || [])].every(x => typeof (x[key] ?? x) === 'string');
       if (!ok || rows.some((r, i) => i && !(rows[i - 1][key] < r[key]))) continue;       // keys that are not text, or rows not in key order: drop the read instead
+      if (name === 'cards') cardsGen++;
       for (const k of patch.del || []) { const i = find(k); if (rows[i]?.[key] === k) rows.splice(i, 1); }
       for (const row of patch.put || []) { const i = find(row[key]); const c = cloneRow(row); if (rows[i]?.[key] === row[key]) rows[i] = c; else rows.splice(i, 0, c); }
       keep.push(e);

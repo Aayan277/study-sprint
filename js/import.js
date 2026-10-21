@@ -464,15 +464,23 @@ export const isComplete = c => !!c.occlusion || !!((c.front.trim() || c.pictures
 // Two fronts that differ only in capitals, spaces or punctuation count as the same.
 // Folded like a typed answer (match.js foldText): Latin accents off, but か ≠ が and कि ≠ की; a text of only
 // symbols ("+", "🧠") keeps them.
+// (Remembered per text, since a preview re-checks the same fronts on every key; clearDupKeys() forgets them.)
+const dupKeys = new Map();
 export function dupKey(s) {
-  return foldText(s);
+  const t = typeof s === 'string' ? s : null;
+  if (t !== null) { const hit = dupKeys.get(t); if (hit !== undefined) return hit; }
+  const k = foldText(s);
+  if (t !== null && t.length <= 500) { if (dupKeys.size >= 100000) dupKeys.clear(); dupKeys.set(t, k); }
+  return k;
 }
+export const clearDupKeys = () => dupKeys.clear();
 
 // For each card: 'deck' if the deck already has that front, 'import' if it appeared earlier in
 // this same import, or null if it's new. Image-occlusion cards are left out: without a heading they all
 // have the front "Diagram", and what tells them apart is the picture (and the box).
-export function findDuplicates(cards, existingFronts = []) {
-  const inDeck = new Set(existingFronts.map(dupKey));
+// (`existingKeys`: the deck's fronts already folded into a Set of dupKeys, so a caller that checks again and again folds them once.)
+export function findDuplicates(cards, existingFronts = [], existingKeys = null) {
+  const inDeck = existingKeys || new Set(existingFronts.map(dupKey));
   const seen = new Set();
   return cards.map(c => {
     const k = dupKey(c.front);
