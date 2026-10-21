@@ -7,7 +7,6 @@ const errors = [];
 const URL = 'http://localhost:8123/';
 const ctx = await browser.newContext({ bypassCSP: true, viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
 const p = await ctx.newPage();
-p.on('console', m => { if (/^(POP|REC|TOTAB|REPL)/.test(m.text())) console.log('  >', m.text()); });
 p.on('pageerror', e => errors.push('pageerror ' + e.message));
 await p.goto('about:blank');
 await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view');
@@ -42,27 +41,24 @@ for (let i = 0; i < 12; i++) {
 }
 ok(bad === 0, `sheet closing + new address in one tick: the app ends on the new route (12 rounds, ${bad} bad)`);
 ok(badBack === 0, `Back after that is sane (no orphan entries, ${badBack} bad)`);
-// The user's address arrives during a tab switch's traversal, and the tab's screen redirects as it renders (an onboarded user's #/welcome -> #/today):
-// the redirect is the app's own, made inside the render, so it must not erase the user's later address (nav.js `fresh`). Where the browser finally
-// parks the history depends on the order it runs the traversals in, so a single round is not a fair test: count the rounds in which the app
-// went to the user's address after the redirect (it never does when the redirect erases it).
-let reached = 0;
+// The user's address arrives in the same tick as a tab switch (its history.go() is still on its way). Chromium commits the address at once
+// (a new entry, popstate fired synchronously) and lands the traversal a moment later, before or after the app's next task: either way the
+// app must end on the user's address, made later, over the tab's root. Tab '#/welcome' also redirects while it renders (an onboarded user's
+// #/welcome -> #/today, inside announce()), which must not erase that address. Every round must pass (tests/nav-order.test.js covers both orders).
+let badTab = 0;
 for (let i = 0; i < 8; i++) {
+  const tab = i % 2 ? '#/welcome' : '#/decks', root = tab === '#/welcome' ? '#/today' : tab;
   await p.evaluate(async () => { (await import('http://localhost:8123/js/nav.js')).toTab('#/today'); });
   await idle(); await p.waitForTimeout(100);
-  await p.evaluate(async html => { (await import('http://localhost:8123/js/ui.js')).openSheet(html); }, SHEET);
-  await idle();
-  await p.evaluate(async () => {
-    const nav = await import('http://localhost:8123/js/nav.js'), sc = document.getElementById('screen');
-    window.sawBrowse = false;
-    window.obs = new MutationObserver(() => { if (sc.dataset.route === 'browse') sawBrowse = true; });
-    obs.observe(sc, { attributes: true, attributeFilter: ['data-route'] });
-    nav.toTab('#/welcome'); location.hash = '#/browse';
-  });
+  if (i % 4 < 2) { await p.evaluate(async html => { (await import('http://localhost:8123/js/ui.js')).openSheet(html); }, SHEET); await idle(); }
+  else { await p.evaluate(async () => (await import('http://localhost:8123/js/nav.js')).go('#/browse')); await idle(); }
+  const len0 = await p.evaluate(() => history.length);
+  await p.evaluate(async t => { (await import('http://localhost:8123/js/nav.js')).toTab(t); location.hash = '#/import'; }, tab);
   await idle(); await p.waitForTimeout(400); await idle();
-  if (await p.evaluate(() => { obs.disconnect(); return sawBrowse; })) reached++;
+  const r = await p.evaluate(() => ({ hash: location.hash, route: document.getElementById('screen').dataset.route, from: history.state?.from, len: history.length }));
+  if (r.hash !== '#/import' || r.route !== 'import' || r.from !== root || r.len !== len0) { badTab++; console.log(`  round ${i} (${tab}): ${JSON.stringify(r)}, length before ${len0}`); }
   await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(200);
 }
-ok(reached > 0, `a render-time redirect does not erase the user's address (8 rounds, the app reached it in ${reached})`);
+ok(badTab === 0, `tab switch + new address in one tick: the app ends on the new address over the tab, no orphan entries (8 rounds, ${badTab} bad)`);
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();
