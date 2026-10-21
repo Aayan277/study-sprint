@@ -295,10 +295,14 @@ export async function renderSettings(el) {
     raf = 0;
     if (!nav.isConnected) { stop(); return; }
     if (performance.now() < lockUntil) return;              // a tap just chose a chip; the smooth scroll is still on its way
-    const line = nav.getBoundingClientRect().bottom + 4;
+    // A jump lands the heading at scroll-padding + scroll-margin, which can sit below the bar, so the line is the lower of the two
+    const px = v => parseFloat(v) || 0;                       // scroll-padding can be 'auto'
+    const landed = px(getComputedStyle(document.documentElement).scrollPaddingTop) + px(getComputedStyle(secs[0][0].querySelector('h2')).scrollMarginTop) + 4;
+    const line = Math.max(nav.getBoundingClientRect().bottom + 4, landed);
     const atEnd = Math.ceil(scrollY + innerHeight) >= document.documentElement.scrollHeight - 2;
     let cur = null;
     for (const [sec, a] of secs) if (sec.getBoundingClientRect().top <= line) cur = a;
+    cur ??= secs[0]?.[1];                                     // above the first section: it is the one being read
     if (atEnd && secs.length) cur = secs[secs.length - 1][1];
     markCurrent(cur);
   };
@@ -310,7 +314,11 @@ export async function renderSettings(el) {
   addEventListener('scroll', onScroll, { passive: true });
   addEventListener('resize', onScroll);
   addEventListener('hashchange', onScroll);      // leaving Settings: the next call sees the bar is gone and lets go
-  nav.addEventListener('click', e => { if (e.target.closest('a[data-sec]')) lockUntil = performance.now() + 900; });
+  nav.addEventListener('click', e => {
+    if (!e.target.closest('a[data-sec]')) return;
+    lockUntil = performance.now() + 900;
+    setTimeout(() => { if (!raf) raf = requestAnimationFrame(measure); }, 900);   // catch up on any scrolling done during the lock
+  });
   measure();
   $('skins').addEventListener('click', e => {
     const b = e.target.closest('.skin'); if (!b) return;

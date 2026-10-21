@@ -47,10 +47,15 @@ for (const [w, h] of [[375, 812], [1440, 900]]) {
 
   // Settings: the jump bar marks the section that was tapped
   await go(p, '#/settings', '#setNav');
+  const first = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
+  ok(first.join() === 'appearTitle', `${w}px: Appearance is current when Settings first opens (${first})`);
   for (const sec of ['appearTitle', 'studyTitle', 'syncTitle', 'dataTitle', 'appearTitle']) {
     await p.click(`#setNav a[data-sec=${sec}]`); await p.waitForTimeout(1300);
     const cur = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
     ok(cur.length === 1 && cur[0] === sec, `${w}px: tapping the ${sec} chip marks that very chip current (${cur})`);
+    await p.evaluate(() => scrollBy(0, 1)); await p.waitForTimeout(100);
+    const cur2 = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
+    ok(cur2.length === 1 && cur2[0] === sec, `${w}px: a 1px scroll after the ${sec} jump keeps that chip current (${cur2})`);
   }
   await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await p.waitForTimeout(400);
   const endCur = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
