@@ -420,5 +420,10 @@ A pass over what a stranger meets first. No version bump on the branch: the merg
 
 ## Parked (not planned for now)
 
+- **Coin store (owner idea, 2026-10-21).** Earn coins for studying and spend them in a store on new themes and other cosmetic extras. Notes for when it is planned:
+  - **Earning:** coins for reviews and for new cards learned. Count at most one review per card per day, so Again-spam and Play loops don't farm coins; maybe add a bonus for finishing the daily goal.
+  - **Store:** new themes first, then things like app icons, card backs, ring styles and streak flair. The five themes people already have stay free and unlocked.
+  - **Sync:** work the balance out from the review log minus purchases. Each purchase is its own synced row (like `gloss:<id>`), so two devices can't clash over a single counter.
+  - **Out of scope:** no real money, no ads, and nothing that changes scheduling.
 - **One-tap AI card generation through the Claude API.** Needs a small backend to hide the key, and API usage costs money. The "Make cards with Claude" copy-and-paste button covers this for now.
 - **AI-made wrong answers for Play:** have Claude also write 2–3 believable wrong answers per card (e.g. "operant conditioning" as a trap for "classical conditioning"), stored with the card and used as multiple-choice options, so definition-style decks get exam-like distractors instead of other cards' unrelated backs. Parked together with the item above.
