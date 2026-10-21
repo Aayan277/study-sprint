@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.51', items: [
+    'The section buttons at the top of Settings now highlight the section you are in, and the streak chip on Today stays on one line.',
+    'Pop-up messages now sit at the bottom of the screen, Arabic and Hebrew rows read right to left with maths kept left to right, and buttons are easier to tap.',
+    'Stats now says Young (under 21 days) and Mature (21 days+), big numbers get commas, and a dozen small wording and layout fixes.',
+  ] },
   { version: '4.50', items: [
     'Record a sound for a card: tap the mic in the card editor, then Stop to add it to that side. Up to 1 minute a clip.',
     'Opens faster on slow phones: Settings, sync and maths load when you first need them, so Today shows about 0.6 s sooner.',
