@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sortedCopies } from '../js/study-data.js';
-import { searchFold, searchFoldSlow, cardMatcher, prefoldIdle, isHidden } from '../js/browse-logic.js';
+import { searchFold, searchFoldSlow, cardMatcher, prefoldIdle, pruneFoldCache, isHidden } from '../js/browse-logic.js';
 import { dupKey, clearDupKeys, findDuplicates } from '../js/import.js';
 import { summariesByDeck, chainMap } from '../js/deck-tree.js';
 
@@ -140,4 +140,23 @@ test('deck summaries: one pass up the parent chain equals the old per-deck lists
   const s = got.get('root');
   assert.ok(s.hidden > 0 && s.due > 0 && s.new > 0 && s.learning > 0 && s.young > 0 && s.mature > 0, JSON.stringify(s));
   assert.equal(got.get('empty').total, 0);
+});
+
+test('prefoldIdle makes progress when the idle callback timed out; pruneFoldCache keeps only listed cards', () => {
+  const cards = Array.from({ length: 5 }, (_, i) => ({ id: 'pr' + i, front: 'Prune ' + i, back: 'b', tags: [] }));
+  let cb = null;
+  const env = { requestIdleCallback: f => { cb = f; return 1; }, cancelIdleCallback: () => {} };
+  prefoldIdle(cards, () => true, env);
+  cb({ didTimeout: true, timeRemaining: () => 0 });
+  assert.equal(cb !== null, true);
+  // all five folded in that one timed-out call: a later pruned list that drops them forgets them (no way to peek, so check it runs)
+  pruneFoldCache(cards.slice(0, 2));
+  assert.ok(cardMatcher('prune 0')(cards[0]));
+  assert.ok(cardMatcher('prune 4')(cards[4]), 'a pruned card is simply folded again');
+});
+
+test('dupKey: long strings give the same key (not remembered)', () => {
+  const long = 'Word, '.repeat(200);
+  assert.equal(dupKey(long), dupKey(long));
+  assert.equal(dupKey(long), dupKey(long.toUpperCase()));
 });

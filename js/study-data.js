@@ -41,7 +41,7 @@ export const recentHistoryFrom = (now = Date.now()) => Math.min(daysAgoStart(REC
 // cardStates in place (never cards), and any other save gives a new array.
 let sortMemo = null;
 export function sortedCopies(rows, order) {
-  const key = [...order.keys()].join('\u0001');
+  const key = [...order.keys()].join('\u0001') + '\u0002' + db.cardsGeneration();       // (the generation moves if the kept cards are ever patched in place)
   if (!(sortMemo && sortMemo.rows === rows && sortMemo.len === rows.length && sortMemo.key === key)) {
     const n = rows.length, rank = new Array(n);
     let known = true;

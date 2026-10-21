@@ -470,7 +470,7 @@ export function dupKey(s) {
   const t = typeof s === 'string' ? s : null;
   if (t !== null) { const hit = dupKeys.get(t); if (hit !== undefined) return hit; }
   const k = foldText(s);
-  if (t !== null) { if (dupKeys.size >= 100000) dupKeys.clear(); dupKeys.set(t, k); }
+  if (t !== null && t.length <= 500) { if (dupKeys.size >= 100000) dupKeys.clear(); dupKeys.set(t, k); }
   return k;
 }
 export const clearDupKeys = () => dupKeys.clear();

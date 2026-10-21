@@ -4,7 +4,7 @@
 // Statuses, search and sorting live in browse-logic.js.
 
 import * as db from './db.js';
-import { browseCards, prefoldIdle, rangeIds, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
+import { browseCards, prefoldIdle, pruneFoldCache, rangeIds, cardStatus, isSuspended, isBuried, buryUntil, parseTags, duplicateCards, FLAGS, FILTERS, FILTER_GROUPS, SORTS, replaceInCards, tagCounts, renameTag, renameTagExact, renameTagPrefix } from './browse-logic.js';
 import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
@@ -162,7 +162,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
   };
 
   // Something changed: reload from the database and redraw.
-  const refresh = async () => { await load(); if (!box.isConnected) return; draw(); onChange(); };
+  let stopFold = null;
+  const prefold = () => { stopFold?.(); pruneFoldCache(cards); stopFold = prefoldIdle(cards, () => box.isConnected); };       // fold the search text in idle time (stops when Browse is left), so the first search is quick
+  const refresh = async () => { await load(); if (!box.isConnected) return; draw(); prefold(); onChange(); };
 
   const remember = () => Object.assign(memory, { query: B.query, filter: B.filter, sort: B.sort });
   let typing = 0;      // (the timer checks box.isConnected: leaving Browse within the 150 ms must not draw into a box that is gone)
@@ -269,7 +271,7 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     openBulkActions(cards.filter(c => B.selected.has(c.id)), { decks, statesById, refresh, clear: () => { B.selected.clear(); } });
   });
   draw();
-  prefoldIdle(cards, () => box.isConnected);       // fold the search text in idle time (stops when Browse is left), so the first search is quick
+  prefold();
 }
 
 // ---------- one card's panel ----------

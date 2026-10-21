@@ -109,6 +109,11 @@ function foldedCard(card, kind, fold) {
   }
   return e.text;
 }
+// Forget folded text of cards that are no longer in the list (deleted ones), so the caches do not grow for the whole session.
+export function pruneFoldCache(cards) {
+  const ids = new Set(cards.map(c => c.id));
+  for (const m of Object.values(foldCache)) for (const id of m.keys()) if (!ids.has(id)) m.delete(id);
+}
 // Fold every card's search text in the browser's idle time, in small chunks, so the first search finds it ready.
 // `alive()` says whether Browse is still on screen; the returned function cancels (also called when alive() turns false).
 export function prefoldIdle(cards, alive = () => true, env = globalThis) {
@@ -119,7 +124,7 @@ export function prefoldIdle(cards, alive = () => true, env = globalThis) {
     handle = null;
     if (stopped || !alive()) { stopped = true; return; }
     const t0 = Date.now();
-    const room = () => (deadline?.timeRemaining ? deadline.timeRemaining() > 2 : Date.now() - t0 < 8);
+    const room = () => (deadline?.timeRemaining && !deadline.didTimeout ? deadline.timeRemaining() > 2 : Date.now() - t0 < 8);       // (a timed-out idle callback has no time left, but must still make progress)
     while (i < cards.length && room()) foldedCard(cards[i++], 'fold', searchFold);
     if (i < cards.length) handle = ric(step);
   };
