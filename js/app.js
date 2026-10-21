@@ -11,12 +11,13 @@ import { initInstall } from './install.js';
 import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
 import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
-import * as sync from './sync.js';
+import { account } from './sync-state.js';
 import { initWhatsNew } from './whats-new.js';
 import { takeLaunch } from './study-data.js';
 import { configureShortcuts } from './shortcuts.js';
 import * as fx from './fx.js';
 import { initBadge } from './badge.js';
+import { parseAuthLink } from './sync-merge.js';
 import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent } from './sidebar.js';
 import { watchMath } from './math-watch.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
@@ -75,7 +76,7 @@ addEventListener('sync', async e => {
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.
-    const acct = await sync.account();
+    const acct = await account();
     const days = acct?.lastSync ? Math.floor((Date.now() - acct.lastSync) / 86400000) : 0;
     if (days >= 3) { warnedStale = true; toast(`Sync hasn't worked for ${days} days. See Settings → Sync.`); }
   }
@@ -286,7 +287,7 @@ function wireGear() {
 // A "reset your password" email opens the app with a sign-in after the # (see parseAuthLink in sync-merge.js).
 // Take it out of the address straight away (and keep it for this tab, in case the app reloads to update).
 function takeResetLink() {
-  const link = sync.recoveryFromLink();
+  const link = parseAuthLink(location.hash);          // (the same check as sync.js recoveryFromLink, without loading sync.js)
   if (!link) return null;
   rewrite('#/settings');
   if (link.session) { try { sessionStorage.setItem('resetLink', JSON.stringify(link)); } catch { /* fine without */ } }
@@ -316,6 +317,7 @@ async function showResetLink(link) {
     return;
   }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
+  const sync = await lazy('./sync.js');
   let user;
   try { user = await sync.lookUpResetLink(link.session); } catch (err) {
     if (err.code !== 'offline') forget();   // offline: keep the link for this tab, so reopening the app tries again
@@ -341,7 +343,7 @@ async function showResetLink(link) {
 const MEDIA_TIDY_EVERY = 24 * 3600 * 1000;
 async function tidyMedia(now = Date.now()) {
   if (Number.isFinite(settings.mediaCleanedAt) && now - settings.mediaCleanedAt < MEDIA_TIDY_EVERY && now >= settings.mediaCleanedAt) return false;
-  if (await sync.account()) return false;
+  if (await account()) return false;
   if (!(await db.count('media'))) return false;       // (not noted: the first picture added is looked at on the next start)
   await db.cleanMedia(now);
   settings.mediaCleanedAt = now;
@@ -358,7 +360,7 @@ function tidyMediaWhenIdle() {
 // never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
 async function checkMinClient() {
   if (syncHeld(APP_VERSION)) return;                      // "Keep using offline" was chosen for this version: sync stays off until the app updates
-  if (!(await sync.account())) { setSyncGate(false); return; }
+  if (!(await account())) { setSyncGate(false); return; }
   const min = await fetchMinClient();
   if (min) rememberMinClient(min);
   if (!min || !isTooOld(APP_VERSION, min)) { setSyncGate(false); return; }
@@ -368,6 +370,14 @@ async function checkMinClient() {
     onUpdate: async () => { await updates?.tryUpdate(); updates?.updater.tap(); },
     onOffline: () => { holdSync(APP_VERSION); setSyncGate(true); toast('Sync is off until Study Sprint updates. Studying works as usual.', { ms: 6000 }); }
   });
+}
+
+// js/sync.js (the server client, merge and push code) is not part of start-up: it loads here, once Today is drawn, and its
+// startAutoSync() does nothing until someone is signed in (Settings → Sync).
+const startSync = () => import('./sync.js').then(s => s.startAutoSync()).catch(err => console.error(err));
+function whenBrowserIdle(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, 500);
 }
 
 async function start() {
@@ -402,7 +412,9 @@ async function start() {
   fx.configure(settings); configureShortcuts(settings);
   const firstRun = await checkFirstRun();
   setSyncGate(syncHeld(APP_VERSION) || isTooOld(APP_VERSION, cachedMinClient()));      // closed before sync starts if this version is known to be too old (checkMinClient, below, asks the server)
-  sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
+  // Syncing starts after the first screen is drawn (below), unless the address holds a sign-in or reset link: that starts it now.
+  const authLink = parseAuthLink(location.hash);
+  if (authLink) startSync();
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
@@ -412,6 +424,7 @@ async function start() {
   addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
+  if (!authLink) whenBrowserIdle(startSync);
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();

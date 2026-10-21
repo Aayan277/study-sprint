@@ -15,7 +15,7 @@ import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
-import * as sync from './sync.js';
+import { lastStatus, account } from './sync-state.js';
 import { toggleMode, isAlwaysDark } from './themes.js';
 import { go as navGo } from './nav.js';
 
@@ -37,7 +37,7 @@ const short = d => (d === 0 ? 'Today' : `${d}d`);
 
 // "Synced 2m ago", "Syncing…" or what went wrong: the one wording for Settings and the sidebar.
 export function syncWording(lastSync) {
-  const st = sync.lastStatus();
+  const st = lastStatus();
   const when = st.at || lastSync;
   const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
   const note = st.state === 'done' && st.note;          // e.g. pictures can't sync yet
@@ -137,7 +137,7 @@ async function paint(loaded) {
 export async function drawSync() {
   const el = $('sideSync');
   if (!el || !DESKTOP.matches) return;
-  const acct = await sync.account();
+  const acct = await account();
   const w = acct ? syncWording(acct.lastSync) : null;
   el.className = 'side-sync' + (!acct ? ' out' : w.warn ? ' warn' : '');
   el.innerHTML = `<i aria-hidden="true"></i><span>${esc(acct ? w.text : 'Sign in to sync')}</span>`;
