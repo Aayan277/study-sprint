@@ -1,1247 +1,35 @@
-// Study Sprint: starts the app, switches between screens, and draws the Settings screen.
+// Study Sprint: starts the app and switches between screens. (The Settings screen is in js/settings.js.)
 //
 // Navigation uses the part of the address after "#", e.g. ".../#/decks" or ".../#/deck/abc123".
 // That way the phone's back gesture and the browser's back button work as expected.
 
 import * as db from './db.js';
-import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, cleanAlign, CARD_ALIGNS, UIS, accentTitle } from './themes.js';
+import { applyTheme, syncBrowserBar, skinButtonsHTML, applyCardAlign, accentTitle } from './themes.js';
 import { renderToday } from './today.js';
 import { addSampleDeck } from './sample.js';
-import { entriesFrom } from './glossary.js';
-const termCount = s => entriesFrom(s).length;      // (Settings → Study → Glossary shows how many terms)
-import { SCHED_DEFAULTS, MAX_INTERVAL_PRESETS, FSRS_VERSION, personalRow, cleanIgnoreBefore, todayISO, parseSteps, formatSteps, parseMaxInterval, sortSteps, explainSteps, usesFsrs7 } from './sched-settings.js';
+import { initInstall } from './install.js';
 import { initPanelResize } from './panel-resize.js';
-import { clearDraft, takeDraft } from './import-draft.js';
-import { $, esc, plural, toast, openSheet, closeSheet, stashDraft, clearStashedDraft, initSheet, initTapGuard, setFocusMode, icon, foldOpen, rememberFold, showFieldError, clearFieldError, sheetDirty } from './ui.js';
-import * as sync from './sync.js';
+import { takeDraft } from './import-draft.js';
+import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
+import { account } from './sync-state.js';
 import { initWhatsNew } from './whats-new.js';
-import { authErrorField, authMessage } from './supa.js';
-import { takeLaunch, clearDismissals } from './study-data.js';
-import { SYNCED_SETTINGS } from './sync-data.js';
+import { takeLaunch } from './study-data.js';
 import { configureShortcuts } from './shortcuts.js';
 import * as fx from './fx.js';
-import { initInstall, settingsRowHTML, wireSettingsRow } from './install.js';
-import { settingsHTML as remindersHTML, wireSettings as wireReminders } from './reminders.js';
-import { initBadge, refreshBadgeNow } from './badge.js';
-import { examList } from './ics.js';
-import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent, syncWording } from './sidebar.js';
-import { checkPassword, passwordOk, passwordMissing } from './password.js';
-import { watchMath } from './math.js';
+import { initBadge } from './badge.js';
+import { parseAuthLink } from './sync-merge.js';
+import { initSidebar, drawSidebar, drawSync as drawSideSync, markCurrent } from './sidebar.js';
+import { watchMath } from './math-watch.js';
 import { go as navGo, replace as navReplace, initNav, rewrite, releaseBack, whenIdle } from './nav.js';
-import { usageLine, cardsWarning } from './quota.js';
-import { damagedNote } from './sync-merge.js';
-import { backupNote } from './backup-nudge.js';
-import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
-import { contactHTML, legalLinksHTML } from './legal.js';
 import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.49';
+const APP_VERSION = '4.50';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
 initInstall();       // listens for the browser saying the app can be installed (see install.js)
-
-// ---------- settings ----------
-// Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
-// null when there is none: the redraw is skipped rather than drawn straight into #screen.
-const settingsView = () => $('screen').querySelector(':scope > .view');
-async function renderSettings(el) {
-  const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
-  // "Last backup: 12 days ago", and a quiet nudge when it has been a month and there is a lot to lose (js/backup-nudge.js).
-  const backup = backupNote({ lastBackup: settings.lastBackup, cards: await db.count('cards'), synced: !!(await sync.account()) });
-  const decks = await db.getDecks();
-  const personal = personalRow((await db.getSettings()).fsrsParams, await db.count('reviewLog'));
-  // FSRS-7 (beta) is on: your own tuning is for FSRS-6 and is not used (see docs/design/fsrs7-plan.md, "Optimizer"). The row says so.
-  if (usesFsrs7(settings)) Object.assign(personal, { using: false, canOptimize: false, why: 'Your FSRS-6 tuning is kept for when you switch back.', status: 'Personal tuning for FSRS-7 is coming; using standard FSRS-7 settings.' });
-  // The reads above take a moment. If this box left the page meanwhile (you went to another screen, which drew into a fresh box),
-  // there is nothing to draw into: the wiring below looks elements up on the page and would find none.
-  if (!el.isConnected) return;
-  const { ui, skin, mode, oled } = settings.theme;
-  el.innerHTML = `
-    <div class="screen-head"><div><h1>Settings</h1></div><div class="head-actions"><a class="btn ghost small" id="helpTop" href="#/help">Help</a></div></div>
-    <nav class="set-nav" id="setNav" aria-label="Jump to a section">
-      <a href="#appearTitle" data-sec="appearTitle">Appearance</a><a href="#studyTitle" data-sec="studyTitle">Study</a><a href="#syncTitle" data-sec="syncTitle">Sync</a><a href="#dataTitle" data-sec="dataTitle">Your data</a>
-    </nav>
-
-    <section class="section" aria-labelledby="appearTitle">
-      <h2 id="appearTitle">Appearance</h2>
-      <h3 class="set-sub" id="uiTitle">Style</h3>
-      <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
-        ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-      </div>
-      <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
-      <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
-      <h3 class="set-sub" id="apTitle">Light or dark</h3>
-      <div class="chips" role="radiogroup" aria-labelledby="apTitle">
-        ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
-          `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-      </div>
-      <label class="adv-row switch-row"><span><b>OLED black</b>
-        <span>A pure black page in dark mode, to save battery on OLED screens.</span></span>
-        <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
-      <div class="set-row column">
-        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers. This device only.</p></div>
-        <div class="chips" role="radiogroup" aria-labelledby="alignLbl" id="alignChips">
-          ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-        </div>
-      </div>
-      <label class="adv-row switch-row"><span><b>Compact deck list</b>
-        <span>Search and sort your decks, with subdecks folded under their course. This device only.</span></span>
-        <input id="compactDecks" type="checkbox" class="switch" ${settings.compactDecks !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Rating feedback</b>
-        <span>A coloured pulse and the new interval appear when you rate a card. This device only.</span></span>
-        <input id="ratingFeedback" type="checkbox" class="switch" ${settings.ratingFeedback !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Smooth transitions</b>
-        <span>Screens slide and pop-up sheets spring open. Turn it off for instant changes. This device only.</span></span>
-        <input id="smoothMotion" type="checkbox" class="switch" ${settings.smoothMotion !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
-        <span>Pick a course in Stats to see how ready you are for its exam. This device only.</span></span>
-        <input id="statsReadiness" type="checkbox" class="switch" ${settings.statsReadiness !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Glossary underlines</b>
-        <span>Terms from your glossary are underlined on Review cards. This device only.</span></span>
-        <input id="glossaryUnderline" type="checkbox" class="switch" ${settings.glossaryUnderline !== false ? 'checked' : ''}></label>
-    </section>
-
-    <section class="section" aria-labelledby="studyTitle">
-      <h2 id="studyTitle">Study</h2>
-      <div class="set-row">
-        <div><b>New cards per day</b><p>Across all decks. A deck can have its own limit too (Edit deck).</p></div>
-        <div class="stepper">
-          <button type="button" class="icon-btn" id="npdMinus" aria-label="Fewer new cards">−</button>
-          <input id="npd" type="number" inputmode="numeric" min="0" max="999" value="${settings.newPerDay}" aria-label="New cards per day">
-          <button type="button" class="icon-btn" id="npdPlus" aria-label="More new cards">+</button>
-        </div>
-      </div>
-      <div class="set-row">
-        <div><b>Reviews per day</b><p>The most reviews shown in a day, across all decks. Blank means no limit, which suits FSRS best.</p></div>
-        <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(settings.reviewLimit) ? settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
-      </div>
-      <label class="adv-row switch-row"><span><b>Single-key shortcuts</b>
-        <span>Press E, I, R, D, Z, A, X, M, -, @ and 1 to 6 on the keyboard to act on a card. Turn off if voice control or a switch triggers them by accident (Space and Enter still work on the focused card). This device only.</span></span>
-        <input id="singleKeys" type="checkbox" class="switch" ${settings.singleKeys !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b>
-        <span>Off: Play is practice only and doesn't change when cards are due, stats or streaks.</span></span>
-        <input id="playCounts" type="checkbox" class="switch" ${settings.playCountsAsReviews === true ? 'checked' : ''}></label>
-      <div class="set-row column">
-        <div><b>Target retention: <span id="retOut" class="mono">${Math.round(settings.targetRetention * 100)}%</span></b>
-          <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
-        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(settings.targetRetention * 100)}" aria-label="Target retention">
-        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
-      </div>
-      <div class="set-row">
-        <div><b>Glossary</b><p id="glossSub">${termCount(settings) ? `${termCount(settings)} term${termCount(settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
-        <button class="btn ghost small" type="button" id="glossBtn">Open</button>
-      </div>
-      ${remindersHTML({ time: settings.reminderTime || '19:00', exams: examList(decks).length, badgeOn: settings.appBadge === true })}
-      <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
-        <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
-        <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
-        <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
-          <label for="lsteps"><b>Learning steps</b></label>
-          <span>Short gaps while a card is <b>new</b>. You see it again after each one, until it moves on to normal reviews.</span>
-          <div class="steps-input">
-            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsHelp">
-            <button class="btn ghost small" type="button" data-reset>Reset</button>
-          </div>
-          <span class="steps-hint" id="lstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.learningSteps}.</span>
-          <ul class="steps-explain" aria-live="polite"></ul>
-          <span class="err" role="alert" hidden></span>
-        </div>
-        <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning">
-          <label for="rsteps"><b>Relearning steps</b></label>
-          <span>Short gaps after you <b>forget</b> a card (press Again on a normal review), before it goes back to normal reviews.</span>
-          <div class="steps-input">
-            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsHelp">
-            <button class="btn ghost small" type="button" data-reset>Reset</button>
-          </div>
-          <span class="steps-hint" id="rstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.relearningSteps}.</span>
-          <ul class="steps-explain" aria-live="polite"></ul>
-          <span class="err" role="alert" hidden></span>
-        </div>
-        <div class="adv-row"><b id="maxLabel">Maximum interval</b>
-          <span>The longest a card can go without being shown. Lower it before an exam so nothing drifts too far out.</span>
-          <div class="chips" role="group" aria-labelledby="maxLabel">${MAX_INTERVAL_PRESETS.map(([d, l]) =>
-            `<button type="button" class="tchip" data-max="${d}" aria-pressed="${settings.maxInterval === d}">${l}</button>`).join('')}</div>
-          <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
-          <span class="err" id="maxErr" role="alert" hidden></span></div>
-        <label class="adv-row switch-row"><span><b>Spread out due dates</b>
-          <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
-          <input id="fuzz" type="checkbox" class="switch" ${settings.fuzz ? 'checked' : ''}></label>
-        <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b>
-          <span id="fsrsHint">FSRS-7 models short-term memory better (same-day repeats, cramming). Beta: off by default. Your cards keep their history; switching back is safe.</span>
-          <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" aria-describedby="fsrsHint" id="fsrsChips">
-            ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-          </div>
-        </div>
-        <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
-          <span id="optStatus">${esc(personal.status)}</span>
-          <div class="opt-actions">
-            <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
-            <button class="btn ghost small" type="button" id="healthOpen">Check how well it fits you</button>
-            ${personal.using ? '<button class="link" type="button" id="optReset">Reset to default</button>' : ''}
-          </div>
-          ${personal.canOptimize ? '' : `<span class="steps-hint" id="optWhy">${esc(personal.why)}</span>`}
-          <div class="confirm" id="optConfirm" role="group" aria-labelledby="optConfirmQ" hidden>
-            <p id="optConfirmQ">Go back to the standard settings? Your cards keep their dates.</p>
-            <div class="sheet-actions"><button class="btn ghost small" type="button" id="optNo">Cancel</button><button class="btn danger solid small" type="button" id="optYes">Reset</button></div>
-          </div>
-        </div>
-        <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
-          <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
-          <div class="steps-input">
-            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
-            <button class="btn ghost small" type="button" id="ignoreClear" ${settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
-          </div>
-          <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>
-        <div class="adv-row"><b id="easyLbl">Easy days</b>
-          <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
-          <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
-            <label class="easy-day"><span>${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'short' }))}</span>
-              <select data-easy="${d}" aria-label="${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'long' }))}">
-                ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
-              </select></label>`).join('')}
-          </div></div>
-        <div class="adv-row"><b id="timerLbl">Play timer</b>
-          <span>The default time per question in Play, in seconds. The Play screen has the same slider.</span>
-          <div class="stepper">
-            <button type="button" class="icon-btn" id="timerMinus" aria-label="Shorter timer">−</button>
-            <input id="timerSec" type="number" inputmode="numeric" min="3" max="20" value="${settings.timer}" aria-labelledby="timerLbl">
-            <button type="button" class="icon-btn" id="timerPlus" aria-label="Longer timer">+</button>
-          </div></div>
-        <div class="adv-row"><b>Leech after</b>
-          <span>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</span>
-          <div class="stepper">
-            <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
-            <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
-            <button type="button" class="icon-btn" id="leechPlus" aria-label="More times">+</button>
-          </div></div>
-        <div class="adv-row"><b id="leechActLbl">When a card becomes a leech</b>
-          <div class="chips" role="group" aria-labelledby="leechActLbl">
-            <button type="button" class="tchip" data-leech="suspend" aria-pressed="${settings.leechAction === 'suspend'}">Tag it and suspend it</button>
-            <button type="button" class="tchip" data-leech="tag" aria-pressed="${settings.leechAction === 'tag'}">Just tag it</button>
-          </div>
-          <span>Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</span></div>
-        <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
-      </details>
-    </section>
-
-    <section class="section" aria-labelledby="syncTitle">
-      <h2 id="syncTitle">Sync</h2>
-      <div id="syncBox"></div>
-    </section>
-
-    <section class="section" aria-labelledby="dataTitle">
-      <h2 id="dataTitle">Your data</h2>
-      <div class="set-row" id="installRow">${settingsRowHTML()}</div>
-      <div class="set-row">
-        <div><b>Storage</b><p>${persisted
-          ? 'Saved permanently on this device.'
-          : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p>
-          <p class="note" id="mediaLine"></p></div>
-      </div>
-      <div class="set-row" id="usageRow" hidden>
-        <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
-      </div>
-      <div class="set-row">
-        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.</p>
-          <p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
-        <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
-      </div>
-      <label class="adv-row switch-row" id="bkSoundsRow" hidden><span><b id="bkSoundsTitle">Include sounds</b>
-        <span id="bkSoundsInfo"></span></span>
-        <input id="bkSounds" type="checkbox" class="switch"></label>
-      <div class="set-row">
-        <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
-        <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
-      </div>
-      <p class="note"><span id="whereNote"></span></p>
-      <details class="danger-zone" id="dangerZone">
-        <summary>Danger zone</summary>
-        <div class="set-row">
-          <div><b>Reset all data</b><p>Deletes every deck, card and review. Your theme and card text setting are kept.</p></div>
-          <button class="btn danger small" type="button" id="resetBtn">Reset…</button>
-        </div>
-      </details>
-    </section>
-
-    <section class="section" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">About</h2>
-      <div class="set-row" id="helpRow">
-        <div><b>Help and questions</b><p>How scheduling works, what the buttons mean, and keeping your data safe.</p></div>
-        <a class="btn ghost small" href="#/help">Open Help</a>
-      </div>
-      <div class="set-row" id="newRow">
-        <div><b>What’s new</b><p>The changes in the latest versions.</p></div>
-        <button class="btn ghost small" type="button" id="newBtn">See what’s new</button>
-      </div>
-      <div class="set-row" id="aboutRow">
-        <div><b>Study Sprint ${APP_VERSION}</b>
-          <p><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · Contact: ${contactHTML()}</p></div>
-      </div>
-    </section>`;
-
-  wireSettingsRow($('installRow'));
-  wireReminders(el, { decks, settings });
-  // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
-  $('setNav').addEventListener('click', e => {
-    const a = e.target.closest('a[data-sec]'); if (!a) return;
-    e.preventDefault();
-    $(a.dataset.sec).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  });
-  $('skins').addEventListener('click', e => {
-    const b = e.target.closest('.skin'); if (!b) return;
-    saveTheme({ ...settings.theme, skin: b.dataset.skin });
-    el.querySelectorAll('.skin').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  });
-  // The previews are redrawn after a light/dark or OLED change, so they show the new look
-  const redrawSkins = () => { $('skins').innerHTML = skinButtonsHTML(settings.theme.skin); };
-  // Original or Clinical: the whole look changes at once. The heading, these chips and the accent buttons are updated by the
-  // 'themechange' listener in start-up below (applyTheme fires it): keep the two in step when adding a style-dependent control.
-  el.querySelectorAll('input[name="ui"]').forEach(r => r.addEventListener('change', () => {
-    saveTheme({ ...settings.theme, ui: r.value });
-  }));
-  el.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
-    saveTheme({ ...settings.theme, mode: r.value });
-    redrawSkins();
-  }));
-  el.querySelectorAll('input[name="cardAlign"]').forEach(r => r.addEventListener('change', () => {
-    settings.cardAlign = applyCardAlign(r.value);
-    db.setSetting('cardAlign', settings.cardAlign);          // this device only: it is not one of the synced settings
-  }));
-  // These two are per device too (not in SYNCED_SETTINGS): Decks and Stats read them when they are drawn.
-  for (const key of ['compactDecks', 'statsReadiness', 'ratingFeedback', 'smoothMotion', 'singleKeys']) {
-    $(key).addEventListener('change', e => { settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(settings); configureShortcuts(settings); });
-  }
-  $('glossaryUnderline').addEventListener('change', e => { settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
-  $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
-  const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'; };
-  addEventListener('glossary-changed', glossCount);
-  $('oled').addEventListener('change', e => {
-    saveTheme({ ...settings.theme, oled: e.target.checked });
-    redrawSkins();
-  });
-  drawSync();
-  $('newBtn').addEventListener('click', async () => (await import('./whats-new.js')).openWhatsNewSheet());
-  $('resetBtn').addEventListener('click', confirmReset);
-  $('exportBtn').addEventListener('click', exportBackup);
-  fillMediaInfo();
-  $('importIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) confirmRestore(f); });
-
-  // New cards per day: typed or changed with − / +, kept between 0 and 999.
-  const setNpd = v => {
-    const n = Math.max(0, Math.min(999, Math.round(Number(v) || 0)));
-    $('npd').value = n;
-    settings.newPerDay = n;
-    db.setSetting('newPerDay', n);
-  };
-  $('npd').addEventListener('change', e => setNpd(e.target.value));
-  $('npdMinus').addEventListener('click', () => setNpd(settings.newPerDay - 5));
-  $('npdPlus').addEventListener('click', () => setNpd(settings.newPerDay + 5));
-  // Play: practice only (default) or counted as reviews. Synced, so every device plays the same way.
-  $('playCounts').addEventListener('change', e => { settings.playCountsAsReviews = e.target.checked; db.setSetting('playCountsAsReviews', e.target.checked); });
-  // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
-  const setLeech = v => {
-    const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
-    $('leech').value = n;
-    settings.leechThreshold = n;
-    db.setSetting('leechThreshold', n);
-  };
-  $('leech').addEventListener('change', e => setLeech(e.target.value));
-  $('leechMinus').addEventListener('click', () => setLeech(settings.leechThreshold - 1));
-  $('leechPlus').addEventListener('click', () => setLeech(settings.leechThreshold + 1));
-  document.querySelectorAll('[data-leech]').forEach(btn => btn.addEventListener('click', () => {
-    settings.leechAction = btn.dataset.leech;
-    db.setSetting('leechAction', settings.leechAction);
-    document.querySelectorAll('[data-leech]').forEach(x => x.setAttribute('aria-pressed', x === btn));
-  }));
-  // Play timer: the same setting as the slider on the Play screen (3 to 20 seconds).
-  const setTimer = v => {
-    const n = Math.max(3, Math.min(20, Math.round(Number(v) || settings.timer)));
-    $('timerSec').value = n;
-    settings.timer = n;
-    db.setSetting('timer', n);
-  };
-  $('timerSec').addEventListener('change', e => setTimer(e.target.value));
-  $('timerMinus').addEventListener('click', () => setTimer(settings.timer - 1));
-  $('timerPlus').addEventListener('click', () => setTimer(settings.timer + 1));
-  // Reviews per day: blank = no limit.
-  $('rpd').addEventListener('change', e => {
-    const v = e.target.value.trim();
-    settings.reviewLimit = v ? Math.max(1, Math.min(9999, Math.round(Number(v) || 1))) : null;
-    e.target.value = settings.reviewLimit ?? '';
-    db.setSetting('reviewLimit', settings.reviewLimit);
-  });
-  el.querySelectorAll('[data-easy]').forEach(sel => sel.addEventListener('change', () => {
-    const week = [...(settings.easyDays || db.DEFAULT_SETTINGS.easyDays)];
-    week[+sel.dataset.easy] = sel.value;
-    settings.easyDays = week;
-    db.setSetting('easyDays', week);
-  }));
-  $('ret').addEventListener('input', e => { $('retOut').textContent = `${e.target.value}%`; });
-  $('ret').addEventListener('change', e => {
-    settings.targetRetention = Number(e.target.value) / 100;
-    db.setSetting('targetRetention', settings.targetRetention);
-  });
-  $('retHelp').addEventListener('click', async () => {
-    try {
-      (await import('./retention-sheet.js')).openRetentionSheet({
-        deckId: '',
-        current: () => Math.round(settings.targetRetention * 100),
-        onPick: pct => {
-          settings.targetRetention = pct / 100;
-          db.setSetting('targetRetention', settings.targetRetention);
-          $('ret').value = pct; $('retOut').textContent = `${pct}%`;
-          toast(`Target retention is now ${pct}%`);
-        }
-      });
-    } catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
-  });
-  rememberFold($('advanced'), 'settings-advanced');
-  wireAdvanced(el);
-}
-
-// Advanced scheduling: each box is checked when you leave it, and only saved if it makes sense.
-function wireAdvanced(el) {
-
-  // Learning / relearning steps: a text box like "1m 10m", with a plain-words list underneath of what
-  // each step is for and what each button does. The list follows what you type; the box saves when
-  // you leave it (only if it can be read). Reset puts just this box back to its default.
-  el.querySelectorAll('.steps-editor').forEach(box => {
-    const key = box.dataset.key, kind = box.dataset.kind;
-    const input = box.querySelector('input'), err = box.querySelector('.err');
-    const explain = steps => {
-      box.querySelector('.steps-explain').innerHTML = explainSteps(steps, kind)
-        .map(([button, what]) => `<li><b>${esc(button)}</b> → ${esc(what)}</li>`).join('');
-    };
-    input.addEventListener('input', () => { const r = parseSteps(input.value); if (r.steps) { explain(r.steps); clearFieldError(input, err); } });
-    input.addEventListener('change', () => {
-      const r = parseSteps(input.value);
-      if (r.error) { showFieldError(input, err, r.error, { focus: false, clearOnInput: false }); return; }      // (checked as you leave the box: pulling the cursor back would trap it)
-      clearFieldError(input, err);
-      settings[key] = formatSteps(sortSteps([...new Set(r.steps)]));   // tidy: in order, no duplicates
-      input.value = settings[key];
-      explain(parseSteps(settings[key]).steps);
-      db.setSetting(key, settings[key]);
-      toast('Saved');
-    });
-    box.querySelector('[data-reset]').addEventListener('click', () => {
-      settings[key] = SCHED_DEFAULTS[key];
-      input.value = settings[key];
-      clearFieldError(input, err);
-      explain(parseSteps(settings[key]).steps);
-      db.setSetting(key, settings[key]);
-      toast('Reset to ' + settings[key]);
-    });
-    explain(parseSteps(settings[key]).steps || parseSteps(SCHED_DEFAULTS[key]).steps);
-  });
-
-  const setMax = days => {
-    const r = parseMaxInterval(days);
-    if (r.error) { showFieldError($('maxDays'), $('maxErr'), r.error, { focus: false, clearOnInput: false }); return; }
-    clearFieldError($('maxDays'), $('maxErr'));
-    settings.maxInterval = r.days;
-    $('maxDays').value = r.days;
-    el.querySelectorAll('[data-max]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.max === r.days)));
-    db.setSetting('maxInterval', r.days);
-    toast('Saved');
-  };
-  el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
-  $('maxDays').addEventListener('change', e => setMax(e.target.value));
-  $('maxDays').addEventListener('input', e => { if (!parseMaxInterval(e.target.value).error) clearFieldError($('maxDays'), $('maxErr')); });      // (checked again as you type)
-  $('fuzz').addEventListener('change', e => { settings.fuzz = e.target.checked; db.setSetting('fuzz', settings.fuzz); });
-  // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
-  const redrawAdvanced = async () => {
-    const view = currentRoute === 'settings' && settingsView();
-    if (!view) return;
-    await renderSettings(view);
-    $('advanced').open = true;
-  };
-  // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
-  el.querySelectorAll('input[name="fsrsVersion"]').forEach(r => r.addEventListener('change', async () => {
-    settings.fsrsVersion = +r.value === 7 ? 7 : 6;
-    await db.setSetting('fsrsVersion', settings.fsrsVersion);
-    toast(settings.fsrsVersion === 7 ? 'FSRS-7 (beta) is on' : 'Back to FSRS-6');
-    await redrawAdvanced();
-    $('fsrsChips').querySelector('input:checked')?.focus();
-  }));
-  $('optOpen').addEventListener('click', async () => {
-    try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
-    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
-  });
-  $('healthOpen').addEventListener('click', async () => {
-    try { (await import('./health-sheet.js')).openHealthSheet(); }
-    catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
-  });
-  $('ignoreBefore').addEventListener('change', e => {
-    const v = cleanIgnoreBefore(e.target.value);
-    e.target.value = v || '';
-    settings.ignoreBefore = v;
-    $('ignoreClear').hidden = !v;
-    db.setSetting('ignoreBefore', v);
-    toast(v ? `Reviews before ${v} are ignored when tuning` : 'Using all your reviews');
-  });
-  $('ignoreClear').addEventListener('click', () => {
-    $('ignoreBefore').value = ''; settings.ignoreBefore = null; $('ignoreClear').hidden = true;
-    db.setSetting('ignoreBefore', null);
-    toast('Using all your reviews');
-  });
-  $('optReset')?.addEventListener('click', () => {
-    $('optConfirm').hidden = false;
-    $('optReset').hidden = true;
-    $('optNo').focus();
-  });
-  $('optNo').addEventListener('click', () => { $('optConfirm').hidden = true; $('optReset') && ($('optReset').hidden = false); $('optReset')?.focus(); });
-  $('optYes').addEventListener('click', async () => {
-    // Saved as { w: null }, not deleted: a stamped value syncs to your other devices, a missing one does not.
-    await db.setSetting('fsrsParams', { w: null, at: Date.now(), version: FSRS_VERSION });
-    await redrawAdvanced();
-    toast('Back to the standard settings');
-  });
-  $('schedReset').addEventListener('click', async () => {
-    for (const [k, v] of Object.entries(SCHED_DEFAULTS)) { settings[k] = v; await db.setSetting(k, v); }
-    const view = settingsView();
-    if (view) { await renderSettings(view); $('advanced').open = true; }
-    toast('Scheduling reset to defaults');
-  });
-}
-
-function saveTheme(theme) {
-  settings.theme = applyTheme(theme);
-  db.setSetting('theme', settings.theme);
-}
-
-// ---------- backup ----------
-// How much room pictures and sounds take here (Storage row), and the backup's "Include sounds" switch: on up to 150 MB of sounds.
-const BIG_BACKUP = 150 * 1024 * 1024;
-async function fillMediaInfo() {
-  try {
-    const [{ sizeText }, totals, est] = await Promise.all([import('./media.js'), db.mediaTotals(), navigator.storage?.estimate?.().catch(() => null)]);
-    if (!$('mediaLine')) return;                       // moved to another screen meanwhile
-    const free = est?.quota ? ` · about ${sizeText(Math.max(0, est.quota - (est.usage || 0)))} free` : '';
-    const size = n => (n ? sizeText(n) : '0 KB');
-    const lack = await sync.missingMedia().catch(() => null);
-    if (!$('mediaLine')) return;
-    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.${lack ? ' ' + notDownloadedLine({ pictures: lack.pictures.length, sounds: lack.sounds.length }) : ''}`;
-    $('bkSoundsRow').hidden = !totals.sounds;
-    if (totals.sounds) {
-      $('bkSoundsTitle').textContent = `Include sounds (${sizeText(totals.sounds)})`;
-      $('bkSounds').checked = totals.sounds <= BIG_BACKUP;
-      $('bkSoundsInfo').textContent = totals.sounds <= BIG_BACKUP ? 'Pictures are always included. Turn this off for a smaller file.' : 'Very large backups can fail on phones.';
-    }
-  } catch (err) { console.error(err); }
-}
-async function exportBackup() {
-  // (The switch only shows when there are sounds; without it, everything is included.)
-  const withSounds = $('bkSoundsRow')?.hidden ? true : $('bkSounds').checked;
-  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) would be missing from the file:
-  // fetch them first. What can't be fetched is said before saving, and a second tap saves without it.
-  const btn = $('exportBtn');
-  let leftOut = 0;
-  // (A device that never signed in has no account to fetch from: nothing to try and nothing to nag about.)
-  const synced = !!(await sync.account().catch(() => null)) || !!(await db.getSettings()).syncState?.userId;
-  const lack = synced ? await sync.missingMedia({ sounds: withSounds }) : { pictures: [], sounds: [] };
-  if (lack.pictures.length + lack.sounds.length) {
-    btn.disabled = true;
-    let r;
-    try {
-      r = await sync.downloadAllMedia({ sounds: withSounds, onProgress: (n, t) => { if ($('backupNote')) $('backupNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } });
-    } finally { btn.disabled = false; }
-    leftOut = r.left.length + r.gone.length;
-    if (leftOut && btn.dataset.armed !== '1') {
-      btn.dataset.armed = '1';
-      btn.textContent = 'Export without them';
-      if ($('backupNote')) { $('backupNote').className = 'note usage-line warn'; $('backupNote').textContent = leftOutNote(leftOut, r.reason, r.gone.length); }
-      return;
-    }
-  }
-  const { blob, cards: cardCount, reviews: reviewCount } = await db.exportAllBlob({ sounds: withSounds });
-  const d = new Date();
-  const name = `study-sprint-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
-  const file = new File([blob], name, { type: 'application/json' });
-  // On phones, the share sheet is the reliable way to save a file ("Save to Files", Drive, email...).
-  // On computers, download it like any other file.
-  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'Study Sprint backup' });
-    } catch (err) {
-      if (err.name === 'AbortError') return;      // closed the share sheet: nothing saved
-      downloadFile(file);
-    }
-  } else {
-    downloadFile(file);
-  }
-  settings.lastBackup = Date.now();
-  await db.setSetting('lastBackup', settings.lastBackup);
-  toast(`Backup saved: ${plural(cardCount, 'card')}, ${plural(reviewCount, 'review')}${leftOut ? `. ${leftOut} ${leftOut === 1 ? 'picture or sound' : 'pictures and sounds'} not included` : ''}`);
-  const view = currentRoute === 'settings' && settingsView();
-  if (view) renderSettings(view);
-}
-
-function downloadFile(file) {
-  const url = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = url; a.download = file.name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function confirmRestore(file) {
-  const synced = !!(await sync.account());
-  let data;
-  try { data = JSON.parse(await file.text()); } catch (e) { data = null; }
-  const problem = db.checkBackup(data);
-  if (problem) { toast(problem); return; }
-  // Glossary terms on this device that the backup does not have would be removed too: say so.
-  const lostTerms = entriesFrom(await db.getSettings()).filter(t => !Object.hasOwn(data.settings || {}, `gloss:${t.id}`)).length;
-  const when = data.exported ? new Date(data.exported).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'an unknown date';
-  openSheet(`
-    <h2 id="sheetTitle">Restore this backup?</h2>
-    <p style="margin:0">Backup from <b>${esc(when)}</b>: ${plural(data.decks.length, 'deck')}, ${plural(data.cards.length, 'card')}, ${plural(data.reviewLog.length, 'review')}.</p>
-    <div class="confirm">
-      <p>Everything on this device now is <b>replaced</b> by the backup${synced ? ', <b>and in your sync account too</b>: your other devices change to match when they sync' : ''}. Export a backup first if you want to keep it.</p>
-      ${lostTerms ? `<p>This also removes ${plural(lostTerms, 'glossary term')} that ${lostTerms === 1 ? 'is' : 'are'} not in the backup.</p>` : ''}
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="rbNo">Cancel</button>
-        <button class="btn danger solid" type="button" id="rbYes">Replace and restore</button>
-      </div>
-    </div>`);
-  $('rbNo').focus();
-  $('rbNo').addEventListener('click', closeSheet);
-  $('rbYes').addEventListener('click', async () => {
-    try {
-      // Catch up first, so everything in the account gets replaced. If another window holds the sync, stop: going on could lose its changes.
-      // (Any other failure, such as being offline, goes on as before: the backup is applied here and sent when there's a connection.)
-      if (synced && ['busy', 'skipped'].includes((await sync.syncNow()).reason)) { closeSheet(); toast('Another window is syncing. Try again in a moment. Nothing was changed.'); return; }
-      await db.importAll(data, { everywhere: synced });
-    } catch (e) {
-      console.error(e);
-      closeSheet();
-      toast(e?.noSpace ? `${e.message} Nothing was changed.` : "Couldn't restore that backup. Nothing was changed.");
-      return;
-    }
-    if (synced) sync.syncNow();
-    settings = await db.getSettings();
-    settings.theme = applyTheme(settings.theme);
-    applyCardAlign(settings.cardAlign);
-    fx.configure(settings); configureShortcuts(settings);
-    closeSheet();
-    toast(`Restored ${plural(data.cards.length, 'card')}`);
-    drawSidebar();
-    navGo('#/decks');
-  });
-}
-
-async function confirmReset() {
-  if (await sync.account()) return confirmResetSynced();
-  openSheet(`
-    <h2 id="sheetTitle">Reset all data?</h2>
-    <div class="confirm">
-      <p>This deletes <b>every deck, card and review</b> on this device. It can't be undone.</p>
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
-        <button class="btn danger solid" type="button" id="rsYes">Delete everything</button>
-      </div>
-    </div>`);
-  $('rsNo').focus();
-  $('rsNo').addEventListener('click', closeSheet);
-  // Files this device never downloaded can't be sent from here: say so (another device that holds them has to do its own re-upload).
-  sync.missingMedia().then(l => {
-    const n = l.pictures.length + l.sounds.length;
-    if (n && $('rsLack')) { $('rsLack').hidden = false; $('rsLack').textContent = `${n.toLocaleString()} ${n === 1 ? 'picture or sound isn' : 'pictures and sounds aren'}'t on this device and can't be re-sent from here. If another device holds ${n === 1 ? 'it' : 'them'}, re-upload from that device too.`; }
-  }).catch(() => {});
-  $('rsYes').addEventListener('click', async () => {
-    await wipeThisDevice();
-    closeSheet();
-    toast('All data reset');
-    drawSidebar();
-    navGo('#/decks');
-  });
-}
-
-// Signed in, Reset can mean "everywhere" or "just this device".
-function confirmResetSynced() {
-  openSheet(`
-    <h2 id="sheetTitle">Reset all data?</h2>
-    <div class="confirm">
-      <p><b>Everywhere</b> deletes every deck, card and review on this device <b>and in your account</b>, so your other devices delete them too when they sync. It can't be undone.</p>
-      <p><b>Just this device</b> signs this device out and clears it. Your account and other devices keep everything (sign in again to get it back).</p>
-      <div class="sheet-actions stack">
-        <button class="btn danger solid" type="button" id="rsAll">Delete everywhere</button>
-        <button class="btn danger" type="button" id="rsHere">Just this device</button>
-        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
-      </div>
-    </div>`);
-  $('rsNo').focus();
-  $('rsNo').addEventListener('click', closeSheet);
-  $('rsAll').addEventListener('click', async () => {
-    // First catch up, so nothing from another device is missed. Stops if another window holds the sync (as with restore).
-    const caught = await sync.syncNow();
-    if (!caught.ok) {
-      closeSheet();
-      toast(caught.reason === 'error' ? "Couldn't sync first, so cards from your other devices might be missed. Connect to the internet and try again. Nothing was deleted." : 'Another window is syncing. Try again in a moment. Nothing was deleted.');
-      return;
-    }
-    await db.deleteEverything();
-    refreshBadgeNow();            // nothing is due any more: the app icon's number goes
-    // Study settings back to their defaults (they sync); the theme stays.
-    for (const [k, v] of Object.entries(db.DEFAULT_SETTINGS)) if (SYNCED_SETTINGS.includes(k)) await db.setSetting(k, v);
-    settings = { ...(await db.getSettings()), theme: settings.theme };
-    await sync.syncNow();
-    closeSheet();
-    toast('Everything deleted on all your devices');
-    drawSidebar();
-    navGo('#/decks');
-  });
-  $('rsHere').addEventListener('click', async () => {
-    await sync.signOut({ forget: true });
-    await wipeThisDevice();
-    closeSheet();
-    toast('This device was reset and signed out');
-    drawSidebar();
-    navGo('#/decks');
-  });
-}
-
-// ---------- sync ----------
-// The Sync section of Settings: sign in or create an account, or (signed in) the sync status.
-async function drawSync() {
-  const box = $('syncBox');
-  if (!box) return;
-  const acct = await sync.account();
-  if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
-  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
-    : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
-  drawUsage();
-  if (!acct) {
-    box.innerHTML = `
-      <p class="note" style="margin-top:0"><b>Optional.</b> Study Sprint works fully without an account, offline too: your cards stay in this browser. An account lets you use the same cards on your phone and laptop. It’s free, and each account only ever sees its own data.</p>
-      <div class="pend-box" id="pendBox" hidden></div>
-      <form id="syncForm" novalidate>
-        <label class="field"><span>Email</span>
-          <input id="syncEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
-        ${passwordField('syncPw', 'Password', 'current-password')}
-        <p class="pw-rules-title">New accounts need:</p>
-        ${rulesList('syncRules')}
-        <div id="captchaBox" hidden></div>
-        <p class="err" id="syncErr" role="alert" hidden></p>
-        <p class="note" id="legalNote">By creating an account you agree to the ${legalLinksHTML()}. Your cards are stored on Supabase servers, managed by the app’s developer.</p>
-        <div class="sheet-actions">
-          <button class="btn ghost" type="button" id="syncCreate" aria-describedby="legalNote">Create account</button>
-          <button class="btn primary" type="submit">Sign in</button>
-        </div>
-      </form>
-      <p class="note">New here? Type your email and pick a password, then tap <b>Create account</b>. We email you a link to confirm it; after that, use <b>Sign in</b> on each device.
-        <button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
-    // A sign-up waiting for its email link (kept on this device for 7 days): the address comes back filled in, with a way to ask again.
-    const wait = (await db.getSettings()).pendingSignup;
-    if (!box.isConnected) return;
-    const fillPending = email => {
-      const pb = $('pendBox');
-      pb.hidden = false;
-      pb.innerHTML = `<p>Waiting for you to confirm <b>${esc(email)}</b>. Open the link in that email, then sign in here.</p>
-        <button class="btn ghost small" type="button" id="pendResend">Send the link again</button>`;
-      wireResend($('pendResend'), email, $('syncErr'));
-    };
-    if (wait && Date.now() - wait.at < PENDING_DAYS * 864e5 && wait.email) { $('syncEmail').value = wait.email; if (!wait.confirmed) fillPending(wait.email); }
-    else if (wait) db.setSetting('pendingSignup', null);
-    const go = async create => {
-      const email = $('syncEmail').value.trim(), pw = $('syncPw').value;
-      const err = $('syncErr'), emailF = $('syncEmail'), pwF = $('syncPw');
-      clearFieldError(emailF, err); clearFieldError(pwF, err);
-      pwF.autocomplete = create ? 'new-password' : 'current-password';      // a new account's password is saved as new, not filled from an old one
-      if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError(emailF, err, 'Type your email address.'); return; }
-      // New accounts follow the password rules; signing in doesn't check them (older passwords still work).
-      if (!pw) { showFieldError(pwF, err, 'Type your password.'); return; }
-      if (create && !passwordOk(pw)) { showFieldError(pwF, err, `Your password needs ${passwordMissing(pw)}.`); return; }
-      box.querySelectorAll('button').forEach(b => { b.disabled = true; });
-      try {
-        // With a captcha set up (sync-config.js), the "are you a person?" box comes first; its token goes with the request.
-        const captcha = await captchaToken();
-        const opts = { onConflict: askAboutDevice };      // cards here from someone else (or from no account) are never merged without a choice
-        const made = await (create ? sync.createAccount(email, pw, captcha, opts) : sync.signIn(email, pw, captcha, opts));
-        if (made?.pending) {                  // Supabase emailed a confirmation link: nobody is signed in yet
-          box.querySelectorAll('button').forEach(b => { b.disabled = false; });
-          await db.setSetting('pendingSignup', { email, at: Date.now() });
-          resendRestUntil = Date.now() + 60000;          // an email was just sent: the server allows the next one in a minute
-          fillPending(email);
-          openSheet(`
-            <h2 id="sheetTitle">Check your email</h2>
-            <p>We sent a link to <b>${esc(email)}</b>. Open it to confirm your account, then come back here and <b>sign in</b> with your email and password.</p>
-            <p class="note">No email after a few minutes? Look in your spam folder, or ask for it again.</p>
-            <div class="sheet-actions"><button class="btn ghost" type="button" id="pendResend2">Send the link again</button><button class="btn primary" type="button" id="pendOk">OK</button></div>`);
-          $('pendOk').addEventListener('click', closeSheet);
-          // The sheet is modal, and an interactive "are you a person?" box can't be solved behind it: close the sheet and ask from the form's button.
-          $('pendResend2').classList.add('resend-link');
-          restResend();
-          $('pendResend2').addEventListener('click', () => {
-            closeSheet();
-            setTimeout(() => { const b = $('pendResend'); b?.scrollIntoView({ block: 'center' }); b?.focus(); b?.click(); }, 0);
-          });
-          return;
-        }
-        db.setSetting('pendingSignup', null);
-        toast(create ? 'Account created. Syncing…' : 'Signed in. Syncing…');
-        drawSync();
-      } catch (e) {
-        box.querySelectorAll('button').forEach(b => { b.disabled = false; });
-        if (e.code === 'cancelled') return;           // (the person chose Cancel when asked about the cards on this device)
-        // The message goes on the box it is about (email, password), or on neither: a rate limit or a lost connection is not the person's typing.
-        const which = authErrorField(e.code);
-        showFieldError(which === 'email' ? emailF : which === 'password' ? pwF : null, err, authMessage(e, { online: navigator.onLine !== false }));
-        if (e.code === 'email_not_confirmed') { db.setSetting('pendingSignup', { email, at: Date.now() }); fillPending(email); }       // the button replaces "tap Create account again"
-      }
-    };
-    wireRules('syncPw', 'syncRules');
-    $('syncForm').addEventListener('submit', e => { e.preventDefault(); go(false); });
-    $('syncCreate').addEventListener('click', () => go(true));
-    // The password box is told which kind of password it holds as soon as a button is aimed at (focus or press), not only when the form is sent.
-    const kind = v => () => { $('syncPw').autocomplete = v; };
-    for (const [btn, v] of [[$('syncCreate'), 'new-password'], [$('syncForm').querySelector('button[type=submit]'), 'current-password']]) {
-      for (const ev of ['focus', 'pointerdown']) btn.addEventListener(ev, kind(v));
-    }
-    $('forgotBtn').addEventListener('click', async () => {
-      const email = $('syncEmail').value.trim(), err = $('syncErr');
-      clearFieldError($('syncPw'), err); clearFieldError($('syncEmail'), err);
-      if (!/^\S+@\S+\.\S+$/.test(email)) { showFieldError($('syncEmail'), err, 'Type your email above first, then tap Forgot password.'); return; }
-      try {
-        await sync.sendPasswordReset(email, await captchaToken());
-        openSheet(`
-          <h2 id="sheetTitle">Check your email</h2>
-          <p>If there's an account for <b>${esc(email)}</b>, we've sent it a password reset link.</p>
-          <p class="note">Open the link: it opens Study Sprint in your browser, where you can set a new password. Then sign in with it on each of your devices (including the home-screen app).</p>
-          <div class="sheet-actions"><button class="btn primary" type="button" id="fpOk">OK</button></div>`);
-        $('fpOk').addEventListener('click', closeSheet);
-      } catch (e) {
-        // (not the password box: nothing was typed wrong there)
-        showFieldError(authErrorField(e.code) === 'email' ? $('syncEmail') : null, err, authMessage(e, { online: navigator.onLine !== false }));
-      }
-    });
-    return;
-  }
-  box.innerHTML = `
-    <div class="set-row">
-      <div><b>Signed in</b><p>${esc(acct.email)}<br><span id="syncStatus"></span></p>
-        <p class="note" id="damagedNote" hidden></p></div>
-      <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
-    </div>
-    <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
-      <span>Off: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account's monthly download allowance. On: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi), and it keeps a full copy in case your account ever loses them.</span></span>
-      <input id="keepAllMedia" type="checkbox" class="switch" ${settings.keepAllMedia ? 'checked' : ''}></label>
-    <div class="set-row">
-      <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
-      <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
-    </div>
-    <div class="set-row">
-      <div><b>Password</b><p>Change the password you sign in with.</p></div>
-      <button class="btn ghost small" type="button" id="pwBtn">Change…</button>
-    </div>
-    <div class="set-row">
-      <div><b>Sign out</b><p>Stops syncing on this device. You choose whether to keep this device's copy.</p></div>
-      <button class="btn ghost small" type="button" id="signOutBtn">Sign out…</button>
-    </div>
-    <div class="set-row">
-      <div><b>Delete my account</b><p>Permanently deletes your account and everything stored in it on the server. Your devices keep their own copy.</p></div>
-      <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
-    </div>
-    <div class="set-row">
-      <div><b>Delete my synced data</b><p>Removes your cards, progress, settings, pictures and sounds from the server. Your account (your email address) stays until you use Delete my account. Your devices keep their own copy.</p></div>
-      <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
-    </div>`;
-  showSyncStatus(acct.lastSync);
-  drawDamaged();
-  $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));
-  $('pwBtn').addEventListener('click', () => openPasswordSheet({ title: 'Change password', save: pw => sync.changePassword(pw), done: 'Password changed' }));
-  $('keepAllMedia').addEventListener('change', async e => {
-    settings.keepAllMedia = e.target.checked;
-    await db.setSetting('keepAllMedia', e.target.checked);          // this device only (db.js LOCAL_ONLY)
-    if (e.target.checked) sync.syncNow({ retry: true });
-  });
-  $('resendBtn').addEventListener('click', confirmResend);
-  $('signOutBtn').addEventListener('click', confirmSignOut);
-  $('delServerBtn').addEventListener('click', confirmDeleteServer);
-  $('delAcctBtn').addEventListener('click', confirmDeleteAccount);
-}
-
-// "Send the link again": the confirmation email once more. Supabase allows one a minute per address, so the button rests for 60 s
-// (it keeps resting if Settings is redrawn). Errors go to `errEl` (the form's message line) or, in the sheet, a toast.
-const PENDING_DAYS = 7;
-let resendRestUntil = 0;
-function restResend() {
-  const left = resendRestUntil - Date.now();
-  document.querySelectorAll('.resend-link').forEach(btn => {
-    btn.disabled = left > 0;
-    btn.textContent = left > 0 ? 'Sent ✓' : 'Send the link again';
-  });
-  if (left > 0) setTimeout(restResend, Math.min(left, 1000));
-}
-function wireResend(btn, email, errEl) {
-  if (!btn) return;
-  btn.classList.add('resend-link');
-  restResend();
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    try {
-      await sync.resendConfirmation(email, await captchaToken());
-      resendRestUntil = Date.now() + 60000;
-      toast('Sent. Check your inbox and spam folder.');
-    } catch (e) {
-      const text = authMessage(e, { online: navigator.onLine !== false });
-      if (e.retryAfter) resendRestUntil = Date.now() + e.retryAfter * 1000;
-      if (errEl?.isConnected) showFieldError(null, errEl, text); else toast(text);
-    }
-    restResend();
-  });
-}
-
-// Records from the server that were damaged are skipped, not fatal (sync-merge.js badRow). Say so quietly, once: the note stays
-// under "Signed in" until Dismiss, and comes back only for records skipped after that.
-async function drawDamaged() {
-  const el = $('damagedNote');
-  if (!el) return;
-  const log = (await db.getSettings()).syncDamaged;
-  if (!el.isConnected) return;
-  const text = damagedNote(log);
-  el.hidden = !text;
-  if (!text) return;
-  el.innerHTML = `${esc(text)} <button class="link inline-btn" type="button" id="damagedOk">Dismiss</button>`;
-  $('damagedOk').addEventListener('click', async () => { await db.setSetting('syncDamaged', { ...log, seen: log.count }); drawDamaged(); });
-}
-
-// Asked by sync.signIn / createAccount before anything is merged, when this device holds cards that aren't this account's.
-// Answers 'go' or 'cancel'. "Remove them" wipes this device first (the account that owns them keeps its copy).
-function askAboutDevice(v) {
-  return new Promise(resolve => {
-    let settled = false;
-    const finish = answer => { if (!settled) { settled = true; resolve(answer); } };
-    const things = v.cards ? plural(v.cards, 'card') : v.decks ? plural(v.decks, 'deck') : 'progress and settings';
-    const count = v.cards || v.decks || 0;
-    const addLabel = !count ? 'Add your progress to your account' : `${count === 1 ? 'Add this' : 'Add these'} ${things} to your account`;
-    openSheet(v.kind === 'other' ? `
-      <h2 id="sheetTitle">This device has cards from another account</h2>
-      <div class="confirm">
-        <p>The ${esc(things)} on this device belong to someone else's account. To sign in here, they have to be removed from this device first. They stay safe in their own account.</p>
-        ${v.pending ? `<p class="note warn">${esc(plural(v.pending, 'change'))} on this device ${v.pending === 1 ? "hasn't" : "haven't"} synced yet and would be lost.</p>` : ''}
-        <div class="sheet-actions stack">
-          <button class="btn danger solid" type="button" id="devRemove">Remove them and sign in</button>
-          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
-        </div>
-      </div>` : `
-      <h2 id="sheetTitle">This device has cards that aren't in an account</h2>
-      <div class="confirm">
-        <p>You have ${esc(things)} on this device that were never synced. You can add them to the account you're signing in to, or start fresh with what is already in that account.</p>
-        <p class="note">New account? Choose Add: a new account is empty, so nothing is lost.</p>
-        <div class="sheet-actions stack">
-          <button class="btn primary" type="button" id="devAdd">${esc(addLabel)}</button>
-          <button class="btn danger" type="button" id="devFresh">Start fresh (remove them)</button>
-          <button class="btn ghost" type="button" id="devCancel">Cancel</button>
-        </div>
-      </div>`);
-    $('sheet').addEventListener('close', () => finish('cancel'), { once: true });
-    const wipeThen = async () => {
-      // (wipeThisDevice clears first and sets up again after: if it fails, some of the data may already be gone.)
-      try { await wipeThisDevice(); } catch (e) { console.error(e); toast("Couldn't finish clearing this device. Some local data may have been cleared. You are not signed in."); finish('cancel'); closeSheet(); drawSidebar(); return; }
-      drawSidebar();
-      finish('go'); closeSheet();
-    };
-    $('devCancel').addEventListener('click', () => { finish('cancel'); closeSheet(); });
-    $('devRemove')?.addEventListener('click', wipeThen);
-    $('devFresh')?.addEventListener('click', wipeThen);
-    $('devAdd')?.addEventListener('click', () => { finish('go'); closeSheet(); });
-  });
-}
-
-// Settings → Your data → "In your account: data … · pictures and sounds … of …" (only when signed in, and the
-// server has supabase/limits.sql). Amber from 80%, with the full message once the account is full.
-async function drawUsage() {
-  const row = $('usageRow');
-  if (!row) return;
-  const u = (await sync.account()) ? usageLine(await sync.usage()) : null;
-  if (!row.isConnected) return;
-  row.hidden = !u;
-  if (!u) return;
-  $('usageLine').textContent = u.text;
-  $('usageLine').className = 'usage-line ' + u.level;
-  $('usageNote').hidden = !u.detail;
-  $('usageNote').textContent = u.detail;
-  $('usageNote').className = 'note usage-line ' + u.level;
-  // 50,000 cards or more: a heads-up that stays here (nothing is blocked).
-  const big = cardsWarning(await db.count('cards'));
-  if (!row.isConnected) return;
-  $('cardsNote').hidden = !big;
-  $('cardsNote').textContent = big || '';
-}
-
-// A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads
-// when it's needed.)
-async function captchaToken() {
-  const { captchaOn, askCaptcha } = await import('./captcha.js');
-  return captchaOn() ? askCaptcha($('captchaBox')) : undefined;
-}
-
-// A password box with a Show / Hide button (handy on phones).
-function passwordField(id, label, autocomplete) {
-  return `<label class="field"><span>${esc(label)}</span>
-    <span class="pw-wrap"><input id="${id}" type="password" autocomplete="${autocomplete}" autocapitalize="off" spellcheck="false">
-      <button type="button" class="pw-show" data-show="${id}" aria-label="Show password" aria-pressed="false">Show</button></span></label>`;
-}
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-show]');
-  if (!b) return;
-  e.preventDefault();
-  const input = $(b.dataset.show), showing = input.type === 'text';
-  input.type = showing ? 'password' : 'text';
-  b.textContent = showing ? 'Show' : 'Hide';
-  b.setAttribute('aria-pressed', String(!showing));
-  b.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
-});
-
-// The password rules as a checklist that ticks off as you type (see password.js).
-const rulesList = id => `<ul class="pw-rules" id="${id}" aria-live="polite"></ul>`;
-function wireRules(inputId, listId) {
-  const draw = () => {
-    $(listId).innerHTML = checkPassword($(inputId).value).map(r =>
-      `<li class="${r.ok ? 'ok' : ''}"><span aria-hidden="true">${icon(r.ok ? 'check' : 'circle')}</span> ${esc(r.label)}<span class="sr-only">${r.ok ? ' (done)' : ''}</span></li>`).join('');
-  };
-  $(inputId).addEventListener('input', draw);
-  draw();
-}
-
-// A sheet asking for a new password (twice). save(pw) does the work; done is the message afterwards.
-function openPasswordSheet({ title, intro = '', save, done }) {
-  openSheet(`
-    <h2 id="sheetTitle">${esc(title)}</h2>
-    ${intro}
-    <form id="pwForm" novalidate>
-      ${passwordField('pw1', 'New password', 'new-password')}
-      ${rulesList('pwRules')}
-      ${passwordField('pw2', 'Type it again', 'new-password')}
-      <p class="err" id="pwErr" role="alert" hidden></p>
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="pwCancel">Cancel</button>
-        <button class="btn primary" type="submit">Save password</button>
-      </div>
-    </form>`);
-  $('pwCancel').addEventListener('click', closeSheet);
-  wireRules('pw1', 'pwRules');
-  $('pwForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const pw = $('pw1').value, err = $('pwErr');
-    clearFieldError($('pw1'), err); clearFieldError($('pw2'), err);
-    if (!passwordOk(pw)) { showFieldError($('pw1'), err, `The password needs ${passwordMissing(pw)}.`); return; }
-    if (pw !== $('pw2').value) { showFieldError($('pw2'), err, "The two passwords don't match."); return; }
-    const btn = e.submitter || [...$('pwForm').elements].find(b => b.type === 'submit');   // the footer's button lives outside the form but is linked to it
-    btn.disabled = true;
-    try {
-      await save(pw);
-      closeSheet();
-      toast(typeof done === 'function' ? done() : done);
-      if (currentRoute === 'settings') drawSync();
-    } catch (ex) { btn.disabled = false; showFieldError($('pw1'), err, ex.message); }
-  });
-}
-
-// Sign out: keep this device's copy, or remove it (e.g. on a shared computer).
-async function confirmSignOut() {
-  openSheet(`
-    <h2 id="sheetTitle">Sign out?</h2>
-    <p>This device stops syncing. Your account and your other devices keep everything.</p>
-    <p class="note" id="soNote">Checking for changes that haven't synced yet…</p>
-    <div class="confirm">
-      <div class="sheet-actions stack">
-        <button class="btn primary" type="button" id="soKeep">Sign out, keep data on this device</button>
-        <button class="btn danger" type="button" id="soRemove">Sign out and remove it from this device</button>
-        <button class="btn ghost" type="button" id="soNo">Cancel</button>
-      </div>
-    </div>`);
-  $('soNo').addEventListener('click', closeSheet);
-  // Pictures and sounds this device hasn't downloaded yet (they load when a card needs them) can't be had once signed out: get them first.
-  $('soKeep').addEventListener('click', async () => {
-    const btn = $('soKeep');
-    if (btn.dataset.armed !== '1') {
-      const lack = await sync.missingMedia().catch(() => null);
-      if (lack && lack.pictures.length + lack.sounds.length) {
-        btn.disabled = true;
-        let r;
-        try { r = await sync.downloadAllMedia({ onProgress: (n, t) => { if ($('soNote')) $('soNote').textContent = `Downloading pictures and sounds first: ${n} of ${t}…`; } }); } finally { btn.disabled = false; }
-        const n = r.left.length + r.gone.length;
-        if (n) {
-          btn.dataset.armed = '1';
-          if ($('soNote')) $('soNote').innerHTML = `<span class="warn">${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} from your cards ${n === 1 ? "isn't" : "aren't"} on this device yet and couldn't be downloaded now, so ${n === 1 ? 'it' : 'they'} won't show here after signing out.</span> Tap again to sign out anyway.`;
-          return;
-        }
-      }
-    }
-    await sync.signOut(); clearDraft(); closeSheet(); toast('Signed out'); drawSync();
-  });
-  let armed = false;
-  $('soRemove').addEventListener('click', async () => {
-    const pending = await sync.pendingChanges().catch(() => 0);
-    if (pending && !armed) {             // a second tap confirms losing them
-      armed = true;
-      $('soNote').innerHTML = `<span class="warn">${plural(pending, 'change')} on this device ${pending === 1 ? "hasn't" : "haven't"} synced yet and would be lost.</span> Tap Remove again to remove anyway, or go back and Sync now first.`;
-      return;
-    }
-    await sync.signOut({ forget: true });
-    await wipeThisDevice();
-    closeSheet();
-    toast('Signed out and removed from this device');
-    drawSidebar();
-    navGo('#/decks');
-  });
-  // Send anything waiting first, so signing out loses nothing.
-  const caught = await sync.syncNow();
-  const pending = await sync.pendingChanges().catch(() => 0);
-  if ($('soNote') && !armed) $('soNote').textContent = caught.reason === 'busy' ? 'Another window is syncing. Close it, or try again in a moment, before signing out.' : pending ? `${plural(pending, 'change')} couldn't sync yet (are you offline?).` : 'Everything here is synced.';
-}
-
-// Send everything on this device to the server again (sync.resendEverything). Safe: it never deletes anything or replaces newer data.
-function confirmResend() {
-  openSheet(`
-    <h2 id="sheetTitle">Re-upload everything from this device?</h2>
-    <div class="confirm">
-      <p>Use this only if the sync server <b>lost your data</b> or was <b>restored from an older copy</b>, so your cards are missing online even though they are here. Normally you never need it.</p>
-      <p class="note">This device sends all of its decks, cards, progress, settings, pictures and sounds again, which can take a while and uses data. Nothing is deleted, and newer changes already on the server are kept. Your other devices don't send anything by themselves: do this on each of your devices, starting with the one you used most recently.</p>
-      <p class="note warn" id="rsLack" hidden></p>
-      <p class="err" id="rsErr" role="alert" hidden></p>
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="rsNo">Cancel</button>
-        <button class="btn primary" type="button" id="rsYes">Re-upload everything</button>
-      </div>
-    </div>`);
-  $('rsNo').focus();
-  $('rsNo').addEventListener('click', closeSheet);
-  $('rsYes').addEventListener('click', async () => {
-    $('rsYes').disabled = true; clearFieldError(null, $('rsErr'));
-    try {
-      await sync.resendEverything();        // only starts it; the sync line under Settings → Sync shows progress and any problem
-      closeSheet();
-      toast('Re-uploading everything from this device…');
-    } catch (e) { $('rsYes').disabled = false; showFieldError(null, $('rsErr'), e.message); }
-  });
-}
-
-// Delete everything in the account on the server (devices keep their copy). Signs this device out.
-function confirmDeleteServer() {
-  openSheet(`
-    <h2 id="sheetTitle">Delete your synced data?</h2>
-    <div class="confirm">
-      <p>This removes your <b>decks, cards, progress, settings, pictures and sounds from the server</b>. It can't be undone. Your account (your email address) stays until you use Delete my account.</p>
-      <p class="note">This device and your other devices keep their own copy of the cards. Of the pictures and sounds, each device keeps only those it has already downloaded: on a device that doesn't hold them all, turn on <b>Keep all pictures and sounds on this device</b> (Settings > Sync) and let it sync first. This device is signed out; sign out on your other devices too, or they'll start sending their changes again. (To remove the account itself, use Delete my account.)</p>
-      <p class="note" id="dsNote" hidden></p>
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="dsNo">Cancel</button>
-        <button class="btn danger solid" type="button" id="dsYes">Delete from server</button>
-      </div>
-    </div>`);
-  $('dsNo').focus();
-  $('dsNo').addEventListener('click', closeSheet);
-  wireSafeDelete({ yes: 'dsYes', note: 'dsNote', label: 'Delete from server', call: o => sync.deleteServerData(o),
-    done: () => { closeSheet(); toast('Your synced data was deleted from the server'); drawSync(); }, fail: msg => toast(msg) });
-}
-
-// Delete my synced data / Delete my account, which leave this device holding its own copy: the pictures and sounds it hasn't downloaded
-// yet (they load when a card needs them) are saved here first, so the account's deletion doesn't lose them. The first tap says how many
-// (when there are any); the second downloads, then deletes. If some can't be downloaded, a further tap deletes anyway. Closing the sheet
-// cancels the download, and nothing is deleted.
-function wireSafeDelete({ yes, note, label, call, done, fail, ready = () => true }) {
-  const ac = new AbortController();
-  const stop = () => ac.abort();
-  document.addEventListener('sheet-closing', stop, { once: true });
-  $('sheet').addEventListener('close', stop, { once: true });
-  const live = () => !!$('sheet')?.open && !ac.signal.aborted;
-  const text = t => { const b = $(yes); if (b) b.textContent = t; };
-  const say = (msg, warn) => { const n = $(note); if (n) { n.hidden = !msg; n.className = warn ? 'note warn' : 'note'; n.textContent = msg || ''; } };
-  let step = 0;                                // 0 first tap, 1 download then delete, 2 delete anyway
-  $(yes).addEventListener('click', async () => {
-    if (!ready()) return;
-    if ($('daErr')) clearFieldError(null, $('daErr'));
-    $(yes).disabled = true;
-    try {
-      if (step === 0) {
-        const lack = await sync.missingMedia().catch(() => null);
-        const n = lack ? lack.pictures.length + lack.sounds.length : 0;
-        step = 1;
-        if (n) {
-          const { sizeText } = await import('./media.js');
-          say(`This device will first download ${n.toLocaleString()} ${n === 1 ? 'picture or sound' : 'pictures and sounds'} (about ${sizeText(estimateBytes({ pictures: lack.pictures.length, sounds: lack.sounds.length }))}) so it keeps ${n === 1 ? 'it' : 'them'}. That can take a while and uses data (best on Wi-Fi).`);
-          text('Download, then delete');
-          $(yes).disabled = false;
-          return;
-        }
-      }
-      await call({ signal: ac.signal, isLive: live, anyway: step === 2, onProgress: (n, t) => text(`Saving pictures here first: ${n} of ${t}`) });
-      done();
-    } catch (e) {
-      if (ac.signal.aborted || e.code === 'cancelled') return;
-      const b = $(yes);
-      if (!b) return;
-      b.disabled = false;
-      if (e.code === 'media_left') { step = 2; say(`${e.message.replace(' Nothing was deleted.', '')} Tap Delete anyway to delete without them.`, true); text('Delete anyway'); return; }
-      text(label);
-      fail(e.message);
-    }
-  });
-}
-
-// Delete the account itself. A typed confirmation: the button stays off until the box says DELETE.
-function confirmDeleteAccount() {
-  openSheet(`
-    <h2 id="sheetTitle">Delete your account?</h2>
-    <div class="confirm">
-      <p>This permanently deletes your <b>account</b> and <b>everything stored in it on the server</b>: decks, cards, progress, settings, pictures and sounds, and your sign-in. It can't be undone, and you'd need to make a new account to sync again.</p>
-      <p class="note"><b>Your data on this device is kept.</b> This device is signed out afterwards. Your other devices keep their own copies of the cards too, but can no longer sync, and keep only the pictures and sounds they have already downloaded (turn on <b>Keep all pictures and sounds on this device</b> in Settings > Sync there first if you want every file).</p>
-      <label class="field"><span>Type DELETE to confirm</span>
-        <input id="daText" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
-      <p class="note" id="daNote" hidden></p>
-      <p class="err" id="daErr" role="alert" hidden></p>
-      <div class="sheet-actions">
-        <button class="btn ghost" type="button" id="daNo">Cancel</button>
-        <button class="btn danger solid" type="button" id="daYes" disabled>Delete my account</button>
-      </div>
-    </div>`);
-  $('daText').focus();
-  $('daNo').addEventListener('click', closeSheet);
-  $('daText').addEventListener('input', () => { if ($('daYes').textContent === 'Delete my account') $('daYes').disabled = $('daText').value.trim() !== 'DELETE'; });
-  wireSafeDelete({ yes: 'daYes', note: 'daNote', label: 'Delete my account', ready: () => $('daText')?.value.trim() === 'DELETE', call: o => sync.deleteAccount(o),
-    done: () => { closeSheet(); toast('Your account was deleted. Your data is still on this device.'); drawSync(); },
-    fail: msg => { const e = $('daErr'); if (e) showFieldError(null, e, msg); } });
-}
-
-// Back to a fresh start on this device (keeps the theme): used by Reset and by signing out with Remove.
-async function wipeThisDevice() {
-  clearStashedDraft();            // unsaved card edits kept from leaving a screen
-  clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
-  const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = settings;
-  await db.resetAll();
-  clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
-  await db.setSetting('theme', theme);
-  await db.setSetting('cardAlign', cardAlign);
-  await db.setSetting('compactDecks', compactDecks);
-  await db.setSetting('statsReadiness', statsReadiness);
-  await db.setSetting('ratingFeedback', ratingFeedback);
-  await db.setSetting('smoothMotion', smoothMotion);
-  await db.setSetting('singleKeys', singleKeys !== false);
-  await db.setSetting('appBadge', appBadge === true);
-  await db.setSetting('reminderTime', reminderTime || '19:00');
-  if (whatsNewSeen) await db.setSetting('whatsNewSeen', whatsNewSeen);          // this device has seen those notes, wiped or not
-  settings = { ...db.DEFAULT_SETTINGS, theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen: whatsNewSeen ?? null };
-  await markOnboarded();          // someone resetting has seen the first-run start
-  await seedSampleDeck();
-  refreshBadgeNow();              // the number on the app icon follows the fresh data
-}
-
-// "Synced 2m ago", "Syncing…" or what went wrong.
-function showSyncStatus(lastSync) {
-  const el = $('syncStatus');
-  if (!el) return;
-  const w = syncWording(lastSync);          // the same wording as the sidebar's sync line
-  el.className = w.warn ? 'warn' : 'muted';
-  el.textContent = w.text;
-  if ($('syncNowBtn')) $('syncNowBtn').disabled = w.syncing;
-}
 
 // Stats is slow to draw, so changes from other devices redraw it once after things settle (not once per sync),
 // and only while it's showing: if the page is hidden, it redraws when you come back.
@@ -1260,16 +48,35 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && statsStale) { statsStale = false; if (currentRoute === 'stats') redrawStatsSoon(); }
 });
 
+// The Settings screen and its sheets live in js/settings.js, loaded the first time they are needed. They share the loaded
+// settings object, the current screen and a few helpers with this file through this object.
+const settingsHost = {
+  get settings() { return settings; },
+  set settings(v) { settings = v; },
+  get currentRoute() { return currentRoute; },
+  version: APP_VERSION,
+  markOnboarded: () => markOnboarded(),
+  seedSampleDeck: again => seedSampleDeck(again)
+};
+async function loadSettings() {
+  const m = await lazy('./settings.js');
+  m.init(settingsHost);
+  return m;
+}
+
 let warnedStale = false;
 // After each sync: keep Settings up to date, and redraw the screen if changes came in from another device.
 addEventListener('sync', async e => {
   const { state, applied } = e.detail;
   drawSideSync();          // the sidebar's sync line (a draw of the whole sidebar follows below when changes came in)
-  if (currentRoute === 'settings') { if (state === 'signed-out') drawSync(); else { showSyncStatus(); if (state === 'done') { drawUsage(); drawDamaged(); } } }
+  if (currentRoute === 'settings') {
+    const s = await loadSettings();          // (already loaded: Settings is showing)
+    if (state === 'signed-out') s.drawSync(); else { s.showSyncStatus(); if (state === 'done') { s.drawUsage(); s.drawDamaged(); } }
+  }
   if (state === 'signed-out' && e.detail.error) toast(e.detail.error);
   if (state === 'error' && !warnedStale) {
     // Failing for days (e.g. the free Supabase project paused): say so once per visit.
-    const acct = await sync.account();
+    const acct = await account();
     const days = acct?.lastSync ? Math.floor((Date.now() - acct.lastSync) / 86400000) : 0;
     if (days >= 3) { warnedStale = true; toast(`Sync hasn't worked for ${days} days. See Settings → Sync.`); }
   }
@@ -1282,8 +89,8 @@ addEventListener('sync', async e => {
   else if (['today', 'decks', 'deck', 'browse'].includes(currentRoute)) route();
   else if (currentRoute === 'settings') {
     // Redraw Settings in place (keeping your scroll position) so synced study settings show.
-    const view = settingsView(), y = scrollY;
-    if (view) { await renderSettings(view); scrollTo(0, y); }
+    const s = await loadSettings(), view = s.settingsView(), y = scrollY;
+    if (view) { await s.renderSettings(view); scrollTo(0, y); }
   }
 });
 
@@ -1356,7 +163,7 @@ const ROUTES = {
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),
   stats: async el => (await lazy('./stats.js')).renderStats(el),
-  settings: el => renderSettings(el),
+  settings: async el => (await loadSettings()).renderSettings(el),
   help: async (el, arg) => (await lazy('./help.js')).renderHelp(el, arg)
 };
 
@@ -1480,7 +287,7 @@ function wireGear() {
 // A "reset your password" email opens the app with a sign-in after the # (see parseAuthLink in sync-merge.js).
 // Take it out of the address straight away (and keep it for this tab, in case the app reloads to update).
 function takeResetLink() {
-  const link = sync.recoveryFromLink();
+  const link = parseAuthLink(location.hash);          // (the same check as sync.js recoveryFromLink, without loading sync.js)
   if (!link) return null;
   rewrite('#/settings');
   if (link.session) { try { sessionStorage.setItem('resetLink', JSON.stringify(link)); } catch { /* fine without */ } }
@@ -1510,6 +317,7 @@ async function showResetLink(link) {
     return;
   }
   // Show whose account the link is for, and refuse a link for a different account than this device's.
+  const sync = await lazy('./sync.js');
   let user;
   try { user = await sync.lookUpResetLink(link.session); } catch (err) {
     if (err.code !== 'offline') forget();   // offline: keep the link for this tab, so reopening the app tries again
@@ -1517,7 +325,7 @@ async function showResetLink(link) {
     return;
   }
   let result;
-  openPasswordSheet({
+  (await loadSettings()).openPasswordSheet({
     title: 'Set a new password',
     intro: `<p class="note" style="margin-top:0">Set a new password for <b>${esc(user.email)}</b>. Then use it to sign in on your other devices.</p>`,
     save: async pw => { result = await sync.finishPasswordReset(link.session, pw); forget(); },
@@ -1535,7 +343,7 @@ async function showResetLink(link) {
 const MEDIA_TIDY_EVERY = 24 * 3600 * 1000;
 async function tidyMedia(now = Date.now()) {
   if (Number.isFinite(settings.mediaCleanedAt) && now - settings.mediaCleanedAt < MEDIA_TIDY_EVERY && now >= settings.mediaCleanedAt) return false;
-  if (await sync.account()) return false;
+  if (await account()) return false;
   if (!(await db.count('media'))) return false;       // (not noted: the first picture added is looked at on the next start)
   await db.cleanMedia(now);
   settings.mediaCleanedAt = now;
@@ -1552,7 +360,7 @@ function tidyMediaWhenIdle() {
 // never syncs has nothing to protect and sends nothing). Any problem with the question means "no minimum".
 async function checkMinClient() {
   if (syncHeld(APP_VERSION)) return;                      // "Keep using offline" was chosen for this version: sync stays off until the app updates
-  if (!(await sync.account())) { setSyncGate(false); return; }
+  if (!(await account())) { setSyncGate(false); return; }
   const min = await fetchMinClient();
   if (min) rememberMinClient(min);
   if (!min || !isTooOld(APP_VERSION, min)) { setSyncGate(false); return; }
@@ -1564,6 +372,14 @@ async function checkMinClient() {
   });
 }
 
+// js/sync.js (the server client, merge and push code) is not part of start-up: it loads here, once Today is drawn, and its
+// startAutoSync() does nothing until someone is signed in (Settings → Sync).
+const startSync = () => import('./sync.js').then(s => s.startAutoSync()).catch(err => console.error(err));
+function whenBrowserIdle(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, 500);
+}
+
 async function start() {
   initSheet();
   initPanelResize();
@@ -1571,7 +387,7 @@ async function start() {
   wireGear();
   initSidebar({ version: APP_VERSION });
   initWhatsNew({ version: APP_VERSION });
-  watchMath();       // draws the maths on cards (js/math.js) wherever it appears
+  watchMath();       // draws the maths on cards (js/math.js, loaded when the first formula appears) wherever it appears
   // "Skip to page" moves focus to the page without touching the address (a #screen hash would be read as a route).
   document.querySelector('.skip')?.addEventListener('click', e => { e.preventDefault(); $('screen').focus({ preventScroll: true }); });
   // Theme changes from the sidebar's toggle (or anywhere else): keep the settings copy and the open Settings screen in step.
@@ -1596,7 +412,9 @@ async function start() {
   fx.configure(settings); configureShortcuts(settings);
   const firstRun = await checkFirstRun();
   setSyncGate(syncHeld(APP_VERSION) || isTooOld(APP_VERSION, cachedMinClient()));      // closed before sync starts if this version is known to be too old (checkMinClient, below, asks the server)
-  sync.startAutoSync();      // does nothing until you sign in (Settings → Sync)
+  // Syncing starts after the first screen is drawn (below), unless the address holds a sign-in or reset link: that starts it now.
+  const authLink = parseAuthLink(location.hash);
+  if (authLink) startSync();
   // Opening the app with no "#/..." in the address shows Today.
   if (!location.hash) history.replaceState(null, '', '#/today');      // (initNav, below, tags the entry)
   // A brand-new install opens on the first-run start (but a link to somewhere else is respected).
@@ -1606,6 +424,7 @@ async function start() {
   addEventListener('hashchange', () => fx.transition(route, currentRoute, (location.hash.match(/^#\/([a-z]+)/) || [, 'today'])[1]));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBrowserBar);
   await route();
+  if (!authLink) whenBrowserIdle(startSync);
   initBadge();          // the due count on the app icon, when the person turned it on (badge.js)
   if (currentRoute !== 'today') drawSidebar();      // Today does it with the data it has just loaded
   tidyMediaWhenIdle();

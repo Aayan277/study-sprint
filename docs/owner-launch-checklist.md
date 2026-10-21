@@ -146,6 +146,7 @@ Not needed now. When you buy a domain:
 - [ ] GitHub **Actions** tab: all four workflows green, none with a "disabled" banner.
 - [ ] Supabase **Project Settings → Usage**: database **under 400 MB**, storage **under 800 MB**, egress (downloads) **under 4 GB**. Over any of these, read "Server full" below.
 - [ ] Supabase **SQL Editor**: run everything in `supabase/owner.sql` to see the top users and the two project-wide totals.
+- [ ] In that same result, glance at `marker_pct` (how much of their row cap or data limit deleted-record markers use; `marker_rows` is the count). If anyone is at about 15 or more, tell the developer: the prune plan (`docs/design/prune-plan.md`) is then worth building.
 - [ ] Download one backup, check it opens, and **keep only the newest offline copy**: delete any offline copy older than 30 days (the privacy page promises backups expire within 30 days, and that includes your own copies).
 
 ## Giving a friend a bigger allowance

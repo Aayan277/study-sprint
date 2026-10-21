@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.50', items: [
+    'Record a sound for a card: tap the mic in the card editor, then Stop to add it to that side. Up to 1 minute a clip.',
+    'Opens faster on slow phones: Settings, sync and maths load when you first need them, so Today shows about 0.6 s sooner.',
+    'Switching tabs just as an address changes no longer sends you back to Today.'
+  ] },
   { version: '4.49', items: [
     'Tapping a tab or link just as a pop-up closes now takes you there, instead of sometimes leaving you where you were.'
   ] },

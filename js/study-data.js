@@ -4,7 +4,7 @@
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { splitCards, queueFrom, rescueToday, rescueBacklog, rescueOffer, buildQueue, limitSiblings, answeredNotes, newLimits, newRoomFor, reviewLimits, extraNewToday, aheadQueue, forgottenQueue, pickedQueue, formatInterval, isPracticeSource, NEW, LEARNING, RELEARNING } from './queue.js';
-import { isHidden } from './browse-logic.js';
+import { isHidden } from './card-checks.js';
 import { chainMap, subtreeIds, treeOrder, effectiveDeck } from './deck-tree.js';
 import { examInfo, examPrepQueue, examSchedule } from './exam.js';
 import { personalW20 } from './sched-settings.js';

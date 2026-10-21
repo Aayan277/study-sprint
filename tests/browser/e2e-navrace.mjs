@@ -41,5 +41,24 @@ for (let i = 0; i < 12; i++) {
 }
 ok(bad === 0, `sheet closing + new address in one tick: the app ends on the new route (12 rounds, ${bad} bad)`);
 ok(badBack === 0, `Back after that is sane (no orphan entries, ${badBack} bad)`);
+// The user's address arrives in the same tick as a tab switch (its history.go() is still on its way). Chromium commits the address at once
+// (a new entry, popstate fired synchronously) and lands the traversal a moment later, before or after the app's next task: either way the
+// app must end on the user's address, made later, over the tab's root. Tab '#/welcome' also redirects while it renders (an onboarded user's
+// #/welcome -> #/today, inside announce()), which must not erase that address. Every round must pass (tests/nav-order.test.js covers both orders).
+let badTab = 0;
+for (let i = 0; i < 8; i++) {
+  const tab = i % 2 ? '#/welcome' : '#/decks', root = tab === '#/welcome' ? '#/today' : tab;
+  await p.evaluate(async () => { (await import('http://localhost:8123/js/nav.js')).toTab('#/today'); });
+  await idle(); await p.waitForTimeout(100);
+  if (i % 4 < 2) { await p.evaluate(async html => { (await import('http://localhost:8123/js/ui.js')).openSheet(html); }, SHEET); await idle(); }
+  else { await p.evaluate(async () => (await import('http://localhost:8123/js/nav.js')).go('#/browse')); await idle(); }
+  const len0 = await p.evaluate(() => history.length);
+  await p.evaluate(async t => { (await import('http://localhost:8123/js/nav.js')).toTab(t); location.hash = '#/import'; }, tab);
+  await idle(); await p.waitForTimeout(400); await idle();
+  const r = await p.evaluate(() => ({ hash: location.hash, route: document.getElementById('screen').dataset.route, from: history.state?.from, len: history.length }));
+  if (r.hash !== '#/import' || r.route !== 'import' || r.from !== root || r.len !== len0) { badTab++; console.log(`  round ${i} (${tab}): ${JSON.stringify(r)}, length before ${len0}`); }
+  await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(200);
+}
+ok(badTab === 0, `tab switch + new address in one tick: the app ends on the new address over the tab, no orphan entries (8 rounds, ${badTab} bad)`);
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();
