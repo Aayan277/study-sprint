@@ -16,7 +16,7 @@ import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
-import { $, esc, plural, toast, icon } from './ui.js';
+import { $, esc, plural, toast, dismissToast, icon } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
 import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, pagesToMarkdown, textPages, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
@@ -225,7 +225,7 @@ export async function renderImport(el, arg) {
     $('pasteBox').value = d.text;
     if (d.suggest) { S.restoreSug = d.sug; setSuggest(true); runSuggest(); }          // the suggestions are found again, and what was unticked or edited is put back
     else showText(d.text);
-    toast('Brought back the text you pasted');
+    toast(DRAFT_TOAST);
   }
 }
 
@@ -249,6 +249,7 @@ async function loadDeckFronts() {
   S.deckKeys = new Set(S.deckFronts.map(dupKey));
 }
 
+const DRAFT_TOAST = 'Brought back the text you pasted';
 // ---------- Paste / File / Google Sheets tabs ----------
 function wireTabs() {
   const tabs = ['paste', 'file', 'sheet'];
@@ -257,6 +258,7 @@ function wireTabs() {
       $(`tab-${x}`).setAttribute('aria-selected', String(x === t));
       $(`pane-${x}`).hidden = x !== t;
     });
+    if (t !== 'paste') dismissToast(DRAFT_TOAST);           // "Brought back the text you pasted" is about the Paste tab
     if (t === 'sheet') $('aiView').hidden = true;          // the AI view is about text, not a sheet
   }));
 }
@@ -345,7 +347,7 @@ function wireFile() {
       else if (/\.json$/i.test(file.name)) await explainJson(file);
       else { S.noCloze = false; showText(await file.text()); }
     } catch (err) {
-      console.error(err);
+      if (err?.message !== 'not-anki') console.error(err);      // (a file that isn't an Anki deck is expected: the message below says so)
       $('fileName').textContent = file.name;          // (clears "reading…")
       if (err?.code === 'too-big' || err?.code === 'no-wasm') { showError(err.message); return; }      // an Anki file that unpacks huge (anki-read.js): it says why
       const anki = /\.(apkg|colpkg)$/i.test(file.name);

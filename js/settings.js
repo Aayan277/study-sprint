@@ -282,7 +282,44 @@ export async function renderSettings(el) {
     const a = e.target.closest('a[data-sec]'); if (!a) return;
     e.preventDefault();
     $(a.dataset.sec).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    markCurrent(a);
   });
+  // The jump bar marks the section being read (aria-current): on scroll, the last section whose top is at or above
+  // the bottom of the sticky bar; at the end of the page, the last section. A tap marks its chip at once.
+  const nav = $('setNav');
+  const links = [...nav.querySelectorAll('a[data-sec]')];
+  const secs = links.map(a => [$(a.dataset.sec)?.closest('section'), a]).filter(([sec]) => sec);
+  function markCurrent(cur) { for (const a of links) { if (a === cur) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); } }
+  let raf = 0, lockUntil = 0;
+  const measure = () => {
+    raf = 0;
+    if (!nav.isConnected) { stop(); return; }
+    if (performance.now() < lockUntil) return;              // a tap just chose a chip; the smooth scroll is still on its way
+    // A jump lands the heading at scroll-padding + scroll-margin, which can sit below the bar, so the line is the lower of the two
+    const px = v => parseFloat(v) || 0;                       // scroll-padding can be 'auto'
+    const landed = px(getComputedStyle(document.documentElement).scrollPaddingTop) + px(getComputedStyle(secs[0][0].querySelector('h2')).scrollMarginTop) + 4;
+    const line = Math.max(nav.getBoundingClientRect().bottom + 4, landed);
+    const atEnd = Math.ceil(scrollY + innerHeight) >= document.documentElement.scrollHeight - 2;
+    let cur = null;
+    for (const [sec, a] of secs) if (sec.getBoundingClientRect().top <= line) cur = a;
+    cur ??= secs[0]?.[1];                                     // above the first section: it is the one being read
+    if (atEnd && secs.length) cur = secs[secs.length - 1][1];
+    markCurrent(cur);
+  };
+  const onScroll = () => { if (!raf) raf = requestAnimationFrame(measure); };
+  function stop() {
+    removeEventListener('scroll', onScroll); removeEventListener('resize', onScroll); removeEventListener('hashchange', onScroll);
+    if (raf) cancelAnimationFrame(raf); raf = 0;
+  }
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', onScroll);
+  addEventListener('hashchange', onScroll);      // leaving Settings: the next call sees the bar is gone and lets go
+  nav.addEventListener('click', e => {
+    if (!e.target.closest('a[data-sec]')) return;
+    lockUntil = performance.now() + 900;
+    setTimeout(() => { if (!raf) raf = requestAnimationFrame(measure); }, 900);   // catch up on any scrolling done during the lock
+  });
+  measure();
   $('skins').addEventListener('click', e => {
     const b = e.target.closest('.skin'); if (!b) return;
     saveTheme({ ...app.settings.theme, skin: b.dataset.skin });
@@ -969,7 +1006,10 @@ export async function drawUsage() {
 // A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads
 // when it's needed.)
 async function captchaToken() {
-  const { captchaOn, askCaptcha } = await import('./captcha.js');
+  let mod;
+  try { mod = await import('./captcha.js'); }
+  catch { throw Object.assign(new Error('network'), { code: 'network' }); }   // offline: the module was never cached
+  const { captchaOn, askCaptcha } = mod;
   return captchaOn() ? askCaptcha($('captchaBox')) : undefined;
 }
 

@@ -975,7 +975,7 @@ test('server errors use neutral wording: nothing about the owner, a project, SQL
     try { await supa.putRows('t', []); } catch (e) { return e; } finally { globalThis.fetch = realFetch; }
   };
   const net = await ask(new TypeError('Failed to fetch'));
-  assert.equal(net.message, "Couldn't reach the sync server. Your cards are safe on this device and will sync when it's back.");
+  assert.equal(net.message, 'Couldn’t reach the sync server. Your cards are safe on this device and will sync when it’s back.');
   const ro = await ask({ status: 400, body: { code: '25006', message: 'cannot execute INSERT in a read-only transaction' } });
   assert.equal(ro.message, SERVER_FULL_MESSAGE_TEXT);
   assert.equal(ro.code, '25006');

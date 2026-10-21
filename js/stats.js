@@ -122,8 +122,8 @@ function retSplitHTML(res, hasLogs) {
     const r = res[d];
     return `<div class="rs-group" role="group" aria-label="Last ${d} days">
       <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
-      ${rowHTML(`Young <small>(under ${YOUNG_DAYS} days)</small>`, r.young, r.target)}
-      ${rowHTML(`Mature <small>(${YOUNG_DAYS}+ days)</small>`, r.mature, r.target)}
+      ${rowHTML(`Young <small>(&lt;${YOUNG_DAYS}d)</small>`, r.young, r.target)}
+      ${rowHTML(`Mature <small>(${YOUNG_DAYS}d+)</small>`, r.mature, r.target)}
     </div>`;
   }).join('') + `<div class="rs-axis muted small" aria-hidden="true"><span class="rs-name"></span><span class="rs-scale"><span>50%</span><span>75%</span><span>100%</span></span><span class="rs-val"></span></div>
     <p class="note">The dot is how often you remembered; the line is your target. Young cards had a gap of under ${YOUNG_DAYS} days since their last review, mature ones ${YOUNG_DAYS} days or more. Multiple choice answers aren’t counted.</p>`;

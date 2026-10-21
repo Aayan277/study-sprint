@@ -128,7 +128,7 @@ export async function renderLibrary(el, showStarters = false) {
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
   const tile = (item, q = '', first = false) => {
-    const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const mastered = stats.total ? (stats.young + stats.mature) / stats.total : 0;
+    const { deck, stats } = item; const c = cnt(deck.id), go = c.total; const learned = stats.total ? (stats.young + stats.mature) / stats.total : 0;
     return `
       <article class="deck" style="--deck:${esc(deck.color)}">
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
@@ -136,12 +136,12 @@ export async function renderLibrary(el, showStarters = false) {
           <span class="deck-name">${esc(deck.name)}</span>
           ${examInfo(deck) ? `<span class="${badgeClass(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
-            ${stats.total ? `<span><b>${stats.total}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
-            <span class="due${c.due ? "" : " zero"}"><b>${c.due}</b> due</span>
-            <span><b>${c.fresh}</b> new</span>` : '<span>No cards yet</span>'}
+            ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
+            <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
+            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
           </span>
         </button>
-        ${stats.total ? `<span class="deck-ring" title="${Math.round(mastered * 100)}% of cards are young or mature">${ring(mastered, 44, 4, `<span class="mono">${Math.round(mastered * 100)}<small>%</small></span>`)}<span class="dr-cap">mastered</span></span>` : ''}
+        ${stats.total ? `<span class="deck-ring" title="${Math.round(learned * 100)}% of cards are learned (young or mature)">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}<span class="dr-cap">learned</span></span>` : ''}
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
           ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
@@ -195,9 +195,9 @@ export async function renderLibrary(el, showStarters = false) {
       <label class="deck-search">${icon('search')}<input id="deckSearch" type="search" placeholder="Search ${plural(list.length, 'deck')}" aria-label="Search decks" autocomplete="off"></label>
       <div class="deck-sort" role="group" aria-label="Sort decks">${SORTS.map(([k, l]) => `<button type="button" data-sort="${k}" aria-pressed="${k === view.sort}">${l}</button>`).join('')}</div>
     </div>` : '') : `<div class="dsum" aria-label="All decks">
-      <span><b class="mono">${todayAll.due}</b> due today</span>
-      <span><b class="mono">${todayAll.fresh}</b> new today</span>
-      <span><b class="mono">${sum('total')}</b> cards</span>
+      <span><b class="mono">${todayAll.due.toLocaleString('en')}</b> due today</span>
+      <span><b class="mono">${todayAll.fresh.toLocaleString('en')}</b> new today</span>
+      <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
@@ -440,12 +440,12 @@ function summaryHTML(s, c) {
   const why = [c.heldBySiblings ? 'one card per note a day' : '', c.heldByLimit ? 'daily limit' : '', c.heldByRescue ? 'catch-up plan' : ''].filter(Boolean).join(', ');
   return `
       <div class="deck-counts" style="margin-top:0">
-        <span class="due${c.due ? '' : ' zero'}"><b>${c.due}</b> due today</span>
-        <span><b>${c.fresh}</b> new today</span>
-        <span><b>${s.total}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
-        ${s.hidden ? `<span><b>${s.hidden}</b> suspended or buried</span>` : ''}
+        <span class="due${c.due ? '' : ' zero'}"><b>${c.due.toLocaleString('en')}</b> due today</span>
+        <span><b>${c.fresh.toLocaleString('en')}</b> new today</span>
+        <span><b>${s.total.toLocaleString('en')}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
+        ${s.hidden ? `<span><b>${s.hidden.toLocaleString('en')}</b> suspended or buried</span>` : ''}
       </div>
-      ${held > 0 ? `<p class="held-note">${held} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
+      ${held > 0 ? `<p class="held-note">${held.toLocaleString('en')} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
       ${c.heldNewByRescue > 0 ? '<p class="held-note">New cards paused <span>(catch-up plan)</span></p>' : ''}
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">
@@ -601,7 +601,8 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
     <h2 id="sheetTitle">${isNew ? 'New deck' : 'Edit deck'}</h2>
     <form id="deckForm" class="sheet-in" style="padding:0" novalidate>
       <label class="field"><span>Name</span>
-        <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}"></label>
+        <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}" aria-describedby="deckErr"></label>
+      <p class="err" id="deckErr" role="alert" hidden></p>
       <label class="field"><span>Course code (optional)</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date (optional)</span>
@@ -625,7 +626,6 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Type the answers</b>
         <span>In Review, this deck's cards (and its subdecks') show a box to type the answer when it is 40 characters or less. To set one card differently, use Answer by in its editor.</span></span>
         <input id="deckTypeIn" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).typeAnswers ? 'checked' : ''}></label>`}
-      <p class="err" id="deckErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
         <button class="btn primary" type="submit">${isNew ? 'Create deck' : 'Save'}</button>

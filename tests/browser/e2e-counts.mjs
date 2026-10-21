@@ -2,7 +2,7 @@
 //   - one number for "due" everywhere: Today, the sidebar, the Decks tile, the deck page and Review's own counts
 //   - subdecks + own cards = the parent; what a daily limit / the one-card-per-note rule holds back is said on the deck page
 //   - 1440 with the sidebar open: the deck-tree column is hidden and the list is wide; with the icon rail it comes back, with due numbers
-//   - an empty deck offers + Add cards; the % ring says "mastered"; the empty Decks screen is the shared start block
+//   - an empty deck offers + Add cards; the % ring says "learned"; the empty Decks screen is the shared start block
 //   - Today has no "N answers today" line and no "~1 min" on rows; the exam chips scroll sideways instead of wrapping
 //   - the deck page's header: Exam prep is the main button within 14 days, Edit / Add subdeck / Export live in a ⋯ menu
 import { chromium } from './pw.mjs';
@@ -207,7 +207,7 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); const now 
 await go(p, '#/decks', '.deck');
 ok(await p.locator('.deck', { hasText: 'Caught up' }).locator('.deck-go.done').count() === 1, 'a deck with cards and nothing due still gets the check');
 const ringTxt = (await p.locator('.deck:has-text("Chemistry") .deck-ring').textContent()).replace(/\s+/g, ' ').trim();
-ok(/^\d+%\s*mastered$/.test(ringTxt), 'the ring reads "0% mastered": ' + ringTxt);
+ok(/^\d+%\s*learned$/.test(ringTxt), 'the ring reads "0% learned": ' + ringTxt);
 await noHScroll(p, 'decks, phone');
 await p.screenshot({ path: SP + '/c-decks-375.png', fullPage: true });
 // the empty Decks screen is the shared start block

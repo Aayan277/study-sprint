@@ -108,8 +108,8 @@ export async function renderToday(el) {
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
             <span class="th-label mono">TODAY</span>
-            <b class="th-big">${tr.state === 'todo' ? `${c.total} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
-            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due}</b> due · <b data-count="new">${c.fresh}</b> new</span>`}
+            <b class="th-big">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
+            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
             ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
             ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>

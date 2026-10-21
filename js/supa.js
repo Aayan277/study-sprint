@@ -45,12 +45,12 @@ async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
     limit.done();
     if (limit.signal.aborted) throw timedOut();
     throw new SupaError(navigator.onLine === false
-      ? "You're offline. Sync will catch up when you're back online."
-      : "Couldn't reach the sync server. Your cards are safe on this device and will sync when it's back.",
+      ? 'You’re offline. Sync will catch up when you’re back online.'
+      : 'Couldn’t reach the sync server. Your cards are safe on this device and will sync when it’s back.',
     { code: 'network' });
   }
   let text;
-  try { text = await res.text(); } catch { if (limit.signal.aborted) throw timedOut(); throw new SupaError("Couldn't reach the sync server.", { code: 'network' }); } finally { limit.done(); }
+  try { text = await res.text(); } catch { if (limit.signal.aborted) throw timedOut(); throw new SupaError("Couldn’t reach the sync server.", { code: 'network' }); } finally { limit.done(); }
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
@@ -158,6 +158,7 @@ export function authMessage(err, { online = true } = {}) {
       : 'You’re offline. Connect to the internet to sign in. You can keep studying while offline.';
   }
   if (err?.code === 'timeout') return 'The sync server took too long to answer. Try again in a moment.';
+  if (/failed to fetch|dynamically imported module|networkerror|load failed/i.test(err?.message || '')) return authMessage({ code: 'network' }, { online });
   return err?.message || 'Something went wrong. Try again.';
 }
 // Sends the confirmation email again (Supabase allows one a minute per address).
@@ -245,7 +246,7 @@ async function storage(path, { method = 'GET', token, body, type, ms = 60000, ke
     });
   } catch {
     if (limit.signal.aborted) throw timedOut();
-    throw new SupaError("Couldn't reach the sync server.", { code: 'network' });
+    throw new SupaError("Couldn’t reach the sync server.", { code: 'network' });
   } finally { if (!keepTimer) limit.done(); }
   res.limit = limit;
   if (!res.ok) {

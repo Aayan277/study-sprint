@@ -122,7 +122,7 @@ function drawName(el, api) {
           <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
         <label class="field"><span>Exam date (optional)</span>
           <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}">
-          <small class="note" style="margin:4px 0 0">With a date, every card comes back before the exam and Exam prep goes over what you have not seen lately.</small></label>
+          <small class="note" style="margin:4px 0 0">With a date, every card comes back before the exam and Exam prep goes over what you haven’t seen lately.</small></label>
         <p class="err" id="wlErr" role="alert" hidden></p>
         <button class="btn primary wide cta" type="submit">Create course</button>
       </form>
