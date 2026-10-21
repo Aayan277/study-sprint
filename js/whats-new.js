@@ -8,6 +8,9 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.49', items: [
+    'Tapping a tab or link just as a pop-up closes now takes you there, instead of sometimes leaving you where you were.'
+  ] },
   { version: '4.48', items: [
     'Easier with a keyboard or screen reader: the card-type choice, practice test Submit, typed-answer results and Undo are now read aloud properly.',
     'Picture cards now tell a screen reader where the hidden part is, and the picture editor explains its keyboard keys.'

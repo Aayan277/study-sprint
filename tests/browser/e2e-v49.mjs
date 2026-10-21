@@ -25,7 +25,7 @@ const ringText = p => p.$eval('.today-hero .ring', e => e.textContent.replace(/\
 const reload = async p => { await p.reload(); await p.waitForSelector('.today-hero'); await theme(p); await p.waitForTimeout(300); };
 const answers = (p, n) => p.evaluate(async n => {
   const db = await import('./js/db.js'); const now = Date.now(); const cs = await db.getAll('cards');
-  await db.putMany('reviewLog', Array.from({ length: n }, (_, i) => ({ cardId: cs[i % cs.length].id, timestamp: now - 60000 * (i + 1), source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true })));
+  await db.putMany('reviewLog', Array.from({ length: n }, (_, i) => ({ cardId: cs[i % cs.length].id, timestamp: now - (i + 1), source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 2, applied: true })));
 }, n);
 // Nothing due: every card scheduled far ahead, no new cards.
 const nothingDue = p => p.evaluate(async () => {
@@ -36,11 +36,12 @@ const nothingDue = p => p.evaluate(async () => {
 
 // ================= 1. The Today ring = today's work =================
 // Finish n of today's new cards the way Review does: a review-log row (state 0 = it was new) and a schedule five days out.
+// (Rows are a few ms old, not minutes: minutes could fall before the 4am rollover and count as yesterday.)
 const study = (p, n) => p.evaluate(async n => {
   const db = await import('./js/db.js'); const { loadAll } = await import('./js/study-data.js');
   const now = Date.now(); const data = await loadAll(); const cs = data.split.fresh.slice(0, n);
   await db.putMany('cardStates', cs.map(c => ({ cardId: c.id, due: now + 5 * 86400000, stability: 20, difficulty: 5, reps: 1, lapses: 0, state: 2, lastReview: now, scheduledDays: 5, elapsedDays: 0, learningSteps: 0 })));
-  await db.putMany('reviewLog', cs.map((c, i) => ({ cardId: c.id, timestamp: now - 60000 * (i + 1), source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 0, applied: true })));
+  await db.putMany('reviewLog', cs.map((c, i) => ({ cardId: c.id, timestamp: now - (i + 1), source: 'review', mode: 'flip', correct: true, ms: 3000, rating: 3, state: 0, applied: true })));
   return cs.length;
 }, n);
 let p = await open(375, 800, 'dark');
