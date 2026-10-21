@@ -209,12 +209,12 @@ const bar = '#acFront';
 const toolStops = () => page.evaluate(() => { const b = document.querySelector('#acForm .fmt-tools'); return [...b.querySelectorAll('button')].filter(x => x.tabIndex === 0).length; });
 ok(await toolStops() === 1, 'Toolbar: exactly one button is in the Tab order');
 await page.evaluate(() => document.querySelector('#acForm .fmt-tools button').focus());
-const fmtOf = () => page.evaluate(() => document.activeElement.dataset.fmt || (document.activeElement.hasAttribute('data-img-add') ? 'image' : document.activeElement.hasAttribute('data-snd-add') ? 'sound' : '?'));
+const fmtOf = () => page.evaluate(() => document.activeElement.dataset.fmt || (document.activeElement.hasAttribute('data-img-add') ? 'image' : document.activeElement.hasAttribute('data-snd-add') ? 'sound' : document.activeElement.hasAttribute('data-rec') ? 'record' : '?'));
 ok(await fmtOf() === 'bold', 'Toolbar: starts on Bold');
 await page.keyboard.press('ArrowRight'); ok(await fmtOf() === 'italic', 'Toolbar: → moves to Italic');
-await page.keyboard.press('End'); ok(await fmtOf() === 'sound', 'Toolbar: End goes to the last button');
+await page.keyboard.press('End'); ok(await fmtOf() === 'record', 'Toolbar: End goes to the last button (the mic)');
 await page.keyboard.press('ArrowRight'); ok(await fmtOf() === 'bold', 'Toolbar: → wraps to the first');
-await page.keyboard.press('ArrowLeft'); ok(await fmtOf() === 'sound', 'Toolbar: ← wraps to the last');
+await page.keyboard.press('ArrowLeft'); ok(await fmtOf() === 'record', 'Toolbar: ← wraps to the last');
 await page.keyboard.press('Home'); ok(await fmtOf() === 'bold', 'Toolbar: Home goes to the first');
 await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');   // list
 await page.keyboard.press('Tab');

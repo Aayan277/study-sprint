@@ -3,6 +3,7 @@
 //   phones and tablets   a plain text box, the buttons add the marks, and a preview shows the result
 //   computers            a Word-style box: text looks bold while you type (Ctrl/⌘+B, Ctrl/⌘+I), and is
 //                        turned back into marks when saved
+// A mic button beside the sound button records a sound straight into the side (recorder.js, loaded when it is first pressed).
 // Usage: put cardTextField(...) in the form's HTML, then read it with readCardText(id) / clear it with
 // setCardText(id, ''). The buttons and shortcuts are wired once, below, for every box.
 
@@ -13,6 +14,7 @@ import { esc, toast, icon } from './ui.js';
 import { toolbarTarget } from './a11y.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
 import { canPlayType } from './audio.js';
+import { recordSupport } from './recorder-logic.js';
 import * as db from './db.js';
 import { renderCloze, makesText, wrapBlank, nextNumber, lastNumber, wordAt, clozeNumbers, planNoteSave } from './cloze.js';
 import { typeFacts, typeNote } from './type-in.js';
@@ -28,17 +30,22 @@ const RICH = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fi
 //   readCardSounds(id).
 //   cloze: true makes it the text of a cloze note (the [...] buttons and the preview work on it: see below)
 export function cardTextField(id, label, value = '', { rows = 2, placeholder = '', image = null, images = true, cloze = false } = {}) {
+  // The mic button is left out where the browser can't record at all (a page that isn't https still shows it, and says why when pressed).
+  const mic = images && recordSupport({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices?.getUserMedia, recorder: window.MediaRecorder }) !== 'unsupported';
   const pics = !images ? '' : `<div class="img-row" id="${id}Img" data-media-id="${esc(image || '')}">${pictureHTML(id, image)}</div>
       <input type="file" id="${id}File" accept="image/*" hidden data-img-file="${id}">
       <div class="snd-edit" id="${id}Snd" data-sound-ids=""></div>
-      <input type="file" id="${id}SndFile" accept="audio/*" multiple hidden data-snd-file="${id}">`;
+      <input type="file" id="${id}SndFile" accept="audio/*" multiple hidden data-snd-file="${id}">
+      ${mic ? `<div class="rec-panel" id="${id}Rec" data-state="idle" hidden role="group" aria-label="Recording"></div>
+      <span hidden id="${id}RecMark" data-sound-ids=""></span>` : ''}`;
   const tools = `<span class="fmt-tools" role="toolbar" aria-label="Formatting">
       <button type="button" data-fmt="bold" data-for="${id}" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
       <button type="button" tabindex="-1" data-fmt="italic" data-for="${id}" aria-label="Italic" title="Italic (Ctrl+I)"><i>I</i></button>
       <button type="button" tabindex="-1" data-fmt="list" data-for="${id}" aria-label="Bullet list" title="Bullet list">•</button>
       <button type="button" tabindex="-1" data-fmt="math" data-for="${id}" aria-label="Maths: put the selection between $ signs" title="Maths: put the selection between $ signs">∑</button>
       ${!images ? '' : `<button type="button" tabindex="-1" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>
-      <button type="button" tabindex="-1" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>`}</span>`;
+      <button type="button" tabindex="-1" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+      ${!mic ? '' : `<button type="button" tabindex="-1" data-rec="${id}" aria-pressed="false" aria-label="Record a sound" title="Record a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`}`}</span>`;
   // Said once, under the Back box: maths goes between $ signs.
   const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
@@ -96,6 +103,22 @@ document.addEventListener('click', e => {
   const rm = e.target.closest?.('[data-snd-remove]');
   if (rm) setCardSounds(rm.dataset.sndRemove, readCardSounds(rm.dataset.sndRemove).filter(x => x !== rm.dataset.sid));
 });
+// The mic button: starts a recording, or stops the one that is going. The recorder is loaded the first time.
+document.addEventListener('click', async e => {
+  const mic = e.target.closest?.('[data-rec]');
+  if (!mic) return;
+  const rec = await import('./recorder.js');
+  if (mic.getAttribute('aria-pressed') === 'true') await rec.stopRecording();
+  else await rec.startRecording(mic.dataset.rec);
+});
+// Saving while a take is going keeps the take: it is stopped and added first, then the form is submitted.
+document.addEventListener('submit', async e => {
+  const form = e.target;
+  if (!form.querySelector?.('.rec-panel[data-state="recording"], .rec-panel[data-state="starting"]')) return;
+  e.preventDefault(); e.stopPropagation();
+  await (await import('./recorder.js')).stopRecording();
+  form.requestSubmit(e.submitter || undefined);
+}, true);
 document.addEventListener('change', async e => {
   const id = e.target.dataset?.sndFile;
   if (!id || !e.target.files?.length) return;
@@ -178,7 +201,7 @@ document.addEventListener('change', async e => {
 });
 
 // Pressing a button mustn't take the focus (and the selection) away from the box.
-document.addEventListener('mousedown', e => { if (e.target.closest?.('[data-fmt]')) e.preventDefault(); });
+document.addEventListener('mousedown', e => { if (e.target.closest?.('[data-fmt], [data-rec]')) e.preventDefault(); });
 document.addEventListener('click', e => {
   const b = e.target.closest?.('[data-fmt]');
   if (b) applyFormat(b.dataset.for, b.dataset.fmt);
@@ -324,6 +347,10 @@ function fillSteps(p, steps, final = '', intro = '') {
 export function clearBasic(p) {
   setCardText(p + 'Front', ''); setCardText(p + 'Back', ''); setCardText(p + 'Hook', '');
   setCardImage(p + 'Front', null); setCardImage(p + 'Back', null);
+  for (const side of ['Front', 'Back']) {      // a finished take's panel goes too (its sound is cleared by the caller, with the others)
+    const rec = document.getElementById(p + side + 'Rec');
+    if (rec) { rec.hidden = true; rec.dataset.state = 'idle'; rec.replaceChildren(); }
+  }
   fillSteps(p, ['', '']);
 }
 // Choosing Text / Steps / Elements. What was typed comes along: the rows are written into Back when going to Text, Back's lines
