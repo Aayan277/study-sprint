@@ -13,6 +13,7 @@
 --   data_pct / media_pct              how full each of the two is, in percent
 --   marker_rows / marker_mb           how many of their records are deleted ones (a deleted card leaves a small empty "marker" behind), and the space those take
 --   dead_mdel_rows                    their picture-deletion marks ("mdel:" settings) that are no longer needed (value null or "gone")
+--   marker_pct                        the larger of markers / row cap and marker space / data limit, in percent (about 15 or more: see docs/design/prune-plan.md)
 -- (Data rows and bytes come from the sync_usage table that limits.sql keeps up to date; if a number ever looks wrong,
 -- run select public.recount_sync_usage(); once to recount everybody, and select public.recount_media_usage(); for pictures.)
 -- At the very bottom is a second small question: the two project-wide totals against their ceilings (the "fuses").
@@ -32,7 +33,9 @@ select
   round(100.0 * coalesce(m.bytes, 0) / nullif(public._media_limit(u.id), 0), 1)  as media_pct,
   coalesce(k.marker_rows, 0)                               as marker_rows,
   round(coalesce(k.marker_bytes, 0) / 1048576.0, 1)        as marker_mb,
-  coalesce(k.dead_mdel_rows, 0)                            as dead_mdel_rows
+  coalesce(k.dead_mdel_rows, 0)                            as dead_mdel_rows,
+  round(greatest(100.0 * coalesce(k.marker_rows, 0) / nullif(public._rows_limit(u.id), 0),
+                 100.0 * coalesce(k.marker_bytes, 0) / nullif(public._data_limit(u.id), 0)), 1) as marker_pct
 from auth.users u
 left join public.sync_usage d on d.user_id = u.id
 left join (
@@ -40,7 +43,7 @@ left join (
   -- The app saves a setting as {"value": ...}; a picture mark is a time, or null (not marked) or "gone" (swept).
   select s.user_id,
          count(*) filter (where s.deleted)                                                      as marker_rows,
-         sum(200 + 2 * octet_length(s.id) + greatest(coalesce(octet_length(s.data::text), 0), coalesce(pg_column_size(s.data), 0))) filter (where s.deleted) as marker_bytes,
+         sum(200 + 2 * octet_length(s.id) + greatest(coalesce(octet_length(s.data::text), 0), coalesce(pg_column_size((s.data::text)::jsonb), 0))) filter (where s.deleted) as marker_bytes,
          count(*) filter (where s.store = 'settings' and s.id like 'mdel:%' and s.data -> 'value' in ('null'::jsonb, '"gone"'::jsonb)) as dead_mdel_rows
   from public.sync_items s
   group by 1

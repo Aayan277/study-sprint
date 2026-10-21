@@ -6,7 +6,7 @@ On a small group of users on Supabase Free, the full feature costs about 2–3 d
 
 **Numbers** (checked against `private.row_bytes` = 200 + 2×len(id) + data size):
 - **One delete marker:** 272 B counted, about 220 B on disk (record ids are 36-character UUIDs).
-- **One `mdel:` row that is null or `'gone'`:** about 297–299 B.
+- **One `mdel:` row that is null or `'gone'`:** about 303–307 B.
 - **Current limits per person:** 40 MB of data and 300,000 rows. `prune-plan.md` still says 80 MB.
 - **Deleting one 1,000-card deck** (about 15 reviews per card) leaves 17,001 markers: 4.6 MB, 11% of the 40 MB limit and 5.7% of the row cap.
   - Markers do not free rows: a delete updates the existing row in place.
@@ -18,7 +18,7 @@ On a small group of users on Supabase Free, the full feature costs about 2–3 d
 - **Whole project:** five heavy churners add about 70 MB a year, about 23% of the 300 MB limit.
 
 **Step 0 (build now):**
-- Add two read-only columns to `supabase/owner.sql`:
+- Add three read-only columns to `supabase/owner.sql`:
   - `marker_rows` = count where `deleted`
   - `dead_mdel_rows` = settings rows where `id like 'mdel:%'` and `data->'value' in ('null','"gone"')`
   - and `marker_mb`.
@@ -149,7 +149,7 @@ Corrections:
 
 ## Tests
 
-**Local PostgreSQL is available.** PG 16 is installed at `/usr/lib/postgresql/16/bin`, with a `postgres` user (uid 102) and `runuser`. `npm run test:sql` (`tests/sql/run.mjs`) already starts a throwaway server as root through `runuser`. pg_cron is not installed and Docker has no daemon, so the shim needs a fake `cron` schema: a `cron.job` table plus `cron.schedule` / `cron.unschedule` upsert-by-name functions, created only in the cron tests.
+**Local PostgreSQL is available.** A PostgreSQL server is installed (the version and bin directory vary; check `tests/sql/run.mjs`), with a `postgres` OS user and `runuser`. `npm run test:sql` (`tests/sql/run.mjs`) already starts a throwaway server as root through `runuser`. pg_cron is not installed and Docker has no daemon, so the shim needs a fake `cron` schema: a `cron.job` table plus `cron.schedule` / `cron.unschedule` upsert-by-name functions, created only in the cron tests.
 
 **SQL** (new `await test(...)` blocks in `tests/sql/run.mjs`; add `prune.sql` to a `runPrune(db)` helper):
 

@@ -524,18 +524,25 @@ await test('owner.sql counts delete markers, their size and dead mdel: rows, for
     ins(A, 'cards', 'm1', 'null', true), ins(A, 'cards', 'm2', 'null', true), ins(A, 'cards', 'live', `'{"x":"y"}'`),
     ins(A, 'settings', 'mdel:null', `'{"value":null}'`), ins(A, 'settings', 'mdel:gone', `'{"value":"gone"}'`),
     ins(A, 'settings', 'mdel:time', `'{"value":1760000000000}'`), ins(A, 'settings', 'theme', `'{"value":null}'`),
-    ins(B, 'cards', 'bm', 'null', true), ins(B, 'settings', 'mdel:bnull', `'{"value":null}'`)].join(';')));
+    ins(B, 'cards', 'bm', 'null', true), ins(B, 'settings', 'mdel:bnull', `'{"value":null}'`),
+    `insert into public.sync_items (user_id, store, id, data, deleted, updated_at) select '${A}', 'reviewLog', 'bulk' || i, null, true, 1 from generate_series(1, 6000) i`,
+    `insert into public.sync_items (user_id, store, id, data, deleted, updated_at) values ('${A}', 'cards', 'bigdead', jsonb_build_object('x', (select jsonb_agg(i) from generate_series(1, 3000) i)), true, 1)`].join(';')));
   const rowFor = email => {
     const out = ok(psql(db, '', { file: join(SQL, 'owner.sql') }), 'owner.sql').split('\n').find(l => l.startsWith(email + '|'));
-    return out.split('|').slice(-3);
+    return out.split('|').slice(-4);
   };
   const expectBytes = num(db, `select sum(private.row_bytes(id, data)) from public.sync_items where user_id = '${A}' and deleted`);
-  const [rows, mb, dead] = rowFor('a@example.test');
-  assert.equal(rows, '2');
+  const [rows, mb, dead, pct] = rowFor('a@example.test');
+  assert.equal(rows, '6003');
+  assert.ok(expectBytes > 1000000);
   assert.equal(Number(mb), Math.round(expectBytes / 104857.6) / 10);
+  assert.equal(Number(pct), Math.round(1000 * Math.max(6003 / 300000, expectBytes / 41943040)) / 10);
+  assert.equal(num(db, `select rows from public.sync_usage where user_id = '${A}'`), 6003 + 5, 'data_rows is not changed by the new columns');
   assert.equal(dead, '2', 'null and "gone" count; a time and other settings do not');
-  assert.deepEqual(rowFor('b@example.test').map(Number).map((n, i) => (i === 1 ? 0 : n)), [1, 0, 1]);
-  assert.deepEqual(rowFor('c@example.test'), ['0', '0.0', '0']);
+  const bBytes = num(db, `select sum(private.row_bytes(id, data)) from public.sync_items where user_id = '${B}' and deleted`);
+  const [bRows, bMb, bDead] = rowFor('b@example.test');
+  assert.deepEqual([bRows, Number(bMb), bDead], ['1', Math.round(bBytes / 104857.6) / 10, '1']);
+  assert.deepEqual(rowFor('c@example.test'), ['0', '0.0', '0', '0.0']);
 });
 
 await test('a change that does not change a record\'s size touches no counter row', () => {

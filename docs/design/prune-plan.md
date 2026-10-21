@@ -1,6 +1,6 @@
 # Plan: prune deleted rows (backlog item 4)
 
-*Design only, nothing built. Written 18 Oct 2026 against v4.32. Decision: parked until it's needed (see "When to build it").*
+*Design only; only Step 0 (the owner.sql columns) is built. Written 18 Oct 2026 against v4.32, corrected 21 Oct 2026. Decision: parked until it's needed (see "When to build it").*
 
 ## Status and corrections (2026-10)
 Re-planned 21 Oct 2026: still too early to build. Only "Step 0" was done: `supabase/owner.sql` now shows `marker_rows`, `marker_mb` and `dead_mdel_rows` per person. The full re-plan is in `docs/design/prune-plan-2026-10.md`; where the two differ, that file wins. Its corrections 1-10:
@@ -29,10 +29,10 @@ When the storage alert (fuse-watch) shows the data total past about 50% of its f
 - **Time base:** a monthly job records `(now(), last_value of sync_seq)` in `private.sync_seq_marks`; rows with `seq <=` the newest mark at least 180 days old are prunable. `updated_at` can't be used: it is the device clock, and Re-upload re-sends old markers with their old times.
 - **`public.sync_prune` (per user):** `pruned_seq` (highest seq pruned), `pruned_until` (highest `updated_at` pruned), `pruned_at`, `rows`. Read-own RLS. Per user, because the pull bookmark is per account.
 - **`private.prune_sync_items()`:** in one statement with data-modifying CTEs, delete delete-markers and null/'gone' `mdel:` rows at or below the cutoff, and raise `sync_prune`. The existing quota trigger already gives back rows and bytes on a real DELETE, so no `app.pruning` setting is needed. Log to `private.prune_runs`. No new index.
-- **Quota trigger:** when a user's row count reaches 0 outside a prune (Delete my synced data), delete their `sync_prune` row, so a later re-upload isn't refused.
-- **Resurrection guard (own trigger, BEFORE INSERT):** refuse a live row in decks/cards/cardStates/reviewLog or an `mdel:` setting whose `updated_at <= pruned_until` when no row exists for that key. The `not exists` check keeps updates through `ON CONFLICT` working. It protects against Re-upload, first sign-in, old app versions, restored backups and the sample deck.
+- **Delete my synced data:** a statement-level AFTER DELETE trigger inside `prune.sql` (no `limits.sql` change) deletes the `sync_prune` row of anyone left with 0 rows, so a later re-upload isn't refused.
+- **Resurrection guard (own trigger, BEFORE INSERT):** for a user with a horizon, when no row exists for that key and `updated_at <= pruned_until`: refuse a live row in decks/cards/cardStates/reviewLog (`sync_pruned`); silently skip (`return null`) a delete marker or an `mdel:` setting. The `not exists` check keeps updates through `ON CONFLICT` working. It protects against Re-upload, first sign-in, old app versions, restored backups and the sample deck.
 - **`public.sync_missing(store, ids[])`:** returns the ids the caller has no row for at all; max 5,000 ids per call.
-- **The job:** pg_cron, 3rd of each month at 04:41 UTC (check on the live project's Extensions page that pg_cron is available on Free); fallback a monthly GitHub Action like fuse-watch. fuse-watch opens an issue if no successful prune ran in 40 days.
+- **The job:** pg_cron, 3rd of each month at 04:41 UTC (check on the live project's Extensions page that pg_cron is available on Free); fallback: the owner calls the function by hand monthly (a GitHub Action can't: its login is read-only). fuse-watch opens an issue if no successful prune ran in 40 days.
 - **Files:** new `prune.sql` (marks, runs, guard, `sync_missing`, the function, the schedule; refuses to run before the new `limits.sql`), `owner.sql` column, `docs/sync-setup.md` step 2d.
 
 ## Client
