@@ -158,7 +158,7 @@ export function authMessage(err, { online = true } = {}) {
       : 'You’re offline. Connect to the internet to sign in. You can keep studying while offline.';
   }
   if (err?.code === 'timeout') return 'The sync server took too long to answer. Try again in a moment.';
-  if (err instanceof TypeError || /failed to fetch|dynamically imported module|networkerror|load failed/i.test(err?.message || '')) return authMessage({ code: 'network' }, { online });
+  if (/failed to fetch|dynamically imported module|networkerror|load failed/i.test(err?.message || '')) return authMessage({ code: 'network' }, { online });
   return err?.message || 'Something went wrong. Try again.';
 }
 // Sends the confirmation email again (Supabase allows one a minute per address).

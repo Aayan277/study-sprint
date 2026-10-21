@@ -101,13 +101,13 @@ function goNow(hash) {
   if (hash !== location.hash) location.hash = hash;
 }
 export function toTab(hash) {
-  fresh = null;                        // the app's own navigation, made after the user's stray address, wins
+  if (!synthetic) fresh = null;        // the app's own navigation, made after the user's stray address, wins (a redirect made while a route renders, inside announce(), is not: it must not erase an address that arrived meanwhile)
   return queue(() => tabNow(hash));
 }
 // Go to an address: a tab destination replaces, anything else is one new entry.
 // When nothing is in flight this changes the address synchronously, like `location.hash = ...` did.
 export function go(hash) {
-  fresh = null;
+  if (!synthetic) fresh = null;
   return queue(() => goNow(hash));
 }
 // Like go(), for a "back" button that has a known parent: if the entry underneath is that parent, really go back to it.
@@ -125,7 +125,7 @@ export function back(fallback) {
 }
 // Swap the address of the screen showing (a redirect: the entry is replaced, not added to).
 export function replace(hash) {
-  fresh = null;
+  if (!synthetic) fresh = null;
   if (isTabRoot(hash)) return toTab(hash);
   return queue(() => {
     const old = lastHash;
@@ -207,13 +207,16 @@ function settle() {
 function onPop() {
   const left = cur;
   const arrived = track(history.state);
-  const w = waiter; waiter = null; w?.();
+  // A longer history and an untagged entry while we traverse: a new address (location.hash = ..., the address bar) committed before our
+  // history.go() did. It is not that go()'s arrival (a traversal never adds an entry), so keep waiting for it, or we would write over the wrong entry.
+  const stray = busy && !arrived && history.length > glen;
+  if (stray) fresh = location.hash;
+  else { const w = waiter; waiter = null; w?.(); }
   if (late) {
     // A history move of ours whose popstate came after we stopped waiting: it is still ours, not a press of Back.
     const l = late; late = null;
     if (arrived && Date.now() < l.until && arrived.depth === l.from.depth + l.delta) { settle(); return; }
   }
-  if (busy && !arrived && history.length > glen) fresh = location.hash;   // a new entry (not one of the old ones we are passing) arrived mid-traversal (not seen at the browser's history cap, where the length stays put: the old loss)
   if (!arrived || busy) return;                       // an entry the app did not tag yet: hashchange handles it
   if (arrived.depth < left.depth) {
     // Back went below some overlays' entries. The one we left, if it is a session, stays when Back moved exactly one entry

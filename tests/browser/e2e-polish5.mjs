@@ -45,11 +45,55 @@ for (const [w, h] of [[375, 812], [1440, 900]]) {
   ok(t.top > t.headBottom + 20, `${w}px: the toast is clear of the header (toast top ${Math.round(t.top)}, header bottom ${Math.round(t.headBottom)})`);
   ok(t.link >= 24, `${w}px: the Undo link is at least 24px tall (${Math.round(t.link)})`);
 
-  // Settings: the jump bar marks a section
+  // Settings: the jump bar marks the section that was tapped
   await go(p, '#/settings', '#setNav');
-  await p.evaluate(() => document.getElementById('syncTitle').scrollIntoView({ block: 'start' })); await p.waitForTimeout(500);
-  const cur = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
-  ok(cur.length === 1, `${w}px: exactly one Settings section is marked current: ${cur}`);
+  for (const sec of ['appearTitle', 'studyTitle', 'syncTitle', 'dataTitle', 'appearTitle']) {
+    await p.click(`#setNav a[data-sec=${sec}]`); await p.waitForTimeout(1300);
+    const cur = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
+    ok(cur.length === 1 && cur[0] === sec, `${w}px: tapping the ${sec} chip marks that very chip current (${cur})`);
+  }
+  await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await p.waitForTimeout(400);
+  const endCur = await p.$eval('#setNav', n => [...n.querySelectorAll('a[aria-current]')].map(a => a.dataset.sec));
+  ok(endCur.join() === 'dataTitle', `${w}px: at the end of the page the last section is current (${endCur})`);
+  await go(p, '#/decks', '.deck');
+  const leak = await p.evaluate(() => document.getElementById('setNav') === null);
+  ok(leak, `${w}px: the jump bar is gone after leaving Settings`);
+
+  // Browse: maths stays left-to-right and the row picks the card text's direction (Arabic rows read right-to-left)
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.addDeckWithCards({ id: 'r', name: 'RTL', color: '#46A758', created: Date.now() + 9 }, [
+      { id: 'r0', deckId: 'r', front: 'ما هو $x^2+1$ في المعادلة', back: 'الجواب $\\frac{a}{b}$', tags: [], created: 1 },
+      { id: 'r1', deckId: 'r', front: 'ما هي {{c1::الميتوكوندريا}} في الخلية', back: 'مصنع الطاقة', cloze: 1, tags: [], created: 2 },
+      { id: 'r2', deckId: 'r', front: 'Energy $E=mc^2$', back: 'physics', tags: [], created: 3 },
+    ]);
+  });
+  await go(p, '#/deck/r', '.crow'); await p.waitForSelector('.crow .katex');
+  const rows = await p.$$eval('.crow', rs => rs.map(r => ({ f: getComputedStyle(r.querySelector('.f')).direction, k: [...r.querySelectorAll('.katex')].map(k => getComputedStyle(k).direction), ckind: !!r.querySelector('.ckind') })));
+  ok(rows.length === 3 && rows.filter(r => r.f === 'rtl').length === 2 && rows.filter(r => r.f === 'ltr').length === 1, `${w}px: two Arabic rows are RTL, the English one LTR (${rows.map(r => r.f)})`);
+  ok(rows.every(r => r.k.every(d => d === 'ltr')), `${w}px: KaTeX is left-to-right in every row`);
+  ok(rows.some(r => r.ckind && r.f === 'rtl'), `${w}px: the cloze Arabic row is RTL despite its c1 badge`);
+  await p.locator('.crow').first().scrollIntoViewIfNeeded();
+  await p.screenshot({ path: process.env.SHOTS ? `${process.env.SHOTS}/rtl-math-${w}.png` : undefined });
+
+  // Toast: clear of the tab bar, the select bar and the save bar on phones
+  if (w < 800) {
+    await p.click('#brSelect'); await p.waitForSelector('#brBulk:not([hidden])'); await p.waitForTimeout(200);
+    await p.evaluate(async () => (await import('./js/ui.js')).toast('Hello there'));
+    const hit = await p.evaluate(() => {
+      const t = document.getElementById('toast').getBoundingClientRect();
+      return ['.tabs', '.bulkbar', '.savebar'].map(sel => [...document.querySelectorAll(sel)].filter(e => e.offsetParent || getComputedStyle(e).position === 'fixed').map(e => e.getBoundingClientRect()).filter(r => r.width && r.height).some(r => t.left < r.right && t.right > r.left && t.top < r.bottom && t.bottom > r.top));
+    });
+    ok(!hit.some(Boolean), `${w}px: the toast does not overlap the tab bar or other bars (${hit})`);
+
+  }
+  // Toast with the Browse side panel open (desktop): centred in the space the panel leaves
+  if (w >= 800) {
+    await p.locator('.crow-btn').first().click(); await p.waitForSelector('body.has-side'); await p.waitForTimeout(400);
+    await p.evaluate(async () => (await import('./js/ui.js')).toast('Hello there'));
+    const g = await p.evaluate(() => { const t = document.getElementById('toast').getBoundingClientRect(), sp = document.querySelector('dialog.sheet.side')?.getBoundingClientRect(); return { right: t.right, panelLeft: sp ? sp.left : 1e9 }; });
+    ok(g.right <= g.panelLeft, `${w}px: the toast stays left of the open side panel (${Math.round(g.right)} <= ${Math.round(g.panelLeft)})`);
+  }
 
   // Stats: the "Pick a day" box shows a focus ring
   await go(p, '#/stats', '#calPick');

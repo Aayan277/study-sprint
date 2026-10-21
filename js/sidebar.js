@@ -15,7 +15,7 @@ import { streakText } from './stats-calc.js';
 import { examInfo, badgeClass, countdown } from './exam.js';
 import { esc, icon, ring, plural, foldOpen, saveFold, toast } from './ui.js';
 import { formatInterval } from './queue.js';
-import * as sync from './sync.js';
+import { lastStatus, account } from './sync-state.js';
 import { toggleMode, isAlwaysDark } from './themes.js';
 import { go as navGo } from './nav.js';
 
@@ -37,7 +37,7 @@ const short = d => (d === 0 ? 'Today' : `${d}d`);
 
 // "Synced 2m ago", "Syncing…" or what went wrong: the one wording for Settings and the sidebar.
 export function syncWording(lastSync) {
-  const st = sync.lastStatus();
+  const st = lastStatus();
   const when = st.at || lastSync;
   const ago = when ? (Date.now() - when < 60000 ? 'just now' : `${formatInterval(Date.now() - when)} ago`) : '';
   const note = st.state === 'done' && st.note;          // e.g. pictures can't sync yet
@@ -79,14 +79,14 @@ async function paint(loaded) {
   const counts = countFor(data, chosen.length ? chosen : allIds);
   const total = counts.total;
   const tr = todayRing(data, chosen, counts);            // the same helper and decks as Today's ring
-  const ringText = tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} today`;
+  const ringText = tr.state === 'nothing' ? 'Nothing due today' : `${tr.done.toLocaleString('en')} of ${tr.total.toLocaleString('en')} today`;
 
   // Today badge
   const badge = $('sideBadge');
   badge.hidden = !total;
-  badge.innerHTML = total ? `<span aria-hidden="true">${total.toLocaleString()}</span><span class="sr-only"> ${plural(total, 'card')} to study</span>` : '';
+  badge.innerHTML = total ? `<span aria-hidden="true">${total.toLocaleString('en')}</span><span class="sr-only"> ${plural(total, 'card')} to study</span>` : '';
   const todayTab = document.querySelector('.tab[data-tab="today"]');
-  todayTab.dataset.tip = total ? `Today · ${total} to study` : 'Today';
+  todayTab.dataset.tip = total ? `Today · ${total.toLocaleString('en')} to study` : 'Today';
 
   // Decks dot: the nearest exam of any deck, when it is close
   const exams = data.decks.map(d => ({ d, info: examInfo(d) })).filter(x => x.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft);
@@ -108,7 +108,7 @@ async function paint(loaded) {
     const show = info && info.daysLeft <= EXAM_PILL_DAYS;
     const soon = show && badgeClass(info).includes('soon');
     const label = [d.name, plural(due, 'card') + ' due', info ? countdown(info).toLowerCase() : ''].filter(Boolean).join(', ');
-    const tip = [d.name, `${due} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
+    const tip = [d.name, `${due.toLocaleString('en')} due`, info ? short(info.daysLeft) : ''].filter(Boolean).join(' · ');
     return `<a class="side-deck" data-key="${esc(d.id)}" href="#/deck/${esc(d.id)}" style="--deck:${esc(d.color)}" aria-label="${esc(label)}" data-tip="${esc(tip)}"${show ? ` data-exam="${soon ? 'soon' : 'on'}"` : ''}>
       <span class="side-name">${esc(d.name)}</span>
       ${show ? `<span class="side-exam${soon ? ' soon' : ''}" aria-hidden="true">${short(info.daysLeft)}</span>` : ''}
@@ -137,7 +137,7 @@ async function paint(loaded) {
 export async function drawSync() {
   const el = $('sideSync');
   if (!el || !DESKTOP.matches) return;
-  const acct = await sync.account();
+  const acct = await account();
   const w = acct ? syncWording(acct.lastSync) : null;
   el.className = 'side-sync' + (!acct ? ' out' : w.warn ? ' warn' : '');
   el.innerHTML = `<i aria-hidden="true"></i><span>${esc(acct ? w.text : 'Sign in to sync')}</span>`;

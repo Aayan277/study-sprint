@@ -10,7 +10,7 @@ import * as db from './db.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, nextDueText, typicalCardMs, sameDayStep, loadStreak, todayRing, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
-import { lastStatus } from './sync.js';
+import { lastStatus } from './sync-state.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish, MOCK_DAYS } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';
@@ -108,8 +108,8 @@ export async function renderToday(el) {
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
             <span class="th-label mono">TODAY</span>
-            <b class="th-big">${tr.state === 'todo' ? `${c.total.toLocaleString()} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
-            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString()}</b> due · <b data-count="new">${c.fresh.toLocaleString()}</b> new</span>`}
+            <b class="th-big">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
+            ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
             ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
             ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>

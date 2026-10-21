@@ -159,7 +159,7 @@ for (const i of man.icons) {
 }
 ok((await png('icons/apple-touch-icon.png')).w === 180, 'the Apple touch icon is 180x180');
 const sw = await (await p.request.get(URL + 'sw.js')).text();
-ok(['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-monochrome-512.png', 'favicon.svg', 'apple-touch-icon.png'].every(f => sw.includes("'icons/" + f + "'")) && sw.includes("'js/install.js'"), 'sw.js saves the icons and install.js for offline');
+ok(['icon-192.png', 'icon-monochrome-512.png', 'favicon.svg', 'apple-touch-icon.png'].every(f => sw.includes("'icons/" + f + "'")) && sw.includes("'js/install.js'"), 'sw.js saves the small icons and install.js for offline (the two big 512 px PNGs are only read by the web manifest, online: not saved)');
 await p.context().close();
 
 await real.close(); await browser.close();

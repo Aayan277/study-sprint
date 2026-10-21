@@ -4,8 +4,8 @@
 
 import { normalizeAnswer } from './match.js';
 
-export const ACCEPT_MAX = 10;
-export const ACCEPT_LEN = 60;
+import { ACCEPT_MAX, ACCEPT_LEN, cleanAccept } from './card-checks.js';
+export { ACCEPT_MAX, ACCEPT_LEN, cleanAccept };      // these live in card-checks.js (no imports) so db.js can load them at start-up
 
 // The accepted answers a card has (a list of strings, however the card was saved).
 export const acceptedOf = card => (Array.isArray(card?.acceptAnswers)
@@ -41,14 +41,4 @@ export function parseAccepted(text) {
     if (out.length >= ACCEPT_MAX) break;
   }
   return out;
-}
-
-// A card from a backup or another device: keep a good `acceptAnswers`, drop a bad one (the rest of the card is left alone).
-// Same pattern as cleanMixedWith in db.js. An empty list is dropped too.
-export function cleanAccept(card) {
-  if (!card || !Object.hasOwn(card, 'acceptAnswers')) return card;
-  const v = card.acceptAnswers;
-  const good = Array.isArray(v) ? v.filter(a => typeof a === 'string' && a.trim()).map(a => a.trim().slice(0, ACCEPT_LEN)).slice(0, ACCEPT_MAX) : [];
-  const { acceptAnswers, ...rest } = card;
-  return good.length ? { ...rest, acceptAnswers: good } : rest;
 }

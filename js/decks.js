@@ -136,9 +136,9 @@ export async function renderLibrary(el, showStarters = false) {
           <span class="deck-name">${esc(deck.name)}</span>
           ${examInfo(deck) ? `<span class="${badgeClass(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
-            ${stats.total ? `<span><b>${stats.total.toLocaleString()}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
-            <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString()}</b> due</span>
-            <span><b>${c.fresh.toLocaleString()}</b> new</span>` : '<span>No cards yet</span>'}
+            ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
+            <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
+            <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
           </span>
         </button>
         ${stats.total ? `<span class="deck-ring" title="${Math.round(learned * 100)}% of cards are learned (young or mature)">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}<span class="dr-cap">learned</span></span>` : ''}
@@ -195,9 +195,9 @@ export async function renderLibrary(el, showStarters = false) {
       <label class="deck-search">${icon('search')}<input id="deckSearch" type="search" placeholder="Search ${plural(list.length, 'deck')}" aria-label="Search decks" autocomplete="off"></label>
       <div class="deck-sort" role="group" aria-label="Sort decks">${SORTS.map(([k, l]) => `<button type="button" data-sort="${k}" aria-pressed="${k === view.sort}">${l}</button>`).join('')}</div>
     </div>` : '') : `<div class="dsum" aria-label="All decks">
-      <span><b class="mono">${todayAll.due.toLocaleString()}</b> due today</span>
-      <span><b class="mono">${todayAll.fresh.toLocaleString()}</b> new today</span>
-      <span><b class="mono">${sum('total').toLocaleString()}</b> cards</span>
+      <span><b class="mono">${todayAll.due.toLocaleString('en')}</b> due today</span>
+      <span><b class="mono">${todayAll.fresh.toLocaleString('en')}</b> new today</span>
+      <span><b class="mono">${sum('total').toLocaleString('en')}</b> cards</span>
       <a class="link" href="#/today">Today ${icon('chevron')}</a>
     </div>`}
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
@@ -440,12 +440,12 @@ function summaryHTML(s, c) {
   const why = [c.heldBySiblings ? 'one card per note a day' : '', c.heldByLimit ? 'daily limit' : '', c.heldByRescue ? 'catch-up plan' : ''].filter(Boolean).join(', ');
   return `
       <div class="deck-counts" style="margin-top:0">
-        <span class="due${c.due ? '' : ' zero'}"><b>${c.due.toLocaleString()}</b> due today</span>
-        <span><b>${c.fresh.toLocaleString()}</b> new today</span>
-        <span><b>${s.total.toLocaleString()}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
-        ${s.hidden ? `<span><b>${s.hidden}</b> suspended or buried</span>` : ''}
+        <span class="due${c.due ? '' : ' zero'}"><b>${c.due.toLocaleString('en')}</b> due today</span>
+        <span><b>${c.fresh.toLocaleString('en')}</b> new today</span>
+        <span><b>${s.total.toLocaleString('en')}</b> ${s.total === 1 ? 'card' : 'cards'}</span>
+        ${s.hidden ? `<span><b>${s.hidden.toLocaleString('en')}</b> suspended or buried</span>` : ''}
       </div>
-      ${held > 0 ? `<p class="held-note">${held} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
+      ${held > 0 ? `<p class="held-note">${held.toLocaleString('en')} wait${held === 1 ? 's' : ''} until tomorrow <span>(${why})</span></p>` : ''}
       ${c.heldNewByRescue > 0 ? '<p class="held-note">New cards paused <span>(catch-up plan)</span></p>' : ''}
       <div style="margin-top:10px">${masteryBar(s)}</div>
       <div class="legend">

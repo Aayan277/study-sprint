@@ -73,3 +73,13 @@ test('Send the link again: the address, the body and where the link opens', asyn
   answer(429, { error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' });
   await assert.rejects(supa.resendSignup('a@b.co'), e => /Too many emails/.test(e.message));
 });
+
+test('a failed fetch or a module that could not load reads as a lost connection; other TypeErrors do not', () => {
+  const net = supa.authMessage({ code: 'network' }, { online: true });
+  const off = supa.authMessage({ code: 'network' }, { online: false });
+  assert.equal(supa.authMessage(new TypeError('Failed to fetch dynamically imported module: https://x.example/js/captcha.js')), net);
+  assert.equal(supa.authMessage(new TypeError('Failed to fetch')), net);
+  assert.equal(supa.authMessage(new TypeError('Load failed'), { online: false }), off);
+  assert.notEqual(supa.authMessage(new TypeError("Cannot read properties of undefined (reading 'x')")), net);
+  assert.equal(supa.authMessage(new TypeError('x is not a function')), 'x is not a function');
+});

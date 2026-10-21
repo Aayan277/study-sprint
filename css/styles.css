@@ -1412,10 +1412,10 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .flash-front b,.flash-recap b,.flash-back b{font-weight:650}
 .flash-front ul,.flash-recap ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
 .flash-front ul,.flash-recap ul{font-size:.8em}
-.fmt-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
+.fmt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2)}
 .field > .fmt-head{font-size:var(--fs-xs)}
 .fmt-head label{cursor:default}
-.fmt-tools{display:inline-flex;gap:4px}
+.fmt-tools{display:inline-flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}
 .fmt-tools button{min-width:36px;min-height:32px;padding:0 8px;border:0;border-radius:var(--r-xs);background:transparent;color:var(--text-2);font:600 .95rem var(--f-ui);cursor:pointer}
 @media (hover:hover) and (pointer:fine){.fmt-tools button:hover{background:var(--surface-3);color:var(--text)}}
 .fmt-tools button svg{display:block}
@@ -1498,6 +1498,22 @@ img[data-media][hidden]{display:none}
 .snd-edit:empty{display:none}
 .snd-item{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
 .snd-item .snd-btn{height:36px;min-width:36px}
+/* Record a sound (recorder.js): the mic button in the toolbar and the panel under the box while a take is going or just made */
+.fmt-tools button[data-rec][aria-pressed="true"]{background:var(--again-tint);color:var(--again);box-shadow:inset 0 0 0 1px var(--again-line)}
+.rec-panel{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);padding:var(--s-2) var(--s-3);border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-2)}
+.rec-panel[hidden]{display:none}
+.rec-panel .snd-btn{height:36px;min-width:36px}
+.rec-dot{width:10px;height:10px;border-radius:50%;background:var(--again)}
+.rec-panel[data-state="recording"] .rec-dot{animation:rec-blink 1s steps(2) infinite}
+@keyframes rec-blink{50%{opacity:.25}}
+.rec-text{color:var(--text)}
+.rec-time{font-variant-numeric:tabular-nums;color:var(--text);min-width:5.5ch}
+.rec-max{color:var(--text-2)}
+.rec-meter{flex:1 1 80px;height:6px;border-radius:var(--r-pill);background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--control);overflow:hidden}
+.rec-meter i{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(var(--lvl,0));background:var(--accent)}
+.btn.small.rec-stop{color:var(--again);border-color:var(--again-line)}
+:root:not([data-theme="light"]) .rec-panel{border-color:var(--control)}
+@media (prefers-reduced-motion:reduce){.rec-panel .rec-dot{animation:none}}
 .snd-name{font-size:var(--fs-sm);color:var(--text-2);margin-right:auto}
 .snd-mark{margin-left:2px}
 
@@ -1573,6 +1589,7 @@ img[data-media][hidden]{display:none}
   .toast{top:auto;bottom:84px}
   body.welcome:not(.focus) .toast{top:20px;bottom:auto}
   body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
+  body.has-side .toast,body.has-side.focus .toast{left:calc((100% + var(--side) - var(--panel)) / 2)}   /* centred in the space the open side panel leaves */
   .update-bar{left:calc(50% + var(--side) / 2);bottom:24px}
   body.focus .update-bar{bottom:150px}
   .ratebar,.savebar{bottom:0}
@@ -3102,6 +3119,7 @@ a.back{text-decoration:none}
   .back{min-height:44px;padding-block:0}
   .exam-chip,.deck-sort button{min-height:44px}
   .fmt-tools button{min-width:40px;min-height:40px}
+  .rec-panel .snd-btn{height:44px;min-width:44px}
   #forgotBtn,#planRest{display:inline-flex;align-items:center;min-height:44px}
   /* the round "i" keeps its 24px ring; the button around it is 44px */
   .info-fold summary{width:44px;height:44px;border:0;background:none}
@@ -3135,3 +3153,6 @@ main h2[tabindex="-1"]{outline:none}
 @media (pointer:coarse){
   .toast-link,.fr-how,.deck-open{min-height:44px}
 }
+
+/* Polish 5: maths stays left-to-right inside rows whose text direction is automatic (Arabic, Hebrew) */
+.katex{direction:ltr;unicode-bidi:isolate}
