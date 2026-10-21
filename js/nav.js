@@ -38,6 +38,8 @@ let chain = Promise.resolve();                            // history changes hap
 let busy = 0;                                             // >0 while we move through history ourselves: hashchange is ignored
 let waiter = null;                                        // resolves on the next popstate (after history.back / go)
 let swallowed = false;                                    // a hashchange arrived while busy: reconcile() must look at the address afterwards
+let fresh = null;                                         // an address the app did not make arrived while busy (our own go() may have popped its entry): reconcile() restores it
+let glen = 0;                                             // history.length when we last called history.go(): a new entry the app did not make shows as a longer history
 let synthetic = false;                                    // true while we dispatch a hashchange ourselves
 let lastHash = '';
 
@@ -63,6 +65,7 @@ function traverse(delta) {
     const from = cur;
     const t = setTimeout(() => { waiter = null; late = { from, delta, until: Date.now() + 5000 }; resolve(false); }, TRAVERSE_WAIT);
     waiter = () => { clearTimeout(t); setTimeout(() => resolve(true), 0); };       // after the browser's own hashchange, which follows popstate
+    glen = history.length;
     history.go(delta);
   });
 }
@@ -205,6 +208,7 @@ function onPop() {
     const l = late; late = null;
     if (arrived && Date.now() < l.until && arrived.depth === l.from.depth + l.delta) { settle(); return; }
   }
+  if (busy && !arrived && history.length > glen) fresh = location.hash;   // a new entry (not one of the old ones we are passing) arrived mid-traversal
   if (!arrived || busy) return;                       // an entry the app did not tag yet: hashchange handles it
   if (arrived.depth < left.depth) {
     // Back went below some overlays' entries. The one we left, if it is a session, stays when Back moved exactly one entry
@@ -249,11 +253,13 @@ function freshEntry(old) {
 function reconcile() {
   if (busy || pending || !swallowed) return;
   swallowed = false;
-  const old = lastHash;
-  if (location.hash === old) return;
-  if (!readEntry(history.state)) { freshEntry(old); lastHash = location.hash; announce(old); return; }
-  track(history.state);
-  announce(old);
+  const old = lastHash, want = fresh;
+  fresh = null;
+  if (location.hash !== old) {
+    if (!readEntry(history.state)) { freshEntry(old); lastHash = location.hash; announce(old); }
+    else { track(history.state); announce(old); }
+  }
+  if (want != null && want !== location.hash) go(want);    // the user's new address was swallowed and its entry popped by our traversal: go there now
 }
 
 // Every in-app link goes through go(): links to tabs replace instead of pushing (the tab bar, the sidebar, the logo, "Back to Today" and so on).
