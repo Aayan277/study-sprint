@@ -7,6 +7,7 @@
 //   startRecording(fieldId, { replaceId })   ask for the microphone and start (the field's id, like 'acBack')
 //   stopRecording({ keep, why })             stop; with keep the take is saved and added to the field (resolves when that is done)
 //   cancelRecording()                        stop and throw the take away
+//   settling()                               the stop in flight (a promise), or null
 //   isRecording()                            is the microphone open?
 // The panel (#<field>Rec) is made empty by card-editor.js and filled in here.
 
@@ -15,8 +16,9 @@ import { saveSound, MAX_SOUNDS, MAX_SOUND_BYTES, sizeText } from './media.js';
 import { stopSound, canPlayType } from './audio.js';
 import { stopSpeaking } from './speech.js';
 import { readCardSounds, setCardSounds } from './card-editor.js';
-import { MAX_REC_MS, REC_BITRATE, pickRecordingType, recordingName, shouldStop, tooShort, fmtClock, recordSupport, isIOS, micErrorMessage, recFailMessage, levelFrom, INSECURE_MESSAGE } from './recorder-logic.js';
+import { MAX_REC_MS, CAP_REC_MS, REC_BITRATE, pickRecordingType, recordingName, shouldStop, tooShort, fmtClock, recordSupport, isIOS, micErrorMessage, recFailMessage, levelFrom, INSECURE_MESSAGE } from './recorder-logic.js';
 
+let settle = null;   // the stop that is still saving: a promise, or null
 let cur = null;      // the take being made: { id, panel, replaceId, stream, rec, type, chunks, bytes, startedAt, timer, raf, ctx }
 
 const panelOf = id => document.getElementById(id + 'Rec');
@@ -50,6 +52,7 @@ const mark = (id, on) => { const m = document.getElementById(id + 'RecMark'); if
 const press = (id, on) => micOf(id)?.setAttribute('aria-pressed', on ? 'true' : 'false');
 
 export const isRecording = () => !!cur?.stream;
+export const settling = () => settle;
 
 export async function startRecording(id, { replaceId = null } = {}) {
   if (cur) await stopRecording({ keep: true });
@@ -78,9 +81,17 @@ export async function startRecording(id, { replaceId = null } = {}) {
   s.stream = stream;
   setAudioSession('play-and-record');
   s.type = pickRecordingType(t => MediaRecorder.isTypeSupported(t));
-  try { s.rec = new MediaRecorder(stream, { mimeType: s.type, audioBitsPerSecond: REC_BITRATE }); } catch { s.rec = new MediaRecorder(stream); }
-  s.rec.ondataavailable = e => { if (e.data?.size) { s.chunks.push(e.data); s.bytes += e.data.size; } };
-  s.rec.start(1000);          // a chunk a second, so the bytes so far can be counted
+  try {
+    try { s.rec = new MediaRecorder(stream, { mimeType: s.type, audioBitsPerSecond: REC_BITRATE }); } catch { s.rec = new MediaRecorder(stream); }
+    s.rec.ondataavailable = e => { if (e.data?.size) { s.chunks.push(e.data); s.bytes += e.data.size; } };
+    s.rec.onerror = () => { if (cur !== s) return; toast('Recording stopped. What was recorded so far is kept.'); stopRecording({ keep: true }); };
+    s.rec.start(1000);          // a chunk a second, so the bytes so far can be counted
+  } catch {
+    cur = null; release(s); hide(id);
+    toast("Couldn't start recording. Try again.");
+    micOf(id)?.focus();
+    return;
+  }
   s.startedAt = Date.now();
   stream.getAudioTracks().forEach(t => {
     t.onended = () => { if (cur !== s) return; toast('The microphone stopped. What was recorded so far is kept.'); stopRecording({ keep: true }); };
@@ -110,7 +121,7 @@ export async function startRecording(id, { replaceId = null } = {}) {
     if (!s.panel.isConnected) { cancelRecording(); return; }      // the sheet was replaced
     const elapsedMs = Date.now() - s.startedAt;
     if (time) time.textContent = fmtClock(elapsedMs);
-    const why = shouldStop({ elapsedMs, bytes: s.bytes, maxMs: MAX_REC_MS, maxBytes: MAX_SOUND_BYTES });
+    const why = shouldStop({ elapsedMs, bytes: s.bytes, maxMs: MAX_REC_MS, maxBytes: MAX_SOUND_BYTES, chunks: s.chunks.length });
     if (why) stopRecording({ keep: true, why });
   }, 200);
   panelOf(id)?.querySelector('[data-rec-stop]')?.focus();
@@ -132,11 +143,16 @@ function release(s) {
   if (cur?.id !== s.id) { press(s.id, false); mark(s.id, false); }
 }
 
-export async function stopRecording({ keep = true, why = null, quiet = false } = {}) {
+export function stopRecording(opts = {}) {
   const s = cur;
   if (!s) return;
   cur = null;
+  const p = finish(s, opts).finally(() => { if (settle === p) settle = null; });
+  return settle = p;
+}
+async function finish(s, { keep = true, why = null, quiet = false }) {
   const { id } = s;
+  const gone = () => !cur || cur.id !== id;      // (false when the next take on this side has already begun)
   if (s.rec && s.rec.state !== 'inactive') {
     const stopped = new Promise(done => { s.rec.addEventListener('stop', done, { once: true }); setTimeout(done, 2000); });
     try { s.rec.stop(); } catch { /* already stopped */ }
@@ -146,26 +162,32 @@ export async function stopRecording({ keep = true, why = null, quiet = false } =
   const ms = Date.now() - s.startedAt;
   const side = sideOf(id);
   if (!keep || !s.rec) {
-    hide(id, 'Recording cancelled.');
+    if (gone()) hide(id, 'Recording cancelled.');
     if (!quiet) micOf(id)?.focus();
     return;
   }
   if (tooShort(ms, s.bytes)) {
     const msg = 'That was too short to keep. Record for at least half a second.';
-    hide(id, msg); toast(msg);
+    if (gone()) hide(id, msg);
+    toast(msg);
     if (!quiet) micOf(id)?.focus();
     return;
   }
+  const full = () => { const ids = readCardSounds(id); return ids.length >= MAX_SOUNDS && !ids.includes(s.replaceId); };
+  const fullMsg = `This side already has ${MAX_SOUNDS} sounds. Remove one to keep the recording.`;
+  if (full()) { if (gone()) hide(id, fullMsg); toast(fullMsg, { ms: 6000 }); return; }
   try {
     const blob = new Blob(s.chunks, { type: s.rec.mimeType || s.type || s.chunks[0]?.type || '' });
     const saved = await saveSound({ name: recordingName(blob.type), type: blob.type, data: await blob.arrayBuffer() });
+    if (full()) { if (gone()) hide(id, fullMsg); toast(fullMsg, { ms: 6000 }); return; }
     const ids = readCardSounds(id);
     const at = ids.indexOf(s.replaceId);
     setCardSounds(id, at >= 0 ? ids.map((x, i) => (i === at ? saved.id : x)) : [...ids, saved.id]);
     const added = why === 'time' ? `Stopped at 1 minute, the longest a recording can be. Added to the ${side}.`
+      : why === 'cap' ? `Stopped at ${CAP_REC_MS / 1000} seconds, the longest this browser can record safely. Added to the ${side}.`
       : why === 'size' ? `Stopped at the 1 MB size limit. Added to the ${side}.`
       : `Recording added to the ${side}: ${Math.max(1, Math.round(ms / 1000))} seconds.`;
-    if (!cur || cur.id !== id) {      // (not when the next take on this side has already begun)
+    if (gone()) {
       show(id, 'done', `<button type="button" class="snd-btn" data-snd="${esc(saved.id)}" aria-label="Play the recording">▶︎</button>
         <span class="rec-text">Recording · ${fmtClock(ms)} · ${sizeText(saved.size)} · added to the ${esc(side)}</span>
         <button type="button" class="btn ghost small" data-rec-redo>Re-record</button>
@@ -176,7 +198,7 @@ export async function stopRecording({ keep = true, why = null, quiet = false } =
     if (!canPlayType(saved.type)) toast("This browser can't play this recording. Other devices may.");
   } catch (err) {
     console.error(err);
-    hide(id);
+    if (gone()) hide(id);
     toast(recFailMessage(err), { ms: 6000 });
   }
 }

@@ -12,6 +12,7 @@ import { soundType, soundExt } from './audio-type.js';
 export const MAX_REC_MS = 60000;          // one take is at most a minute
 export const REC_BITRATE = 64000;         // speech: ~0.5 MB a minute
 export const MIN_REC_MS = 500;
+export const CAP_REC_MS = 40000;        // a take that arrives in one piece (no chunks: Safari) stays under 1 MB at this length
 
 // AAC in m4a plays on every phone and in Anki, so it comes first; WebM/Opus does not play on older iPhones. Plain mp4 comes after webm
 // because Chrome's may hold Opus.
@@ -31,8 +32,9 @@ export function recordingName(type, date = new Date()) {
 
 // Stop a little under the limit: some browsers ignore the bitrate asked for, and the last chunk still has to fit.
 export const recStopBytes = maxBytes => Math.floor(maxBytes * 0.94);
-export function shouldStop({ elapsedMs, bytes, maxMs = MAX_REC_MS, maxBytes }) {
+export function shouldStop({ elapsedMs, bytes, maxMs = MAX_REC_MS, maxBytes, chunks }) {
   if (elapsedMs >= maxMs) return 'time';
+  if (chunks === 0 && elapsedMs >= CAP_REC_MS) return 'cap';      // still no data after 40 s (>3 s): the browser doesn't slice
   if (maxBytes && bytes >= recStopBytes(maxBytes)) return 'size';
   return null;
 }
@@ -45,8 +47,9 @@ export const fmtClock = ms => {
 };
 
 export function recordSupport({ secure, mediaDevices, recorder }) {
-  if (!recorder || !mediaDevices) return 'unsupported';
-  return secure === false ? 'insecure' : 'ok';
+  if (!recorder) return 'unsupported';
+  if (secure === false) return 'insecure';
+  return mediaDevices ? 'ok' : 'unsupported';
 }
 export const isIOS = (ua = '', platform = '', touchPoints = 0) => /iPhone|iPad|iPod/.test(ua) || (platform === 'MacIntel' && touchPoints > 1);
 

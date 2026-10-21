@@ -116,7 +116,8 @@ document.addEventListener('submit', async e => {
   const form = e.target;
   if (!form.querySelector?.('.rec-panel[data-state="recording"], .rec-panel[data-state="starting"]')) return;
   e.preventDefault(); e.stopPropagation();
-  await (await import('./recorder.js')).stopRecording();
+  const rec = await import('./recorder.js');
+  await (rec.stopRecording() || rec.settling());      // (a Stop already pressed is still saving: wait for it, don't stop again)
   form.requestSubmit(e.submitter || undefined);
 }, true);
 document.addEventListener('change', async e => {

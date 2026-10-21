@@ -240,5 +240,51 @@ for (const [name, words] of [['NotAllowedError', 'Microphone access is blocked']
   ok(await q.locator('[data-rec]').count() === 0 && await q.locator('[data-snd-add]').count() === 2, 'no MediaRecorder: no mic button (the sound button stays)');
   await q.context().close();
 }
+// ---------- 10. hardening: start throws, Save after Stop, a full side ----------
+const seed = p => p.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'rec', name: 'Rec', color: '#46A758', created: Date.now() }, [{ id: 'R0', deckId: 'rec', front: 'seed', back: 'x', tags: [], created: 1 }]); });
+{
+  const p = await device('startfails', { init: new Function("MediaRecorder.prototype.start = function () { throw new Error('boom'); };") });
+  await seed(p);
+  await p.goto(APP + '#/deck/rec'); await p.click('#brAdd'); await p.waitForSelector('#acForm');
+  await p.click('[data-rec=acBack]');
+  await p.waitForFunction(() => document.querySelector('#toast')?.textContent.includes("Couldn't start recording"), null, { timeout: 5000 }).catch(() => {});
+  ok((await p.textContent('#toast')).includes("Couldn't start recording. Try again."), 'MediaRecorder.start throws: the toast says so');
+  ok(await p.isHidden('#acBackRec') && await p.getAttribute('[data-rec=acBack]', 'aria-pressed') === 'false', 'MediaRecorder.start throws: the panel is hidden and the mic unpressed');
+  const t = await p.evaluate(() => window.__streams.map(s => s.getTracks().map(x => x.readyState)));
+  ok(t.length === 1 && t[0].every(x => x === 'ended'), 'MediaRecorder.start throws: the microphone track has ended');
+  await p.context().close();
+}
+{
+  await openAdd();
+  await page.fill('#acFront', 'Race');
+  const n0 = await run(async () => (await (await import('./js/db.js')).getAll('cards')).length);
+  await record('acBack', 1200);
+  await run(() => { window.__subs = 0; document.addEventListener('submit', () => window.__subs++, true); });
+  await run(() => { document.querySelector('#acBackRec [data-rec-stop]').click(); document.getElementById('acForm').requestSubmit(); });
+  await page.waitForFunction(() => /Card added/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 10000 });
+  await page.waitForTimeout(500);
+  const r = await run(async () => { const cs = (await (await import('./js/db.js')).getAll('cards')).filter(c => c.front === 'Race'); return { n: cs.length, s: cs[0]?.backSounds?.length, subs: window.__subs }; });
+  const n1 = await run(async () => (await (await import('./js/db.js')).getAll('cards')).length);
+  ok(r.n === 1 && r.s === 1 && n1 === n0 + 1, `Stop then Save at once: exactly one card, with the sound (${JSON.stringify(r)})`);
+  ok(r.subs <= 3, `Stop then Save at once: the form was submitted only a few times (${r.subs})`);
+  await run(async () => (await import('./js/ui.js')).closeSheet());
+  await sheetSettled(page);
+}
+{
+  await openAdd();
+  await record('acBack', 1200);
+  await run(async () => {
+    const { saveSound } = await import('./js/media.js'); const { setCardSounds } = await import('./js/card-editor.js'); const ids = [];
+    for (let i = 0; i < 4; i++) ids.push((await saveSound({ name: `s${i}.webm`, type: 'audio/webm', data: new Uint8Array([1, 2, 3, i]).buffer })).id);
+    setCardSounds('acBack', ids);
+  });
+  await page.click('#acBackRec [data-rec-stop]');
+  await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('already has 4 sounds'), null, { timeout: 5000 }).catch(() => {});
+  ok((await toastText()).includes('This side already has 4 sounds. Remove one to keep the recording.'), 'full side: Stop says the side already has 4 sounds');
+  ok(await items('acBack').count() === 4 && await page.isHidden('#acBackRec') && !(await page.textContent('#acBackRec')).includes('added'), 'full side: still 4 sounds, the panel is hidden and does not say "added"');
+  ok(await allEnded(), 'full side: the microphone is let go');
+  await run(async () => (await import('./js/ui.js')).closeSheet());
+  await sheetSettled(page);
+}
 ok(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close();

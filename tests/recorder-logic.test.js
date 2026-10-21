@@ -37,6 +37,14 @@ test('shouldStop and tooShort', () => {
   assert.ok(tooShort(2000, 0));
   assert.ok(!tooShort(500, 1));
 });
+test('shouldStop: a take with no data chunk after 3 s is capped at 40 s (Safari)', () => {
+  const maxBytes = 1048576;
+  assert.equal(shouldStop({ elapsedMs: 39999, bytes: 0, maxBytes, chunks: 0 }), null);
+  assert.equal(shouldStop({ elapsedMs: 40000, bytes: 0, maxBytes, chunks: 0 }), 'cap');
+  assert.equal(shouldStop({ elapsedMs: 40000, bytes: 10, maxBytes, chunks: 3 }), null);
+  assert.equal(shouldStop({ elapsedMs: 40000, bytes: 10, maxBytes }), null);
+  assert.equal(shouldStop({ elapsedMs: 60000, bytes: 0, maxBytes, chunks: 0 }), 'time');
+});
 test('fmtClock', () => {
   assert.equal(fmtClock(0), '0:00');
   assert.equal(fmtClock(7400), '0:07');
@@ -49,6 +57,8 @@ test('recordSupport', () => {
   assert.equal(recordSupport({ secure: false, mediaDevices: md, recorder: rec }), 'insecure');
   assert.equal(recordSupport({ secure: true, mediaDevices: md, recorder: undefined }), 'unsupported');
   assert.equal(recordSupport({ secure: true, mediaDevices: undefined, recorder: rec }), 'unsupported');
+  assert.equal(recordSupport({ secure: false, mediaDevices: undefined, recorder: rec }), 'insecure');      // (no mediaDevices on a page that isn't https)
+  assert.equal(recordSupport({ secure: false, mediaDevices: md, recorder: undefined }), 'unsupported');
 });
 test('isIOS', () => {
   assert.ok(isIOS('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)', 'iPhone', 5));
