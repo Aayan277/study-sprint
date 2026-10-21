@@ -101,13 +101,13 @@ function goNow(hash) {
   if (hash !== location.hash) location.hash = hash;
 }
 export function toTab(hash) {
-  fresh = null;                        // the app's own navigation, made after the user's stray address, wins
+  if (!synthetic) fresh = null;        // the app's own navigation, made after the user's stray address, wins (a redirect made while a route renders, inside announce(), is not: it must not erase an address that arrived meanwhile)
   return queue(() => tabNow(hash));
 }
 // Go to an address: a tab destination replaces, anything else is one new entry.
 // When nothing is in flight this changes the address synchronously, like `location.hash = ...` did.
 export function go(hash) {
-  fresh = null;
+  if (!synthetic) fresh = null;
   return queue(() => goNow(hash));
 }
 // Like go(), for a "back" button that has a known parent: if the entry underneath is that parent, really go back to it.
@@ -125,7 +125,7 @@ export function back(fallback) {
 }
 // Swap the address of the screen showing (a redirect: the entry is replaced, not added to).
 export function replace(hash) {
-  fresh = null;
+  if (!synthetic) fresh = null;
   if (isTabRoot(hash)) return toTab(hash);
   return queue(() => {
     const old = lastHash;

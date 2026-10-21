@@ -7,6 +7,7 @@ const errors = [];
 const URL = 'http://localhost:8123/';
 const ctx = await browser.newContext({ bypassCSP: true, viewport: { width: 375, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
 const p = await ctx.newPage();
+p.on('console', m => { if (/^(POP|REC|TOTAB|REPL)/.test(m.text())) console.log('  >', m.text()); });
 p.on('pageerror', e => errors.push('pageerror ' + e.message));
 await p.goto('about:blank');
 await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view');
@@ -41,5 +42,27 @@ for (let i = 0; i < 12; i++) {
 }
 ok(bad === 0, `sheet closing + new address in one tick: the app ends on the new route (12 rounds, ${bad} bad)`);
 ok(badBack === 0, `Back after that is sane (no orphan entries, ${badBack} bad)`);
+// The user's address arrives during a tab switch's traversal, and the tab's screen redirects as it renders (an onboarded user's #/welcome -> #/today):
+// the redirect is the app's own, made inside the render, so it must not erase the user's later address (nav.js `fresh`). Where the browser finally
+// parks the history depends on the order it runs the traversals in, so a single round is not a fair test: count the rounds in which the app
+// went to the user's address after the redirect (it never does when the redirect erases it).
+let reached = 0;
+for (let i = 0; i < 8; i++) {
+  await p.evaluate(async () => { (await import('http://localhost:8123/js/nav.js')).toTab('#/today'); });
+  await idle(); await p.waitForTimeout(100);
+  await p.evaluate(async html => { (await import('http://localhost:8123/js/ui.js')).openSheet(html); }, SHEET);
+  await idle();
+  await p.evaluate(async () => {
+    const nav = await import('http://localhost:8123/js/nav.js'), sc = document.getElementById('screen');
+    window.sawBrowse = false;
+    window.obs = new MutationObserver(() => { if (sc.dataset.route === 'browse') sawBrowse = true; });
+    obs.observe(sc, { attributes: true, attributeFilter: ['data-route'] });
+    nav.toTab('#/welcome'); location.hash = '#/browse';
+  });
+  await idle(); await p.waitForTimeout(400); await idle();
+  if (await p.evaluate(() => { obs.disconnect(); return sawBrowse; })) reached++;
+  await p.goto(URL + '#/today'); await p.waitForSelector('#screen .view'); await p.waitForTimeout(200);
+}
+ok(reached > 0, `a render-time redirect does not erase the user's address (8 rounds, the app reached it in ${reached})`);
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();
