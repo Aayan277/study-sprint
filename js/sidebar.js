@@ -84,7 +84,7 @@ async function paint(loaded) {
   // Today badge
   const badge = $('sideBadge');
   badge.hidden = !total;
-  badge.innerHTML = total ? `<span aria-hidden="true">${total}</span><span class="sr-only"> ${plural(total, 'card')} to study</span>` : '';
+  badge.innerHTML = total ? `<span aria-hidden="true">${total.toLocaleString()}</span><span class="sr-only"> ${plural(total, 'card')} to study</span>` : '';
   const todayTab = document.querySelector('.tab[data-tab="today"]');
   todayTab.dataset.tip = total ? `Today · ${total} to study` : 'Today';
 

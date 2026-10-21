@@ -135,7 +135,7 @@ fake.setDown(true);
 const errCount = errors.length;
 await A.click('#syncNowBtn');
 await A.waitForFunction(() => document.querySelector('#syncStatus').textContent.startsWith("Couldn't sync"));
-ok((await A.textContent('#syncStatus')).includes("Couldn't reach the sync server"), 'offline/paused server explained: ' + await A.textContent('#syncStatus'));
+ok((await A.textContent('#syncStatus')).includes("Couldn’t reach the sync server"), 'offline/paused server explained: ' + await A.textContent('#syncStatus'));
 errors.splice(errCount);   // the expected "Sync failed" console errors
 fake.setDown(false);
 await A.click('#syncNowBtn'); await waitSynced(A);

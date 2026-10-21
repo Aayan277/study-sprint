@@ -175,7 +175,7 @@ export async function renderPlay(el) {
 
     // One line saying what's in "Customise", so the folded part is still visible at a glance.
     const untimed = prefs.untimed === true && prefs.fmt !== 'lightning';      // (Lightning is a 60-second race: it stays timed)
-    const timeText = prefs.fmt === 'lightning' ? '60 s clock' : untimed ? 'No time limit' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
+    const timeText = prefs.fmt === 'lightning' ? '60s clock' : untimed ? 'No time limit' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
     const summary = [typing ? 'Typing' : QTYPES[prefs.qtype], prefs.hard ? 'Hard' : 'Normal', prefs.flash ? `Flash ${prefs.flash / 1000}s` : null,
       prefs.fmt === 'classic' ? `${prefs.len} questions` : null, timeText].filter(Boolean).join(' · ');
     const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
@@ -341,7 +341,7 @@ function start(el, opts) {
 function updateHud(penalty) {
   let a;
   if (G.fmt === 'classic') a = `Q <b>${Math.min(G.i + 1, G.total)}</b>/${G.total}`;
-  else if (G.fmt === 'survival') a = `<span class="lives" aria-label="${G.lives} of ${LIVES} lives left">${'●'.repeat(G.lives)}<span class="lost">${'●'.repeat(LIVES - G.lives)}</span></span>Q <b>${G.i + 1}</b>`;
+  else if (G.fmt === 'survival') a = `<span class="lives" aria-label="${G.lives} of ${LIVES} lives left">${'●'.repeat(G.lives)}<span class="lost">${'○'.repeat(LIVES - G.lives)}</span></span>Q <b>${G.i + 1}</b>`;
   else a = `<span id="clockWrap">Time <b id="hudClock">${fmtClock(G.clock)}</b></span>${penalty ? '<span class="penalty">−3s</span>' : ''}`;
   $('hudA').innerHTML = a + (G.hard ? ' <span class="hardtag">Hard</span>' : '') + (G.flash ? ` <span class="hardtag">Flash ${G.flash / 1000}s</span>` : '');
   const shown = +$('score').textContent.replace(/\D/g, '') || 0;

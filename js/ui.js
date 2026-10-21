@@ -50,6 +50,8 @@ function hideToast() {
   $('toast').hidden = true;
   announceToast('');
 }
+// Hides the toast if it is showing exactly this message (a message that is about a screen the person has left).
+export function dismissToast(msg) { const t = $('toast'); if (t && !t.hidden && t.textContent.includes(msg)) hideToast(); }
 export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   const t = $('toast');
   if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; }      // an older held toast must not hide this one

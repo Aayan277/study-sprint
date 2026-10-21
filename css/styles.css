@@ -236,10 +236,10 @@ main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-i
 .tab[aria-current="page"] svg{color:var(--accent);stroke-width:2;filter:drop-shadow(0 0 8px var(--glow))}
 .tab[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;border-radius:0 0 2px 2px;background:var(--accent);box-shadow:0 0 12px 1px var(--glow)}
 
-/* Toasts sit at the top, below the header, so they never cover a button. During a round the header is hidden and
+/* Toasts sit at the bottom, above the tab bar and the sticky bars (select, save, rate) and the update button, so they never cover the header or its back link. During a round the header is hidden and
    Quit is up there, so the toast goes above the docked answer/rating bar instead. The first-run start has no header. */
 body.focus .toast{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px))}
-body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px))}
+body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bottom:auto}
 
 /* Focus mode (phones): while a Review or Play round is running the header and tab bar get out of the way.
    js/ui.js setFocusMode() turns the body class on and off. */
@@ -632,7 +632,7 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .confirm p{margin:0}
 .confirm.neutral{background:var(--surface-2);border-color:var(--line)}
 .err{color:var(--again);font-size:var(--fs-base);margin:12px 0 0}
-.toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
+.toast{position:fixed;left:50%;top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;width:max-content;background:var(--surface-3);color:var(--text);padding:10px var(--s-4);border-radius:var(--r-md);font-size:var(--fs-base);font-weight:500;max-width:calc(100% - 32px);box-shadow:var(--e-3)}
 /* "Update ready — tap to restart": stays until tapped (or the app restarts itself at a safe moment). Above the tab bar; above the answer bar in a round. */
 .update-bar{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:21;width:max-content;max-width:calc(100% - 32px);min-height:44px;background:var(--accent);color:var(--on-accent);border:0;padding:10px var(--s-5);border-radius:var(--r-md);font:inherit;font-size:var(--fs-base);font-weight:600;box-shadow:var(--e-3);cursor:pointer}
 .update-bar[hidden]{display:none}
@@ -986,7 +986,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .end-ask-b{display:flex;gap:var(--s-2);margin-left:auto}
 @media (max-width:360px){.hud{column-gap:8px}.hud .link{padding:8px 4px}}   /* keeps Quit on the same line at 320px */
 .lives{color:var(--again);letter-spacing:3px;font-size:1rem;margin-right:8px}
-.lives .lost{color:var(--line-strong)}
+.lives .lost{color:var(--text-3)}
 .penalty{color:var(--again);font-weight:600;margin-left:4px}
 .hardtag{font-weight:700;font-size:var(--fs-2xs);letter-spacing:.1em;text-transform:uppercase;color:var(--again);border:1px solid var(--again);border-radius:4px;padding:1px 6px}
 .prompt{font-weight:600;font-size:var(--fs-base);color:var(--text-2);margin:0 0 10px;text-align:center}
@@ -1007,7 +1007,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .opt{display:flex;align-items:center;gap:var(--s-3);min-height:56px;padding:10px 14px;color:var(--text);font-weight:500;font-size:var(--fs-md);text-align:left;cursor:pointer;min-width:0}
 .opt:disabled{cursor:default;color:var(--text)}
 .opt .key{flex:none;width:22px;height:22px;display:grid;place-items:center;font:var(--fs-xs) var(--f-num);color:var(--text-2);border:1px solid var(--line-strong);border-radius:5px}
-.opt .lbl{min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.opt .lbl{min-width:0;overflow-wrap:break-word;hyphens:auto;line-height:1.3}
 .opt.correct{background:var(--good-tint);border-color:var(--good)}
 .opt.wrong{background:var(--again-tint);border-color:var(--again)}
 .opt.dim{opacity:.45}
@@ -1569,7 +1569,9 @@ img[data-media][hidden]{display:none}
   main[data-route="review"] > .view{max-width:780px}
   main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
-  .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2);top:20px;bottom:auto}
+  .toast,body.welcome:not(.focus) .toast{left:calc(50% + var(--side) / 2)}
+  .toast{top:auto;bottom:84px}
+  body.welcome:not(.focus) .toast{top:20px;bottom:auto}
   body.focus .toast{left:calc(50% + var(--side) / 2);top:auto;bottom:130px}
   .update-bar{left:calc(50% + var(--side) / 2);bottom:24px}
   body.focus .update-bar{bottom:150px}
@@ -2400,7 +2402,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .ys-list small{color:var(--text-2)}
 .ys-list .link{color:var(--accent-text);flex:none}
 .ys-exams{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 var(--s-3)}
-.ys-exams .tchip{flex-wrap:wrap;row-gap:0;text-align:left;border-radius:var(--r-md)}
+.ys-exams .tchip{flex-wrap:wrap;row-gap:0;white-space:normal;text-align:left;max-width:100%;border-radius:var(--r-md)}
+.ys-exams .tchip small{flex-basis:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
 .ys-exams .tchip.on{opacity:.8;cursor:default;border-color:var(--accent);background:var(--accent-tint)}
 .ys-exams .tchip .ico{width:15px;height:15px}
 .ys-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-3);align-items:end}
@@ -2796,7 +2799,7 @@ main[data-route="settings"] .advanced > summary .adv-sub{font-size:var(--fs-sm);
 .rs-scale > span:nth-child(2){--p:.5}
 .rs-scale > span:nth-child(3){--p:1;transform:translateX(-100%)}
 @media (min-width:700px){.rs-row,.rs-axis{grid-template-columns:190px minmax(0,1fr) 230px;column-gap:var(--s-4)}}
-@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}}
+@media (max-width:400px){.rs-row,.rs-axis{grid-template-columns:76px minmax(0,1fr) 112px}.rs-scale > span:nth-child(2){display:none}}
 
 /* ---- Phone tap targets (< 600px, Original style only): every control gets at least 44x44 px to tap -----------------------
    Small controls keep their look. Their tap area grows with a see-through box (::before) that reaches past the edges, so
@@ -3118,3 +3121,17 @@ a.back{text-decoration:none}
 }
 /* Original dark: the "Young" mastery segment is 3:1 or more against its track (Clinical has its own, in clinical.css) */
 :root:not([data-theme="light"]):not([data-ui="clinical"]){--lv-young:color-mix(in srgb,var(--accent) 78%,var(--surface-1))}
+
+/* Polish 5: small targets (24px, 44px on touch), the current Settings section, links that look like links, and a visible focus ring on the day picker */
+.toast-link{display:inline-flex;align-items:center;min-height:24px;padding:2px 4px;margin-left:4px;color:var(--accent-text);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.fr-how{display:inline-flex;align-items:center;min-height:24px}
+.deck-open{box-sizing:border-box;min-height:24px}
+.side-head{min-height:24px}
+#calPick:focus,#calPick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.set-nav a[aria-current]{border-color:var(--accent);background:var(--accent-tint);color:var(--text)}
+main h2[tabindex="-1"]{outline:none}
+#syncForm > .field:first-of-type{margin-top:var(--s-3)}
+.fin-links .link{color:var(--accent-text);text-decoration:underline;text-underline-offset:3px}
+@media (pointer:coarse){
+  .toast-link,.fr-how,.deck-open{min-height:44px}
+}

@@ -132,10 +132,13 @@ export function notesHTML(entries = recentNotes()) {
 
 // The list of recent changes in a sheet (Settings → About → What's new, and "See all" on Today's card).
 export function openWhatsNewSheet() {
+  const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
   openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
     <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Got it</button></div>`);
   // The sheet scrolls: a keyboard can reach it, and it has a name.
   const scroller = document.querySelector('#sheet .sheet-in');
   if (scroller) { scroller.tabIndex = 0; scroller.setAttribute('role', 'region'); scroller.setAttribute('aria-label', 'Release notes'); }
   document.getElementById('newOk').addEventListener('click', closeSheet);
+  // Closing puts focus back where it was (otherwise it falls to the start of the page, the skip link).
+  if (opener) document.getElementById('sheet').addEventListener('close', () => { if (opener.isConnected) opener.focus({ preventScroll: true }); }, { once: true });
 }

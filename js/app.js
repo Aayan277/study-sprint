@@ -291,6 +291,20 @@ async function renderSettings(el) {
     e.preventDefault();
     $(a.dataset.sec).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
+  // The jump bar marks the section being read (aria-current): the first section whose body crosses the band under the sticky bar.
+  if ('IntersectionObserver' in window) {
+    const nav = $('setNav');
+    const links = [...nav.querySelectorAll('a[data-sec]')];
+    const secs = new Map(links.map(a => [$(a.dataset.sec)?.closest('section'), a]).filter(([sec]) => sec));
+    const live = new Map();
+    const io = new IntersectionObserver(entries => {
+      if (!nav.isConnected) { io.disconnect(); return; }
+      for (const en of entries) live.set(en.target, en.isIntersecting);
+      const cur = [...secs.keys()].find(sec => live.get(sec));
+      for (const [sec, a] of secs) { if (sec === cur) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
+    }, { rootMargin: '-120px 0px -60% 0px' });
+    for (const sec of secs.keys()) io.observe(sec);
+  }
   $('skins').addEventListener('click', e => {
     const b = e.target.closest('.skin'); if (!b) return;
     saveTheme({ ...settings.theme, skin: b.dataset.skin });
@@ -977,7 +991,10 @@ async function drawUsage() {
 // A fresh "are you a person?" token, or undefined when the project has no captcha set up. (captcha.js only loads
 // when it's needed.)
 async function captchaToken() {
-  const { captchaOn, askCaptcha } = await import('./captcha.js');
+  let mod;
+  try { mod = await import('./captcha.js'); }
+  catch { throw Object.assign(new Error('network'), { code: 'network' }); }   // offline: the module was never cached
+  const { captchaOn, askCaptcha } = mod;
   return captchaOn() ? askCaptcha($('captchaBox')) : undefined;
 }
 
