@@ -122,6 +122,9 @@ export function notesHTML(entries = recentNotes()) {
 // The list of recent changes in a sheet (Settings → About → What's new, and "See all" on Today's card).
 export function openWhatsNewSheet() {
   openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
-    <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
+    <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Got it</button></div>`);
+  // The sheet scrolls: a keyboard can reach it, and it has a name.
+  const scroller = document.querySelector('#sheet .sheet-in');
+  if (scroller) { scroller.tabIndex = 0; scroller.setAttribute('role', 'region'); scroller.setAttribute('aria-label', 'Release notes'); }
   document.getElementById('newOk').addEventListener('click', closeSheet);
 }

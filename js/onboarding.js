@@ -20,7 +20,7 @@ import { deckPath, subtreeIds, effectiveDeck } from './deck-tree.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { examOptions } from './exam.js';
 import { isHidden } from './browse-logic.js';
-import { formatInterval } from './queue.js';
+import { formatInterval, formatIntervalLong } from './queue.js';
 import { formatHTML, plainText, shortDeckPath, answerSize } from './format.js';
 import { imgHTML } from './media.js';
 import { hasMasks, occlusionHTML, occLabel } from './occlusion.js';
@@ -220,6 +220,7 @@ function optsFor(card, now = Date.now()) {
   return examOptions(deckSchedulerOptions(G.settings, deck), deck, now);
 }
 
+const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 function drawGuide() {
   const { el, cards, i, flipped } = G;
   if (i >= cards.length) return drawGuideDone();
@@ -234,18 +235,32 @@ function drawGuide() {
   const fullPath = deckPath(G.decks, card.deckId);
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}</span>`;
   const backSize = answerSize(plainText(card.back));
-  el.innerHTML = `
+  // The page frame (count, Skip, and the #coach status line) is drawn once; only its text changes between cards, so a screen reader
+  // hears the new step instead of a status region that was thrown away and rebuilt.
+  if (!el.querySelector('#coach')) {
+    el.innerHTML = `
     <div class="welcome guide">
-      <div class="wl-top"><span class="wl-count mono">Card ${i + 1} of ${cards.length}</span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
-      <p class="coach" id="coach" role="status">${flipped
-        ? '<b>2</b> Now rate how well you knew it. This tells the app when to show the card again.<br><span class="coach-key">Again: forgot · Hard: barely · Good: got it · Easy: instantly</span>'
-        : '<b>1</b> Read the question, try to recall the answer, then tap the card to flip it.'}</p>
-      <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" tabindex="-1">
+      <div class="wl-top"><span class="wl-count mono" id="gCount"></span><button class="link" type="button" id="gSkip">Skip the walk-through</button></div>
+      <p class="coach" id="coach" role="status" aria-atomic="true"><b id="coachN"></b><span id="coachT"></span><span class="coach-key" id="coachK"></span></p>
+      <div id="gStage"></div>
+    </div>`;
+    $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
+  }
+  $('gCount').textContent = `Card ${i + 1} of ${cards.length}`;
+  $('coachN').textContent = flipped ? '2' : '1';
+  $('coachT').textContent = flipped
+    ? ' Now rate how well you knew it. This tells the app when to show the card again.'
+    : ` Read the question, try to recall the answer, then ${MOUSE.matches ? 'click the card or press Space' : 'tap the card'} to flip it.`;
+  $('coachK').textContent = flipped ? 'Again: forgot · Hard: barely · Good: got it · Easy: instantly' : '';
+  $('coachK').hidden = !flipped;
+  $('gStage').innerHTML = `
+      <article class="flash rv-card${flipped ? ' flipped' : ''}" id="flash" ${flipped ? 'tabindex="-1"' : 'tabindex="0" aria-labelledby="gQ" aria-describedby="gHint"'}>
         <div class="rv-turn">
           <div class="rv-face rv-front" ${flipped ? HIDDEN : ''}>${deckLabel}
-            <div class="flash-front${size}">${front}</div>
-            <p class="flash-hint">Tap to flip</p></div>
-          <div class="rv-face rv-back" tabindex="-1" ${flipped ? '' : HIDDEN}>${deckLabel}
+            <div class="flash-front${size}" id="gQ">${front}</div>
+            <span class="sr-only" id="gHint">Press Space or Enter to show the answer</span>
+            <p class="flash-hint">${MOUSE.matches ? 'Click or press Space to flip' : 'Tap to flip'}</p></div>
+          <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer" ${flipped ? '' : HIDDEN}>${deckLabel}
             ${occ ? '' : `<div class="flash-recap${backSize ? ' small' : ''}">${front}</div>`}
             <div class="flash-ans"><div class="flash-back${backSize}${occ ? ' occ-back' : ''}">${occ
               ? `${occlusionHTML(card, 'back', { shortcut: false })}<p class="occ-label${label ? '' : ' none'}">${label ? esc(label) : 'Hidden area'}</p>`
@@ -254,11 +269,9 @@ function drawGuide() {
       </article>
       <div class="ratebar" id="ratebar">${flipped ? `
         <div class="rates">${[[1, 'Again'], [2, 'Hard'], [3, 'Good'], [4, 'Easy']].map(([r, label]) => `
-          <button type="button" class="rate r${r}" data-rate="${r}" aria-keyshortcuts="${r}"><b>${label}</b>${ivl ? `<span class="mono">${formatInterval(ivl[r])}</span>` : ''}</button>`).join('')}</div>`
-        : '<button class="btn primary wide" type="button" id="showBtn">Show answer</button>'}</div>
-    </div>`;
+          <button type="button" class="rate r${r}" data-rate="${r}" aria-keyshortcuts="${r}"${ivl ? ` aria-label="${label}, next review in ${formatIntervalLong(ivl[r])}"` : ''}><b>${label}</b>${ivl ? `<span class="mono">${formatInterval(ivl[r])}</span>` : ''}</button>`).join('')}</div>`
+        : '<button class="btn primary wide" type="button" id="showBtn">Show answer</button>'}</div>`;
   setFocusMode(true);
-  $('gSkip').addEventListener('click', () => { const api = G.api; G = null; setFocusMode(false); leave(api); });
   $('showBtn')?.addEventListener('click', flipGuide);
   $('flash').addEventListener('click', e => {
     const zoom = e.target.closest('.occ-zoom');

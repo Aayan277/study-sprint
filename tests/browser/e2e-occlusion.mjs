@@ -62,7 +62,7 @@ await page.locator(`[data-start="${seed.deckId}"]`).click(); await page.waitForS
 ok((await page.textContent('.rv-counts .c-new')) === '1', 'Review shows 1 of the 3 siblings (one a day)');
 await page.waitForSelector('.rv-front .occ-img[src]', { timeout: 5000 });
 const first = await page.evaluate(() => { const c = document.querySelector('.rv-front .occ'); return { aria: c.getAttribute('aria-label'), ask: [...c.querySelectorAll('.occ-ask')].map(e => e.getAttribute('aria-label')), hidden: c.querySelectorAll('.occ-mask[aria-hidden=true]').length, ar: c.style.aspectRatio, w: c.getBoundingClientRect().width, h: c.getBoundingClientRect().height }; });
-ok(first.aria === 'Heart anatomy: 3 hidden parts' && first.ask.length >= 1 && first.ask.every(a => /^Hidden part \d of 3: name this part$/.test(a)), 'front: the picture is a group, the asked box has an accessible name ' + first.ask.join('; '));
+ok(first.aria === 'Picture: 3 hidden parts' && first.ask.length >= 1 && first.ask.every(a => /^Hidden part \d of 3, (upper|middle|lower|centre)[a-z ]*: name this part$/.test(a)), 'front: the picture is a group (the header is read once, above it), the asked box has an accessible name with its position ' + first.ask.join('; '));
 ok(first.hidden === 4 - first.ask.length && near(first.w / first.h, 2048 / 1365, 0.02), 'front: the other boxes are hidden from screen readers, and the box has the picture\'s shape');
 const nowN = +first.ask[0].match(/part (\d)/)[1];
 // the boxes sit where their % says (within 1px) on the picture

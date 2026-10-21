@@ -99,9 +99,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
             <div class="chips">${Object.entries(ORDERS).map(([k, label]) => radio('order', k, label, cfg.order === k)).join('')}</div>
             <p class="note" id="ptOrderNote" ${cfg.order === 'weak' ? '' : 'hidden'}>The cards you are least likely to remember now come first. Cards you have not studied yet come last.</p></fieldset>
         </div>
-        <label class="adv-row switch-row"><span><b>Count answers as reviews</b>
-          <span>Off: a practice test changes nothing in your schedule or stats. On: answers count like Play answers do when Play counts as reviews (due cards are graded, missed cards come back sooner).</span></span>
-          <input id="ptCounts" type="checkbox" class="switch" ${cfg.counts ? 'checked' : ''}></label>
+        <label class="adv-row switch-row"><span><b id="ptCountsLbl">Count answers as reviews</b>
+          <span id="ptCountsHelp">Off: a practice test changes nothing in your schedule or stats. On: answers count like Play answers do when Play counts as reviews (due cards are graded, missed cards come back sooner).</span></span>
+          <input id="ptCounts" type="checkbox" class="switch" aria-labelledby="ptCountsLbl" aria-describedby="ptCountsHelp" ${cfg.counts ? 'checked' : ''}></label>
         <p class="pt-note" id="ptNote" role="status" aria-live="polite"></p>
         ${recent.length ? `<section class="pt-hist" aria-label="Recent results"><h3>Recent results</h3><ul>${recent.map(r => `<li><span>${new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b class="mono">${r.pct}%</b><span class="mono">${r.correct}/${r.total}</span>${r.secs ? `<span class="mono">${clock(r.secs * 1000)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
         <div class="sheet-actions"><button class="btn ghost" type="button" id="ptCancel">Cancel</button><button class="btn primary" type="submit" id="ptStart">Start test</button></div>

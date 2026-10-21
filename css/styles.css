@@ -1738,6 +1738,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .coach b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 var(--fs-xs) var(--f-num)}
 .coach-key{display:block;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .guide .flash{min-height:min(50dvh,420px)}
+.guide #gStage{display:contents}
 .wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line);box-shadow:0 0 28px -6px var(--glow)}
 .wl-done .ico{width:30px;height:30px}
 @media (min-width:1024px){
