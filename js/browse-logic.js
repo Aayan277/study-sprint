@@ -7,6 +7,7 @@
 //   flag         0 = none, 1 red, 2 orange, 3 green, 4 blue
 
 import { dayEnd } from './days.js';
+import { isSuspended, isBuried, isHidden } from './card-checks.js';
 import { formatInterval, isPracticeSource } from './queue.js';
 import { dupKey } from './import.js';
 import { normTag, tagWords, SEP } from './tag-tree.js';
@@ -25,10 +26,8 @@ const NEW = 0, LEARNING = 1, RELEARNING = 3;
 const COLLATE = new Intl.Collator();
 const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
-export const isSuspended = card => !!card.suspended;
-export const isBuried = (card, now = Date.now()) => !!card.buriedUntil && card.buriedUntil > now;
-// Cards Review and Play should skip right now.
-export const isHidden = (card, now = Date.now()) => isSuspended(card) || isBuried(card, now);
+// isSuspended, isBuried and isHidden (cards Review and Play skip right now) live in card-checks.js, a file with no imports.
+export { isSuspended, isBuried, isHidden };
 
 // "Bury until tomorrow" means until the next study day starts (4am).
 export const buryUntil = (now = Date.now()) => dayEnd(now);

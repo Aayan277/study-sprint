@@ -8,18 +8,16 @@
 //   x, y, w, h are fractions (0 to 1) of the picture, so they survive resizing. w and h in the occlusion itself are
 //   the saved picture's size in pixels (so the box has the right shape before the picture has loaded).
 //
-// Pure functions (no page, no database, and NO imports, so db.js can load this at start-up), tested by
+// Pure functions (no page, no database), tested by
 // tests/occlusion.test.js. The part that touches the page (zoom, pinch) is in occlusion-view.js.
 
-export const MAX_MASKS = 300;     // boxes in one picture
-export const MAX_POINTS = 200;    // corners of one polygon
 export const MAX_LABEL = 200;
 export const MAX_HEADER = 300;
-const SHAPES = ['rect', 'ellipse', 'polygon'];
-const EPS = 1e-6;
+// The size limits and the validity checks (validMasks, validOcclusion) live in card-checks.js, a file with no imports, so db.js can
+// load them at start-up without this file. They are re-exported here so every other file keeps importing them from occlusion.js.
+import { MAX_MASKS, MAX_POINTS, SHAPES, isNum, isPlain, validMasks, validOcclusion } from './card-checks.js';
+export { MAX_MASKS, MAX_POINTS, validMasks, validOcclusion };
 
-const isNum = v => typeof v === 'number' && Number.isFinite(v);
-const isPlain = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const clamp01 = v => Math.min(1, Math.max(0, v));
 const round5 = v => Math.round(v * 1e5) / 1e5;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -67,24 +65,6 @@ export function occFrontBack({ header, masks }, n) {
 }
 
 // ---------- checking data ----------
-// Boxes end up in style attributes (and in backups and sync), so only plain numbers in range are allowed.
-function validMask(m) {
-  if (!isPlain(m) || typeof m.id !== 'string' || !Number.isInteger(m.n) || m.n < 1 || !SHAPES.includes(m.shape)) return false;
-  if (![m.x, m.y, m.w, m.h].every(isNum) || m.x < 0 || m.y < 0 || m.w <= 0 || m.h <= 0 || m.x + m.w > 1 + EPS || m.y + m.h > 1 + EPS) return false;
-  if (m.label !== undefined && typeof m.label !== 'string') return false;
-  if (m.points !== undefined) {
-    if (!Array.isArray(m.points) || m.points.length < 3 || m.points.length > MAX_POINTS) return false;
-    if (!m.points.every(p => Array.isArray(p) && p.length === 2 && p.every(v => isNum(v) && v >= 0 && v <= 1))) return false;
-  }
-  return true;
-}
-export const validMasks = masks => Array.isArray(masks) && masks.length >= 1 && masks.length <= MAX_MASKS && masks.every(validMask);
-
-// Is this a good card.occlusion?
-export const validOcclusion = o =>
-  isPlain(o) && Number.isInteger(o.n) && o.n >= 1 && isNum(o.w) && o.w > 0 && isNum(o.h) && o.h > 0 &&
-  (o.header === undefined || typeof o.header === 'string') && validMasks(o.masks);
-
 // Tidy one box from outside (Number(), clamp into the picture, round). null when nothing is left of it.
 export function cleanMask(m) {
   if (!m || typeof m !== 'object') return null;
