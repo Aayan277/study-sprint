@@ -526,7 +526,11 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   addBlank(t.id, which);
 });
-// Basic | Cloze | Image occlusion: show one part of the form.
+// Basic | Cloze | Image occlusion: show one part of the form. Focus only follows a pointer pick; with arrow keys it must
+// stay on the radio so the group can be walked.
+let kindByPointer = false;
+document.addEventListener('pointerdown', () => { kindByPointer = true; }, true);
+document.addEventListener('keydown', () => { kindByPointer = false; }, true);
 document.addEventListener('change', e => {
   const p = e.target.dataset?.kindFor;
   if (!p) return;
@@ -536,7 +540,7 @@ document.addEventListener('change', e => {
   const occ = document.getElementById(p + 'Occ');
   if (occ) occ.hidden = kind !== 'occlusion';
   try { localStorage.setItem('study-sprint-add-kind', kind); } catch { /* fine */ }
-  (document.getElementById(kind === 'occlusion' ? (occForms.get(p)?.image ? p + 'OccEdit' : p + 'OccChoose') : p + (kind === 'cloze' ? 'Text' : 'Front')))?.focus();
+  if (kindByPointer) (document.getElementById(kind === 'occlusion' ? (occForms.get(p)?.image ? p + 'OccEdit' : p + 'OccChoose') : p + (kind === 'cloze' ? 'Text' : 'Front')))?.focus();
 });
 export const lastKind = () => { try { const k = localStorage.getItem('study-sprint-add-kind'); return k === 'cloze' || k === 'occlusion' ? k : 'basic'; } catch { return 'basic'; } };
 

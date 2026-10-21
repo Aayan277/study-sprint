@@ -48,6 +48,18 @@ export function occLabel(masks, n) {
   return [...new Set(labels)].join(', ');
 }
 
+// Where a group sits in the picture, in words for people who cannot see it: the middle of its boxes on a 3 x 3 grid ("upper
+// left", "centre", "lower middle"). Positions are 0..1. (No neighbours' labels: they are the answers to the other cards.)
+export function occPlace(masks, n) {
+  const own = (masks || []).filter(m => m && m.n === n && [m.x, m.y, m.w, m.h].every(v => typeof v === 'number' && Number.isFinite(v)));
+  if (!own.length) return { where: '' };
+  const cx = (Math.min(...own.map(m => m.x)) + Math.max(...own.map(m => m.x + m.w))) / 2;
+  const cy = (Math.min(...own.map(m => m.y)) + Math.max(...own.map(m => m.y + m.h))) / 2;
+  const third = v => (v < 1 / 3 ? 0 : v > 2 / 3 ? 2 : 1);
+  const row = ['upper', 'middle', 'lower'][third(cy)], col = ['left', 'middle', 'right'][third(cx)];
+  return { where: row === 'middle' && col === 'middle' ? 'centre' : row === 'middle' ? `middle ${col}` : col === 'middle' ? row + ' middle' : `${row} ${col}` };
+}
+
 // The ordinary front and back for a card (what older versions of the app show).
 export function occFrontBack({ header, masks }, n) {
   const { k, total } = groupIndex(masks, n);
@@ -299,7 +311,8 @@ const drawable = masks => (Array.isArray(masks) ? masks : []).filter(m => isPlai
 //   side 'all'    every box as an outline with a number (the editor's preview); this card's group is highlighted
 //   zoom          add the Zoom button (not wanted in Play or in small lists)
 //   shortcut      say the button has the Z key (Review does; the walk-through doesn't)
-export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = true } = {}) {
+//   headed        the page already shows the header above the picture, so the picture's name and alt text don't repeat it
+export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = true, headed = false } = {}) {
   const o = card?.occlusion || {};
   const masks = drawable(o.masks);
   const groups = groupsOf(masks), total = groups.length;
@@ -309,6 +322,7 @@ export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = tr
   const W = Number(o.w), H = Number(o.h);
   const sized = isNum(W) && isNum(H) && W > 0 && H > 0;
   const label = occLabel(masks, active);
+  const { where } = occPlace(masks, active);
   const box = m => `left:${pct(m.x)};top:${pct(m.y)};width:${pct(m.w)};height:${pct(m.h)}`;
   const shapeStyle = m => {
     let s = box(m);
@@ -330,7 +344,7 @@ export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = tr
       return `<div class="occ-mask occ-reveal" style="${style}" role="img" aria-label="${esc(label ? 'Answer: ' + label : `Uncovered part ${k} of ${total}`)}"></div>`;
     }
     if (side === 'front' && mine) {
-      return `<div class="occ-mask occ-ask" style="${style}" role="img" aria-label="Hidden part ${k} of ${total}: name this part"></div>`;
+      return `<div class="occ-mask occ-ask" style="${style}" role="img" aria-label="${esc(`Hidden part ${k} of ${total}${where ? ', ' + where : ''}: name this part`)}"></div>`;
     }
     return `<div class="occ-mask" style="${style}" aria-hidden="true"></div>`;
   }).join('');
@@ -347,8 +361,8 @@ export function occlusionHTML(card, side = 'front', { zoom = true, shortcut = tr
     tag = `<span class="occ-tag${cls}" aria-hidden="true" style="left:${c}%;transform:${cls === ' occ-tag-up' ? `translate(-${c}%,-100%)` : `translateX(-${c}%)`};${where}">${esc(label)}</span>`;
   }
   const style = sized ? ` style="aspect-ratio:${Math.round(W)} / ${Math.round(H)};--ar:${(W / H).toFixed(4)}"` : '';
-  return `<figure class="occ occ-${side}${sized ? '' : ' occ-flow'}"${style} role="group" aria-label="${esc(name)}: ${total} hidden ${total === 1 ? 'part' : 'parts'}">`
-    + `<img class="occ-img" data-media="${esc(card?.backImage ?? '')}" alt="${esc(name)}">${divs}${tag}`
+  return `<figure class="occ occ-${side}${sized ? '' : ' occ-flow'}"${style} role="group" aria-label="${headed ? 'Picture' : esc(name)}: ${total} hidden ${total === 1 ? 'part' : 'parts'}">`
+    + `<img class="occ-img" data-media="${esc(card?.backImage ?? '')}" alt="${headed ? '' : esc(name)}">${divs}${tag}`
     + `${zoom ? `<button type="button" class="occ-zoom" aria-label="Zoom picture"${shortcut ? ' aria-keyshortcuts="Z"' : ''}>${ZOOM_ICON}</button>` : ''}</figure>`;
 }
 

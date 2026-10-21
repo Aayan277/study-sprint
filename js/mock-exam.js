@@ -56,11 +56,13 @@ function stopTest() {
   setFocusMode(false);
   releaseBack('session');
   if (!T) return;
+  setInert(false);
   clearInterval(T.timer);
   stopSound();
   T = null;
 }
 
+const keysAttr = k => (singleKeysOn() ? ` aria-keyshortcuts="${k}"` : '');
 const q = () => T.run.questions[T.state.i];
 const total = () => T.run.questions.length;
 const elapsedNow = () => T.base + (performance.now() - T.since);
@@ -97,11 +99,11 @@ function startTaking() {
         </div>
         <div id="tAnswer" class="t-answer"></div>
         <div class="t-step">
-          <button class="btn ghost" id="tPrev" type="button">‹ Previous${keyHint(' <kbd class="key-hint">P</kbd>')}</button>
+          <button class="btn ghost" id="tPrev" type="button"${keysAttr('P')}>‹ Previous${keyHint(' <kbd class="key-hint" aria-hidden="true">P</kbd>')}</button>
           <button class="btn primary" id="tNext" type="button">Next ›</button>
         </div>
         <div class="t-tools">
-          <button class="btn ghost small" id="tFlag" type="button" aria-pressed="false">${icon('flag')}<span>Flag for review</span>${keyHint(' <kbd class="key-hint">F</kbd>')}</button>
+          <button class="btn ghost small" id="tFlag" type="button" aria-pressed="false"${keysAttr('F')}>${icon('flag')}<span>Flag for review</span>${keyHint(' <kbd class="key-hint" aria-hidden="true">F</kbd>')}</button>
           <button class="btn ghost small t-navbtn" id="tNavBtn" type="button">${icon('grid')}<span>Questions</span></button>
           <button class="btn ghost small" id="tClear" type="button" hidden>Clear answer</button>
           <button class="btn ghost small t-submit" id="tSubmit" type="button">Submit test</button>
@@ -213,7 +215,8 @@ function updateChrome() {
   $('tBarFill').style.width = `${((i + 1) / n) * 100}%`;
   $('tPrev').disabled = i === 0;
   $('tNext').textContent = i >= n - 1 ? 'Review and submit' : 'Next ›';
-  if (i < n - 1) $('tNext').insertAdjacentHTML('beforeend', keyHint(' <kbd class="key-hint">N</kbd>'));
+  if (i < n - 1) $('tNext').insertAdjacentHTML('beforeend', keyHint(' <kbd class="key-hint" aria-hidden="true">N</kbd>'));
+  if (i < n - 1 && singleKeysOn()) $('tNext').setAttribute('aria-keyshortcuts', 'N'); else $('tNext').removeAttribute('aria-keyshortcuts');
   const flagged = state.flags[i];
   $('tFlag').setAttribute('aria-pressed', String(flagged));
   $('tFlag').querySelector('span').textContent = flagged ? 'Flagged for review' : 'Flag for review';
@@ -292,15 +295,31 @@ const counts = () => {
 };
 
 // ---------- asking: leave, submit ----------
-const PARTS = ['tLayout'];
-const setInert = on => PARTS.forEach(id => { const e = $(id); if (e) e.inert = on; });
+// The question is modal: everything else on the page (the test, the Leave bar, the app's own bar) is inert while it is open.
+// Live regions and sheets stay as they are, so a toast is still announced.
+// (The "open in another tab" question is the exception: Leave stays usable beside it, so only the test itself is inert.)
+function setInert(on, modal = true) {
+  (T?.inerted || []).forEach(e => { e.inert = false; }); if (T) T.inerted = [];
+  if (!on) return;
+  const out = [];
+  if (!modal) { const l = $('tLayout'); if (l) { l.inert = true; out.push(l); } T.inerted = out; return; }
+  for (let n = $('tAsk'); n && n !== document.body; n = n.parentElement) {
+    for (const sib of n.parentElement?.children || []) {
+      if (sib !== n && !sib.inert && !sib.matches('script, style, dialog, #toast, [aria-live], [role=status], [role=alert]')) { sib.inert = true; out.push(sib); }
+    }
+  }
+  T.inerted = out;
+}
 function showAsk(kind, html) {
   closeSheet();
   T.asking = kind;
+  T.opener = document.activeElement;
   const box = $('tAsk');
   box.innerHTML = html;
+  if (box.querySelector('#tAskD')) box.setAttribute('aria-describedby', 'tAskD'); else box.removeAttribute('aria-describedby');
   box.hidden = false;
-  setInert(true);
+  if (kind === 'tab') box.removeAttribute('aria-modal'); else box.setAttribute('aria-modal', 'true');
+  setInert(true, kind !== 'tab');
 }
 function hideAsk() {
   if (!T?.asking) return;
@@ -326,12 +345,20 @@ function askSubmit() {
   if (!open.length && !flagged.length) { submit({}); return; }
   const list = ks => (ks.length > 8 ? `${ks.slice(0, 8).map(k => k + 1).join(', ')} and ${ks.length - 8} more` : ks.map(k => k + 1).join(', '));
   const lines = [open.length ? `${plural(open.length, 'question')} not answered (${list(open)}). They count as wrong.` : '', flagged.length ? `${flagged.length} flagged for review (${list(flagged)}).` : ''].filter(Boolean);
-  showAsk('submit', `<div class="t-ask-text"><p id="tAskT"><b>Submit your test?</b></p><p class="t-ask-d">${lines.join(' ')}</p></div>
+  showAsk('submit', `<div class="t-ask-text"><p id="tAskT"><b>Submit your test?</b></p><p class="t-ask-d" id="tAskD">${lines.join(' ')}</p></div>
     <div class="end-ask-b"><button class="btn primary small" id="tAskNo" type="button">${open.length ? 'Go to first unanswered' : 'Go to first flagged'}</button><button class="btn ghost small" id="tAskYes" type="button">Submit test</button></div>`);
   const target = open.length ? open[0] : flagged[0];
   $('tAskNo').addEventListener('click', () => { hideAsk(); if (target === T.state.i) keepTesting(); else go(target); });
   $('tAskYes').addEventListener('click', () => { hideAsk(); submit({}); });
   $('tAskYes').focus({ preventScroll: true });
+}
+// Escape / Back on the "Submit?" question: back to the button that opened it.
+function dismissAsk() {
+  const opener = T.opener;
+  hideAsk();
+  if (T.asking) return;
+  const back = opener?.isConnected && opener !== document.body ? opener : $('tSubmit');
+  back?.focus({ preventScroll: true });
 }
 function keepTesting() {
   hideAsk();
@@ -348,13 +375,13 @@ function leave() {
 function backPressed() {
   if (!T || T.state.done) return;
   if (T.asking === 'tab') return;
-  if (T.asking === 'leave') leave(); else if (T.asking) hideAsk(); else askLeave();
+  if (T.asking === 'leave') leave(); else if (T.asking) dismissAsk(); else askLeave();
 }
 
 addEventListener('keydown', e => {
   if (!T || T.state.done || T.submitting || !$('tLayout') || e.ctrlKey || e.metaKey || e.altKey || document.getElementById('sheet')?.open) return;
   if (T.asking === 'tab') return;
-  if (T.asking) { if (e.key === 'Escape') { e.preventDefault(); if (T.asking === 'leave') keepTesting(); else hideAsk(); } return; }
+  if (T.asking) { if (e.key === 'Escape') { e.preventDefault(); if (T.asking === 'leave') keepTesting(); else dismissAsk(); } return; }
   if (e.key === 'Escape') { e.preventDefault(); askLeave(); return; }
   const inField = e.target.matches?.('input[type=text], textarea, select');
   if (inField || !singleKeysOn()) return;

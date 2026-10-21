@@ -972,7 +972,12 @@ async function runSuggest({ focus = false } = {}) {
     $('sugNote').hidden = true;
   }
   const bar = $('sugStatus'), label = $('sugStatusText');
-  const timer = setTimeout(() => { if (!stale()) { label.textContent = 'Finding cards… 0%'; bar.hidden = false; } }, 300);
+  const timer = setTimeout(() => {
+    if (stale()) return;
+    label.textContent = 'Finding cards… 0%'; bar.hidden = false;
+    // The Suggest button hid when the run began, which left focus on the page: Stop is where it can go (and it is what a keyboard user wants).
+    if (focus && (!document.activeElement || document.activeElement === document.body)) $('sugStop').focus({ preventScroll: true });
+  }, 300);
   let known = [...S.deckFronts];
   try { known = [...entriesFrom(await db.getSettings()).flatMap(e => [e.term, ...(e.aliases || [])]), ...known]; } catch { /* no glossary: the deck's fronts will do */ }
   if (stale()) { clearTimeout(timer); return; }
@@ -984,7 +989,10 @@ async function runSuggest({ focus = false } = {}) {
   clearTimeout(timer);
   if (stale()) return;
   S.sugJob = null;
+  const onStop = bar.contains(document.activeElement);
   bar.hidden = true;
+  // (Stop just went away: a finished run moves on to the list heading below; any other end puts focus back in the text)
+  if (onStop) ($('preview').hidden || out.status !== 'done' || !out.result?.suggestions?.length ? $('pasteBox') : $('pvTitle')).focus({ preventScroll: true });
   // Stopped, too long, an error or nothing found: the first time that ends suggest mode with a message; when suggestions are already
   // on the screen (the text was edited) they stay, with their ticks and edits, and the message is a note above them.
   const fail = msg => {

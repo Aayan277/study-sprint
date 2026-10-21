@@ -52,6 +52,7 @@ const ICON = {
 };
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = MAC ? '⌘' : 'Ctrl';
+const MASK_KEYS = 'ArrowUp ArrowDown ArrowLeft ArrowRight Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight L G Delete';
 const TOOLS = [
   ['undo', 'Undo', `Undo (${MOD}+Z)`, MAC ? 'Meta+Z' : 'Control+Z'],
   ['redo', 'Redo', `Redo (${MOD}+Shift+Z)`, MAC ? 'Meta+Shift+Z' : 'Control+Shift+Z Control+Y'],
@@ -96,9 +97,10 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
         <div class="occ-ed-head"><h2 id="occEdTitle">Hide parts</h2><span class="occ-ed-count" id="occEdCount" aria-live="polite"></span></div>
         <button type="button" class="btn primary" data-act="done">Done</button>
       </div>
-      <div class="occ-ed-stage" tabindex="-1" autofocus>
+      <div class="occ-ed-stage" tabindex="-1" role="group" aria-label="Image" autofocus>
         <div class="occ-ed-canvas">${imgHTML(image, 'occ-ed-img')}<div class="occ-ed-masks"></div></div>
         <p class="occ-ed-pill occ-ed-note" role="status"></p>
+        <p class="sr-only" id="occEdKeys">With a box selected: arrow keys nudge it, Alt plus arrow keys resize it, Shift makes the steps bigger. L names it, G groups the selected boxes into one card, Delete removes them.</p>
         <p class="occ-ed-pill occ-ed-hint" ${seen || start.length ? 'hidden' : ''}>${hint}</p>
       </div>
       <div class="occ-ed-label" hidden>
@@ -153,7 +155,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       }
       const handles = on && sel.size === 1 ? ['nw', 'ne', 'sw', 'se'].map(c => `<i class="occ-ed-h occ-ed-h-${c}"></i>`).join('') : '';
       return `<div class="occ-ed-mask${on ? ' sel' : ''}${!on && mates.has(m.n) ? ' mate' : ''}${m.shape === 'ellipse' ? ' round' : ''}" data-id="${esc(m.id)}" data-n="${m.n}"
-        style="left:${pct(m.x)};top:${pct(m.y)};width:${pct(m.w)};height:${pct(m.h)}" tabindex="0" role="button" aria-pressed="${on}"
+        style="left:${pct(m.x)};top:${pct(m.y)};width:${pct(m.w)};height:${pct(m.h)}" tabindex="0" role="button" aria-pressed="${on}" aria-describedby="occEdKeys" aria-keyshortcuts="${MASK_KEYS}"
         aria-label="Part ${k} of ${total}, ${label ? 'label ' + esc(label) : 'no label'}"><span class="occ-ed-fill"${clip}></span><span class="occ-ed-num">${k}</span>${handles}</div>`;
     }
     let mates = new Set();       // groups that have a selected box (their other boxes are tinted)
@@ -196,6 +198,7 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
     function status() {
       const masks = hist.present;
       const count = masks.length ? `${boxes(masks.length)} · ${cards(groupsOf(masks).length)}` : 'No boxes yet';
+      stage.setAttribute('aria-label', `Image, ${masks.length ? boxes(masks.length) : 'no boxes yet'}`);
       if (countEl.textContent !== count) countEl.textContent = count;     // the live region only speaks real changes
       tool('undo').disabled = !hist.past.length;
       tool('redo').disabled = !hist.future.length;
@@ -257,7 +260,10 @@ export function openOcclusionEditor({ image, w, h, masks = [], focusN = null, ma
       const c = toImage(v, vw / 2, vh / 2, cw, ch);
       const bw = Math.min(1, ADD_SIZE / Math.max(1, v.s));          // 20% of the picture, less when zoomed in
       const bh = Math.min(1, bw * cw / ch);                          // ... and square on screen
+      const before = hist.present.length;
       addBox(tidy({ x: clamp(c.x - bw / 2, 0, 1 - bw), y: clamp(c.y - bh / 2, 0, 1 - bh), w: bw, h: bh }));
+      // The button that was pressed stays where it is, so the new box takes the focus (arrows nudge it straight away).
+      if (hist.present.length > before) maskBox.querySelector(`[data-id="${CSS.escape([...sel][0])}"]`)?.focus({ preventScroll: true });
     }
 
     function doGroup() {

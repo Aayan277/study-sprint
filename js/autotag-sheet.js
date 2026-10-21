@@ -83,7 +83,7 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
         <input class="tag-name" value="${esc(t.name)}" aria-label="Tag name" autocapitalize="off" autocomplete="off" spellcheck="false" data-was="${esc(t.name)}"></div>
       <div class="ts-meta"><span class="muted small ts-count">${plural(t.count, 'card')}</span>
         ${t.exists ? '<span class="muted small ts-exists">Already a tag: these cards are added to it</span>' : ''}
-        <button class="btn ghost small" type="button" aria-expanded="false" aria-controls="tc-${i}">Cards</button></div>
+        <button class="btn ghost small" type="button" aria-expanded="false" aria-controls="tc-${i}" aria-label="Cards tagged ${esc(t.name)}">Cards</button></div>
       <p class="ts-err small" hidden></p>
       <div class="ts-cards" id="tc-${i}" hidden></div>
     </li>`;
@@ -141,7 +141,7 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
   const body = $('atBody');
   body.addEventListener('input', e => {
     if (e.target.matches('.pick, .tag-name, #tagFolder')) refreshFooter();
-    if (e.target.matches('.tag-name')) { const li = e.target.closest('li'); li.querySelector('.pick').setAttribute('aria-label', `Use tag ${e.target.value.trim() || 'with no name'}`); }
+    if (e.target.matches('.tag-name')) { const li = e.target.closest('li'); const nm = e.target.value.trim() || 'with no name'; li.querySelector('.pick').setAttribute('aria-label', `Use tag ${nm}`); li.querySelector('button[aria-controls]').setAttribute('aria-label', `Cards tagged ${nm}`); }
   });
   body.addEventListener('change', e => {
     if (e.target.matches('.ts-cards input')) {

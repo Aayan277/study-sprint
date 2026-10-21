@@ -12,7 +12,7 @@ import { checkTyped } from './match.js';
 import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, mathHTML, answerText, answerTargets, shortDeckPath, answerSize } from './format.js';
+import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize } from './format.js';
 import { cardMediaHTML, warmCards } from './media.js';
 import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
@@ -248,7 +248,7 @@ function renderSession(el, enter = false) {
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
   const backSize = occ || sp ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
-    ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front')}`
+    ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front', { headed: !!card.occlusion.header })}`
     : cardMediaHTML(card, 'front', cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front));
   const answerHTML = occ
     ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'Hidden area'}</p>
@@ -287,7 +287,7 @@ function renderSession(el, enter = false) {
           ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
           ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
-        <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer" ${R.flipped ? '' : HIDDEN}>
+        <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer"${R.typed ? ' aria-describedby="rvTyped"' : ''} ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
           ${cloze || occ ? '' : `<div class="flash-recap${backSize || sp ? ' small' : ''}">${front}</div>`}
           <div class="flash-ans">
@@ -446,10 +446,10 @@ function typedResultHTML() {
   if (diff && (diff.tooDifferent || (result.correct && !hasMarks(diff)))) diff = null;     // too different: just "You typed X"
   // One corrected line (the card shows the answer itself); a "Closest answer" row only when the back has several answers.
   const shown = diff ? diffHTML(diff, { answerRow: false, closest: !!diff.alternate }) : '';
-  if (result.correct) return `<p class="typed ok">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
+  if (result.correct) return `<p class="typed ok" id="rvTyped">${icon('check')} ${result.exact ? 'Correct' : 'Correct, with a small typo'}${result.exact || diff ? '' : `: <span class="given">${esc(value)}</span>`}</p>${shown}`;
   // "Accept my answer from now on" adds the typed text to the card's accepted answers (accept.js). You still pick the rating yourself.
   const accept = canAccept(R.current.card, value) ? '<p class="typed-accept"><button type="button" class="link" data-accept-typed>Accept my answer from now on</button></p>' : '';
-  return `<p class="typed no">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}${accept}`;
+  return `<p class="typed no" id="rvTyped">${icon('x')} ${value.trim() ? `Not quite.${diff ? '' : ` You typed <span class="given">${esc(value)}</span>`}` : 'No answer'}</p>${shown}${accept}`;
 }
 
 // Accept the typed text from now on: the card keeps it, and this answer counts as right (Good is suggested; the rating stays yours).
@@ -485,6 +485,7 @@ function flip(el) {
   const front = flash.querySelector('.rv-front'), back = flash.querySelector('.rv-back');
   front.setAttribute('aria-hidden', 'true'); front.inert = true;
   back.removeAttribute('aria-hidden'); back.inert = false;
+  if (R.typed) back.setAttribute('aria-describedby', 'rvTyped'); else back.removeAttribute('aria-describedby');      // "Correct" / "Not quite" is read when focus lands here
   $('typeForm')?.remove();
   $('longNote')?.remove();
   $('ratebar').innerHTML = backBarHTML();
@@ -699,6 +700,9 @@ async function undo(el) {
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
     R.shownAt = Date.now(); R.answerMs = 0;
     renderSession(el, true);
+    // Said aloud (the toast is a live region): the card is back, so a screen-reader user knows the rating was taken back.
+    const front = spokenCard(String(u.item.card.front || '').replace(/<[^>]*>/g, ' '), '', 41);
+    toast(`Undid rating${front && front !== 'Picture' ? ': ' + front : ''}`);
   } finally {
     R.busy = false;
   }

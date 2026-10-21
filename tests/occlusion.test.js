@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   isOcclusion, hasMasks, groupsOf, groupIndex, occLabel, occFrontBack, validOcclusion, cleanMask,
   parseAnkiOcclusion, toFractions, ankiOcclusionText, planOcclusionSave, occRemovalText, healOcclusion,
-  occlusionHTML, occSpeech, fitView, zoomAt, clampView, toImage, rectFrom, hitTest, handleAt, moveMask, resizeMask,
+  occlusionHTML, occSpeech, occPlace, fitView, zoomAt, clampView, toImage, rectFrom, hitTest, handleAt, moveMask, resizeMask,
   nextN, groupMasks, splitMask, deleteMasks, newH, pushH, undoH, redoH
 } from '../js/occlusion.js';
 
@@ -293,7 +293,7 @@ test('HTML front: the active group asks, the others are hidden from screen reade
   assert.match(html, /<figure class="occ occ-front" style="aspect-ratio:2048 \/ 1365;--ar:1\.5004" role="group" aria-label="Heart: 2 hidden parts">/);
   assert.match(html, /data-media="img1"/);
   assert.equal((html.match(/occ-ask/g) || []).length, 2);                               // m2 and m3 are both group 3
-  assert.match(html, /role="img" aria-label="Hidden part 2 of 2: name this part"/);
+  assert.match(html, /role="img" aria-label="Hidden part 2 of 2, centre: name this part"/);
   assert.match(html, /left:10\.000%;top:10\.000%;width:20\.000%;height:20\.000%/);
   assert.match(html, /aria-hidden="true"><\/div>/);
   assert.match(html, /class="occ-zoom"/);
@@ -448,4 +448,30 @@ test('history: push, undo, redo, a new push clears redo, capped at 100', () => {
   assert.equal(redoH(h), h);
   for (let i = 0; i < 150; i++) h = pushH(h, [i]);
   assert.equal(h.past.length, 100);
+});
+
+// ---------- where a part is, in words ----------
+test('occPlace: the middle of the group on a 3 x 3 grid (never the other cards\' labels)', () => {
+  assert.deepEqual(occPlace(MASKS, 1), { where: 'upper left' });
+  assert.deepEqual(occPlace(MASKS, 3), { where: 'centre' });
+  const m = [mask('a', 1, 0.8, 0.8, 0.1, 0.1), mask('b', 2, 0.4, 0.05, 0.2, 0.1, { label: 'Top' }), mask('c', 3, 0.05, 0.45, 0.1, 0.1), mask('d', 4, 0.9, 0.5, 0.05, 0.05)];
+  assert.deepEqual(occPlace(m, 1), { where: 'lower right' });
+  assert.equal(occPlace(m, 2).where, 'upper middle');
+  assert.equal(occPlace(m, 3).where, 'middle left');
+  assert.equal(occPlace(m, 4).where, 'middle right');
+  assert.deepEqual(occPlace(m, 9), { where: '' });
+  assert.deepEqual(occPlace([mask('a', 1, 0, 0, 1, 1)], 1), { where: 'centre' });
+  assert.equal(occPlace([null, 5, ...m], 2).where, 'upper middle');                              // junk entries are skipped
+});
+
+test('HTML front: the position is in the asked box name; a header shown by the page is not repeated in the picture name', () => {
+  const html = occlusionHTML(card(1), 'front', { headed: true });
+  assert.match(html, /aria-label="Hidden part 1 of 2, upper left: name this part"/);
+  assert.match(html, /aria-label="Picture: 2 hidden parts"/);
+  assert.match(html, /alt=""/);
+  assert.ok(!html.includes('Heart'));
+  assert.match(occlusionHTML(card(1), 'front'), /alt="Heart"/);
+  const alone = occlusionHTML(card(1, { occlusion: { ...card(1).occlusion, masks: [mask('a', 1, 0.1, 0.1, 0.2, 0.2)] } }), 'front');
+  assert.match(alone, /aria-label="Hidden part 1 of 1, upper left: name this part"/);
+  assert.ok(!occlusionHTML(card(1), 'front').includes('Vein'));                                  // other cards' answers are not given away
 });

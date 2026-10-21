@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.48', items: [
+    'Easier with a keyboard or screen reader: the card-type choice, practice test Submit, typed-answer results and Undo are now read aloud properly.',
+    'Picture cards now tell a screen reader where the hidden part is, and the picture editor explains its keyboard keys.'
+  ] },
   { version: '4.47', items: [
     'Faster with big decks: Browse finds cards on the first search quicker, and Today, the Decks list, Stats and starting a review open sooner.',
     'Typing in the import preview no longer lags on large decks.'
@@ -126,6 +130,9 @@ export function notesHTML(entries = recentNotes()) {
 // The list of recent changes in a sheet (Settings → About → What's new, and "See all" on Today's card).
 export function openWhatsNewSheet() {
   openSheet(`<h2 id="sheetTitle">What’s new</h2><div class="wn-list">${notesHTML(recentNotes(3))}</div>
-    <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Close</button></div>`);
+    <div class="sheet-actions"><button class="btn primary" type="button" id="newOk">Got it</button></div>`);
+  // The sheet scrolls: a keyboard can reach it, and it has a name.
+  const scroller = document.querySelector('#sheet .sheet-in');
+  if (scroller) { scroller.tabIndex = 0; scroller.setAttribute('role', 'region'); scroller.setAttribute('aria-label', 'Release notes'); }
   document.getElementById('newOk').addEventListener('click', closeSheet);
 }
