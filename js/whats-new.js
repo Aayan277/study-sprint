@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.47', items: [
+    'Faster with big decks: Browse finds cards on the first search quicker, and Today, the Decks list, Stats and starting a review open sooner.',
+    'Typing in the import preview no longer lags on large decks.'
+  ] },
   { version: '4.46', items: [
     'Dark mode: the open ⋯ menu button and a sound button under the mouse now have clear edges.',
     'Suggest tags now treats cards made from the same note alike, so they end up in the same folder.'

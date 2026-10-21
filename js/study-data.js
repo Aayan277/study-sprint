@@ -36,13 +36,36 @@ export function recentHistoryEnough(rows, now = Date.now()) {
 // Where the first read of the review log starts: two weeks back, with a margin so the gap across the edge is still there.
 export const recentHistoryFrom = (now = Date.now()) => Math.min(daysAgoStart(RECENT_DAYS, now), now - RECENT_DAYS * DAY - 3600000);
 
+// The cards in deck order, then in the order they were added, as copies the caller may change. The sorted order is kept
+// (sortMemo) while the kept card rows are the same array of the same length and the decks are in the same order: db.js only ever patches
+// cardStates in place (never cards), and any other save gives a new array.
+let sortMemo = null;
+export function sortedCopies(rows, order) {
+  const key = [...order.keys()].join('\u0001') + '\u0002' + db.cardsGeneration();       // (the generation moves if the kept cards are ever patched in place)
+  if (!(sortMemo && sortMemo.rows === rows && sortMemo.len === rows.length && sortMemo.key === key)) {
+    const n = rows.length, rank = new Array(n);
+    let known = true;
+    for (let i = 0; i < n; i++) { const r = order.get(rows[i].deckId); if (r === undefined) { known = false; break; } rank[i] = r; }
+    let perm;
+    if (known) {
+      perm = Array.from({ length: n }, (_, i) => i);
+      perm.sort((a, b) => rank[a] - rank[b] || rows[a].created - rows[b].created);
+    } else perm = null;       // a card of an unknown deck: keep the plain comparison below, whose result is not worth caching
+    sortMemo = perm ? { rows, len: n, key, perm } : null;
+    if (!perm) return rows.map(r => ({ ...r })).sort((a, b) => order.get(a.deckId) - order.get(b.deckId) || a.created - b.created);
+  }
+  const perm = sortMemo.perm, out = new Array(perm.length);
+  for (let i = 0; i < perm.length; i++) out[i] = { ...rows[perm[i]] };
+  return out;
+}
+
 // Load everything today's queue is built from.
 //   history  also keep the review log of the last weeks (data.history), for Today's time estimate and the catch-up banner:
 //            the last two weeks when they say enough (recentHistoryEnough), else the last 60 days
 //   fullHistory  with `history`: always the last 60 days (Play's speed profile reads them all)
 export async function loadAll({ history = false, fullHistory = false } = {}) {
-  const [settings, decks, cards, states, first] = await Promise.all([
-    db.getSettings(), db.getDecks(), db.getAllCached('cards'), db.getAllCached('cardStates'), db.getLogsSince(history ? recentHistoryFrom() : dayStart())
+  const [settings, decks, sharedCards, states, first] = await Promise.all([
+    db.getSettings(), db.getDecks(), db.getAllCached('cards', { shared: true }), db.getAllCached('cardStates'), db.getLogsSince(history ? recentHistoryFrom() : dayStart())
   ]);
   let recent = first;
   if (history && (fullHistory || !recentHistoryEnough(first))) recent = (await db.getLogsBetween(daysAgoStart(HISTORY_DAYS), recentHistoryFrom())).concat(first);
@@ -52,7 +75,7 @@ export async function loadAll({ history = false, fullHistory = false } = {}) {
   decks.splice(0, decks.length, ...tree.map(x => x.deck));      // each deck followed by its subdecks
   // New cards come in deck order, then in the order they were added.
   const order = new Map(decks.map((d, i) => [d.id, i]));
-  cards.sort((a, b) => order.get(a.deckId) - order.get(b.deckId) || a.created - b.created);
+  const cards = sortedCopies(sharedCards, order);
   // Suspended cards, and cards buried until tomorrow, sit out of Review.
   const now = Date.now();
   const hiddenCount = cards.filter(c => isHidden(c, now)).length;
@@ -160,14 +183,14 @@ export function todayRing(data, deckIds, counts, now = Date.now()) {
   const end = dayEnd(now);
   const finished = new Set();
   const all = data.allCards || data.cards;
-  const cardOf = new Map(all.map(c => [c.id, c]));
+  let cardOf = null;       // (built only if a learning card due today needs it)
   for (const l of data.logs) {
     if (!(l.source === 'review' || (isPracticeSource(l.source) && l.applied))) continue;
     if (ids && !ids.has(data.deckOf.get(l.cardId))) continue;
     const st = data.statesById.get(l.cardId);
     // Still to come back today: part of `left`. But a card suspended or buried since is out of the queue (so not in
     // `left`): it stays done, so the total does not shrink.
-    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end && !isHidden(cardOf.get(l.cardId) || {}, now)) continue;
+    if (st && (st.state === LEARNING || st.state === RELEARNING) && st.due <= end && !isHidden((cardOf ||= new Map(all.map(c => [c.id, c]))).get(l.cardId) || {}, now)) continue;
     finished.add(l.cardId);
   }
   const done = finished.size, left = counts.total, total = done + left;

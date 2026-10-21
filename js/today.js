@@ -70,7 +70,12 @@ export async function renderToday(el) {
     const fresh = cards.filter(x => { const st = data.statesById.get(x.id); return !st || st.state === NEW; });
     if (!fresh.length) return deckSchedulerOptions(data.settings).learningSteps.filter(sameDayStep).length;
     const byDeck = new Map(data.decks.map(d => [d.id, d]));
-    const total = fresh.reduce((n, x) => n + deckSchedulerOptions(data.settings, byDeck.get(x.deckId)).learningSteps.filter(sameDayStep).length, 0);
+    const stepsOf = new Map();       // (once per deck, not once per card)
+    const total = fresh.reduce((n, x) => {
+      let k = stepsOf.get(x.deckId);
+      if (k === undefined) stepsOf.set(x.deckId, k = deckSchedulerOptions(data.settings, byDeck.get(x.deckId)).learningSteps.filter(sameDayStep).length);
+      return n + k;
+    }, 0);
     return total / fresh.length;
   };
   const allIds = data.decks.map(d => d.id);

@@ -15,7 +15,7 @@ import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
 import { SPEECH_LANGS } from './speech.js';
 import { leftOutNote, fetchMissingFor } from './lazy-media.js';
 import { SCHED_DEFAULTS, parseSteps, parseMaxInterval, formatSteps } from './sched-settings.js';
-import { ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
+import { summariesByDeck, ancestors, chainMap, subtreeIds, deckPath, treeOrder, canNest, effectiveDeck, deckChoices, deckTreeRows } from './deck-tree.js';
 import { go as navGo, up } from './nav.js';
 
 // Colors a deck can have. Mid-tones, so they read on both light and dark themes.
@@ -35,32 +35,26 @@ export function cardLevel(state) {
 }
 
 
-// Count cards, due cards, new cards and mastery levels for one deck.
-function summarize(cards, statesById) {
-  const s = { total: cards.length, due: 0, new: 0, learning: 0, young: 0, mature: 0, hidden: 0 };
-  const cutoff = dayEnd();   // a study day ends at 4am, like Anki
-  const now = Date.now();
-  for (const c of cards) {
-    const st = statesById.get(c.id);
-    const lvl = cardLevel(st);
-    s[lvl]++;
-    // Suspended and buried cards don't count as due (Review skips them).
-    if (isHidden(c, now)) s.hidden++;
-    else if (lvl !== 'new' && st.due <= cutoff) s.due++;
-  }
-  return s;
-}
-
 // Load every deck with its counts, in tree order (each deck followed by its subdecks). A deck's counts
 // include its subdecks. Uses the cards loadAll() read, so nothing is read twice.
 // Takes what loadAll() already read (its decks, every card and every state), so a page reads the database once.
+// The counts are added up the parent chain in one pass; a deck's list of cards (item.cards, which only a deck's own page and
+// its export/share read) is built the first time it is asked for.
 function loadDecks(data) {
   const decks = [...data.decks], cards = data.allCards, statesById = data.statesById;
-  const byDeck = new Map(decks.map(d => [d.id, []]));
   const chains = chainMap(decks);
-  for (const c of cards) for (const id of chains.get(c.deckId) || []) byDeck.get(id).push(c);
+  const cutoff = dayEnd();   // a study day ends at 4am, like Anki
+  const now = Date.now();
+  const sums = summariesByDeck(decks, cards, chains, {
+    levelOf: c => cardLevel(statesById.get(c.id)),
+    hiddenOf: c => isHidden(c, now),         // (suspended and buried cards don't count as due: Review skips them)
+    dueOf: c => statesById.get(c.id).due <= cutoff
+  });
   decks.sort((a, b) => a.created - b.created);
-  return treeOrder(decks).map(({ deck, depth }) => ({ deck, depth, cards: byDeck.get(deck.id), stats: summarize(byDeck.get(deck.id), statesById) }));
+  return treeOrder(decks).map(({ deck, depth }) => {
+    let own = null;
+    return { deck, depth, get cards() { return own ||= cards.filter(c => chains.get(c.deckId)?.includes(deck.id)); }, stats: sums.get(deck.id) };
+  });
 }
 
 // Subdecks inside a deck's tile or page: one row each, indented by depth. Folded ones are remembered
