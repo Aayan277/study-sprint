@@ -9,7 +9,7 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
   { version: '4.48', items: [
-    'Better with a keyboard or screen reader: the card-type choice, the practice test’s Submit question, typed-answer results and Undo are easier to use and are read aloud properly.',
+    'Easier with a keyboard or screen reader: the card-type choice, practice test Submit, typed-answer results and Undo are now read aloud properly.',
     'Picture cards now tell a screen reader where the hidden part is, and the picture editor explains its keyboard keys.'
   ] },
   { version: '4.47', items: [
