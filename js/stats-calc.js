@@ -168,7 +168,9 @@ export function streakFromDays(days, now = Date.now(), { rest: planned = EMPTY_S
 
 // The wording for a streak (Today, the sidebar and the finish screen all use it): { line, sub }.
 // `line` says what to do (first match wins); `sub` is the freeze note, or ''.
-const WEEKDAY_NAME = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+// Built on first use: making an Intl formatter costs a few ms, and this file loads on every start.
+let weekdayName;
+const WEEKDAY_NAME = () => (weekdayName ??= new Intl.DateTimeFormat(undefined, { weekday: 'short' }));
 export function streakText(streak, now = Date.now()) {
   const yesterday = dayKey(daysAgoStart(1, now));
   let line;
@@ -179,7 +181,7 @@ export function streakText(streak, now = Date.now()) {
   else if (streak.days) line = 'Study today to keep it';
   else line = 'Study today to start one';
   let sub = '';
-  if (streak.freeze.usedOn) sub = `Freeze used ${WEEKDAY_NAME.format(new Date(`${streak.freeze.usedOn}T12:00:00`))}`;
+  if (streak.freeze.usedOn) sub = `Freeze used ${WEEKDAY_NAME().format(new Date(`${streak.freeze.usedOn}T12:00:00`))}`;
   else if (streak.days && streak.frozen[0] !== yesterday) sub = '1 freeze ready this week';   // (missing today would break it anyway after a freeze yesterday)
   return { line, sub };
 }

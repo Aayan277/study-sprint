@@ -10,7 +10,7 @@ import * as db from './db.js';
 import { deckSchedulerOptions } from './sched-settings.js';
 import { dayStart } from './days.js';
 import { loadAll, countFor, nextDueText, typicalCardMs, sameDayStep, loadStreak, todayRing, minutesText, launchStudy, scopeKey, customQueue, live, rescueState, rescueClearAt, RESCUE_DISMISS, dismissRescueToday } from './study-data.js';
-import { lastStatus } from './sync.js';
+import { lastStatus } from './sync-state.js';
 import { examInfo, countdown, badgeClass, newPerDayToFinish, MOCK_DAYS } from './exam.js';
 import { extraNewToday, NEW } from './queue.js';
 import { subtreeIds, ancestors, deckPath, effectiveDeck } from './deck-tree.js';

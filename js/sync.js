@@ -14,6 +14,7 @@
 // at, applied (changes received), sent, error }.
 
 import * as db from './db.js';
+import { lastStatus, setStatus, account } from './sync-state.js';
 import * as supa from './supa.js';
 import { planSweep, markKey, GONE, droppedRefs } from './media-sweep.js';
 import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
@@ -40,20 +41,16 @@ let retrySounds = true;       // sounds the server turned away are tried again o
 export const timing = { skipRetry: 45000, busyNoteAfter: 120000, lockWait: 60000, mediaRetry: 400 };
 const BUSY_NOTE = 'Waiting for another window of the app, which is syncing or paused. Close other windows if this stays.';
 let skips = 0, firstSkip = 0, skipTimer = 0;
-let last = { state: 'idle', at: 0, applied: 0, sent: 0, error: null };
 
 function emit(detail) {
-  last = { ...last, ...detail };
-  globalThis.dispatchEvent?.(new CustomEvent('sync', { detail: last }));
+  const next = { ...lastStatus(), ...detail };
+  setStatus(next);          // (js/sync-state.js: Today and the sidebar read it without loading this file)
+  globalThis.dispatchEvent?.(new CustomEvent('sync', { detail: next }));
 }
-export const lastStatus = () => last;
+export { lastStatus, account };
 
 // ---------- account ----------
-// Who's signed in on this device, or null.
-export async function account() {
-  const { syncAuth, syncState } = await db.getSettings();
-  return syncAuth ? { email: syncAuth.user.email, id: syncAuth.user.id, lastSync: syncState?.lastSync || 0 } : null;
-}
+// account() (who's signed in on this device, or null) lives in sync-state.js, re-exported above.
 
 // Make an account. With email confirmation turned on (the normal setup, docs/sync-setup.md) nobody is signed in
 // yet: Supabase emails a link first. Returns { pending: true } then, { pending: false } once signed in.

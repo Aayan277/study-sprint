@@ -7,6 +7,7 @@
 //   flag         0 = none, 1 red, 2 orange, 3 green, 4 blue
 
 import { dayEnd } from './days.js';
+import { isSuspended, isBuried, isHidden } from './card-checks.js';
 import { formatInterval, isPracticeSource } from './queue.js';
 import { dupKey } from './import.js';
 import { normTag, tagWords, SEP } from './tag-tree.js';
@@ -22,13 +23,13 @@ const NEW = 0, LEARNING = 1, RELEARNING = 3;
 
 // Comparing text with localeCompare() builds a new collator on every call, which is very slow in a sort of
 // thousands of cards. These two are made once: plain A-Z order, and A-Z ignoring case/accents with numbers in order.
-const COLLATE = new Intl.Collator();
-const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+// They are built on first use, not when the file loads (making a collator takes a few ms).
+let collate, natural;
+const COLLATE = () => (collate ??= new Intl.Collator());
+const NATURAL = () => (natural ??= new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }));
 
-export const isSuspended = card => !!card.suspended;
-export const isBuried = (card, now = Date.now()) => !!card.buriedUntil && card.buriedUntil > now;
-// Cards Review and Play should skip right now.
-export const isHidden = (card, now = Date.now()) => isSuspended(card) || isBuried(card, now);
+// isSuspended, isBuried and isHidden (cards Review and Play skip right now) live in card-checks.js, a file with no imports.
+export { isSuspended, isBuried, isHidden };
 
 // "Bury until tomorrow" means until the next study day starts (4am).
 export const buryUntil = (now = Date.now()) => dayEnd(now);
@@ -143,7 +144,7 @@ export function cardMatcher(query) {
 const CARD_ONLY_SORTS = {
   'added-new': (a, b) => b.created - a.created,
   'added-old': (a, b) => a.created - b.created,
-  az: (a, b) => NATURAL.compare(a.front, b.front)
+  az: (a, b) => NATURAL().compare(a.front, b.front)
 };
 const sortCache = new WeakMap();    // cards array → { sort, length, list }
 function sortedCards(cards, sort) {
@@ -187,7 +188,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
     const key = x => (x.card.occlusion || x.card.reverse ? '' : dupKey(x.card.front));
     const counts = new Map();
     for (const x of list) counts.set(key(x), (counts.get(key(x)) || 0) + 1);
-    return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE.compare(key(a), key(b)) || a.card.created - b.card.created);
+    return list.filter(x => key(x) && counts.get(key(x)) > 1).sort((a, b) => COLLATE().compare(key(a), key(b)) || a.card.created - b.card.created);
   }
   else if (filter !== 'all') list = list.filter(x => x.status === filter);
 
@@ -199,7 +200,7 @@ export function browseCards(cards, statesById, { query = '', filter = 'all', sor
     due: (a, b) => due(a) - due(b),
     lapses: (a, b) => (b.state?.lapses || 0) - (a.state?.lapses || 0),
     difficulty: (a, b) => (b.state?.difficulty || 0) - (a.state?.difficulty || 0),
-    az: (a, b) => NATURAL.compare(a.card.front, b.card.front)
+    az: (a, b) => NATURAL().compare(a.card.front, b.card.front)
   }[sort] || ((a, b) => b.card.created - a.card.created);
   return list.sort(by);
 }
@@ -273,7 +274,7 @@ export function replaceInCards(cards, { find, replace = '', field = 'both', matc
 export function tagCounts(cards) {
   const counts = new Map();
   for (const c of cards) for (const t of new Set(tagWords(c.tags))) counts.set(t, (counts.get(t) || 0) + 1);
-  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || COLLATE.compare(a.tag, b.tag));
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || COLLATE().compare(a.tag, b.tag));
 }
 // The tags a rename gives: what was typed, split like the tags of a card (spaces, commas, line breaks). "a b" makes two tags.
 const renamedTo = text => parseTags(text);

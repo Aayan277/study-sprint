@@ -14,7 +14,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 
 export const SEP = '::';
 export const MAX_IDS = 5000;
-const NATURAL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+let natural;      // built on first use (making a collator takes a few ms)
+const NATURAL = () => (natural ??= new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }));
 
 // "a::::b" and "a::b" are the same tag for display and matching (empty pieces are dropped).
 export const pieces = tag => String(tag ?? '').split(SEP).map(s => s.trim()).filter(Boolean);
@@ -51,7 +52,7 @@ export function tagTree(cards) {
       });
     }
   }
-  const sort = list => { list.sort((a, b) => NATURAL.compare(a.name, b.name)); list.forEach(n => sort(n.children)); };
+  const sort = list => { list.sort((a, b) => NATURAL().compare(a.name, b.name)); list.forEach(n => sort(n.children)); };
   sort(roots);
   return roots;
 }
@@ -133,7 +134,7 @@ export function matchIds(cards, ids, { under = '' } = {}) {
     for (const { card } of list) if (!seenCards.has(card.id)) { seenCards.add(card.id); out.push(card); }
   }
   const sources = [...folders.values()].map(s => ({ path: s.path, ids: [...s.ids].map(k => wanted.get(k)), cards: s.cards.size }))
-    .sort((a, b) => b.ids.length - a.ids.length || b.cards - a.cards || NATURAL.compare(a.path, b.path));
+    .sort((a, b) => b.ids.length - a.ids.length || b.cards - a.cards || NATURAL().compare(a.path, b.path));
   return { cards: out, found, missing, sources };
 }
 

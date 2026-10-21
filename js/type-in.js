@@ -10,18 +10,13 @@ import { answerText } from './format.js';
 import { hasBlank } from './cloze.js';
 import { hasMasks, occLabel } from './occlusion.js';
 import { isStructured } from './reverse.js';
+import { cleanTypeIn } from './card-checks.js';
+export { cleanTypeIn };      // lives in card-checks.js (no imports) so db.js can load it at start-up
 
 export const TYPE_HARD_MAX = 500;      // the answer box's maxlength: a longer answer can't be typed
 
 // The card's own choice: true, false, or null (follows its deck). Anything else counts as unset.
 export const ownTypeIn = card => (card?.typeIn === true || card?.typeIn === false ? card.typeIn : null);
-
-// A card from a backup or another device: keep a boolean `typeIn`, drop anything else (same pattern as cleanAccept).
-export function cleanTypeIn(card) {
-  if (!card || !Object.hasOwn(card, 'typeIn') || typeof card.typeIn === 'boolean') return card;
-  const { typeIn, ...rest } = card;
-  return rest;
-}
 
 // What decides whether a card can be typed: { structured, answer, picture }.
 //   structured  a step-by-step or elements card (never typed)
