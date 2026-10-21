@@ -517,6 +517,27 @@ await test('owner.sql runs on a project that still has the old scripts, and on t
   assert.match(ok(psql(db, '', { file: join(SQL, 'owner.sql') }), 'owner.sql on v2'), /sync\|0\.0\|300\.0/);
 });
 
+await test('owner.sql counts delete markers, their size and dead mdel: rows, for the right person only', () => {
+  const db = newDb('owner-markers');
+  const ins = (uid, store, id, data, deleted = false) => `insert into public.sync_items (user_id, store, id, data, deleted, updated_at) values ('${uid}', '${store}', '${id}', ${data}, ${deleted}, 1)`;
+  ok(psql(db, [
+    ins(A, 'cards', 'm1', 'null', true), ins(A, 'cards', 'm2', 'null', true), ins(A, 'cards', 'live', `'{"x":"y"}'`),
+    ins(A, 'settings', 'mdel:null', `'{"value":null}'`), ins(A, 'settings', 'mdel:gone', `'{"value":"gone"}'`),
+    ins(A, 'settings', 'mdel:time', `'{"value":1760000000000}'`), ins(A, 'settings', 'theme', `'{"value":null}'`),
+    ins(B, 'cards', 'bm', 'null', true), ins(B, 'settings', 'mdel:bnull', `'{"value":null}'`)].join(';')));
+  const rowFor = email => {
+    const out = ok(psql(db, '', { file: join(SQL, 'owner.sql') }), 'owner.sql').split('\n').find(l => l.startsWith(email + '|'));
+    return out.split('|').slice(-3);
+  };
+  const expectBytes = num(db, `select sum(private.row_bytes(id, data)) from public.sync_items where user_id = '${A}' and deleted`);
+  const [rows, mb, dead] = rowFor('a@example.test');
+  assert.equal(rows, '2');
+  assert.equal(Number(mb), Math.round(expectBytes / 104857.6) / 10);
+  assert.equal(dead, '2', 'null and "gone" count; a time and other settings do not');
+  assert.deepEqual(rowFor('b@example.test').map(Number).map((n, i) => (i === 1 ? 0 : n)), [1, 0, 1]);
+  assert.deepEqual(rowFor('c@example.test'), ['0', '0.0', '0']);
+});
+
 await test('a change that does not change a record\'s size touches no counter row', () => {
   const db = newDb('nogrowth');
   ok(asUser(db, A, rowSql('g1', 100)));

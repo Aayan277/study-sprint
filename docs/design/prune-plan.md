@@ -2,9 +2,24 @@
 
 *Design only, nothing built. Written 18 Oct 2026 against v4.32. Decision: parked until it's needed (see "When to build it").*
 
+## Status and corrections (2026-10)
+Re-planned 21 Oct 2026: still too early to build. Only "Step 0" was done: `supabase/owner.sql` now shows `marker_rows`, `marker_mb` and `dead_mdel_rows` per person. The full re-plan is in `docs/design/prune-plan-2026-10.md`; where the two differ, that file wins. Its corrections 1-10:
+1. `usage_cache` is gone (`limits.sql` drops it), so there is nothing to clear.
+2. No `app.pruning` setting and no change to the space-counting trigger: `sync_items_quota` already gives back rows and bytes on a real DELETE.
+3. No `limits.sql` change: "Delete my synced data clears the horizon" is a statement-level AFTER DELETE trigger inside `prune.sql`.
+4. A stale delete marker (or `mdel:` setting) is silently skipped by the guard, not refused, so Re-upload cannot recreate thousands of markers.
+5. Staleness is judged against the `cleanSeq` from before the pull (`pruned_seq > cleanSeq_before`), then `cleanSeq = lastSeq`.
+6. Restoring a backup lowers `sync_seq`: the prune first deletes marks with a seq above the current sequence value.
+7. `tryStartOver` runs before the pull and clears `syncedAt`, so on a stale device the start-over waits one run.
+8. Unsent old edits whose parent was pruned are removed (with the cascade), not restamped.
+9. A device unopened for 180+ days may sync once on old code; the guard and `cleanSeq` cover it, and `min_client` should be raised before the first prune.
+10. The prune runs from pg_cron (or by hand monthly), not a GitHub Action, which only has a read-only login.
+
+**Build trigger:** build the rest when owner.sql shows anyone's markers at 15% or more of their row cap or data limit, or the sync fuse passes 50%, or the user base is about to grow a lot.
+
 ## Why and how much it saves
 - A deleted record stays on the server as a delete marker: 272 bytes of quota (about 220 B on disk) and one row of the 300,000-row cap. `mdel:` rows that are `null` or `'gone'` are about 300 B each.
-- A typical heavy account (about 210k rows, 5% markers) carries about 10,500 markers: 2.9 MB, about 3.5% of the 80 MB per-person limit.
+- A typical heavy account (about 210k rows, 5% markers) carries about 10,500 markers: 2.9 MB, about 7% of the 40 MB per-person limit.
 - Deck churn is where it matters: deleting a 1,000-card deck with about 15 reviews per card leaves about 17,000 markers (4.6 MB). Three such decks a year is about 14 MB a year, growing forever (about 42 MB after 3 years). With pruning it levels off at 7 months' worth (about 8 MB).
 
 ## When to build it
@@ -13,12 +28,12 @@ When the storage alert (fuse-watch) shows the data total past about 50% of its f
 ## Server
 - **Time base:** a monthly job records `(now(), last_value of sync_seq)` in `private.sync_seq_marks`; rows with `seq <=` the newest mark at least 180 days old are prunable. `updated_at` can't be used: it is the device clock, and Re-upload re-sends old markers with their old times.
 - **`public.sync_prune` (per user):** `pruned_seq` (highest seq pruned), `pruned_until` (highest `updated_at` pruned), `pruned_at`, `rows`. Read-own RLS. Per user, because the pull bookmark is per account.
-- **`private.prune_sync_items()`:** in one statement with data-modifying CTEs, delete delete-markers and null/'gone' `mdel:` rows at or below the cutoff, subtract per-user totals from `sync_usage` once, and raise `sync_prune`. The quota trigger skips row-by-row accounting when `app.pruning` is on (clients can't set it). Clear `usage_cache` 'sync'. Log to `private.prune_runs`. No new index.
+- **`private.prune_sync_items()`:** in one statement with data-modifying CTEs, delete delete-markers and null/'gone' `mdel:` rows at or below the cutoff, and raise `sync_prune`. The existing quota trigger already gives back rows and bytes on a real DELETE, so no `app.pruning` setting is needed. Log to `private.prune_runs`. No new index.
 - **Quota trigger:** when a user's row count reaches 0 outside a prune (Delete my synced data), delete their `sync_prune` row, so a later re-upload isn't refused.
 - **Resurrection guard (own trigger, BEFORE INSERT):** refuse a live row in decks/cards/cardStates/reviewLog or an `mdel:` setting whose `updated_at <= pruned_until` when no row exists for that key. The `not exists` check keeps updates through `ON CONFLICT` working. It protects against Re-upload, first sign-in, old app versions, restored backups and the sample deck.
 - **`public.sync_missing(store, ids[])`:** returns the ids the caller has no row for at all; max 5,000 ids per call.
 - **The job:** pg_cron, 3rd of each month at 04:41 UTC (check on the live project's Extensions page that pg_cron is available on Free); fallback a monthly GitHub Action like fuse-watch. fuse-watch opens an issue if no successful prune ran in 40 days.
-- **Files:** `limits.sql` (the table, the trigger changes), new `prune.sql` (marks, runs, guard, `sync_missing`, the function, the schedule; refuses to run before the new `limits.sql`), `owner.sql` column, `docs/sync-setup.md` step 2d.
+- **Files:** new `prune.sql` (marks, runs, guard, `sync_missing`, the function, the schedule; refuses to run before the new `limits.sql`), `owner.sql` column, `docs/sync-setup.md` step 2d.
 
 ## Client
 - **`syncState.cleanSeq`:** "this device has read every row up to here with new code". Only new code raises it; old code keeps the field. Needed because an old-code sync (a device unopened for 180+ days runs one before the service worker updates it) moves `lastSeq` past pruned rows without seeing them.
