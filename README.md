@@ -39,9 +39,9 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 - **Spaced repetition that fits your day.** One Start button on Today for everything due, with a time estimate from your own pace.
 - **Exam date mode.** Give a course an exam date and every card comes back before it; Exam prep goes over what you haven't seen lately.
 - **Timed game rounds.** Classic, Survival and Lightning rounds for cramming, and right answers on due cards count as reviews.
-- **Paste notes, get cards.** Paste almost any format, or import .apkg, Quizlet, CSV and Excel, and check an editable preview first.
+- **Paste notes, get cards.** Paste almost any format, or import .apkg, Quizlet, CSV, Excel, PDFs and PowerPoint slides, and check an editable preview first.
 - **Stats that mean something.** Retention, a year-long study calendar, hardest cards and a readiness ring for each course.
-- **Yours.** Works offline, keeps your data on your device, syncs only if you sign in, and installs from the browser as a home-screen app.
+- **Yours.** Works offline, opens quickly even on slow phones, keeps your data on your device, syncs only if you sign in, and installs from the browser as a home-screen app.
 
 <details>
 <summary><b>The full feature list</b></summary>
@@ -55,7 +55,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
 - **Memory hook:** the optional "Memory hook" field on a Basic card is shown under the answer in Review and added to Back as an Extra line in the Anki export.
 - **Scratchpad:** the pen button in Review (or **D**) lets you draw on the card with a pen, finger or mouse (pen strokes ignore a resting palm). Pen, Eraser, Clear and Close appear on the card. On or off is remembered on this device; drawings are never saved: a flip keeps them, the next card starts clean.
 - **Pictures:** one picture on each side of a card (the picture button next to B / I / •). Photos are shrunk automatically (longest side 1280px), shown in Review and Play, synced between devices (Supabase Storage: run `supabase/media.sql`), kept in backups, and brought along by Anki imports and exports.
-- **Sounds:** up to 4 sounds on each side of a card (the music-note button next to the picture button; each can be up to 1 MB). Review shows a ▶ under the side's text and **plays a side's sounds by itself** (a deck option, Edit deck → "Play sounds automatically", on by default); R and the speaker button play the sound, or read the text aloud when the side has none. Play shows a ▶ by the question but never plays by itself. **Anki decks keep their sounds** (`[sound:…]`): the import shows how many notes have them and the size, has a "Bring sounds" switch (it starts off when the device is short of space), and says plainly which sounds it could not keep (over 1 MB, missing from the file, or a format the app can't keep). Sounds are kept exactly as they are, synced like pictures (re-run `supabase/media.sql` once to allow them, see docs/sync-setup.md), exported back to Anki, and kept in backups (Settings → Back up has an "Include sounds" switch; a backup with sounds is version 2, so an older app says it was made by a newer version; a backup made with the switch off is version 1 and restores anywhere, and its cards then show sounds as "not available on this device yet" unless they are synced from your account). Settings → Your data shows how much room pictures and sounds use.
+- **Sounds:** up to 4 sounds on each side of a card (the music-note button next to the picture button; each can be up to 1 MB). You can also **record** one: the mic button in the card editor records up to a minute (40 seconds on Safari), stopping early if it reaches 1 MB, and Stop adds it to that side. Review shows a ▶ under the side's text and **plays a side's sounds by itself** (a deck option, Edit deck → "Play sounds automatically", on by default); R and the speaker button play the sound, or read the text aloud when the side has none. Play shows a ▶ by the question but never plays by itself. **Anki decks keep their sounds** (`[sound:…]`): the import shows how many notes have them and the size, has a "Bring sounds" switch (it starts off when the device is short of space), and says plainly which sounds it could not keep (over 1 MB, missing from the file, or a format the app can't keep). Sounds are kept exactly as they are, synced like pictures (re-run `supabase/media.sql` once to allow them, see docs/sync-setup.md), exported back to Anki, and kept in backups (Settings → Back up has an "Include sounds" switch; a backup with sounds is version 2, so an older app says it was made by a newer version; a backup made with the switch off is version 1 and restores anywhere, and its cards then show sounds as "not available on this device yet" unless they are synced from your account). Settings → Your data shows how much room pictures and sounds use.
 - **Exam date mode** (Edit deck → Exam date): cards you should still remember at 99% or better on exam day are left alone, even if their next review falls after the exam. The rest get a **final pass**: spread over the last 3 days (fewer if the exam is closer), the weakest closest to the exam, with the reviews that add most to your exam-day recall first. It is worked out whenever the day's queue is built, so cards added later (Anki import, moved in, a new subdeck) are covered too. Retention rises to 95% over the last two weeks, and **Exam prep** goes over every card you haven't seen in 3 days, the ones you're least likely to remember first. Today also says how many **new cards a day** finish the deck by the exam, with one tap to set it (it asks first). A countdown shows on the deck; after the exam it goes back to normal.
 - **Export** (a deck's page → Export): save a deck as a spreadsheet (.csv) or an Anki deck (.apkg), with tags. Re-exporting updates the cards in Anki instead of duplicating them.
 - **Card list** (each deck's page, or Decks → Browse all cards):
@@ -68,7 +68,7 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - Paste notes in almost any format: `term - definition`, tabs, `|`, `:`, `=`, commas, numbered or bulleted lists, Notion and markdown tables, **bold** terms, Quizlet exports, or term and definition on separate lines. The format is detected for you.
   - Upload .csv, .tsv, .txt or Excel (.xlsx) files, or load a shared Google Sheet. A CSV that Export wrote comes back whole: cells with line breaks, blank lines and bullets are kept, and the Tags column is read. The deck picker is at the top and starts on the deck of your last import; the save button says where the cards go ("Add 12 cards to “Biology”").
   - Export (CSV) puts a `'` in front of any cell that starts with `=`, `+`, `-`, `@`, a tab or a line break, so Excel and Sheets don't run it as a formula; Import takes it off again (only for a file with the export's own `Front,Back,Tags` header). Tags are written comma-separated, so a tag with a space stays one tag.
-  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes stay one note with a card per blank (Back Extra is kept), image-occlusion notes keep their boxes (one card per box group, with the header, labels and Back Extra), and formatting and sounds are left out. **Other fields:** an Anki note's other fields (First Aid, Sketchy, Personal Notes and so on) keep their names and stay under the answer as folded sections, which Review remembers open or shut for each name (a switch in the preview, "Keep the other fields"; the card editor has an "Other fields" fold). A note type with a reverse card ("Basic (and reversed card)") brings both cards. Export writes the sections as `<details>` blocks, which import reads back; a CSV keeps Front, Back and Tags only (plus the Both directions column).
+  - **Anki decks** (.apkg, from Anki's File → Export, or shared decks from AnkiWeb): old and new Anki formats. Pick one Anki deck or all of them; tags come along, cloze notes stay one note with a card per blank (Back Extra is kept), image-occlusion notes keep their boxes (one card per box group, with the header, labels and Back Extra), and bold, italics, lists, pictures and sounds come along (other formatting, like colours, is left out; see Formatting, Pictures and Sounds above). **Other fields:** an Anki note's other fields (First Aid, Sketchy, Personal Notes and so on) keep their names and stay under the answer as folded sections, which Review remembers open or shut for each name (a switch in the preview, "Keep the other fields"; the card editor has an "Other fields" fold). A note type with a reverse card ("Basic (and reversed card)") brings both cards. Export writes the sections as `<details>` blocks, which import reads back; a CSV keeps Front, Back and Tags only (plus the Both directions column).
   - **Anki progress:** if the deck was exported with “Include scheduling information”, a switch brings over each card's review history (shown as Anki in Card info and counted in Stats) and rebuilds its due date by replaying those reviews through FSRS with the deck's own settings, the way Anki's own FSRS reads them: cram reviews from filtered decks are ignored, Forget resets the card, and a history that starts partway starts from Anki's interval and ease. Off, or with no history, cards start as new.
   - Check everything in an editable preview first: fix cells, delete rows, swap front and back, pick columns, and see duplicates flagged.
   - **Make cards with Claude** copies a ready-made prompt with your notes, to paste into Claude.
@@ -113,10 +113,11 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **Days off:** tap the streak on Today (or "Plan a day off" in Stats) to plan days off for an exam week or a trip: starting tomorrow, up to 60 days ahead, up to 14 at a time, and you can remove them again. A day off never breaks the streak and doesn't add to it. Courses with an exam offer a one-tap "Day off on exam day". Days off sync between your devices (two devices that each add one keep both).
   - **How it is worked out:** from your review history each time, nothing extra is stored, so every device agrees once they have synced. Because of that, streaks (and the best streak) you already had may now be longer than before: the freeze is applied to all your history.
   - **Time zones:** days are named in the time zone your device is in now (a day starts at 4am there). If you travel or change time zone, a day's boundary moves with it, so one day can look doubled or missed around the change; the freeze usually absorbs that.
+- **Settings:** Appearance, Study, Sync and Your data, with buttons at the top that jump to each section and highlight the one you're in.
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
 - **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: name your course, add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
 - **Install card:** after your first finished Review session, Today offers to install the app (Install / Not now on Android and desktop, Add to Home Screen steps on iPhone Safari). It is remembered per device, hidden once the app is installed, and Settings has an Install app row.
-- **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono (monospace only for numbers and key hints).
+- **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark or light (it follows your device until you choose), plus an OLED black option. Settings → Appearance → Style also offers **Clinical**, a plainer, more professional look with its own accent names and no animations. Fonts are Geist and Geist Mono (monospace only for numbers and key hints).
 - **Appearance** (Settings → Appearance, this device only; none of these sync):
   - **Card text alignment** is Auto (short text centred, long answers left-aligned so they are easier to read), Center or Left. It applies to Review, the first-run card and Play questions.
   - **Compact deck list** (on by default): Decks gets a search box (course name, code or subdeck) and a sort (Due first, Exam, A–Z); subdecks fold under their course (what you open is remembered); each deck has a small round play button instead of a full-width Study button; and on a computer the tiles keep their own height. Turn it off for the earlier list.
@@ -124,7 +125,6 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **Rating feedback** (on by default): when you rate a card in Review, a ring in the rating's colour pulses on the button, the new interval ("10m", "9d") floats up, and a plain outline of the old card drifts away in a direction that suits the rating (Again back into the pile, Good and Easy lifting away). The next card is drawn at once, never held back for the effect, and is never tinted. Turn it off for no effect at all.
   - **Smooth transitions** (on by default): moving between tabs slides the new screen in (the header and tab bar stay still), and pop-up sheets spring open and slide away. Not used during Review or Play rounds. Turn it off for instant changes.
   - Some motion has no switch: the today ring on Today fills from where it was and turns green when today is done, the Review finish screen counts its numbers up (with a small confetti burst at most once a day, when you clear the whole queue of 5 or more cards, and a one-time badge at 7, 30 and 100 days), and Play has combo flames, a score count-up and a heavier grade stamp. If your device is set to reduce motion, none of it moves: numbers are simply shown and everything else stays still.
-- **Works offline,** installs on your phone, and keeps your data on your device.
 
 </details>
 
@@ -145,7 +145,9 @@ Everything is saved in your browser (IndexedDB) on your device, and it all works
 
 ## How it's built
 
-Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages serves the files exactly as they are. Libraries come from a CDN at pinned versions: [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) 5.4.2 for scheduling, SheetJS, loaded only when you import an Excel file, and fflate, fzstd and sql.js, loaded only when you import an Anki deck.
+Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages serves the files exactly as they are. Libraries come from a CDN at pinned versions, and all but the first load only when needed: [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) 5.4.2 for scheduling; KaTeX for maths, the first time a card shows a formula; SheetJS when you import an Excel file; pdf.js when you import a PDF; fflate when you import slides or an Anki deck; and fzstd and sql.js for Anki decks.
+
+Smaller modules, such as the practice test, Suggest cards and Suggest tags, say what they do in a comment at the top of each file.
 
 | File | What it does |
 | --- | --- |
@@ -167,7 +169,8 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/export.js` | Exporting a deck as CSV or an Anki deck |
 | `js/exam.js` | Exam date mode: the final pass, limits, pulling cards in, Exam prep, new cards a day |
 | `js/format.js`, `js/card-editor.js` | Card formatting: marks ↔ HTML, and the B / I / • editor |
-| `js/media.js` | Pictures: shrinking, saving and showing them |
+| `js/media.js` | Pictures and sounds: shrinking, saving and showing them |
+| `js/recorder.js`, `js/recorder-logic.js` | Recording a sound with the microphone (loaded when you first press the mic button) |
 | `js/speech.js` | Reading cards aloud |
 | `js/balance.js` | Evening out reviews across days, and easy days |
 | `js/deck-tree.js` | Subdecks: paths, what's inside a deck, inherited settings, and the rows of a searchable deck tree |
@@ -202,7 +205,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `tests/*.test.js` | Tests for every rule above that doesn't need a browser |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and installing as an app |
 
-The full plan, including what's planned next, is in [PLAN.md](PLAN.md).
+The full plan, including what's planned next and the v3.0 redesign, is in [PLAN.md](PLAN.md). What changed in each release is in `js/whats-new.js` (also shown in the app: Settings → About → See what’s new).
 
 ## Before you share it
 
@@ -224,9 +227,13 @@ Then open the address it prints.
 
 ## Releasing a change
 
-Phones keep the old copy of the app files until `CACHE` in `sw.js` changes. So **bump `CACHE` (for example `v37` to `v38`)
-on every release that changes any app file**, then run `node tests/update-sw-hash.mjs` to save the files' new fingerprint
-in `sw.js` (it covers `css/`, `js/`, `icons/`, `index.html` and the manifest). `npm test` fails with a reminder until you do both.
+Phones keep the old copy of the app files until `CACHE` in `sw.js` changes. So on every release that changes any app file:
+
+1. Bump `APP_VERSION` in `js/app.js` (for example `4.52` to `4.53`) and `CACHE` in `sw.js` (for example `study-sprint-v128` to `study-sprint-v129`), and add a "What's new" entry in `js/whats-new.js`.
+2. Run `node tests/update-sw-hash.mjs` to save the files' new fingerprint in `sw.js` (it covers `css/`, `js/`, `icons/`, `fonts/`, `index.html` and the manifest). `npm test` fails with a reminder until the `CACHE` bump and this step are both done.
+3. Before merging, run `npm test` and the full `node tests/browser/run.mjs` (see below).
+
+Branches that are worked on side by side don't bump `sw.js`; do one bump when they are merged. Changes to files that aren't in `sw.js` (this README, for one) need no bump.
 
 If the look of the app changed, also run `node tests/browser/readme-shots.mjs`: it remakes the screenshots in `docs/screenshots/`
 (Today, Review, Play, Stats, Decks, Import and a computer shot) from the real app in Violet Dark. The README and the manifest
@@ -236,10 +243,11 @@ and the link-preview image (`icons/og-1200x630.png`) are designed pictures: redo
 ## Running the tests
 
 ```
-node --test
+npm install     # once
+npm test
 ```
 
-`node tests/sim/exam-sim.mjs` simulates 300 cards up to an exam and prints the reviews per day and the predicted exam-day recall (it needs `npm install --no-save ts-fsrs@5.4.2` once). To run one file, use for example `node tests/import.test.js`. No install is needed: it uses Node's built-in test runner. `package.json` only tells Node the files are modules.
+`npm test` runs `node --test` with Node's built-in test runner. The one-time `npm install` fetches ts-fsrs, which a few tests check the scheduling against (they are skipped without it). To run one file, use for example `node tests/import.test.js`. `node tests/sim/exam-sim.mjs` simulates 300 cards up to an exam and prints the reviews per day and the predicted exam-day recall. `npm run test:sql` checks the Supabase scripts against a local PostgreSQL and skips cleanly without one.
 
 ### Browser tests
 
@@ -251,18 +259,6 @@ npm run test:browser            # all of them (a few minutes)
 npm run test:browser review     # only the ones with "review" in the name
 ```
 
-On Claude Code's cloud computers this works as is. On your own computer, install the browser tools once:
-`npm install --no-save playwright && npx playwright install chromium`. Screenshots and downloads go in
+They need Playwright and its Chromium browser. On Claude Code's cloud computers that is already there; on your own computer, install them once with `npm install --no-save playwright && npx playwright install chromium`. Screenshots and downloads go in
 `tests/browser/out`. `tests/browser/files` has the sample files the tests import (Anki decks, a spreadsheet);
-`make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package).
-
-## Redesign (v3.0, experiment branch)
-
-What changed across the three steps (details in PLAN.md):
-
-1. **Look:** a dark and sleek look with new design tokens; five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light, plus OLED black; rating colors fixed so Again / Hard / Good / Easy never change with the theme; a focus mode that hides the tab bar and header during a round; and contrast fixes. Geist fonts.
-2. **Today:** a home screen (the first tab) with a daily goal ring, streak, one Start button, a row per course with a mastery ring and upcoming exams. The card now flips, the finish screen was redone, and emoji were replaced by one set of icons. The old Review setup lives in Today → Options.
-3. **Shorter screens and a first run:** a skippable first-run start (pitch, name your course, add cards, guided review) that existing users never see; Stats folds four sections under "More stats" on phones only; Settings moves timer and leech options into Advanced scheduling and Reset into a Danger zone; card filters are grouped; Play opens with deck, format and Start above the fold with the rest under "Customise"; and Play starts new cards in decks with an exam coming up. Along the way: fixes for focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight.
-4. **Speed and Today follow-ups:** Stats, Today and Browse are much quicker on big libraries (10,000 cards); other screens load when first opened and the app opens from its saved files at once, updating in the background. Starting a session while another is going resumes it (same decks) or asks first; the flipped card moves focus to the answer for screen readers and the keyboard; the Today time estimate uses the real time between answers.
-5. **Visual polish (v3.2):** Start and every label in the app font, exams in amber (red only in the last 3 days), Again in crimson so it never looks like Ember's orange, a calm deck label and readable long answers on cards, framed pictures, one deck-page stripe and one empty state, finer Stats chart scales with a shorter Hardest list, one 1120px content width on desktop, and a more careful Today time estimate (only answers under 45 seconds apart, from Review's own recent history).
-6. **Layout polish (v3.3):** a short card sheet in Review and Play with Save returning to the card; one sheet frame everywhere (× at the top right, a sticky footer, a grab bar that really drags); a Review progress bar; Decks that scale (search, sort, folded subdecks, small play buttons); exam date in three taps from Today; a per-course readiness header in Stats; and a three-column Decks page on wide screens.
+`make-files` has the Python scripts that made the Anki ones (they need the `anki` Python package). Two browser-test runs from one checkout share `tests/browser/out` and collide, so use a separate worktree for each.
