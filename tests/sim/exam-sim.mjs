@@ -1,5 +1,5 @@
 // Simulation: what the exam does to your daily reviews, before and after the "final pass" (v3.1).
-//   npm install --no-save ts-fsrs@5.4.2      (once; the app loads it from a CDN, Node can't)
+//   npm install      (once; the app loads it from a CDN, Node can't)
 //   node tests/sim/exam-sim.mjs
 //
 // 300 cards, 20 new a day for 15 days, an exam on day 30, always answering like a student who remembers a card
