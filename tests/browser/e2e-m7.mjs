@@ -18,7 +18,7 @@ await page.evaluate(async () => { const db = await import('./js/db.js'); const n
 await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.deck').length === 2);
 await page.screenshot({ path: SP + '/m7-decks.png', fullPage: true });
 const kanji = page.locator('article.deck', { hasText: 'Kanji Test' });      // the list is sorted by what is due, so find the tile by name
-ok((await kanji.locator('.deck-counts').textContent()).includes('3'), 'kanji deck has 3 cards');
+ok((await kanji.locator('.deck-counts').textContent()).match(/\b3 cards\b/) !== null, 'kanji deck has 3 cards');
 await kanji.locator('.deck-open').click(); await page.waitForSelector('.crow');
 ok((await page.locator('.crow .f').first().textContent()) === '一' && (await page.locator('.crow .b').first().textContent()) === 'one; いち / ひと(つ)', 'first card is 一 → one; いち / ひと(つ)');
 // some review history so the backup has everything

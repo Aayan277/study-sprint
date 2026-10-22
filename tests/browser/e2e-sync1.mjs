@@ -84,7 +84,6 @@ page = await newPage();
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 r = await page.evaluate(async () => { const db = await import('./js/db.js'); return { decks: await db.getAll('decks'), cards: await db.getAll('cards') }; });
 ok(r.decks[0].id === 'sample' && r.decks[0].updatedAt > 0 && r.cards.every(c => /^sample-\d+$/.test(c.id)), 'sample deck has fixed ids');
-r = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).map(d => d.id));
 
 // ---- 4. restoring an old backup fills in uids ----
 r = await page.evaluate(async () => {

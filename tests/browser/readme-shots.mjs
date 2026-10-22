@@ -88,7 +88,10 @@ await shoot('decks', ...PHONE, async p => { await p.goto(URL_ + '#/decks'); awai
 await shoot('import', ...PHONE, async p => {
   await p.goto(URL_ + '#/import'); await p.waitForSelector('#pasteBox');
   await p.fill('#pasteBox', 'Mitochondria - Makes ATP for the cell\nRibosome - Builds proteins\nNucleus - Holds the DNA\nGolgi apparatus - Packs proteins for export\nLysosome - Digests waste');
+  await p.fill('#newName', 'Cell Biology');
   await p.waitForSelector('#saveBtn:not([disabled])');
+  await p.waitForSelector('#preview:not([hidden])');
+  await p.$eval('#pasteBox', e => { window.scrollTo(0, e.getBoundingClientRect().top + scrollY - 90); });          // paste box at the top, the start of the preview below it
 });
 await shoot('desktop', 1440, 900, 1, async () => {});
 await browser.close(); server.close();
