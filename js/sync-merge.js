@@ -89,7 +89,7 @@ export function decide(row, localTime = 0) {
 export const needsPush = (record, since) => record.updatedAt > since && record.syncedAt !== record.updatedAt;
 export const tombstoneNeedsPush = (t, since) => t.deletedAt > since && !t.synced;
 
-// A record and its delete marker can both be waiting (e.g. a starter deck deleted, then added again).
+// A record and its delete marker can both be waiting (e.g. a sample deck deleted, then added again).
 // Send only the newest of each, since the server can't take the same row twice in one request.
 export function newestOnly(rows) {
   const best = new Map();

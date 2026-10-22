@@ -483,14 +483,10 @@ for (const ui of ['original', 'clinical']) {
   await p.context().close();
 }
 
-// ---------- L3 / L6 / L8: Starter decks chevron, one card count in Browse, swatches in two even rows ----------
+// ---------- L6 / L8: one card count in Browse, swatches in two even rows ----------
 {
   const p = await open(PHONE);
   await go(p, '#/decks', '.deck');
-  ok(await p.locator('#startersBox > summary svg.starters-chev').count() === 1, 'L3: "Starter decks" has a chevron');
-  const before = await p.$eval('.starters-chev', e => getComputedStyle(e).transform);
-  await p.click('#startersBox > summary');
-  ok(await p.$eval('.starters-chev', e => getComputedStyle(e).transform) !== before, 'L3: the chevron turns when it opens');
   await go(p, '#/browse', '.crow, .brow, #brCount');
   const head = await p.textContent('.br-head h2');
   ok(head.trim() === 'Cards' && /\d+ cards?/.test(await p.textContent('#brCount')), `L6: Browse says "Cards" once and the count once ("${head.trim()}" + "${(await p.textContent('#brCount')).trim()}")`);

@@ -158,7 +158,7 @@ const ROUTES = {
   review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
   play: async el => (await lazy('./play.js')).renderPlay(el),
   test: async (el, deckId) => (await lazy('./mock-exam.js')).renderTest(el, deckId),
-  decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
+  decks: async el => (await lazy('./decks.js')).renderLibrary(el),
   deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),

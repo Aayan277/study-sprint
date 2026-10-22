@@ -15,7 +15,7 @@ const TAB_ROOT = /^#\/(today|decks|play|stats|settings)\/?$/;
 // ---------- pure helpers (tests/nav.test.js) ----------
 // The screen name in an address: '#/deck/abc' is 'deck'; no hash means Today.
 export const routeName = hash => (String(hash || '').match(/^#\/([a-z]+)/) || [, 'today'])[1];
-// Is this address a bottom-tab destination? '#/decks' is; '#/decks/starters' is a sub-view (a drill-down), and so is '#/deck/x'.
+// Is this address a bottom-tab destination? '#/decks' is; '#/deck/x' is a sub-view (a drill-down).
 export const isTabRoot = hash => hash === '' || hash == null || TAB_ROOT.test(hash);
 // What history.state means to us: null for an entry the app did not make (or has not tagged yet).
 export function readEntry(state) {

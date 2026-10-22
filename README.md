@@ -114,7 +114,6 @@ Real spaced repetition (FSRS-6) · timed game rounds · no ads, no account, work
   - **How it is worked out:** from your review history each time, nothing extra is stored, so every device agrees once they have synced. Because of that, streaks (and the best streak) you already had may now be longer than before: the freeze is applied to all your history.
   - **Time zones:** days are named in the time zone your device is in now (a day starts at 4am there). If you travel or change time zone, a day's boundary moves with it, so one day can look doubled or missed around the change; the freeze usually absorbs that.
 - **Backups:** export everything to one file and restore it on any device (Settings → Your data).
-- **Starter decks:** optional JLPT N5 and N4 kanji decks, tucked away (Decks tab → Starter decks, or Import → Ready-made decks).
 - **First run:** a fresh install opens on a landing-style welcome screen (a mini card with the four rating intervals; two columns on a computer), then a short, skippable start: name your course, add cards (the sample cards come first, or paste, or a file), and a guided review of 3 cards that ends by showing when each card comes back. It never shows again (Today's "How it works" link re-opens it), and existing users never see it. An empty Today offers Paste notes, Try sample cards and How it works.
 - **Install card:** after your first finished Review session, Today offers to install the app (Install / Not now on Android and desktop, Add to Home Screen steps on iPhone Safari). It is remembered per device, hidden once the app is installed, and Settings has an Install app row.
 - **Themes:** 5 accent colors (Violet, Ocean, Forest, Ember, Rose), each in dark (the default) and light, plus an OLED black option. Fonts are Geist and Geist Mono (monospace only for numbers and key hints).
@@ -154,7 +153,7 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `css/styles.css` | All styles. The theme colors are at the top |
 | `js/app.js` | Starts the app, switches screens, Settings and backups |
 | `js/db.js` | Saving and loading (IndexedDB), backup export and restore |
-| `js/decks.js` | Deck list, deck page, create/edit/delete, starter decks |
+| `js/decks.js` | Deck list, deck page, create/edit/delete |
 | `js/browse.js`, `js/browse-logic.js` | The card list: search, filters, sorting, and every card action |
 | `js/import.js` | Format detection for pasted text, files and sheets |
 | `js/import-screen.js` | The Import screen and its preview |
@@ -198,7 +197,6 @@ Plain HTML, CSS and JavaScript modules. There's no build step, so GitHub Pages s
 | `js/autograde.js` | Turning Play answers into review ratings |
 | `js/stats.js`, `js/stats-calc.js` | The Stats screen and the numbers behind it (the streak walk with its freeze and days off is in `stats-calc.js`) |
 | `js/streak-sheet.js` | The "Your streak" sheet: the freeze explained, the last 7 days, planning and removing days off |
-| `js/jlpt.js` | The optional JLPT kanji starter decks |
 | `js/themes.js`, `js/sample.js`, `js/ui.js` | Themes, the sample deck, shared helpers |
 | `tests/browser/readme-shots.mjs` | Makes the README and manifest screenshots in `docs/screenshots/` from the real app |
 | `tests/*.test.js` | Tests for every rule above that doesn't need a browser |
@@ -264,7 +262,7 @@ What changed across the three steps (details in PLAN.md):
 
 1. **Look:** a dark and sleek look with new design tokens; five accent themes (Violet, Ocean, Forest, Ember, Rose) in dark and light, plus OLED black; rating colors fixed so Again / Hard / Good / Easy never change with the theme; a focus mode that hides the tab bar and header during a round; and contrast fixes. Geist fonts.
 2. **Today:** a home screen (the first tab) with a daily goal ring, streak, one Start button, a row per course with a mastery ring and upcoming exams. The card now flips, the finish screen was redone, and emoji were replaced by one set of icons. The old Review setup lives in Today → Options.
-3. **Shorter screens and a first run:** a skippable first-run start (pitch, name your course, add cards, guided review) that existing users never see; JLPT starter decks tucked away under "Starter decks"; Stats folds four sections under "More stats" on phones only; Settings moves timer and leech options into Advanced scheduling and Reset into a Danger zone; card filters are grouped; Play opens with deck, format and Start above the fold with the rest under "Customise"; and Play starts new cards in decks with an exam coming up. Along the way: fixes for focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight.
+3. **Shorter screens and a first run:** a skippable first-run start (pitch, name your course, add cards, guided review) that existing users never see; Stats folds four sections under "More stats" on phones only; Settings moves timer and leech options into Advanced scheduling and Reset into a Danger zone; card filters are grouped; Play opens with deck, format and Start above the fold with the rest under "Customise"; and Play starts new cards in decks with an exam coming up. Along the way: fixes for focus-mode leaks, a toast hidden by the rating bar, theme preview redraws, a late Review redraw hiding the tab bar, count labels, and the exam test around midnight.
 4. **Speed and Today follow-ups:** Stats, Today and Browse are much quicker on big libraries (10,000 cards); other screens load when first opened and the app opens from its saved files at once, updating in the background. Starting a session while another is going resumes it (same decks) or asks first; the flipped card moves focus to the answer for screen readers and the keyboard; the Today time estimate uses the real time between answers.
 5. **Visual polish (v3.2):** Start and every label in the app font, exams in amber (red only in the last 3 days), Again in crimson so it never looks like Ember's orange, a calm deck label and readable long answers on cards, framed pictures, one deck-page stripe and one empty state, finer Stats chart scales with a shorter Hardest list, one 1120px content width on desktop, and a more careful Today time estimate (only answers under 45 seconds apart, from Review's own recent history).
 6. **Layout polish (v3.3):** a short card sheet in Review and Play with Save returning to the card; one sheet frame everywhere (× at the top right, a sticky footer, a grab bar that really drags); a Review progress bar; Decks that scale (search, sort, folded subdecks, small play buttons); exam date in three taps from Today; a per-course readiness header in Stats; and a three-column Decks page on wide screens.

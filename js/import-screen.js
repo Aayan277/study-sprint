@@ -156,7 +156,6 @@ export async function renderImport(el, arg) {
     </section>
 
     <p class="err" id="loadErr" role="alert" hidden></p>
-    <p class="note" id="readyMade"><a href="#/decks/starters">Ready-made decks</a> (JLPT kanji) are in Decks → Starter decks.</p>
 
     <section id="preview" class="section" hidden aria-labelledby="pvTitle">
       <h2 id="pvTitle" tabindex="-1" style="margin-top:22px">Preview</h2>

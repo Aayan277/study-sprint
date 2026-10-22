@@ -168,16 +168,12 @@ await p.goto(URL + 'index.html'); await p.waitForSelector('.today-hero');
 ok(p.url().endsWith('#/today'), 'a device with decks but no saved flags never sees the start');
 await p.context().close();
 
-// ---- starter decks are hidden but reachable ----
+// ---- no built-in starter or JLPT decks are offered ----
 p = await fresh();
 await p.goto(URL + '?skipOnboarding#/decks'); await p.waitForSelector('.deck');
-ok(await p.locator('#startersBox').count() === 1 && !(await p.locator('.starter').first().isVisible()), 'the JLPT starter decks are not shown on Decks by default');
-ok((await p.textContent('#startersBox > summary')).trim() === 'Starter decks', 'a small "Starter decks" link is there');
-await p.click('#startersBox > summary');
-ok(await p.locator('.starter').count() === 2 && await p.locator('.starter').first().isVisible(), 'opening it shows both decks');
-await p.goto(URL + '#/import'); await p.waitForSelector('#readyMade');
-await p.click('#readyMade a'); await p.waitForSelector('#startersBox[open]');
-ok(await p.locator('.starter').first().isVisible(), 'Import → Ready-made decks opens them');
+ok(await p.locator('#startersBox, .starter, [data-starter]').count() === 0 && !/starter decks|JLPT/i.test(await p.textContent('#screen')), 'Decks shows no starter or JLPT section');
+await p.goto(URL + '#/import'); await p.waitForSelector('#screen h1, #screen h2');
+ok(await p.locator('#readyMade').count() === 0 && !/ready-made|starter decks|JLPT/i.test(await p.textContent('#screen')), 'Import shows no ready-made or JLPT section');
 await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
 ok(!(await p.content()).includes('JLPT'), 'no JLPT deck is mentioned on Today');
 await p.context().close();

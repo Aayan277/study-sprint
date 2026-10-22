@@ -49,7 +49,6 @@ const visibleHints = p => p.evaluate(() => [...document.querySelectorAll('.key-h
   await go(p, '#/deck/sample', '.crow');
   for (const [sel, what] of [['#brTags', 'Tools'], ['#brSelect', 'Select'], ['#brAdd', '+ Add card'], ['#back', '‹ Decks'], ['#addExam', 'Add exam date'], ['#testBtn', 'Practice test']]) { ok(await p.locator(sel).count() > 0, `${what} is on the deck page`); await tall(p, sel, what); }
   await go(p, '#/decks', '.deck');
-  await tall(p, '.starters > summary', '"Starter decks"');
   { const [w, h] = await sizeOf(p, '.deck .icon-btn'); ok(w >= 40 && h >= 40, `the deck's edit icon is at least 40x40 (${w}x${h})`); }
   await go(p, '#/settings', '#exportBtn');
   await tall(p, '.set-nav a', 'a Settings section chip');
