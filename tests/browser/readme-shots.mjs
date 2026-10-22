@@ -65,7 +65,7 @@ async function seed(page) {
 
 const browser = await chromium.launch();
 const shoot = async (name, w, h, scale, go) => {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', colorScheme: 'dark', reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
   await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-theme', JSON.stringify({ skin: 'violet', mode: 'dark' })); } catch { /* fine */ } });
   const page = await ctx.newPage();
   await page.goto(URL_); await page.waitForSelector('.today-hero');
