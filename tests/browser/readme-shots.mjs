@@ -65,7 +65,7 @@ async function seed(page) {
 
 const browser = await chromium.launch();
 const shoot = async (name, w, h, scale, go) => {
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale, serviceWorkers: 'block', colorScheme: 'dark', reducedMotion: 'reduce', isMobile: w < 800, hasTouch: w < 800 });
   await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-theme', JSON.stringify({ skin: 'violet', mode: 'dark' })); } catch { /* fine */ } });
   const page = await ctx.newPage();
   await page.goto(URL_); await page.waitForSelector('.today-hero');
@@ -88,7 +88,10 @@ await shoot('decks', ...PHONE, async p => { await p.goto(URL_ + '#/decks'); awai
 await shoot('import', ...PHONE, async p => {
   await p.goto(URL_ + '#/import'); await p.waitForSelector('#pasteBox');
   await p.fill('#pasteBox', 'Mitochondria - Makes ATP for the cell\nRibosome - Builds proteins\nNucleus - Holds the DNA\nGolgi apparatus - Packs proteins for export\nLysosome - Digests waste');
+  await p.fill('#newName', 'Cell Biology');
   await p.waitForSelector('#saveBtn:not([disabled])');
+  await p.waitForSelector('#preview:not([hidden])');
+  await p.$eval('#pasteBox', e => { window.scrollTo(0, e.getBoundingClientRect().top + scrollY - 90); });          // paste box at the top, the start of the preview below it
 });
 await shoot('desktop', 1440, 900, 1, async () => {});
 await browser.close(); server.close();

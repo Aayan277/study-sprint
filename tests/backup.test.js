@@ -1,10 +1,8 @@
-// Tests for backup checks (js/db.js) and the starter decks (js/jlpt.js). Run with: node tests/backup.test.js
+// Tests for backup checks (js/db.js). Run with: node tests/backup.test.js
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBackup, BACKUP_FORMAT, BACKUP_VERSION, cleanMixedWith, restoredSettings } from '../js/db.js';
-import { STARTER_DECKS, starterCards } from '../js/jlpt.js';
-import { checkAnswer, canType } from '../js/match.js';
 
 const good = { format: BACKUP_FORMAT, version: BACKUP_VERSION, decks: [], cards: [], cardStates: [], reviewLog: [], settings: {} };
 
@@ -57,26 +55,6 @@ test('a backup with a broken record, bad color or SVG picture is refused', () =>
   assert.equal(checkBackup({ ...good, decks: [{ id: 'd', color: '#3E63DD' }], cards: [{ id: 'c' }], cardStates: [{ cardId: 'c' }] }), null);
   assert.match(checkBackup({ ...good, media: [{ id: 'm', type: 'image/svg+xml', data: '' }] }), /not a supported image/);
   assert.equal(checkBackup({ ...good, media: [{ id: 'm', type: 'image/jpeg', data: '' }] }), null);
-});
-
-test('starter decks: 102 N5 and 180 N4 kanji', () => {
-  assert.deepEqual(STARTER_DECKS.map(d => starterCards(d.level).length), [102, 180]);
-  const all = STARTER_DECKS.flatMap(d => starterCards(d.level));
-  assert.ok(all.every(c => c.front && c.back && c.tags.length === 2), 'every card has a front, back and tags');
-  assert.equal(new Set(all.map(c => c.front)).size, all.length, 'no kanji appears twice');
-});
-
-test('starter cards: typing a meaning or a reading counts as right', () => {
-  const one = starterCards('N5')[0];
-  assert.deepEqual(one, { front: '一', back: 'one; いち / ひと(つ)', tags: ['N5', 'numbers & time'] });
-  assert.ok(checkAnswer('one', one.back).correct);
-  assert.ok(checkAnswer('いち', one.back).correct);
-  assert.ok(checkAnswer('ひとつ', one.back).correct);
-  assert.ok(checkAnswer('ひと', one.back).correct);
-  assert.equal(checkAnswer('two', one.back).correct, false);
-  // Most backs are short enough to type (40 characters or less).
-  const typeable = STARTER_DECKS.flatMap(d => starterCards(d.level)).filter(c => canType(c.back)).length;
-  assert.ok(typeable > 270, `${typeable} of 282 typeable`);
 });
 
 test('the catch-up plan in a backup: a good one (or none) passes, a damaged one is refused', () => {

@@ -11,17 +11,15 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 const count = name => page.evaluate(async n => (await (await import('./js/db.js')).getAll(n)).length, name);
 
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
-// Starter decks
-ok(!(await page.locator('.starter').first().isVisible()), 'starter decks are tucked away by default');
-await page.click('#startersBox > summary');
-ok((await page.locator('.starter').count()) === 2, 'two starter decks offered');
-await page.screenshot({ path: SP + '/m7-starters.png', fullPage: true });
-await page.click('[data-starter="jlpt-n5"]');
-await page.waitForFunction(() => document.querySelectorAll('.deck').length === 2);
-ok((await page.locator('.starter').count()) === 1, 'added N5 deck is no longer offered');
-const n5 = page.locator('article.deck', { hasText: 'JLPT N5 Kanji' });      // the list is sorted by what is due, so find the tile by name
-ok((await n5.locator('.deck-counts').textContent()).includes('102'), 'N5 deck has 102 cards');
-await n5.locator('.deck-open').click(); await page.waitForSelector('.crow');
+// A small kanji deck, added through the app's own save path (as an import would)
+await page.evaluate(async () => { const db = await import('./js/db.js'); const now = Date.now();
+  await db.addDeckWithCards({ id: 'kanji-test', name: 'Kanji Test', color: '#3E63DD', created: now },
+    [['一', 'one; いち / ひと(つ)'], ['二', 'two; に / ふた(つ)'], ['三', 'three; さん / みっ(つ)']].map(([front, back], i) => ({ id: 'kanji-test-' + i, deckId: 'kanji-test', front, back, created: now + i }))); });
+await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.deck').length === 2);
+await page.screenshot({ path: SP + '/m7-decks.png', fullPage: true });
+const kanji = page.locator('article.deck', { hasText: 'Kanji Test' });      // the list is sorted by what is due, so find the tile by name
+ok((await kanji.locator('.deck-counts').textContent()).match(/\b3 cards\b/) !== null, 'kanji deck has 3 cards');
+await kanji.locator('.deck-open').click(); await page.waitForSelector('.crow');
 ok((await page.locator('.crow .f').first().textContent()) === '一' && (await page.locator('.crow .b').first().textContent()) === 'one; いち / ひと(つ)', 'first card is 一 → one; いち / ひと(つ)');
 // some review history so the backup has everything
 await page.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards'))[0];

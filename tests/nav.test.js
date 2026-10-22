@@ -7,7 +7,6 @@ import { routeName, isTabRoot, readEntry, makeEntry, isStale, popsFor } from '..
 test('routeName reads the screen from the address', () => {
   assert.equal(routeName('#/deck/abc'), 'deck');
   assert.equal(routeName('#/review'), 'review');
-  assert.equal(routeName('#/decks/starters'), 'decks');
   assert.equal(routeName(''), 'today');
   assert.equal(routeName(undefined), 'today');
 });
@@ -15,7 +14,7 @@ test('routeName reads the screen from the address', () => {
 test('only the five bottom-tab destinations are tab roots', () => {
   for (const h of ['#/today', '#/decks', '#/play', '#/stats', '#/settings', '#/today/', '']) assert.ok(isTabRoot(h), h);
   // drill-downs, sessions and sub-views push one entry
-  for (const h of ['#/deck/x', '#/browse', '#/browse/leech', '#/import', '#/import/x', '#/review', '#/review/x', '#/decks/starters', '#/welcome', '#/welcome/review/sample']) assert.ok(!isTabRoot(h), h);
+  for (const h of ['#/deck/x', '#/browse', '#/browse/leech', '#/import', '#/import/x', '#/review', '#/review/x', '#/welcome', '#/welcome/review/sample']) assert.ok(!isTabRoot(h), h);
 });
 
 test('history.state is read back only when the app made it', () => {

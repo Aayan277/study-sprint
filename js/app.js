@@ -25,7 +25,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.51';
+const APP_VERSION = '4.52';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -158,7 +158,7 @@ const ROUTES = {
   review: async (el, deckId) => (await lazy('./review.js')).renderReview(el, deckId),
   play: async el => (await lazy('./play.js')).renderPlay(el),
   test: async (el, deckId) => (await lazy('./mock-exam.js')).renderTest(el, deckId),
-  decks: async (el, arg) => (await lazy('./decks.js')).renderLibrary(el, arg === 'starters'),
+  decks: async el => (await lazy('./decks.js')).renderLibrary(el),
   deck: async (el, id) => (await lazy('./decks.js')).renderDeck(el, id),
   browse: async (el, arg) => (await lazy('./browse.js')).renderBrowseAll(el, arg),
   import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),

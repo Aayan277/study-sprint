@@ -8,6 +8,9 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.52', items: [
+    'The built-in JLPT kanji decks are gone. If you added one, it stays in your decks and works as before.',
+  ] },
   { version: '4.51', items: [
     'The section buttons at the top of Settings now highlight the section you are in, and the streak chip on Today stays on one line.',
     'Pop-up messages now sit at the bottom of the screen, Arabic and Hebrew rows read right to left with maths kept left to right, and buttons are easier to tap.',

@@ -5,7 +5,6 @@ import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, sav
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
-import { STARTER_DECKS, starterCards } from './jlpt.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
 import { examInfo, countdown, badgeClass, MOCK_DAYS } from './exam.js';
@@ -109,8 +108,7 @@ const SORTS = [['due', 'Due first'], ['exam', 'Exam'], ['az', 'A–Z']];
 const SORT_KEY = 'study-sprint-decks-sort';
 const savedSort = () => { try { const v = localStorage.getItem(SORT_KEY); return SORTS.some(x => x[0] === v) ? v : 'due'; } catch { return 'due'; } };
 
-// showStarters: open the Starter decks section (the Import screen's "Ready-made decks" link does this).
-export async function renderLibrary(el, showStarters = false) {
+export async function renderLibrary(el) {
   const today = await loadAll(), list = loadDecks(today);
   const compact = today.settings.compactDecks !== false;
   const leeches = today.allCards.filter(c => (c.tags || []).includes('leech')).length;      // cards you keep forgetting, waiting for a fix
@@ -121,9 +119,6 @@ export async function renderLibrary(el, showStarters = false) {
   // Each deck's numbers are worked out once per render (the queues are not cheap), then reused by the tiles, the sort and the search.
   const countsMemo = new Map();
   const cnt = id => { let c = countsMemo.get(id); if (!c) countsMemo.set(id, c = countFor(today, [id])); return c; };
-  // Starter decks you haven't added yet.
-  const added = new Set(list.map(x => x.deck.starter).filter(Boolean));
-  const starters = STARTER_DECKS.filter(s => !added.has(s.key)).map(s => ({ ...s, count: starterCards(s.level).length }));
   const view = { query: '', sort: savedSort() };
 
   // One deck's tile. `q` is the search text (compact only): a course that matches only through a subdeck shows just those subdecks.
@@ -203,16 +198,6 @@ export async function renderLibrary(el, showStarters = false) {
     ${list.length ? `<div class="decks${compact ? ' compact' : ''}" id="deckGrid"></div><p class="note" id="deckNone" hidden></p>`
     : emptyStartHTML()}
     ${list.length ? `<p class="browse-all"><a href="#/browse">Browse all cards →</a>${leeches ? ` <span aria-hidden="true">·</span> <a href="#/browse/leech" id="leechLink">${plural(leeches, 'card')} to fix</a>` : ''}</p>` : ''}
-    ${starters.length ? `
-    <details class="starters" id="startersBox" ${showStarters ? 'open' : ''}>
-      <summary>${icon('chevron', 'starters-chev')}Starter decks</summary>
-      <p class="note">Optional ready-made decks. Add one if it's useful to you.</p>
-      ${starters.map(s => `
-        <div class="starter">
-          <div><b>${esc(s.name)}</b><span class="muted small"> · ${s.count} kanji with meanings and readings</span></div>
-          <button class="btn ghost small" type="button" data-starter="${esc(s.key)}">Add</button>
-        </div>`).join('')}
-    </details>` : ''}
   `;
 
   // The tiles are drawn from the search text and the sort, so both just redraw this part.
@@ -250,20 +235,6 @@ export async function renderLibrary(el, showStarters = false) {
   const create = () => openDeckEditor(null, () => renderLibrary(el));
   $('newDeck').addEventListener('click', create);
   wireEmptyStart(el);
-  if (showStarters) $('startersBox')?.scrollIntoView({ block: 'center' });
-  el.querySelectorAll('[data-starter]').forEach(b => b.addEventListener('click', async () => {
-    const s = STARTER_DECKS.find(x => x.key === b.dataset.starter);
-    b.disabled = true;
-    // Fixed ids, so the same starter deck added on two devices is one deck once they sync.
-    const deckId = `starter-${s.key}`, now = Date.now();
-    // `starter` remembers which starter deck this is, so it isn't offered again.
-    await db.addDeckWithCards(
-      { id: deckId, name: s.name, course: s.course, color: s.color, created: now, starter: s.key },
-      starterCards(s.level).map((c, i) => ({ id: `${deckId}-${i}`, deckId, ...c, created: now + i }))
-    );
-    toast(`Added ${s.name}`);
-    renderLibrary(el, true);          // the section stays open, in case the other one is wanted too
-  }));
 }
 
 // ---------- one deck and its cards ----------
