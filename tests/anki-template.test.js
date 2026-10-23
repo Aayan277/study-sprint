@@ -55,9 +55,9 @@ test('{{#F}} and {{^F}} sections follow whether the field has anything in it (An
   assert.equal(draw(model(['A', 'B'], '{{/A}}{{A}}{{#B}}{{B}}'), ['q', 'b']).q, 'qb');
 });
 
-test('filters: text, hint and type; unknown ones show the field as it is', () => {
+test('filters: text and type; hint shows nothing here (the field is a folded section); unknown ones show the field as it is', () => {
   const m = model(['A', 'B', 'C'], '{{text:A}}|{{hint:B}}|{{type:C}}|{{edit:B}}|{{nc:type:C}}');
-  assert.equal(draw(m, ['<b>x</b> &lt;y&gt;', '<i>h</i>', 'typed']).q, 'x <y>|*h*||*h*|');
+  assert.equal(draw(m, ['<b>x</b> &lt;y&gt;', '<i>h</i>', 'typed']).q, 'x <y>|||*h*|');
 });
 
 test('Japanese filters: furigana, kana and kanji read the 漢字[かんじ] syntax', () => {
@@ -98,7 +98,9 @@ test('blocks and line breaks make lines, with no blank lines between blocks and 
 test('which fields a template shows', () => {
   assert.deepEqual([...shownFields(VERB)].sort(), [...VERB_FIELDS].sort());
   const m = model(['Front', 'Back', 'Extra', 'Hidden', 'Switch'], '{{Front}}{{type:Back}}{{#Switch}}{{/Switch}}', '{{FrontSide}}<hr id=answer>{{Back}}{{hint:Extra}}');
-  assert.deepEqual([...shownFields(m)].sort(), ['Back', 'Extra', 'Front']);          // (the type box and the section's switch are not shown)
+  assert.deepEqual([...shownFields(m)].sort(), ['Back', 'Front']);          // (the type box, the section's switch and a field only behind hint: are not shown)
+  const both = model(['Front', 'Back', 'Extra'], '{{Front}}{{hint:Extra}}', '{{FrontSide}}<hr id=answer>{{Back}}{{Extra}}');
+  assert.deepEqual([...shownFields(both)].sort(), ['Back', 'Extra', 'Front']);          // (shown normally as well: stays inline)
 });
 
 // ---------- furigana in the app's text ----------
@@ -234,4 +236,79 @@ test('import: a note with fewer fields than its type, or no templates at all, do
   assert.deepEqual(notesToImport([noteOf('9', ['a', 'b'])], new Map([['9', VERB]])).templated, [false]);
   const none = { name: 'x', cloze: false, fields: ['A', 'B', 'C'], templates: [] };
   assert.deepEqual(notesToImport([noteOf('9', ['a', 'b', 'c'])], new Map([['9', none]])).templated, [false]);
+});
+
+// ---------- fields inside tags and comments, the template's own answer line ----------
+test('a field written inside a tag or a comment is not shown, and stays a folded spare field', () => {
+  const m = model(['Word', 'Meaning', 'Pitch'], '<div>{{Word}}</div><span data-p="{{Pitch}}"></span>', '{{FrontSide}}<hr id=answer>{{Meaning}}');
+  assert.deepEqual([...shownFields(m)].sort(), ['Meaning', 'Word']);
+  assert.deepEqual(draw(m, ['犬', 'dog', '<b>1</b> "x>y"']), { q: '犬', a: 'dog' });
+  const r = notesToImport([noteOf('9', ['犬', 'dog', '<b>1</b> "x>y"'])], new Map([['9', model(['Word', 'Meaning', 'Pitch', 'Ex'], '<div>{{Word}}</div><span data-p="{{Pitch}}"></span>', '{{FrontSide}}<hr id=answer>{{Meaning}}{{Ex}}')]]));
+  assert.deepEqual(r.templated, [true]);
+  assert.deepEqual(r.spareFields[0].map(f => f.name), ['Pitch']);
+  const c = model(['A', 'B', 'C'], '{{A}}<!-- {{C}} -->', '{{FrontSide}}<hr id=answer>{{B}}');
+  assert.deepEqual(draw(c, ['a', 'b', 'secret']), { q: 'a', a: 'b' });
+  assert.deepEqual([...shownFields(c)].sort(), ['A', 'B']);
+  assert.deepEqual(draw(model(['A', 'B'], '{{A}}<!-- never closed {{B}}'), ['a', 'b']).q, 'a');
+});
+
+test('a field holding <hr id=answer> does not cut the back early', () => {
+  const m = model(['A', 'B'], '{{A}}', '{{FrontSide}}<hr id=answer>{{B}}');
+  assert.deepEqual(draw(m, ['x<hr id=answer>y', 'back']), { q: 'xy', a: 'back' });
+  const own = model(['A', 'B'], '{{A}}', '{{B}}<hr id="answer">after {{A}}');
+  assert.equal(draw(own, ['q', 'b<hr id=answer>c']).a, 'after q');
+  assert.equal(draw(model(['A', 'B'], '{{A}}', '{{B}}'), ['q', 'b<hr id=answer>c']).a, 'bc');          // (no line in the template: the whole back)
+});
+
+// ---------- hostile text stays fast ----------
+const fast = (what, run, ms = 300) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
+test('furigana filters and templates stay fast on hostile text', () => {
+  const m = model(['A', 'B'], '{{furigana:A}}{{kana:A}}{{kanji:A}}', '{{FrontSide}}<hr id=answer>{{B}}');
+  for (const bad of ['x['.repeat(25000), '['.repeat(50000), 'a'.repeat(50000) + '[', ' '.repeat(50000) + '[', 'x[' + 'a'.repeat(50000), '<script>'.repeat(8000), '<hr id=answer>'.repeat(3000)]) {
+    fast('render', () => htmlToLines(renderCard(m, [bad, bad]).q + renderCard(m, [bad, bad]).a));
+  }
+  fast('template', () => { const t = '<!--'.repeat(12000) + '<img'.repeat(12000) + '<script'.repeat(8000) + '{{'.repeat(10000); renderCard(model(['A', 'B'], t, t), ['a', 'b']); });
+  fast('lines', () => htmlToLines(' '.repeat(50000) + '<div'.repeat(10000) + '\u0001'.repeat(50000)));
+});
+
+test('furigana syntax: words with readings, [sound:] left alone', () => {
+  const m = model(['A', 'B'], '{{furigana:A}}', '{{FrontSide}}<hr id=answer>{{B}}');
+  assert.equal(renderCard(m, ['日本語[にほんご] 勉強[べんきょう]する[sound:a.mp3]', 'b']).q, '<ruby>日本語<rt>にほんご</rt></ruby><ruby>勉強<rt>べんきょう</rt></ruby>する[sound:a.mp3]');
+});
+
+// ---------- ruby: omitted end tags, collisions with Chinese titles, hostile text ----------
+test('a ruby whose </rt> or </rp> is left out still reads right (as HTML allows)', () => {
+  assert.equal(htmlToMarks('<ruby>漢<rt>かん</ruby>'), '｜漢《かん》');
+  assert.equal(htmlToMarks('<ruby>漢<rt>かん<rb>字<rt>じ</ruby>'), '｜漢《かん》｜字《じ》');
+  assert.equal(htmlToMarks('<ruby>漢<rp>(<rt>かん<rp>)</ruby>字', { marks: false }), '漢(かん)字');
+  assert.equal(htmlToMarks('<RUBY>漢<RT>かん</RT></RUBY>'), '｜漢《かん》');
+  assert.equal(htmlToMarks('<ruby>漢<rt>かん</rt> never closed'), '漢かん never closed');          // (no </ruby>: only text is left)
+});
+
+test('｜base《reading》 is furigana only for a short word with a reading that is not Chinese characters', () => {
+  assert.equal(formatHTML('｜見《み》る'), '<ruby>見<rt>み</rt></ruby>る');
+  assert.equal(formatHTML('｜北京《Beijing》'), '<ruby>北京<rt>Beijing</rt></ruby>');
+  assert.equal(formatHTML('｜北京《běijīng》'), '<ruby>北京<rt>běijīng</rt></ruby>');
+  assert.equal(formatHTML('推荐｜三体《刘慈欣》'), '推荐｜三体《刘慈欣》');          // (a book title: not a ruby)
+  assert.equal(plainText('推荐｜三体《刘慈欣》'), '推荐｜三体《刘慈欣》');
+  assert.deepEqual(answerTargets('推荐｜三体《刘慈欣》'), ['推荐｜三体《刘慈欣》']);
+  assert.equal(htmlToMarks('<ruby>字<rt>字</rt></ruby>'), '｜字《字》');          // (an Anki ruby is still taken in; Review then shows it as plain text)
+  const long = `｜${'あ'.repeat(40)}《a》`;
+  assert.equal(formatHTML(long), long);          // (a word that long is not furigana)
+});
+
+test('a typed furigana answer accepts the word and the reading, math in the reading included', () => {
+  assert.deepEqual(answerTargets('｜見《み》る'), ['見る', 'みる']);
+  assert.deepEqual(answerTargets('$｜x《y》$ ｜a《b》'), ['｜x《y》 a', '$｜x《y》$ a', '｜x《y》 b', '$｜x《y》$ b']);
+  assert.ok(answerTargets('$\\frac{1}{2}$ ｜a《b》').includes('1/2 b'));
+});
+
+test('ruby and marks stay fast on a hostile text of 50 KB', () => {
+  const bad = ['<ruby>' + '<rt>'.repeat(12000) + '</ruby>', '<ruby>' + '<rp>'.repeat(12000) + '</ruby>', '<ruby>'.repeat(8000), '<ruby'.repeat(10000), '<ruby>' + 'a<rt>b'.repeat(8000),
+    '<rt>'.repeat(12000) + '</ruby>', '｜a《'.repeat(16000), '｜'.repeat(50000), '《'.repeat(50000), '[sound:'.repeat(7000), '<'.repeat(50000), '<div'.repeat(12000), '<li'.repeat(16000)];
+  for (const s of bad) {
+    fast('htmlToMarks', () => { htmlToMarks(s); htmlToMarks(s, { marks: false }); });
+    fast('marks', () => { formatHTML(s); plainText(s); answerTargets(s); });
+  }
+  assert.ok(htmlToMarks('<ruby>' + 'a<rt>b</rt>'.repeat(3000) + '</ruby>').length > 0);          // (a ruby over the length cap is just its text)
 });
