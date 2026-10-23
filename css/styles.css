@@ -1400,6 +1400,8 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 
 /* Card formatting (format.js, card-editor.js) */
 .flash-front b,.flash-recap b,.flash-back b{font-weight:650}
+/* furigana (Japanese readings): the reading small above its word, and not bold like the card text */
+ruby rt{font-size:.5em;font-weight:400;letter-spacing:0;line-height:1}
 .flash-front ul,.flash-recap ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
 .flash-front ul,.flash-recap ul{font-size:.8em}
 .fmt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2)}
