@@ -81,10 +81,31 @@ test('cards of one note that share a guid and a note id are told apart by templa
   ];
   const idx = indexByGuid(saved);
   assert.equal(slotOf(saved[0]), 'ft0'); assert.equal(slotOf(saved[1]), 'ft1'); assert.equal(slotOf(saved[2]), 'f');
-  const m = matchRows([{ guid: 'G', slot: 'ft1' }, { guid: 'G', slot: 'ft0' }, { guid: 'G', slot: 'ft2' }, { guid: 'G', slot: 'f' }, { guid: 'H', slot: 'ft0' }, { guid: 'H', slot: 'f' }], idx);
-  // ft2 has no saved card: it is added, not used to overwrite a sibling. A missing templateOrd is its own key, not t0.
-  assert.deepEqual(m.map(c => c?.id ?? null), ['b', 'a', null, null, null, 'old']);
+  const m = matchRows([{ guid: 'G', slot: 'ft1' }, { guid: 'G', slot: 'ft0' }, { guid: 'G', slot: 'ft2' }, { guid: 'G', slot: 'f' }, { guid: 'H', slot: 'f' }, { guid: 'H', slot: 'ft0' }], idx);
+  // ft2 has no saved card: it is added, not used to overwrite a sibling. A missing templateOrd is its own key, not t0 (G has no plain card).
+  assert.deepEqual(m.map(c => c?.id ?? null), ['b', 'a', null, null, 'old', null]);      // (the last one: old was already taken by the plain f)
   // the preview's rows carry templateOrd too, and a reverse card keeps its own key
   assert.equal(rowSlot({ templateOrd: 1 }), 'ft1'); assert.equal(rowSlot({ templateOrd: 0 }, true), 'rt0'); assert.equal(rowSlot({}), 'f');
   assert.equal(countMatches([{ ankiGuid: 'G', templateOrd: 0 }, { ankiGuid: 'G', templateOrd: 1 }, { ankiGuid: 'G', templateOrd: 2 }], idx), 2);
+});
+
+test('a card saved before templateOrd existed becomes template 0 of its note', () => {
+  const old = { id: 'old', ankiGuid: 'G', front: 'Q', back: 'A', tags: [], created: 1 };      // imported with only its first card
+  const idx = indexByGuid([old, { id: 'cloze', ankiGuid: 'G', cloze: 1 }, { id: 'rev', ankiGuid: 'G', reverse: true, noteId: 'P' }]);
+  // incoming: the note's cards ft0, ft1, ft2
+  const m = matchRows([{ guid: 'G', slot: 'ft0' }, { guid: 'G', slot: 'ft1' }, { guid: 'G', slot: 'ft2' }], idx);
+  assert.deepEqual(m.map(c => c?.id ?? null), ['old', null, null]);
+  // the update relinks it: templateOrd 0 and the note's shared noteId
+  const fresh = { ankiGuid: 'G', front: 'Q2', back: 'A2', templateOrd: 0, noteId: 'tmp' };
+  const map = noteIdMap([[old, fresh]]);
+  const merged = mergeCard(old, fresh, map.get('tmp'), 9);
+  assert.equal(merged.templateOrd, 0); assert.equal(merged.noteId, 'tmp'); assert.equal(merged.id, 'old'); assert.equal(merged.front, 'Q2');
+  assert.ok(!sameContent(old, merged));
+  // a second import finds it by its exact key, with no fallback needed
+  assert.equal(matchRows([{ guid: 'G', slot: 'ft0' }], indexByGuid([merged]))[0].id, 'old');
+  // an exact ft0 card wins over a plain one; the plain one is not stolen
+  const both = indexByGuid([merged, { id: 'plain', ankiGuid: 'G' }]);
+  assert.deepEqual(matchRows([{ guid: 'G', slot: 'ft0' }], both).map(c => c.id), ['old']);
+  // a reverse card has no fallback
+  assert.equal(matchRows([{ guid: 'G', slot: 'rt0' }], idx)[0], null);
 });

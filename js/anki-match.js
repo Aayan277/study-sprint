@@ -17,7 +17,7 @@ export function slotOf(card) {
   return ordinary(card, card.reverse);
 }
 // The place of a row in the import preview (its cloze / occlusion are still { noteKey, n, … } objects there). `reverse`: its reverse card.
-export const rowSlot = (c, reverse = false) => (c.cloze ? `c${c.cloze.n}` : c.occlusion ? `o${c.occlusion.n}` : ordinary(c, reverse));
+export const rowSlot = (c, reverse = false) => (c.cloze ? `c${c.cloze.n}` : c.occlusion ? `o${c.occlusion.n}` : ordinary(c.siblings ? { templateOrd: c.siblings.ord } : c, reverse));
 
 const keyOf = (guid, slot) => `${guid}\u0001${slot}`;
 
@@ -33,12 +33,19 @@ export function indexByGuid(cards) {
   return index;
 }
 
+// Before 4.54 a note with several card templates came in as its first card only, saved with no templateOrd. That card is the note's
+// template 0, so when the incoming ft0 has no exact match it takes the saved plain card (f) of the same note: the update gives it
+// templateOrd 0 and the note's shared noteId, so it becomes a sibling of the cards added beside it instead of being duplicated.
+// (There is no such case for a reverse card: a reversed note is never a several-template note, so rt0 has no fallback.)
+const FALLBACK = { ft0: 'f' };
+
 // For each item { guid, slot }, the saved card it matches, or null. A saved card is matched at most once (the first item to ask for it).
 export function matchRows(items, index) {
   const claimed = new Set();
   return items.map(it => {
     if (!it || !it.guid || !index) return null;
-    const card = index.get(keyOf(it.guid, it.slot));
+    let card = index.get(keyOf(it.guid, it.slot));
+    if ((!card || claimed.has(card.id)) && FALLBACK[it.slot]) card = index.get(keyOf(it.guid, FALLBACK[it.slot]));
     if (!card || claimed.has(card.id)) return null;
     claimed.add(card.id);
     return card;
@@ -47,7 +54,7 @@ export function matchRows(items, index) {
 
 // What an update replaces. Everything else (id, deck, created, flag, suspended, buried, acceptAnswers)
 // stays, and so do the schedule and review history, which are kept in other stores keyed by the card's id.
-export const CONTENT = ['front', 'back', 'frontImage', 'backImage', 'frontSounds', 'backSounds', 'noteFields', 'noteExtra', 'typeIn', 'cloze', 'noteText', 'occlusion'];
+export const CONTENT = ['front', 'back', 'frontImage', 'backImage', 'frontSounds', 'backSounds', 'noteFields', 'noteExtra', 'typeIn', 'cloze', 'noteText', 'occlusion', 'templateOrd'];
 const MEDIA = ['frontImage', 'backImage', 'frontSounds', 'backSounds'];
 export { MEDIA };
 

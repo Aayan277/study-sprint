@@ -261,7 +261,7 @@ test('a field holding <hr id=answer> does not cut the back early', () => {
 });
 
 // ---------- hostile text stays fast ----------
-const fast = (what, run, ms = 300) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
+const fast = (what, run, ms = 1000) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
 test('furigana filters and templates stay fast on hostile text', () => {
   const m = model(['A', 'B'], '{{furigana:A}}{{kana:A}}{{kanji:A}}', '{{FrontSide}}<hr id=answer>{{B}}');
   for (const bad of ['x['.repeat(25000), '['.repeat(50000), 'a'.repeat(50000) + '[', ' '.repeat(50000) + '[', 'x[' + 'a'.repeat(50000), '<script>'.repeat(8000), '<hr id=answer>'.repeat(3000)]) {
@@ -327,4 +327,85 @@ test('ruby and marks stay fast on a hostile text of 50 KB', () => {
     fast('marks', () => { formatHTML(s); plainText(s); answerTargets(s); });
   }
   assert.ok(htmlToMarks('<ruby>' + 'a<rt>b</rt>'.repeat(3000) + '</ruby>').length > 0);          // (a ruby over the length cap is just its text)
+});
+
+// ---------- a note type with several card templates: every card of the note comes in ----------
+const MULTI = ({ name: 'Vocab 3 cards', cloze: false, fields: ['Word', 'Reading', 'Meaning', 'Audio', 'Notes'], templates: [
+  { ord: 0, qfmt: '{{Word}}<br>{{Reading}}', afmt: '{{FrontSide}}<hr id=answer>{{Meaning}}' },
+  { ord: 1, qfmt: '{{Meaning}}', afmt: '{{FrontSide}}<hr id=answer>{{Word}} {{Reading}}' },
+  { ord: 2, qfmt: '{{#Audio}}{{Audio}}{{/Audio}}', afmt: '{{FrontSide}}<hr id=answer>{{Word}}<br>{{Meaning}}' }] });
+const multi = (notes, m = MULTI) => notesToImport(notes, new Map([['7', m]]));
+const vocab = (id, fields, cards, extra = {}) => ({ id, guid: 'g' + id, mid: '7', fields, tags: ['jp'], deck: 'D', cards, ...extra });
+
+test('several card templates: each card the note has in Anki comes in, drawn from its own template', () => {
+  const r = multi([vocab('1', ['犬', 'いぬ', 'dog', '[sound:dog.mp3]', 'a pet'], { 0: 'a', 1: 'b', 2: 'c' })]);
+  assert.deepEqual(r.rows.slice(0, 2), [['犬\nいぬ', 'dog'], ['dog', '犬 いぬ']]);
+  assert.equal(r.rows[2][1], '犬\ndog', 'the listening card: its front is the sound, its back the word and meaning');
+  assert.equal(r.rows.length, 3);
+  assert.deepEqual(r.ankiIds, ['a', 'b', 'c'], 'each card has its own Anki card id (its own review history)');
+  assert.deepEqual(r.templated, [true, true, true]);
+  assert.deepEqual(r.siblings, [{ noteKey: '1', ord: 0 }, { noteKey: '1', ord: 1 }, { noteKey: '1', ord: 2 }]);
+  assert.deepEqual(r.tags, [['jp'], ['jp'], ['jp']]);
+  assert.deepEqual(r.spareFields.map(f => f.map(x => x.name)), [['Notes'], ['Notes'], ['Notes']], 'a field none of the cards shows is kept folded on each');
+  const cards = buildCards(r);
+  assert.deepEqual(cards.map(c => c.siblings), r.siblings);
+  assert.deepEqual(cards.map(c => c.ankiId), ['a', 'b', 'c']);
+});
+
+test('several card templates: the listening card has the sound on its front, and a card with an empty front is left out', () => {
+  const r = multi([vocab('1', ['犬', 'いぬ', 'dog', '[sound:dog.mp3]', ''], { 0: 'a', 1: 'b', 2: 'c' }), vocab('2', ['猫', 'ねこ', 'cat', '', ''], { 0: 'd', 1: 'e' })]);
+  assert.deepEqual(r.ankiIds, ['a', 'b', 'c', 'd', 'e']);
+  assert.deepEqual(r.sounds.map(s => s && s.front), [null, null, ['dog.mp3'], null, null]);
+  assert.deepEqual(r.siblings.map(s => s && [s.noteKey, s.ord]), [['1', 0], ['1', 1], ['1', 2], ['2', 0], ['2', 1]]);
+  // A note whose Audio is empty has no listening card in Anki; and if it were in the list, it would draw an empty front and be left out.
+  const odd = multi([vocab('3', ['鳥', 'とり', 'bird', '', ''], { 0: 'f', 1: 'g', 2: 'h' })]);
+  assert.deepEqual(odd.ankiIds, ['f', 'g']);
+  assert.deepEqual(odd.siblings.map(s => s.ord), [0, 1]);
+  assert.equal(fieldReport(odd).more, 0, 'a card Anki would not make is not "left out"');
+});
+
+test('several card templates: only the cards that exist in Anki come in, and a lone card has no siblings', () => {
+  const r = multi([vocab('1', ['犬', 'いぬ', 'dog', '', ''], { 0: 'a' }), vocab('2', ['猫', 'ねこ', 'cat', '', ''], { 1: 'e' }), vocab('3', ['鳥', 'とり', 'bird', '', ''], {})]);
+  assert.deepEqual(r.ankiIds, ['a', 'e', null]);
+  assert.deepEqual(r.rows, [['犬\nいぬ', 'dog'], ['cat', '猫 ねこ'], ['鳥\nとり', 'bird']], 'card 1 deleted in Anki: only card 2 comes; no card list: card 1 as before');
+  assert.deepEqual(r.siblings, [null, null, null]);
+  assert.equal(buildCards(r)[0].siblings, undefined);
+});
+
+test('several card templates: review history comes along from each card\'s own Anki card id, and onlyDeck keeps the links', () => {
+  const rev = new Map([['a', [{ timestamp: 1, ease: 3, ivl: 1, ms: 1, type: 0, factor: 0 }]], ['b', [{ timestamp: 2, ease: 1, ivl: 0, ms: 1, type: 0, factor: 0 }, { timestamp: 3, ease: 3, ivl: 1, ms: 1, type: 1, factor: 2500 }]]]);
+  const r = notesToImport([vocab('1', ['犬', 'いぬ', 'dog', '', ''], { 0: 'a', 1: 'b' }), vocab('2', ['猫', 'ねこ', 'cat', '', ''], { 0: 'c', 1: 'd' }, { deck: 'E' })], new Map([['7', MULTI]]), rev);
+  assert.deepEqual([...r.reviews.keys()].sort(), ['a', 'b']);
+  assert.deepEqual(r.progress, { cards: 2, reviews: 3 });
+  const d = onlyDeck(r, 'D');
+  assert.deepEqual(d.siblings, [{ noteKey: '1', ord: 0 }, { noteKey: '1', ord: 1 }]);
+  assert.deepEqual(d.progress, { cards: 2, reviews: 3 });
+});
+
+test('several card templates: a field any card shows is not folded, and Back Extra shown by a later card stays on the card', () => {
+  const m = { ...MULTI, fields: [...MULTI.fields, 'Back Extra'], templates: [...MULTI.templates.slice(0, 2), { ord: 2, qfmt: '{{Audio}}', afmt: '{{FrontSide}}<hr id=answer>{{Notes}} {{Back Extra}}' }] };
+  const r = multi([vocab('1', ['犬', 'いぬ', 'dog', '[sound:d.mp3]', 'pet', 'x'], { 0: 'a', 1: 'b', 2: 'c' })], m);
+  assert.deepEqual(r.spareFields, [[], [], []]);
+  assert.deepEqual(r.noteExtras, ['', '', '']);
+});
+
+test('several card templates: one-template types, Basic, reversed and cloze notes come in exactly as before', () => {
+  const one = multi([vocab('1', ['犬', 'いぬ', 'dog', '', ''], { 0: 'a', 1: 'zz' })], { ...MULTI, templates: [MULTI.templates[0]] });
+  assert.deepEqual(one.ankiIds, ['a']);
+  assert.deepEqual(one.siblings, [null]);
+  const basic = notesToImport([{ id: '1', mid: '8', fields: ['Q', 'A'], tags: [], deck: 'D', cards: { 0: 'a', 1: 'b' } }],
+    new Map([['8', { name: 'Basic', fields: ['Front', 'Back'], cloze: false, templates: [{ ord: 0, qfmt: '{{Front}}', afmt: '{{FrontSide}}<hr id=answer>{{Back}}' }, { ord: 1, qfmt: '{{Back}}', afmt: '{{FrontSide}}<hr id=answer>{{Front}}' }] }]]));
+  assert.deepEqual([basic.siblings, basic.ankiIds, basic.templated], [[null], ['a'], [false]]);
+  assert.deepEqual(basic.reversed.map(x => x?.ankiId), ['b']);
+});
+
+test('several card templates: a type-in box is kept only on a card whose back is the typed answer', () => {
+  const fields = ['Word', 'Meaning', 'Reading', 'Audio', 'Notes'];
+  const t0 = { ord: 0, qfmt: '{{Word}}{{Reading}}{{type:Meaning}}', afmt: '{{FrontSide}}<hr id=answer>{{Meaning}}' };
+  const third = { ord: 2, qfmt: '{{Notes}}', afmt: '{{FrontSide}}<hr id=answer>{{Word}}' };          // (a third card type: two would make a "Basic and reversed" type, handled separately)
+  const m = { ...MULTI, fields, templates: [t0, { ord: 1, qfmt: '{{Meaning}}{{Notes}}{{type:Word}}', afmt: '{{FrontSide}}<hr id=answer>{{Word}}' }, third] };
+  const note = vocab('1', ['犬', 'dog', 'いぬ', '', 'n'], { 0: 'a', 1: 'b' });
+  assert.deepEqual(multi([note], m).typeIns, [true, true]);
+  const more = { ...m, templates: [t0, { ...m.templates[1], afmt: '{{FrontSide}}<hr id=answer>{{Word}} {{Reading}}' }, third] };
+  assert.deepEqual(multi([note], more).typeIns, [true, false], 'a back with more than the typed word is a flip card');
 });

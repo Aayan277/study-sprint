@@ -413,6 +413,7 @@ export function buildCards(result, frontCol = 0, backCol = 1, { keepFields = tru
     ...(result.sounds?.[i] && (result.sounds[i].front.length || result.sounds[i].back.length) ? { sounds: { front: result.sounds[i].front, back: result.sounds[i].back } } : {}),     // sound file names on each side (Anki imports; see anki.js)
     ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
     ...(result.templated?.[i] ? { templated: true } : {}),     // front and back drawn from the note type's card template: no swapping or column picking
+    ...(result.siblings?.[i] ? { siblings: result.siblings[i] } : {}),     // one of the several cards of a templated note: { noteKey, ord } (the cards of a note share noteKey)
     ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
     ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
     ...extrasOf(result, i, frontCol, backCol, keepFields),

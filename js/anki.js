@@ -14,7 +14,7 @@ import { htmlToMarks } from './format.js';
 import { clozeNumbers, clozeCard } from './cloze.js';
 import { parseAnkiOcclusion, occFrontBack, groupsOf } from './occlusion.js';
 import { parseDetails, cleanFields, MAX_TEXT } from './note-fields.js';
-import { fieldIsEmpty, shownFields, renderCard, htmlToLines } from './anki-template.js';
+import { fieldIsEmpty, shownFields, renderCard, htmlToLines, firstTemplate, templateAt } from './anki-template.js';
 
 // HTML → plain text, keeping line breaks (formatting dropped). Fields themselves keep their bold,
 // italics and lists as marks: see htmlToMarks in format.js.
@@ -95,6 +95,13 @@ export function templateFormats(config) {
   } catch { /* an odd record: no templates */ }
   return out;
 }
+
+// The card numbers (ord) of a templated note that come in: when its note type has several card templates, every card the note has in
+// Anki (note.cards maps number → Anki card id) that has a template; otherwise (or with no card list) just the first card.
+const cardNumbers = (model, note) => {
+  const have = Object.keys(note.cards || {}).map(Number).filter(n => Number.isInteger(n) && n >= 0 && templateAt(model, n)).sort((a, b) => a - b);
+  return (model.templates?.length || 0) >= 2 && have.length ? have : [0];
+};
 
 // The fields a card template names: "{{Front}}", "{{cloze:Text}}", "{{#Add Reverse}}{{Back}}{{/Add Reverse}}" give Front, Text,
 // Add Reverse and Back, each marked as a plain use or as a condition (a {{#…}} or {{^…}} section).
@@ -191,6 +198,10 @@ export { clozeNumbers, clozeCard };
 //             the second field) and the other non-empty fields, which buildCards keeps as the card's noteFields (item A)
 //   templated  for each row, true when its front and back were drawn from the note type's card template (see anki-template.js) instead
 //             of from columns: the row is just [front, back], and the front/back column choice does not apply to it
+//   siblings  for each row, null or { noteKey, ord }: a card of a templated note type with several card templates (Recognition and
+//             Production, say). Every card the note has in Anki comes in, each drawn from its own template; ord is its Anki card number,
+//             and noteKey is shared by the note's cards so the import makes them siblings (Review shows one of them a day, like cloze
+//             cards). A card whose template draws an empty front is left out, as Anki leaves it out.
 //   spareFields  for each templated row, the fields its template does not show, [{ name, text }], which buildCards keeps as noteFields
 //   fieldInfo  for each row, { note, pics, cut, more }: fields left out for holding only pictures, fields cut to the length limit, and
 //             whether the note has more card types in Anki than come in (see fieldReport)
@@ -237,6 +248,7 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
   const typeAt = new Set();      // row indexes of cards that ask for the answer to be typed
   const templatedAt = new Set();      // row indexes of cards drawn from their note type's card template
   const spareAt = new Map();      // row index → the fields a templated row's template does not show
+  const siblingAt = new Map();      // row index → { noteKey, ord } for a card of a templated note with several cards
   const revAt = new Map(), namesAt = new Map(), detailsAt = new Map(), splitAt = new Map(), infoAt = new Map();      // by row index (filled for the rows that have them)
   const soundFiles = new Map();          // name → { size, type } of every sound that can be kept
   const verdicts = new Map();
@@ -313,23 +325,28 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
     if (note.fields.some(hasImage)) images++;
     // An ordinary note whose card template shows more than the first two fields is drawn from the template: its front and back are the
     // template's front and back, as text (sides). Not when a side would come out empty: then it is laid out from columns, as before.
+    // A note type with several card templates brings every card the note has in Anki, each from its own template (a card whose front
+    // or back comes out empty is left out, as Anki leaves out a card with an empty front).
     const nums = clozeNumbers(note.fields[0] ?? '');
     const shown = !model.cloze && !nums.length && !isOcclusionNote(note, model) ? templateShown(String(note.mid), model) : null;
-    let sides = null;
+    let drawn = null;          // [{ ord, template, q, a, front, back, cut }] for a templated note
     if (shown) {
-      const drawn = renderCard(model, parts.map(p => p.rest));
       const side = html => ({ html, text: ankiMath(htmlToLines(html)) });
-      const [q, a] = [side(drawn.q), side(drawn.a)];
-      if ([q, a].every(x => x.text.trim() || imageNames(x.html).length || soundNames(x.html).length)) {
-        const cap = t => (t.length > MAX_TEXT ? t.slice(0, MAX_TEXT - 1) + '…' : t);          // (the same limit as a note field)
-        sides = { q: q.html, a: a.html, front: cap(q.text), back: cap(a.text), cut: (q.text.length > MAX_TEXT) + (a.text.length > MAX_TEXT) };
-      }
+      const cap = t => (t.length > MAX_TEXT ? t.slice(0, MAX_TEXT - 1) + '…' : t);          // (the same limit as a note field)
+      drawn = cardNumbers(model, note).map(ord => {
+        const template = ord === 0 ? firstTemplate(model) : templateAt(model, ord), card = renderCard(model, parts.map(p => p.rest), template);
+        const [q, a] = [side(card.q), side(card.a)];
+        if (![q, a].every(x => x.text.trim() || imageNames(x.html).length || soundNames(x.html).length)) return null;
+        return { ord, template, q: q.html, a: a.html, front: cap(q.text), back: cap(a.text), cut: (q.text.length > MAX_TEXT) + (a.text.length > MAX_TEXT) };
+      }).filter(Boolean);
+      if (!drawn.length) drawn = null;
     }
+    const shownAll = drawn ? shownFields(model, drawn.map(c => c.template)) : null;          // the fields any brought card shows
     // One picture per side: the first in the front field, and the first in the other fields for the back (a templated card: the first
     // on its front and on its back).
-    const frontPics = sides ? imageNames(sides.q) : imageNames(note.fields[0]), backPics = sides ? imageNames(sides.a) : note.fields.slice(1).flatMap(imageNames);
-    const pics = { front: frontPics[0] || null, back: backPics[0] || null };
-    if (frontPics.length > 1 || backPics.length > 1) extraImages++;
+    const picNames = sides => ({ front: sides ? imageNames(sides.q) : imageNames(note.fields[0]), back: sides ? imageNames(sides.a) : note.fields.slice(1).flatMap(imageNames) });
+    const picsOf = (drawn || [null]).map(picNames);
+    if (picsOf.some(p => p.front.length > 1 || p.back.length > 1)) extraImages++;
     const noteTags = (note.tags || []).map(t => t.toLowerCase());
     if (isOcclusionNote(note, model)) {
       // Fields of the Image Occlusion note type: Occlusion, Image, Header, Back Extra, Comments.
@@ -390,35 +407,49 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
       }
       usedTypes.add('cloze');
     } else {
-      rows.push(sides ? [sides.front, sides.back] : text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
-      clozes.push(null); occlusions.push(null); noteExtras.push(''); guids.push(note.guid || null);
-      sounds.push(sides ? soundsFrom(note, [sides.q], [sides.a]) : soundsOf(note, [0]));
-      ankiIds.push(note.cards?.[0] ?? null);            // the front → back card
-      usedTypes.add(String(note.mid));
-      const at = rows.length - 1;
-      // A field called Back Extra (after the first two: what this app's reversed-card export writes) is the note's extra, shown open.
-      const extraAt = fieldIndex(model, 'back extra', -1);
-      const extraShown = !!sides && shown.has(String(model.fields[extraAt]).trim());          // (a template that shows Back Extra itself has it in the back)
-      if (extraAt >= 2 && !isOcclusionNote(note, model) && !extraShown) { noteExtras[at] = text[extraAt].trim(); }
-      // "Basic (and reversed card)" brings both cards: the reverse card exists in Anki when the note has a second card.
-      const ords = typedOrds(model, note.fields);
-      if (ords.has(0) && (!sides || sides.back.trim() === (text[1] ?? '').trim())) typeAt.add(at);          // (a templated back is more than the typed answer: then it is a flip card)
-      const reverse = reverseModel(model) && note.cards?.[1] ? { ankiId: note.cards[1], ...(ords.has(1) ? { typeIn: true } : {}) } : null;
-      if (reverse) revAt.set(at, reverse);
-      if (model.fields?.length) namesAt.set(at, model.fields.map((n, i) => (conditionOnly(model, n) || (i === extraAt && extraAt >= 2) ? null : n)));
-      if (details.length) detailsAt.set(at, details.filter(d => d.text).map(d => ({ name: d.name, text: d.text })));
-      const named = namesAt.get(at) || [];
-      const spare = [];
-      let lost = 0;
-      // Which fields stay as folded sections: from the third on for a column row, and the ones the template doesn't show for a templated one.
-      text.forEach((t, i) => {
-        if (sides ? shown.has(String(model.fields?.[i] ?? '').trim()) || named[i] === null : i < 2 || named[i] === null) return;
-        if (t.trim()) spare.push({ name: named[i] ?? `Field ${i + 1}`, text: t.trim() });
-        else if (hasImage(note.fields[i])) lost++;
-      });
-      if (sides) { templatedAt.add(at); spareAt.set(at, spare); namesAt.delete(at); }
-      infoAt.set(at, { note: String(note.id ?? index), pics: lost, cut: sides ? sides.cut : 0,        // (the length limits for a basic note depend on the columns picked: basicFieldsCut in import.js)
-        more: !reverse && (model.templates?.length || 0) >= 2 && Object.keys(note.cards || {}).length >= 2 });
+      // A templated note with several cards: one row for each, sharing a key (see siblings above). A single card has no siblings.
+      const group = drawn && drawn.length > 1 ? String(note.id ?? index) : null;
+      const firstRow = rows.length;
+      for (const [k, sides] of (drawn || [null]).entries()) {
+        const pics = { front: picsOf[k].front[0] || null, back: picsOf[k].back[0] || null };
+        rows.push(sides ? [sides.front, sides.back] : text); tags.push(noteTags); decks.push(note.deck || ''); pictures.push(pics); occluded.push(false);
+        clozes.push(null); occlusions.push(null); noteExtras.push(''); guids.push(note.guid || null);
+        sounds.push(sides ? soundsFrom(note, [sides.q], [sides.a]) : soundsOf(note, [0]));
+        ankiIds.push(note.cards?.[sides ? sides.ord : 0] ?? null);            // the front → back card (a templated note: the card of this template)
+        usedTypes.add(String(note.mid));
+        const at = rows.length - 1;
+        if (group) siblingAt.set(at, { noteKey: group, ord: sides.ord });
+        // A field called Back Extra (after the first two: what this app's reversed-card export writes) is the note's extra, shown open.
+        const extraAt = fieldIndex(model, 'back extra', -1);
+        const extraShown = !!sides && shownAll.has(String(model.fields[extraAt]).trim());          // (a template that shows Back Extra itself has it in the back)
+        if (extraAt >= 2 && !isOcclusionNote(note, model) && !extraShown) { noteExtras[at] = text[extraAt].trim(); }
+        // "Basic (and reversed card)" brings both cards: the reverse card exists in Anki when the note has a second card.
+        const ords = typedOrds(model, note.fields);
+        const typed = sides ? sides.ord < 2 && ords.has(sides.ord) && sides.back.trim() === (text[sides.ord === 0 ? 1 : 0] ?? '').trim()          // (a templated back is more than the typed answer: then it is a flip card)
+          : ords.has(0);
+        if (typed) typeAt.add(at);
+        const reverse = reverseModel(model) && note.cards?.[1] ? { ankiId: note.cards[1], ...(ords.has(1) ? { typeIn: true } : {}) } : null;
+        if (reverse) revAt.set(at, reverse);
+        if (model.fields?.length) namesAt.set(at, model.fields.map((n, i) => (conditionOnly(model, n) || (i === extraAt && extraAt >= 2) ? null : n)));
+        if (details.length) detailsAt.set(at, details.filter(d => d.text).map(d => ({ name: d.name, text: d.text })));
+        const named = namesAt.get(at) || [];
+        const spare = [];
+        let lost = 0;
+        // Which fields stay as folded sections: from the third on for a column row, and the ones no brought template shows for a templated one.
+        text.forEach((t, i) => {
+          if (sides ? shownAll.has(String(model.fields?.[i] ?? '').trim()) || named[i] === null : i < 2 || named[i] === null) return;
+          if (t.trim()) spare.push({ name: named[i] ?? `Field ${i + 1}`, text: t.trim() });
+          else if (hasImage(note.fields[i])) lost++;
+        });
+        if (sides) { templatedAt.add(at); spareAt.set(at, spare); namesAt.delete(at); }
+        infoAt.set(at, { note: String(note.id ?? index), pics: lost, cut: sides ? sides.cut : 0,        // (the length limits for a basic note depend on the columns picked: basicFieldsCut in import.js)
+          more: !sides && !reverse && (model.templates?.length || 0) >= 2 && Object.keys(note.cards || {}).length >= 2 });
+      }
+      // The note's other cards are counted once, on its first row (fieldReport counts a note once).
+      if (group) {
+        const first = infoAt.get(firstRow);
+        for (let r = firstRow + 1; r < rows.length; r++) { first.cut += infoAt.get(r).cut; first.pics = Math.max(first.pics, infoAt.get(r).pics); infoAt.get(r).cut = 0; infoAt.get(r).pics = 0; }
+      }
     }
   }
   const width = Math.max(2, ...rows.map(r => r.length));
@@ -433,7 +464,7 @@ export function notesToImport(notes, models, reviews = new Map(), media = null) 
   const withReverse = [...ankiIds, ...reversed.map(r => r?.ankiId ?? null)];          // a reverse card's history comes along too
   const used = new Map(withReverse.filter(id => id && reviews.get(id)?.length).map(id => [id, reviews.get(id)]));
   return { columns, rows: padded, tags, decks, images, extraImages, pictures, occluded, clozes, occlusions, noteExtras, guids, sounds, soundFiles, ankiIds, reviews: used, progress: progressOf(withReverse, used),
-    templated: all.map(i => templatedAt.has(i)), spareFields: all.map(i => spareAt.get(i) || null),
+    templated: all.map(i => templatedAt.has(i)), spareFields: all.map(i => spareAt.get(i) || null), siblings: all.map(i => siblingAt.get(i) || null),
     reversed, typeIns, fieldNames: all.map(i => namesAt.get(i) || null), detailFields: all.map(i => detailsAt.get(i) || null), extraSplits: all.map(i => splitAt.get(i) || null), fieldInfo: all.map(i => infoAt.get(i) || null),
     format: { id: 'anki', label: 'from the Anki deck' }, headerSkipped: false };
 }
@@ -562,7 +593,7 @@ export function onlyDeck(result, deck) {
   const pick = list => list.filter((_, i) => keep[i]);
   const ankiIds = pick(result.ankiIds || []);
   const reversed = pick(result.reversed || []);
-  return { ...result, reversed, typeIns: pick(result.typeIns || []), fieldNames: pick(result.fieldNames || []), templated: pick(result.templated || []), spareFields: pick(result.spareFields || []), detailFields: pick(result.detailFields || []), extraSplits: pick(result.extraSplits || []), fieldInfo: pick(result.fieldInfo || []), rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), occlusions: pick(result.occlusions || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), sounds: pick(result.sounds || []), ankiIds,
+  return { ...result, reversed, typeIns: pick(result.typeIns || []), fieldNames: pick(result.fieldNames || []), templated: pick(result.templated || []), siblings: pick(result.siblings || []), spareFields: pick(result.spareFields || []), detailFields: pick(result.detailFields || []), extraSplits: pick(result.extraSplits || []), fieldInfo: pick(result.fieldInfo || []), rows: pick(result.rows), tags: pick(result.tags), decks: pick(result.decks), pictures: pick(result.pictures || []), occluded: pick(result.occluded || []), clozes: pick(result.clozes || []), occlusions: pick(result.occlusions || []), noteExtras: pick(result.noteExtras || []), guids: pick(result.guids || []), sounds: pick(result.sounds || []), ankiIds,
     progress: progressOf([...ankiIds, ...reversed.map(r => r?.ankiId ?? null)], result.reviews || new Map()) };
 }
 

@@ -120,5 +120,34 @@ await page.click('#saveBtn'); await page.waitForSelector('.crow');
 d = await everything();
 ok(d.cards.length === 16, `switch off: a second full set comes in (${d.cards.length})`);
 
+// ---- 7. a deck saved the old way (before 4.54, only a multi-card note's first card, no templateOrd): the re-import relinks it ----
+await openImport('anki-multicard-legacy.apkg');
+await page.waitForSelector('#preview[data-guids]');
+await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Multi'); await page.click('#saveBtn'); await page.waitForSelector('.crow');
+const oldWay = await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const inu = (await db.getAll('cards')).filter(c => c.front.startsWith('inu') || c.front === 'dog');
+  const first = inu.find(c => c.templateOrd === 0), second = inu.find(c => c.templateOrd === 1);
+  const { templateOrd, noteId, ...plain } = first;
+  await db.put('cards', plain);               // as an older version saved it
+  await db.deleteCards([second.id]);          // and it had no second card
+  return { id: first.id, guid: first.ankiGuid, total: (await db.getAll('cards')).filter(c => c.ankiGuid && c.deckId === first.deckId).length };
+});
+ok(oldWay.total === 6, 'set up: the deck now looks like an old import (6 of its 7 cards, inu with only its plain first card)');
+await openImport('anki-multicard-legacy.apkg');
+await page.selectOption('#deckSel', await page.evaluate(async id => (await (await import('./js/db.js')).get('cards', id)).deckId, oldWay.id));
+await page.waitForSelector('#updRow:not([hidden])');
+ok((await page.textContent('#updTitle')).startsWith('Update 6 cards'), 'the plain first card matches its template-0 card: ' + await page.textContent('#updTitle'));
+await page.click('#saveBtn'); await page.waitForSelector('.crow');
+const relinked = await page.evaluate(async o => {
+  const db = await import('./js/db.js');
+  const all = await db.getAll('cards');
+  const mine = all.filter(c => c.ankiGuid === o.guid);
+  return { mine: mine.map(c => ({ id: c.id, ord: c.templateOrd, noteId: c.noteId })), deckCards: (await db.getAll('cards')).filter(c => c.deckId === (all.find(x => x.id === o.id)).deckId).length };
+}, oldWay);
+const kept0 = relinked.mine.find(c => c.id === oldWay.id);
+ok(relinked.mine.length === 2 && kept0?.ord === 0 && relinked.mine.find(c => c.ord === 1) && kept0.noteId && relinked.mine.every(c => c.noteId === kept0.noteId), 'inu: the old card is now template 0 (same id) and sits in one note with the newly added template 1 card');
+ok(relinked.deckCards === 7, 'the deck is back to 7 cards, no duplicates (' + relinked.deckCards + ')');
+
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
