@@ -50,10 +50,10 @@ async function run(tag, viewport, mobile, themeName, mode) {
   // ---- front ----
   await show(p, 'single');
   const one = await sizeOf(p, '.rv-front .flash-front');
-  ok(one.cls === 'flash-front' && await p.locator('.rv-front .lead, .rv-front .rest').count() === 0, `${T}: a single line is as before (no lead, no rest, class "${one.cls}")`);
+  ok(one.cls === 'flash-front' && await p.locator('.rv-front .fl-lead, .rv-front .fl-rest').count() === 0, `${T}: a single line is as before (no lead, no rest, class "${one.cls}")`);
   await show(p, 'multi');
   const fcls = await p.locator('.rv-front .flash-front').getAttribute('class');
-  const lead = await sizeOf(p, '.rv-front .flash-front .lead'), rest = await sizeOf(p, '.rv-front .flash-front .rest');
+  const lead = await sizeOf(p, '.rv-front .flash-front .fl-lead'), rest = await sizeOf(p, '.rv-front .flash-front .fl-rest');
   ok(fcls === 'flash-front multi', `${T}: a short multi-line front is "multi", not "long" (${fcls})`);
   ok(Math.abs(lead.px - one.px) < .5 && lead.weight >= 600, `${T}: the first line is at the full size of a one-line front (${lead.px}px vs ${one.px}px, weight ${lead.weight})`);
   ok(rest.px <= lead.px * .7 && rest.px >= 15, `${T}: the other lines are smaller (${rest.px}px) but not tiny`);
@@ -65,7 +65,7 @@ async function run(tag, viewport, mobile, themeName, mode) {
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/front-${tag}-${themeName}-${mode}.png` });
   // ---- back ----
   await flip(p);
-  const bl = await sizeOf(p, '.rv-back .flash-back .lead'), br = await sizeOf(p, '.rv-back .flash-back .rest'), rl = await sizeOf(p, '.rv-back .flash-recap .lead'), rr = await sizeOf(p, '.rv-back .flash-recap .rest');
+  const bl = await sizeOf(p, '.rv-back .flash-back .fl-lead'), br = await sizeOf(p, '.rv-back .flash-back .fl-rest'), rl = await sizeOf(p, '.rv-back .flash-recap .fl-lead'), rr = await sizeOf(p, '.rv-back .flash-recap .fl-rest');
   ok(bl.px > br.px * 1.4 && bl.weight >= 600, `${T}: on the back the first answer line is prominent (${bl.px}px / weight ${bl.weight}) and the rest secondary (${br.px}px)`);
   ok(rr.px < rl.px, `${T}: the recap of the front has the same hierarchy (${rl.px}px, ${rr.px}px)`);
   const bbg = rgb(await p.locator('.rv-back').evaluate(el => getComputedStyle(el).backgroundColor));
@@ -76,18 +76,31 @@ async function run(tag, viewport, mobile, themeName, mode) {
   // ---- cards that must look as before ----
   await show(p, 'para');
   const pc = await p.locator('.rv-front .flash-front').getAttribute('class');
-  ok(/\b(long|xlong)\b/.test(pc) && !/multi/.test(pc) && await p.locator('.rv-front .lead').count() === 0, `${T}: a paragraph keeps its long size (${pc})`);
+  ok(/\b(long|xlong)\b/.test(pc) && !/multi/.test(pc) && await p.locator('.rv-front .fl-lead').count() === 0, `${T}: a paragraph keeps its long size (${pc})`);
   const para = await sizeOf(p, '.rv-front .flash-front');
   ok(para.px <= one.px, `${T}: and is never larger than a one-line front (${para.px}px, ${one.px}px)`);
   await flip(p);
-  ok(await p.locator('.rv-back .lead, .rv-back .rest').count() === 0, `${T}: a paragraph's back has no lead and rest`);
+  ok(await p.locator('.rv-back .fl-lead, .rv-back .fl-rest').count() === 0, `${T}: a paragraph's back has no lead and rest`);
   for (const id of ['longlines', 'two']) {
     await show(p, id);
-    ok(!/multi/.test(await p.locator('.rv-front .flash-front').getAttribute('class')) && await p.locator('.rv-front .lead').count() === 0, `${T}: "${id}" (long lines, or only two lines) is left as it was`);
+    ok(!/multi/.test(await p.locator('.rv-front .flash-front').getAttribute('class')) && await p.locator('.rv-front .fl-lead').count() === 0, `${T}: "${id}" (long lines, or only two lines) is left as it was`);
   }
+  // ---- other screens that have their own "lead" and "rest" classes keep their display ----
+  await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');
+  const disp = await p.evaluate(() => {
+    let go = document.querySelector('.deck-go.lead');
+    const mk = html => { const d = document.createElement('div'); d.innerHTML = html; document.body.append(d); return d.firstElementChild; };
+    if (!go) go = mk('<button class="deck-go lead" type="button"></button>');       // (no deck due to start: draw one to read its style)
+    const wd = mk('<div class="wd rest"><i></i></div>'), grid = mk('<div class="cal-grid"><i class="rest"></i><i></i></div>');
+    const d = el => getComputedStyle(el).display;
+    return { go: d(go), wd: d(wd), cal: d(grid.children[0]), calPlain: d(grid.children[1]) };
+  });
+  ok(disp.go === 'grid', `${T}: the Study button on Decks (.deck-go.lead) is still display:grid (${disp.go})`);
+  ok(disp.wd === 'flex', `${T}: the 7-day strip day (.wd.rest) is still display:flex (${disp.wd})`);
+  ok(disp.cal === disp.calPlain, `${T}: a Stats calendar rest day (i.rest) displays like the other days (${disp.cal} / ${disp.calPlain})`);
   // ---- right to left ----
   await show(p, 'rtl');
-  ok(await p.locator('.rv-front .flash-front .lead').count() === 1 && await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${T}: Arabic lines get a lead too, with no sideways scroll`);
+  ok(await p.locator('.rv-front .flash-front .fl-lead').count() === 1 && await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${T}: Arabic lines get a lead too, with no sideways scroll`);
   ok(await plain(p, '.rv-front .flash-front') === 'كتب|to write|الماضي', `${T}: Arabic text order unchanged`);
   if (SHOTS && themeName === 'original' && mode === 'dark') await p.screenshot({ path: `${SHOTS}/front-rtl-${tag}.png` });
   await p.context().close();

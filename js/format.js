@@ -259,8 +259,8 @@ export const shortDeckPath = path => String(path || '').split(' › ').slice(-2)
 // How long an answer is: 'long' from 160 characters, 'xlong' from 320 (smaller, left-aligned; see .flash-back in styles.css).
 export const answerSize = text => (text.length > 320 ? ' long xlong' : text.length > 160 ? ' long' : '');
 // Several short lines (a template card: the word, its meaning, the question...): the first line leads and the others sit under it,
-// smaller and quieter (.lead and .rest in styles.css). Only 3 to 8 plain lines, the first no longer than `first` characters, the others
-// no longer than `rest`, all of it no longer than `total`; anything else (a paragraph, a list, a picture, a blank line) is left as it is.
+// smaller and quieter (.fl-lead and .fl-rest in styles.css). Only 3 to 8 plain lines, the first no longer than `first` characters, the others
+// no longer than `rest`, all of it no longer than `total`; anything else (a paragraph, a list, a formula, a blank line) is left as it is.
 // `text` is the plain text, `html` what formatHTML made of it; the words and their order stay the same, so a screen reader reads it as before.
 export function leadLines(text, html, { first, rest, total }) {
   const lines = String(text).split('\n').map(l => l.trim());
@@ -269,7 +269,7 @@ export function leadLines(text, html, { first, rest, total }) {
   if (/<(?:ul|ol|img|div|p|pre|table|button|audio|h\d)\b|class="tex/.test(html)) return html;
   const cut = html.indexOf('<br>');
   if (cut < 1 || html.split('<br>').length !== lines.length) return html;
-  return `<span class="lead">${html.slice(0, cut + 4)}</span><span class="rest">${html.slice(cut + 4)}</span>`;
+  return `<span class="fl-lead">${html.slice(0, cut + 4)}</span><span class="fl-rest">${html.slice(cut + 4)}</span>`;
 }
-export const isLead = html => html.startsWith('<span class="lead">');
+export const isLead = html => html.startsWith('<span class="fl-lead">');
 export const FRONT_LINES = { first: 18, rest: 48, total: 120 }, BACK_LINES = { first: 18, rest: 80, total: 160 };
