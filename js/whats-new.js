@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.53', items: [
+    'Anki decks now follow their own card layout: the parts meant for the front show on the front, and the rest show after you flip, with nothing to click open.',
+    'Furigana from Anki decks shows as small readings above the kanji, and typed answers accept the word or its reading.',
+  ] },
   { version: '4.52', items: [
     'The built-in JLPT kanji decks are gone. If you added one, it stays in your decks and works as before.',
   ] },
