@@ -29,8 +29,8 @@ export function detectLang(text, fallback = 'en-US') {
   return fallback;
 }
 
-// What to say: the card's text without formatting marks or bullet dots.
-export const speakableText = text => replaceMath(plainText(text), s => ` ${texToSpeech(s.tex)} `).replace(/^• /gm, '').replace(/\s+/g, ' ').trim();
+// What to say: the card's text without formatting marks or bullet dots (furigana: the reading, which is how the word is said).
+export const speakableText = text => replaceMath(plainText(text, { ruby: 'reading' }), s => ` ${texToSpeech(s.tex)} `).replace(/^• /gm, '').replace(/\s+/g, ' ').trim();
 
 // What a step-by-step card says: its intro and the steps shown so far ("Step 1. ...", each ending with a full stop), then the
 // final answer once every step is shown. p = parseSteps(...) from steps.js; shown = how many steps are on screen.

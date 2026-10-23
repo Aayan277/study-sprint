@@ -403,14 +403,16 @@ export function buildCards(result, frontCol = 0, backCol = 1, { keepFields = tru
   // tags, ankiId, ankiGuid, ankiDeck, cloze and pictures: only Anki imports have them, one per row (ankiId links a row to its Anki
   // review history; ankiDeck is the Anki deck it came from, for keeping subdecks).
   return result.rows.map((r, i) => ({
-    // A cloze note's card always has its front and back in the first two columns, whichever columns were picked.
-    front: (result.clozes?.[i] ? r[0] : r[frontCol]) ?? '', back: (result.clozes?.[i] ? r[1] : r[backCol]) ?? '',
+    // A cloze note's card always has its front and back in the first two columns, whichever columns were picked. So has a card drawn
+    // from its note type's card template (anki.js `templated`).
+    front: (result.clozes?.[i] || result.templated?.[i] ? r[0] : r[frontCol]) ?? '', back: (result.clozes?.[i] || result.templated?.[i] ? r[1] : r[backCol]) ?? '',
     ...(result.tags ? { tags: result.tags[i] } : {}),
     ...(result.ankiIds?.[i] ? { ankiId: result.ankiIds[i] } : {}),
     ...(result.decks?.[i] ? { ankiDeck: result.decks[i] } : {}),
     ...(result.pictures?.[i] && (result.pictures[i].front || result.pictures[i].back) ? { pictures: result.pictures[i] } : {}),
     ...(result.sounds?.[i] && (result.sounds[i].front.length || result.sounds[i].back.length) ? { sounds: { front: result.sounds[i].front, back: result.sounds[i].back } } : {}),     // sound file names on each side (Anki imports; see anki.js)
     ...(result.occluded?.[i] ? { occluded: true } : {}),       // image-occlusion notes (see anki.js)
+    ...(result.templated?.[i] ? { templated: true } : {}),     // front and back drawn from the note type's card template: no swapping or column picking
     ...(result.clozes?.[i] ? { cloze: result.clozes[i] } : {}),         // a cloze note's card: { noteKey, n, text }
     ...(result.occlusions?.[i] ? { occlusion: result.occlusions[i] } : {}),     // an image-occlusion note's card: { noteKey, n, header, shapes, pixels, image }
     ...extrasOf(result, i, frontCol, backCol, keepFields),
@@ -439,7 +441,8 @@ function extrasOf(result, i, frontCol, backCol, keep) {
 function rawFields(result, i, frontCol, backCol) {
   const names = result.fieldNames?.[i];
   const fields = [];
-  if (names) result.rows[i].forEach((text, c) => {
+  if (result.templated?.[i]) fields.push(...(result.spareFields?.[i] || []));         // the fields its template doesn't show (the others are on the card)
+  else if (names) result.rows[i].forEach((text, c) => {
     if (c === frontCol || c === backCol || names[c] === null || names[c] === undefined || !String(text).trim()) return;
     fields.push({ name: names[c], text: String(text).trim() });
   });

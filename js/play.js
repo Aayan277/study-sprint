@@ -98,7 +98,11 @@ function keepPlaying() {
 }
 
 // ---------- setup ----------
-const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back) });
+// (rawFront and rawBack: the sides as written, with their furigana marks, because the typed answer is checked against the word, 見る, and the reading, みる,
+// not against the plain text 見(み)る)
+const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back), rawFront: c.front, rawBack: c.back });
+const typingTargets = (q, card) => answerTargets(q.answer === card.back && card.rawBack !== undefined ? card.rawBack
+  : q.answer === card.front && card.rawFront !== undefined ? card.rawFront : q.answer);
 
 export async function renderPlay(el) {
   stopRound();
@@ -299,7 +303,7 @@ function start(el, opts) {
     answered: false, raf: 0, autoTimer: 0, flashTimer: 0,
     saving: Promise.resolve()          // answers are saved one after another in the background
   };
-  G.mixIndex = buildAnswerIndex(all, c => { const a = questionFor(c, 'typing')?.answer; return a ? answerTargets(a) : []; }, MIX_SCAN_MAX);
+  G.mixIndex = buildAnswerIndex(all, c => { const q = questionFor(c, 'typing'); return q?.answer ? typingTargets(q, c) : []; }, MIX_SCAN_MAX);
   setFocusMode(true);
   holdBack('session', backPressed);        // Back (an edge swipe) does what Quit does: asks before leaving a round that has answers
   el.innerHTML = `
@@ -477,7 +481,7 @@ function answer(choice) {
   if (G.qtype === 'typing') {
     $('pInput').disabled = true;
     // Answers the person asked to accept ("Accept this answer from now on") count too, when the question asks for the card's back.
-    const targets = answerTargets(G.q.answer);
+    const targets = typingTargets(G.q, G.card);
     if (choice !== null) { given = choice; const res = checkTyped(choice, G.q.answer === G.card.back ? withAccepted(targets, G.card) : targets, { forgiving: !G.hard }); ok = res.correct; exact = res.exact; target = res.target; if (!ok) mixedWith = typedMixup(choice); }
   } else {
     if (choice !== null) {

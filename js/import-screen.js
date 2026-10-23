@@ -685,7 +685,7 @@ function wirePreview() {
   $('backCol').addEventListener('change', pickCols);
 
   $('swapBtn').addEventListener('click', () => {
-    S.cards = S.cards.map(c => c.cloze || c.occlusion ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}), ...(c.reversed ? { typeIn: c.reversed.typeIn, reversed: { ...c.reversed, typeIn: c.typeIn } } : {}) }));
+    S.cards = S.cards.map(c => c.cloze || c.occlusion || c.templated ? c : ({ ...c, front: c.back, back: c.front, ...(c.pictures ? { pictures: { front: c.pictures.back, back: c.pictures.front } } : {}), ...(c.sounds ? { sounds: { front: c.sounds.back, back: c.sounds.front } } : {}), ...(c.reversed ? { typeIn: c.reversed.typeIn, reversed: { ...c.reversed, typeIn: c.typeIn } } : {}) }));
     [S.frontCol, S.backCol] = [S.backCol, S.frontCol];
     if (!$('cols').hidden) { $('frontCol').value = S.frontCol; $('backCol').value = S.backCol; }
     renderList();
@@ -878,6 +878,9 @@ function refreshFlags() {
     }
   }
   if (fields.more) parts.push(`<span class="warn">${plural(fields.more, 'note')} ${fields.more === 1 ? 'has' : 'have'} more card types in Anki (like a listening card); only the first card of each comes in.</span>`);
+  // Cards drawn from their note type's card template (anki.js): the Front / Back choice doesn't apply to them.
+  const laidOut = S.cards.filter(c => c.templated).length;
+  if (laidOut) parts.push(laidOut === S.cards.length ? "Cards follow the deck's own card layout." : `${plural(laidOut, 'card')} follow${laidOut === 1 ? 's' : ''} the deck's own card layout; Front and Back above apply to the rest.`);
   // Cloze notes: how many notes the cards come from.
   const notesN = sug ? 0 : new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
@@ -887,7 +890,7 @@ function refreshFlags() {
   $('clozeNote').hidden = !hasBlanks;
   if (hasBlanks) $('clozeToggle').textContent = S.noCloze ? 'Turn {{c1::…}} lines into cloze notes' : 'Keep {{c1::…}} lines as plain cards';
   if (!sug && S.result.format.id !== 'anki' && S.result.tags?.some(t => t.length)) parts.push('Tags come along too.');
-  $('swapBtn').hidden = sug || (S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion));          // nothing to swap in cloze or occlusion cards, or in suggestions
+  $('swapBtn').hidden = sug || (S.cards.length > 0 && S.cards.every(c => c.cloze || c.occlusion || c.templated));          // nothing to swap in cloze, occlusion or template-drawn cards, or in suggestions
   // Image-occlusion notes: how many notes the cards come from.
   const occNotes = new Set(S.cards.filter(c => c.occlusion).map(c => c.occlusion.noteKey)).size;
   if (occNotes) parts.push(`${plural(occNotes, 'image-occlusion note')} make${occNotes === 1 ? 's' : ''} these cards: one card per box. Every box is hidden and you name the highlighted one; Review shows one a day.`);
