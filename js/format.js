@@ -11,10 +11,74 @@ import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain } from './m
 
 const escapeHTML = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-const BOTH = /\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*/g;      // ***bold and italic***
-const BOLD = /\*\*(?=\S)(.+?)(?<=\S)\*\*/g;
 const ITALIC = /(^|[^*\w])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?![*\w])/g;
-const BULLET = /^\s*[-•]\s+(.*)$/;
+
+// Linear scanners. A text from an imported file or a synced card can be hostile (50 KB of "**a " or "<ruby"), and a regex that tries every
+// start and rereads to the end of the text each time takes seconds. These give the same answers as the regexes in the comments, in one pass.
+const isSpace = ch => /\s/.test(ch);
+const LINE_END = /[\n\r\u2028\u2029]/g;
+// A search for "the first match at or after pos" that remembers its last answer: asking again from a later position (up to that answer)
+// costs nothing, and "nothing left" stays nothing. The positions asked about only ever go up.
+const memoNext = find => {
+  let from = -1, at = -1;
+  return pos => (from >= 0 && pos >= from && (at < 0 || pos <= at) ? at : (from = pos, at = find(pos)));
+};
+
+// ***bold and italic*** (n = 3) or **bold** (n = 2), as the regex  \*\*(?=\S)(.+?)(?<=\S)\*\*  does: the inside starts and ends on a non-space,
+// has no line break, and ends at the first closing run of stars that follows a non-space. The text between the marks becomes
+// open + inside + close. testOnly: just say whether there is any such pair.
+function replaceMarks(text, n, open, close, testOnly = false) {
+  const stars = '*'.repeat(n);
+  let i = text.indexOf(stars);
+  if (i < 0) return testOnly ? false : text;
+  const closer = memoNext(pos => { for (let j = text.indexOf(stars, pos); j >= 0; j = text.indexOf(stars, j + 1)) if (!isSpace(text[j - 1])) return j; return -1; });
+  const lineEnd = (re => memoNext(pos => { re.lastIndex = pos; const m = re.exec(text); return m ? m.index : -1; }))(new RegExp(LINE_END));
+  let out = '', at = 0;
+  while (i >= 0) {
+    const a = i + n;                                     // where the inside starts
+    if (a < text.length && !isSpace(text[a])) {
+      const j = closer(a + 1);
+      if (j < 0) break;                                  // no closing marks left anywhere: no later start can match either
+      const brk = lineEnd(a);
+      if (brk < 0 || brk > j) {
+        if (testOnly) return true;
+        out += text.slice(at, i) + open + text.slice(a, j) + close;
+        at = i = j + n;
+        i = text.indexOf(stars, i);
+        continue;
+      }
+    }
+    i = text.indexOf(stars, i + 1);
+  }
+  return testOnly ? false : out + text.slice(at);
+}
+const BOTH = (text, open, close) => replaceMarks(text, 3, open, close);
+const BOLD = (text, open, close) => replaceMarks(text, 2, open, close);
+
+// A bullet line ("- text", "• text"): the text after the bullet, or null. Same as  /^\s*[-•]\s+(.*)$/  (the spaces before and after the
+// bullet are taken whole, and the text must have no line break in it).
+function bulletText(line) {
+  let b = 0;
+  while (b < line.length && isSpace(line[b])) b++;
+  if (line[b] !== '-' && line[b] !== '•') return null;
+  let c = b + 1;
+  if (c >= line.length || !isSpace(line[c])) return null;
+  while (c < line.length && isSpace(line[c])) c++;
+  const rest = line.slice(c);
+  return new RegExp(LINE_END).test(rest) ? null : rest;
+}
+// Does any line start with a bullet?  Same as  /^\s*[-•]\s+/m.test(text)  : a bullet after spaces (and line breaks) that begin at the
+// very start of the text, or that include a line break (a line starts right after it).
+function hasBulletLine(text) {
+  let start = true, brk = false;
+  for (let b = 0; b < text.length; b++) {
+    const ch = text[b];
+    if (isSpace(ch)) { if (ch === '\n' || ch === '\r' || ch === '\u2028' || ch === '\u2029') brk = true; continue; }
+    if ((ch === '-' || ch === '•') && b + 1 < text.length && isSpace(text[b + 1]) && (start || brk)) return true;
+    start = brk = false;
+  }
+  return false;
+}
 
 // Furigana. Both brackets are Japanese ones, so ordinary text (math, [blanks], markdown links) never looks like it. The word is short, and the
 // reading is not Chinese characters: 《 》 are also the brackets of a book title in Chinese ("推荐｜三体《刘慈欣》"), and that is no furigana.
@@ -23,7 +87,7 @@ const isReading = reading => !/\p{Script=Han}/u.test(reading);
 const hasRuby = s => { for (const m of s.matchAll(RUBY)) if (isReading(m[2])) return true; return false; };
 
 // (The text is already escaped here, so the word and its reading can't bring any HTML with them.)
-const inline = html => html.replace(RUBY, (m, base, reading) => (isReading(reading) ? `<ruby>${base}<rt>${reading}</rt></ruby>` : m)).replace(BOTH, '<b><i>$1</i></b>').replace(BOLD, '<b>$1</b>').replace(ITALIC, '$1<i>$2</i>');
+const inline = html => BOLD(BOTH(html.replace(RUBY, (m, base, reading) => (isReading(reading) ? `<ruby>${base}<rt>${reading}</rt></ruby>` : m)), '<b><i>', '</i></b>'), '<b>', '</b>').replace(ITALIC, '$1<i>$2</i>');
 
 // A formula as HTML.
 //   'span'  a placeholder that js/math.js draws with KaTeX (the raw text shows until it has loaded, or if it can't)
@@ -48,8 +112,8 @@ export function formatHTML(text, { math = 'span' } = {}) {
   let list = null;
   const source = math === 'raw' ? held.text : unescapeDollar(held.text);
   for (const line of escapeHTML(source).split(/\r?\n/)) {
-    const m = BULLET.exec(line);
-    if (m) { if (!list) blocks.push(list = []); list.push(inline(m[1])); continue; }
+    const item = bulletText(line);
+    if (item !== null) { if (!list) blocks.push(list = []); list.push(inline(item)); continue; }
     list = null;
     blocks.push(inline(line));
   }
@@ -70,10 +134,10 @@ export function mathHTML(text, { inline: flat = false } = {}) {
 
 // The marks taken out of text that has no formulas in it. Furigana: 'paren' keeps the reading as 見(み)る (searching, lists, exports),
 // 'base' only the word (what to type), 'reading' only the reading (what to say).
-const stripMarks = (s, ruby = 'paren') => s
-  .split(/\r?\n/).map(l => { const m = BULLET.exec(l); return m ? `• ${m[1]}` : l; }).join('\n')
-  .replace(RUBY, (m, base, reading) => (!isReading(reading) ? m : ruby === 'base' ? base : ruby === 'reading' ? reading : `${base}(${reading})`))
-  .replace(BOTH, '$1').replace(BOLD, '$1').replace(ITALIC, '$1$2');
+const stripLines = (s, ruby) => s
+  .split(/\r?\n/).map(l => { const item = bulletText(l); return item !== null ? `• ${item}` : l; }).join('\n')
+  .replace(RUBY, (m, base, reading) => (!isReading(reading) ? m : ruby === 'base' ? base : ruby === 'reading' ? reading : `${base}(${reading})`));
+const stripMarks = (s, ruby = 'paren') => BOLD(BOTH(stripLines(s, ruby), '', ''), '', '').replace(ITALIC, '$1$2');
 
 // Card text without the marks: for typed answers, Play's options, searching and short previews.
 // A formula is kept exactly as written. ruby: how furigana comes out (see stripMarks); the default is 見(み)る.
@@ -125,7 +189,7 @@ export function answerTargets(text) {
 // Does the text use any formatting marks? (Formulas don't count, and their insides are not looked at.)
 export const hasFormatting = text => {
   const s = holdMath(String(text ?? '')).text;
-  return new RegExp(BOLD.source).test(s) || hasRuby(s) || new RegExp(ITALIC.source).test(s) || /^\s*[-•]\s+/m.test(s);
+  return replaceMarks(s, 2, '', '', true) || hasRuby(s) || new RegExp(ITALIC.source).test(s) || hasBulletLine(s);
 };
 
 // The inside of a <ruby> tag as text: each word with its <rt> reading, as ｜見《み》 (marks: true) or 見(み). Only text comes out:
@@ -180,30 +244,97 @@ function mapRuby(html, fn) {
   return out + html.slice(at);
 }
 
+// Tags found in one pass (the regexes these replace reread to the end of the text from every "<" that has no ">" after it, which a hostile
+// field can use to make them take seconds). Each is the same as the regex in its comment, with a failed search remembered so it is not repeated.
+const sameWord = (s, pos, word) => {                      // the lower case word at pos, in any case (ASCII only, like a regex's i flag)
+  for (let k = 0; k < word.length; k++) {
+    let c = s.charCodeAt(pos + k);
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== word.charCodeAt(k)) return false;
+  }
+  return true;
+};
+// <name ...> for any of the names, as  <(name1|name2)\b[^>]*>  (word: with the \b; without it, "<link" is a "<li" tag too). Replaced by
+// fn(name), or with pair: true the whole  <name ...> inside </name>  (the first closing tag, whatever is between) by fn(name, inside).
+// A tag that is never closed, or has no ">" at all, is left as it is.
+function replaceTags(html, names, { word = false, pair = false }, fn) {
+  const nextGt = memoNext(pos => html.indexOf('>', pos));
+  const unclosed = {};
+  const findClose = (name, from) => {
+    for (let q = html.indexOf('</', from); q >= 0; q = html.indexOf('</', q + 1)) if (sameWord(html, q + 2, name) && html[q + 2 + name.length] === '>') return q;
+    return -1;
+  };
+  let out = '', at = 0, p = html.indexOf('<');
+  while (p >= 0) {
+    const name = names.find(n => sameWord(html, p + 1, n));
+    let end = -1, repl = '';
+    if (name && !(word && /\w/.test(html.charAt(p + 1 + name.length)))) {
+      const gt = nextGt(p + 1 + name.length);
+      if (gt < 0) break;                                    // no ">" left anywhere: no later tag can match either
+      if (!pair) { end = gt + 1; repl = fn(name); }
+      else if (!unclosed[name]) {
+        const q = findClose(name, gt + 1);
+        if (q < 0) unclosed[name] = true;                   // no closing tag left: a later one can't find one either
+        else { end = q + name.length + 3; repl = fn(name, html.slice(gt + 1, q)); }
+      }
+    }
+    if (end < 0) { p = html.indexOf('<', p + 1); continue; }
+    out += html.slice(at, p) + repl;
+    at = end;
+    p = html.indexOf('<', at);
+  }
+  return out + html.slice(at);
+}
+// Every "<" … ">" with something in between gone: the same as  .replace(/<[^>]+>/g, '')
+function stripTags(html) {
+  let out = '', at = 0, p = html.indexOf('<');
+  while (p >= 0) {
+    const gt = html.indexOf('>', p + 1);
+    if (gt < 0) break;
+    if (gt === p + 1) { p = html.indexOf('<', p + 1); continue; }          // "<>" is not a tag
+    out += html.slice(at, p);
+    at = gt + 1;
+    p = html.indexOf('<', at);
+  }
+  return out + html.slice(at);
+}
+// Every [sound:…] gone (up to the first "]"): the same as  .replace(/\[sound:[^\]]*\]/g, '')
+function stripSounds(html) {
+  let out = '', at = 0, p = html.indexOf('[sound:');
+  while (p >= 0) {
+    const end = html.indexOf(']', p + 7);
+    if (end < 0) break;
+    out += html.slice(at, p);
+    at = end + 1;
+    p = html.indexOf('[sound:', at);
+  }
+  return out + html.slice(at);
+}
+
 // HTML → card text, keeping bold, italics and lists as marks (from Anki fields, or the rich editor on a
 // computer). Everything else (colors, fonts, images…) is dropped.
 //   marks: false gives plain text instead (bullets as "• ").
 export function htmlToMarks(html, { marks = true } = {}) {
   // Marks must hug the words, so move spaces from inside <b> … </b> to outside.
   const wrap = (mark, inner) => {
-    const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(inner);
-    return m[2] ? `${m[1]}${mark}${m[2]}${mark}${m[3]}` : inner;
+    let a = 0, z = inner.length;                                 // (the spaces at each end, taken whole)
+    while (a < z && isSpace(inner[a])) a++;
+    while (z > a && isSpace(inner[z - 1])) z--;
+    return a < z ? `${inner.slice(0, a)}${mark}${inner.slice(a, z)}${mark}${inner.slice(z)}` : inner;
   };
-  let s = String(html ?? '')
-    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/\[sound:[^\]]*\]/g, '');
+  let s = stripSounds(replaceTags(String(html ?? ''), ['style', 'script'], { pair: true }, () => ''));
   s = mapRuby(s, inner => rubyMarks(inner, marks));
   if (marks) {
-    s = s.replace(/<(b|strong)\b[^>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('**', inner))
-      .replace(/<(i|em)\b[^>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('*', inner));
+    s = replaceTags(s, ['b', 'strong'], { word: true, pair: true }, (name, inner) => wrap('**', inner));
+    s = replaceTags(s, ['i', 'em'], { word: true, pair: true }, (name, inner) => wrap('*', inner));
   }
-  return s
+  s = s
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(li|tr|h\d|ul|ol)>/gi, '\n')
-    .replace(/<\/(div|p)>/gi, '')
-    .replace(/<(div|p|ul|ol)\b[^>]*>/gi, '\n')
-    .replace(/<li[^>]*>/gi, marks ? '- ' : '• ')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<\/(div|p)>/gi, '');
+  s = replaceTags(s, ['div', 'p', 'ul', 'ol'], { word: true }, () => '\n');
+  s = replaceTags(s, ['li'], {}, () => (marks ? '- ' : '• '));
+  return stripTags(s)
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
       if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1));
       return ENTITIES[e.toLowerCase()] ?? m;
@@ -247,8 +378,8 @@ export function toggleBullets(value, start, end) {
   let to = value.indexOf('\n', Math.max(start, end - 1));
   if (to < 0) to = value.length;
   const lines = value.slice(from, to).split('\n');
-  const all = lines.every(l => BULLET.test(l) || !l.trim());
-  const changed = lines.map(l => (!l.trim() ? l : all ? l.replace(/^\s*[-•]\s+/, '') : BULLET.test(l) ? l : `- ${l}`)).join('\n');
+  const all = lines.every(l => bulletText(l) !== null || !l.trim());
+  const changed = lines.map(l => (!l.trim() ? l : all ? l.replace(/^\s*[-•]\s+/, '') : bulletText(l) !== null ? l : `- ${l}`)).join('\n');
   const out = value.slice(0, from) + changed + value.slice(to);
   return { value: out, start: from, end: from + changed.length };
 }
