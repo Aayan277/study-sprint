@@ -12,9 +12,11 @@
 import { parseSteps } from './steps.js';
 import { maskMath } from './math.js';
 
-// Is this card one of a pair? (A card with a noteId that is not a cloze or image-occlusion card.)
+// Is this card one of a pair? (A card with a noteId that is not a cloze or image-occlusion card, nor one of the several cards an Anki note
+// type with several card templates makes: those carry `templateOrd`, their Anki card number, and share a noteId only so Review shows
+// one of them a day.)
 export const isPair = card => !!card && typeof card.noteId === 'string' && card.noteId !== ''
-  && card.cloze === undefined && !card.occlusion && card.noteText === undefined;
+  && card.cloze === undefined && !card.occlusion && card.noteText === undefined && card.templateOrd === undefined;
 
 const hasSide = (text, image, sounds) => !!String(text ?? '').trim() || !!image || (Array.isArray(sounds) && sounds.length > 0);
 // An elements card lists "Element 1: …" lines (like a step card's "Step 1: …").
@@ -119,7 +121,7 @@ export function reverseSwitchHTML(p, { on = false, blocked = false } = {}) {
 
 // ---------- other places that change cards ----------
 // A card as an ordinary one again (its partner is gone).
-export const unpaired = ({ noteId, reverse, noteEditedAt, ...rest }) => rest;
+export const unpaired = ({ noteId, reverse, noteEditedAt, templateOrd, ...rest }) => rest;
 
 // Find and replace changes cards one at a time (browse-logic.js replaceInCards), which would leave a pair disagreeing, and
 // healPairs can't fix that (both have the same noteEditedAt). This takes the changed cards and returns the cards to save: ordinary
