@@ -1404,6 +1404,13 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 ruby rt{font-size:.5em;font-weight:400;letter-spacing:0;line-height:1}
 .flash-front ul,.flash-recap ul,.flash-back ul{display:inline-block;margin:.2em 0;padding-left:1.2em;text-align:left}
 .flash-front ul,.flash-recap ul{font-size:.8em}
+/* Several short lines (leadLines in format.js): the first line keeps the card's full size, the rest sit under it smaller and in the
+   quieter text color (--text-2 is 4.5:1 on every surface). On the back the first line is the answer and is drawn larger. */
+.lead,.rest{display:block}
+.rest{margin-top:.3em;font-size:max(1rem,.6em);font-weight:500;line-height:1.3;letter-spacing:0;color:var(--text-2)}
+.flash-recap .rest{font-size:.75em}
+.flash-back .lead{font-size:1.45em;font-weight:600;line-height:1.2;color:var(--text)}
+.flash-back .rest{font-size:.85em;font-weight:inherit;line-height:1.45}
 .fmt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s-2)}
 .field > .fmt-head{font-size:var(--fs-xs)}
 .fmt-head label{cursor:default}
