@@ -80,6 +80,8 @@ function parseTemplate(fmt) {
 
 // The note type's first card template, the one that makes the front → back card.
 export const firstTemplate = model => (model?.templates || []).find(t => t?.ord === 0) || (model?.templates || [])[0] || null;
+// The card template with this card number (ord), or null. (A template with no number of its own counts by its place in the list.)
+export const templateAt = (model, ord) => (model?.templates || []).find((t, i) => (Number.isInteger(t?.ord) ? t.ord : i) === ord) || null;
 
 // The fields a template puts on the card (not the ones it only asks about in a {{#Field}} section, not a {{type:Field}} box, not one
 // written inside a tag, and not one only behind {{hint:Field}}, which Anki shows on a click: that one stays a folded section).
@@ -90,11 +92,12 @@ function shownIn(pieces, out = new Set()) {
   }
   return out;
 }
-// The names of the model's fields that the first card template shows, on either side: a Set.
-export function shownFields(model) {
-  const t = firstTemplate(model);
-  if (!t) return new Set();
-  const shown = shownIn([...parseTemplate(t.qfmt), ...parseTemplate(t.afmt)]);
+// The names of the model's fields that a card template shows, on either side: a Set. By default the first template; pass `templates`
+// (a list) for a note that brings several cards, and every field any of them shows counts.
+export function shownFields(model, templates = [firstTemplate(model)]) {
+  const list = templates.filter(Boolean);
+  if (!list.length) return new Set();
+  const shown = shownIn(list.flatMap(t => [...parseTemplate(t.qfmt), ...parseTemplate(t.afmt)]));
   return new Set((model.fields || []).map(f => String(f).trim()).filter(f => shown.has(f)));
 }
 
@@ -125,11 +128,11 @@ const ANSWER_LINE_ALL = /<hr\s+id\s*=\s*["']?answer["']?\s*\/?>/gi;
 const ANSWER_MARK = '\u0003';            // where the template's own <hr id=answer> was
 const FRONT_MARK = '\u0002';
 
-// A note drawn with its note type's first card template: { q, a } as HTML. `a` is only what the back adds: what comes after
+// A note drawn with one of its note type's card templates (the first unless `template` is given): { q, a } as HTML. `a` is only what the back adds: what comes after
 // <hr id=answer> when the template has one, else the back without the {{FrontSide}} part (Review shows the front above the back).
 //   fieldHTML  the note's fields (HTML), in the note type's order
-export function renderCard(model, fieldHTML) {
-  const t = firstTemplate(model);
+export function renderCard(model, fieldHTML, template = firstTemplate(model)) {
+  const t = template;
   const fields = new Map();
   (model.fields || []).forEach((n, i) => {
     const name = String(n).trim();

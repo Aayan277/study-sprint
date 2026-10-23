@@ -735,6 +735,8 @@ export function checkBackup(data) {
   // A note's other fields (item A) are a short list of { name, text }; a reverse card (item 5) is marked reverse: true and shares a noteId.
   if (!data.cards.every(c => c.noteFields === undefined || validFields(c.noteFields))) return 'This backup file is damaged (a card has invalid note fields).';
   if (!data.cards.every(c => c.reverse === undefined || (c.reverse === true && typeof c.noteId === 'string' && c.noteId !== ''))) return 'This backup file is damaged (a card has an invalid reverse card link).';
+  // A card of an Anki note with several card templates (templateOrd) is a whole number and shares a noteId.
+  if (!data.cards.every(c => c.templateOrd === undefined || (Number.isInteger(c.templateOrd) && c.templateOrd >= 0 && typeof c.noteId === 'string' && c.noteId !== ''))) return 'This backup file is damaged (a card has an invalid card type number).';
   // Image-occlusion fields end up in style attributes, so the boxes must be plain numbers in range.
   if (!data.cards.every(c => c.occlusion === undefined || (validOcclusion(c.occlusion) && typeof c.noteId === 'string'))) {
     return 'This backup file is damaged (a card has invalid image-occlusion fields).';

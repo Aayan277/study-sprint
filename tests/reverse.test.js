@@ -190,3 +190,15 @@ test('pairPlan keeps the partner\'s own typeIn, and deletes a value that is not 
   const [a4, b4] = pairPlan(f, r, { typeIn: false });
   assert.deepEqual([a4.typeIn, b4.typeIn], [false, false]);
 });
+
+test('a card of an Anki note with several card templates (templateOrd) shares a noteId but is not one of a pair', () => {
+  const a = fwd({ id: 'a', templateOrd: 0 }), b = fwd({ id: 'b', templateOrd: 1 });
+  assert.equal(isPair(a), false);
+  assert.equal(isPair(b), false);
+  assert.equal(playRole(a, 'back'), 'back', 'Play asks it like any ordinary card');
+  assert.equal(playRole(b, 'front'), 'front');
+  assert.deepEqual(healPairs([a, b]), []);
+  assert.equal(loneIds([a, b]).size, 0);
+  assert.equal(unpaired(a).templateOrd, undefined, 'taken out of its note, it is an ordinary card');
+  assert.equal(unpaired(a).noteId, undefined);
+});

@@ -823,10 +823,11 @@ function refreshFlags() {
     }
     row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !makesReverse(c);
+    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !c.siblings && !makesReverse(c);
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : makesReverse(c) ? 'Both directions: makes 2 cards'
+      : c.siblings ? `Card type ${c.siblings.ord + 1} of a note: part of a note`
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 
@@ -881,6 +882,10 @@ function refreshFlags() {
   // Cards drawn from their note type's card template (anki.js): the Front / Back choice doesn't apply to them.
   const laidOut = S.cards.filter(c => c.templated).length;
   if (laidOut) parts.push(laidOut === S.cards.length ? "Cards follow the deck's own card layout." : `${plural(laidOut, 'card')} follow${laidOut === 1 ? 's' : ''} the deck's own card layout; Front and Back above apply to the rest.`);
+  // Notes with several card types (a templated note type, anki.js siblings): how many notes the cards come from.
+  const sibCards = sug ? [] : used.filter(c => c.siblings && isComplete(live(c)));
+  const sibNotes = new Set(sibCards.map(c => c.siblings.noteKey)).size;
+  if (sibNotes) parts.push(`<b>${plural(sibNotes, 'note')} → ${plural(sibCards.length, 'card')}</b>: each card type of a note is a card of its own, with its own schedule and history, and Review shows one of a note's cards a day.`);
   // Cloze notes: how many notes the cards come from.
   const notesN = sug ? 0 : new Set(S.cards.filter(c => c.cloze).map(c => c.cloze.noteKey)).size;
   if (notesN) parts.push(`${plural(notesN, 'cloze note')} make${notesN === 1 ? 's' : ''} these cards: one card for each blank, and Review shows one of them a day.`);
@@ -1076,7 +1081,7 @@ function applyFilter() {
 const CARDS_WARNED_KEY = 'study-sprint-cards-warned';       // the 50,000-card heads-up is shown once
 const cardsWarnedBefore = () => { try { return localStorage.getItem(CARDS_WARNED_KEY) === '1'; } catch { return false; } };
 async function save() {
-  let toAdd = S.cards.filter(inUse).map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, typeIn: c.typeIn, reverse: makesReverse(c) ? c.reversed : null }));
+  let toAdd = S.cards.filter(inUse).map(live).filter(isComplete).map(c => ({ front: c.front.trim(), back: c.back.trim(), tags: c.tags || [], ankiId: c.ankiId, ankiGuid: c.ankiGuid, ankiDeck: c.ankiDeck, pictures: c.pictures, sounds: c.sounds, cloze: c.cloze, siblings: c.siblings, occlusion: c.occlusion, noteExtra: c.noteExtra, noteFields: c.noteFields, typeIn: c.typeIn, reverse: makesReverse(c) ? c.reversed : null }));
   if (!toAdd.length) return;
   // Anki progress: each card's Anki reviews are replayed through FSRS, which needs the scheduler library.
   let replay = null;
@@ -1133,6 +1138,14 @@ async function save() {
         if (!noteIds.has(c.cloze.noteKey)) noteIds.set(c.cloze.noteKey, db.newId());
         Object.assign(card, clozeCard(c.cloze.text, c.cloze.n), { noteId: noteIds.get(c.cloze.noteKey), cloze: c.cloze.n, noteText: c.cloze.text });
         if (c.noteExtra) card.noteExtra = c.noteExtra;
+      }
+      if (c.siblings) {
+        // The cards of an Anki note with several card templates share a noteId (so Review shows one of them a day, like cloze cards);
+        // templateOrd is the card's Anki card number, which also keeps them from being taken for a reversed pair (reverse.js isPair).
+        const key = 'cards:' + c.siblings.noteKey;
+        if (!noteIds.has(key)) noteIds.set(key, db.newId());
+        card.noteId = noteIds.get(key);
+        card.templateOrd = c.siblings.ord;
       }
       if (c.occlusion) {
         // An image-occlusion note's cards share a noteId too. Their boxes and picture are added below.
