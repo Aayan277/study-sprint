@@ -98,10 +98,11 @@ function keepPlaying() {
 }
 
 // ---------- setup ----------
-// (rawBack: the back as written, with its furigana marks, because the typed answer is checked against the word, 見る, and the reading, みる,
+// (rawFront and rawBack: the sides as written, with their furigana marks, because the typed answer is checked against the word, 見る, and the reading, みる,
 // not against the plain text 見(み)る)
-const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back), rawBack: c.back });
-const typingTargets = (q, card) => answerTargets(q.answer === card.back && card.rawBack !== undefined ? card.rawBack : q.answer);
+const playCopy = c => ({ ...c, front: plainText(c.front), back: plainText(c.back), rawFront: c.front, rawBack: c.back });
+const typingTargets = (q, card) => answerTargets(q.answer === card.back && card.rawBack !== undefined ? card.rawBack
+  : q.answer === card.front && card.rawFront !== undefined ? card.rawFront : q.answer);
 
 export async function renderPlay(el) {
   stopRound();

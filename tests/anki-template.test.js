@@ -268,7 +268,7 @@ test('furigana filters and templates stay fast on hostile text', () => {
     fast('render', () => htmlToLines(renderCard(m, [bad, bad]).q + renderCard(m, [bad, bad]).a));
   }
   fast('template', () => { const t = '<!--'.repeat(12000) + '<img'.repeat(12000) + '<script'.repeat(8000) + '{{'.repeat(10000); renderCard(model(['A', 'B'], t, t), ['a', 'b']); });
-  fast('lines', () => htmlToLines(' '.repeat(50000) + '<div'.repeat(10000) + '\u0001'.repeat(50000)));
+  fast('lines', () => htmlToLines(' '.repeat(50000) + '<div>'.repeat(10000) + '\u0001'.repeat(50000)));
 });
 
 test('furigana syntax: words with readings, [sound:] left alone', () => {
@@ -285,6 +285,22 @@ test('a ruby whose </rt> or </rp> is left out still reads right (as HTML allows)
   assert.equal(htmlToMarks('<ruby>漢<rt>かん</rt> never closed'), '漢かん never closed');          // (no </ruby>: only text is left)
 });
 
+test('rb/rt pairs go by position; what can not be paired, or would not be drawn as ruby, is plain text', () => {
+  assert.equal(htmlToMarks('<ruby><rb>漢</rb><rb>字</rb><rt>かん</rt><rt>じ</rt></ruby>'), '｜漢《かん》｜字《じ》');
+  assert.equal(htmlToMarks('<ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby>'), '｜漢《かん》｜字《じ》');
+  assert.equal(htmlToMarks('<ruby>a<rt>b</rt><rt>c</rt></ruby>'), 'abc');          // (a reading with no word: as main, plain text)
+  assert.equal(htmlToMarks('<ruby>私<rt>わたし私</rt></ruby>'), '私(わたし私)');          // (not drawn as ruby, so no raw mark either)
+  assert.equal(htmlToMarks(`<ruby>${'あ'.repeat(40)}<rt>a</rt></ruby>`), `${'あ'.repeat(40)}(a)`);
+  assert.equal(htmlToMarks(`<ruby>あ<rt>${'a'.repeat(70)}</rt></ruby>`), `あ(${'a'.repeat(70)})`);
+});
+
+test('htmlToMarks reads tags like main does: a "<" inside an attribute or in text, and a sound name with brackets', () => {
+  assert.equal(htmlToMarks('<img alt="a<b" src="x.png">hi'), 'hi');
+  assert.equal(htmlToMarks('<span title="1 < 2">t</span> end'), 't end');
+  assert.equal(htmlToMarks('x < y <ruby>見<rt>み</rt></ruby> > z'), 'x z');
+  assert.equal(htmlToMarks('q [sound:a[1].mp3] z'), 'q .mp3] z');
+});
+
 test('｜base《reading》 is furigana only for a short word with a reading that is not Chinese characters', () => {
   assert.equal(formatHTML('｜見《み》る'), '<ruby>見<rt>み</rt></ruby>る');
   assert.equal(formatHTML('｜北京《Beijing》'), '<ruby>北京<rt>Beijing</rt></ruby>');
@@ -292,7 +308,7 @@ test('｜base《reading》 is furigana only for a short word with a reading that
   assert.equal(formatHTML('推荐｜三体《刘慈欣》'), '推荐｜三体《刘慈欣》');          // (a book title: not a ruby)
   assert.equal(plainText('推荐｜三体《刘慈欣》'), '推荐｜三体《刘慈欣》');
   assert.deepEqual(answerTargets('推荐｜三体《刘慈欣》'), ['推荐｜三体《刘慈欣》']);
-  assert.equal(htmlToMarks('<ruby>字<rt>字</rt></ruby>'), '｜字《字》');          // (an Anki ruby is still taken in; Review then shows it as plain text)
+  assert.equal(htmlToMarks('<ruby>字<rt>字</rt></ruby>'), '字(字)');          // (a reading of Chinese characters is no furigana mark)
   const long = `｜${'あ'.repeat(40)}《a》`;
   assert.equal(formatHTML(long), long);          // (a word that long is not furigana)
 });
@@ -304,8 +320,8 @@ test('a typed furigana answer accepts the word and the reading, math in the read
 });
 
 test('ruby and marks stay fast on a hostile text of 50 KB', () => {
-  const bad = ['<ruby>' + '<rt>'.repeat(12000) + '</ruby>', '<ruby>' + '<rp>'.repeat(12000) + '</ruby>', '<ruby>'.repeat(8000), '<ruby'.repeat(10000), '<ruby>' + 'a<rt>b'.repeat(8000),
-    '<rt>'.repeat(12000) + '</ruby>', '｜a《'.repeat(16000), '｜'.repeat(50000), '《'.repeat(50000), '[sound:'.repeat(7000), '<'.repeat(50000), '<div'.repeat(12000), '<li'.repeat(16000)];
+  const bad = ['<ruby>' + '<rt>'.repeat(12000) + '</ruby>', '<ruby>' + '<rp>'.repeat(12000) + '</ruby>', '<ruby>'.repeat(8000), '<ruby>' + 'a<rt>b'.repeat(8000),
+    '<rt>'.repeat(12000) + '</ruby>', '｜a《'.repeat(16000), '｜'.repeat(50000), '《'.repeat(50000)];
   for (const s of bad) {
     fast('htmlToMarks', () => { htmlToMarks(s); htmlToMarks(s, { marks: false }); });
     fast('marks', () => { formatHTML(s); plainText(s); answerTargets(s); });

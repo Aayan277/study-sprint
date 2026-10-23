@@ -21,7 +21,7 @@ const escapeHTML = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&l
 // [sound:...] is not a reading. The word and the reading are short and have no brackets of their own, and a long field is left alone,
 // so a hostile field can't make the search slow.
 const READING = / ?([^ >[\]]{1,64})\[([^\]\n]{1,128})\]/g;
-const MAX_FILTERED = 5000;
+const MAX_FILTERED = 50000;
 const readings = (html, draw) => (html.length > MAX_FILTERED || !html.includes('[') ? html
   : html.replace(READING, (m, base, reading) => (/^(sound:|\$)/.test(reading) ? m : draw(base, reading))));
 

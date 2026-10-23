@@ -130,34 +130,40 @@ export const hasFormatting = text => {
 
 // The inside of a <ruby> tag as text: each word with its <rt> reading, as ｜見《み》 (marks: true) or 見(み). Only text comes out:
 // tags are dropped, and the characters the mark uses are taken out of the word and reading so a mark can't be cut short.
-// One pass over the tags. HTML lets </rt> and </rp> be left out: a reading then ends at the next <rt> or <rp>, or at the end.
-// An absurdly long ruby is just its text, so a hostile field can't make this slow.
+// One pass over the tags. HTML lets </rt> and </rp> be left out: a reading ends at the next <rt>, <rp> or <rb>, or at the end.
+// The nth reading belongs to the nth word (a word starts at an <rb>, or at text after a reading). Readings that have no word to
+// belong to, and an absurdly long ruby (so a hostile field can't make this slow), come out as plain text.
 const MAX_RUBY = 4000;
 const RUBY_PART = /<(\/?)([a-z][a-z0-9]*)\b[^<>]*>|[^<]+|</gi;      // (a tag, a run of text, or a stray "<": no part can run past the next "<")
 function rubyMarks(inner, marks) {
-  const clean = h => h.replace(/[｜《》]/g, '').replace(/\s+/g, ' ').trim();
-  if (inner.length > MAX_RUBY) return inner.replace(/<[^<>]*>/g, '');
-  let out = '', base = '', reading = '', where = 'base';        // where: the text goes to the word, a reading, or nowhere (<rp>)
-  const pair = () => {
-    const b = clean(base), r = clean(reading);
-    out += !r ? b : !b ? r : marks ? `｜${b}《${r}》` : `${b}(${r})`;
-    base = reading = '';
-  };
+  const plain = () => inner.replace(/<[^<>]*>/g, '');
+  if (inner.length > MAX_RUBY) return plain();
+  const words = [];                      // { base, reading }: reading is null until its <rt> comes
+  let where = 'base', reading = '', fresh = true, next = 0;      // fresh: the next text starts a new word; next: the word the next reading belongs to
+  const endReading = () => { const w = words[next++]; if (w) w.reading = reading; reading = ''; return !!w; };
   for (const m of inner.matchAll(RUBY_PART)) {
     const name = m[2]?.toLowerCase();
-    if (name === 'rt' || name === 'rp') {
-      if (where === 'rt') pair();
-      where = m[1] ? 'base' : name;           // (</rt> and </rp> go back to the word; <rt> and <rp> start a reading or skip one)
-    } else if (name === 'rb' && !m[1]) {
-      if (where === 'rt') pair();          // (<rb> also ends a reading whose </rt> was left out)
-      where = 'base';
+    if (name === 'rt' || name === 'rp' || name === 'rb') {
+      if (where === 'rt' && !endReading()) return plain();
+      where = m[1] ? 'base' : name === 'rp' ? 'rp' : name === 'rt' ? 'rt' : 'base';          // (<rb> and the closing tags go back to the word)
+      if (name === 'rb' && !m[1]) { words.push({ base: '', reading: null }); fresh = false; }
+      else if (name === 'rt' && m[1]) fresh = true;
     } else if (!name) {
-      if (where === 'base') base += m[0];
-      else if (where === 'rt') reading += m[0];
+      if (where === 'rt') reading += m[0];
+      else if (where === 'base' && !(fresh && !m[0].trim())) {
+        if (fresh) { words.push({ base: '', reading: null }); fresh = false; }
+        words.at(-1).base += m[0];
+      }
     }
   }
-  if (where === 'rt') pair();
-  return out + clean(base);
+  if (where === 'rt' && !endReading()) return plain();
+  const clean = h => h.replace(/[｜《》]/g, '').replace(/\s+/g, ' ');
+  return words.map(w => {
+    const b = clean(w.base).trim(), r = clean(w.reading ?? '').trim();
+    if (!r) return clean(w.base);
+    if (!b) return r;
+    return marks && b.length <= 32 && r.length <= 64 && isReading(r) ? `｜${b}《${r}》` : `${b}(${r})`;          // (a mark only when it would be drawn as ruby)
+  }).join('');
 }
 
 // Every <ruby>…</ruby> in the HTML replaced by what fn makes of its inside. One pass: a <ruby> that is never closed is left as it is.
@@ -184,20 +190,20 @@ export function htmlToMarks(html, { marks = true } = {}) {
     return m[2] ? `${m[1]}${mark}${m[2]}${mark}${m[3]}` : inner;
   };
   let s = String(html ?? '')
-    .replace(/<(style|script)[^<>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/\[sound:[^\][]*\]/g, '');
+    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/\[sound:[^\]]*\]/g, '');
   s = mapRuby(s, inner => rubyMarks(inner, marks));
   if (marks) {
-    s = s.replace(/<(b|strong)\b[^<>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('**', inner))
-      .replace(/<(i|em)\b[^<>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('*', inner));
+    s = s.replace(/<(b|strong)\b[^>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('**', inner))
+      .replace(/<(i|em)\b[^>]*>([\s\S]*?)<\/\1>/gi, (m, t, inner) => wrap('*', inner));
   }
   return s
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(li|tr|h\d|ul|ol)>/gi, '\n')
     .replace(/<\/(div|p)>/gi, '')
-    .replace(/<(div|p|ul|ol)\b[^<>]*>/gi, '\n')
-    .replace(/<li[^<>]*>/gi, marks ? '- ' : '• ')
-    .replace(/<[^<>]+>/g, '')
+    .replace(/<(div|p|ul|ol)\b[^>]*>/gi, '\n')
+    .replace(/<li[^>]*>/gi, marks ? '- ' : '• ')
+    .replace(/<[^>]+>/g, '')
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
       if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1));
       return ENTITIES[e.toLowerCase()] ?? m;
