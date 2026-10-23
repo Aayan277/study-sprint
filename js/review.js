@@ -12,7 +12,7 @@ import { checkTyped } from './match.js';
 import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize } from './format.js';
+import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize, leadLines, isLead, FRONT_LINES, BACK_LINES } from './format.js';
 import { cardMediaHTML, warmCards } from './media.js';
 import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
@@ -237,19 +237,21 @@ function renderSession(el, enter = false) {
   const typeThis = mode.type;
   const occ = hasMasks(card);
   const frontLen = occ ? 0 : answerText(card.front).length;          // measured as words, not as LaTeX
-  const size = frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
+  const cloze = hasBlank(card);
+  const frontFmt = occ || cloze ? '' : leadLines(answerText(card.front), formatHTML(card.front), FRONT_LINES);          // (several short lines: the first leads, see leadLines)
+  const multi = isLead(frontFmt);
+  const size = multi ? ' multi' : frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
   // the note's Extra under it. Everything goes through renderCloze/formatHTML, so nothing in the text can inject HTML.
-  const cloze = hasBlank(card);
   // An image-occlusion card shows its picture with every box hidden and the highlighted one to name; the back uncovers that
   // box, with its label, and a button shows the whole picture. (occlusion.js builds the HTML, escaping the text.)
   const label = occ ? occLabel(card.occlusion.masks, card.occlusion.n) : '';
   const backSize = occ || sp ? '' : answerSize(answerText(cloze ? card.noteText : card.back));          // a long answer is smaller and left-aligned
   const front = occ
     ? `${card.occlusion.header ? `<p class="occ-head">${mathHTML(card.occlusion.header)}</p>` : ''}${occlusionHTML(card, 'front', { headed: !!card.occlusion.header })}`
-    : cardMediaHTML(card, 'front', cloze ? renderCloze(card.noteText, card.cloze, 'front') : formatHTML(card.front));
+    : cardMediaHTML(card, 'front', cloze ? renderCloze(card.noteText, card.cloze, 'front') : frontFmt);
   const answerHTML = occ
     ? `${occlusionHTML(card, 'back')}<p class="occ-label${label ? '' : ' none'}">${label ? mathHTML(label) : 'Hidden area'}</p>
        <button type="button" class="occ-peek" aria-pressed="false" aria-keyshortcuts="M">Show whole picture <kbd class="key-hint" aria-hidden="true">M</kbd></button>`
@@ -257,7 +259,7 @@ function renderSession(el, enter = false) {
       ? cardMediaHTML(card, 'back', renderCloze(card.noteText, card.cloze, 'back'))
       : sp
         ? cardMediaHTML(card, 'back', stepsHTML(sp))
-        : cardMediaHTML(card, 'back', formatHTML(card.back));
+        : cardMediaHTML(card, 'back', leadLines(answerText(card.back), formatHTML(card.back), BACK_LINES));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.
