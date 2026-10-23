@@ -7,6 +7,7 @@ async function leechPanel({ leechIds }) {
 }
 
 import { pairsFor } from './confusion.js';
+import { mathHTML } from './format.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 // "You mix these up" (B2): up to 3 pairs, involving the cards of this round (or session), from the last 90 days of the
@@ -16,7 +17,7 @@ export function pairsHTML(pairs, cardsById, label = c => String(c?.front ?? ''))
   const rows = pairs.filter(p => cardsById.has(p.a) && cardsById.has(p.b)).slice(0, MAX_PAIRS);
   if (!rows.length) return '';
   return `<section class="mixups"><h2>You mix these up</h2><ul class="mix-list">${rows.map(p => `
-    <li class="mix-row"><span class="mix-pair"><span class="mix-card">${esc(label(cardsById.get(p.a)))}</span><span class="mix-vs" aria-hidden="true">vs</span><span class="sr-only"> and </span><span class="mix-card">${esc(label(cardsById.get(p.b)))}</span></span>
+    <li class="mix-row"><span class="mix-pair"><span class="mix-card">${mathHTML(label(cardsById.get(p.a)), { inline: true })}</span><span class="mix-vs" aria-hidden="true">vs</span><span class="sr-only"> and </span><span class="mix-card">${mathHTML(label(cardsById.get(p.b)), { inline: true })}</span></span>
       <span class="mix-n mono">${p.count}×</span><button class="btn ghost small" type="button" data-mix-a="${esc(p.a)}" data-mix-b="${esc(p.b)}">Compare</button></li>`).join('')}</ul></section>`;
 }
 async function pairsPanel({ cardIds, entries = [] }) {

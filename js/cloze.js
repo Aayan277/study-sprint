@@ -8,7 +8,43 @@ import { formatHTML } from './format.js';
 import { holdMath, unholdMath } from './math.js';
 
 // {{c1::answer}} or {{c1::answer::hint}}
-const CLOZE = /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g;
+// Found by a scanner, not a regex. The regex this replaced, /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g, reread the rest of
+// the text from every position of an unclosed blank, so a few KB of "{{c1::a " took 150 ms and 50 KB never finished.
+// What that regex found, and so what this finds (each blank starts after the end of the one before):
+//   - "{{c", digits, "::" starts a blank; anything else is skipped one character on.
+//   - The blank ends at the FIRST "}}" after that (a blank without one ends the search: nothing later can have one either).
+//   - If a "::" comes before that "}}", it splits the text from the hint (the first "::": ":::" is "::" and then a ":" in
+//     the hint, and "::}}" is an empty hint, "" and not missing). Otherwise there is no hint (undefined).
+// Each blank is { index, end, num (a string), text, hint }. One pass: the first "::" is looked for once and kept.
+export function clozeBlanks(s) {
+  s = String(s ?? '');
+  const out = [];
+  let from = 0, colons = -2;                      // colons: where the next "::" is (-1 none left, -2 not looked for yet)
+  for (;;) {
+    const at = s.indexOf('{{c', from);
+    if (at < 0) return out;
+    let p = at + 3;
+    while (p < s.length && s.charCodeAt(p) >= 48 && s.charCodeAt(p) <= 57) p++;
+    if (p === at + 3 || s.charCodeAt(p) !== 58 || s.charCodeAt(p + 1) !== 58) { from = at + 1; continue; }
+    const num = s.slice(at + 3, p);
+    p += 2;
+    const close = s.indexOf('}}', p);
+    if (close < 0) return out;
+    if (colons !== -1 && colons < p) colons = s.indexOf('::', p);
+    const hinted = colons !== -1 && colons < close;
+    out.push({ index: at, end: close + 2, num, text: s.slice(p, hinted ? colons : close), hint: hinted ? s.slice(colons + 2, close) : undefined });
+    from = close + 2;
+  }
+}
+// String.replace for blanks: fn(match, num, text, hint) gives the replacement.
+function replaceBlanks(s, fn) {
+  let out = '', last = 0;
+  for (const b of clozeBlanks(s)) {
+    out += s.slice(last, b.index) + fn(s.slice(b.index, b.end), b.num, b.text, b.hint);
+    last = b.end;
+  }
+  return out + s.slice(last);
+}
 
 // Formulas are lifted out before the blanks are looked for, so a }} inside one ({{c1::$\sqrt{x^{2}}$}}) does not end the
 // blank. A blank that starts inside a formula is not a blank (it shows as typed). fn gets the text without formulas and a
@@ -20,7 +56,7 @@ function withMath(text, fn) {
 
 // Which numbers does a text use, smallest first? "{{c1::a}} {{c2::b}} {{c1::c}}" → [1, 2]
 export function clozeNumbers(text) {
-  return withMath(text, held => [...new Set([...held.matchAll(CLOZE)].map(m => +m[1]))].sort((a, b) => a - b));
+  return withMath(text, held => [...new Set(clozeBlanks(held).map(b => +b.num))].sort((a, b) => a - b));
 }
 
 // One card for blank number n: that blank is hidden as […] (or [hint]) on the front, the other blanks are
@@ -28,7 +64,7 @@ export function clozeNumbers(text) {
 export function clozeCard(text, n) {
   return withMath(text, (held, back) => {
     const answers = [];
-    const front = held.replace(CLOZE, (m, num, answer, hint) => {
+    const front = replaceBlanks(held, (m, num, answer, hint) => {
       if (+num !== n) return answer;
       answers.push(answer);
       return hint ? `[${hint}]` : '[…]';
@@ -41,7 +77,7 @@ export function clozeCard(text, n) {
 export const hasCloze = text => clozeNumbers(text).length > 0;
 
 // The text with every blank filled in (what read-aloud says after the flip).
-export const clozeFull = text => withMath(text, (held, back) => back(held.replace(CLOZE, (m, num, answer) => answer)));
+export const clozeFull = text => withMath(text, (held, back) => back(replaceBlanks(held, (m, num, answer) => answer)));
 
 // Does this card show a blank of its note? (A card of a note whose text no longer has its number is shown as an
 // ordinary card, from its saved front and back.)
@@ -59,7 +95,7 @@ const STRAY = /[-]/g;
 //   side 'back'   the full text with blank n marked as the answer
 //   side 'all'    every blank marked (the editor's preview)
 export function renderCloze(text, n, side = 'front') {
-  const marked = withMath(String(text ?? '').replace(STRAY, ''), (held, back) => back(held.replace(CLOZE, (m, num, answer, hint) => {
+  const marked = withMath(String(text ?? '').replace(STRAY, ''), (held, back) => back(replaceBlanks(held, (m, num, answer, hint) => {
     if (side === 'all') return ANS_OPEN + answer + ANS_CLOSE;
     if (+num !== n) return answer;
     if (side === 'back') return ANS_OPEN + answer + ANS_CLOSE;
@@ -107,8 +143,8 @@ export function makesText(text) {
 //           reviews higher); on a tie the first stays.
 //   error   set (and nothing else to do) when a blank is empty, with the message to show
 export function planNoteSave(oldSiblings, newText, score = () => 0) {
-  for (const m of withMath(newText, held => [...held.matchAll(CLOZE)])) {
-    if (!m[2].trim()) return { update: [], add: [], remove: [], duplicates: [], error: `Blank c${m[1]} is empty. Select the words to hide, then press New blank.` };
+  for (const m of withMath(newText, held => clozeBlanks(held))) {
+    if (!m.text.trim()) return { update: [], add: [], remove: [], duplicates: [], error: `Blank c${m.num} is empty. Select the words to hide, then press New blank.` };
   }
   const byNumber = new Map();
   const duplicates = [];
