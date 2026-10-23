@@ -12,6 +12,7 @@ for (const [file, deckName] of [['anki-media-new.apkg', 'Anatomy new'], ['anki-m
   await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (this file imports the same notes twice on purpose: as new cards each time)
   const found = await page.textContent('#found');
   ok(found.includes('Found 4 cards') && found.includes('have pictures, which come along too (the first one on each side)'), `${file}: ${found}`);
   await page.selectOption('#deckSel', '__new'); await page.fill('#newName', deckName); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 });

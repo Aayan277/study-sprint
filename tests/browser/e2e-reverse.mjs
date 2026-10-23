@@ -192,6 +192,7 @@ const load = async file => {
   await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
   await page.selectOption('#deckSel', '__new');          // a new deck, so earlier imports don't make these rows "Already in this deck"
 };
 for (const [file, name] of [['anki-reversed-new.apkg', 'Reversed new'], ['anki-reversed-legacy.apkg', 'Reversed old']]) {

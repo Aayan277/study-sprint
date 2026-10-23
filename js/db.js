@@ -1195,6 +1195,21 @@ export function usedMediaIds(cards) {
   }
   return used;
 }
+// Throw away pictures and sounds that were only just saved and turned out not to be needed (an import found the card already holds the
+// same file). Files the server already has are left alone: cleanMedia and the sweep handle those.
+export async function discardMedia(ids) {
+  if (!ids.length) return;
+  const db = await openDB();
+  const tx = db.transaction(['media', 'settings'], 'readwrite');
+  await inTx(tx, async () => {
+    for (const id of ids) {
+      const m = await done(tx.objectStore('media').get(id));
+      if (!m || m.uploaded) continue;
+      tx.objectStore('media').delete(id);
+      await noteMedia(tx, id, m, null);
+    }
+  });
+}
 // Remove pictures and sounds no card uses any more (replaced, removed, or their card deleted). Ones added in the
 // last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.
 export async function cleanMedia(now = Date.now()) {

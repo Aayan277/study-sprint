@@ -22,6 +22,7 @@ const load = async file => {
   await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
 };
 const save = async name => { await page.selectOption('#deckSel', '__new'); await page.fill('#newName', name); await page.click('#saveBtn'); await page.waitForSelector('.crow', { timeout: 30000 }); };
 const closeSheet = async () => { await page.waitForTimeout(500); await page.evaluate(() => { const s = document.getElementById('sheet'); if (s?.open) s.close(); }); await page.waitForTimeout(250); };      // (a moment first: a saved card's panel opens again a moment after the toast; a moment after: the sheet's history entry comes off, see js/nav.js)

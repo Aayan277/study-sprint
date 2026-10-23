@@ -5,6 +5,7 @@ import * as db from './db.js';
 import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, clearDupKeys, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
+import { indexByGuid, matchRows, rowSlot, slotOf, mergeCard, noteIdMap, sameContent, MEDIA } from './anki-match.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
 import { keepDraft, takeDraft } from './import-draft.js';
 import { formatHTML } from './format.js';
@@ -63,6 +64,8 @@ export async function renderImport(el, arg) {
     keepFields: true,      // the "Keep the other fields" switch (Anki notes with more than two fields)
     makeReverse: true,     // the "Make the reverse cards too" switch (notes that work in both directions)
     bringSounds: true,     // the "Bring sounds" switch (Anki imports)
+    updateOld: true,       // the "Update the cards you already have" switch (re-importing an Anki deck)
+    guidIndex: null,       // the saved cards with an Anki guid, by identity (anki-match.js); null until read or when not an Anki import
     freeNote: '',          // "Not enough free space on this device for the sounds…", when the switch started off for that reason
     doc: null,             // the PDF or slides being read: { pages, name, what }
     withNotes: true,       // the "Include speaker notes" switch
@@ -176,6 +179,9 @@ export async function renderImport(el, arg) {
         <label class="field"><span>Front</span><select id="frontCol"></select></label>
         <label class="field"><span>Back</span><select id="backCol"></select></label>
       </div>
+      <label class="adv-row switch-row prog-row" id="updRow" hidden><span><b id="updTitle">Update the cards you already have (keeps your progress)</b>
+        <span id="updInfo"></span></span>
+        <input id="updateOld" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="progRow" hidden><span><b>Bring over my Anki progress</b>
         <span id="progInfo"></span></span>
         <input id="ankiProg" type="checkbox" class="switch" checked></label>
@@ -666,6 +672,19 @@ function showResult(result, keepError = false, pasted = '') {
     S.carry = null;
   }
   renderList();
+  loadGuidIndex();
+}
+
+// Re-importing an Anki deck: the cards already saved with an Anki guid, by identity (anki-match.js), so the preview can offer to update them.
+async function loadGuidIndex() {
+  const st = S;
+  $('preview').removeAttribute('data-guids');
+  if (S.result?.format.id !== 'anki' || !S.result.guids?.some(Boolean)) { S.guidIndex = null; $('preview').dataset.guids = 'none'; return; }
+  const index = indexByGuid(await db.getAllCached('cards', { shared: true }));
+  if (S !== st) return;
+  S.guidIndex = index;
+  refreshFlags();
+  $('preview').dataset.guids = 'read';          // (tests wait for this: the "update" switch is there, or not, from now on)
 }
 
 // The cards the result makes with the columns picked. `row` says which row of the result a card came from (rows can be deleted
@@ -741,6 +760,7 @@ function wirePreview() {
     refreshFlags();
   });
   $('makeReverse').addEventListener('change', e => { S.makeReverse = e.target.checked; refreshFlags(); });
+  $('updateOld').addEventListener('change', e => { S.updateOld = e.target.checked; refreshFlags(); });
   $('saveBtn').addEventListener('click', save);
 }
 
@@ -791,7 +811,17 @@ function refreshFlags() {
   if (!S.result) return;
   const sug = !!S.result.suggest;
   // (a suggestion that is not ticked is not a card: it takes no part in the counts or the duplicate check)
-  S.flags = findDuplicates(S.cards.map(c => (inUse(c) ? c : { ...c, front: '' })), S.deckFronts, S.deckKeys);
+  // Cards of a re-imported Anki deck that are already saved (same note guid and place): matched[i] is the saved card, or null.
+  const items = [], owner = [];
+  S.cards.forEach((c, i) => {
+    if (!c.ankiGuid || !inUse(c) || !isComplete(live(c))) return;
+    items.push({ guid: c.ankiGuid, slot: rowSlot(c) }); owner.push([i, false]);
+    if (makesReverse(c)) { items.push({ guid: c.ankiGuid, slot: rowSlot(c, true) }); owner.push([i, true]); }
+  });
+  const matched = S.cards.map(() => null);
+  let oldN = 0;
+  matchRows(items, S.guidIndex).forEach((card, k) => { if (!card) return; oldN++; if (!owner[k][1] && S.updateOld) matched[owner[k][0]] = card; });
+  S.flags = findDuplicates(S.cards.map((c, i) => (inUse(c) && !matched[i] ? c : { ...c, front: '' })), S.deckFronts, S.deckKeys);
   const used = S.cards.filter(inUse);
   const complete = used.filter(c => isComplete(live(c))).length;
   const pairN = used.filter(c => isComplete(live(c)) && makesReverse(c)).length;       // cards that also make a reverse card
@@ -823,8 +853,9 @@ function refreshFlags() {
     }
     row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !makesReverse(c);
+    badge.hidden = !matched[i] && !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !makesReverse(c);
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
+      : matched[i] ? 'Updates the card you already have'
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : makesReverse(c) ? 'Both directions: makes 2 cards'
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
@@ -898,7 +929,15 @@ function refreshFlags() {
   if (occluded) parts.push(`<span class="warn">${plural(occluded, 'image-occlusion note')} ${occluded === 1 ? 'comes' : 'come'} in as ${occluded === 1 ? 'a plain picture card' : 'plain picture cards'}: the heading on the front, the whole picture on the back (this kind of occlusion note can't be read).</span>`);
   if (S.result.format.id === 'anki') parts.push(prog?.cards ? 'Tags come along too.' : 'They come in as new cards, with their tags. (This file has no review history: to bring your progress, export from Anki with “Include scheduling information” ticked.)');
   $('progRow').hidden = !prog?.cards;
-  if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.`;
+  if (prog?.cards) $('progInfo').textContent = `${plural(prog.reviews, 'review')} on ${plural(prog.cards, 'card')}: due dates and history are rebuilt with FSRS. Off = start them all as new.${oldN && S.updateOld ? ' Cards you already have keep their own progress.' : ''}`;
+  // Re-import: cards that are already saved are updated in place (default) or come in again as new cards.
+  $('updRow').hidden = !oldN;
+  if (oldN) {
+    $('updTitle').textContent = `Update ${plural(oldN, 'card')} you already have (keeps your progress)`;
+    $('updateOld').checked = S.updateOld;
+    $('updInfo').textContent = 'Their text, pictures and sounds are replaced by what is in this file. Their deck, due dates and review history stay. Off = they come in again as new cards, so you get a second copy.';
+    if (S.updateOld) parts.push(`${plural(oldN, 'card')} you already have will be updated, not added again.`);
+  }
   // A big deck: more than 200 MB of pictures and sounds, or more than 50,000 reviews of history (see quota.js).
   if (S.result.format.id === 'anki') for (const w of importWarnings({ mediaBytes: S.ankiMediaBytes, reviews: prog?.reviews || 0, soundBytes: S.bringSounds ? snd.bytes : 0 })) parts.push(`<span class="warn">${esc(w)}</span>`);
   // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
@@ -917,7 +956,10 @@ function refreshFlags() {
   const name = (S.deckId === NEW_DECK ? $('newName').value.trim() : $('deckSel').selectedOptions[0].dataset.name).replace(/\s+/g, ' ');
   const shown = name.length > 32 ? name.slice(0, 31) + '…' : name;
   const total = complete + pairN;          // a reverse card is a card too
-  $('saveBtn').textContent = !complete ? 'No complete cards yet' : name ? `Add ${plural(total, 'card')} to “${shown}”` : `Name the deck to add ${plural(total, 'card')}`;   // (the ask is in the button itself: a hint above it overlapped the page)
+  const updN = S.updateOld ? oldN : 0, newN = total - updN;          // cards updated in place, and cards that are added
+  $('saveBtn').textContent = !complete ? 'No complete cards yet'
+    : !newN ? `Update ${plural(updN, 'card')}`
+    : name ? `${updN ? `Update ${updN}, add` : 'Add'} ${plural(newN, 'card')} to “${shown}”` : `Name the deck to add ${plural(newN, 'card')}`;   // (the ask is in the button itself: a hint above it overlapped the page)
   $('saveBtn').disabled = !complete;
 }
 
@@ -1205,7 +1247,7 @@ async function save() {
       }
     }
     // Nothing is saved until everything is ready; then it all goes in together (see db.addImport).
-    const newDecks = [];
+    let newDecks = [];
     let color;
     if (deckId === NEW_DECK) {
       deckId = db.newId();
@@ -1256,13 +1298,48 @@ async function save() {
       ankiOf.set(rev.id, r.ankiId);
     });
     cards.push(...reverses);
+    // Cards of a re-imported deck that are already saved are updated in place instead of added again (anki-match.js): the saved card
+    // keeps its id, deck, schedule and review history (those live under its id) and takes the new content. The Anki history is not
+    // replayed onto it: its own progress is the one to keep.
+    let updated = [], upToDate = 0, unusedMedia = [];
+    if (S.updateOld && cards.some(c => c.ankiGuid)) {
+      const index = indexByGuid(await db.getAll('cards'));
+      const found = matchRows(cards.map(c => ({ guid: c.ankiGuid, slot: slotOf(c) })), index);
+      if (found.some(Boolean)) {
+        const pairs = found.map((old, i) => (old ? [old, cards[i]] : null)).filter(Boolean);
+        const noteMap = noteIdMap(pairs);
+        const swap = await reusedMedia(pairs);            // pictures and sounds the card already had, saved again by this import
+        const fix = c => { const o = { ...c }; for (const k of MEDIA) if (Array.isArray(o[k])) o[k] = o[k].map(id => swap.get(id) || id); else if (swap.has(o[k])) o[k] = swap.get(o[k]); return o; };
+        const mapNote = c => (c.noteId && noteMap.has(c.noteId) ? { ...c, noteId: noteMap.get(c.noteId) } : c);
+        const kept = [];
+        cards.forEach((c, i) => {
+          const fresh = mapNote(fix(c));
+          if (!found[i]) { kept.push(fresh); return; }
+          const merged = mergeCard(found[i], fresh, fresh.noteId || found[i].noteId, now);
+          if (sameContent(found[i], merged)) upToDate++;
+          else updated.push(merged);
+        });
+        cards = kept;
+        unusedMedia = [...swap.keys()];
+      }
+    }
     // A card too large to sync is left out, with the rest of its note (the other blanks, the reverse card), so nothing comes in half.
+    // (An updated card that is too large keeps the content it has: the update is left out.)
     const bigNotes = new Set(), bigIds = new Set();
-    for (const c of splitTooBig(cards).big) { bigIds.add(c.id); if (c.noteId) bigNotes.add(c.noteId); }
-    const countBefore = cards.length;
-    if (bigIds.size) cards = cards.filter(c => !bigIds.has(c.id) && !(c.noteId && bigNotes.has(c.noteId)));
-    const tooLarge = countBefore - cards.length;
-    if (!cards.length) {         // nothing fits: no deck, no empty import (pictures and sounds saved for these cards are cleaned up later as unused)
+    for (const c of splitTooBig([...cards, ...updated]).big) { bigIds.add(c.id); if (c.noteId) bigNotes.add(c.noteId); }
+    const countBefore = cards.length + updated.length;
+    const stays = c => !bigIds.has(c.id) && !(c.noteId && bigNotes.has(c.noteId));
+    if (bigIds.size) { cards = cards.filter(stays); updated = updated.filter(stays); }
+    const tooLarge = countBefore - cards.length - updated.length;
+    // Decks (and subdecks) that no new card ended up in are not made: a re-import that only updates cards leaves no empty deck behind.
+    if (updated.length || upToDate) {
+      const inUseIds = new Set();
+      for (const c of cards) for (let id = c.deckId; id && !inUseIds.has(id); id = newDecks.find(d => d.id === id)?.parentId) inUseIds.add(id);
+      newDecks = newDecks.filter(d => inUseIds.has(d.id));
+      made = newDecks.filter(d => d.id !== deckId).length;
+    }
+    const deckGone = !cards.length && (S.deckId === NEW_DECK);          // a new deck that nothing new went into
+    if (!cards.length && !updated.length && !upToDate) {         // nothing fits: no deck, no empty import (pictures and sounds saved for these cards are cleaned up later as unused)
       toast(`Nothing was added. ${tooLargeNote(tooLarge, 'out')}.`, { ms: 6000 });
       saveBtn.disabled = false;
       if (saveBtn.isConnected) refreshFlags();
@@ -1282,8 +1359,10 @@ async function save() {
       });
     }
     const cardsBefore = await db.count('cards');
-    await db.addImport({ decks: newDecks, cards, reviewLog: logs, cardStates: states });
-    rememberDeck(deckId);
+    // The updated cards are saved with the new ones, the way a card edit is saved: db.addImport stamps each with updatedAt (so sync sends it).
+    await db.addImport({ decks: newDecks, cards: [...cards, ...updated], reviewLog: logs, cardStates: states });
+    if (unusedMedia.length) { try { await db.discardMedia(unusedMedia.filter(id => !db.usedMediaIds([...cards, ...updated]).has(id))); } catch (err) { console.error(err); } }
+    if (!deckGone) rememberDeck(deckId);
     // Past 50,000 cards: say so once (it is only a heads-up; Settings keeps showing it).
     // (Only for someone signed in to sync: the note is about the account. Settings → Your data keeps showing it.)
     let bigNote = null;
@@ -1291,7 +1370,11 @@ async function save() {
       try { if (await (await import('./sync.js')).account()) bigNote = cardsWarning(cardsBefore + cards.length); } catch { /* no sync: no note */ }
     }
     if (bigNote) { try { localStorage.setItem(CARDS_WARNED_KEY, '1'); } catch { /* fine */ } }
-    const added = `Added ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`;
+    const did = [];
+    if (updated.length) did.push(`Updated ${plural(updated.length, 'card')} you already had (progress kept)`);
+    if (upToDate) did.push(`${plural(upToDate, 'card')} ${upToDate === 1 ? 'was' : 'were'} already up to date`);
+    if (cards.length) did.push(`${did.length ? 'added' : 'Added'} ${plural(cards.length, 'card')} to ${deckName}${made ? ` (${plural(made, 'new subdeck')})` : ''}`);
+    const added = `${did.join(', ')}${withHistory ? `, ${withHistory} with Anki progress` : ''}${soundsSkipped ? `. ${plural(soundsSkipped, 'sound')} couldn't be kept` : ''}`;
     const left = [...tooBigNotes(tooBig), tooLargeNote(tooLarge, 'out')].filter(Boolean);
     const said = left.length ? `${added}. ${left.join('. ')}` : added;
     if (bigNote) toast(`${said}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' }, hold: true });
@@ -1302,13 +1385,40 @@ async function save() {
     try { first = sessionStorage.getItem(FIRST_REVIEW_KEY); sessionStorage.removeItem(FIRST_REVIEW_KEY); } catch { /* fine */ }
     clearShare();                               // what was shared has been turned into cards
     keepDraft(null);                            // and so has the pasted text
-    navReplace(first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
+    navReplace(deckGone ? '#/decks' : first === deckId ? `#/welcome/review/${deckId}` : `#/deck/${deckId}`);
   } catch (err) {
     console.error(err);
     toast("Couldn't add the cards. Nothing was saved, so you can try again.");
     saveBtn.disabled = false;
     if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
+}
+
+// Updating a card saves its pictures and sounds again (new ids). Where a saved card already holds the very same file (same type and bytes),
+// the new copy is not needed: returns Map new id → the id the card already had, so the card keeps pointing at its old file and the copy is
+// removed (db.discardMedia). A file that really changed gets its new id, and the old one is cleaned up later like any replaced picture.
+async function reusedMedia(pairs) {
+  const swap = new Map();
+  const same = (a, b) => {
+    if (!a || !b || a.type !== b.type || a.data.byteLength !== b.data.byteLength) return false;
+    const x = new Uint8Array(a.data), y = new Uint8Array(b.data);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+    return true;
+  };
+  for (const [old, fresh] of pairs) {
+    for (const k of MEDIA) {
+      const had = [].concat(old[k] || []), now = [].concat(fresh[k] || []);
+      for (const id of now) {
+        if (swap.has(id) || had.includes(id)) continue;
+        const copy = await db.getMedia(id);
+        for (const oldId of had) {
+          if (oldId === id || [...swap.values()].includes(oldId)) continue;
+          if (same(copy, await db.getMedia(oldId))) { swap.set(id, oldId); break; }
+        }
+      }
+    }
+  }
+  return swap;
 }
 
 // The picture and boxes of the image-occlusion cards being added (cards[i] belongs to toAdd[i]). Returns the indexes of
