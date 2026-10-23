@@ -266,6 +266,13 @@ export async function ankiContents(deck, cards, now = Date.now()) {
   const tagsOf = c => ((c.tags || []).length ? ` ${c.tags.map(t => t.replace(/\s+/g, '_')).join(' ')} ` : '');
   const notes = [], ankiCards = [];
   let cardCount = 0;
+  // Every note needs a guid of its own, or Anki drops the cards of the notes that repeat one. The several cards an Anki note type with several
+  // card templates made here (templateOrd, one noteId) all carry the Anki note's guid, but go out as notes of their own: only the one with the
+  // lowest templateOrd keeps it, and the others get a guid made from their own card id.
+  const lowest = new Map();          // noteId → the lowest templateOrd among its sibling cards
+  for (const c of cards) if (c.noteId && Number.isInteger(c.templateOrd)) lowest.set(c.noteId, Math.min(lowest.get(c.noteId) ?? Infinity, c.templateOrd));
+  const keepsGuid = c => !(c.noteId && Number.isInteger(c.templateOrd)) || lowest.get(c.noteId) === c.templateOrd;
+  const usedGuids = new Set();
   for (const [i, g] of groups.entries()) {
     const noteId = now + i;
     const first = g.cards ? g.cards[0] : g.card;
@@ -313,7 +320,7 @@ export async function ankiContents(deck, cards, now = Date.now()) {
         if (c.noteExtra && String(c.noteExtra).trim()) back += `${back ? '<br><br>' : ''}${toAnkiHTML(c.noteExtra)}`;
         flds = `${front}\x1f${withSounds(back + fieldsHTML(c), c.backSoundFiles)}`;
       }
-      note = { id: noteId, guid: c.ankiGuid || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? (pairKey(g) === '00' ? BASIC_REV_ID : REV_TYPE_IDS[pairKey(g)]) : c.typed ? BASIC_TYPE_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
+      note = { id: noteId, guid: (keepsGuid(c) && c.ankiGuid) || ankiGuid(g.pair ? c.noteId : c.id), mid: g.pair ? (pairKey(g) === '00' ? BASIC_REV_ID : REV_TYPE_IDS[pairKey(g)]) : c.typed ? BASIC_TYPE_ID : BASIC_ID, mod: secs, usn: -1, tags: tagsOf(c),
         flds, sfld: plainText(c.front), csum: await ankiChecksum(plainText(c.front)), flags: 0, data: '' };
       // New cards, in the deck's order. Card 1 is the forward card, card 2 the reverse one.
       for (const [ord, x] of (g.pair ? [c, g.cards.find(y => y.reverse)] : [c]).entries()) {
@@ -321,6 +328,8 @@ export async function ankiContents(deck, cards, now = Date.now()) {
           ivl: 0, factor: 0, reps: 0, lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: '' });
       }
     }
+    for (let n = 0; usedGuids.has(note.guid); ) note.guid = ankiGuid(`${note.guid}:${++n}`);          // (never two notes with one guid)
+    usedGuids.add(note.guid);
     notes.push(note);
   }
   return { col, notes, cards: ankiCards };

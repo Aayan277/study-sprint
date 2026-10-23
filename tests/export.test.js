@@ -437,3 +437,19 @@ test('typing cards: export, then import reads them back as typing cards', async 
   assert.deepEqual(r.clozes.map((c, i) => c && r.typeIns[i]).filter(x => x !== null), [true, true]);
   assert.equal(r.rows[at('Capital of France')][1], 'Paris', 'the Back field is the answer alone');
 });
+
+test('a deck of cards from a note with several card templates exports with a guid for every note, none repeated', async () => {
+  const sib = (id, ord, extra = {}) => ({ id, front: 'q' + ord, back: 'a' + ord, tags: [], deckName: 'Vocab', noteId: 'N1', templateOrd: ord, ankiGuid: 'ANKIGUID', ...extra });
+  const mixed = [sib('s2', 1), sib('s0', 0), sib('s1', 2), { id: 'x', front: 'other', back: 'b', tags: [], ankiGuid: 'ANKIGUID' }, { id: 'y', front: 'p', back: 'q', tags: [], ankiGuid: 'ANKIGUID' }];
+  const { notes } = await ankiContents({ id: 'd', name: 'Vocab' }, mixed, 1_800_000_000_000);
+  const guids = notes.map(n => n.guid);
+  assert.equal(notes.length, 5);
+  assert.equal(new Set(guids).size, 5, 'every note has its own guid: ' + guids);
+  const byFront = Object.fromEntries(notes.map(n => [n.flds.split('\x1f')[0], n.guid]));
+  assert.equal(byFront.q0, 'ANKIGUID', 'the sibling with the lowest templateOrd keeps the Anki note\'s guid');
+  assert.equal(byFront.q1, ankiGuid('s2'));
+  assert.equal(byFront.q2, ankiGuid('s1'));
+  // exporting again gives the same guids (so Anki updates the notes)
+  const again = await ankiContents({ id: 'd', name: 'Vocab' }, mixed, 1_800_000_000_000);
+  assert.deepEqual(again.notes.map(n => n.guid), guids);
+});

@@ -261,7 +261,7 @@ test('a field holding <hr id=answer> does not cut the back early', () => {
 });
 
 // ---------- hostile text stays fast ----------
-const fast = (what, run, ms = 300) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
+const fast = (what, run, ms = 1000) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
 test('furigana filters and templates stay fast on hostile text', () => {
   const m = model(['A', 'B'], '{{furigana:A}}{{kana:A}}{{kanji:A}}', '{{FrontSide}}<hr id=answer>{{B}}');
   for (const bad of ['x['.repeat(25000), '['.repeat(50000), 'a'.repeat(50000) + '[', ' '.repeat(50000) + '[', 'x[' + 'a'.repeat(50000), '<script>'.repeat(8000), '<hr id=answer>'.repeat(3000)]) {

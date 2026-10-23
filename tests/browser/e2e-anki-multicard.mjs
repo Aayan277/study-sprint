@@ -24,7 +24,7 @@ ok(found.includes('2 notes → 4 cards'), 'the preview says "2 notes → 4 cards
 ok(!found.includes('more card types'), 'no "more card types in Anki" note: the cards now come in');
 const prog = (await page.textContent('#progInfo')).replace(/\s+/g, ' ');
 ok(prog.includes('8 reviews on 3 cards'), 'history counts the cards that come in (neko\'s skipped card has none): ' + prog.slice(0, 40));
-ok(await page.locator('.prow .badge', { hasText: 'Card type 1 of a note' }).count() === 2 && await page.locator('.prow .badge', { hasText: 'Card type 2 of a note' }).count() === 2, 'four rows are marked as one of a note\'s card types');
+ok(await page.locator('.prow .badge', { hasText: 'Card type 1: part of a note' }).count() === 2 && await page.locator('.prow .badge', { hasText: 'Card type 2: part of a note' }).count() === 2, 'four rows are marked as one of a note\'s card types');
 const rows = await page.locator('.prow').evaluateAll(list => list.map(r => r.querySelector('[data-side=front]').value.replace(/\n/g, ' / ') + ' => ' + r.querySelector('[data-side=back]').value.replace(/\n/g, ' / ')));
 ok(rows.includes('inu / いぬ => dog / Inu ga suki.') && rows.some(r => r.startsWith('dog => inu / いぬ')), 'both layouts are drawn for inu: ' + JSON.stringify(rows.slice(0, 2)));
 ok(rows.length === 7 && !rows.some(r => r.startsWith(' =>') || r.startsWith('=>')), 'seven rows, none with an empty front');

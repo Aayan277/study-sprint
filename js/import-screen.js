@@ -827,7 +827,7 @@ function refreshFlags() {
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : makesReverse(c) ? 'Both directions: makes 2 cards'
-      : c.siblings ? `Card type ${c.siblings.ord + 1} of a note: part of a note`
+      : c.siblings ? `Card type ${c.siblings.ord + 1}: part of a note`
       : c.occlusion ? `Image occlusion: box ${groupIndex(c.occlusion.shapes, c.occlusion.n).k}` : `Cloze card c${c.cloze?.n}: part of a note`;
   });
 

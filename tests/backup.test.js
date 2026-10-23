@@ -182,3 +182,9 @@ test('a basic note with 33 other fields, a 77-character name and a 25,000-charac
   // the same list, uncleaned, is what a backup refuses
   assert.match(checkBackup({ ...good, cards: [{ ...card, noteFields: fields.slice(2).map((t, i) => ({ name: names[i + 2], text: t })) }] }), /invalid note fields/);
 });
+
+test('checkBackup: a card\'s Anki card number (templateOrd) must be a whole number, with or without a noteId', () => {
+  const card = extra => ({ id: 'c', front: 'f', back: 'b', ...extra });
+  assert.equal(checkBackup({ ...good, cards: [card({ noteId: 'N', templateOrd: 1 }), card({ id: 'd', templateOrd: 0 })] }), null, 'a sibling an older app detached from its note is fine');
+  for (const templateOrd of [-1, 1.5, '1', null, NaN]) assert.match(checkBackup({ ...good, cards: [card({ noteId: 'N', templateOrd })] }), /card type number/);
+});
