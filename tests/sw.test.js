@@ -36,7 +36,7 @@ function boot(stores) {
       if (!stores.has(name)) stores.set(name, new Map());
       const m = stores.get(name);
       const key = req => String(req.url ?? req);
-      return { keys: async () => [...m.keys()].map(url => ({ url })), match: async req => m.get(key(req)), put: async (req, res) => { m.set(key(req), res); }, delete: async req => m.delete(key(req)) };
+      return { keys: async () => [...m.keys()].map(url => ({ url })), match: async (req, opts = {}) => { const strip = u => (opts.ignoreSearch ? u.split('?')[0] : u); for (const [u, r] of m) if (strip(u) === strip(key(req))) return r; }, put: async (req, res) => { m.set(key(req), res); }, delete: async req => m.delete(key(req)) };
     }
   };
   const ctx = vm.createContext({

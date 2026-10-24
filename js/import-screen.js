@@ -521,7 +521,7 @@ async function takeShared() {
     const t = await c.match(shareUrl('text'));
     const old = x => Date.now() - x >= SHARE_MAX_AGE;
     if ((f && old(Number(f.headers.get('x-at') || 0))) || (t && old((await t.clone().json()).at || 0))) { await clearShare(); return; }      // too old: not used, and not left taking room
-    if (f) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('content-type') || '' });
+    if (f) file = new File([await f.blob()], decodeURIComponent(f.headers.get('x-name') || 'shared'), { type: f.headers.get('x-type') || f.headers.get('content-type') || '' });
     if (t) said = await t.json();
   } catch { /* nothing was kept: just show the screen */ }
   // (The address stays #/import/share until the cards are saved, so a reload, such as one after an app update, finds the share again.)

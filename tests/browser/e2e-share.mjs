@@ -194,5 +194,20 @@ for (const [name, mime, buf] of [['random.zip', 'application/zip', Buffer.from('
   await page.waitForFunction(() => document.querySelector('#pasteBox')?.value.includes('Cell - unit of life'), null, { timeout: 30000 });
   ok(true, 'a same-origin share is still taken and fills the screen');
 }
+// A saved share must never be served as a page: an HTML file in the share cache is not answered to a page load.
+{
+  await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
+  await page.evaluate(async () => {
+    const c = await caches.open('study-sprint-share');
+    await c.put(new URL('share-target/file', document.baseURI), new Response('<script>document.title="XSS-RAN"</script><h1>hostile</h1>', { headers: { 'content-type': 'text/html', 'x-name': 'x.html', 'x-at': String(Date.now()) } }));
+  });
+  const x = await ctx.newPage();
+  const resp = await x.goto('http://localhost:8123/share-target/file');
+  const body = await x.content();
+  ok(!((resp.headers()['content-type'] || '').includes('text/html') && body.includes('hostile')), 'share-target/file does not render a shared HTML file: ' + resp.headers()['content-type']);
+  ok(!body.includes('hostile') && (await x.title()) !== 'XSS-RAN', 'and no script from it runs');
+  await x.close();
+  await page.evaluate(async () => { const c = await caches.open('study-sprint-share'); for (const k of await c.keys()) await c.delete(k); });
+}
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' || ') : ''));
 await browser.close();
