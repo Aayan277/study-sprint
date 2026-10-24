@@ -10,7 +10,7 @@
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { hasMath, wrapMath, maskMath } from './math.js';
 import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
-import { esc, toast, icon } from './ui.js';
+import { esc, toast } from './ui.js';
 import { toolbarTarget } from './a11y.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
 import { canPlayType } from './audio.js';
@@ -288,12 +288,12 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
       </div>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
       <div class="steps-ed" id="${p}Steps" data-mode="${mode === 'text' ? 'steps' : mode}" data-cur="${mode}" ${parsed ? '' : 'hidden'}>
-        <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro (optional)' : 'Intro (optional)'}</span><textarea id="${p}Intro" rows="2">${esc(parsed?.intro || '')}</textarea></label>
+        <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro' : 'Intro'}</span><textarea id="${p}Intro" rows="2">${esc(parsed?.intro || '')}</textarea></label>
         <ol class="step-list" id="${p}StepList" aria-label="${word}s">${rows.map((t, i) => stepRowHTML(i, t, rows.length, word)).join('')}</ol>
         <button type="button" class="btn ghost small" data-step-add="${p}" id="${p}StepAdd">+ Add ${word.toLowerCase()}</button>
         <label class="field" id="${p}FinalWrap" ${mode === 'elements' ? 'hidden' : ''}><span>Final answer</span><textarea id="${p}Final" rows="2">${esc(st?.final || '')}</textarea></label>
       </div>
-      ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'e.g. a rhyme or picture' })}`;
+      ${cardTextField(p + 'Hook', 'Memory hook', hook, { rows: 2, images: false, placeholder: 'e.g. a rhyme or picture' })}`;
 }
 // 'text', 'steps' or 'elements'
 export const answerMode = p => document.querySelector(`input[name="${p}Mode"]:checked`)?.value || 'text';
@@ -381,7 +381,7 @@ document.addEventListener('change', e => {
   const el = to === 'elements';
   if (to !== 'text') {
     document.getElementById(p + 'FinalWrap').hidden = el;
-    document.getElementById(p + 'IntroL').textContent = el ? 'Rule or intro (optional)' : 'Intro (optional)';
+    document.getElementById(p + 'IntroL').textContent = el ? 'Rule or intro' : 'Intro';
     document.getElementById(p + 'StepList').setAttribute('aria-label', el ? 'Elements' : 'Steps');
     document.getElementById(p + 'StepAdd').textContent = el ? '+ Add element' : '+ Add step';
   }

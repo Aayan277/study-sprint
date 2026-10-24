@@ -1039,7 +1039,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
       ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}
-      <label class="field"><span>Tags</span><input id="acTags" autocomplete="off"></label>
+      <label class="field"><span>Tags</span><input id="acTags" autocomplete="off" placeholder="e.g. renal cardio"></label>
       <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>

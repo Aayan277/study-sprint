@@ -848,6 +848,7 @@ function refreshFlags() {
   // What the update would do with each match: nothing to change ('same'), replace it ('safe': nobody edited it here since it was imported)
   // or hold it back ('edited': it differs from the file, and was edited here or was saved by a version that could not tell).
   const kinds = { same: 0, safe: 0, edited: 0 };
+  const RANK = { same: 0, safe: 1, edited: 2 };
   const rowKind = {};          // card index -> 'same' | 'safe' | 'edited' (what the update does with that row)
   let oldN = 0;
   matchRows(items, currentIndex()).forEach((card, k) => {
@@ -855,7 +856,8 @@ function refreshFlags() {
     oldN++;
     const kind = classifyRow(card, live(S.cards[owner[k][0]]), owner[k][1]);
     kinds[kind]++;
-    if (!owner[k][1]) rowKind[owner[k][0]] = kind;
+    const r = owner[k][0];          // a row's kind is the worst of its cards (a note's reverse card edited here holds the whole row back)
+    if (rowKind[r] === undefined || RANK[kind] > RANK[rowKind[r]]) rowKind[r] = kind;
     if (!owner[k][1] && S.updateOld) matched[owner[k][0]] = card;
   });
   S.shownMatches = oldN;
@@ -892,10 +894,11 @@ function refreshFlags() {
     }
     row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
-    badge.hidden = !matched[i] && !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !c.siblings && !makesReverse(c);
-    badge.classList.toggle('warn', !isComplete(live(c)) || (!matched[i] && !!flag));
+    const hit = S.updateOld && rowKind[i] !== undefined;          // the row's card, or its reverse card, is already saved
+    badge.hidden = !hit && !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !c.siblings && !makesReverse(c);
+    badge.classList.toggle('warn', !isComplete(live(c)) || (!hit && !!flag) || (hit && rowKind[i] === 'edited' && S.overwriteEdited));
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
-      : matched[i] ? matchedBadge(rowKind[i])
+      : hit ? matchedBadge(rowKind[i])
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : makesReverse(c) ? 'Both directions: makes 2 cards'
       : c.siblings ? `Card type ${c.siblings.ord + 1}: part of a note`

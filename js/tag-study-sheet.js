@@ -43,6 +43,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
 
   openSheet(`
     <h2 id="sheetTitle">Study by tag or question ID</h2>
+    <p class="note" style="margin-top:0">In all decks.</p>
     <div class="chips" role="group" aria-label="Find cards by">
       <button type="button" class="tchip" data-tab="ids" aria-pressed="true">Question IDs</button>
       <button type="button" class="tchip" data-tab="tag" aria-pressed="false">Tag</button>

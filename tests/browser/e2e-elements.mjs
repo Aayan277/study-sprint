@@ -42,7 +42,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.fill('#acFront', 'Battery');
   await p.click('.answer-mode .chip:has(#acModeElements)');
   ok(await p.locator('#acSteps').isVisible() && await p.locator('#acBackWrap').isHidden(), `${tag}: Elements shows element rows instead of Back`);
-  ok(/Rule or intro \(optional\)/.test(await p.textContent('#acSteps')) && await p.locator('#acFinal').isHidden(), `${tag}: "Rule or intro (optional)", and no final answer`);
+  ok(/Rule or intro/.test(await p.textContent('#acSteps')) && await p.locator('#acFinal').isHidden(), `${tag}: "Rule or intro", and no final answer`);
   ok(/\+ Add element/.test(await p.textContent('#acSteps')), `${tag}: "+ Add element"`);
   ok(/at least two elements, or choose Text/.test(await p.textContent('#acWhy')), `${tag}: Add explains (${(await p.textContent('#acWhy')).trim()})`);
   const ta = i => p.locator('#acStepList textarea').nth(i);
