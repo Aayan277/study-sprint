@@ -13,7 +13,8 @@ import { contactHTML } from './legal.js';
 
 const code = s => `<code>${s}</code>`;
 // label: an aria-label for short link text such as "?"
-export const helpLink = (id, text, label = '') => `<a href="#/help/${id}"${label ? ` aria-label="${label}"` : ''}>${text}</a>`;
+// With a label, the link is a short "?" (named by the label) and gets the help-q class, a tap target of at least 24px.
+export const helpLink = (id, text, label = '') => `<a href="#/help/${id}"${label ? ` class="help-q" aria-label="${label}"` : ''}>${text}</a>`;
 
 export const SECTIONS = [
   { title: 'Studying', items: [
@@ -73,7 +74,7 @@ export const SECTIONS = [
     { id: 'reverse', q: 'What is a reverse card?', a: `
       <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one.</p>` },
     { id: 'anki-import', q: 'What happens to my Anki deck when I import it?', a: `
-      <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you edited here are left alone unless you turn on <b>Overwrite the cards you edited here too</b>.</p>` },
+      <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you may have edited here are left alone unless you turn on <b>Overwrite … you may have edited here too</b>. Each of those rows says “Kept as you edited it”, or “Overwrites your edits” when that switch is on.</p>` },
     { id: 'typing', q: 'Can I type my answers instead of flipping?', a: `
       <p>Yes, and the app shows which letters were wrong. For one session: Today → <b>Options</b> → Answer by → <b>Typing the answer</b> (answers of 40 characters or less). To keep it: open a card and set <b>Answer by</b> to Typing the answer, select several cards in Browse and choose <b>Answer by…</b>, or turn on <b>Type the answers</b> in a deck’s Edit deck sheet (it applies to that deck and its subdecks, and <b>Answer by</b> in a card’s editor sets one card differently). Anki cards with a “type in the answer” box come in as typing cards. Cloze, image-occlusion and elements cards always just flip: they have no typing box.</p>` },
     { id: 'cloze', q: 'How do I write cloze (fill in the blank) cards?', a: `

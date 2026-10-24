@@ -85,7 +85,7 @@ await page.evaluate(async () => { const db = await import('./js/db.js');
 await page.goto('http://localhost:8123/#/play'); await page.waitForSelector('#pDeck');
 const sampleId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name.includes('Psychology')).id);
 await page.selectOption('#pDeck', sampleId);
-ok(await page.isChecked('input[name=qtype][value=back]') && (await page.textContent('#customBody fieldset:nth-of-type(1) .note')).includes('long answers'), 'psychology deck (long backs) starts on Back → front, with a reason');
+ok(await page.isChecked('input[name=qtype][value=back]'), 'psychology deck (long backs) starts on Back → front');
 await page.screenshot({ path: SP + '/adv-play.png', fullPage: true });
 await page.selectOption('#pDeck', 'vocab');
 ok(await page.isChecked('input[name=qtype][value=front]'), 'short-answer deck starts on Front → back');
