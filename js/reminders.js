@@ -101,7 +101,7 @@ export function settingsHTML({ time, exams, badgeOn }) {
       <h3 class="set-sub" id="remTitle">Reminders</h3>
       <div class="set-row" id="remRow">
         <div><b><label for="remTime">Daily reminder</label></b>
-          <p id="remHelp">A calendar alert every day at the time you pick. Best in Apple Calendar and Outlook. In Google Calendar, alerts follow your default notifications.</p></div>
+          <p id="remHelp">Calendar alert at this time</p></div>
         <div class="steps-input rem-actions">${timeInput('remTime', time).replace('aria-label="Reminder time"', 'aria-describedby="remHelp"')}
           <button class="btn ghost small" type="button" id="remAdd">${icon('calendar')} Add to my calendar</button></div>
       </div>
@@ -110,7 +110,7 @@ export function settingsHTML({ time, exams, badgeOn }) {
         <button class="btn ghost small" type="button" id="examAdd">${icon('calendar')} Add exams to my calendar</button>
       </div>` : ''}
       ${row === 'switch' ? `<label class="adv-row switch-row" id="badgeRow"><span><b>Cards due on the app icon</b>
-        <span>Shows today's card count on the Study Sprint icon. It updates when you open or leave the app.${needsPermission() ? ' On iPhone this needs notifications allowed. Study Sprint sends none.' : ''}</span></span>
+        ${needsPermission() ? '<span>On iPhone this needs notifications allowed. Study Sprint sends none.</span>' : ''}</span>
         <input id="appBadge" type="checkbox" class="switch" ${badgeOn ? 'checked' : ''}></label>
         <p class="note" id="badgeNote" role="status" hidden></p>`
       : row === 'install' ? `<div class="set-row" id="badgeRow"><div><b>Cards due on the app icon</b>

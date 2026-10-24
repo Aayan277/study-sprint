@@ -23,7 +23,7 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   const n = await p.locator('details.help-q').count();
   ok(n >= 12, tag + `at least 12 questions (${n})`);
   ok(await p.locator('details.help-q[open]').count() === 0, tag + 'all start closed');
-  ok(await p.locator('section.help-sec h2').count() === 3, tag + 'three sections with headings');
+  ok(await p.locator('section.help-sec h2').count() === 4, tag + 'four sections with headings');
   const heights = await p.$$eval('details.help-q > summary', els => els.map(e => e.getBoundingClientRect().height));
   ok(Math.min(...heights) >= 44, tag + 'every question is at least 44px tall: ' + Math.min(...heights));
   await p.goto(APP + '#/help/ratings');
@@ -31,6 +31,13 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   ok(await p.locator('details.help-q[open]').count() === 1 && await p.locator('#h-ratings[open]').count() === 1, tag + '#/help/ratings opens only that answer and focuses its question');
   const top = await p.evaluate(() => document.getElementById('h-ratings').getBoundingClientRect().top);
   ok(top >= 0 && top < h, tag + 'and scrolls it into view');
+  // every answer has a unique id and opens from its deep link
+  const ids = await p.$$eval('details.help-q', els => els.map(e => e.id.slice(2)));
+  ok(new Set(ids).size === ids.length, tag + 'every Help id is unique');
+  for (const id of ['cloze', 'maths', 'typing', 'steps', 'subdecks', 'deck-options', 'read-aloud', 'export', 'deck-ring', 'exam-date', 'adding', 'tags', 'play-scoring', 'stats-terms', 'stats-calendar', 'fit-check', 'stats-layout', 'device-only', 'shortcuts', 'accuracy', 'advanced', 'reminders', 'glossary'])
+    ok(ids.includes(id), tag + `Help has "${id}"`);
+  await p.goto(APP + '#/help/device-only'); await p.waitForSelector('#h-device-only[open]');
+  ok(await p.locator('details.help-q[open]').count() === 1, tag + '#/help/device-only opens only that answer');
   // a bad id just shows the page
   await p.goto(APP + '#/help/nope'); await p.waitForSelector('h1:has-text("Help")');
   ok(await p.locator('details.help-q[open]').count() === 0, tag + 'an unknown id opens nothing');
@@ -66,7 +73,7 @@ for (const [ui, mode] of [['original', 'light'], ['clinical', 'dark']]) {
   const p = await open(375, 740);
   await p.goto(APP + '#/settings'); await p.waitForSelector('#helpRow');
   const s = await p.textContent('main, #screen');
-  for (const label of ['Target retention', 'New cards per day', 'Count Play answers as reviews', 'Export backup', 'Import backup', 'Your data', 'Sync']) ok(s.includes(label), `Settings has "${label}"`);
+  for (const label of ['Target retention', 'New cards per day', 'Count Play answers as reviews', 'Export backup', 'Import backup', 'Your data', 'Sync', 'Single-key shortcuts', 'Glossary', 'Glossary underlines', 'Card text alignment', 'Compact deck list', 'Rating feedback', 'Smooth transitions', 'Exam readiness in Stats', 'Learning steps', 'Relearning steps', 'Maximum interval', 'Spread out due dates', 'Easy days', 'Play timer', 'Leech after', 'Scheduler', 'Check how well it fits you', 'Ignore reviews before', 'Add to my calendar']) ok(s.includes(label), `Settings has "${label}"`);
   await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');
   ok(await p.locator('a:has-text("Import")').count() > 0, 'the Decks screen has Import');
   await p.goto(APP + '#/import'); await p.waitForSelector('#claudeBtn');

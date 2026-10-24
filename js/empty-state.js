@@ -10,7 +10,6 @@ const ART = '<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rec
 
 // courseId: the one course to paste into, or '' to let the import screen ask.
 export const emptyStartHTML = ({ courseId = '' } = {}) => `<div class="empty empty-first">${ART}<b>Nothing to study yet</b>
-  <p>Add terms and definitions and Study Sprint turns them into flashcards. Or try 12 sample cards first.</p>
   <div class="empty-btns"><a class="btn primary" href="#/import${courseId ? '/' + encodeURIComponent(courseId) : ''}">${icon('paste')} Add cards</a>
     <button class="btn ghost" type="button" id="trySample">Try sample cards</button></div>
   <a class="fr-how" href="#/help">How it works ›</a></div>`;

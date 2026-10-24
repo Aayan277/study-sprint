@@ -38,7 +38,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
 
   // ---------- Settings: the row, the empty text ----------
   await p.goto('about:blank'); await p.goto(URL + '#/settings'); await p.waitForSelector('#glossBtn');
-  ok(/Define a term once and it’s underlined on every card/.test(await p.textContent('#glossSub')), `${tag}: Settings → Study → Glossary shows the empty text`);
+  ok((await p.textContent('#glossSub')).trim() === '', `${tag}: Settings → Study → Glossary shows nothing while there are no terms`);
   ok(await p.locator('#glossaryUnderline').isChecked(), `${tag}: "Glossary underlines" is on by default`);
   await p.click('#glossBtn'); await p.waitForSelector('#glAdd');
   ok(/Define a term once/.test(await p.textContent('#glCount')), `${tag}: the sheet shows the empty text`);

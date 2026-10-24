@@ -25,7 +25,7 @@ ok(await page.inputValue('#lsteps') === '1m 10m' && await page.inputValue('#rste
 const explain = await page.textContent(L + ' .steps-explain');
 console.log('   explanation:', explain.replace(/\s+/g, ' '));
 ok(explain.includes('Again → back in 1 minute (step 1)') && explain.includes('Good → moves to the next step: 10 minutes (step 2)') && explain.includes('Good on the last step → moves on to normal reviews'), 'each step and button is explained');
-ok((await page.textContent(L + ' .steps-hint')).includes('m = minutes') && (await page.textContent(L + ' .steps-hint')).includes('Default: 1m 10m'), 'hint explains the letters and the default');
+ok(await page.locator(L + ' .steps-hint').count() === 0 && (await page.getAttribute('#lsteps', 'placeholder')) === '1m 10m' && (await page.getAttribute('#lsteps', 'aria-describedby')) === 'lstepsExplain' && await page.locator('#lstepsExplain').count() === 1, 'the default is the placeholder and the live explanation describes the box');
 await page.screenshot({ path: SP + '/adv-steps.png', fullPage: true });
 await page.fill('#lsteps', '10x'); await page.press('#lsteps', 'Tab');
 ok((await page.textContent(L + ' .err')).includes('"10x" isn\'t a step') && (await setting('learningSteps')) === '1m 10m', 'bad steps are refused and not saved');

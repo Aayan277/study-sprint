@@ -60,6 +60,7 @@ export async function renderSettings(el) {
 
     <section class="section" aria-labelledby="appearTitle">
       <h2 id="appearTitle">Appearance</h2>
+      <p class="note">These settings apply to this device only. <a href="#/help/device-only">Which settings sync?</a></p>
       <h3 class="set-sub" id="uiTitle">Style</h3>
       <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
         ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
@@ -71,36 +72,30 @@ export async function renderSettings(el) {
         ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
-      <label class="adv-row switch-row"><span><b>OLED black</b>
-        <span>A pure black page in dark mode, to save battery on OLED screens.</span></span>
+      <label class="adv-row switch-row"><span><b>OLED black</b></span>
         <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
       <div class="set-row column">
-        <div><b id="alignLbl">Card text alignment</b><p>Auto centres short text and left-aligns long answers. This device only.</p></div>
+        <div><b id="alignLbl">Card text alignment</b></div>
         <div class="chips" role="radiogroup" aria-labelledby="alignLbl" id="alignChips">
           ${CARD_ALIGNS.map(([v, l]) => `<label class="chip"><input type="radio" name="cardAlign" value="${v}" ${cleanAlign(app.settings.cardAlign) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
         </div>
       </div>
-      <label class="adv-row switch-row"><span><b>Compact deck list</b>
-        <span>Search and sort your decks, with subdecks folded under their course. This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Compact deck list</b></span>
         <input id="compactDecks" type="checkbox" class="switch" ${app.settings.compactDecks !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Rating feedback</b>
-        <span>A coloured pulse and the new interval appear when you rate a card. This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Rating feedback</b></span>
         <input id="ratingFeedback" type="checkbox" class="switch" ${app.settings.ratingFeedback !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Smooth transitions</b>
-        <span>Screens slide and pop-up sheets spring open. Turn it off for instant changes. This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Smooth transitions</b></span>
         <input id="smoothMotion" type="checkbox" class="switch" ${app.settings.smoothMotion !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b>
-        <span>Pick a course in Stats to see how ready you are for its exam. This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${app.settings.statsReadiness !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Glossary underlines</b>
-        <span>Terms from your glossary are underlined on Review cards. This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Glossary underlines</b></span>
         <input id="glossaryUnderline" type="checkbox" class="switch" ${app.settings.glossaryUnderline !== false ? 'checked' : ''}></label>
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
       <h2 id="studyTitle">Study</h2>
       <div class="set-row">
-        <div><b>New cards per day</b><p>Across all decks. A deck can have its own limit too (Edit deck).</p></div>
+        <div><b>New cards per day</b></div>
         <div class="stepper">
           <button type="button" class="icon-btn" id="npdMinus" aria-label="Fewer new cards">−</button>
           <input id="npd" type="number" inputmode="numeric" min="0" max="999" value="${app.settings.newPerDay}" aria-label="New cards per day">
@@ -108,63 +103,52 @@ export async function renderSettings(el) {
         </div>
       </div>
       <div class="set-row">
-        <div><b>Reviews per day</b><p>The most reviews shown in a day, across all decks. Blank means no limit, which suits FSRS best.</p></div>
+        <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
-      <label class="adv-row switch-row"><span><b>Single-key shortcuts</b>
-        <span>Press E, I, R, D, Z, A, X, M, -, @ and 1 to 6 on the keyboard to act on a card. Turn off if voice control or a switch triggers them by accident (Space and Enter still work on the focused card). This device only.</span></span>
+      <label class="adv-row switch-row"><span><b>Single-key shortcuts</b></span>
         <input id="singleKeys" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b>
-        <span>Off: Play is practice only and doesn't change when cards are due, stats or streaks.</span></span>
+      <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b></span>
         <input id="playCounts" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
       <div class="set-row column">
-        <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b>
-          <p>How likely you are to remember a card when it comes back. Higher means more reviews. 90% suits most people.</p></div>
+        <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b></div>
         <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(app.settings.targetRetention * 100)}" aria-label="Target retention">
         <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
       </div>
       <div class="set-row">
-        <div><b>Glossary</b><p id="glossSub">${termCount(app.settings) ? `${termCount(app.settings)} term${termCount(app.settings) === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'}</p></div>
+        <div><b>Glossary</b><p id="glossSub">${termCount(app.settings) ? `${termCount(app.settings)} term${termCount(app.settings) === 1 ? '' : 's'}` : ''}</p></div>
         <button class="btn ghost small" type="button" id="glossBtn">Open</button>
       </div>
       ${remindersHTML({ time: app.settings.reminderTime || '19:00', exams: examList(decks).length, badgeOn: app.settings.appBadge === true })}
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
-        <summary>Advanced scheduling<span class="adv-sub">Steps, maximum interval, easy days, Play timer, leeches</span></summary>
-        <p class="note">Changes apply to future reviews. Cards already scheduled keep their dates until you next review them.</p>
+        <summary>Advanced scheduling</summary>
         <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
           <label for="lsteps"><b>Learning steps</b></label>
-          <span>Short gaps while a card is <b>new</b>. You see it again after each one, until it moves on to normal reviews.</span>
-          <div class="steps-input">
-            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsHelp">
+                    <div class="steps-input">
+            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
           </div>
-          <span class="steps-hint" id="lstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.learningSteps}.</span>
-          <ul class="steps-explain" aria-live="polite"></ul>
+          <ul class="steps-explain" id="lstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning">
           <label for="rsteps"><b>Relearning steps</b></label>
-          <span>Short gaps after you <b>forget</b> a card (press Again on a normal review), before it goes back to normal reviews.</span>
-          <div class="steps-input">
-            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsHelp">
+                    <div class="steps-input">
+            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
           </div>
-          <span class="steps-hint" id="rstepsHelp">Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. Default: ${SCHED_DEFAULTS.relearningSteps}.</span>
-          <ul class="steps-explain" aria-live="polite"></ul>
+          <ul class="steps-explain" id="rstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row"><b id="maxLabel">Maximum interval</b>
-          <span>The longest a card can go without being shown. Lower it before an exam so nothing drifts too far out.</span>
           <div class="chips" role="group" aria-labelledby="maxLabel">${MAX_INTERVAL_PRESETS.map(([d, l]) =>
             `<button type="button" class="tchip" data-max="${d}" aria-pressed="${app.settings.maxInterval === d}">${l}</button>`).join('')}</div>
           <label class="inline-num"><input id="maxDays" type="number" inputmode="numeric" min="1" max="36500" value="${app.settings.maxInterval}" aria-label="Maximum interval in days"> days</label>
           <span class="err" id="maxErr" role="alert" hidden></span></div>
-        <label class="adv-row switch-row"><span><b>Spread out due dates</b>
-          <span>Moves longer gaps by a day or so (within what FSRS allows) onto the least busy days, so reviews don't pile up on one day.</span></span>
+        <label class="adv-row switch-row"><span><b>Spread out due dates</b></span>
           <input id="fuzz" type="checkbox" class="switch" ${app.settings.fuzz ? 'checked' : ''}></label>
         <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b>
-          <span id="fsrsHint">FSRS-7 models short-term memory better (same-day repeats, cramming). Beta: off by default. Your cards keep their history; switching back is safe.</span>
-          <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" aria-describedby="fsrsHint" id="fsrsChips">
+                    <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" id="fsrsChips">
             ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(app.settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
           </div>
         </div>
@@ -182,29 +166,25 @@ export async function renderSettings(el) {
           </div>
         </div>
         <div class="adv-row" id="ignoreRow"><label for="ignoreBefore"><b>Ignore reviews before</b></label>
-          <span id="ignoreHint">Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).</span>
           <div class="steps-input">
-            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(app.settings.ignoreBefore || '')}" aria-describedby="ignoreHint ignoreHint2">
+            <input id="ignoreBefore" type="date" max="${todayISO()}" value="${esc(app.settings.ignoreBefore || '')}">
             <button class="btn ghost small" type="button" id="ignoreClear" ${app.settings.ignoreBefore ? '' : 'hidden'}>Clear</button>
-          </div>
-          <span class="steps-hint" id="ignoreHint2">Applies to Optimize and “Check how well it fits you”. Cards first studied before the date are skipped too, since their start is unknown.</span></div>
+          </div></div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
-          <span>Give busy days fewer reviews. Reduced days get about half; Minimum days as few as possible. Needs “Spread out due dates”.</span>
-          <div class="easy-days" role="group" aria-labelledby="easyLbl">${[1, 2, 3, 4, 5, 6, 0].map(d => `
+          <span id="easyNeeds" class="note" ${app.settings.fuzz ? 'hidden' : ''}>Needs “Spread out due dates”.</span>
+          <div class="easy-days" role="group" aria-labelledby="easyLbl" aria-describedby="easyNeeds">${[1, 2, 3, 4, 5, 6, 0].map(d => `
             <label class="easy-day"><span>${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'short' }))}</span>
               <select data-easy="${d}" aria-label="${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'long' }))}">
                 ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(app.settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
               </select></label>`).join('')}
           </div></div>
         <div class="adv-row"><b id="timerLbl">Play timer</b>
-          <span>The default time per question in Play, in seconds. The Play screen has the same slider.</span>
           <div class="stepper">
             <button type="button" class="icon-btn" id="timerMinus" aria-label="Shorter timer">−</button>
             <input id="timerSec" type="number" inputmode="numeric" min="3" max="20" value="${app.settings.timer}" aria-labelledby="timerLbl">
             <button type="button" class="icon-btn" id="timerPlus" aria-label="Longer timer">+</button>
           </div></div>
         <div class="adv-row"><b>Leech after</b>
-          <span>A card you forget this many times is a <b>leech</b>, and again every half that many after (8, 12, 16…). 0 turns this off.</span>
           <div class="stepper">
             <button type="button" class="icon-btn" id="leechMinus" aria-label="Fewer times">−</button>
             <input id="leech" type="number" inputmode="numeric" min="0" max="99" value="${app.settings.leechThreshold}" aria-label="Times forgotten before a card is a leech">
@@ -214,8 +194,7 @@ export async function renderSettings(el) {
           <div class="chips" role="group" aria-labelledby="leechActLbl">
             <button type="button" class="tchip" data-leech="suspend" aria-pressed="${app.settings.leechAction === 'suspend'}">Tag it and suspend it</button>
             <button type="button" class="tchip" data-leech="tag" aria-pressed="${app.settings.leechAction === 'tag'}">Just tag it</button>
-          </div>
-          <span>Leeches are tagged “leech”. Find them in the card list with the Leeches filter, then rewrite or split them.</span></div>
+          </div></div>
         <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
       </details>
     </section>
@@ -238,8 +217,7 @@ export async function renderSettings(el) {
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
       <div class="set-row">
-        <div><b>Back up</b><p>Save everything (decks, cards, progress, settings) to one file. Keep it somewhere safe, or use it to move your data to another device.</p>
-          <p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
+        <div><b>Back up</b><p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
         <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
       </div>
       <label class="adv-row switch-row" id="bkSoundsRow" hidden><span><b id="bkSoundsTitle">Include sounds</b>
@@ -262,11 +240,11 @@ export async function renderSettings(el) {
     <section class="section" aria-labelledby="aboutTitle">
       <h2 id="aboutTitle">About</h2>
       <div class="set-row" id="helpRow">
-        <div><b>Help and questions</b><p>How scheduling works, what the buttons mean, and keeping your data safe.</p></div>
+        <div><b>Help and questions</b></div>
         <a class="btn ghost small" href="#/help">Open Help</a>
       </div>
       <div class="set-row" id="newRow">
-        <div><b>What’s new</b><p>The changes in the latest versions.</p></div>
+        <div><b>What’s new</b></div>
         <button class="btn ghost small" type="button" id="newBtn">See what’s new</button>
       </div>
       <div class="set-row" id="aboutRow">
@@ -346,7 +324,7 @@ export async function renderSettings(el) {
   }
   $('glossaryUnderline').addEventListener('change', e => { app.settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
   $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
-  const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : 'Define a term once and it’s underlined on every card, with its definition a tap away.'; };
+  const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : ''; };
   addEventListener('glossary-changed', glossCount);
   $('oled').addEventListener('change', e => {
     saveTheme({ ...app.settings.theme, oled: e.target.checked });
@@ -480,7 +458,7 @@ function wireAdvanced(el) {
   el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
   $('maxDays').addEventListener('change', e => setMax(e.target.value));
   $('maxDays').addEventListener('input', e => { if (!parseMaxInterval(e.target.value).error) clearFieldError($('maxDays'), $('maxErr')); });      // (checked again as you type)
-  $('fuzz').addEventListener('change', e => { app.settings.fuzz = e.target.checked; db.setSetting('fuzz', app.settings.fuzz); });
+  $('fuzz').addEventListener('change', e => { app.settings.fuzz = e.target.checked; $('easyNeeds').hidden = e.target.checked; db.setSetting('fuzz', app.settings.fuzz); });
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
     const view = app.currentRoute === 'settings' && settingsView();
@@ -762,8 +740,7 @@ export async function drawSync() {
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">New here? Type your email and pick a password, then tap <b>Create account</b>. We email you a link to confirm it; after that, use <b>Sign in</b> on each device.
-        <button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
+      <p class="note"><button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
     // A sign-up waiting for its email link (kept on this device for 7 days): the address comes back filled in, with a way to ask again.
     const wait = (await db.getSettings()).pendingSignup;
     if (!box.isConnected) return;
@@ -864,7 +841,7 @@ export async function drawSync() {
       <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
     </div>
     <div class="set-row">
-      <div><b>Password</b><p>Change the password you sign in with.</p></div>
+      <div><b>Password</b></div>
       <button class="btn ghost small" type="button" id="pwBtn">Change…</button>
     </div>
     <div class="set-row">

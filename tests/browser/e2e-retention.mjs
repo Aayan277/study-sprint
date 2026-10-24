@@ -78,7 +78,7 @@ for (const [w, h, ui, mode] of LOOKS) {
   ok((await p.textContent('#retHelp')).trim() === 'Help me choose', `${tag}: Help me choose sits by Target retention`);
   ok((await p.textContent('#healthOpen')).trim() === 'Check how well it fits you', `${tag}: the health check sits by Personal parameters`);
   ok(await p.evaluate(() => document.getElementById('healthOpen').closest('#optRow') !== null), `${tag}: ...inside the Personal parameters row`);
-  ok((await p.textContent('#ignoreHint')) === 'Reviews before this date are ignored when tuning. Use it if your early history is messy (e.g. an old Anki import).', `${tag}: the Ignore reviews before hint`);
+  ok(await p.locator('#ignoreHint, #ignoreHint2').count() === 0 && !(await p.getAttribute('#ignoreBefore', 'aria-describedby')), `${tag}: no hint text under Ignore reviews before, and no dangling aria-describedby`);
   ok((await p.getAttribute('#ignoreBefore', 'type')) === 'date' && await p.isHidden('#ignoreClear'), `${tag}: a date picker, and no Clear while it is empty`);
   ok((await p.getAttribute('#ignoreBefore', 'max')) === await p.evaluate(async () => (await import('./js/sched-settings.js')).todayISO()), `${tag}: the date picker stops at today`);
   await p.fill('#ignoreBefore', '2020-02-03');
