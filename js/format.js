@@ -71,7 +71,7 @@ function bulletText(line) {
 // very start of the text, or that include a line break (a line starts right after it).
 function hasBulletLine(text) {
   let start = true, brk = false;
-  const lineEnd = new RegExp(LINE_END);
+  const lineEnd = new RegExp(LINE_END.source);
   for (let b = 0; b < text.length; b++) {
     const ch = text[b];
     if (isSpace(ch)) { if (lineEnd.test(ch)) brk = true; continue; }
