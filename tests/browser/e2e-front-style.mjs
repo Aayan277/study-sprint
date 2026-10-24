@@ -92,12 +92,13 @@ async function run(tag, viewport, mobile, themeName, mode) {
     const mk = html => { const d = document.createElement('div'); d.innerHTML = html; document.body.append(d); return d.firstElementChild; };
     if (!go) go = mk('<button class="deck-go lead" type="button"></button>');       // (no deck due to start: draw one to read its style)
     const wd = mk('<div class="wd rest"><i></i></div>'), grid = mk('<div class="cal-grid"><i class="rest"></i><i></i></div>');
-    const d = el => getComputedStyle(el).display;
-    return { go: d(go), wd: d(wd), cal: d(grid.children[0]), calPlain: d(grid.children[1]) };
+    const d = el => getComputedStyle(el).display, m = el => getComputedStyle(el).marginTop;
+    return { go: d(go), wd: d(wd), cal: d(grid.children[0]), calPlain: d(grid.children[1]), calMt: m(grid.children[0]), calPlainMt: m(grid.children[1]) };
   });
   ok(disp.go === 'grid', `${T}: the Study button on Decks (.deck-go.lead) is still display:grid (${disp.go})`);
   ok(disp.wd === 'flex', `${T}: the 7-day strip day (.wd.rest) is still display:flex (${disp.wd})`);
   ok(disp.cal === disp.calPlain, `${T}: a Stats calendar rest day (i.rest) displays like the other days (${disp.cal} / ${disp.calPlain})`);
+  ok(disp.calMt === disp.calPlainMt, `${T}: a Stats calendar rest day (i.rest) has the same marginTop as the other days (${disp.calMt} / ${disp.calPlainMt})`);
   // ---- right to left ----
   await show(p, 'rtl');
   ok(await p.locator('.rv-front .flash-front .fl-lead').count() === 1 && await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${T}: Arabic lines get a lead too, with no sideways scroll`);

@@ -23,6 +23,8 @@ test('plain text for typed answers and Play', () => {
   assert.equal(hasFormatting('a **b**'), true);
   assert.equal(hasFormatting('5 * 3 * 2'), false);
   assert.equal(hasFormatting('x\n- y'), true);
+  assert.equal(hasFormatting('a\nb\n- c'), true);       // a bullet after two line breaks (a sticky regex once missed it)
+  assert.equal(hasFormatting('x\ny\n• z'), true);
 });
 
 test('HTML (Anki fields, the computer editor) back to marks', () => {
