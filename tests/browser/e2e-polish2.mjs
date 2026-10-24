@@ -270,6 +270,7 @@ await p.waitForFunction(() => !document.getElementById('sheet').open);
 ok((await p.textContent('#toast')) === 'Card saved', 'saving shows a toast');
 ok((await p.textContent('.rv-front .flash-front')) === 'Edited front' && (await p.$$eval('.rv-counts span', s => s.map(x => x.textContent).join('|'))) === before, 'back on the same card with the new text, and the counts did not move');
 ok(await p.$eval('#flash', e => e.classList.contains('flipped')), 'a card that was turned over is still turned over');
+await p.waitForFunction(() => document.getElementById('flash')?.contains(document.activeElement), null, { timeout: 2000 }).catch(() => {});
 ok(await p.evaluate(() => document.getElementById('flash').contains(document.activeElement)), 'focus is back on the card');
 const editedId = (await p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).find(c => c.front === 'Edited front')?.id));
 ok(!!editedId && editedId.startsWith('econ'), 'the edit went to that card');

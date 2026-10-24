@@ -181,7 +181,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
     const started = !$('sheet').open;
     // Review turns focus mode on when it has drawn, and that hides any toast: wait for it so the message stays up.
     if (started) for (let i = 0; i < 40 && !document.body.classList.contains('focus'); i++) await new Promise(r => setTimeout(r, 100));
-    if (n) toast(`Unsuspended ${plural(n, 'card')}${started ? ' and started a session' : ''}.`);
+    if (n) toast(`Unsuspended ${plural(n, 'card')}${started && document.body.classList.contains('focus') ? ' and started a session' : ''}.`);
   });
 
   $('tsText').focus();

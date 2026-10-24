@@ -54,6 +54,7 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); await db.s
 const q = await ctx.newPage(); await q.goto(URL + '#/today'); await q.waitForSelector('#startBtn'); await q.click('#startBtn'); await q.waitForSelector('#typeIn');
 await q.click('#moreBtn'); await q.waitForSelector('#sheet[open]'); await q.keyboard.press('Escape');
 await q.waitForFunction(() => !document.querySelector('#sheet[open]'));
+await q.waitForFunction(() => document.activeElement?.id === 'typeIn', null, { timeout: 2000 }).catch(() => {});      // (focus moves on the dialog's close event)
 ok(await q.evaluate(() => document.activeElement?.id === 'typeIn'), 'typing card: after the card menu closes, focus is in the answer box');
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
