@@ -72,9 +72,7 @@ function fitSection(r) {
     <p>${r.own ? 'Your own settings' : 'The standard settings'} predicted your last ${plural(f.n, 'review')} (since ${esc(dateText(f.sinceDay))}) with a prediction error (log loss) of <b class="mono">${f.logLoss.toFixed(3)}</b> and RMSE <b class="mono">${pctText(f.rmse)}</b>. Lower is better.</p>
     ${c.rough ? '<p class="hc-rough">Only a few reviews, so treat this as rough.</p>' : ''}
     ${biasLine(c) ? `<p>${esc(biasLine(c))}</p>` : ''}
-    <p class="hc-sug">${esc(fitAdvice(c, { usingOwn: r.own, canOptimize: r.canOptimize, retention: retentionVerdict(r.ret.all, r.ret.target).verdict }))}</p>
-    <details class="opt-fold"><summary>How this is judged</summary>
-      <p class="opt-note">Three checks, and the verdict is the worst of them. (1) Do the average predicted and the actual chance of remembering match? Poor if they differ by more than 3 points beyond chance. (2) How far off are the predictions in each band of confidence, with the part that is just luck on a small sample removed? Good up to 2 points, OK up to 4. (3) Do the predictions beat just guessing your own average (${whole(f.recall)}) every time? A model that is no better than that cannot be Good.</p></details></section>`;
+    <p class="hc-sug">${esc(fitAdvice(c, { usingOwn: r.own, canOptimize: r.canOptimize, retention: retentionVerdict(r.ret.all, r.ret.target).verdict }))}</p></section>`;
 }
 
 function bucketLine(name, b, target) {

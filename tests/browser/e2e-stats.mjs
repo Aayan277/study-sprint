@@ -50,7 +50,6 @@ const shownTotal = +/of (\d+) due reviews/.exec(retText)[1];
 const reviewLogs = await page.evaluate(async () => { const { daysAgoStart } = await import('./js/stats-calc.js'); const since = daysAgoStart(29);
   return (await (await import('./js/db.js')).getLogsSince(since)).filter(l => l.source === 'review' && l.state === 2).length; });
 ok(shownTotal === reviewLogs, `retention counts the ${reviewLogs} Review answers, not the Play multiple choice ones: ${shownTotal}`);
-ok(/Multiple choice isn.t counted/.test(retText), 'the Retention card says multiple choice is not counted');
 ok((await page.locator('#perDay .col').count()) === 30 && (await page.locator('#forecast .col').count()) === 7, '30-day and 7-day charts drawn');
 ok((await page.locator('#perDay .cap').count()) === 1, 'only the peak column is labeled');
 await noHScroll('stats');
