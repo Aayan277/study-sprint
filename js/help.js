@@ -40,7 +40,8 @@ export const SECTIONS = [
         <li><b>By tag or question ID</b>: study just the cards you pick.</li>
         <li><b>More new cards today</b>: raise today’s new-card limit with the + and − buttons, then <b>Add</b>.</li>
         <li><b>Postpone reviews</b>: push chosen reviews to later.</li>
-        <li><b>Exam prep</b>: review cards you haven’t seen lately. It is greyed out when you’ve seen everything recently.</li>
+        <li><b>Review ahead</b>: study cards that aren’t due yet; each is rescheduled from today.</li>
+        <li><b>Exam prep</b>: review cards you haven’t seen lately. It shows only when a deck has an exam date, and it is greyed out when you’ve seen everything recently.</li>
         <li><b>Cards I forgot today</b>: go over them again.</li>
       </ul>` },
     { id: 'review-counts', q: 'What are the New, Learn and Due numbers at the top of Review?', a: `
