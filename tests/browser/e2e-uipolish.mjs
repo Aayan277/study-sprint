@@ -431,10 +431,8 @@ for (const ui of ['original', 'clinical']) {
   const p = await open(PHONE, { ui });
   await go(p, '#/deck/sample', '#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm');
   await p.locator('.kind-switch .chip', { hasText: 'Cloze' }).click();
-  ok(await p.isVisible('.more-tips > summary') && !(await p.isVisible('.cloze-help')), `M11 (${ui}): "More tips" is closed and the long help is hidden`);
+  ok(!(await p.locator('.more-tips, .cloze-help').count()), `M11 (${ui}): no "More tips" fold or long help in the form`);
   ok((await p.locator('#acCloze').innerText()).match(/select a word/gi)?.length === 1, `M11 (${ui}): the "select a word" hint appears once in the form`);
-  await p.click('.more-tips > summary');
-  ok(await p.isVisible('.cloze-help') && /hint/.test(await p.textContent('.cloze-help')), `M11 (${ui}): opening More tips shows the rest (hints, same blank, maths)`);
   await p.context().close();
 }
 
@@ -462,7 +460,7 @@ ok(!/Answer given/.test(fs.readFileSync('js/mock-exam.js', 'utf8')), 'M12: "Answ
   await go(p, '#/deck/sample', '#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm');
   const t = await p.textContent('.answer-mode');
   ok(/Plain text/.test(t) && /Step by step/.test(t) && /List of parts/.test(t) && !/Elements/.test(t), `L1: the choices read "Plain text", "Step by step", "List of parts" (${t.replace(/\s+/g, ' ').trim()})`);
-  ok(await p.isVisible('.answer-hint'), 'L1: one hint line explains them');
+  ok(!(await p.locator('.answer-hint').count()), 'L1: no hint line under the choices');
   const vals = await p.$$eval('.answer-mode input', is => is.map(i => i.value));
   ok(vals.join() === 'text,steps,elements', 'L1: the stored values are still text, steps, elements');
   await p.context().close();

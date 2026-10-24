@@ -51,7 +51,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
     <div id="tsIds" class="ts-pane">
       <label class="field"><span>Paste question IDs</span>
         <textarea id="tsText" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false"
-          placeholder="For example 12345, 23456 34567: copy them from your UWorld or AMBOSS block"></textarea></label>
+          placeholder="e.g. 12345, 23456 34567"></textarea></label>
       <label class="field" id="tsLookWrap" hidden><span>Look in</span><select id="tsLook" class="select"></select></label>
       <div class="ts-missing" id="tsMissing" hidden></div>
     </div>

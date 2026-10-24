@@ -37,7 +37,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await p.click('#brAdd'); await p.waitForSelector('#acFront');
   ok(await p.locator('#acModeSteps').count() === 1 && /Answer:\s*Plain text\s*Step by step\s*List of parts/.test(await p.textContent('.answer-mode')), `${tag}: Basic has an "Answer: Plain text | Step by step | List of parts" choice`);
   ok(await p.locator('#acSteps').isHidden() && await p.locator('#acBackWrap').isVisible(), `${tag}: off = the normal Back box`);
-  ok(/Memory hook \(optional\)/.test(await p.textContent('#acForm')), `${tag}: Basic has a "Memory hook (optional)" field`);
+  ok(/Memory hook/.test(await p.textContent('#acForm')), `${tag}: Basic has a "Memory hook" field`);
   await p.fill('#acFront', 'Solve 2x + 3 = 7');
   await p.click('.answer-mode .chip:has(#acModeSteps)');
   ok(await p.locator('#acSteps').isVisible() && await p.locator('#acBackWrap').isHidden(), `${tag}: on = step fields instead of Back`);
@@ -80,7 +80,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 90
   await ta(0).fill('just this');
   ok(await p.getAttribute(addBtn, 'aria-disabled') === 'true' && /two steps/.test(await p.textContent('#acWhy')), `${tag}: one step cannot be added (${(await p.textContent('#acWhy')).trim()})`);
   // v4.8.1: a line inside a step that starts "Answer:" or "Step N:" would not read back as the same steps: it is refused with a reason
-  ok(await p.locator('#acIntro').isVisible() && /Intro \(optional\)/.test(await p.textContent('#acSteps')), `${tag}: the intro is a visible "Intro (optional)" field`);
+  ok(await p.locator('#acIntro').isVisible() && /Intro/.test(await p.textContent('#acSteps')), `${tag}: the intro is a visible "Intro" field`);
   await ta(1).fill('then\nAnswer: x');
   ok(await p.getAttribute(addBtn, 'aria-disabled') === 'true' && /can't start with 'Step N:' or 'Answer:'/.test(await p.textContent('#acWhy')), `${tag}: "Answer:" inside a step is refused (${(await p.textContent('#acWhy')).trim()})`);
   await ta(1).fill('then');

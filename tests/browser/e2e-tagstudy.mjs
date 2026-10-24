@@ -47,7 +47,7 @@ ok(/Postpone reviews/.test(await p.textContent('#sheet')), 'Custom study has Pos
 await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
 ok((await p.textContent('#sheetTitle')).trim() === 'Study by tag or question ID', 'the sheet opens');
 ok((await p.textContent('#sheet')).includes('In all decks'), 'it says it looks in all decks');
-ok((await p.getAttribute('#tsText', 'placeholder')).startsWith('For example 12345, 23456 34567'), 'placeholder shows how to paste');
+ok((await p.getAttribute('#tsText', 'placeholder')).startsWith('e.g. 12345, 23456 34567'), 'placeholder shows an example');
 ok(await p.isDisabled('#tsStudy') && await p.isDisabled('#tsUnsus'), 'buttons are off before anything is found');
 
 // paste IDs: 789 (leading zeros in the tag), 12345 (in two question banks), 23456, one missing
