@@ -42,7 +42,7 @@ await seed(p);
 await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForSelector('#optBtn');
 await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
 const firstOpt = await p.$eval('#sheet .cs-opt', d => d.textContent.replace(/\s+/g, ' '));
-ok(/By tag or question ID/.test(firstOpt) && /Find the cards for the questions you missed in a question bank, or for one tag/.test(firstOpt), 'Custom study starts with By tag or question ID: ' + firstOpt);
+ok(/By tag or question ID/.test(firstOpt) && !/question bank/.test(firstOpt), 'Custom study starts with By tag or question ID: ' + firstOpt);
 ok(/Postpone reviews/.test(await p.textContent('#sheet')), 'Custom study has Postpone reviews');
 await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
 ok((await p.textContent('#sheetTitle')).trim() === 'Study by tag or question ID', 'the sheet opens');
@@ -88,6 +88,7 @@ ok((await p.textContent('#tsStudy')).trim() === 'Study 4 now', 'Study 4 now');
 await p.click('#tsStudy');
 await p.waitForFunction(() => location.hash.startsWith('#/review') && document.querySelector('.flash-front'));
 ok((await suspended(p)).length === 0, 'Study now unsuspended the cards (and started the session)');
+await p.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('started a session'));      // (shown once Review has drawn)
 const toastTxt = (await p.textContent('#toast')).trim();
 ok(toastTxt === 'Unsuspended 3 cards and started a session.', 'toast: ' + toastTxt);
 ok((await p.textContent('.flash-deck')).includes('Question IDs'), 'the session is named: ' + (await p.textContent('.flash-deck')).trim());

@@ -49,8 +49,7 @@ let p = await open(375, 800, 'dark');
 let rt = await ringText(p);
 const toGo = +(await p.textContent('.th-big')).match(/\d+/)?.[0];
 ok(toGo > 3 && rt === `0/${toGo}`, `work left: "${toGo} to go", the ring reads 0/${toGo} (${rt})`);
-ok((await p.textContent('.th-label')).trim() === 'TODAY' && !(await p.textContent('#screen')).includes('DAILY GOAL'), 'the ring label is TODAY, not DAILY GOAL');
-ok(!(await p.textContent('#screen')).includes('All cards learned'), 'unseen new cards left: no "All cards learned" line');
+ok(await p.locator('.th-label').count() === 0 && !(await p.textContent('#screen')).includes('DAILY GOAL'), 'no repeated TODAY label above the count, and no DAILY GOAL');
 await study(p, 3); await reload(p);
 rt = await ringText(p);
 ok(rt === `3/${toGo}` && await p.$eval('.today-hero .ring', e => !e.classList.contains('is-full')), `after 3 cards: 3/${toGo}, the total does not move (${rt})`);
@@ -60,7 +59,7 @@ await study(p, 999); await reload(p);
 ok(await p.locator('.th-done').count() === 1 && await p.locator('#startBtn').count() === 0, 'all done: the done state shows');
 ok((await p.textContent('.th-big')).trim() === 'All done for today', 'all done: "All done for today"');
 ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')), 'all done: the ring is complete (a check, green)');
-ok((await p.textContent('.th-learned')).trim() === 'All cards learned · only reviews from now', 'no unseen new cards left: "All cards learned · only reviews from now"');
+ok(!(await p.textContent('#screen')).includes('All cards learned'), 'no "All cards learned" line (cut)');
 ok(!(await p.textContent('#screen')).includes('0/0'), 'the text "0/0" appears nowhere on Today');
 const ex = p.locator('.th-done #customLink');
 ok((await ex.textContent()).trim() === 'Extra study' && await ex.evaluate(e => e.classList.contains('btn') && e.classList.contains('ghost') && !e.classList.contains('primary')), 'a plain secondary "Extra study" button');
@@ -78,7 +77,6 @@ ok((await p.textContent('.th-big')).trim() === 'Nothing due today', 'nothing due
 rt = await ringText(p);
 ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')) && !rt.includes('/'), `nothing due: the ring is full with a check, not 0/0 (${rt})`);
 ok(!(await p.textContent('#screen')).includes('0/0') && /next card is due in/.test(await p.textContent('.th-done')), 'nothing due: no 0/0 and the next due time is shown');
-ok((await p.textContent('.th-learned')).includes('All cards learned'), 'nothing due and no new cards left: the learned line too');
 await noHScroll(p, 'today nothing due 375'); await p.screenshot({ path: SP + '/v49-today-nothing-375-dark.png' });
 
 // Settings: no Daily goal stepper, a Play switch (off), synced

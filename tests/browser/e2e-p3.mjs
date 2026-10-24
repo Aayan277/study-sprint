@@ -43,7 +43,7 @@ ok(await page.textContent('#csForgotBtn') === 'Review 1 card', 'forgotten today:
 await noH('custom study'); await page.screenshot({ path: SP + '/p3-custom.png', fullPage: true });
 await page.fill('#csNew', '5'); await page.dispatchEvent('#csNew', 'change'); await page.click('#csNewBtn');
 await page.waitForSelector('#sheet:not([open])', { state: 'attached' }); await openOpts();
-await page.waitForFunction(() => document.querySelector('#sheet .note')?.textContent.includes('+ 5 extra'));
+await page.waitForFunction(() => document.querySelector('#sheet[open] [data-deck]'));
 ok(await chip('Second') === '0 due · 3 new' && await chip('Intro') === '0 due · 9 new', 'extra new raises limits: ' + await chip('Second'));
 const s = await page.evaluate(async () => (await import('./js/db.js')).getSettings());
 ok(s.extraNew.n === 5, 'extra saved for today');

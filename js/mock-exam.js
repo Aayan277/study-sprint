@@ -6,7 +6,7 @@
 
 import * as db from './db.js';
 import {
-  scoreRun, isAnswered, byTag, byDeck, tagLabel, missedIds, navState, clock, timeLeft, correctText, retakeRun, newState, UNTAGGED
+  scoreRun, isAnswered, byTag, byDeck, tagLabel, missedIds, navState, clock, timeLeft, correctText, retakeRun, newState
 } from './mock-exam-logic.js';
 import { loadSaved, saveState, saveRun, clearSaved, saveResult, getHistory, KEYS } from './mock-exam-store.js';
 import { savePracticeAnswer, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
@@ -520,7 +520,7 @@ async function drawResults({ fresh = false } = {}) {
       <span class="t-bar-v mono">${g.pct}% <small>${g.correct}/${g.total}</small></span></li>`).join('')}</ul>`;
   const SHOWN_TAGS = 8;
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">Practice test · ${esc(deckName)}</span><h1 id="tResTitle" tabindex="-1">Your result</h1></div></div>
+    <div class="screen-head"><div><h1 id="tResTitle" tabindex="-1">Your result · ${esc(deckName)}</h1></div></div>
     <div class="res-head t-score">
       ${ring(score.pct / 100, 112, 10, `<b>${score.pct}%</b>`, 't-ring')}
       <div style="min-width:0">
@@ -546,7 +546,7 @@ async function drawResults({ fresh = false } = {}) {
     <div id="tSched" aria-live="polite">${run.cfg.counts ? '<p class="sched-note">Saving your answers to the schedule…</p>' : '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>'}</div>
     ${tags.length ? `<section class="t-sec"><h2>Score by tag</h2>${bars(tags.slice(0, SHOWN_TAGS), tagLabel)}
       ${tags.length > SHOWN_TAGS ? `<details class="t-more"><summary>Show all ${tags.length} tags</summary>${bars(tags.slice(SHOWN_TAGS), tagLabel)}</details>` : ''}
-      ${tags.length === 1 && tags[0].key === UNTAGGED ? '<p class="note">These cards have no tags. Add tags in Browse to see where you are weak.</p>' : ''}</section>` : ''}
+</section>` : ''}
     ${subdecks.length > 1 ? `<section class="t-sec"><h2>Score by subdeck</h2>${bars(subdecks, rel)}</section>` : ''}
     <section class="t-sec">
       <div class="t-sec-h"><h2>Your answers</h2>

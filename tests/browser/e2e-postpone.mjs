@@ -37,7 +37,6 @@ await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForSelector(
 ok((await p.textContent('[data-count=due]')).trim() === '10', 'Today shows 10 due');
 await openPostpone(p);
 ok((await p.textContent('#sheetTitle')).trim() === 'Postpone reviews', 'the sheet opens');
-ok((await p.textContent('#sheet')).includes("Busy few days? Push back the reviews you'll still remember best."), 'its blurb');
 ok(await p.locator('[data-pdays]').count() === 4 && (await p.$$eval('[data-pdays]', b => b.map(x => x.textContent.trim()))).join('|') === '1 day|2 days|3 days|1 week', 'chips: 1 day, 2 days, 3 days, 1 week');
 ok(await p.getAttribute('[data-pdays="2"]', 'aria-pressed') === 'true', '2 days is the start');
 const line = (await p.textContent('#ppLine')).replace(/\s+/g, ' ').trim();

@@ -78,17 +78,17 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     openSheet(`
       <h2 id="sheetTitle">${mock ? 'Mock exam' : 'Practice test'}</h2>
       <form class="sheet-in pt-form" id="ptForm" style="padding:0" novalidate>
-        <p class="note" style="margin:0">${mock && exam ? `${esc(countdown(exam))}. ` : ''}A calm mock exam: one question at a time, and no answers shown until you submit. It uses your own cards.</p>
+        ${mock && exam ? `<p class="note" style="margin:0">${esc(countdown(exam))}</p>` : ''}
         ${saved ? `<div class="pt-resume" role="group" aria-label="Test in progress">
           <p><b>A test is in progress</b> (${esc(deckPath(data.decks, saved.run.deckId))}, question ${saved.state.i + 1} of ${saved.run.questions.length}). Starting a new one replaces it.</p>
           <div class="pt-resume-b"><button class="btn primary small" type="button" id="ptResume">Resume</button><button class="btn ghost small" type="button" id="ptDiscard">Discard</button></div></div>` : ''}
-        <label class="field"><span>Deck <small>(its subdecks are included)</small></span>
+        <label class="field"><span>Deck</span>
           <select id="ptDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === id ? 'selected' : ''}>${esc(d.label)} (${poolFor(data, cards, d.id).length})</option>`).join('')}</select></label>
-        ${tags.length > 1 ? `<fieldset><legend>Only these tags <small>(optional)</small></legend>
+        ${tags.length > 1 ? `<fieldset><legend>Only these tags</legend>
           <div class="chips" role="group" aria-label="Narrow by tag">${tags.map(t => `<button type="button" class="tchip" data-tag="${esc(t.tag)}" aria-pressed="${cfg.tags.includes(t.tag)}">${esc(t.label)} <small>${t.n}</small></button>`).join('')}</div></fieldset>` : ''}
         <fieldset><legend>Questions</legend>
-          <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? `All <small>(up to ${MAX_QUESTIONS})</small>` : n, cfg.count === n)).join('')}</div></fieldset>
-        <fieldset><legend>Question types <small>(all on: a mix)</small></legend>
+          <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? 'All' : n, cfg.count === n)).join('')}</div></fieldset>
+        <fieldset><legend>Question types</legend>
           <div class="chips">${Object.entries(KINDS).map(([k, label]) => `<label class="chip"><input type="checkbox" name="kind" value="${k}" ${cfg.kinds.includes(k) && perKind[k] ? 'checked' : ''} ${perKind[k] ? '' : 'disabled'}><span>${label}</span></label>`).join('')}</div>
           <p class="note" id="ptKindNote"></p></fieldset>
         <div class="settings">
@@ -96,8 +96,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
             <div class="chips">${LIMITS.map(m => radio('limit', m, m ? `${m} min` : 'Off', cfg.limit === m)).join('')}
               ${cfg.limit && !LIMITS.includes(cfg.limit) ? radio('limit', cfg.limit, `${cfg.limit} min`, true) : ''}</div></fieldset>
           <fieldset><legend>Order</legend>
-            <div class="chips">${Object.entries(ORDERS).map(([k, label]) => radio('order', k, label, cfg.order === k)).join('')}</div>
-            <p class="note" id="ptOrderNote" ${cfg.order === 'weak' ? '' : 'hidden'}>The cards you are least likely to remember now come first. Cards you have not studied yet come last.</p></fieldset>
+            <div class="chips">${Object.entries(ORDERS).map(([k, label]) => radio('order', k, label, cfg.order === k)).join('')}</div></fieldset>
         </div>
         <label class="adv-row switch-row"><span><b id="ptCountsLbl">Count answers as reviews</b>
           <span id="ptCountsHelp">Off: a practice test changes nothing in your schedule or stats. On: answers count like Play answers do when Play counts as reviews (due cards are graded, missed cards come back sooner).</span></span>
@@ -141,7 +140,6 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     $('ptForm').addEventListener('change', e => {
       if (e.target.id === 'ptDeck') return;
       read();
-      $('ptOrderNote').hidden = cfg.order !== 'weak';
       refresh();
     });
     $('ptForm').addEventListener('click', e => {

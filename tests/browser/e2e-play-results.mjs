@@ -95,7 +95,7 @@ await p.context().close();
 
 // A touch screen (no hover) never sees the key hint
 p = await open(); await seed(p); await p.evaluate(() => { location.hash = '#/play'; }); await p.waitForSelector('#startBtn');
-ok(await p.locator('.hint.keys').count() === 1 && await p.locator('.hint.keys').isHidden(), 'no key hint on a touch screen');
+ok(await p.locator('.hint.keys').count() === 0, 'no key hint line on the Play setup (cut)');
 await p.context().close();
 
 // ---------- 3. Leeches are collected and handed to the finish slot ----------
@@ -114,7 +114,7 @@ for (const scheme of ['light', 'dark']) {
   p = await open({ w: 1440, h: 900, touch: false, scheme });
   await seed(p);
   await setup(p, 'pr');
-  ok(await p.locator('.hint.keys').isVisible(), `a mouse sees the key hint (${scheme})`);
+  ok(await p.locator('.hint.keys').count() === 0, `a mouse sees no key hint line either (${scheme})`);
   await p.screenshot({ path: SP + `/pr-setup-1440-${scheme}.png`, fullPage: true });
   await playRound(p, 2);
   await p.screenshot({ path: SP + `/pr-results-1440-${scheme}.png`, fullPage: true });
