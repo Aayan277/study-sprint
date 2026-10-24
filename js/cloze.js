@@ -38,7 +38,7 @@ export function clozeBlanks(s) {
   }
 }
 // String.replace for blanks: fn(match, num, text, hint) gives the replacement.
-function replaceBlanks(s, fn) {
+export function replaceBlanks(s, fn) {
   let out = '', last = 0;
   for (const b of clozeBlanks(s)) {
     out += s.slice(last, b.index) + fn(s.slice(b.index, b.end), b.num, b.text, b.hint);

@@ -15,7 +15,7 @@
 
 import { words, keyOf, stem, STOPWORDS, FILLER, newCounts, addPhrases, termWeights, groupNear, candidatePhrases, isJunkTerm } from './keywords.js';
 import { normalize, stripMarker, dupKey } from './import.js';
-import { clozeCard } from './cloze.js';
+import { clozeCard, clozeBlanks } from './cloze.js';
 import { joinElements } from './steps.js';
 
 export const MAX_CHARS = 600_000;
@@ -694,7 +694,7 @@ export function suggestCards(input) {
 
 // ---------- junk ----------
 
-function junky(c) {
+export function junky(c) {
   if ([c.front, c.back].some(s => alnumCount(s) < 2)) return true;
   if (dupKey(c.front) === dupKey(c.back)) return true;
   if (c.front.length > 200 || c.back.length > 1000 || (c.cloze && c.cloze.length > 500)) return true;
@@ -703,7 +703,7 @@ function junky(c) {
   if (letterCount(all) < all.replace(/\s/g, '').length * 0.7) return true;
   if (c.type === 'basic' && c.kind !== 'acronym' && c.kind !== 'vocab' && isJunkTerm(c.front)) return true;
   if (c.type === 'cloze') {
-    const ans = (c.cloze.match(/\{\{c1::(.*?)\}\}/g) || []).map(m => m.slice(6, -2));
+    const ans = clozeBlanks(c.cloze).filter(b => b.num === '1').map(b => c.cloze.slice(b.index + 6, b.end - 2));
     if (!ans.length || ans.some(a => wc(a) > 6)) return true;
     if (c.kind !== 'fact' && ans.some(a => isJunkTerm(a))) return true;
     if (wc(c.front) < 6) return true;
