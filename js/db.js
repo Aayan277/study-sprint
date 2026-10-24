@@ -276,18 +276,40 @@ export async function addDeckWithCards(deck, cards = [], { at = Date.now() } = {
 
 // Save a whole import in one go: new decks, the cards, and (from Anki) review history and schedules.
 // All or nothing, so a failure never leaves an empty deck behind.
-export async function addImport({ decks = [], cards = [], reviewLog = [], cardStates = [] }) {
+//   updates  cards the import changes in place (a re-imported Anki deck): [{ id, apply }]. `apply(current)` gets the card as it is
+//            stored at this moment, read inside this same save, and returns { kind, row }: row (or null for nothing to write) is saved.
+//            A card that is gone by then (deleted, say by a sync a moment ago) is skipped, never put back.
+// Returns the outcome of each update: [{ id, kind, row }], where kind is the one apply gave or 'gone'.
+export async function addImport({ decks = [], cards = [], reviewLog = [], cardStates = [], updates = [] }) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'reviewLog', 'cardStates'], 'readwrite');
   const now = Date.now();
-  await inTx(tx, () => {
+  const outcomes = [];
+  await inTx(tx, async () => {
     for (const [name, rows] of Object.entries({ decks, cards, reviewLog, cardStates })) {
       const os = tx.objectStore(name);
       rows.forEach(r => os.put(stamp(name, r, now)));
     }
+    const os = tx.objectStore('cards');
+    for (const u of updates) {
+      const cur = await done(os.get(u.id));
+      if (!cur) { outcomes.push({ id: u.id, kind: 'gone', row: null }); continue; }
+      const { kind, row } = u.apply(cur);
+      if (row) os.put(stamp('cards', row, now));
+      outcomes.push({ id: u.id, kind, row });
+    }
   });
   scheduleChanges++;
   changed();
+  return outcomes;
+}
+
+// Read pictures and sounds one at a time inside ONE read transaction (so a long comparison does not open a transaction per file):
+// fn gets get(id), which resolves to the stored file or undefined.
+export async function withMediaReader(fn) {
+  const db = await openDB();
+  const tx = db.transaction('media', 'readonly');
+  return fn(id => done(tx.objectStore('media').get(id)));
 }
 
 // Delete a deck plus everything that belongs to it: its cards, their schedules and their review history.
@@ -1196,6 +1218,21 @@ export function usedMediaIds(cards) {
     for (const id of [...(Array.isArray(c.frontSounds) ? c.frontSounds : []), ...(Array.isArray(c.backSounds) ? c.backSounds : [])]) used.add(id);
   }
   return used;
+}
+// Throw away pictures and sounds that were only just saved and turned out not to be needed (an import found the card already holds the
+// same file). Files the server already has are left alone: cleanMedia and the sweep handle those.
+export async function discardMedia(ids) {
+  if (!ids.length) return;
+  const db = await openDB();
+  const tx = db.transaction(['media', 'settings'], 'readwrite');
+  await inTx(tx, async () => {
+    for (const id of ids) {
+      const m = await done(tx.objectStore('media').get(id));
+      if (!m || m.uploaded) continue;
+      tx.objectStore('media').delete(id);
+      await noteMedia(tx, id, m, null);
+    }
+  });
 }
 // Remove pictures and sounds no card uses any more (replaced, removed, or their card deleted). Ones added in the
 // last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.

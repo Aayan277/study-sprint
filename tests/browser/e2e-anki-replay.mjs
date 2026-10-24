@@ -35,6 +35,7 @@ const load = async (file, deckValue) => {
   await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (this file imports the same notes twice on purpose: as new cards each time)
   if (deckValue) await page.selectOption('#deckSel', deckValue);
 };
 

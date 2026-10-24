@@ -70,6 +70,7 @@ for (const [file, deckName] of [['anki-sound-new.apkg', 'Sounds new'], ['anki-so
   await openFileTab(page);
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
   const found = await page.textContent('#found');
   ok(found.includes('Found 8 cards') || found.includes('Found 9 cards'), `${file}: ${found.slice(0, 80)}`);
   ok(found.includes('4 notes have sounds, which come along too.'), `${file}: the summary says how many notes have sounds`);
@@ -100,6 +101,7 @@ ok(await run(() => navigator.storage.persisted().then(p => typeof p === 'boolean
 // ---------- 2. the switch off, and the free-space check ----------
 await openFileTab(page);
 await page.setInputFiles('#fileIn', SP + '/files/anki-sound-new.apkg');
+await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 await page.uncheck('#ankiSounds');
 const off = await page.textContent('#found');
@@ -113,6 +115,7 @@ await tight.addInitScript(() => { navigator.storage.estimate = async () => ({ us
 const tp = await tight.newPage();
 await openFileTab(tp);
 await tp.setInputFiles('#fileIn', SP + '/files/anki-sound-new.apkg');
+await tp.waitForSelector('#preview[data-guids]'); if (await tp.isVisible('#updRow')) await tp.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
 await tp.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 ok(!(await tp.isChecked('#ankiSounds')) && /Not enough free space on this device for the sounds \(about [\d.]+ [KM]B needed, \d+ KB free\)\./.test(await tp.textContent('#found')), 'little free space: the switch starts off and says why');
 await tight.close();
@@ -417,6 +420,7 @@ const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }
 await dl.saveAs(SP + '/exports/with-sounds.apkg');
 await openFileTab(page);
 await page.setInputFiles('#fileIn', SP + '/exports/with-sounds.apkg');
+await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
 await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
 const again = await page.textContent('#found');
 ok(again.includes('4 notes have sounds, which come along too.') && !again.includes("weren't imported"), `Export → import: the sounds are still there (${again.slice(0, 140)})`);
