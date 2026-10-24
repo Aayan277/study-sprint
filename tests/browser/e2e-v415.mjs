@@ -50,7 +50,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   // ----- Add card -----
   await go(p, '#/deck/T', '#brAdd');
   await p.click('#brAdd'); await p.waitForSelector('#acTags');
-  ok((await norm(p, '#acForm label:has(#acTags) span')) === 'Tags (optional, separated by spaces or commas)', 'Add card label says spaces or commas');
+  ok((await norm(p, '#acForm label:has(#acTags) span')) === 'Tags', 'Add card label is just "Tags"');
 
   // ----- Study by tag or question ID finds the card whose old tag has a space in it -----
   await go(p, '#/today', '#optBtn');

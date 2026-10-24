@@ -61,7 +61,13 @@ ok((await page.textContent('#updInfo')).includes('Off = they come in again'), 't
 ok(await page.isVisible('#editRow') && !(await page.isChecked('#overwriteEdited')) && (await page.textContent('#editTitle')) === 'Overwrite 1 card you may have edited here too', 'a separate switch for the edited card, off: ' + await page.textContent('#editTitle'));
 ok(await page.isChecked('#updateOld'), 'the switch is on by default');
 ok((await page.textContent('#found')).includes('5 cards you already have will be updated'), 'the summary says so too');
-ok((await page.locator('.prow .badge:not([hidden])', { hasText: 'Updates the card you already have' }).count()) === 5, 'five rows are marked as updates (Gamma\'s one row covers its two cards)');
+const badgeCount = async t => page.locator('.prow .badge:not([hidden])', { hasText: t }).count();
+ok(await badgeCount('Updates the card you already have') === 4, 'the rows that will change are marked as updates (Gamma\'s one row covers its two cards)');
+ok(await badgeCount('Kept as you edited it') === 1 && await badgeCount('Overwrites your edits') === 0, 'Beta, edited here and held back, says "Kept as you edited it"');
+await page.click('#overwriteEdited');
+ok(await badgeCount('Overwrites your edits') === 1 && await badgeCount('Kept as you edited it') === 0, 'with the overwrite switch on, Beta says "Overwrites your edits"');
+await page.click('#overwriteEdited');
+ok(await badgeCount('Kept as you edited it') === 1, 'and back off, "Kept as you edited it" again');
 ok(!(await page.locator('#dupBtn').isVisible()), 'rows being updated are not flagged as duplicates');
 if (SHOTS) {
   await page.evaluate(async () => (await import('./js/ui.js')).dismissToast?.('Added 6 cards to Update test'));
@@ -112,7 +118,9 @@ await page.selectOption('#deckSel', deck.id);
 await page.waitForSelector('#updRow:not([hidden])');
 ok((await page.textContent('#updTitle')).startsWith('You already have 8 cards'), 'second time: all 8 match, none left to update: ' + await page.textContent('#updTitle'));
 ok((await page.textContent('#saveBtn')) === 'Already up to date' && await page.isDisabled('#saveBtn'), 'nothing to do: the button says so');
+ok(await badgeCount('Already up to date') === 6 && await badgeCount('Kept as you edited it') === 1 && await badgeCount('Updates the card you already have') === 0, 'second time: rows that match the file say "Already up to date", Beta says "Kept as you edited it"');
 await page.click('#overwriteEdited');
+ok(await badgeCount('Overwrites your edits') === 1 && await badgeCount('Already up to date') === 6, 'opting in: Beta says "Overwrites your edits"');
 ok((await page.textContent('#saveBtn')) === 'Update 1 card', 'opting in: ' + await page.textContent('#saveBtn'));
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const toast2 = await page.textContent('#toast');

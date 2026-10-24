@@ -15,9 +15,7 @@ import { $, esc, plural, toast, openSheet, closeSheet, guardSheet, askClose } fr
 
 const MAX_SHOWN = 100;                   // cards listed under a tag
 export const NONE_FOUND = 'No clear topics found in these cards. Tags work best when cards share words like ‘kidney’ or ‘cell cycle’.';
-const intro = deck => `Topics found in ${deck ? "this deck's cards" : 'these cards'}. Rename them, untick what you don't want, then add them. Tags you already have stay as they are.`;
 const NO_SURE = 'No tag stood out enough to tick for you. These might still help: tick the ones you want.';
-const LESS_SURE = 'Not sure enough to tick these: some mix topics or are on only a few cards. Open Cards to check, then tick the ones you want.';
 const SAME_NAME = "Same name as another tag: they'll be one tag";
 
 const num = n => n.toLocaleString('en');
@@ -89,10 +87,10 @@ export async function openAutotagSheet({ deckId = null, cardIds = null, refresh 
     </li>`;
   const firstLess = tags.findIndex(t => !t.sure);
   const list = (from, to) => `<ul class="tag-sugs" aria-label="${from ? 'Other possible tags' : 'Suggested tags'}">${tags.slice(from, to).map((t, k) => rowHtml(t, from + k)).join('')}</ul>`;
-  $('atBody').innerHTML = `<p class="note" style="margin-top:0">${esc(anySure ? intro(!!deckId) : NO_SURE)}</p>
-    <label class="field"><span>Put them in a folder (optional)</span><input id="tagFolder" placeholder="e.g. renal" autocapitalize="off" autocomplete="off"></label>
+  $('atBody').innerHTML = `${anySure ? '' : `<p class="note" style="margin-top:0">${esc(NO_SURE)}</p>`}
+    <label class="field"><span>Put them in a folder</span><input id="tagFolder" placeholder="e.g. renal" autocapitalize="off" autocomplete="off"></label>
     ${anySure ? list(0, firstLess < 0 ? tags.length : firstLess) : ''}
-    ${firstLess >= 0 ? `<h3 class="tool-h" id="atLess">Other possible tags</h3>${anySure ? `<p class="note" style="margin-top:0">${esc(LESS_SURE)}</p>` : ''}${list(firstLess, tags.length)}` : ''}`;
+    ${firstLess >= 0 ? `<h3 class="tool-h" id="atLess">Other possible tags</h3>${list(firstLess, tags.length)}` : ''}`;
   live(anySure ? `Found ${plural(tags.filter(t => t.sure).length, 'tag')}${firstLess >= 0 ? ` and ${tags.length - tags.filter(t => t.sure).length} others` : ''}` : `${NO_SURE} ${plural(tags.length, 'possible tag')}`);
   if ($('atBody').contains(document.activeElement) || document.activeElement === document.body) $('sheetTitle').focus({ preventScroll: true });
 

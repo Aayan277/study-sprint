@@ -110,7 +110,7 @@ export async function renderImport(el, arg) {
 
     <section class="pane" id="pane-paste" role="tabpanel" aria-labelledby="tab-paste">
       <textarea id="pasteBox" rows="8" spellcheck="false" aria-label="Paste your cards or notes"
-        placeholder="Paste cards, one per line:&#10;Mitosis - cell division into 2 identical cells&#10;Meiosis - division into 4 gametes&#10;&#10;Tabs, | : = and commas work too, as do Quizlet exports and tables from Notion."></textarea>
+        placeholder="Mitosis - cell division into 2 identical cells&#10;Meiosis - division into 4 gametes"></textarea>
       <div class="pane-actions">
         <button class="btn ghost small" type="button" id="suggestBtn">Suggest cards</button>
         <button class="btn ghost small" type="button" id="claudeBtn">Make cards with Claude</button>
@@ -125,7 +125,7 @@ export async function renderImport(el, arg) {
     <section class="pane" id="pane-file" role="tabpanel" aria-labelledby="tab-file" hidden>
       <label class="drop">
         <input type="file" id="fileIn" accept=".csv,.tsv,.txt,.xlsx,.xls,.json,.apkg,.colpkg,.pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
-        <b>Choose a file</b><span class="muted">.csv, .txt, Excel, an Anki deck, or a PDF or slides (.pptx) with text</span>
+        <b>Choose a file</b><span class="muted">.csv, Excel, Anki, PDF, .pptx</span>
         <span class="mono" id="fileName"></span>
       </label>
       <p class="note" id="docStatus" role="status" hidden></p>
@@ -138,7 +138,7 @@ export async function renderImport(el, arg) {
           <button class="btn ghost small" type="button" id="docAi">Make cards with AI</button>
           <button class="btn ghost small" type="button" id="docRaw">Use the text as it is</button>
         </div>
-        <p class="note">Suggest cards finds definitions, lists and key facts, right here on your device. AI usually makes better cards: you paste the text into your own chat, and nothing is sent from here. Or use the text as it is and tidy it in the preview.</p>
+        <p class="note">Nothing is sent from here: Suggest cards works on your device, and AI cards go through your own chat.</p>
       </div>
       <label class="field" id="sheetPickRow" hidden style="margin-top:12px"><span id="sheetPickLbl">Sheet</span><select id="sheetPick"></select></label>
     </section>
@@ -196,10 +196,10 @@ export async function renderImport(el, arg) {
         <span id="soundInfo"></span></span>
         <input id="ankiSounds" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="fieldsRow" hidden><span><b>Keep the other fields</b>
-        <span id="fieldsInfo"></span></span>
+        </span>
         <input id="keepFields" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="revRow" hidden><span><b>Make the reverse cards too</b>
-        <span id="revInfo"></span></span>
+        </span>
         <input id="makeReverse" type="checkbox" class="switch" checked></label>
       <label class="adv-row switch-row prog-row" id="subRow" hidden><span><b>Keep Anki's subdecks</b>
         <span id="subInfo"></span></span>
@@ -825,6 +825,13 @@ function autosizeAll(boxes) {
   list.forEach((t, i) => { t.style.height = heights[i] + 'px'; });
 }
 
+// The badge of a row that matches a saved card: what the update really does with it.
+function matchedBadge(kind) {
+  if (kind === 'same') return 'Already up to date';
+  if (kind === 'edited') return S.overwriteEdited ? 'Overwrites your edits' : 'Kept as you edited it';
+  return 'Updates the card you already have';
+}
+
 // Update the "Found N cards" line, duplicate badges and the save button.
 function refreshFlags() {
   if (!S.result) return;
@@ -841,11 +848,14 @@ function refreshFlags() {
   // What the update would do with each match: nothing to change ('same'), replace it ('safe': nobody edited it here since it was imported)
   // or hold it back ('edited': it differs from the file, and was edited here or was saved by a version that could not tell).
   const kinds = { same: 0, safe: 0, edited: 0 };
+  const rowKind = {};          // card index -> 'same' | 'safe' | 'edited' (what the update does with that row)
   let oldN = 0;
   matchRows(items, currentIndex()).forEach((card, k) => {
     if (!card) return;
     oldN++;
-    kinds[classifyRow(card, live(S.cards[owner[k][0]]), owner[k][1])]++;
+    const kind = classifyRow(card, live(S.cards[owner[k][0]]), owner[k][1]);
+    kinds[kind]++;
+    if (!owner[k][1]) rowKind[owner[k][0]] = kind;
     if (!owner[k][1] && S.updateOld) matched[owner[k][0]] = card;
   });
   S.shownMatches = oldN;
@@ -869,6 +879,7 @@ function refreshFlags() {
       row.classList.toggle('dup', inUse(c) && !!flag);
       row.classList.toggle('off', !inUse(c));
       badge.hidden = !text;
+      badge.classList.toggle('warn', /^(Already in this deck|No \{\{c1|Missing a side|Duplicate)/.test(text));
       badge.textContent = text;
       return;
     }
@@ -882,8 +893,9 @@ function refreshFlags() {
     row.classList.toggle('incomplete', !isComplete(live(c)));
     row.classList.toggle('dup', !!flag);
     badge.hidden = !matched[i] && !flag && isComplete(live(c)) && !c.cloze && !c.occlusion && !c.siblings && !makesReverse(c);
+    badge.classList.toggle('warn', !isComplete(live(c)) || (!matched[i] && !!flag));
     badge.textContent = !isComplete(live(c)) ? 'Missing a side, will be skipped'
-      : matched[i] ? 'Updates the card you already have'
+      : matched[i] ? matchedBadge(rowKind[i])
       : flag === 'deck' ? 'Already in this deck' : flag ? 'Duplicate of an earlier card'
       : makesReverse(c) ? 'Both directions: makes 2 cards'
       : c.siblings ? `Card type ${c.siblings.ord + 1}: part of a note`
@@ -920,7 +932,6 @@ function refreshFlags() {
   $('revRow').hidden = !reversible;
   if (reversible) {
     $('makeReverse').checked = S.makeReverse;
-    $('revInfo').textContent = 'Each of these also asks the back and expects the front, with its own schedule. Review shows one of the two a day.';
     parts.push(S.makeReverse ? `${plural(pairN, 'note')} work${pairN === 1 ? 's' : ''} in both directions, so ${pairN === 1 ? 'it makes' : 'each makes'} 2 cards.`
       : '<span class="warn">Reverse cards are left out (Make the reverse cards too is off).</span>');
   }
@@ -929,7 +940,6 @@ function refreshFlags() {
   const fields = fieldReport(S.result);
   if (S.hasFields) {
     $('keepFields').checked = S.keepFields;
-    $('fieldsInfo').textContent = 'Anki fields like First Aid or Sketchy stay under the answer, folded, with their names.';
     if (S.keepFields) {
       parts.push('Other fields come along as folded sections.');
       if (fields.pictures) parts.push(`<span class="warn">Pictures in other fields are left out (${fields.pictures}).</span>`);
@@ -984,7 +994,7 @@ function refreshFlags() {
   // Cards from several Anki decks: offer to keep them as subdecks of the deck they go into.
   const subs = new Set(subdeckPaths(S.cards.map(c => c.ankiDeck)).filter(p => p.length).map(p => p[0]));
   $('subRow').hidden = !subs.size;
-  if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to, like in Anki. Off = everything goes in that one deck.`;
+  if (subs.size) $('subInfo').textContent = `Makes ${plural(subs.size, 'subdeck')} (${[...subs].slice(0, 3).join(', ')}${subs.size > 3 ? ', …' : ''}) inside the deck you add them to.`;
   if (missing) parts.push(`<span class="warn">${plural(missing, 'row')} missing a side will be skipped.</span>`);
   if (dups) parts.push(`<span class="warn">${plural(dups, 'possible duplicate')} flagged.</span>`);
   // (written only when it changed, so a screen reader does not read it out again at every tick)

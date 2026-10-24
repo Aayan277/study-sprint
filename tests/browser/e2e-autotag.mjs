@@ -69,7 +69,7 @@ ok((await p.textContent('#atLess')) === 'Other possible tags' && await p.evaluat
 const names = await p.$$eval('.tag-sugs .tag-name', i => i.map(x => x.value));
 console.log('   tags:', names.join(', '));
 ok(names.every(n => /^[\p{L}-]+$/u.test(n) && n.length >= 4), 'every name is a clean word or phrase');
-ok((await p.textContent('#atBody')).includes("Topics found in this deck's cards.") && await p.isVisible('#tagFolder'), 'the intro and the folder box are there');
+ok(!(await p.textContent('#atBody')).includes('Topics found in') && await p.isVisible('#tagFolder'), 'no intro, and the folder box is there');
 ok(/^Add \d+ tags? to \d+ cards?$/.test(await addLabel(p)), 'the button says what it will do: ' + await addLabel(p));
 ok(await p.evaluate(() => (document.querySelector('#atLive').textContent || '').startsWith('Found ')), 'the result is announced once');
 const countText = await rows.nth(0).locator('.ts-count').textContent();

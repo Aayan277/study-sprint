@@ -46,17 +46,15 @@ export function cardTextField(id, label, value = '', { rows = 2, placeholder = '
       ${!images ? '' : `<button type="button" tabindex="-1" data-img-add="${id}" aria-label="Add a picture" title="Add a picture"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5L5 20"/></svg></button>
       <button type="button" tabindex="-1" data-snd-add="${id}" aria-label="Add a sound" title="Add a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
       ${!mic ? '' : `<button type="button" tabindex="-1" data-rec="${id}" aria-pressed="false" aria-label="Record a sound" title="Record a sound"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`}`}</span>`;
-  // Said once, under the Back box: maths goes between $ signs.
-  const hint = /Back$/.test(id) ? '<small class="note math-hint">Maths: write it between $ signs, like $x^2$.</small>' : '';
   if (RICH.matches) {
     return `<div class="field fmt-field"><span class="fmt-head"><span id="${id}Lbl">${esc(label)}</span>${tools}</span>
       <div class="rich" id="${id}" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${id}Lbl"
         data-rich="1" ${cloze ? 'data-cloze-box="1"' : ''} data-placeholder="${esc(placeholder)}" style="--rows:${rows}">${formatHTML(value, { math: 'raw' })}</div>
-      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}</div>`;
   }
   return `<div class="field fmt-field"><span class="fmt-head"><label for="${id}">${esc(label)}</label>${tools}</span>
       <textarea id="${id}" rows="${rows}" placeholder="${esc(placeholder)}" ${cloze ? 'data-cloze-box="1"' : ''}>${esc(value)}</textarea>
-      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) || hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}${hint}</div>`;
+      ${cloze ? '' : `<div class="fmt-preview" id="${id}Prev" aria-label="Preview" ${hasFormatting(value) || hasMath(value) ? '' : 'hidden'}>${formatHTML(value)}</div>`}${pics}</div>`;
 }
 
 const pictureHTML = (id, image) => (image
@@ -288,15 +286,14 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
         <span class="answer-mode-l">Answer:</span>
         ${MODES.map(([k, l, id]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${id}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
-      <p class="note answer-hint">Plain text is one box. Step by step and List of parts give each step or part its own box.</p>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
       <div class="steps-ed" id="${p}Steps" data-mode="${mode === 'text' ? 'steps' : mode}" data-cur="${mode}" ${parsed ? '' : 'hidden'}>
-        <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro (optional)' : 'Intro (optional)'}</span><textarea id="${p}Intro" rows="2" placeholder="${mode === 'elements' ? 'Shown above the elements.' : 'Shown before the first step.'}">${esc(parsed?.intro || '')}</textarea></label>
+        <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro (optional)' : 'Intro (optional)'}</span><textarea id="${p}Intro" rows="2">${esc(parsed?.intro || '')}</textarea></label>
         <ol class="step-list" id="${p}StepList" aria-label="${word}s">${rows.map((t, i) => stepRowHTML(i, t, rows.length, word)).join('')}</ol>
         <button type="button" class="btn ghost small" data-step-add="${p}" id="${p}StepAdd">+ Add ${word.toLowerCase()}</button>
-        <label class="field" id="${p}FinalWrap" ${mode === 'elements' ? 'hidden' : ''}><span>Final answer (optional)</span><textarea id="${p}Final" rows="2" placeholder="Shown after the last step. Play asks for it.">${esc(st?.final || '')}</textarea></label>
+        <label class="field" id="${p}FinalWrap" ${mode === 'elements' ? 'hidden' : ''}><span>Final answer</span><textarea id="${p}Final" rows="2">${esc(st?.final || '')}</textarea></label>
       </div>
-      ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'A trick to remember it. Shown under the answer.' })}`;
+      ${cardTextField(p + 'Hook', 'Memory hook (optional)', hook, { rows: 2, images: false, placeholder: 'e.g. a rhyme or picture' })}`;
 }
 // 'text', 'steps' or 'elements'
 export const answerMode = p => document.querySelector(`input[name="${p}Mode"]:checked`)?.value || 'text';
@@ -385,7 +382,6 @@ document.addEventListener('change', e => {
   if (to !== 'text') {
     document.getElementById(p + 'FinalWrap').hidden = el;
     document.getElementById(p + 'IntroL').textContent = el ? 'Rule or intro (optional)' : 'Intro (optional)';
-    document.getElementById(p + 'Intro').placeholder = el ? 'Shown above the elements.' : 'Shown before the first step.';
     document.getElementById(p + 'StepList').setAttribute('aria-label', el ? 'Elements' : 'Steps');
     document.getElementById(p + 'StepAdd').textContent = el ? '+ Add element' : '+ Add step';
   }
@@ -488,9 +484,7 @@ export function clozeFields(p, text = '', extra = '') {
     </div>
     ${cardTextField(id, 'Text', text, { rows: 4, placeholder: 'e.g. The mitochondria makes ATP for the cell', images: false, cloze: true })}
     <div class="cloze-prev" id="${id}Prev">${clozePreviewHTML(text)}</div>
-    ${cardTextField(p + 'Extra', 'Extra (optional)', extra, { rows: 2, images: false, placeholder: 'Shown under the answer' })}
-    <details class="more-tips"><summary>${icon('chevron', 'more-tips-chev')}More tips</summary>
-      <p class="note cloze-help">Each blank becomes its own card. “Same blank as the last one” hides another word on that same card. To show a hint instead of […], type two colons and the hint inside the blank, after the answer. Maths goes between $ signs, like $x^2$.</p></details>`;
+    ${cardTextField(p + 'Extra', 'Extra', extra, { rows: 2, images: false })}`;
 }
 const clozePreviewHTML = text => `<p class="cloze-makes" aria-live="polite">${esc(makesText(text))}</p>
   ${text.trim() ? `<div class="cloze-render">${renderCloze(text, 0, 'all')}</div>` : ''}`;
@@ -604,9 +598,9 @@ export function occlusionFields(p, card = null, extra = '', { hidden = false, ma
         <div class="occ-form-prev" id="${p}OccPrev">${parts.preview}</div>
         <div class="occ-form-row"><p class="cloze-makes" id="${p}OccMakes" aria-live="polite">${esc(parts.makes)}</p>
           <button type="button" class="btn ghost" id="${p}OccEdit" data-occ-edit="${p}">Edit boxes</button></div>
-        <label class="field"><span>Header (optional)</span><input id="${p}OccHead" data-occ-head="${p}" maxlength="${MAX_HEADER}" autocomplete="off" placeholder="e.g. Heart anatomy" value="${esc(o?.header || '')}"></label>
-        <fieldset class="occ-labels" id="${p}OccLabels" data-sig="${groupsOf(st.masks).join()}"><legend>Labels (optional)</legend>${parts.labels}</fieldset>
-        ${cardTextField(p + 'OccExtra', 'Extra (optional)', extra || card?.noteExtra || '', { rows: 2, images: false, placeholder: 'Shown under the answer' })}
+        <label class="field"><span>Header</span><input id="${p}OccHead" data-occ-head="${p}" maxlength="${MAX_HEADER}" autocomplete="off" placeholder="e.g. Heart anatomy" value="${esc(o?.header || '')}"></label>
+        <fieldset class="occ-labels" id="${p}OccLabels" data-sig="${groupsOf(st.masks).join()}"><legend>Labels</legend>${parts.labels}</fieldset>
+        ${cardTextField(p + 'OccExtra', 'Extra', extra || card?.noteExtra || '', { rows: 2, images: false })}
       </div>
     </div>`;
 }
@@ -636,7 +630,7 @@ export function drawOcclusion(p) {
   if (makes.textContent !== parts.makes) makes.textContent = parts.makes;
   // The label boxes keep what was typed in them unless the groups changed.
   const labels = document.getElementById(p + 'OccLabels'), sig = groupsOf(st.masks).join();
-  if (labels.dataset.sig !== sig) { labels.dataset.sig = sig; labels.innerHTML = '<legend>Labels (optional)</legend>' + parts.labels; }
+  if (labels.dataset.sig !== sig) { labels.dataset.sig = sig; labels.innerHTML = '<legend>Labels</legend>' + parts.labels; }
 }
 export function readOcclusion(p) {
   const st = occForms.get(p);

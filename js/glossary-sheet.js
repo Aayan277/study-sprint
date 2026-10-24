@@ -83,7 +83,7 @@ export async function openTermForm({ id = null, term = '', def = '', back = 'clo
     <h2 id="sheetTitle">${mine ? 'Edit term' : 'Add term'}</h2>
     <form id="glForm" class="sheet-in" style="padding:0" autocomplete="off">
       <label class="field"><span>Term</span><input id="glTerm" type="text" maxlength="${LIMITS.term}" value="${esc(start.term)}" required></label>
-      <label class="field"><span>Other spellings (optional, separated by commas)</span><input id="glAlias" type="text" value="${esc(start.aliases.join(', '))}" placeholder="e.g. adenosine triphosphate"></label>
+      <label class="field"><span>Other spellings</span><input id="glAlias" type="text" value="${esc(start.aliases.join(', '))}" placeholder="e.g. adenosine triphosphate"></label>
       <label class="field"><span>Definition</span><textarea id="glDef" rows="4" maxlength="${LIMITS.def}" placeholder="What it means, in your own words">${esc(start.def)}</textarea></label>
       <p class="note" id="glWarn" role="status">${full ? `Your glossary is full (${LIMITS.terms.toLocaleString('en')} terms). Delete one to add another.` : ''}</p>
       <div class="sheet-actions">
