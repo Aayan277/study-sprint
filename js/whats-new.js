@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.55', items: [
+    'Security fix: files shared to the app are now handled safely.',
+    'Hostile or huge Anki, PowerPoint and cloze text no longer slows the app down.',
+    'The editor preview now shows when a bullet starts on the third line.',
+  ] },
   { version: '4.54', items: [
     'Re-importing an Anki deck now updates the cards you already have and keeps your progress. Update the app on all your devices.',
     'Anki notes with several card types now bring every card, not just the first.',
