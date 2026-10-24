@@ -1370,6 +1370,7 @@ async function save() {
           const fresh = mapNote(fix(c));
           if (!found[i]) { kept.push(fresh); return; }
           candidates.push(...db.usedMediaIds([c]));          // the pictures and sounds this import saved for it (dropped below if nothing ends up using them)
+          // (only a suggestion: applyUpdate keeps the saved card's own noteId when it has one)
           plans.push({ id: found[i].id, fresh, noteId: fresh.noteId || found[i].noteId });
         });
         cards = kept;
