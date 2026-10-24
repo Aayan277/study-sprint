@@ -133,6 +133,8 @@ ok(d.cards.length === 8 && d.cards.filter(c => c.id !== betaBefore.id).every(c =
 // ---- 5b. an edit on a REVERSE card holds its whole row back (the row shows the worst of its two cards) ----
 await page.evaluate(async () => { const db = await import('./js/db.js'); const r = (await db.getAll('cards')).find(c => c.ankiGuid === 'gGamma' && c.reverse); await db.put('cards', { ...r, back: 'my reverse note' }); });
 const revBefore = (await everything()).cards.find(c => c.ankiGuid === 'gGamma' && c.reverse);
+await page.evaluate(async () => { const db = await import('./js/db.js'); const { contentSig } = await import('./js/anki-match.js');
+  const b = (await db.getAll('cards')).find(c => c.front === 'Beta'); const nb = { ...b, back: 'stale from an older file' }; nb.ankiSig = contentSig(nb); await db.put('cards', nb); });
 await openImport('anki-update-v2.apkg');
 await page.selectOption('#deckSel', deck.id);
 await page.waitForSelector('#updRow:not([hidden])');
@@ -142,7 +144,11 @@ await page.click('#overwriteEdited');
 ok(await gammaBadge() === 'Overwrites your edits' && await page.locator('.prow .badge.warn', { hasText: 'Overwrites your edits' }).count() === 1, 'with the switch on it says "Overwrites your edits" (as a warning badge)');
 await page.click('#overwriteEdited');
 ok(await gammaBadge() === 'Kept as you edited it' && await page.locator('.prow .badge.warn', { hasText: 'Overwrites your edits' }).count() === 0, 'and off again, it is back to "Kept as you edited it", no warning');
-if (!(await page.isDisabled('#saveBtn'))) { await page.click('#saveBtn'); await page.waitForSelector('.crow'); }
+ok(!(await page.isDisabled('#saveBtn')) && (await page.textContent('#saveBtn')) === 'Update 1 card', 'save is enabled: ' + await page.textContent('#saveBtn'));
+ok(await badgeCount('Updates the card you already have') === 1, 'Beta says "Updates the card you already have"');
+await page.click('#saveBtn'); await page.waitForSelector('.crow');
+ok(/Updated 1 card/.test(await page.textContent('#toast')), 'toast: one card updated');
+ok((await everything()).cards.find(c => c.front === 'Beta').back === 'second letter', 'Beta took the file\'s content');
 const revAfter = (await everything()).cards.find(c => c.id === revBefore.id);
 ok(revAfter.back === 'my reverse note' && revAfter.updatedAt === revBefore.updatedAt, 'saved with the switch off, the edited reverse card is exactly as it was');
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
