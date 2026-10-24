@@ -10,7 +10,7 @@
 // A note type's card template says what goes on the front and back; when it shows more than the first two fields, the card
 // is built from the template (anki-template.js) instead of from columns.
 
-import { htmlToMarks } from './format.js';
+import { htmlToMarks, memoNext } from './format.js';
 import { clozeNumbers, clozeCard } from './cloze.js';
 import { parseAnkiOcclusion, occFrontBack, groupsOf } from './occlusion.js';
 import { parseDetails, cleanFields, MAX_TEXT } from './note-fields.js';
@@ -22,16 +22,40 @@ export const htmlToText = html => htmlToMarks(html, { marks: false });
 
 // Anki's editor writes formulas as [$]x[/$] and [$$]x[/$$]; here they are \(x\) and \[x\], which (unlike $ ... $) take
 // spaces and line breaks inside, as Anki's do. (\( ... \) and \[ ... \] themselves are read as they are.)
-export const ankiMath = text => String(text ?? '').replace(/\[\$\$\]([\s\S]+?)\[\/\$\$\]/g, (m, t) => `\\[${t}\\]`).replace(/\[\$\]([\s\S]+?)\[\/\$\]/g, (m, t) => `\\(${t}\\)`);
+// replaceBetween does  text.replace(/\[\$\]([\s\S]+?)\[\/\$\]/g, ...)  (open "[$]", close "[/$]") in one pass: the regex reread the whole text from every opening that never closed.
+// The inside is at least one character and ends at the first closing mark; with no closing mark left, no later opening can match either.
+function replaceBetween(text, open, close, wrap) {
+  let out = '', at = 0, i = text.indexOf(open);
+  while (i >= 0) {
+    const j = text.indexOf(close, i + open.length + 1);
+    if (j < 0) break;
+    out += text.slice(at, i) + wrap(text.slice(i + open.length, j));
+    at = j + close.length;
+    i = text.indexOf(open, at);
+  }
+  return out + text.slice(at);
+}
+export const ankiMath = text => replaceBetween(replaceBetween(String(text ?? ''), '[$$]', '[/$$]', t => `\\[${t}\\]`), '[$]', '[/$]', t => `\\(${t}\\)`);
 
 export const hasImage = html => /<img\b/i.test(String(html ?? ''));
 
 // The sound file names in a field, in order: 'dog [sound:dog.mp3]' → ['dog.mp3']. Names may be URL-encoded ("my%20sound.mp3").
 // Call it on the field's HTML before htmlToMarks, which removes the [sound:...] tags.
 //   raw: true gives the names as written (before URL-decoding), for a file whose name really has a % in it
+// The names inside [sound:...] tags, as the regex  /\[sound:([^\]]+)\]/g  finds them, but in one pass (that regex reread to the end of the text from every "[sound:" with no "]" after it).
+function soundTags(text) {
+  const out = [];
+  let i = text.indexOf('[sound:');
+  while (i >= 0) {
+    const j = text.indexOf(']', i + 7);
+    if (j < 0) break;                                   // no "]" left anywhere: no later tag can close either
+    if (j > i + 7) { out.push(text.slice(i + 7, j)); i = text.indexOf('[sound:', j + 1); } else i = text.indexOf('[sound:', i + 1);
+  }
+  return out;
+}
 export function soundNames(html, { raw = false } = {}) {
-  return [...String(html ?? '').matchAll(/\[sound:([^\]]+)\]/g)]
-    .map(m => htmlToMarks(m[1], { marks: false }))
+  return soundTags(String(html ?? ''))
+    .map(name => htmlToMarks(name, { marks: false }))
     .map(n => (raw ? n : (() => { try { return decodeURIComponent(n); } catch { return n; } })()))
     .map(n => n.trim())
     .filter(Boolean);
@@ -41,9 +65,39 @@ export const MAX_SOUNDS = 4;                        // per side of a card
 const SOUND_EXT = /\.(mp3|m4a|mp4|aac|ogg|oga|opus|webm|wav|flac)$/i;
 
 // The picture file names in a field, in order: <img src="brain.png"> → ['brain.png'].
+// The src values of the <img> tags, as the regex  /<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi  finds them, but without rereading the text
+// from every "<img" that has no src (the regex took seconds on 50 KB of them). The first usable "src=" before the tag's ">" wins; its value may run past the ">" when quoted.
+function imageSrcs(text) {
+  const out = [], found = new Map();                    // found: position of a usable "src" -> [value, where the value ends]
+  const srcRe = /src/gi, imgRe = /<img(?!\w)/gi;
+  const space = j => { while (j < text.length && /\s/.test(text[j])) j++; return j; };
+  const usable = p => {                                 // is there  src\s*=\s*value  at p, with a word break before it?
+    if (/\w/.test(text[p - 1] ?? '')) return false;
+    let j = space(p + 3);
+    if (text[j] !== '=') return false;
+    j = space(j + 1);
+    const q = text[j];
+    if (q === '"' || q === "'") {
+      const k = text.indexOf(q, j + 1);
+      if (k >= 0) { found.set(p, [text.slice(j + 1, k), k + 1]); return true; }
+    }
+    let k = j;
+    while (k < text.length && !/[\s>]/.test(text[k])) k++;
+    if (k === j) return false;
+    found.set(p, [text.slice(j, k), k]);
+    return true;
+  };
+  const nextSrc = memoNext(pos => { srcRe.lastIndex = pos; for (let m; (m = srcRe.exec(text));) { if (usable(m.index)) return m.index; srcRe.lastIndex = m.index + 1; } return -1; });
+  const nextGt = memoNext(pos => text.indexOf('>', pos));
+  for (let m; (m = imgRe.exec(text));) {
+    const gt = nextGt(m.index + 4), p = nextSrc(m.index + 4);
+    if (p >= 0 && (gt < 0 || p < gt)) { const [value, end] = found.get(p); out.push(value); imgRe.lastIndex = end; } else imgRe.lastIndex = m.index + 1;
+  }
+  return out;
+}
 export function imageNames(html) {
-  return [...String(html ?? '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)]
-    .map(m => htmlToMarks(m[1] ?? m[2] ?? m[3], { marks: false }))
+  return imageSrcs(String(html ?? ''))
+    .map(src => htmlToMarks(src, { marks: false }))
     .map(n => { try { return decodeURIComponent(n); } catch { return n; } })
     .filter(Boolean);
 }
@@ -211,8 +265,38 @@ export { clozeNumbers, clozeCard };
 
 // The labels in an Image Occlusion note's Comments field: lines "1. Aorta" (split by <br> or a line break), all of them
 // numbered. Returns labels by position (index k - 1), or null when the field is anything else.
+// splitIoLines does  text.split(/<br\s*\/?>|<\/?div\b[^>]*>|\r?\n/i)  in one pass: that regex reread the whole text from every "<div" that never closed.
+function splitIoLines(text) {
+  const out = [];
+  let at = 0, close = -2;                                // close: the next ">" at or after the last search (-1: none left, so none for any later start)
+  const nextClose = pos => (close === -2 || (close >= 0 && close < pos) ? (close = text.indexOf('>', pos)) : close);
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    let end = -1;
+    if (ch === '\n') end = i + 1;
+    else if (ch === '\r' && text[i + 1] === '\n') end = i + 2;
+    else if (ch === '<') {
+      const tag = text.slice(i + 1, i + 5).toLowerCase();
+      if (tag.startsWith('br')) {
+        let j = i + 3;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        if (text[j] === '/') j++;
+        if (text[j] === '>') end = j + 1;
+      } else if (tag.startsWith('div') || tag.startsWith('/div')) {
+        const j = i + (tag[0] === '/' ? 5 : 4);          // just past "div"
+        if (!/\w/.test(text[j] ?? '')) { const c = nextClose(j); if (c >= 0) end = c + 1; }
+      }
+    }
+    if (end < 0) continue;
+    out.push(text.slice(at, i));
+    at = end;
+    i = end - 1;
+  }
+  out.push(text.slice(at));
+  return out;
+}
 export function ioLabels(html) {
-  const lines = String(html ?? '').split(/<br\s*\/?>|<\/?div\b[^>]*>|\r?\n/i).map(l => htmlToText(l).trim()).filter(Boolean);
+  const lines = splitIoLines(String(html ?? '')).map(l => htmlToText(l).trim()).filter(Boolean);
   const out = [];
   for (const line of lines) {
     const m = /^(\d+)\.\s(.*)$/s.exec(line);
