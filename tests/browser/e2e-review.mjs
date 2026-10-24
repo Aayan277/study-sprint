@@ -9,7 +9,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console ' + m.t
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
 const noHScroll = async w => ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + w);
 const dbq = fn => page.evaluate(async src => { const db = await import('./js/db.js'); return (new Function('db', 'return (' + src + ')(db)'))(db); }, fn.toString());
-const counts = async () => (await page.textContent('.rv-counts')).trim().split(/\s+/).map(Number);
+const counts = async () => (await page.$$eval('.rv-counts span', s => s.map(x => +x.textContent)));
 
 await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 ok((await page.getAttribute('#screen', 'aria-live')) === null && (await page.getAttribute('#toastLive', 'role')) === 'status', 'the whole screen is not a live region; the toast still announces');
@@ -89,7 +89,7 @@ await page.focus('.rate.r1'); await page.keyboard.press('Enter');
 await page.waitForFunction(() => !document.querySelector('.rate'));
 logs = await dbq(db => db.getAll('reviewLog'));
 ok(logs.length === 1 && logs[0].rating === 1, 'Enter on the Again button rates Again: ' + JSON.stringify(logs.map(l => l.rating)));
-await page.click('#undoBtn'); await page.waitForFunction(() => document.querySelector('.rv-counts')?.textContent.trim().split(/\s+/)[0] === '12');
+await page.click('#undoBtn'); await page.waitForFunction(() => document.querySelector('.rv-counts .c-new')?.textContent === '12');
 // tap card to flip, Again via button
 await page.click('#flash'); await page.click('.rate.r1');
 await page.waitForFunction(() => !document.querySelector('.rate'));
@@ -125,7 +125,7 @@ const card = await page.evaluate(async () => {
 });
 const short = card.back.length <= 40;
 console.log('   current card:', card.front, '| back length', card.back.length);
-if (!short) ok(await page.isVisible('.note.center'), 'long answer: told to flip instead');
+if (!short) ok(await page.locator('#typeIn').count() === 0 && await page.isVisible('#showBtn'), 'long answer: no typing box, flipped instead');
 // Sample backs are long, so add a short card and review it with typing.
 await page.evaluate(async () => {
   const db = await import('./js/db.js');

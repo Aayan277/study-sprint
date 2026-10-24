@@ -274,7 +274,6 @@ export function mountRetentionHelper(root, { deckId = '', current, onPick }) {
         ${exams.length > 1 ? `<label class="rc-exam-pick">Exam <select class="select" data-rc="exam">${exams.map((g, k) => `<option value="${k}" ${k === examIx ? 'selected' : ''}>${esc(g.names[0])} · ${esc(g.date)}</option>`).join('')}</select></label>` : ''}
         <figcaption class="rc-cap">Recall on exam day (${esc(ex.date)}), before the final pass: the average chance of remembering a card if you stopped reviewing ${FINAL_DAYS} days before</figcaption>
         ${chart(drawn[1])}
-        <p class="rc-note">The exam’s own rules are included: the target rises over the last two weeks, and cards you would remember at under 99% on exam day get one more review in the last ${FINAL_DAYS} days, spread over those days. That final pass lifts every target to about the same readiness, so the chart shows recall before it, and the numbers show how busy the last ${FINAL_DAYS} days get.</p>
       </figure>` : ''}
       <div class="rc-sugg">${lines.map(l => `<p class="rc-note">${esc(l)}</p>`).join('')}</div>
       <details class="opt-fold"><summary>See the numbers</summary>

@@ -45,7 +45,6 @@ export async function openStatsLayoutSheet({ onChange = () => {} } = {}) {
 
   openSheet(`
     <h2 id="sheetTitle">Customise Stats</h2>
-    <p class="muted small sl-note">Show or hide a card, move it up or down, and pick its size. Size applies on wider screens: on a phone every card is full width. Two half cards side by side share a row; a half card with no half card next to it shows full width. A card with no size choice always fills the row.</p>
     <ol class="sl-list" id="slList">${layout.order.map(row).join('')}</ol>
     <div class="sl-confirm" id="slConfirm" role="group" aria-labelledby="slConfirmQ" hidden>
       <p id="slConfirmQ"><b>Reset to the default layout?</b> All cards come back, in their usual order and size.</p>

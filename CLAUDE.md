@@ -1,1 +1,2 @@
 Owner is new to coding: explain in plain language. Opus agents plan and review, Sonnet agents write code (`.claude/agents`). Code Reviewer before every merge; then merge without asking. Never `pkill` by pattern. Before a release or merge, use the `release` skill.
+No helper, tagline or caption text on screens. Explanations go in js/help.js. A control without visible text needs an aria-label. Keep only warnings, errors, legal/privacy and data-loss notes.

@@ -51,7 +51,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
     <div id="tsIds" class="ts-pane">
       <label class="field"><span>Paste question IDs</span>
         <textarea id="tsText" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false"
-          placeholder="For example 12345, 23456 34567: copy them from your UWorld or AMBOSS block"></textarea></label>
+          placeholder="e.g. 12345, 23456 34567"></textarea></label>
       <label class="field" id="tsLookWrap" hidden><span>Look in</span><select id="tsLook" class="select"></select></label>
       <div class="ts-missing" id="tsMissing" hidden></div>
     </div>
@@ -179,7 +179,9 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
     } catch { toast("Couldn't start the session. Check your connection and try again."); return; }
     // "Start over?" may be asking about a session in progress: then nothing has started yet.
     const started = !$('sheet').open;
-    if (n) toast(`Unsuspended ${plural(n, 'card')}${started ? ' and started a session' : ''}.`);
+    // Review turns focus mode on when it has drawn, and that hides any toast: wait for it so the message stays up.
+    if (started) for (let i = 0; i < 40 && !document.body.classList.contains('focus'); i++) await new Promise(r => setTimeout(r, 100));
+    if (n) toast(`Unsuspended ${plural(n, 'card')}${started && document.body.classList.contains('focus') ? ' and started a session' : ''}.`);
   });
 
   $('tsText').focus();

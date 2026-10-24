@@ -370,30 +370,11 @@ test('ring: all done, and nothing due at all (never 0/0, drawn full)', () => {
   const d = ringWorld({ logs, newCards: 0 }); d.statesById.set('r0', { cardId: 'r0', state: 2, due: now + DAY }); d.statesById.set('r1', { cardId: 'r1', state: 2, due: now + DAY });
   d.split = splitCards(d.cards, d.statesById, now);
   const done = ringOf(d);
-  assert.deepEqual([done.state, done.done, done.left, done.frac, done.allLearned], ['done', 1, 0, 1, true]);
+  assert.deepEqual([done.state, done.done, done.left, done.frac], ['done', 1, 0, 1]);
   const none = ringWorld({ newCards: 0 }); none.statesById.set('r0', { cardId: 'r0', state: 2, due: now + DAY }); none.statesById.set('r1', { cardId: 'r1', state: 2, due: now + DAY });
   none.split = splitCards(none.cards, none.statesById, now);
   const n = ringOf(none);
   assert.deepEqual([n.state, n.done, n.total, n.frac, n.n, n.of], ['nothing', 0, 0, 1, 1, 1]);      // shown as 1/1 full, never 0/0
-});
-
-test('ring: "All cards learned" only when no deck has an unseen new card', () => {
-  assert.equal(ringOf(ringWorld()).allLearned, false);
-  assert.equal(ringOf(ringWorld({ newCards: 0 })).allLearned, true);
-  // new cards held back by the daily limit are still unseen
-  assert.equal(ringOf(ringWorld({ newPerDay: 0 })).allLearned, false);
-  // an empty set of cards is not "learned"
-  assert.equal(ringOf({ ...ringWorld({ newCards: 0 }), cards: [], allCards: [], split: { reviews: [], waiting: [], fresh: [] } }).allLearned, false);
-  // a suspended unseen new card was never learned
-  const sus = ringWorld({ newCards: 1 }); sus.allCards = sus.allCards.map(c => (c.id === 'n0' ? { ...c, suspended: true } : c)); sus.cards = sus.allCards.filter(c => !c.suspended);
-  sus.split = splitCards(sus.cards, sus.statesById, now);
-  assert.equal(ringOf(sus).allLearned, false);
-  // scoped to the chosen deck: another deck's unseen card does not count
-  const two = ringWorld({ newCards: 0 }); two.decks = [...two.decks, { id: 'e', name: 'E', created: 2 }];
-  two.allCards = [...two.allCards, { id: 'z', deckId: 'e', front: 'f', back: 'b', created: 20 }]; two.cards = two.allCards; two.deckOf.set('z', 'e'); two.chains = chainMap(two.decks);
-  two.split = splitCards(two.cards, two.statesById, now);
-  assert.equal(todayRing(two, ['d'], countFor(two, ['d']), now).allLearned, true);
-  assert.equal(todayRing(two, ['e'], countFor(two, ['e']), now).allLearned, false);
 });
 
 test('ring: counts Review answers and Play answers that changed the schedule, not practice or imports, and honours the deck choice', () => {

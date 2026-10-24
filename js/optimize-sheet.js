@@ -229,7 +229,6 @@ function resultHTML(r) {
     case 'better': {
       const s = r.saved;
       return `<p class="opt-result good"><b>Done.</b> Your new settings predict your answers better, so they're now in use.</p>
-        <p class="opt-note">Run this again every month or so as you review more.</p>
         <details class="opt-fold"><summary>Details</summary>
           <p class="opt-detail">Checked on your newest 20% of reviews, which the fit did not see: prediction error (log loss) <b class="mono">${s.logLoss.before.toFixed(3)} → ${s.logLoss.after.toFixed(3)}</b> · RMSE <b class="mono">${pctText(s.rmse.before)} → ${pctText(s.rmse.after)}</b></p>
           <p class="opt-note">Used ${word(s.reviews, 'review', 'reviews')} of ${word(s.cards, 'card', 'cards')}. Those error numbers are for that check. The 21 numbers, in the same format as Anki's:</p>

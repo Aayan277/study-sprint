@@ -61,7 +61,6 @@ export async function openExamSheet(deckId, onDone = () => {}) {
       <div class="exam-quick" role="group" aria-label="Quick dates">
         ${PRESETS.map(([label, n]) => `<button type="button" class="tchip" data-days="${n}" aria-pressed="false">${label}</button>`).join('')}
       </div>
-      <p class="note" style="margin:0">Every card in ${esc(deck.name)} comes back before then, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately.</p>
       <p class="err" id="xdErr" role="alert" hidden></p>
       <div class="sheet-actions"><button class="btn primary" type="submit">Save exam date</button></div>
     </form>`);

@@ -325,9 +325,6 @@ for (const [w, h] of [[390, 844], [320, 640]]) {
   ok(Object.values(sizes).every(v => v >= 44), `M6 (${w}px): Tools, Select, + Add card and ‹ Decks are 44px or more high (${JSON.stringify(sizes)})`);
   await go(p, '#/today', '#optBtn');
   ok(await p.$eval('#optBtn', b => b.getBoundingClientRect().height) >= 44, `M6 (${w}px): Options is 44px high`);
-  await go(p, '#/stats', '.chart');
-  const info = await p.$eval('.info-fold summary', s => { const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
-  ok(info[0] >= 44 && info[1] >= 44, `M6 (${w}px): the Stats "i" button is ${info.join('x')}`);
   await go(p, '#/deck/sample', '.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm .fmt-tools button');
   const tb = await p.$$eval('#ceForm .fmt-tools button', bs => bs.map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
   ok(tb.length >= 4 && tb.every(([bw, bh]) => bw >= 40 && bh >= 40), `M6 (${w}px): the editor toolbar buttons are 40x40 or more (${tb.slice(0, 3).map(x => x.join('x')).join(', ')} ...)`);
@@ -411,7 +408,7 @@ for (const [vp, label, min] of [[PHONE, 'phone', 22], [DESK, 'desktop', 14]]) {
   ok(c.w >= min && c.w <= 30, `M10 (${label}): calendar squares are ${c.w}px (at least ${min}px) for ${c.n} weeks`);
   ok(c.grid <= c.box + 2, `M10 (${label}): the ${c.n} weeks fit the card without sideways scrolling (${c.grid} of ${c.box}px)`);
   await p.locator('#calGrid i.lv1, #calGrid i.lv2, #calGrid i.lv3, #calGrid i.lv4').first().click();
-  ok(!/Tap a day/.test(await p.textContent('#calInfo')) && await p.locator('#calGrid i.sel').count() === 1, `M10 (${label}): tapping a day shows it (${(await p.textContent('#calInfo')).trim()})`);
+  ok(/: \d+ answers?|: no studying/.test(await p.textContent('#calInfo')) && await p.locator('#calGrid i.sel').count() === 1, `M10 (${label}): tapping a day shows it (${(await p.textContent('#calInfo')).trim()})`);
   await p.context().close();
 }
 
@@ -431,10 +428,8 @@ for (const ui of ['original', 'clinical']) {
   const p = await open(PHONE, { ui });
   await go(p, '#/deck/sample', '#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm');
   await p.locator('.kind-switch .chip', { hasText: 'Cloze' }).click();
-  ok(await p.isVisible('.more-tips > summary') && !(await p.isVisible('.cloze-help')), `M11 (${ui}): "More tips" is closed and the long help is hidden`);
+  ok(!(await p.locator('.more-tips, .cloze-help').count()), `M11 (${ui}): no "More tips" fold or long help in the form`);
   ok((await p.locator('#acCloze').innerText()).match(/select a word/gi)?.length === 1, `M11 (${ui}): the "select a word" hint appears once in the form`);
-  await p.click('.more-tips > summary');
-  ok(await p.isVisible('.cloze-help') && /hint/.test(await p.textContent('.cloze-help')), `M11 (${ui}): opening More tips shows the rest (hints, same blank, maths)`);
   await p.context().close();
 }
 
@@ -462,7 +457,7 @@ ok(!/Answer given/.test(fs.readFileSync('js/mock-exam.js', 'utf8')), 'M12: "Answ
   await go(p, '#/deck/sample', '#brAdd'); await p.click('#brAdd'); await p.waitForSelector('#acForm');
   const t = await p.textContent('.answer-mode');
   ok(/Plain text/.test(t) && /Step by step/.test(t) && /List of parts/.test(t) && !/Elements/.test(t), `L1: the choices read "Plain text", "Step by step", "List of parts" (${t.replace(/\s+/g, ' ').trim()})`);
-  ok(await p.isVisible('.answer-hint'), 'L1: one hint line explains them');
+  ok(!(await p.locator('.answer-hint').count()), 'L1: no hint line under the choices');
   const vals = await p.$$eval('.answer-mode input', is => is.map(i => i.value));
   ok(vals.join() === 'text,steps,elements', 'L1: the stored values are still text, steps, elements');
   await p.context().close();

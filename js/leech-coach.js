@@ -48,7 +48,6 @@ export async function coachHTML(ids) {
   if (!found.length) return '';
   const one = found.length === 1;
   return `<section class="coach" aria-labelledby="coachTitle"><h2 id="coachTitle" tabindex="-1">Cards you keep forgetting</h2>
-    <p class="note">${one ? 'This card keeps' : 'These cards keep'} slipping. Fixing ${one ? 'it' : 'them'} usually works better than more repeats.</p>
     <ul class="coach-list">${found.map(([c, s]) => rowHTML(c, s?.lapses || 0)).join('')}</ul></section>`;
 }
 
@@ -116,7 +115,6 @@ function openHook(card, done) {
       <p class="coach-q">${esc(plainText(card.front))}<br><b>${esc(plainText(card.back || card.noteText || ''))}</b></p>
       <label class="field"><span>A trick to remember it</span>
         <textarea id="hookText" rows="3" placeholder="A picture, a rhyme, what it sounds like…">${esc(card.noteExtra || '')}</textarea></label>
-      <p class="note">It shows under the answer. The card goes back into your reviews with its schedule as it is.</p>
       <p class="err" id="hookErr" role="alert" hidden></p>
       <div class="sheet-actions"><button class="btn ghost" type="button" id="hookCancel">Cancel</button><button class="btn primary" type="submit">Save hook</button></div>
     </form>`);
@@ -162,7 +160,6 @@ function openSplit(card, done) {
   openSheet(`
     <h2 id="sheetTitle">Split into smaller cards</h2>
     <form id="splitForm" class="coach-form">
-      <p class="note">One small fact per card is easier to remember. Edit the pieces if they’re not quite right.</p>
       <ol class="split-list" id="splitList">${backs.map((b, i) => partHTML(i, b)).join('')}</ol>
       <button class="btn ghost small" type="button" id="splitAdd" ${backs.length >= MAX_PARTS ? 'hidden' : ''}>+ Add a card</button>
       <fieldset class="split-orig"><legend>The original card</legend>
@@ -231,7 +228,6 @@ async function openPartner(card, done) {
   const pool = [...cardsById.values()].filter(c => c.id !== card.id && !c.noteId && c.front);
   openSheet(`
     <h2 id="sheetTitle">What does it get mixed up with?</h2>
-    <p class="note">Pick a card that looks or sounds like it. You’ll see them side by side.</p>
     <label class="field"><span>Search your cards</span><input type="search" id="partnerQ" autocomplete="off" placeholder="A word from the front or back"></label>
     <ul class="partner-list" id="partnerList"></ul>`);
   const draw = () => {

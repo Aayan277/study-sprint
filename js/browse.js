@@ -88,7 +88,6 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
   const emptyArt = `<svg class="empty-art" viewBox="0 0 120 96" aria-hidden="true"><rect x="34" y="10" width="62" height="74" rx="10" fill="none" stroke="var(--line-strong)" stroke-width="2" transform="rotate(8 65 47)"/><rect x="24" y="14" width="62" height="74" rx="10" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="2"/><path d="M55 38v26M42 51h26" stroke="var(--accent-text)" stroke-width="3.5" stroke-linecap="round"/></svg>`;
   box.innerHTML = `
     <div class="empty empty-first" id="brEmpty" hidden>${emptyArt}<b>No cards yet</b>
-      <p>Paste a list like <code>term - definition</code> and it becomes cards. Or add them one at a time.</p>
       <div class="empty-btns"><a class="btn primary" href="#/import${deckId ? '/' + encodeURIComponent(deckId) : ''}">${icon('paste')} Paste cards</a>
         <button class="btn ghost" type="button" id="brAddFirst">${icon('plus')} Add one card</button></div></div>
     <div id="brMain">
@@ -342,7 +341,7 @@ export async function openCardPanel(card, ctx) {
         <dt>Status</dt><dd>${esc(status.label)}</dd>
         ${studied ? `
         <dt>Due</dt><dd>${state.due <= now ? 'Now' : `${shortDate(state.due)} (in ${formatInterval(state.due - now)})`}</dd>
-        <dt>Remembered for</dt><dd>about ${formatInterval(state.stability * 86400000)} <span class="muted">(stability)</span></dd>
+        <dt>Remembered for</dt><dd>about ${formatInterval(state.stability * 86400000)}</dd>
         <dt>Difficulty</dt><dd>${state.difficulty.toFixed(1)} / 10</dd>
         <dt>Reviews</dt><dd>${state.reps}</dd>
         <dt>Forgotten</dt><dd>${plural(state.lapses, 'time')}</dd>` : ''}
@@ -418,7 +417,7 @@ async function openCardActions(card, ctx) {
       <button type="button" class="act-row" data-act="bury" aria-keyshortcuts="-">${icon('moon')}<span>${isBuried(card, now) ? 'Unbury' : 'Bury until tomorrow'}</span><kbd aria-hidden="true">-</kbd></button>
       <button type="button" class="act-row" data-act="suspend" aria-keyshortcuts="@">${icon('pause')}<span>${isSuspended(card) ? 'Unsuspend' : 'Suspend'}</span><kbd aria-hidden="true">@</kbd></button>
       <button type="button" class="act-row" data-go="glossary">${icon('plus')}<span>Add to glossary${picked ? `<small>“${esc(picked)}”</small>` : ''}</span></button>
-      <button type="button" class="act-row" data-go="more">${icon('more')}<span>More<small>Move, due date, reset, delete, card info</small></span>${icon('chevron')}</button>
+      <button type="button" class="act-row" data-go="more">${icon('more')}<span>More</span>${icon('chevron')}</button>
     </div>`), { side: true });
   const { save } = cardOps(card, ctx);
   const sheet = $('sheet');
@@ -904,7 +903,6 @@ function openTools(cards, { scope, refresh }) {
   openSheet(`
     <h2 id="sheetTitle">Tools</h2>
     <h3 class="tool-h">Find by tag or question ID</h3>
-    <p class="note">Paste the IDs of questions you missed in a question bank, or pick a tag, and study those cards. Looks in all decks.</p>
     <button class="btn ghost small" type="button" id="toolTagStudy">Find by tag or question ID</button>
     <h3 class="tool-h">Tags in ${esc(scope)}</h3>
     ${folders ? `<div class="tag-tree-box" id="tagTreeBox">${tagTreeHTML(tree, { mode: 'manage' })}</div>`
@@ -915,10 +913,8 @@ function openTools(cards, { scope, refresh }) {
       : '<p class="note">No tags yet. Add them when editing a card.</p>'}
     <div id="tagEdit"></div>
     <h3 class="tool-h">Suggest tags</h3>
-    <p class="note">Finds the topics in ${esc(scope)}'s cards and offers them as tags. You choose which to add.</p>
     <button class="btn ghost small" type="button" id="toolAutoTag"${cards.length >= 10 ? '' : ' disabled'}>Suggest tags for these cards</button>
     <h3 class="tool-h">Link cloze cards</h3>
-    <p class="note">Cards imported before notes existed have one separate card for each blank (“The […] makes ATP” and “The mitochondria makes […]”). This finds cards of one deck that come from the same sentence and links them as one cloze note, so Review shows one of them a day. Schedules and history stay as they are. You see what it found first.</p>
     <button class="btn ghost small" type="button" id="linkFind">Find cards to link</button>
     <div id="linkOut" aria-live="polite"></div>`, { side: true });
   wireLinkTool(cards, { scope, refresh });
@@ -1043,7 +1039,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
       ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}
-      <label class="field"><span>Tags (optional, separated by spaces or commas)</span><input id="acTags" autocomplete="off"></label>
+      <label class="field"><span>Tags</span><input id="acTags" autocomplete="off" placeholder="e.g. renal cardio"></label>
       <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>

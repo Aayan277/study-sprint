@@ -162,7 +162,7 @@ await page.setInputFiles('#fileIn', SP + '/files/doc-slides.pptx');
 await page.waitForSelector('#docBox:not([hidden])', { timeout: 60000 });
 ok(await page.isVisible('#docSuggest') && (await page.textContent('#docSuggest')) === 'Suggest cards', 'a file shows Suggest cards first');
 ok((await page.$$eval('#docBox .pane-actions button', b => b.map(x => x.textContent))).join('|') === 'Suggest cards|Make cards with AI|Use the text as it is', 'the three choices, in order');
-ok((await page.textContent('#docBox .note')).startsWith('Suggest cards finds definitions, lists and key facts, right here on your device.'), 'and the note explains them');
+ok((await page.textContent('#docBox .note')).startsWith('Nothing is sent from here'), 'and the note keeps the privacy clause');
 await noHScroll('slides choice');
 await page.click('#docSuggest');
 await page.waitForSelector('.prow.sug', { timeout: 30000 }).catch(() => {});

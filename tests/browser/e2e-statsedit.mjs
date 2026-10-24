@@ -149,8 +149,8 @@ for (const ui of ['original', 'clinical']) {
   ok(JSON.stringify((await saved(p)).hidden) === JSON.stringify(['hours', 'difficulty']), `${tag}: the hidden cards are saved`);
   ok(/Add widget/.test(await p.textContent('#edAdd')) && /2 hidden/.test(await p.textContent('#edAdd')) && await p.getAttribute('#edAdd', 'aria-disabled') === null, `${tag}: the Add tile counts the hidden cards`);
   await p.click('#edAdd'); await p.waitForSelector('#sheet[open] .aw-list');
-  const items = await p.$$eval('.aw-item', bs => bs.map(b => ({ id: b.dataset.id, name: b.querySelector('b').textContent, desc: b.querySelector('.muted').textContent, thumb: !!b.querySelector('svg.aw-svg path, svg.aw-svg rect, svg.aw-svg circle'), label: b.getAttribute('aria-label') })));
-  ok(items.length === 2 && items.every(i => i.name && i.desc.length > 10 && i.thumb && i.label.startsWith('Add ')), `${tag}: the Add sheet lists the hidden cards with a name, a line and a picture (${items.map(i => i.name)})`);
+  const items = await p.$$eval('.aw-item', bs => bs.map(b => ({ id: b.dataset.id, name: b.querySelector('b').textContent, thumb: !!b.querySelector('svg.aw-svg path, svg.aw-svg rect, svg.aw-svg circle'), label: b.getAttribute('aria-label') })));
+  ok(items.length === 2 && items.every(i => i.name && i.thumb && i.label.startsWith('Add ')), `${tag}: the Add sheet lists the hidden cards with a name and a picture (${items.map(i => i.name)})`);
   await p.screenshot({ path: `${SP}/add-widget-${tag}.png` });
   await p.click('.aw-item[data-id=difficulty]');
   await p.waitForSelector('.ed-unit[data-card=difficulty]');

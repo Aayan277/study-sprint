@@ -61,7 +61,13 @@ ok((await page.textContent('#updInfo')).includes('Off = they come in again'), 't
 ok(await page.isVisible('#editRow') && !(await page.isChecked('#overwriteEdited')) && (await page.textContent('#editTitle')) === 'Overwrite 1 card you may have edited here too', 'a separate switch for the edited card, off: ' + await page.textContent('#editTitle'));
 ok(await page.isChecked('#updateOld'), 'the switch is on by default');
 ok((await page.textContent('#found')).includes('5 cards you already have will be updated'), 'the summary says so too');
-ok((await page.locator('.prow .badge:not([hidden])', { hasText: 'Updates the card you already have' }).count()) === 5, 'five rows are marked as updates (Gamma\'s one row covers its two cards)');
+const badgeCount = async t => page.locator('.prow .badge:not([hidden])', { hasText: t }).count();
+ok(await badgeCount('Updates the card you already have') === 4, 'the rows that will change are marked as updates (Gamma\'s one row covers its two cards)');
+ok(await badgeCount('Kept as you edited it') === 1 && await badgeCount('Overwrites your edits') === 0, 'Beta, edited here and held back, says "Kept as you edited it"');
+await page.click('#overwriteEdited');
+ok(await badgeCount('Overwrites your edits') === 1 && await badgeCount('Kept as you edited it') === 0, 'with the overwrite switch on, Beta says "Overwrites your edits"');
+await page.click('#overwriteEdited');
+ok(await badgeCount('Kept as you edited it') === 1, 'and back off, "Kept as you edited it" again');
 ok(!(await page.locator('#dupBtn').isVisible()), 'rows being updated are not flagged as duplicates');
 if (SHOTS) {
   await page.evaluate(async () => (await import('./js/ui.js')).dismissToast?.('Added 6 cards to Update test'));
@@ -112,7 +118,9 @@ await page.selectOption('#deckSel', deck.id);
 await page.waitForSelector('#updRow:not([hidden])');
 ok((await page.textContent('#updTitle')).startsWith('You already have 8 cards'), 'second time: all 8 match, none left to update: ' + await page.textContent('#updTitle'));
 ok((await page.textContent('#saveBtn')) === 'Already up to date' && await page.isDisabled('#saveBtn'), 'nothing to do: the button says so');
+ok(await badgeCount('Already up to date') === 6 && await badgeCount('Kept as you edited it') === 1 && await badgeCount('Updates the card you already have') === 0, 'second time: rows that match the file say "Already up to date", Beta says "Kept as you edited it"');
 await page.click('#overwriteEdited');
+ok(await badgeCount('Overwrites your edits') === 1 && await badgeCount('Already up to date') === 6, 'opting in: Beta says "Overwrites your edits"');
 ok((await page.textContent('#saveBtn')) === 'Update 1 card', 'opting in: ' + await page.textContent('#saveBtn'));
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const toast2 = await page.textContent('#toast');
@@ -121,6 +129,29 @@ d = await everything();
 const beta2 = d.cards.find(c => c.id === betaBefore.id);
 ok(beta2.back === 'second letter' && beta2.id === betaBefore.id, 'the edited card now has the file\'s content, same id');
 ok(d.cards.length === 8 && d.cards.filter(c => c.id !== betaBefore.id).every(c => c.updatedAt === stamp[c.id]) && d.media.length === 1, 'nothing else was written again and no picture was added');
+
+// ---- 5b. an edit on a REVERSE card holds its whole row back (the row shows the worst of its two cards) ----
+await page.evaluate(async () => { const db = await import('./js/db.js'); const r = (await db.getAll('cards')).find(c => c.ankiGuid === 'gGamma' && c.reverse); await db.put('cards', { ...r, back: 'my reverse note' }); });
+const revBefore = (await everything()).cards.find(c => c.ankiGuid === 'gGamma' && c.reverse);
+await page.evaluate(async () => { const db = await import('./js/db.js'); const { contentSig } = await import('./js/anki-match.js');
+  const b = (await db.getAll('cards')).find(c => c.front === 'Beta'); const nb = { ...b, back: 'stale from an older file' }; nb.ankiSig = contentSig(nb); await db.put('cards', nb); });
+await openImport('anki-update-v2.apkg');
+await page.selectOption('#deckSel', deck.id);
+await page.waitForSelector('#updRow:not([hidden])');
+const gammaBadge = () => page.locator('.prow', { has: page.locator('textarea[data-side="front"]', { hasText: 'Gamma!' }) }).locator('.badge').textContent();
+ok(await gammaBadge() === 'Kept as you edited it', 'Gamma, whose reverse card was edited here, says "Kept as you edited it": ' + await gammaBadge());
+await page.click('#overwriteEdited');
+ok(await gammaBadge() === 'Overwrites your edits' && await page.locator('.prow .badge.warn', { hasText: 'Overwrites your edits' }).count() === 1, 'with the switch on it says "Overwrites your edits" (as a warning badge)');
+await page.click('#overwriteEdited');
+ok(await gammaBadge() === 'Kept as you edited it' && await page.locator('.prow .badge.warn', { hasText: 'Overwrites your edits' }).count() === 0, 'and off again, it is back to "Kept as you edited it", no warning');
+ok(!(await page.isDisabled('#saveBtn')) && (await page.textContent('#saveBtn')) === 'Update 1 card', 'save is enabled: ' + await page.textContent('#saveBtn'));
+ok(await badgeCount('Updates the card you already have') === 1, 'Beta says "Updates the card you already have"');
+await page.click('#saveBtn'); await page.waitForSelector('.crow');
+ok(/Updated 1 card/.test(await page.textContent('#toast')), 'toast: one card updated');
+ok((await everything()).cards.find(c => c.front === 'Beta').back === 'second letter', 'Beta took the file\'s content');
+const revAfter = (await everything()).cards.find(c => c.id === revBefore.id);
+ok(revAfter.back === 'my reverse note' && revAfter.updatedAt === revBefore.updatedAt, 'saved with the switch off, the edited reverse card is exactly as it was');
+await page.goto('http://localhost:8123/#/decks'); await page.waitForSelector('.deck');
 
 // ---- 6. switch off: as before ----
 await openImport('anki-update-v2.apkg');

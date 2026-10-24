@@ -37,7 +37,7 @@ for (const [file, name] of [['anki-anking.apkg', 'AnKing new'], ['anki-anking-le
   ok(found.includes('Found 6 cards'), `${file}: 4 cloze notes make 6 cards: ${found.slice(0, 60)}`);
   ok(found.includes('Other fields come along as folded sections.'), `${file}: the summary says other fields come along as folded sections`);
   ok(found.includes('Pictures in other fields are left out (1).'), `${file}: and counts the field that held only a picture`);
-  ok(await page.isVisible('#fieldsRow') && (await page.textContent('#fieldsRow')).includes('Keep the other fields') && (await page.textContent('#fieldsRow')).includes('Anki fields like First Aid or Sketchy stay under the answer, folded, with their names.') && await page.isChecked('#keepFields'), `${file}: the "Keep the other fields" switch is on`);
+  ok(await page.isVisible('#fieldsRow') && (await page.textContent('#fieldsRow')).includes('Keep the other fields') && await page.isChecked('#keepFields'), `${file}: the "Keep the other fields" switch is on`);
   if (file === 'anki-anking.apkg') { await page.screenshot({ path: SP + '/fields-import-375.png', fullPage: true }); }
   await save(name);
   const cs = await cardsIn(name);

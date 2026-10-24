@@ -34,15 +34,13 @@ ok(await page.locator('.mode').count() === 3 && (await page.locator('.mode').eva
 ok(await page.locator('.mode').evaluateAll(els => new Set(els.map(e => Math.round(e.getBoundingClientRect().top))).size === 1), 'the tiles sit side by side');
 ok(await page.getAttribute('#customBtn', 'aria-expanded') === 'false' && await page.isHidden('#customBody'), 'Customise starts folded');
 for (const n of ['Question', 'Difficulty', 'Flash']) ok(await page.locator('#customBody legend', { hasText: new RegExp('^' + n + '$') }).isHidden(), n + ' is inside the fold');
-const sum = (await page.textContent('#customBtn .muted')).trim();
-ok(/questions/.test(sum) && /Normal/.test(sum) && /each/.test(sum), 'a one-line summary of the choices: ' + sum);
+ok(await page.locator('#customBtn .muted').count() === 0, 'Customise has no summary line, just the fold');
 ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
 await page.screenshot({ path: SP + '/play-folded.png' });
 await page.click('#customBtn');
 ok(await page.isVisible('#customBody legend:text-is("Question")') && await page.isVisible('#customBody legend:text-is("Flash")'), 'tapping Customise shows the options');
 await page.click('input[name=len][value="10"]', { force: true }).catch(() => {});
 await page.$eval('input[name=diff][value=hard]', el => el.click());
-ok((await page.textContent('#customBtn .muted')).includes('Hard') && (await page.textContent('#customBtn .muted')).includes('10 questions'), 'the summary follows the choices');
 await page.screenshot({ path: SP + '/play-custom.png', fullPage: true });
 await page.reload(); await page.waitForSelector('#startBtn');
 ok(await page.getAttribute('#customBtn', 'aria-expanded') === 'true', 'the open fold is remembered');

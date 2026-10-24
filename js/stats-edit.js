@@ -20,7 +20,7 @@ const EDGE = 70;              // auto-scroll starts this close to the top or bot
 export const editBarHTML = () => `
   <div class="ed-bar" id="edBar" role="region" aria-label="Edit Stats">
     <div class="ed-row">
-      <div class="ed-title"><b>Editing Stats</b><span class="muted small ed-hint">Drag a card to move it. Tap × to remove it.</span></div>
+      <div class="ed-title"><b>Editing Stats</b></div>
       <div class="ed-btns">
         <button type="button" class="ed-list" data-act="list" aria-haspopup="dialog">Edit as a list</button>
         <button type="button" class="ed-list" id="edReset" data-act="reset">Reset</button>
@@ -53,7 +53,7 @@ export function addTileHTML(layout) {
   const n = hiddenCards(layout).length;
   return n
     ? `<button type="button" class="ed-add" id="edAdd" data-act="add" aria-haspopup="dialog">${icon('plus')}<span>Add widget</span><small class="muted">${n} hidden</small></button>`
-    : `<button type="button" class="ed-add" id="edAdd" data-act="add" aria-disabled="true">${icon('check')}<span>All widgets are on the page</span><small class="muted">Nothing is hidden</small></button>`;
+    : `<button type="button" class="ed-add" id="edAdd" data-act="add" aria-disabled="true">${icon('check')}<span>All widgets are on the page</span></button>`;
 }
 
 // Small static pictures for the Add widget list (shapes only, in the accent colour).
@@ -175,10 +175,9 @@ export function createSession({ el, layout, redraw, onDone, onEnd, openList }) {
     if (!hidden.length) { say('All widgets are already on the page.'); return; }
     openSheet(`
       <h2 id="sheetTitle">Add widget</h2>
-      <p class="muted small aw-note">Pick a card to add it to the end of Stats.</p>
-      <ul class="aw-list">${hidden.map(c => `<li><button type="button" class="aw-item" data-id="${c.id}" aria-label="Add ${esc(c.name)}: ${esc(c.desc)}">
+      <ul class="aw-list">${hidden.map(c => `<li><button type="button" class="aw-item" data-id="${c.id}" aria-label="Add ${esc(c.name)}">
         <span class="aw-thumb">${thumbHTML(c.id)}</span>
-        <span class="aw-txt"><b>${esc(c.name)}</b><span class="muted small">${esc(c.desc)}</span></span>
+        <span class="aw-txt"><b>${esc(c.name)}</b></span>
         <span class="aw-plus" aria-hidden="true">${icon('plus')}</span></button></li>`).join('')}</ul>
       <div class="sheet-actions"><button type="button" class="btn ghost" id="awClose">Close</button></div>`);
     document.getElementById('awClose').addEventListener('click', closeSheet);

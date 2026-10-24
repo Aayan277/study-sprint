@@ -106,7 +106,7 @@ const RS_MIN = 0.5;       // the scale of the dots runs from 50% to 100%
 const rsPos = v => +((Math.min(1, Math.max(RS_MIN, v)) - RS_MIN) / (1 - RS_MIN)).toFixed(4);   // 0 to 1 along the track; the CSS keeps it inside the track's ends
 const RS_MARK = { on: '✓', under: '▼', over: '▲' };
 function retSplitHTML(res, hasLogs) {
-  if (!hasLogs) return '<p class="muted">Shows how often you remember cards when they come due, for cards you know less well (young) and well (mature), against your target. Nothing has come due in the last 90 days yet.</p>';
+  if (!hasLogs) return '<p class="muted">Nothing due in the last 90 days yet.</p>';
   const rowHTML = (label, b, target) => {
     if (!b.n) return `<div class="rs-row"><span class="rs-name">${label}</span><span class="rs-track" aria-hidden="true"></span><span class="rs-val muted">No reviews</span></div>`;
     const rate = b.ok / b.n;
@@ -125,8 +125,7 @@ function retSplitHTML(res, hasLogs) {
       ${rowHTML(`Young <small>(&lt;${YOUNG_DAYS}d)</small>`, r.young, r.target)}
       ${rowHTML(`Mature <small>(${YOUNG_DAYS}d+)</small>`, r.mature, r.target)}
     </div>`;
-  }).join('') + `<div class="rs-axis muted small" aria-hidden="true"><span class="rs-name"></span><span class="rs-scale"><span>50%</span><span>75%</span><span>100%</span></span><span class="rs-val"></span></div>
-    <p class="note">The dot is how often you remembered; the line is your target. Young cards had a gap of under ${YOUNG_DAYS} days since their last review, mature ones ${YOUNG_DAYS} days or more. Multiple choice answers aren’t counted.</p>`;
+  }).join('') + `<div class="rs-axis muted small" aria-hidden="true"><span class="rs-name"></span><span class="rs-scale"><span>50%</span><span>75%</span><span>100%</span></span><span class="rs-val"></span></div>`;
 }
 
 // The mastery grid draws at most this many squares up front; "Show more" adds the rest of a deck.
@@ -171,7 +170,7 @@ function calendarHTML(cal, now) {
       </div>
       <div class="cal-foot">
         <label class="cal-pick muted small">Pick a day <input type="date" id="calPick" min="${esc(shown[0] ? dayKey(shown[0].time) : '')}" max="${esc(shown.length ? dayKey(shown[shown.length - 1].time) : '')}"></label>
-        <span class="muted small" id="calInfo" aria-live="polite">Tap a day, or pick one, to see it.</span>
+        <span class="muted small" id="calInfo" aria-live="polite"></span>
         <span class="cal-key muted small" aria-hidden="true">Less <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</span>
         <span class="cal-key cal-key2 muted small" aria-hidden="true"><i class="lv0 frz"></i> Streak freeze <i class="lv0 rest"></i> Day off</span>
       </div>
@@ -323,7 +322,6 @@ export async function renderStats(el) {
       <div class="legend">${LEVELS.map(([k, name]) => `<span><i class="sw lv-${k}"></i>${name} <b>${counts[k]}</b></span>`).join('')}</div>
       <div class="mdetail" id="mDetail" aria-live="polite"></div>
       <div id="mGrid">${masteryGridHTML(decks, inside, cards, statesById)}</div>
-      <p class="note">Levels come from the review schedule: Young means remembered for under 21 days, Mature 21 days or more.</p>
     </section>`;
   // The header for one course: how many of its cards you would still remember (90% or better) on exam day, or today
   // when there is no exam, if you stopped reviewing now.
@@ -340,8 +338,7 @@ export async function renderStats(el) {
         <div class="ready-row"><h2 id="readyTitle">${exam ? 'Exam readiness' : 'Readiness today'}</h2>${exam ? `<span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>` : ''}</div>
         <p class="ready-line"><b>${seen}</b>/${cards.length} seen · <b>${counts.mature}</b> mature</p>
         <div class="mbar" aria-hidden="true"><span class="lv-mature" style="width:${share('mature')}"></span><span class="lv-young" style="width:${share('young')}"></span><span class="lv-learning" style="width:${share('learning')}"></span></div>
-        <p class="note ready-note">${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better). Add an exam date to see it for exam day.'}</p>
-        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
+        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better).'} ${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
         <div class="ready-acts">
           ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
           <button class="btn ghost small" type="button" id="readyTest">Practice test</button>
@@ -357,7 +354,6 @@ export async function renderStats(el) {
       <button type="button" class="pick-btn" id="sDeckBtn" aria-haspopup="dialog" aria-label="Show stats for: ${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}. Change deck">
         ${icon('search')}${course ? `<i class="dot" style="background:${esc(course.color)}"></i>` : ''}<span>${esc(deckFilter === 'all' ? 'All decks' : deckPath(decks, deckFilter))}</span>${icon('down')}</button>
       ${customBtn}
-      <span class="pick-hint">Search ${plural(decks.length, 'deck')}</span>
     </div>` : `
     <div class="filter-row">
       <select id="sDeck" class="select" aria-label="Show stats for">
@@ -376,19 +372,17 @@ export async function renderStats(el) {
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
         <p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
         ${weekDotsHTML(streak.week)}
-        <p class="frz-note">One freeze a week covers a missed day. It doesn’t add to the count. <button class="link" type="button" id="planRest">Plan a day off</button></p>
+        <p class="frz-note"><button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>`,
     retention: () => `
       <div class="card pc-ret">
         <h2>Retention</h2>
         <div class="big">${D.ret.rate === null ? '–' : Math.round(D.ret.rate * 100)}<small>${D.ret.rate === null ? '' : '%'}</small></div>
-        <p>${D.ret.total ? `You remembered ${D.ret.remembered} of ${plural(D.ret.total, 'due review')} in the last 30 days.` : 'Shows how often you remember cards when they come due. Nothing has come due in the last 30 days yet.'}</p>
-        <details class="info-fold"><summary aria-label="What counts as a review"><span aria-hidden="true">i</span></summary>
-          <span class="muted">Counts flipping, typing and Anki answers. Multiple choice isn’t counted: you can guess it.</span></details>
+        <p>${D.ret.total ? `You remembered ${D.ret.remembered} of ${plural(D.ret.total, 'due review')} in the last 30 days.` : 'Nothing due in the last 30 days yet.'}</p>
       </div>`,
     rs: () => `
     <section class="card section rs-card" aria-labelledby="rsTitle">
-      <div class="mhead"><h2 id="rsTitle">Retention vs target</h2><span class="muted small">Young and mature cards</span></div>
+      <div class="mhead"><h2 id="rsTitle">Retention vs target</h2></div>
       <div id="retSplit"><p class="muted">Working it out…</p></div>
     </section>`,
     cal: () => calendarHTML(D.cal, now),
@@ -424,12 +418,12 @@ export async function renderStats(el) {
         <li${i >= HARD_SHOWN ? ' data-more hidden' : ''}>${hardRow(h.card)}
           <div class="n">${h.lapses ? `Forgotten ${h.lapses}×` : ''}${h.lapses && h.misses ? ' · ' : ''}${h.misses ? `missed ${h.misses}× in 30 days` : ''}</div></li>`).join('')}</ol>
         ${D.hardest.length > HARD_SHOWN ? `<button class="btn ghost small hard-all" type="button" id="hardAll" aria-expanded="false" aria-controls="hardList">Show all ${D.hardest.length}</button>` : ''}`
-      : '<p class="muted">Cards you forget or miss show up here, so you can go over them again.</p>'}
-      ${D.leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(D.leechCount, 'card')} to fix</a> <span class="muted small">cards you keep forgetting</span></p>` : ''}
+      : '<p class="muted">No hard cards yet.</p>'}
+      ${D.leechCount ? `<p class="hard-fix"><a class="link" href="#/browse/leech" id="leechFix">${plural(D.leechCount, 'card')} to fix</a></p>` : ''}
     </section>`,
     buttons: () => `
     <section class="card section" aria-labelledby="btnTitle">
-      <div class="mhead"><h2 id="btnTitle">Answer buttons</h2><span class="muted small">Last 30 days</span></div>
+      <div class="mhead"><h2 id="btnTitle">Answer buttons · 30 days</h2></div>
       ${[['learning', 'Learning', D.buttons.learningRight], ['review', 'Reviews', D.buttons.reviewRight]].map(([k, name, right]) => {
         const row = D.buttons[k], n = row.reduce((a, b) => a + b, 0);
         return `<div class="btn-row"><div class="btn-row-head"><b>${name}</b><span class="muted small">${n ? `${right}% right · ${plural(n, 'answer')}` : 'No answers yet'}</span></div>
@@ -437,11 +431,10 @@ export async function renderStats(el) {
             ${n ? row.map((c, i) => c ? `<span class="b${i + 1}" style="width:${(c / n * 100).toFixed(2)}%" title="${['Again', 'Hard', 'Good', 'Easy'][i]}: ${c}">${c / n >= 0.12 ? c : ''}</span>` : '').join('') : ''}</div></div>`;
       }).join('')}
       <div class="legend"><span><i class="sw b1"></i>Again</span><span><i class="sw b2"></i>Hard</span><span><i class="sw b3"></i>Good</span><span><i class="sw b4"></i>Easy</span></div>
-      <p class="note">Mostly Good is normal. Lots of Again on reviews means cards are coming back too late: try a higher retention in Settings.</p>
     </section>`,
     hours: () => `
     <section class="card section">
-      <div class="mhead"><h2>Time of day</h2><span class="muted small">Last 30 days</span></div>
+      <div class="mhead"><h2>Time of day · 30 days</h2></div>
       ${columnChart({
         id: 'hours', rows: D.hours, value: d => d.total,
         x: d => (d.hour % 6 === 0 ? hourName(d.hour) : ''),
@@ -466,7 +459,6 @@ export async function renderStats(el) {
         tableRow: d => [`${d.band} of 10`, d.count],
         label: 'How many studied cards are at each FSRS difficulty, from 1 (easiest) to 10 (hardest)'
       })}
-      <p class="note">FSRS's difficulty for each card you've studied. Hard cards come back more often.</p>
     </section>`,
     mastery: () => masteryHTML(false)
   };
