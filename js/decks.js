@@ -440,9 +440,9 @@ async function openExport(deck, decks, deckCards) {
       const pics = cards.some(c => c.frontImage || c.backImage), snds = cards.some(c => c.frontSounds?.length || c.backSounds?.length);
       return pics || snds ? ` ${pics && snds ? 'Pictures and sounds go' : pics ? 'Pictures go' : 'Sounds go'} in the Anki deck (a spreadsheet can only hold text).` : '';
     })()}</p>
-    ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
+    ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only, so use .apkg for those.</p>' : ''}
     <div class="export-opts">
-      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b>${cards.some(c => c.occlusion) ? '<span>Image occlusion comes back as plain cards.</span>' : ''}</button>
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b></button>
       <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b></button>
     </div>
     <p class="err" id="exErr" role="alert" hidden></p>`);
@@ -576,7 +576,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date</span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
-        ${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).</small>` : ''}</label>
+        ${parentNow && effectiveDeck(decks, parentNow).examDate ? `<small class="note" style="margin:4px 0 0">Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).</small>` : ''}</label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
