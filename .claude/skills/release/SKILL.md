@@ -6,6 +6,7 @@ description: Study Sprint release and merge checklist (sw.js version bump, hash 
 ## Release steps
 - Any change to an app file: bump `APP_VERSION` in `js/app.js` and `CACHE` in `sw.js`, then `node tests/update-sw-hash.mjs`.
 - Parallel branches don't bump `sw.js`; do one bump at merge time.
+- On a `sw.js` merge conflict, keep the integration branch's copy (`git checkout --ours sw.js` when merging into it), then run `node tests/update-sw-hash.mjs`. Taking a stale branch's copy once lost a security fix.
 - Before merging: `npm test` and the full `node tests/browser/run.mjs`.
 
 ## Browser tests
