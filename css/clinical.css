@@ -56,8 +56,7 @@
 
 /* --- type: calmer headings, quieter eyebrows --- */
 :root[data-ui="clinical"] h1{font-weight:600;font-size:1.75rem;letter-spacing:-.02em;line-height:1.15}
-:root[data-ui="clinical"] .eyebrow,
-:root[data-ui="clinical"] .th-label{font:500 var(--fs-xs)/1.4 var(--f-ui);letter-spacing:0;text-transform:none;color:var(--text-2)}
+:root[data-ui="clinical"] .eyebrow{font:500 var(--fs-xs)/1.4 var(--f-ui);letter-spacing:0;text-transform:none;color:var(--text-2)}
 :root[data-ui="clinical"] .deck-code{letter-spacing:0;font-weight:500}
 :root[data-ui="clinical"] ::selection{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 
@@ -175,7 +174,6 @@
 :root[data-ui="clinical"] .cal-grid i,:root[data-ui="clinical"] .cal-key i{border-radius:2px}
 :root[data-ui="clinical"] .ready-card{background:var(--surface-1)}
 :root[data-ui="clinical"] .stats-scope .pick-btn{background:var(--surface-1);border-color:var(--line-strong)}
-:root[data-ui="clinical"] .info-fold[open] summary{background:var(--surface-2)}
 :root[data-ui="clinical"] .mhead h2{font-weight:600}
 
 /* --- Settings: accent choices are plain swatches --- */
@@ -318,7 +316,7 @@
    4. v4.9 additions (all variants)
    ====================================================================== */
 /* "All done for today": no repeated headline, no "0 due · 0 new"; the ring turns a quiet green; extra study is secondary */
-:root[data-ui="clinical"] .today-hero:has(.th-done) .th-sub:not(.th-learned),
+:root[data-ui="clinical"] .today-hero:has(.th-done) .th-sub,
 :root[data-ui="clinical"] .th-done > b{display:none}
 :root[data-ui="clinical"] .today-hero:has(.th-done) .ring-fg{stroke:var(--good)}
 :root[data-ui="clinical"] .ring-check{color:var(--good);width:26px;height:26px}
@@ -345,7 +343,6 @@
 /* ---------- Today: one summary panel ---------- */
 :root[data-ui="clinical"][data-ui="clinical"] .today-hero{padding:var(--s-4);border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-main{gap:var(--s-4)}
-:root[data-ui="clinical"][data-ui="clinical"] .th-label{font-size:var(--fs-xs);font-weight:500;color:var(--text-2)}
 :root[data-ui="clinical"][data-ui="clinical"] .th-big{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
 :root[data-ui="clinical"][data-ui="clinical"] .th-sub{font-size:var(--fs-sm)}
 /* streak: one quiet line under a hairline instead of a three-line block */
@@ -375,7 +372,6 @@
 :root[data-ui="clinical"][data-ui="clinical"] .deck{box-shadow:0 0 0 1px var(--line);border-radius:var(--r-lg)}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .deck:hover{background:var(--surface-1);box-shadow:0 0 0 1px var(--line-strong)}}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-fg{stroke:var(--accent)}
-:root[data-ui="clinical"][data-ui="clinical"] .dr-cap{color:var(--text-2)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-search input{background:var(--surface-1);border-color:var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-sort{box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .deck-sort button[aria-pressed="true"]{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
@@ -433,8 +429,7 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .brand{font-weight:650;letter-spacing:-.01em;gap:0}
 
 /* ---- goal: a line and a bar instead of the ring ---- */
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-main > .ring,
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .th-label{display:none}
+:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-main > .ring{display:none}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .th-text{display:grid;gap:2px;min-width:0;flex:1}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .goal{display:grid;gap:6px;margin-top:var(--s-3);max-width:420px}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .goal-t{font-size:var(--fs-sm);color:var(--text-2)}
@@ -481,7 +476,6 @@
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-in{position:static;display:inline;font-size:var(--fs-sm);color:var(--text)}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .ring-in small{font-size:inherit;color:inherit}
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring{display:flex;align-items:baseline;gap:4px;flex-direction:row}
-:root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .deck-ring .dr-cap{font-size:var(--fs-sm);color:var(--text-2)}
 
 /* ---- navigation: words only ---- */
 :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .tab svg,
@@ -636,8 +630,7 @@
 :root[data-ui="clinical"] .lp-rates span{border-radius:var(--r-sm);box-shadow:0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"] :is(.lp-rates .r1,.lp-rates .r2,.lp-rates .r3,.lp-rates .r4){box-shadow:0 0 0 1px var(--line-strong)}
 :root[data-ui="clinical"] .lp-points .ico{border-radius:var(--r-sm);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
-:root[data-ui="clinical"] :is(.lp-imports span,.fr-tag){border-radius:var(--r-xs)}
-:root[data-ui="clinical"] .fr-tag{background:var(--surface-2);box-shadow:none;color:var(--text-2)}
+:root[data-ui="clinical"] .fr-tag{border-radius:var(--r-xs);background:var(--surface-2);box-shadow:none;color:var(--text-2)}
 :root[data-ui="clinical"] .fr-add{border-radius:var(--r-sm)}
 :root[data-ui="clinical"] .inst-icon{box-shadow:0 0 0 1px var(--line-strong);border-radius:var(--r-md)}
 :root[data-ui="clinical"] .lp-ph-prog i{box-shadow:none}
