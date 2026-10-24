@@ -21,9 +21,9 @@ const open = async (ui, width, height) => {
 };
 const stats = async p => { await p.goto('http://localhost:8123/#/stats'); await p.reload(); await p.waitForSelector('main[data-route=stats] .pgrid, .stats-none'); };
 // The cards' titles as they sit on the page: top to bottom, left to right (what the eye sees).
-const seen = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.filter(h => h.offsetParent !== null && !h.closest('.ready-card')).map(h => { const r = h.closest('.card').getBoundingClientRect(); return { t: h.textContent.trim(), y: Math.round(r.top), x: Math.round(r.left) }; }).sort((a, b) => a.y - b.y || a.x - b.x).map(o => o.t));
-const dom = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.map(h => h.textContent.trim()));
-const box = (p, title) => p.evaluate(t => { const h = [...document.querySelectorAll('main[data-route=stats] .view .card h2')].find(x => x.textContent.trim() === t); if (!h) return null; const r = h.closest('.card').getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) }; }, title);
+const seen = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.filter(h => h.offsetParent !== null && !h.closest('.ready-card')).map(h => { const r = h.closest('.card').getBoundingClientRect(); return { t: h.textContent.trim().replace(/ · 30 days$/, ''), y: Math.round(r.top), x: Math.round(r.left) }; }).sort((a, b) => a.y - b.y || a.x - b.x).map(o => o.t));
+const dom = p => p.$$eval('main[data-route=stats] .view .card h2', hs => hs.map(h => h.textContent.trim().replace(/ · 30 days$/, '')));
+const box = (p, title) => p.evaluate(t => { const h = [...document.querySelectorAll('main[data-route=stats] .view .card h2')].find(x => x.textContent.trim().replace(/ · 30 days$/, '') === t); if (!h) return null; const r = h.closest('.card').getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) }; }, title);
 // The list sheet is reached from edit mode (Edit, then "Edit as a list"); leaving it also leaves edit mode.
 const openList = async p => { if (!(await p.$('#edBar'))) { await p.click('#editBtn, #editEmpty'); await p.waitForSelector('#edBar'); } await p.click('.ed-list'); await p.waitForSelector('#sheet[open] #slList'); };
 const leave = async p => { if (await p.$('#edBar')) { await p.click('#edDone'); await p.waitForSelector('#editBtn'); } };
@@ -41,12 +41,12 @@ for (const ui of ['original', 'clinical']) {
   await openList(p);
   ok(await p.$eval('#sheet', d => d.getAttribute('aria-labelledby') === 'sheetTitle' && d.querySelector('#sheetTitle').textContent === 'Customise Stats'), `${tag}: the sheet is a labelled dialog`);
   ok((await p.$$('#slList .sl-row')).length === 11, `${tag}: a row for each of the 11 cards`);
-  ok(/Size applies on wider screens/.test(await p.textContent('#sheet')), `${tag}: the sheet says sizes apply on wider screens`);
+  ok(await p.locator('#sheet [aria-label$="size on wide screens"]').count() > 0, `${tag}: the size choices say they apply on wide screens`);
   ok(await p.evaluate(() => [...document.querySelectorAll('#slList .sl-row')].every(r => r.querySelector('[data-act=show]').getAttribute('aria-label').startsWith('Show ') && (['rs', 'cal'].includes(r.dataset.id) ? !r.querySelector('[role=radiogroup]') : r.querySelector('[role=radiogroup]').getAttribute('aria-label')))), `${tag}: every row is labelled with the card name, and the two fixed-size cards have no size chips`);
   await p.screenshot({ path: `${SP}/sheet-desktop-${tag}.png` });
   // hide Difficulty
   await p.getByLabel('Show Difficulty').uncheck();
-  await p.waitForFunction(() => !document.body.textContent.includes('FSRS\'s difficulty for each card'));
+  await p.waitForFunction(() => ![...document.querySelectorAll('main[data-route=stats] .view .card h2')].some(h => h.textContent === 'Difficulty'));
   ok(!(await seen(p)).includes('Difficulty'), `${tag}: hiding Difficulty removes it from the page behind the sheet`);
   // move Hardest cards up twice; the focus stays on the button, the live region says where it went
   await p.click('button[aria-label="Move Hardest cards up"]');
@@ -242,13 +242,13 @@ for (const ui of ['original', 'clinical']) {
   ok(lone.length === 2 && lone.every(w => w >= vw - 2), `${tag} 390: a lone streak or retention card is full width (${lone}, page ${vw})`);
   await p.screenshot({ path: `${SP}/page-phone-lone-${tag}.png`, fullPage: true });
   // Answer buttons sits before Due... so it is not in the fold; only the More cards after the last other card are
-  const inFold = await p.$$eval('#moreBody h2', h => h.map(x => x.textContent.trim()));
+  const inFold = await p.$$eval('#moreBody h2', h => h.map(x => x.textContent.trim().replace(/ · 30 days$/, '')));
   ok(inFold.join() === 'Time of day,Difficulty,Mastery', `${tag} 390: a More card placed before other cards leaves the fold (fold: ${inFold})`);
   await p.context().close();
   // default phone page keeps its fold
   p = await open(ui, 390, 800);
   await stats(p);
-  ok((await p.$$eval('#moreBody h2', h => h.map(x => x.textContent.trim()))).join() === 'Answer buttons,Time of day,Difficulty,Mastery', `${tag} 390: the default phone page still folds Answer buttons, Time of day, Difficulty, Mastery`);
+  ok((await p.$$eval('#moreBody h2', h => h.map(x => x.textContent.trim().replace(/ · 30 days$/, '')))).join() === 'Answer buttons,Time of day,Difficulty,Mastery', `${tag} 390: the default phone page still folds Answer buttons, Time of day, Difficulty, Mastery`);
   await p.context().close();
   // one course picked, Mastery moved: the readiness card takes the full width
   p = await open(ui, 1280, 900);

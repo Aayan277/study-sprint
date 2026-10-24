@@ -64,7 +64,7 @@ await p.click('#streakBtn'); await p.waitForSelector('#sheet[open] .ys');
 ok((await norm(p, '#sheetTitle')) === 'Your streak', 'the sheet is titled "Your streak"');
 ok(await p.locator('#sheet .wd.frz').count() === 1 && await p.locator('#sheet .wd.on').count() === 5, 'the 7-day row: 5 studied, 1 covered');
 ok(/streak freeze used/.test(await p.getAttribute('#sheet .wd.frz', 'title')), 'the covered day is named in its title: ' + await p.getAttribute('#sheet .wd.frz', 'title'));
-ok((await norm(p, '#sheet')).includes('One missed day a week is covered'), 'the sheet explains the freeze');
+ok((await norm(p, '#sheet')).includes('One missed day a week is covered'), 'the sheet explains the freeze');  // (the sheet keeps its explanation; only the Stats card lost its sentence)
 await noHScroll(p, 'the sheet at 375');
 ok(await p.evaluate(() => { const s = document.querySelector('#sheet'); return s.scrollWidth <= s.clientWidth + 1; }), 'the sheet itself does not scroll sideways');
 await p.screenshot({ path: SP + '/streak-sheet-375-dark.png' });
@@ -117,7 +117,7 @@ await go(p, '#/stats', '.pgrid');
 ok(/^5/.test(await norm(p, '.pgrid .big')), 'Stats: the same 5 day streak');
 ok(await p.locator('.pgrid .wd.frz').count() === 1 && await p.locator('.pgrid .wd.frz svg').count() === 1, 'Stats: the covered day is a .frz dot with a snowflake');
 ok(/streak freeze used/.test(await p.getAttribute('.pgrid .wd.frz', 'title')), 'with a title: ' + await p.getAttribute('.pgrid .wd.frz', 'title'));
-ok((await norm(p, '.frz-note')).includes('One freeze a week covers a missed day. It doesn’t add to the count.'), 'the streak card explains the freeze');
+ok(await p.locator('.frz-note #planRest').count() === 1 && (await norm(p, '.frz-note')) === 'Plan a day off', 'the streak card keeps only the "Plan a day off" button');
 await p.waitForSelector('.cal-grid i.frz');
 ok(await p.locator('.cal-grid i.frz').count() === 1 && /streak freeze/.test(await p.getAttribute('.cal-grid i.frz', 'title')), 'the calendar has one hatched cell titled "streak freeze": ' + await p.getAttribute('.cal-grid i.frz', 'title'));
 ok(await p.locator('.cal-grid i.rest').count() === 0, 'days off still to come are not drawn in the calendar (it ends today)');

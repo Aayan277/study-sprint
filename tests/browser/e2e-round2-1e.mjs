@@ -86,9 +86,7 @@ for (const [w, h, mode] of [[375, 780, 'dark'], [375, 780, 'light'], [1440, 900,
     // On a phone the box shares its row with the Edit button; together they span the width.
     ok(sb.search && sb.h >= 44 && sb.sameRow && sb.rowW > w - 40 && sb.w > 150, `${tag}: the deck search is a box with a search icon, beside Edit, filling the row (${Math.round(sb.w)}px of ${Math.round(sb.rowW)}px)`);
   } else ok(sb.search && sb.h >= 44 && sb.w > 400, `${tag}: the deck search is a full-size box with a search icon (${Math.round(sb.w)}px)`);
-  ok(await p.locator('.info-fold').count() === 1 && !(await p.locator('.info-fold > span').isVisible()), `${tag}: Retention fine print is behind an (i)`);
-  await p.click('.info-fold summary');
-  ok(await p.locator('.info-fold > span').isVisible() && /Multiple choice/.test(await p.textContent('.info-fold')), `${tag}: the (i) opens the fine print`);
+  ok(await p.locator('.info-fold').count() === 0, `${tag}: the Retention card has no fine print`);
   // answers start 70 days before 14 Oct 2026 (6 Aug), so the calendar starts in August
   const cal = await p.evaluate(() => ({ cells: document.querySelectorAll('#calGrid i').length, firstMonth: [...document.querySelectorAll('.cal-m')].find(m => m.textContent)?.textContent }));
   ok(cal.cells < 53 * 7 && cal.cells >= 9 * 7 && cal.cells <= 14 * 7 && cal.cells % 7 === 0, `${tag}: the calendar starts at the first month with answers (${cal.cells / 7} weeks)`);
