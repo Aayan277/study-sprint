@@ -1,5 +1,6 @@
 // Tests for js/occlusion.js (image occlusion). Run with: node tests/occlusion.test.js
 
+import { assertFast, size } from './speed-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -88,10 +89,10 @@ test('parse: a polygon moved in Anki (left/top changed, points not) is shifted t
 });
 
 test('parse: a long run of backslashes is not a slow regex, and \\: and \\} still work', () => {
-  const t0 = performance.now();
-  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:' + '\\'.repeat(5000)).shapes.length, 0);
-  assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:' + '\\'.repeat(5000) + 'x').shapes.length, 0);
-  assert.ok(performance.now() - t0 < 50, 'took ' + (performance.now() - t0));
+  assertFast('parseAnkiOcclusion on backslashes', () => {
+    assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:' + '\\'.repeat(size(5000))).shapes.length, 0);
+    assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:' + '\\'.repeat(size(5000)) + 'x').shapes.length, 0);
+  });
   assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:foo=a\\:b}}').shapes.length, 1);
   assert.equal(parseAnkiOcclusion('{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:foo=a\\}b}}').shapes.length, 1);
 });

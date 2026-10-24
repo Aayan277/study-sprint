@@ -2,19 +2,12 @@
 // from every position (3 KB of "{{c1::a " took 150 ms, 50 KB never finished), and card text can come from an imported file or a synced card.
 // Also checks that the scanner that replaced the regex gives what the regex gave. Run with: node tests/cloze-speed.test.js
 
+import { fast, rep, size } from './speed-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clozeBlanks, clozeNumbers, clozeCard, clozeFull, renderCloze, hasCloze, parseCloze, planNoteSave, withClozeLines, planLinks, makesText } from '../js/cloze.js';
 import { parseText } from '../js/import.js';
 
-const LIMIT = 300;       // ms; the regex took seconds to minutes on the first four of these
-const fast = (name, fn) => test(`fast on hostile text: ${name}`, () => {
-  const t = performance.now();
-  fn();
-  const ms = performance.now() - t;
-  assert.ok(ms < LIMIT, `${name} took ${ms.toFixed(0)} ms`);
-});
-const rep = (s, bytes = 50000) => s.repeat(Math.ceil(bytes / s.length));
 // every function that reads blanks
 const all = s => { clozeNumbers(s); clozeCard(s, 1); clozeFull(s); renderCloze(s, 1, 'front'); renderCloze(s, 1, 'all'); hasCloze(s); makesText(s); };
 
@@ -29,7 +22,7 @@ fast('many whole blanks without a hint', () => all(rep('{{c1::a}} ', 150000)));
 fast('many whole blanks with a hint', () => all(rep('{{c1::a::b}} ', 150000)));
 fast('many whole blanks, the only :: is far at the end', () => all(rep('{{c1::a}} ') + '::'));
 fast('{{c with no digits or no ::', () => all(rep('{{c ') + rep('{{c1 ') + rep('{{cx::')));
-fast('{{c and a huge number', () => all('{{c' + '1'.repeat(50000) + ' {{c' + '1'.repeat(50000) + '::a}}'));
+fast('{{c and a huge number', () => all('{{c' + '1'.repeat(size(50000)) + ' {{c' + '1'.repeat(size(50000)) + '::a}}'));
 fast('{{{{{{ and }}}}}}', () => all(rep('{{') + rep('}}')));
 fast('blanks inside formulas that never close', () => all(rep('$a {{c1::b ')));
 fast('planNoteSave on an unclosed text', () => planNoteSave([], rep('{{c1::a ')));

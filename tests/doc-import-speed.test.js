@@ -1,11 +1,11 @@
 // Speed and behaviour checks for the slide-XML scanning in js/doc-import.js. Run with: node tests/doc-import-speed.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertFast, rep as repBytes, size } from './speed-helper.mjs';
 import { slideLines, notesText, slideOrder, notesTarget, xmlText } from '../js/doc-import.js';
 
-const N = 50000, LIMIT_MS = 300;
-const rep = s => s.repeat(Math.ceil(N / s.length)).slice(0, N);
-const hostile = {
+const rep = s => repBytes(s).slice(0, size(50000));
+const hostile = () => ({
   'unclosed a:p': rep('<a:p>'),
   'unclosed a:t in a:p': '<a:p>' + rep('<a:t x') + '</a:p>',
   'unclosed a:t': '<a:p>' + rep('<a:t>'),
@@ -13,19 +13,18 @@ const hostile = {
   'unclosed a:br': '<a:p>' + rep('<a:br'),
   'unclosed p:sp': rep('<p:sp>'),
   'unclosed p:sp with ph': rep('<p:sp><p:ph '),
-  'long blank run': '<a:p><a:t>' + ' \t'.repeat(N / 2) + 'x\n</a:t></a:p>',
+  'long blank run': '<a:p><a:t>' + ' \t'.repeat(size(25000)) + 'x\n</a:t></a:p>',
   'unclosed Relationship': rep('<Relationship '),
   'unclosed sldId': rep('<p:sldId '),
   'unfinished entities': rep('&#x'),
-};
-const ms = f => { const t = performance.now(); f(); return performance.now() - t; };
+});
 
-for (const [name, xml] of Object.entries(hostile)) {
-  test(`fast on 50 KB of ${name}`, () => {
+for (const name of Object.keys(hostile())) {
+  test(`fast on hostile text: ${name}`, () => {
     for (const [fn, f] of Object.entries({
-      slideLines: () => slideLines(xml), slideLinesMarks: () => slideLines(xml, { marks: true }), notesText: () => notesText(xml),
-      slideOrderRels: () => slideOrder('', xml), slideOrderPres: () => slideOrder(xml, ''), notesTarget: () => notesTarget('ppt/slides/s1.xml', xml), xmlText: () => xmlText(xml)
-    })) assert.ok(ms(f) < LIMIT_MS, `${fn} too slow`);
+      slideLines: xml => slideLines(xml), slideLinesMarks: xml => slideLines(xml, { marks: true }), notesText: xml => notesText(xml),
+      slideOrderRels: xml => slideOrder('', xml), slideOrderPres: xml => slideOrder(xml, ''), notesTarget: xml => notesTarget('ppt/slides/s1.xml', xml), xmlText: xml => xmlText(xml)
+    })) assertFast(`${name}: ${fn}`, () => f(hostile()[name]));
   });
 }
 

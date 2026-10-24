@@ -3,16 +3,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fast, rep } from './speed-helper.mjs';
 import { ankiMath, soundNames, imageNames, ioLabels } from '../js/anki.js';
 
-const LIMIT = 300;       // ms
-const fast = (name, fn) => test(`fast on hostile text: ${name}`, () => {
-  const t = performance.now();
-  fn();
-  const ms = performance.now() - t;
-  assert.ok(ms < LIMIT, `${name} took ${ms.toFixed(0)} ms`);
-});
-const rep = (s, bytes = 50000) => s.repeat(Math.ceil(bytes / s.length));
 
 fast('[$] never closed', () => ankiMath(rep('[$]')));
 fast('[$$] never closed', () => ankiMath(rep('[$$]a ')));

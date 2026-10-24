@@ -2,23 +2,17 @@
 // Run with: node tests/cloze-regex-followup.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertFast, rep } from './speed-helper.mjs';
 import { notesOf } from '../js/autotag.js';
 import { junky } from '../js/reading-cards.js';
 
-const LIMIT = 300;
-const rep = (s, bytes = 50000) => s.repeat(Math.ceil(bytes / s.length));
-const timed = (name, fn) => test(`fast: ${name}`, () => {
-  const t = performance.now();
-  fn();
-  const ms = performance.now() - t;
-  assert.ok(ms < LIMIT, `${name} took ${ms.toFixed(0)} ms`);
-});
+const timed = (name, fn) => test(`fast: ${name}`, () => assertFast(name, fn));
 const noteFront = front => notesOf([{ id: 'a', front, back: 'b', tags: [] }])[0].front;
 const clozeCardOf = cloze => ({ type: 'cloze', kind: 'fact', front: 'x '.repeat(10), back: 'yy', cloze });
 
-for (const [name, s] of [['unclosed', rep('{{c1::a ')], ['unclosed with hint', rep('{{c1::a::b ')], ['opened a lot, closed at end', rep('{{c1::a ') + '}}']]) {
-  timed(`autotag, ${name}`, () => noteFront(s));
-  timed(`reading-cards, ${name}`, () => junky(clozeCardOf(s)));
+for (const [name, s] of [['unclosed', () => rep('{{c1::a ')], ['unclosed with hint', () => rep('{{c1::a::b ')], ['opened a lot, closed at end', () => rep('{{c1::a ') + '}}']]) {
+  timed(`autotag, ${name}`, () => noteFront(s()));
+  timed(`reading-cards, ${name}`, () => junky(clozeCardOf(s())));
 }
 
 test('autotag keeps the answer and drops the hint', () => {
