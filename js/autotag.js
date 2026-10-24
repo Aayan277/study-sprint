@@ -17,6 +17,7 @@
 //   undoTags(cards, added)         the cards that change when exactly what was added is taken away again
 
 import { words, stem, STOPWORDS, FILLER, newCounts, addPhrases, candidatePhrases, groupNear, bestForm, slugTag, isJunkTerm } from './keywords.js';
+import { replaceBlanks } from './cloze.js';
 import { NOT_TERMS } from './reading-cards.js';
 import { clozeFull, hasBlank } from './cloze.js';
 import { tagWords, normTag } from './tag-tree.js';
@@ -87,7 +88,18 @@ function variant(a, b) {
 // ---------- the cards as notes ----------
 
 // Take away what is not words: **bold**, $maths$, {{c1::hidden}} marks, [sound:x.mp3] and <tags>.
-const plain = s => String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\]/g, ' ').replace(/\$(?!\d)[^$\n]*\$/g, ' ').replace(/\{\{c\d+::(.*?)(?:::[^}]*)?\}\}/g, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ');
+// "{{...}}" with no "}" inside becomes a space. By indexOf, not a regex: /\{\{[^}]*\}\}/ rereads the rest of the text from every unclosed "{{".
+const dropBraces = s => {
+  let out = '', last = 0, at;
+  while ((at = s.indexOf('{{', last)) >= 0) {
+    const close = s.indexOf('}', at + 2);
+    if (close < 0) break;
+    if (s[close + 1] === '}') { out += s.slice(last, at) + ' '; last = close + 2; }
+    else { out += s.slice(last, at + 2); last = at + 2; }
+  }
+  return out + s.slice(last);
+};
+const plain = s => dropBraces(replaceBlanks(String(s ?? '').replace(/\*\*/g, '').replace(/\[sound:[^\]]*\]/g, ' ').replace(/\$(?!\d)[^$\n]*\$/g, ' '), (m, n, t) => t)).replace(/<[^>]*>/g, ' ');
 
 // The cards as notes: [{ id, front, text, extra, cardIds }]. A note is its cards that share a noteId (the blanks of a cloze note, a card and its
 // reverse); a card with no noteId is a note by itself.
