@@ -37,13 +37,13 @@ const attrs = tag => Object.fromEntries([...tag.matchAll(/([\w:.-]+)\s*=\s*(?:"(
 // .rels file says which file each id is. ["ppt/slides/slide1.xml", …]
 export function slideOrder(presXml, relsXml) {
   const targets = new Map();
-  for (const m of String(relsXml).matchAll(/<Relationship\b[^>]*>/g)) {
-    const a = attrs(m[0]);
+  for (const m of openTags(String(relsXml), 'Relationship')) {
+    const a = attrs(m);
     if (a.Id && a.Target) targets.set(a.Id, a.Target);
   }
   const out = [];
-  for (const m of String(presXml).matchAll(/<p:sldId\b[^>]*>/g)) {
-    const t = targets.get(attrs(m[0])['r:id']);
+  for (const m of openTags(String(presXml), 'p:sldId')) {
+    const t = targets.get(attrs(m)['r:id']);
     if (t) out.push(resolvePath('ppt/', t));
   }
   return out;
@@ -60,14 +60,84 @@ export function resolvePath(base, target) {
   return parts.join('/');
 }
 
+// Linear-time stand-ins for regexes that went quadratic on a hostile file (50 KB of unclosed tags took 300 ms to 700 ms).
+const isWord = c => c !== undefined && /\w/.test(c);
+// Same as .replace(/[ \t]+\n/g, '\n')
+const trimLineEnds = s => {
+  let out = '', from = 0, nl;
+  while ((nl = s.indexOf('\n', from)) >= 0) {
+    let e = nl;
+    while (e > from && (s[e - 1] === ' ' || s[e - 1] === '\t')) e--;
+    out += s.slice(from, e) + '\n';
+    from = nl + 1;
+  }
+  return out + s.slice(from);
+};
+// Same matches as /<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?>/g: [{ br: true }] for a line break, [{ text }] for the inside of a <a:t>
+function textRuns(s) {
+  const out = [];
+  let gt = -1, close = -1, noGt = false, noClose = false, i = 0;
+  while (!noGt && (i = s.indexOf('<a:', i)) >= 0) {
+    const isT = s.startsWith('<a:t', i) && !isWord(s[i + 4]), isBr = s.startsWith('<a:br', i) && !isWord(s[i + 5]);
+    if (!isT && !isBr) { i++; continue; }
+    if (gt < i) { gt = s.indexOf('>', i); if (gt < 0) { noGt = true; break; } }
+    if (isT && !noClose) {
+      if (close <= gt) { close = s.indexOf('</a:t>', gt + 1); if (close < 0) noClose = true; }
+      if (!noClose) { out.push({ text: s.slice(gt + 1, close) }); i = close + 6; continue; }
+    }
+    if (isBr) { out.push({ br: true }); i = gt + 1; continue; }
+    i++;
+  }
+  return out;
+}
+// The [start, end) ranges of the <p:sp>...</p:sp> boxes; same as /<p:sp\b[\s\S]*?<\/p:sp>/g
+function spRanges(s) {
+  const out = [];
+  let i = 0;
+  while ((i = s.indexOf('<p:sp', i)) >= 0) {
+    if (isWord(s[i + 5])) { i++; continue; }
+    const close = s.indexOf('</p:sp>', i + 5);
+    if (close < 0) break;
+    out.push([i, close + 7]);
+    i = close + 7;
+  }
+  return out;
+}
+
+// Same matches as /<NAME\b[^>]*>/g, as strings
+function openTags(s, name) {
+  const out = [];
+  let i = 0, gt = -1;
+  while ((i = s.indexOf('<' + name, i)) >= 0) {
+    if (isWord(s[i + name.length + 1])) { i++; continue; }
+    if (gt < i) { gt = s.indexOf('>', i); if (gt < 0) break; }
+    out.push(s.slice(i, gt + 1));
+    i = gt + 1;
+  }
+  return out;
+}
+// Same as xml.matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g), keeping only the inside of each paragraph
+function paragraphs(s) {
+  const out = [];
+  let i = 0, gt = -1;
+  while ((i = s.indexOf('<a:p', i)) >= 0) {
+    if (isWord(s[i + 4])) { i++; continue; }
+    if (gt < i) { gt = s.indexOf('>', i); if (gt < 0) break; }
+    const close = s.indexOf('</a:p>', gt + 1);
+    if (close < 0) break;
+    out.push(s.slice(gt + 1, close));
+    i = close + 6;
+  }
+  return out;
+}
 const textOfParagraphs = (xml, marks = false) => {
   const lines = [];
-  for (const p of xml.matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g)) {
+  for (const inner of paragraphs(xml)) {
     let line = '';
-    for (const t of p[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?>/g)) line += t[0].startsWith('<a:br') ? '\n' : xmlText(t[1]);
-    line = line.replace(/[ \t]+\n/g, '\n').trim();
+    for (const t of textRuns(inner)) line += t.br ? '\n' : xmlText(t.text);
+    line = trimLineEnds(line).trim();
     if (!line) continue;
-    lines.push(marks ? markParagraph(p[1], line) : line);
+    lines.push(marks ? markParagraph(inner, line) : line);
   }
   return lines;
 };
@@ -92,10 +162,10 @@ function markParagraph(inner, plain) {
     const lead = text.match(/^\s*/)[0], trail = text.match(/\s*$/)[0];
     out += lead + '**' + text.trim() + '**' + trail;
   }
-  return out.replace(/[ \t]+\n/g, '\n').trim();
+  return trimLineEnds(out).trim();
 }
 // The text boxes (<p:sp>) of a slide. Slide numbers, dates and footers are page furniture, not content.
-const shapes = xml => [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].map(m => m[0]);
+const shapes = xml => spRanges(xml).map(([a, b]) => xml.slice(a, b));
 const placeholder = sp => { const m = sp.match(/<p:ph\b[^>]*>/); return m ? attrs(m[0]).type || 'body' : null; };
 
 // The text of one slide, one paragraph per line, in the order it is in the file (which is the reading order PowerPoint saves).
@@ -104,7 +174,9 @@ export function slideLines(xml, { marks = false } = {}) {
   xml = String(xml);
   const lines = [];
   // Anything outside a <p:sp> (tables in graphic frames) is read too, after the plain text boxes.
-  const rest = xml.replace(/<p:sp\b[\s\S]*?<\/p:sp>/g, '');
+  let rest = '', at = 0;
+  for (const [a, b] of spRanges(xml)) { rest += xml.slice(at, a); at = b; }
+  rest += xml.slice(at);
   for (const sp of shapes(xml)) {
     const ph = placeholder(sp);
     if (ph === 'sldNum' || ph === 'ftr' || ph === 'dt' || ph === 'hdr') continue;
@@ -122,8 +194,8 @@ export function notesText(xml) {
 
 // The notes file a slide points to, from its .rels file ("../notesSlides/notesSlide1.xml" → "ppt/notesSlides/notesSlide1.xml").
 export function notesTarget(slidePath, relsXml) {
-  for (const m of String(relsXml || '').matchAll(/<Relationship\b[^>]*>/g)) {
-    const a = attrs(m[0]);
+  for (const m of openTags(String(relsXml || ''), 'Relationship')) {
+    const a = attrs(m);
     if (/\/notesSlide$/.test(a.Type || '') && a.Target) return resolvePath(slidePath.replace(/[^/]*$/, ''), a.Target);
   }
   return null;
