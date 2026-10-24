@@ -1346,7 +1346,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .inline-num input{width:96px;font:600 var(--fs-md) var(--f-num);padding:9px 10px}
 .switch-row{grid-template-columns:minmax(0,1fr) auto;align-items:center;cursor:pointer}
 .switch-row > span{display:grid;gap:4px}
-.help-q{display:inline-grid;place-items:center;justify-self:start;min-width:24px;min-height:24px}
+.help-link{display:inline-grid;place-items:center;justify-self:start;min-width:24px;min-height:24px}
 .chips + .switch-row{margin-top:var(--s-4)}
 .switch-row > span > span{font-size:var(--fs-sm);color:var(--text-2)}
 /* A switch: its edge is a 3:1 color, and a checked switch is accent with the knob on the right */

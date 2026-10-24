@@ -13,8 +13,8 @@ import { contactHTML } from './legal.js';
 
 const code = s => `<code>${s}</code>`;
 // label: an aria-label for short link text such as "?"
-// With a label, the link is a short "?" (named by the label) and gets the help-q class, a tap target of at least 24px.
-export const helpLink = (id, text, label = '') => `<a href="#/help/${id}"${label ? ` class="help-q" aria-label="${label}"` : ''}>${text}</a>`;
+// With a label, the link is a short "?" (named by the label) and gets the help-link class, a tap target of at least 24px.
+export const helpLink = (id, text, label = '') => `<a href="#/help/${id}"${label ? ` class="help-link" aria-label="${label}"` : ''}>${text}</a>`;
 
 export const SECTIONS = [
   { title: 'Studying', items: [
