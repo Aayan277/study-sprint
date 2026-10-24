@@ -9,8 +9,8 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-v130';
-// files-hash: 66fd2a6ac570d61d
+const CACHE = 'study-sprint-v131';
+// files-hash: 24f15d3bf980977f
 const CORE = [
   './', 'index.html', 'privacy.html', 'terms.html', 'manifest.webmanifest', 'css/styles.css', 'css/clinical.css',
   'js/app.js', 'js/sync-state.js', 'js/settings.js', 'js/math-watch.js', 'js/card-checks.js', 'js/help.js', 'js/whats-new.js', 'js/note-fields.js', 'js/reverse.js', 'js/autograde.js', 'js/browse.js', 'js/browse-logic.js', 'js/anki.js', 'js/anki-template.js', 'js/anki-read.js', 'js/anki-match.js', 'js/sync-data.js', 'js/sync-merge.js', 'js/sync.js', 'js/sync-config.js', 'js/sidebar.js', 'js/supa.js', 'js/password.js', 'js/export.js', 'js/share-deck.js', 'js/share-logic.js', 'js/exam.js', 'js/exam-sheet.js', 'js/fsrs-data.js', 'js/fsrs-fit.js', 'js/fit-health.js', 'js/health-sheet.js', 'js/retention-sim.js', 'js/retention-sheet.js', 'js/worker-job.js', 'js/fsrs7-model.js', 'js/fsrs7-sched.js', 'js/srs7.js', 'js/fsrs-optimize-worker.js', 'js/optimize-sheet.js', 'js/format.js', 'js/cloze.js', 'js/occlusion.js', 'js/occlusion-view.js', 'js/occlusion-editor.js', 'js/card-editor.js', 'js/media.js', 'js/panel-resize.js', 'js/audio.js', 'js/audio-type.js', 'js/backup-nudge.js', 'js/speech.js', 'js/balance.js', 'js/deck-tree.js', 'js/deck-picker.js', 'js/days.js', 'js/db.js', 'js/decks.js', 'js/game.js', 'js/import.js', 'js/import-screen.js', 'js/doc-import.js', 'js/match.js', 'js/type-in.js', 'js/steps.js', 'js/confusion.js', 'js/scratchpad.js', 'js/answer-diff.js', 'js/math.js', 'js/tag-tree.js', 'js/tag-study-sheet.js', 'js/postpone.js', 'js/postpone-sheet.js', 'js/accept.js', 'js/glossary.js', 'js/glossary-view.js', 'js/glossary-sheet.js', 'js/glossary-list.js', 'js/update.js', 'js/app-config.js', 'js/keywords.js', 'js/reading-cards.js', 'js/reading-suggest.js', 'js/keywords-job.js', 'js/keywords-worker.js', 'js/autotag.js', 'js/autotag-sheet.js',
@@ -144,7 +144,7 @@ async function takeShare(req) {
     const file = form.getAll('files').find(f => typeof f === 'object' && f && typeof f.name === 'string' && f.size > 0);
     const note = body => c.put(new URL('share-target/text', self.registration.scope), new Response(JSON.stringify({ at, ...body }), { headers: { 'content-type': 'application/json' } }));
     if (file && file.size > MAX_SHARE_BYTES) await note({ tooBig: file.name });                   // not kept: the screen says it is too big
-    else if (file) await c.put(new URL('share-target/file', self.registration.scope), new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name), 'x-at': String(at) } }));
+    else if (file) await c.put(new URL('share-target/file', self.registration.scope), new Response(file, { headers: { 'content-type': 'application/octet-stream', 'x-type': file.type || '', 'x-name': encodeURIComponent(file.name), 'x-at': String(at) } }));
     else await note({ title: String(form.get('title') || ''), text: String(form.get('text') || ''), url: String(form.get('url') || '') });
   } catch {
     // The form couldn't be read or kept (storage full…): the screen says so instead of showing nothing.
@@ -169,7 +169,7 @@ self.addEventListener('fetch', e => {
   } else if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
     // jsdelivr addresses carry the version, so a query string (an old "?again=2" retry) never means a different file.
     // A saved "opaque" copy can't answer a cors request (the module and stylesheet loads ask with cors), so that one is fetched again.
-    const find = caches.match(req, { ignoreSearch: url.hostname === 'cdn.jsdelivr.net' });
+    const find = caches.open(CACHE).then(c => c.match(req, { ignoreSearch: url.hostname === 'cdn.jsdelivr.net' }));
     e.respondWith(find.then(r => (r && !(r.type === 'opaque' && req.mode === 'cors') ? r : fetch(req).then(save))));
   }
 });
@@ -178,16 +178,19 @@ self.addEventListener('fetch', e => {
 // worker installs (a new CACHE name for each release), so the files in use always belong to the same version. An
 // earlier version refreshed each file on its own in the background, which could mix a new file with an old one
 // after a big update ("Importing binding name ... is not found"). Updates now arrive only as a whole new worker.
+// Only this version's cache is searched, never the global caches.match: the share cache holds files other apps sent us,
+// and it must never answer a page load.
 // A file that isn't saved yet (or a page with nothing saved) comes from the network; offline, the app shell is shown.
 async function savedFirst(req) {
-  const saved = await caches.match(req, { ignoreSearch: true });
+  const cache = await caches.open(CACHE);
+  const saved = await cache.match(req, { ignoreSearch: true });
   if (saved) return saved;
   try {
     const res = await fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }));
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   } catch (err) {
-    if (req.mode === 'navigate') return (await caches.match('index.html')) || Response.error();
+    if (req.mode === 'navigate') return (await cache.match('index.html')) || Response.error();
     throw err;
   }
 }

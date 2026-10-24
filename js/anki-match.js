@@ -32,6 +32,8 @@ const keyOf = (guid, slot) => `${guid}\u0001${slot}`;
 // Places are taken from the single best noteId copy: two different notes are never mixed, so no note ever ends up with two cards in one
 // place. A place that copy lacks is then filled by a card with no note of its own, if there is one; otherwise it becomes a new card in
 // that note (see noteIdMap). The oldest card of a place wins within a copy.
+// Why a lone card in a preferred deck still ranks below the best noteId copy: letting it go first would take a place (f) out of a reversed
+// pair or cloze note and leave the rest of that note matched without it, splitting the note. Tested: 'a pair split across two decks is still found whole'.
 export function indexByGuid(cards, prefer = null) {
   const byGuid = new Map();         // guid → Map copy key → [cards]
   for (const c of cards) {

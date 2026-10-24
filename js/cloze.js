@@ -15,6 +15,7 @@ import { holdMath, unholdMath } from './math.js';
 //   - The blank ends at the FIRST "}}" after that (a blank without one ends the search: nothing later can have one either).
 //   - If a "::" comes before that "}}", it splits the text from the hint (the first "::": ":::" is "::" and then a ":" in
 //     the hint, and "::}}" is an empty hint, "" and not missing). Otherwise there is no hint (undefined).
+// Nested blanks, e.g. {{c1::a {{c2::b}} c}}, are NOT supported: the outer blank ends at the first "}}" (tests/cloze-nested.test.js pins this).
 // Each blank is { index, end, num (a string), text, hint }. One pass: the first "::" is looked for once and kept.
 export function clozeBlanks(s) {
   s = String(s ?? '');
@@ -37,7 +38,7 @@ export function clozeBlanks(s) {
   }
 }
 // String.replace for blanks: fn(match, num, text, hint) gives the replacement.
-function replaceBlanks(s, fn) {
+export function replaceBlanks(s, fn) {
   let out = '', last = 0;
   for (const b of clozeBlanks(s)) {
     out += s.slice(last, b.index) + fn(s.slice(b.index, b.end), b.num, b.text, b.hint);

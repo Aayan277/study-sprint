@@ -4,16 +4,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fast, rep, size } from './speed-helper.mjs';
 import { formatHTML, plainText, answerText, hasFormatting, htmlToMarks, toggleBullets } from '../js/format.js';
 
-const LIMIT = 300;       // ms; the slow versions took 0.1 to 7 seconds on these
-const fast = (name, fn) => test(`fast on hostile text: ${name}`, () => {
-  const t = performance.now();
-  fn();
-  const ms = performance.now() - t;
-  assert.ok(ms < LIMIT, `${name} took ${ms.toFixed(0)} ms`);
-});
-const rep = (s, bytes = 50000) => s.repeat(Math.ceil(bytes / s.length));
 
 // bold, italic and bold-italic marks (formatHTML, plainText / answerText, hasFormatting)
 fast('** never closed (formatHTML)', () => formatHTML(rep('**a ')));
@@ -23,9 +16,9 @@ fast('** never closed (hasFormatting)', () => hasFormatting(rep('**a ')));
 fast('*** never closed', () => formatHTML(rep('***a ')));
 fast('* never closed', () => formatHTML(rep('*a ')) + plainText(rep(' *a')));
 fast('** that only closes after a space', () => formatHTML(rep('**a **')));
-fast('bullet line with a stray line break', () => formatHTML(`- ${' '.repeat(25000)}${'a'.repeat(25000)}\ra`));
-fast('blank lines (hasFormatting)', () => hasFormatting('\n'.repeat(50000)));
-fast('blank lines in a bullet toggle', () => toggleBullets(`${' '.repeat(50000)}x`, 0, 50000));
+fast('bullet line with a stray line break', () => formatHTML(`- ${' '.repeat(size(25000))}${'a'.repeat(size(25000))}\ra`));
+fast('blank lines (hasFormatting)', () => hasFormatting('\n'.repeat(size(50000))));
+fast('blank lines in a bullet toggle', () => toggleBullets(`${' '.repeat(size(50000))}x`, 0, size(50000)));
 
 // htmlToMarks: tags
 fast('<ruby never closed', () => htmlToMarks(rep('<ruby')));
@@ -36,7 +29,7 @@ fast('<style> opened a lot, one ">" at the very end', () => htmlToMarks(`${rep('
 fast('<b> never closed', () => htmlToMarks(rep('<b>x', 150000)));
 fast('<strong> never closed', () => htmlToMarks(rep('<strong>x', 150000)));
 fast('<i> and <em> never closed', () => htmlToMarks(rep('<i>x') + rep('<em>x')));
-fast('<b> with a long run of spaces', () => htmlToMarks(`<b>a${' '.repeat(50000)}b</b>`));
+fast('<b> with a long run of spaces', () => htmlToMarks(`<b>a${' '.repeat(size(50000))}b</b>`));
 fast('<p, <div and <ul with no ">"', () => htmlToMarks(rep('<p') + rep('<div') + rep('<ul')));
 fast('<li with no ">"', () => htmlToMarks(rep('<li')));
 fast('"<" with no ">" (any tag)', () => htmlToMarks(rep('<a')));
