@@ -2,6 +2,7 @@
 // the first two fields is drawn from its template. Run with: node tests/anki-template.test.js
 // (All the decks here are made up; none of this is from a real person's deck.)
 
+import { assertFast, size } from './speed-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderCard, shownFields, htmlToLines, fieldIsEmpty } from '../js/anki-template.js';
@@ -261,14 +262,13 @@ test('a field holding <hr id=answer> does not cut the back early', () => {
 });
 
 // ---------- hostile text stays fast ----------
-const fast = (what, run, ms = 1000) => { const t = performance.now(); run(); const took = performance.now() - t; assert.ok(took < ms, `${what} took ${took.toFixed(0)} ms`); };
 test('furigana filters and templates stay fast on hostile text', () => {
   const m = model(['A', 'B'], '{{furigana:A}}{{kana:A}}{{kanji:A}}', '{{FrontSide}}<hr id=answer>{{B}}');
-  for (const bad of ['x['.repeat(25000), '['.repeat(50000), 'a'.repeat(50000) + '[', ' '.repeat(50000) + '[', 'x[' + 'a'.repeat(50000), '<script>'.repeat(8000), '<hr id=answer>'.repeat(3000)]) {
-    fast('render', () => htmlToLines(renderCard(m, [bad, bad]).q + renderCard(m, [bad, bad]).a));
+  for (const bad of [() => 'x['.repeat(size(25000)), () => '['.repeat(size(50000)), () => 'a'.repeat(size(50000)) + '[', () => ' '.repeat(size(50000)) + '[', () => 'x[' + 'a'.repeat(size(50000)), () => '<script>'.repeat(size(8000)), () => '<hr id=answer>'.repeat(size(3000))]) {
+    assertFast('render', () => { const b = bad(); htmlToLines(renderCard(m, [b, b]).q + renderCard(m, [b, b]).a); });
   }
-  fast('template', () => { const t = '<!--'.repeat(12000) + '<img'.repeat(12000) + '<script'.repeat(8000) + '{{'.repeat(10000); renderCard(model(['A', 'B'], t, t), ['a', 'b']); });
-  fast('lines', () => htmlToLines(' '.repeat(50000) + '<div>'.repeat(10000) + '\u0001'.repeat(50000)));
+  assertFast('template', () => { const t = '<!--'.repeat(size(12000)) + '<img'.repeat(size(12000)) + '<script'.repeat(size(8000)) + '{{'.repeat(size(10000)); renderCard(model(['A', 'B'], t, t), ['a', 'b']); });
+  assertFast('lines', () => htmlToLines(' '.repeat(size(50000)) + '<div>'.repeat(size(10000)) + '\u0001'.repeat(size(50000))));
 });
 
 test('furigana syntax: words with readings, [sound:] left alone', () => {
@@ -319,12 +319,12 @@ test('a typed furigana answer accepts the word and the reading, math in the read
   assert.ok(answerTargets('$\\frac{1}{2}$ ｜a《b》').includes('1/2 b'));
 });
 
-test('ruby and marks stay fast on a hostile text of 50 KB', () => {
-  const bad = ['<ruby>' + '<rt>'.repeat(12000) + '</ruby>', '<ruby>' + '<rp>'.repeat(12000) + '</ruby>', '<ruby>'.repeat(8000), '<ruby>' + 'a<rt>b'.repeat(8000),
-    '<rt>'.repeat(12000) + '</ruby>', '｜a《'.repeat(16000), '｜'.repeat(50000), '《'.repeat(50000)];
-  for (const s of bad) {
-    fast('htmlToMarks', () => { htmlToMarks(s); htmlToMarks(s, { marks: false }); });
-    fast('marks', () => { formatHTML(s); plainText(s); answerTargets(s); });
+test('ruby and marks stay fast on hostile text', () => {
+  const bad = [() => '<ruby>' + '<rt>'.repeat(size(12000)) + '</ruby>', () => '<ruby>' + '<rp>'.repeat(size(12000)) + '</ruby>', () => '<ruby>'.repeat(size(8000)), () => '<ruby>' + 'a<rt>b'.repeat(size(8000)),
+    () => '<rt>'.repeat(size(12000)) + '</ruby>', () => '｜a《'.repeat(size(16000)), () => '｜'.repeat(size(50000)), () => '《'.repeat(size(50000))];
+  for (const make of bad) {
+    assertFast('htmlToMarks', () => { const s = make(); htmlToMarks(s); htmlToMarks(s, { marks: false }); });
+    assertFast('marks', () => { const s = make(); formatHTML(s); plainText(s); answerTargets(s); });
   }
   assert.ok(htmlToMarks('<ruby>' + 'a<rt>b</rt>'.repeat(3000) + '</ruby>').length > 0);          // (a ruby over the length cap is just its text)
 });
