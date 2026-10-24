@@ -34,7 +34,7 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   // every answer has a unique id and opens from its deep link
   const ids = await p.$$eval('details.help-q', els => els.map(e => e.id.slice(2)));
   ok(new Set(ids).size === ids.length, tag + 'every Help id is unique');
-  for (const id of ['cloze', 'maths', 'typing', 'steps', 'subdecks', 'deck-options', 'read-aloud', 'export', 'deck-ring', 'exam-date', 'adding', 'tags', 'play-scoring', 'stats-terms', 'stats-calendar', 'fit-check', 'stats-layout', 'device-only', 'shortcuts', 'accuracy', 'advanced', 'reminders', 'glossary'])
+  for (const id of ['cloze', 'maths', 'typing', 'steps', 'subdecks', 'deck-options', 'read-aloud', 'export', 'deck-ring', 'exam-date', 'adding', 'tags', 'play-scoring', 'stats-terms', 'stats-calendar', 'fit-check', 'stats-layout', 'device-only', 'shortcuts', 'accuracy', 'advanced', 'reminders', 'glossary', 'custom-study', 'review-counts', 'compare', 'tools', 'reverse', 'anki-import', 'health-check', 'optimize', 'streak-freeze', 'readiness', 'retention-planner'])
     ok(ids.includes(id), tag + `Help has "${id}"`);
   await p.goto(APP + '#/help/device-only'); await p.waitForSelector('#h-device-only[open]');
   ok(await p.locator('details.help-q[open]').count() === 1, tag + '#/help/device-only opens only that answer');

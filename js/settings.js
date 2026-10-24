@@ -33,6 +33,7 @@ import { damagedNote } from './sync-merge.js';
 import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 import { contactHTML, legalLinksHTML } from './legal.js';
+import { helpLink } from './help.js';
 
 
 // ---------- settings ----------
@@ -106,10 +107,10 @@ export async function renderSettings(el) {
         <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
-      <label class="adv-row switch-row"><span><b>Single-key shortcuts</b></span>
-        <input id="singleKeys" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b>Count Play answers as reviews</b></span>
-        <input id="playCounts" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
+        <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
+      <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play answers as reviews</b> ${helpLink('play', '?', 'About counting Play answers as reviews')}</span>
+        <input id="playCounts" aria-labelledby="playCountsLbl" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b></div>
         <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(app.settings.targetRetention * 100)}" aria-label="Target retention">
@@ -124,19 +125,21 @@ export async function renderSettings(el) {
         <summary>Advanced scheduling</summary>
         <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
           <label for="lsteps"><b>Learning steps</b></label>
-                    <div class="steps-input">
-            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsExplain">
+          <div class="steps-input">
+            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsFmt lstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
           </div>
+          <span class="steps-hint" id="lstepsFmt">Separate with spaces: <b>m</b> minutes, <b>h</b> hours, <b>d</b> days · ${helpLink('steps', 'More')}</span>
           <ul class="steps-explain" id="lstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning">
           <label for="rsteps"><b>Relearning steps</b></label>
-                    <div class="steps-input">
-            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsExplain">
+          <div class="steps-input">
+            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsFmt rstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
           </div>
+          <span class="steps-hint" id="rstepsFmt">Separate with spaces: <b>m</b> minutes, <b>h</b> hours, <b>d</b> days · ${helpLink('steps', 'More')}</span>
           <ul class="steps-explain" id="rstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
@@ -147,8 +150,8 @@ export async function renderSettings(el) {
           <span class="err" id="maxErr" role="alert" hidden></span></div>
         <label class="adv-row switch-row"><span><b>Spread out due dates</b></span>
           <input id="fuzz" type="checkbox" class="switch" ${app.settings.fuzz ? 'checked' : ''}></label>
-        <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b>
-                    <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" id="fsrsChips">
+        <div class="adv-row" id="fsrsRow"><b id="fsrsLbl">Scheduler</b> ${helpLink('advanced', '?', 'About the scheduler')}
+          <div class="chips" role="radiogroup" aria-labelledby="fsrsLbl" id="fsrsChips">
             ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(app.settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
           </div>
         </div>
@@ -172,7 +175,7 @@ export async function renderSettings(el) {
           </div></div>
         <div class="adv-row"><b id="easyLbl">Easy days</b>
           <span id="easyNeeds" class="note" ${app.settings.fuzz ? 'hidden' : ''}>Needs “Spread out due dates”.</span>
-          <div class="easy-days" role="group" aria-labelledby="easyLbl" aria-describedby="easyNeeds">${[1, 2, 3, 4, 5, 6, 0].map(d => `
+          <div class="easy-days" role="group" aria-labelledby="easyLbl" ${app.settings.fuzz ? '' : 'aria-describedby="easyNeeds"'}>${[1, 2, 3, 4, 5, 6, 0].map(d => `
             <label class="easy-day"><span>${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'short' }))}</span>
               <select data-easy="${d}" aria-label="${esc(new Date(2026, 0, 4 + d).toLocaleDateString(undefined, { weekday: 'long' }))}">
                 ${[['normal', 'Normal'], ['reduced', 'Reduced'], ['minimum', 'Minimum']].map(([v, l]) => `<option value="${v}" ${(app.settings.easyDays?.[d] || 'normal') === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -458,7 +461,7 @@ function wireAdvanced(el) {
   el.querySelectorAll('[data-max]').forEach(b => b.addEventListener('click', () => setMax(+b.dataset.max)));
   $('maxDays').addEventListener('change', e => setMax(e.target.value));
   $('maxDays').addEventListener('input', e => { if (!parseMaxInterval(e.target.value).error) clearFieldError($('maxDays'), $('maxErr')); });      // (checked again as you type)
-  $('fuzz').addEventListener('change', e => { app.settings.fuzz = e.target.checked; $('easyNeeds').hidden = e.target.checked; db.setSetting('fuzz', app.settings.fuzz); });
+  $('fuzz').addEventListener('change', e => { app.settings.fuzz = e.target.checked; $('easyNeeds').hidden = e.target.checked; const ed = el.querySelector('.easy-days'); if (e.target.checked) ed.removeAttribute('aria-describedby'); else ed.setAttribute('aria-describedby', 'easyNeeds'); db.setSetting('fuzz', app.settings.fuzz); });
   // Personal parameters: the sheet fits your own FSRS weights (optimize-sheet.js, loaded when first opened).
   const redrawAdvanced = async () => {
     const view = app.currentRoute === 'settings' && settingsView();
@@ -740,7 +743,8 @@ export async function drawSync() {
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note"><button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
+      <p class="note">New here? Type your email and a password, then tap <b>Create account</b>. We email you a link to confirm it.
+        <button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
     // A sign-up waiting for its email link (kept on this device for 7 days): the address comes back filled in, with a way to ask again.
     const wait = (await db.getSettings()).pendingSignup;
     if (!box.isConnected) return;

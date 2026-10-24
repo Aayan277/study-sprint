@@ -85,7 +85,7 @@ await noHScroll(p, 'today nothing due 375'); await p.screenshot({ path: SP + '/v
 await go(p, '#/settings', '#playCounts');
 ok(await p.locator('#dgIn, #dgMinus, #dgPlus').count() === 0 && !(await p.textContent('#screen')).includes('Daily goal'), 'Settings has no Daily goal stepper');
 ok(await p.$eval('#playCounts', e => !e.checked), 'Settings: "Count Play answers as reviews" is off by default');
-ok((await p.textContent('.switch-row:has(#playCounts)')).trim() === 'Count Play answers as reviews', 'with just its label (the explanation lives in Help)');
+ok((await p.textContent('.switch-row:has(#playCounts)')).trim().startsWith('Count Play answers as reviews') && await p.locator('.switch-row:has(#playCounts) a[href="#/help/play"][aria-label]').count() === 1, 'with just its label and a ? link to Help (the explanation lives there)');
 await p.click('#playCounts');
 ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playCountsAsReviews) === true, 'switching it on saves the setting');
 ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('playCountsAsReviews')), 'and it is a synced setting');

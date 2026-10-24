@@ -14,6 +14,7 @@
 //   seedSample()  adds the sample deck          finish()  remembers that the first-run start is done
 // (the empty Today screen adds the sample deck itself, with addSampleDeck() from sample.js)
 
+import { helpLink } from './help.js';
 import * as db from './db.js';
 import { DECK_COLORS } from './decks.js';
 import { deckPath, subtreeIds, effectiveDeck } from './deck-tree.js';
@@ -117,7 +118,8 @@ function drawName(el, api) {
         <label class="field"><span>Course code</span>
           <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
         <label class="field"><span>Exam date</span>
-          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}"></label>
+          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}">
+          <small class="note">${helpLink('exam-date', 'What an exam date changes')}</small></label>
         <p class="err" id="wlErr" role="alert" hidden></p>
         <button class="btn primary wide cta" type="submit">Create course</button>
       </form>
