@@ -16,8 +16,10 @@ export function slotOf(card) {
   if (card.occlusion) return `o${card.occlusion.n}`;
   return ordinary(card, card.reverse);
 }
-// The place of a row in the import preview (its cloze / occlusion are still { noteKey, n, … } objects there). `reverse`: its reverse card.
-export const rowSlot = (c, reverse = false) => (c.cloze ? `c${c.cloze.n}` : c.occlusion ? `o${c.occlusion.n}` : ordinary(c.siblings ? { templateOrd: c.siblings.ord } : c, reverse));
+// The place of a row in the import preview (its cloze / occlusion are still { noteKey, n, … } objects there, and its template number is
+// siblings.ord): the same answer slotOf gives for the card it will make. `reverse`: its reverse card.
+export const rowSlot = (c, reverse = false) => slotOf({
+  cloze: c.cloze ? c.cloze.n : undefined, occlusion: c.occlusion, templateOrd: c.siblings ? c.siblings.ord : undefined, reverse });
 
 import { isPair } from './reverse.js';
 
@@ -25,9 +27,11 @@ const keyOf = (guid, slot) => `${guid}\u0001${slot}`;
 
 // Every saved card that has a guid, by identity. When one note is saved more than once (a deck imported twice by an older version of
 // the app), the saved cards fall into copies: the cards that share a noteId are one copy (a reversed pair, a cloze note's blanks, a
-// several-template note), and a card with no noteId is a copy of its own, wherever its deck is. Copies are ranked: one with a card in
-// one of the `prefer` decks (the deck being imported into, and its subdecks) first, then the one holding the oldest card (the one most
-// likely to hold your progress). Each place is filled from the best copy that has it, and the oldest card of a place wins within a copy.
+// several-template note), and a card with no noteId is a copy of its own. Copies are ranked: one with a card in one of the `prefer`
+// decks (the deck being imported into, and its subdecks) first, then the one holding the oldest card (most likely to hold your progress).
+// Places are taken from the single best noteId copy: two different notes are never mixed, so no note ever ends up with two cards in one
+// place. A place that copy lacks is then filled by a card with no note of its own, if there is one; otherwise it becomes a new card in
+// that note (see noteIdMap). The oldest card of a place wins within a copy.
 export function indexByGuid(cards, prefer = null) {
   const byGuid = new Map();         // guid → Map copy key → [cards]
   for (const c of cards) {
@@ -39,12 +43,16 @@ export function indexByGuid(cards, prefer = null) {
   const older = (a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1);
   const index = new Map();
   for (const [guid, copies] of byGuid) {
-    const list = [...copies.values()].map(cs => cs.sort(older));
-    const chosen = cs => !!prefer && cs.some(c => prefer.has(c.deckId));
-    list.sort((x, y) => chosen(y) - chosen(x) || older(x[0], y[0]));
-    for (const cs of list) for (const c of cs) {
-      const k = keyOf(guid, slotOf(c));
-      if (!index.has(k)) index.set(k, c);
+    const list = [...copies.entries()].map(([key, cs]) => ({ note: key.startsWith('n:'), cs: cs.sort(older) }));
+    const chosen = e => !!prefer && e.cs.some(c => prefer.has(c.deckId));
+    list.sort((x, y) => chosen(y) - chosen(x) || older(x.cs[0], y.cs[0]));
+    const best = list.find(e => e.note);
+    for (const e of [best, ...list.filter(e => !e.note)]) {
+      if (!e) continue;
+      for (const c of e.cs) {
+        const k = keyOf(guid, slotOf(c));
+        if (!index.has(k)) index.set(k, c);
+      }
     }
   }
   return index;
@@ -54,7 +62,8 @@ export function indexByGuid(cards, prefer = null) {
 // template 0, so when the incoming ft0 has no exact match it takes the saved plain card (f) of the same note: the update gives it
 // templateOrd 0 and the note's shared noteId, so it becomes a sibling of the cards added beside it instead of being duplicated.
 // (There is no such case for a reverse card: a reversed note is never a several-template note, so rt0 has no fallback.)
-const FALLBACK = { ft0: 'f' };
+// A good occlusion row (o1, o2…) likewise takes the plain picture card (f) a note saved earlier when its picture or boxes could not be used.
+const fallbackOf = slot => (slot === 'ft0' || /^o\d+$/.test(slot) ? 'f' : null);
 
 // For each item { guid, slot }, the saved card it matches, or null. A saved card is matched at most once (the first item to ask for it).
 export function matchRows(items, index) {
@@ -62,8 +71,8 @@ export function matchRows(items, index) {
   return items.map(it => {
     if (!it || !it.guid || !index) return null;
     let card = index.get(keyOf(it.guid, it.slot));
-    if ((!card || claimed.has(card.id)) && FALLBACK[it.slot]) {
-      card = index.get(keyOf(it.guid, FALLBACK[it.slot]));
+    if ((!card || claimed.has(card.id)) && fallbackOf(it.slot)) {
+      card = index.get(keyOf(it.guid, fallbackOf(it.slot)));
       if (card && isPair(card)) card = undefined;          // the plain card of a reversed pair is not a template-0 card: leave its pair alone
     }
     if (!card || claimed.has(card.id)) return null;
@@ -99,7 +108,8 @@ export function mergeCard(old, fresh, noteId, now) {
 //   pairs  [[savedCard, newCard], …]
 export function noteIdMap(pairs) {
   const map = new Map();
-  for (const [old, fresh] of pairs) {
+  // (a saved card that is in a note decides first: the cards of a re-imported note go into the note the saved cards are in)
+  for (const [old, fresh] of [...pairs.filter(([o]) => o.noteId), ...pairs.filter(([o]) => !o.noteId)]) {
     if (fresh.noteId && !map.has(fresh.noteId)) map.set(fresh.noteId, old.noteId || fresh.noteId);
   }
   return map;
@@ -151,7 +161,7 @@ const untouched = card => card.ankiSig !== undefined && card.ankiSig === content
 // row is null when nothing needs writing. A card saved by an older version of the app as a note's first card (no templateOrd) becomes
 // template 0 of its note in every case: that only changes how the cards are linked, not their content.
 export function applyUpdate(cur, plan, { now = Date.now(), overwriteEdited = false } = {}) {
-  const { fresh } = plan, noteId = plan.noteId || cur.noteId;
+  const { fresh } = plan, noteId = cur.noteId || plan.noteId;          // (a saved card is never moved to another note)
   const merged = mergeCard(cur, fresh, noteId, now);
   const relink = fresh.templateOrd === 0 && cur.templateOrd === undefined && !isPair(cur);
   const keepText = adopt => {

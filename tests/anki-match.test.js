@@ -85,8 +85,8 @@ test('cards of one note that share a guid and a note id are told apart by templa
   // ft2 has no saved card: it is added, not used to overwrite a sibling. A missing templateOrd is its own key, not t0 (G has no plain card).
   assert.deepEqual(m.map(c => c?.id ?? null), ['b', 'a', null, null, 'old', null]);      // (the last one: old was already taken by the plain f)
   // the preview's rows carry templateOrd too, and a reverse card keeps its own key
-  assert.equal(rowSlot({ templateOrd: 1 }), 'ft1'); assert.equal(rowSlot({ templateOrd: 0 }, true), 'rt0'); assert.equal(rowSlot({}), 'f');
-  assert.equal(countMatches([{ ankiGuid: 'G', templateOrd: 0 }, { ankiGuid: 'G', templateOrd: 1 }, { ankiGuid: 'G', templateOrd: 2 }], idx), 2);
+  assert.equal(rowSlot({ siblings: { ord: 1 } }), 'ft1'); assert.equal(rowSlot({ siblings: { ord: 0 } }, true), 'rt0'); assert.equal(rowSlot({}), 'f');
+  assert.equal(countMatches([0, 1, 2].map(ord => ({ ankiGuid: 'G', siblings: { ord } })), idx), 2);
 });
 
 test('a card saved before templateOrd existed becomes template 0 of its note', () => {
@@ -141,7 +141,7 @@ test('the legacy template-0 relink happens even when the content is held back', 
   const r = applyUpdate(legacy, { fresh: incoming({ templateOrd: 0, noteId: 'N' }), noteId: 'N' });
   assert.equal(r.kind, 'held'); assert.equal(r.row.front, 'old'); assert.equal(r.row.templateOrd, 0); assert.equal(r.row.noteId, 'N');
   const pair = applyUpdate(saved({ noteId: 'P' }), { fresh: incoming({ templateOrd: 0, noteId: 'N' }), noteId: 'N' });
-  assert.equal(pair.row.noteId, 'N');          // (an ordinary update; the fallback below keeps pairs out of it)
+  assert.equal(pair.row.noteId, 'P');          // (a saved card is never moved to another note)
 });
 
 test('the template-0 fallback never takes the plain card of a reversed pair', () => {
@@ -167,14 +167,14 @@ test('the preview judges a row the same way', () => {
   assert.equal(classifyRow(saved({ front: 'a', back: 'b' }), { front: 'b', back: 'a', reversed: {} }, true), 'same');
 });
 
-test('of several saved copies of a note, the one in the chosen deck wins, then the oldest; a missing place is filled from the next copy', () => {
+test('of several saved copies of a note, the one in the chosen deck wins, then the oldest; two notes are never mixed', () => {
   const cards = [
     { id: 'a1', ankiGuid: 'G', cloze: 1, noteId: 'NA', deckId: 'A', created: 1 }, { id: 'a2', ankiGuid: 'G', cloze: 2, noteId: 'NA', deckId: 'A', created: 2 },
     { id: 'b1', ankiGuid: 'G', cloze: 1, noteId: 'NB', deckId: 'B', created: 5 }
   ];
   const ids = idx => matchRows([{ guid: 'G', slot: 'c1' }, { guid: 'G', slot: 'c2' }], idx).map(c => c?.id ?? null);
   assert.deepEqual(ids(indexByGuid(cards)), ['a1', 'a2']);                              // oldest copy
-  assert.deepEqual(ids(indexByGuid(cards, new Set(['B']))), ['b1', 'a2']);              // B's copy first; it has no c2, so that comes from A's
+  assert.deepEqual(ids(indexByGuid(cards, new Set(['B']))), ['b1', null]);              // B's note only: its c2 would be a new card in that note, not A's card
   assert.deepEqual(ids(indexByGuid(cards, new Set(['A', 'B']))), ['a1', 'a2']);
 });
 
@@ -186,7 +186,7 @@ test('a pair split across two decks is still found whole', () => {
   const ids = prefer => matchRows([{ guid: 'G', slot: 'f' }, { guid: 'G', slot: 'r' }], indexByGuid(cards, prefer)).map(c => c?.id ?? null);
   assert.deepEqual(ids(null), ['f', 'r']);
   assert.deepEqual(ids(new Set(['B'])), ['f', 'r']);
-  assert.deepEqual(ids(new Set(['C'])), ['f2', 'r']);          // the preferred deck's own forward card, and the reverse from the pair
+  assert.deepEqual(ids(new Set(['C'])), ['f', 'r']);          // the pair is one note: a plain card elsewhere does not take its place
 });
 
 test('a note split across two subdecks keeps all its blanks', () => {
@@ -200,4 +200,45 @@ test('the fingerprint does not depend on the order of an object\'s keys (the syn
   const b = { occlusion: { masks: [{ n: 1, h: 4, w: 3, y: 2, x: 1 }], h: 20, w: 10, n: 1 }, noteFields: [{ text: 't', name: 'F' }], back: 'b', front: 'f' };
   assert.equal(contentSig(a), contentSig(b));
   assert.notEqual(contentSig(a), contentSig({ ...b, back: 'c' }));
+});
+
+test('two saved copies of a note: no card changes note and no note gets two cards in one place', () => {
+  const saved = [
+    { id: 'a2', ankiGuid: 'G', cloze: 2, noteId: 'N1', deckId: 'A', created: 5, front: 'x', back: 'y', tags: [] },                  // copy N1 (deck A) has only c2
+    { id: 'b1', ankiGuid: 'G', cloze: 1, noteId: 'N2', deckId: 'B', created: 1, front: 'x', back: 'y', tags: [] },                  // copy N2 (deck B) has c1 and c2
+    { id: 'b2', ankiGuid: 'G', cloze: 2, noteId: 'N2', deckId: 'B', created: 2, front: 'x', back: 'y', tags: [] }
+  ];
+  const fresh = [1, 2].map(n => ({ ankiGuid: 'G', cloze: n, noteId: 'new', front: 'f' + n, back: 'b' + n, tags: [] }));
+  for (const [prefer, note] of [[new Set(['A']), 'N1'], [new Set(['B']), 'N2'], [null, 'N2']]) {
+    const m = matchRows(fresh.map(f => ({ guid: 'G', slot: slotOf(f) })), indexByGuid(saved, prefer));
+    const map = noteIdMap(m.map((old, i) => (old ? [old, fresh[i]] : null)).filter(Boolean));
+    const after = [];
+    m.forEach((old, i) => {
+      if (old) { const r = applyUpdate(old, { fresh: fresh[i], noteId: map.get('new') }, { now: 9 }).row; after.push({ ...old, ...(r || {}) }); }
+      else after.push({ ...fresh[i], id: 'new' + i, noteId: map.get('new') || 'new' });          // a card nothing matched is added to the note the matched ones are in
+    });
+    const untouched = saved.filter(c => !m.includes(c));
+    for (const c of after) if (c.id.startsWith('new')) assert.equal(c.noteId, note, 'new siblings join the preferred copy\'s note');
+    for (const o of m.filter(Boolean)) assert.equal(after.find(c => c.id === o.id).noteId, o.noteId, 'a matched card is never moved to another note');
+    const notes = new Map();
+    for (const c of [...after, ...untouched]) { const k = c.noteId + '/' + c.cloze; notes.set(k, (notes.get(k) || 0) + 1); }
+    assert.ok([...notes.values()].every(n => n === 1), 'no note has two cards for one blank: ' + JSON.stringify([...notes]));
+  }
+});
+
+test('a card with no note fills a place the note lacks, and joins that note', () => {
+  const saved = [{ id: 'f', ankiGuid: 'G', front: 'x', back: 'y', created: 1, tags: [] }, { id: 'c2', ankiGuid: 'G', cloze: 2, noteId: 'N', created: 2, tags: [] }];
+  const m = matchRows([{ guid: 'G', slot: 'c2' }, { guid: 'G', slot: 'f' }], indexByGuid(saved));
+  assert.deepEqual(m.map(c => c.id), ['c2', 'f']);
+  const r = applyUpdate(saved[0], { fresh: { ankiGuid: 'G', front: 'n', back: 'm', noteId: 'new' }, noteId: 'N' }, { overwriteEdited: true });
+  assert.equal(r.row.noteId, 'N');
+});
+
+test('a row\'s place in the preview is the place of the card it makes', () => {
+  assert.equal(rowSlot({ cloze: { n: 2 } }), slotOf({ cloze: 2 }));
+  assert.equal(rowSlot({ occlusion: { n: 3 } }), slotOf({ occlusion: { n: 3 } }));
+  assert.equal(rowSlot({ siblings: { ord: 1 } }), slotOf({ templateOrd: 1 }));
+  // an occlusion row whose picture could not be used was saved as a plain card: a good row still finds it
+  const idx = indexByGuid([{ id: 'plain', ankiGuid: 'G' }]);
+  assert.equal(matchRows([{ guid: 'G', slot: rowSlot({ occlusion: { n: 1 } }) }], idx)[0].id, 'plain');
 });
