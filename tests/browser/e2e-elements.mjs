@@ -76,7 +76,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.goto('about:blank'); await p.goto(URL + '#/review/T'); await p.waitForSelector('#flash');
   ok(/Negligence/.test(await p.textContent('.rv-front .flash-front')), `${tag}: the first card is Negligence`);
   ok((await p.textContent('.rv-front .el-count')).trim() === '4 elements', `${tag}: the front says "4 elements"`);
-  ok(await p.locator('#typeIn').count() === 0 && /recall them in your head/.test(await p.textContent('#longNote')), `${tag}: no typing; the note says to recall them in your head`);
+  ok(await p.locator('#typeIn').count() === 0 && await p.locator('#longNote').count() === 0, `${tag}: no typing, and no note under the card`);
   await p.keyboard.press('Space'); await p.waitForSelector('#stepBtn');
   ok(await shown(p) === 0 && await p.locator('.rate').count() === 0, `${tag}: after the flip no element is visible`);
   ok(/Recall element 1 of 4, then reveal\./.test(await p.textContent('#stepTry')) && /Reveal element 1 of 4/.test(await p.textContent('#stepBtn')), `${tag}: "Recall element 1 of 4, then reveal." and the button`);

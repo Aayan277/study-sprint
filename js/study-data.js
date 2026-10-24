@@ -177,7 +177,6 @@ export function countFor(data, deckIds) {
 //   state     'todo' (work left), 'done' (finished today's work) or 'nothing' (nothing was due at all today)
 //   frac      the ring's fill: done / total, and full (1) when there was nothing to do
 //   n, of     the numbers the ring shows (n of 1 for 'nothing', so the ring is never 0/0)
-//   allLearned true when none of these decks (and subdecks) has an unseen new card left, suspended ones included
 export function todayRing(data, deckIds, counts, now = Date.now()) {
   const ids = deckIds.length ? withSubdecks(data, deckIds) : null;
   const end = dayEnd(now);
@@ -195,11 +194,7 @@ export function todayRing(data, deckIds, counts, now = Date.now()) {
   }
   const done = finished.size, left = counts.total, total = done + left;
   const state = left > 0 ? 'todo' : done > 0 ? 'done' : 'nothing';
-  // "All cards learned": none of these decks (and their subdecks) has an unseen new card. Suspended or buried unseen cards
-  // count as not learned (they were never studied), which is why this reads every card, not the visible ones.
-  const inScope = all.filter(c => !ids || ids.has(c.deckId));
-  const allLearned = inScope.length > 0 && !inScope.some(c => { const st = data.statesById.get(c.id); return !st || st.state === NEW; });
-  return { done, left, total, state, allLearned, frac: total ? done / total : 1, n: total ? done : 1, of: total || 1 };
+  return { done, left, total, state, frac: total ? done / total : 1, n: total ? done : 1, of: total || 1 };
 }
 
 // "The next card is due in 3h." (or '' when there's nothing scheduled), for cards that are all done today.

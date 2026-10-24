@@ -88,14 +88,13 @@ export async function renderToday(el) {
     const ids = chosen.length ? chosen : allIds;
     const c = countFor(data, ids);
     drawSidebar({ data, streak, chosen });          // the sidebar shows the same count as Start, from the data loaded here
-    const day = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
     const tr = todayRing(data, chosen, c);                 // the same decks as the cards still to go
     const resume = live.resume && live.resume.day === dayStart() && live.resume.version === db.scheduleVersion() ? live.resume : null;
     const exams = data.decks.map(deck => ({ deck, info: examInfo(deck) })).filter(e => e.info).sort((a, b) => a.info.daysLeft - b.info.daysLeft).slice(0, 3);
     const noExam = coursesWithoutExam();
     el.innerHTML = `
       <div class="screen-head">
-        <div><span class="eyebrow mono">${esc(day.toUpperCase())}</span><h1>Today</h1></div>
+        <div><h1>Today</h1></div>
         ${data.decks.length ? `<div class="head-actions"><button class="btn ghost small" type="button" id="optBtn">${icon('sliders')} Options</button></div>` : ''}
       </div>
       ${!data.cards.length && !data.hiddenCount ? emptyStartHTML({ courseId: top.filter(d => d.id !== 'sample').length === 1 ? top.filter(d => d.id !== 'sample')[0].id : '' })
@@ -107,10 +106,8 @@ export async function renderToday(el) {
         <div class="th-main">
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
-            <span class="th-label mono">TODAY</span>
             <b class="th-big">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
             ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
-            ${tr.allLearned ? '<span class="th-sub th-learned">All cards learned · only reviews from now</span>' : ''}
             ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>
         </div>
@@ -319,7 +316,6 @@ export async function renderToday(el) {
               ${depth ? `<span class="sub-mark" aria-hidden="true">${icon('sub')}</span>` : ''}<i class="dot" style="background:${esc(d.color)}"></i>${esc(d.name)} <small class="mono">${dc.due} due · ${dc.fresh} new</small></button>`;
           }).join('')}
         </div>
-        <p class="note">Each deck shows its due and new cards (with its subdecks). You get up to ${data.settings.newPerDay}${data.extra ? ` + ${data.extra} extra` : ''} new cards a day (change it in Settings, or for one deck with its Edit button).</p>
       </section>
       <section class="section">
         <h3 class="label" id="optModeLbl">Answer by</h3>
@@ -327,7 +323,6 @@ export async function renderToday(el) {
           <button type="button" class="tchip" data-typing="0" aria-pressed="${!typing}">Flipping the card</button>
           <button type="button" class="tchip" data-typing="1" aria-pressed="${typing}">Typing the answer</button>
         </div>
-        <p class="note">Typing the answer types every answer of 40 characters or less; longer ones are flipped. Cards set to type (in the card or its deck) are typed either way, and cards set to Flipping the card are always flipped.</p>
       </section>
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="customBtn">Custom study…</button>
@@ -371,27 +366,23 @@ export async function renderToday(el) {
 
     openSheet(`
       <h2 id="sheetTitle">Custom study</h2>
-      <p class="note" style="margin-top:0">For the decks chosen in Options.</p>
       <div class="cs-opt">
         <b>By tag or question ID</b>
-        <p>Find the cards for the questions you missed in a question bank, or for one tag. Looks in all decks.</p>
         <button class="btn primary small" type="button" id="csTagBtn">Choose…</button>
       </div>
       <div class="cs-opt">
         <b>More new cards today</b>
-        <p>Raises today's new card limit (each deck's own limit too). It goes back to normal tomorrow. ${plural(newAvail, 'new card')} available.</p>
         <div class="cs-row">
           <div class="stepper">
             <button type="button" class="icon-btn" id="csMinus" aria-label="Fewer">−</button>
             <input id="csNew" type="number" inputmode="numeric" min="1" max="999" value="${extra}" aria-label="Extra new cards">
             <button type="button" class="icon-btn" id="csPlus" aria-label="More">+</button>
           </div>
-          <button class="btn primary small" type="button" id="csNewBtn" ${newAvail ? '' : 'disabled'}>Add</button>
+          <button class="btn primary small" type="button" id="csNewBtn" ${newAvail ? '' : 'disabled'}>Add (${newAvail.toLocaleString('en')} available)</button>
         </div>
       </div>
       <div class="cs-opt">
         <b id="csAheadLbl">Review ahead</b>
-        <p>Study cards that aren't due yet, for example before an exam. Each one is rescheduled from today.</p>
         <div class="chips" role="group" aria-labelledby="csAheadLbl">
           ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
             `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
@@ -400,17 +391,14 @@ export async function renderToday(el) {
       </div>
       <div class="cs-opt">
         <b>Postpone reviews</b>
-        <p>Busy few days? Push back the reviews you'll still remember best.</p>
         <button class="btn primary small" type="button" id="csPostBtn">Choose…</button>
       </div>
       ${exams.length ? `<div class="cs-opt">
-        <b>Exam prep</b>
-        <p>${esc(exams.map(e => `${e.deck.name}: ${countdown(e.info).toLowerCase()}`).join(' · '))}. Go over every card you haven't seen in the last 3 days, weakest first, then any you haven't started.</p>
+        <b>Exam prep · ${esc(exams.map(e => `${e.deck.name}: ${countdown(e.info).toLowerCase()}`).join(' · '))}</b>
         <button class="btn primary small" type="button" id="csPrepBtn" ${prep.queue.length ? '' : 'disabled'}>${prep.queue.length ? `Review ${plural(prep.queue.length, 'card')}` : 'All seen recently'}</button>
       </div>` : ''}
       <div class="cs-opt">
         <b>Cards I forgot today</b>
-        <p>Go over every card you pressed Again on${data.settings.playCountsAsReviews === true ? ', or got wrong in Play,' : ''} today.</p>
         <button class="btn primary small" type="button" id="csForgotBtn" ${forgot.queue.length ? '' : 'disabled'}>${forgot.queue.length ? `Review ${plural(forgot.queue.length, 'card')}` : 'None today'}</button>
       </div>
       `);

@@ -72,8 +72,12 @@ export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
 // (styles.css hides them when <body> has the class "focus"). Each screen turns it on when a round starts
 // and off when the round ends; going to any other screen also turns it off (see route() in app.js).
+// Starting a round clears a toast left over from the screen before (e.g. "Added 5 cards"), which would cover the first card.
+// Only on the way in: Review turns this on again for every card, and a toast shown during the round must stay.
 export function setFocusMode(on) {
+  const was = document.body.classList.contains('focus');
   document.body.classList.toggle('focus', !!on);
+  if (on && !was) { clearTimeout(toastTimer); if (toastLeave) { window.removeEventListener('hashchange', toastLeave); toastLeave = null; } if ($('toast')) hideToast(); }
 }
 
 // The speaker button's picture (it replaces the 🔊 emoji, which looks different on every phone).

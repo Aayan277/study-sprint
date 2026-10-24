@@ -82,8 +82,8 @@ for (let i = 0; i < 10; i++) {
   await page.keyboard.press(rating);
   if (i < 9) await page.waitForSelector('#flash:not([data-rated])', { timeout: 8000 }).catch(() => {});
 }
-const want = { 'Short typed': [true, ''], 'Long typed': [true, ''], 'Unset short': [false, ''], 'Flip me': [false, ''], 'Elements typed': [false, 'Elements card'], 'Half': [true, ''],
-  'Colour': [true, ''], 'pumps': [true, ''], 'Labelled pic': [true, ''], 'Unlabelled pic': [false, 'No label on this box'] };
+const want = { 'Short typed': [true, ''], 'Long typed': [true, ''], 'Unset short': [false, ''], 'Flip me': [false, ''], 'Elements typed': [false, ''], 'Half': [true, ''],
+  'Colour': [true, ''], 'pumps': [true, ''], 'Labelled pic': [true, ''], 'Unlabelled pic': [false, ''] };      // (no flip note under the card any more)
 for (const [n, [box, note]] of Object.entries(want)) {
   const s = seen.get(n);
   ok(!!s && s.hasBox === box && s.note.startsWith(note) && (note || !s.note), `Review (Today switch off): "${n}" ${box ? 'asks for a typed answer' : 'flips'}${note ? ' with the note "' + note + '"' : ' with no note'}${s ? '' : ' (never shown)'}`);
@@ -147,7 +147,7 @@ for (let i = 0; i < 2; i++) {
   if (i === 0) await page.waitForSelector('#flash:not([data-rated])');
 }
 ok(kidSeen.short?.box === true, 'Deck default: an unset short card in the subdeck types');
-ok(kidSeen.long?.box === false && kidSeen.long.note.startsWith('Long answer'), 'Deck default: an unset long card flips, with the Long answer note');
+ok(kidSeen.long?.box === false && kidSeen.long.note === '', 'Deck default: an unset long card flips, with no note under it');
 // turning it off again
 await page.goto(APP + '#/deck/par'); await deckMenu(page); await page.click('#editDeck'); await page.waitForSelector('#deckTypeIn');
 await page.click('#deckTypeIn', { force: true }); await page.click('button[type=submit][form=deckForm]'); await page.waitForFunction(() => document.getElementById('toast')?.textContent.includes('Deck saved'));
@@ -284,7 +284,7 @@ await page.click('#optBtn, [data-opts], button:has-text("Options")').catch(() =>
 await page.waitForSelector('#modeChips', { timeout: 5000 }).catch(() => {});
 if (await page.locator('#modeChips').count()) {
   const t = await page.textContent('#sheet');
-  ok(t.includes('Typing the answer types every answer of 40 characters or less; longer ones are flipped.') && t.includes('cards set to Flipping the card are always flipped'), 'Today: the Answer by note explains the card and deck settings');
+  ok(await page.locator('#modeChips [data-typing]').count() === 2 && !t.includes('40 characters or less'), 'Today: Answer by offers the two choices, with no note');
   await closeSheet();
 } else ok(false, 'Today: could not open the options sheet');
 

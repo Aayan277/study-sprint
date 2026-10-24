@@ -112,7 +112,7 @@ await page.keyboard.press('z'); await page.waitForSelector('dialog.occ-view[open
 await page.click('[data-close]'); await page.waitForFunction(() => !document.querySelector('dialog.occ-view'));
 
 // flip: the box is uncovered, the others stay covered, the label shows
-await page.click('.rv-front .flash-hint');
+await page.click('#showBtn');
 await page.waitForFunction(() => document.querySelector('#flash').classList.contains('flipped'));
 const back = await page.evaluate(() => { const b = document.querySelector('.rv-back'); return { reveal: b.querySelectorAll('.occ-reveal').length, covered: b.querySelectorAll('.occ-mask:not(.occ-reveal)').length, label: b.querySelector('.occ-label').textContent, extra: b.querySelector('.flash-extra')?.textContent, inert: document.querySelector('.rv-front').inert, aria: b.querySelector('.occ-reveal')?.getAttribute('aria-label') }; });
 ok(back.reveal >= 1 && back.reveal + back.covered === 4 && back.covered >= 1, 'back: only the asked box is uncovered, the others stay covered');
@@ -155,7 +155,7 @@ for (let i = 0; i < 3; i++) {
   if (i < 2) await page.waitForSelector('#flash:not([data-rated])');
 }
 const seenList = [...seen].sort();
-ok(seenList.join(' / ') === ['Aorta|true|', 'Left ventricle|true|', 'Hidden area|false|No label on this box: say it in your head, then flip.'].sort().join(' / '), 'typed answer: offered for labelled boxes only; the unlabelled one says so: ' + seenList.join(' / '));
+ok(seenList.join(' / ') === ['Aorta|true|', 'Left ventricle|true|', 'Hidden area|false|'].sort().join(' / '), 'typed answer: offered for labelled boxes only; the unlabelled one says so: ' + seenList.join(' / '));
 await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('reviewTyping', false); });
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
 
@@ -299,7 +299,7 @@ await page.evaluate(async deckId => {
 }, seed.deckId);
 await page.goto(URL + '#/welcome/review/' + seed.deckId); await page.waitForSelector('#flash .occ');
 ok(await page.locator('#flash .rv-front .occ-ask').count() >= 1 && (await page.locator('#flash .rv-front .occ-img').count()) === 1, 'the walk-through shows the picture with the asked box');
-await page.click('#flash .flash-hint'); await page.waitForSelector('#flash.flipped');
+await page.click('#showBtn'); await page.waitForSelector('#flash.flipped');
 ok(await page.locator('#flash .rv-back .occ-reveal').count() >= 1 && (await page.textContent('#flash .rv-back .occ-label')).length > 0, 'the walk-through back uncovers the box and shows its label');
 await noSideways(page, 'in the walk-through');
 ok(await page.locator('#flash .occ-zoom').count() >= 1 && await page.locator('#flash .occ-zoom[aria-keyshortcuts]').count() === 0, 'the walk-through zoom button does not claim a Z shortcut');

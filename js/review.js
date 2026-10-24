@@ -164,7 +164,6 @@ const stepsLeft = () => { const sp = R?.flipped && R.current && stepsOf(R.curren
 // A step or elements card, a box with no label, and a back with nothing to type are flipped; so is an answer too long to type.
 const modeOf = card => answerMode(card, typeFacts(card), !!deckOf(card)?.typeAnswers, R.typing);
 const typesAnswer = card => modeOf(card).type;
-const FLIP_NOTE = { structured: 'Elements card: recall them in your head, then flip.', nolabel: 'No label on this box: say it in your head, then flip.', long: 'Long answer: say it in your head, then flip.' };
 // Read the side showing (the back once flipped) in the deck's language.
 // A side with sounds plays them (one after another) instead of reading the text out; any other side is read out.
 function readAloud() {
@@ -207,11 +206,11 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
-  // text inside each span stays just the number.
-  return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
-    <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
+  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label; the sr-only span says
+  // it to screen readers (CSS text is not reliably read).
+  return `<span class="c-new${cls('new')}" data-label="New"><span class="sr-only">New </span>${n('new')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn"><span class="sr-only">Learn </span>${n('learn')}</span>
+    <span class="c-rev${cls('review')}" data-label="Due"><span class="sr-only">Due </span>${n('review')}</span>`;
 }
 
 // The face that is turned away is hidden from screen readers and can't be focused or tabbed to (inert).
@@ -287,7 +286,6 @@ function renderSession(el, enter = false) {
           <div class="flash-front${size}" id="rvQ">${front}</div>
           ${typeThis ? '' : '<span class="sr-only" id="rvHint">Press Space or Enter to show the answer</span>'}
           ${sp?.kind === 'elements' ? `<p class="el-count">${sp.steps.length} elements</p>` : ''}
-          ${typeThis ? '' : `<p class="flash-hint">${MOUSE.matches ? 'Click or press Space to show the answer' : 'Tap to show the answer'}</p>`}
         </div>
         <div class="rv-face rv-back" tabindex="-1" role="region" aria-label="Answer"${R.typed ? ' aria-describedby="rvTyped"' : ''} ${R.flipped ? '' : HIDDEN}>
           ${deckLabel}
@@ -306,7 +304,6 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    ${mode.wanted && FLIP_NOTE[mode.why] && !R.flipped && (!sp || sp.kind === 'elements') ? `<p class="note center" id="longNote">${FLIP_NOTE[mode.why]}</p>` : ''}
     <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
     <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? typingKeys() : keyLine)}</p>`;
   drawSessionPage(el, stripKeys(head), stripKeys(body));
@@ -349,7 +346,7 @@ function renderSession(el, enter = false) {
     $('typeIn').addEventListener('blur', () => { $('keyLine').textContent = $('keyLine').dataset.normal; });
   }
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
-  else $('flash').focus({ preventScroll: true });
+  else ($('showBtn') || $('flash')).focus({ preventScroll: true });      // the Show answer button is announced as a button, and Space or Enter on it flips the card
   publishLive();
 }
 
@@ -394,7 +391,7 @@ function drawSessionPage(el, head, body) {
 }
 
 const showButtonHTML = typeThis => stripKeys(
-  `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`);
+  `<button class="btn ${typeThis ? 'ghost' : 'primary'} wide" type="button" id="showBtn" aria-describedby="rvQ">${typeThis ? "I don't know" : 'Show answer'}${typeThis ? '' : ' <kbd class="key-hint" aria-hidden="true">Space</kbd>'}</button>`);
 
 // The buttons under the card: Show answer, or the four ratings.
 function wireRatebar(el) {
@@ -489,7 +486,6 @@ function flip(el) {
   back.removeAttribute('aria-hidden'); back.inert = false;
   if (R.typed) back.setAttribute('aria-describedby', 'rvTyped'); else back.removeAttribute('aria-describedby');      // "Correct" / "Not quite" is read when focus lands here
   $('typeForm')?.remove();
-  $('longNote')?.remove();
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
   // FSRS-7 and the card's memory is still being rebuilt: draw the buttons again with the right intervals when it is ready.
@@ -776,7 +772,7 @@ document.getElementById('sheet')?.addEventListener('close', () => {
   const sheet = document.getElementById('sheet');
   if (sheet.open || !R?.active || !location.hash.startsWith('#/review')) return;
   const card = document.getElementById('flash');
-  (card?.querySelector('.rv-back:not([inert])') || card)?.focus({ preventScroll: true });
+  (card?.querySelector('.rv-back:not([inert])') || document.getElementById('showBtn') || card)?.focus({ preventScroll: true });
 });
 
 // Quick keys: bury (-) or suspend (@) the card on screen without opening the panel.
@@ -848,14 +844,14 @@ async function finish(el) {
   const title = endedEarly ? 'Session ended' : reviewed && !rest.total ? 'Nice work' : 'Session done';
 
   el.innerHTML = `
-    <div class="screen-head"><div><span class="eyebrow mono">${endedEarly ? 'ENDED EARLY' : 'DONE FOR NOW'}</span><h1>${title}</h1></div></div>
+    <div class="screen-head"><div><h1>${title}</h1></div></div>
     <div class="stats4">
       <div><div class="v">${cardsDone}</div><div class="l">Cards reviewed</div></div>
       <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
       <div><div class="v">${mins}:${String(secs).padStart(2, '0')}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
-    <p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}. ` : ''}Accuracy counts every rating except Again.</p>
+    ${endedEarly || reviewed > cardsDone ? `<p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.` : ''}</p>` : ''}
     <div class="res-actions">
       ${goOn
         ? `<button class="btn primary" type="button" id="keepBtn" aria-label="${goOn.word}: ${plural(goOn.total, 'card')}">${goOn.word} · ${plural(goOn.total, 'card')}</button>

@@ -35,7 +35,6 @@ export function openPostponeSheet({ data, cards, onChange = () => {} }) {
 
   openSheet(`
     <h2 id="sheetTitle">Postpone reviews</h2>
-    <p>Busy few days? Push back the reviews you'll still remember best.</p>
     <div class="chips" role="group" aria-label="Push back by">
       ${CHOICES.map(([d, l]) => `<button type="button" class="tchip" data-pdays="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
     </div>

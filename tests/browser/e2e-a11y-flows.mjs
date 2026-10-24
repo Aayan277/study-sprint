@@ -165,7 +165,7 @@ ok((await page.textContent('.rv-counts')) !== before || await page.locator('.rat
 // Play with the keys off
 await page.goto(URL + '#/play'); await page.waitForSelector('#startBtn');
 await page.$eval('input[name=qtype][value=front]', el => el.click());
-ok((await page.textContent('.keys')).trim() === 'Esc to quit', 'Shortcuts off: Play setup hint drops the number keys');
+ok(await page.locator('.hint.keys').count() === 0, 'Play setup has no key-hint line (cut)');
 await page.click('#startBtn'); await page.waitForSelector('#pCard');
 ok(await page.locator('#options .key').count() === 0, 'Shortcuts off: Play options show no number badges');
 await page.keyboard.press('1'); await page.waitForTimeout(300);

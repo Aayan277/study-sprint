@@ -243,11 +243,11 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await go(p, '#/today', '#optBtn');
   await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csForgotBtn');
   const forgot = await p.$eval('#csForgotBtn', b => b.closest('.cs-opt').textContent.replace(/\s+/g, ' '));
-  ok(/pressed Again on today\./.test(forgot) && !/Play/.test(forgot), 'Custom study: "Cards I forgot today" does not mention Play while Play is practice only: ' + forgot.slice(0, 90));
+  ok(/Cards I forgot today/.test(forgot) && !/Play/.test(forgot), 'Custom study: "Cards I forgot today" has no explanation, so no mention of Play: ' + forgot.slice(0, 90));
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', true); });
   await go(p, '#/today', '#optBtn');
   await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csForgotBtn');
-  ok(/got wrong in Play, today/.test(await p.$eval('#csForgotBtn', b => b.closest('.cs-opt').textContent.replace(/\s+/g, ' '))), 'with "Count Play answers as reviews" on it does');
+  ok(await p.locator('#csForgotBtn').count() === 1 && !/Play/.test(await p.$eval('#csForgotBtn', b => b.closest('.cs-opt').textContent)), 'with "Count Play answers as reviews" on the option is still there, without any explanation');
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', false); });
   await go(p, '#/stats', '.pgrid');
   ok(/Review today to start a streak/.test(await norm(p, '.pgrid')) || (await norm(p, '.pgrid')).includes('streak'), 'Stats: the streak line does not say play');

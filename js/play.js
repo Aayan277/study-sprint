@@ -170,19 +170,11 @@ export async function renderPlay(el) {
     if (!mcOk && prefs.qtype !== 'typing') prefs.qtype = 'typing';
     const best = settings.playBest?.[bestKey(prefs)];
     const typing = prefs.qtype === 'typing';
-    const notes = [];
-    if (prefs.fmt === 'survival') notes.push('Timer shrinks 3% a question, 2s floor.');
-    if (typing) notes.push(`Typing gets ${TYPING_TIME}× time: ${Math.round(pace * TYPING_TIME)}s${prefs.fmt === 'survival' ? ' to start' : ''}.`);
     const paceName = pace <= 4 ? 'Sprint' : pace <= 7 ? 'Quick' : pace <= 10 ? 'Standard' : pace <= 14 ? 'Relaxed' : 'Easy';
     const radio = (name, value, label, checked, extra = '') =>
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
 
-    // One line saying what's in "Customise", so the folded part is still visible at a glance.
     const untimed = prefs.untimed === true && prefs.fmt !== 'lightning';      // (Lightning is a 60-second race: it stays timed)
-    const timeText = prefs.fmt === 'lightning' ? '60s clock' : untimed ? 'No time limit' : `${pace}s ${prefs.fmt === 'survival' ? 'to start' : 'each'}`;
-    const summary = [typing ? 'Typing' : QTYPES[prefs.qtype], prefs.hard ? 'Hard' : 'Normal', prefs.flash ? `Flash ${prefs.flash / 1000}s` : null,
-      prefs.fmt === 'classic' ? `${prefs.len} questions` : null, timeText].filter(Boolean).join(' · ');
-    const fmtDesc = { classic: 'Set length', survival: '3 lives', lightning: '60s clock' };
 
     el.innerHTML = `
       <div class="screen-head"><div><h1>Play</h1></div></div>
@@ -198,17 +190,17 @@ export async function renderPlay(el) {
         <div class="modes three">
           ${[['classic', `${prefs.len} Q`], ['survival', '<span class="hearts" aria-hidden="true">●●●</span>'], ['lightning', '<span class="clock">1:00</span>']].map(([v, ex]) => `
             <label class="mode"><input type="radio" name="fmt" value="${v}" ${prefs.fmt === v ? 'checked' : ''}>
-              <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span><span class="mode-desc">${fmtDesc[v]}</span></label>`).join('')}
+              <span class="mode-ex">${ex}</span><span class="mode-name">${FORMATS[v]}</span></label>`).join('')}
         </div>
       </fieldset>
 
       <div class="start-row">
         <button class="btn primary" type="button" id="startBtn">Start round</button>
-        <span class="mode-best">${best ? `Best for this setup <b class="mono">${best.toLocaleString()}</b>` : 'No score for this setup yet'}</span>
+        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
       </div>
 
       <button class="fold-toggle" type="button" id="customBtn" aria-expanded="${customOpen}" aria-controls="customBody">
-        <span>Customise</span><span class="muted small">${esc(summary)}</span>${icon('chevron')}</button>
+        <span>Customise</span>${icon('chevron')}</button>
       <div id="customBody" ${customOpen ? '' : 'hidden'}>
       <fieldset><legend>Question</legend>
         <div class="chips">
@@ -216,46 +208,39 @@ export async function renderPlay(el) {
           ${radio('qtype', 'back', 'Back → pick the front', prefs.qtype === 'back', mcOk && mcBack ? '' : 'disabled')}
           ${radio('qtype', 'typing', 'Typing', typing, typeCount ? '' : 'disabled')}
         </div>
-        ${(!mcOk || typing || suggested || (hasCloze && prefs.qtype !== 'front')) ? `<p class="note">${!mcOk ? 'Multiple choice needs 4+ cards with different answers.'
-          : hasCloze && !typing && !suggested ? 'Cloze cards are always asked front → back.'
-          : typing ? `${typeCount} of ${pool.length} cards fit typing (40 characters max).`
-          : suggested ? 'Back → front suits this deck’s long answers.'
-          : ''}</p>` : ''}
+        ${!mcOk ? '<p class="note">Multiple choice needs 4+ cards with different answers.</p>' : ''}
       </fieldset>
 
       <div class="settings">
         <fieldset><legend>Difficulty</legend>
           <div class="chips">${radio('diff', 'normal', 'Normal', !prefs.hard)}${radio('diff', 'hard', 'Hard', prefs.hard)}</div>
-          ${prefs.hard ? '<p class="note">6 options, −50 per miss, ×1.25 points, no typo forgiveness.</p>' : ''}
         </fieldset>
         <fieldset><legend>Flash</legend>
           <div class="chips">${[0, 1200, 800, 500].map(f => radio('flash', f, f ? `${f / 1000}s` : 'Off', prefs.flash === f)).join('')}</div>
-          ${prefs.flash ? `<p class="note">Question hides after ${prefs.flash / 1000}s. Points ×1.2.</p>` : ''}
         </fieldset>
       </div>
 
       <div class="settings">
         ${prefs.fmt === 'classic' ? `<fieldset><legend>Questions</legend>
           <div class="chips">${[10, 20, 40].map(n => radio('len', n, n, prefs.len === n)).join('')}</div></fieldset>` : ''}
-        ${prefs.fmt === 'lightning' ? `<fieldset><legend>Clock</legend>
-          <p class="lightning-note"><b>60 seconds</b> in all. A wrong answer costs <b>3s</b>.</p></fieldset>` : `
+        ${prefs.fmt === 'lightning' ? '' : `
         <fieldset><legend id="paceLegend">${prefs.fmt === 'survival' ? 'Starting time per question' : 'Time per question'}</legend>
           <div class="slider-row">
             <input type="range" id="pace" min="3" max="20" step="1" value="${pace}" aria-labelledby="paceLegend" ${untimed ? 'disabled' : ''}>
             <output for="pace" class="mono" id="paceOut">${untimed ? '<b>Off</b>' : `<b>${pace}s</b> ${paceName}`}</output>
           </div>
-          <label class="adv-row switch-row"><span><b>No time limit</b>
-            <span>Take as long as you need. There is no speed bonus. (Lightning is a 60-second race, so it is always timed.)</span></span>
+          <label class="adv-row switch-row"><span><b>No time limit</b></span>
             <input id="untimed" type="checkbox" class="switch" ${untimed ? 'checked' : ''}></label>
-          ${notes.length && !untimed ? `<p class="note">${notes.join(' ')}</p>` : ''}
         </fieldset>`}
       </div>
       </div>
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
-        <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). Lightning’s clock pauses while you read an answer.</p>
+        <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). No time limit: no speed bonus.</p>
+        <p>Survival: the timer shrinks 3% a question, down to 2s. Lightning: always timed, 60 seconds in all, a wrong answer costs 3s, and the clock pauses while you read an answer.</p>
+        <p>Typing gets ${TYPING_TIME}× the time. Hard: 6 options, −50 per miss, ×1.25 points, no typo forgiveness. Flash: the question hides after the set seconds, ×1.2 points.</p>
         <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
-      <p class="hint keys mono">${singleKeysOn() ? 'Number keys to answer · Enter for next · Esc to quit' : 'Esc to quit'}</p>`}`;
+      `}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
     const save = () => db.setSetting('playPrefs', { ...prefs });
