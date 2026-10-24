@@ -19,7 +19,7 @@ const isSpace = ch => /\s/.test(ch);
 const LINE_END = /[\n\r\u2028\u2029]/g;
 // A search for "the first match at or after pos" that remembers its last answer: asking again from a later position (up to that answer)
 // costs nothing, and "nothing left" stays nothing. The positions asked about only ever go up.
-const memoNext = find => {
+export const memoNext = find => {
   let from = -1, at = -1;
   return pos => (from >= 0 && pos >= from && (at < 0 || pos <= at) ? at : (from = pos, at = find(pos)));
 };
