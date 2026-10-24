@@ -338,7 +338,7 @@ export async function renderStats(el) {
         <div class="ready-row"><h2 id="readyTitle">${exam ? 'Exam readiness' : 'Readiness today'}</h2>${exam ? `<span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>` : ''}</div>
         <p class="ready-line"><b>${seen}</b>/${cards.length} seen · <b>${counts.mature}</b> mature</p>
         <div class="mbar" aria-hidden="true"><span class="lv-mature" style="width:${share('mature')}"></span><span class="lv-young" style="width:${share('young')}"></span><span class="lv-learning" style="width:${share('learning')}"></span></div>
-        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
+        <details class="fine ready-fine"><summary>How sure is this?</summary><p>${exam ? 'Cards you would still remember (90% or better) on exam day if you stopped reviewing now.' : 'Cards you remember right now (90% or better).'} ${esc(readyEstimateText(cleanFsrsParams(settings.fsrsParams)))}</p></details>
         <div class="ready-acts">
           ${exam ? '<button class="btn primary small" type="button" id="readyPrep">' + icon('target') + ' Exam prep</button>' : '<button class="btn primary small" type="button" id="readyExam">' + icon('calendar') + ' Add exam date</button>'}
           <button class="btn ghost small" type="button" id="readyTest">Practice test</button>

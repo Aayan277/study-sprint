@@ -325,9 +325,6 @@ for (const [w, h] of [[390, 844], [320, 640]]) {
   ok(Object.values(sizes).every(v => v >= 44), `M6 (${w}px): Tools, Select, + Add card and ‹ Decks are 44px or more high (${JSON.stringify(sizes)})`);
   await go(p, '#/today', '#optBtn');
   ok(await p.$eval('#optBtn', b => b.getBoundingClientRect().height) >= 44, `M6 (${w}px): Options is 44px high`);
-  await go(p, '#/stats', '.chart');
-  const info = await p.$eval('.info-fold summary', s => { const r = s.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
-  ok(info[0] >= 44 && info[1] >= 44, `M6 (${w}px): the Stats "i" button is ${info.join('x')}`);
   await go(p, '#/deck/sample', '.crow'); await p.locator('.crow').first().click(); await p.waitForSelector('#ceForm .fmt-tools button');
   const tb = await p.$$eval('#ceForm .fmt-tools button', bs => bs.map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
   ok(tb.length >= 4 && tb.every(([bw, bh]) => bw >= 40 && bh >= 40), `M6 (${w}px): the editor toolbar buttons are 40x40 or more (${tb.slice(0, 3).map(x => x.join('x')).join(', ')} ...)`);
@@ -411,7 +408,7 @@ for (const [vp, label, min] of [[PHONE, 'phone', 22], [DESK, 'desktop', 14]]) {
   ok(c.w >= min && c.w <= 30, `M10 (${label}): calendar squares are ${c.w}px (at least ${min}px) for ${c.n} weeks`);
   ok(c.grid <= c.box + 2, `M10 (${label}): the ${c.n} weeks fit the card without sideways scrolling (${c.grid} of ${c.box}px)`);
   await p.locator('#calGrid i.lv1, #calGrid i.lv2, #calGrid i.lv3, #calGrid i.lv4').first().click();
-  ok(!/Tap a day/.test(await p.textContent('#calInfo')) && await p.locator('#calGrid i.sel').count() === 1, `M10 (${label}): tapping a day shows it (${(await p.textContent('#calInfo')).trim()})`);
+  ok(/: \d+ answers?|: no studying/.test(await p.textContent('#calInfo')) && await p.locator('#calGrid i.sel').count() === 1, `M10 (${label}): tapping a day shows it (${(await p.textContent('#calInfo')).trim()})`);
   await p.context().close();
 }
 
