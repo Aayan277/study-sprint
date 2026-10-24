@@ -886,6 +886,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .custom-btn{margin-top:12px}
 .cs-opt{border-top:1px solid var(--line);padding:14px 0}
 .cs-opt>b{display:block;margin-bottom:2px}
+.cs-opt>p{margin:0 0 10px}
 .cs-opt .chips{margin-bottom:10px}
 .cs-row{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap}
 .prog-row{border:1px solid var(--accent-line);border-radius:var(--r-md);padding:12px 14px;margin:6px 0 12px;background:var(--accent-tint)}
