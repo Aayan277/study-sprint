@@ -337,7 +337,7 @@ export function duplicateCards(cards, all, newId, now = Date.now()) {
       if (c.noteId && !lone.has(c.id) && !noteIds.has(c.noteId)) noteIds.set(c.noteId, newId());
       let copy = { ...c, id: newId(), created: now + i++ };
       // Own state and sync/export identity are not copied (a copied ankiGuid would make two notes with one guid in an export).
-      for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt', 'syncedAt', 'uid', 'ankiGuid', 'ankiId']) delete copy[k];
+      for (const k of ['flag', 'suspended', 'buriedUntil', 'updatedAt', 'syncedAt', 'uid', 'ankiGuid', 'ankiId', 'ankiSig']) delete copy[k];
       if (isPair(c) && lone.has(c.id)) copy = unpaired(copy);          // its partner is missing: an ordinary card
       else if (c.noteId) copy.noteId = noteIds.get(c.noteId);
       if (Array.isArray(c.noteFields)) copy.noteFields = c.noteFields.map(x => (x && typeof x === 'object' ? { ...x } : x));

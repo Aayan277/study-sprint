@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slotOf, rowSlot, indexByGuid, matchRows, mergeCard, noteIdMap, sameContent, countMatches } from '../js/anki-match.js';
+import { slotOf, rowSlot, indexByGuid, matchRows, mergeCard, noteIdMap, sameContent, countMatches, applyUpdate, classifyRow, contentSig } from '../js/anki-match.js';
 
 test('a card\'s place in its note', () => {
   assert.equal(slotOf({ front: 'a', back: 'b' }), 'f');
@@ -108,4 +108,72 @@ test('a card saved before templateOrd existed becomes template 0 of its note', (
   assert.deepEqual(matchRows([{ guid: 'G', slot: 'ft0' }], both).map(c => c.id), ['old']);
   // a reverse card has no fallback
   assert.equal(matchRows([{ guid: 'G', slot: 'rt0' }], idx)[0], null);
+});
+
+const saved = (extra = {}) => { const c = { id: 'x', deckId: 'D', front: 'old', back: 'old b', tags: ['mine'], created: 1, ankiGuid: 'G', ...extra }; return { ...c, ankiSig: contentSig(c) }; };
+const incoming = (extra = {}) => ({ front: 'new', back: 'new b', tags: ['anki'], ankiGuid: 'G', ...extra });
+
+test('an untouched card is updated; one edited here is held back unless asked', () => {
+  const cur = saved();
+  const r = applyUpdate(cur, { fresh: incoming() }, { now: 5 });
+  assert.equal(r.kind, 'updated'); assert.equal(r.row.front, 'new'); assert.equal(r.row.ankiSig, contentSig(r.row)); assert.deepEqual(r.row.tags, ['mine', 'anki']);
+  const edited = { ...cur, front: 'my own wording' };            // its fingerprint no longer matches
+  const held = applyUpdate(edited, { fresh: incoming() });
+  assert.equal(held.kind, 'held'); assert.equal(held.row?.front ?? 'my own wording', 'my own wording');
+  const forced = applyUpdate(edited, { fresh: incoming() }, { overwriteEdited: true });
+  assert.equal(forced.kind, 'updated'); assert.equal(forced.row.front, 'new');
+  // a card an older version saved has no fingerprint: held when it would change
+  const { ankiSig, ...legacy } = cur;
+  assert.equal(applyUpdate(legacy, { fresh: incoming() }).kind, 'held');
+});
+
+test('a card that already has the file\'s content is left alone (and learns its fingerprint once)', () => {
+  const cur = saved({ front: 'new', back: 'new b', tags: ['anki'] });
+  assert.deepEqual(applyUpdate(cur, { fresh: incoming() }), { kind: 'same', row: null });
+  const { ankiSig, ...legacy } = cur;
+  const r = applyUpdate(legacy, { fresh: incoming() });
+  assert.equal(r.kind, 'same'); assert.equal(r.row.ankiSig, contentSig(legacy));          // known untouched from now on
+  assert.deepEqual(applyUpdate(r.row, { fresh: incoming() }), { kind: 'same', row: null });
+});
+
+test('the legacy template-0 relink happens even when the content is held back', () => {
+  const { ankiSig, ...legacy } = saved();
+  const r = applyUpdate(legacy, { fresh: incoming({ templateOrd: 0, noteId: 'N' }), noteId: 'N' });
+  assert.equal(r.kind, 'held'); assert.equal(r.row.front, 'old'); assert.equal(r.row.templateOrd, 0); assert.equal(r.row.noteId, 'N');
+  const pair = applyUpdate(saved({ noteId: 'P' }), { fresh: incoming({ templateOrd: 0, noteId: 'N' }), noteId: 'N' });
+  assert.equal(pair.row.noteId, 'N');          // (an ordinary update; the fallback below keeps pairs out of it)
+});
+
+test('the template-0 fallback never takes the plain card of a reversed pair', () => {
+  const idx = indexByGuid([{ id: 'f', ankiGuid: 'G', noteId: 'P', deckId: 'D' }, { id: 'r', ankiGuid: 'G', noteId: 'P', reverse: true, deckId: 'D' }]);
+  assert.equal(matchRows([{ guid: 'G', slot: 'ft0' }], idx)[0], null);
+});
+
+test('the card is judged as it is stored at that moment (an edit that landed meanwhile is not overwritten)', () => {
+  const plan = { fresh: incoming() };
+  const snapshot = saved();
+  const meanwhile = { ...snapshot, front: 'edited on my phone' };          // sync brought this in after the snapshot was read
+  assert.equal(applyUpdate(snapshot, plan).kind, 'updated');
+  assert.equal(applyUpdate(meanwhile, plan).kind, 'held');
+});
+
+test('the preview judges a row the same way', () => {
+  const cur = saved({ front: 'a', back: 'b', noteFields: [{ name: 'F', text: 't' }] });
+  const row = (extra = {}) => ({ front: 'a', back: 'b', noteFields: [{ name: 'F', text: 't' }], ...extra });
+  assert.equal(classifyRow(cur, row()), 'same');
+  assert.equal(classifyRow(cur, row({ back: 'b2' })), 'safe');
+  assert.equal(classifyRow({ ...cur, back: 'mine' }, row({ back: 'b2' })), 'edited');
+  assert.equal(classifyRow(cur, row({ pictures: { front: null, back: 'p.png' } })), 'safe');          // a picture appeared
+  assert.equal(classifyRow(saved({ front: 'a', back: 'b' }), { front: 'b', back: 'a', reversed: {} }, true), 'same');
+});
+
+test('of several saved copies of a note, the one in the chosen deck wins, then the oldest, one copy for the whole note', () => {
+  const cards = [
+    { id: 'a1', ankiGuid: 'G', cloze: 1, deckId: 'A', created: 1 }, { id: 'a2', ankiGuid: 'G', cloze: 2, deckId: 'A', created: 2 },
+    { id: 'b1', ankiGuid: 'G', cloze: 1, deckId: 'B', created: 5 }
+  ];
+  const ids = idx => matchRows([{ guid: 'G', slot: 'c1' }, { guid: 'G', slot: 'c2' }], idx).map(c => c?.id ?? null);
+  assert.deepEqual(ids(indexByGuid(cards)), ['a1', 'a2']);                              // oldest copy
+  assert.deepEqual(ids(indexByGuid(cards, new Set(['B']))), ['b1', null]);              // B has no c2: it is added there, not joined to A's
+  assert.deepEqual(ids(indexByGuid(cards, new Set(['A', 'B']))), ['a1', 'a2']);
 });

@@ -23,6 +23,7 @@ const openImport = async file => {
   await page.goto('http://localhost:8123/#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]');          // (the saved cards have been read: the update switch is there or not)
 };
 
 // ---- 1. the first import ----
@@ -44,16 +45,22 @@ const reviewed = d.cards.find(c => c.id === d.states[0].cardId);
 const before = { id: reviewed.id, front: reviewed.front, state: d.states[0], logs: d.logs.filter(l => l.cardId === reviewed.id).length };
 ok(before.logs === 1 && before.state.reps === 1, `reviewed one card once ("${before.front}")`);
 const decksBefore = d.decks.length;
+// You edit Beta's back here. The file's Beta is unchanged, so only the edit tells Beta apart from the file.
+await page.evaluate(async () => { const db = await import('./js/db.js'); const b = (await db.getAll('cards')).find(c => c.front === 'Beta'); await db.put('cards', { ...b, back: 'my own note' }); });
+d = await everything();
 const betaBefore = d.cards.find(c => c.front === 'Beta');
+ok(betaBefore.back === 'my own note' && betaBefore.ankiSig, 'Beta was edited here (and the import left a fingerprint on it)');
 
 // ---- 3. the changed deck: the preview ----
 await openImport('anki-update-v2.apkg');
 await page.selectOption('#deckSel', deck.id);
 await page.waitForSelector('#updRow:not([hidden])');
 const title = await page.textContent('#updTitle');
-ok(title === 'Update 6 cards you already have (keeps your progress)', 'switch says how many: ' + title);
+ok(title === 'Update 5 cards you already have (keeps your progress)', 'switch counts the cards that will really change (Beta is edited here, so not counted): ' + title);
+ok((await page.textContent('#updInfo')).includes('Off = they come in again'), 'the switch explains itself');
+ok(await page.isVisible('#editRow') && !(await page.isChecked('#overwriteEdited')) && (await page.textContent('#editTitle')) === 'Overwrite 1 card you may have edited here too', 'a separate switch for the edited card, off: ' + await page.textContent('#editTitle'));
 ok(await page.isChecked('#updateOld'), 'the switch is on by default');
-ok((await page.textContent('#found')).includes('6 cards you already have will be updated'), 'the summary says so too');
+ok((await page.textContent('#found')).includes('5 cards you already have will be updated'), 'the summary says so too');
 ok((await page.locator('.prow .badge:not([hidden])', { hasText: 'Updates the card you already have' }).count()) === 5, 'five rows are marked as updates (Gamma\'s one row covers its two cards)');
 ok(!(await page.locator('#dupBtn').isVisible()), 'rows being updated are not flagged as duplicates');
 if (SHOTS) {
@@ -66,11 +73,11 @@ if (SHOTS) {
   await page.screenshot({ path: SHOTS + '/import-preview-dark.png' });
   await page.emulateMedia({ colorScheme: 'light' });
 }
-ok((await page.textContent('#saveBtn')) === 'Update 6, add 2 cards to “Update test”', 'the button says what will happen: ' + await page.textContent('#saveBtn'));
+ok((await page.textContent('#saveBtn')) === 'Update 5, add 2 cards to “Update test”', 'the button says what will happen: ' + await page.textContent('#saveBtn'));
 ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const toast = await page.textContent('#toast');
-ok(toast.includes('Updated 5 cards') && toast.includes('progress kept') && toast.includes('already up to date') && toast.includes('added 2 cards'), 'toast: ' + toast);
+ok(toast.includes('Updated 5 cards') && toast.includes('progress kept') && toast.includes('added 2 cards') && toast.includes('1 card you edited here was left as it is'), 'toast: ' + toast);
 
 // ---- 4. what changed ----
 d = await everything();
@@ -88,7 +95,7 @@ ok(d.logs.filter(l => l.cardId === before.id).length === before.logs, 'its revie
 ok(d.states.length === 1 && d.logs.length === 1, 'no history was replayed onto other cards');
 ok(alpha.updatedAt > betaBefore.updatedAt, 'an updated card is stamped for sync (updatedAt moved)');
 const beta = d.cards.find(c => c.front === 'Beta');
-ok(beta.id === betaBefore.id && beta.updatedAt === betaBefore.updatedAt, 'Beta (unchanged) was not rewritten');
+ok(beta.id === betaBefore.id && beta.back === 'my own note' && beta.updatedAt === betaBefore.updatedAt, 'Beta, edited here, was left exactly as it is');
 const gamma = d.cards.filter(c => c.ankiGuid === 'gGamma');
 const fwd = gamma.find(c => !c.reverse), rev = gamma.find(c => c.reverse);
 ok(gamma.length === 2 && fwd.front === 'Gamma!' && rev.back === 'Gamma!' && rev.front === 'third letter' && fwd.noteId && fwd.noteId === rev.noteId, 'both cards of the reversed note updated and still a pair');
@@ -98,17 +105,22 @@ ok(heart[2].front.includes('[…]') && heart[0].noteExtra === 'Organ', 'the new 
 ok(d.cards.some(c => c.front === 'Epsilon' && c.deckId === deck.id), 'the new note came in as a new card');
 ok(d.media.length === 1 && alpha.backImage && d.cards.find(c => c.id === alpha.id).backImage === alpha.backImage, `the picture is still stored once (${d.media.length})`);
 
-// ---- 5. the same file again: nothing to change ----
+// ---- 5. the same file again: only the edited card differs; opting in overwrites it ----
 const stamp = Object.fromEntries(d.cards.map(c => [c.id, c.updatedAt]));
 await openImport('anki-update-v2.apkg');
 await page.selectOption('#deckSel', deck.id);
 await page.waitForSelector('#updRow:not([hidden])');
-ok((await page.textContent('#updTitle')).startsWith('Update 8 cards'), 'second time: all 8 match');
+ok((await page.textContent('#updTitle')).startsWith('You already have 8 cards'), 'second time: all 8 match, none left to update: ' + await page.textContent('#updTitle'));
+ok((await page.textContent('#saveBtn')) === 'Already up to date' && await page.isDisabled('#saveBtn'), 'nothing to do: the button says so');
+await page.click('#overwriteEdited');
+ok((await page.textContent('#saveBtn')) === 'Update 1 card', 'opting in: ' + await page.textContent('#saveBtn'));
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const toast2 = await page.textContent('#toast');
-ok(toast2.includes('8 cards were already up to date') && !toast2.includes('Updated'), 'toast: ' + toast2);
+ok(toast2.includes('Updated 1 card') && toast2.includes('7 cards were already up to date'), 'toast: ' + toast2);
 d = await everything();
-ok(d.cards.length === 8 && d.cards.every(c => c.updatedAt === stamp[c.id]) && d.media.length === 1, 'nothing was written again and no picture was added');
+const beta2 = d.cards.find(c => c.id === betaBefore.id);
+ok(beta2.back === 'second letter' && beta2.id === betaBefore.id, 'the edited card now has the file\'s content, same id');
+ok(d.cards.length === 8 && d.cards.filter(c => c.id !== betaBefore.id).every(c => c.updatedAt === stamp[c.id]) && d.media.length === 1, 'nothing else was written again and no picture was added');
 
 // ---- 6. switch off: as before ----
 await openImport('anki-update-v2.apkg');
@@ -137,7 +149,8 @@ ok(oldWay.total === 6, 'set up: the deck now looks like an old import (6 of its 
 await openImport('anki-multicard-legacy.apkg');
 await page.selectOption('#deckSel', await page.evaluate(async id => (await (await import('./js/db.js')).get('cards', id)).deckId, oldWay.id));
 await page.waitForSelector('#updRow:not([hidden])');
-ok((await page.textContent('#updTitle')).startsWith('Update 6 cards'), 'the plain first card matches its template-0 card: ' + await page.textContent('#updTitle'));
+ok((await page.textContent('#updTitle')).startsWith('You already have 6 cards'), 'the plain first card matches its template-0 card: ' + await page.textContent('#updTitle'));
+ok((await page.textContent('#saveBtn')).startsWith('Add 1 card'), 'only the missing second card is added: ' + await page.textContent('#saveBtn'));
 await page.click('#saveBtn'); await page.waitForSelector('.crow');
 const relinked = await page.evaluate(async o => {
   const db = await import('./js/db.js');
@@ -148,6 +161,59 @@ const relinked = await page.evaluate(async o => {
 const kept0 = relinked.mine.find(c => c.id === oldWay.id);
 ok(relinked.mine.length === 2 && kept0?.ord === 0 && relinked.mine.find(c => c.ord === 1) && kept0.noteId && relinked.mine.every(c => c.noteId === kept0.noteId), 'inu: the old card is now template 0 (same id) and sits in one note with the newly added template 1 card');
 ok(relinked.deckCards === 7, 'the deck is back to 7 cards, no duplicates (' + relinked.deckCards + ')');
+
+// ---- 8. a card deleted or edited while the import is saving (sync can land between reading the cards and writing them) ----
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block' });
+  const p2 = await ctx2.newPage();
+  p2.on('pageerror', e => errors.push('pageerror ' + e.message));
+  const go = async file => {
+    await p2.goto('http://localhost:8123/#/decks'); await p2.waitForSelector('.deck');
+    await p2.goto('http://localhost:8123/#/import'); await p2.waitForSelector('#tab-file'); await p2.click('#tab-file');
+    await p2.setInputFiles('#fileIn', SP + '/files/' + file);
+    await p2.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+    await p2.waitForSelector('#preview[data-guids]');
+  };
+  await go('anki-update-v1.apkg');
+  await p2.selectOption('#deckSel', '__new'); await p2.fill('#newName', 'Race'); await p2.click('#saveBtn'); await p2.waitForSelector('.crow');
+  await go('anki-update-v2.apkg');
+  await p2.selectOption('#deckSel', await p2.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(x => x.name === 'Race').id));
+  await p2.waitForSelector('#updRow:not([hidden])');
+  // The moment the save has read the cards, another "device" deletes Alpha and edits Gamma.
+  await p2.evaluate(() => {
+    const real = IDBObjectStore.prototype.getAll;
+    let armed = true;
+    IDBObjectStore.prototype.getAll = function (...a) {
+      const req = real.apply(this, a);
+      if (armed && this.name === 'cards') {
+        armed = false; IDBObjectStore.prototype.getAll = real;
+        req.addEventListener('success', async () => {
+          const db = await import('./js/db.js'), all = req.result;
+          await db.deleteCards([all.find(c => c.front === 'Alpha').id]);
+          const g = all.find(c => c.ankiGuid === 'gGamma' && !c.reverse);
+          await db.put('cards', { ...g, front: 'edited meanwhile' });
+        });
+      }
+      return req;
+    };
+  });
+  await p2.click('#saveBtn'); await p2.waitForSelector('.crow');
+  const raced = await p2.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.ankiGuid));
+  ok(!raced.some(c => c.front === 'Alpha' || c.front === 'Alpha (revised)'), 'the card deleted meanwhile was not put back');
+  ok(raced.some(c => c.front === 'edited meanwhile') && !raced.some(c => c.front === 'Gamma!'), 'the card edited meanwhile was not overwritten');
+  const t = await p2.textContent('#toast');
+  ok(t.includes('1 card was deleted meanwhile') && t.includes('1 card you edited here was left as it is'), 'the toast says so: ' + t);
+  // discardMedia only removes files that are not on the server, and ignores ones that do not exist
+  const media = await p2.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.putMedia({ id: 'm-server', type: 'image/png', data: new ArrayBuffer(4), size: 4, created: Date.now(), uploaded: true });
+    await db.putMedia({ id: 'm-local', type: 'image/png', data: new ArrayBuffer(4), size: 4, created: Date.now(), uploaded: false });
+    await db.discardMedia(['m-server', 'm-local', 'm-nowhere']);
+    return await db.mediaKeys();
+  });
+  ok(media.includes('m-server') && !media.includes('m-local'), 'discardMedia keeps files the server has, removes the local-only one, ignores one that is not there');
+  await ctx2.close();
+}
 
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
 await browser.close();
