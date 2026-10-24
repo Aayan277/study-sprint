@@ -17,9 +17,8 @@
 //   undoTags(cards, added)         the cards that change when exactly what was added is taken away again
 
 import { words, stem, STOPWORDS, FILLER, newCounts, addPhrases, candidatePhrases, groupNear, bestForm, slugTag, isJunkTerm } from './keywords.js';
-import { replaceBlanks } from './cloze.js';
 import { NOT_TERMS } from './reading-cards.js';
-import { clozeFull, hasBlank } from './cloze.js';
+import { clozeFull, hasBlank, replaceBlanks } from './cloze.js';
 import { tagWords, normTag } from './tag-tree.js';
 
 export const MAX_TAGS = 15;
