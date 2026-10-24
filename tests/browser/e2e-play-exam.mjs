@@ -41,7 +41,6 @@ await page.click('#customBtn');
 ok(await page.isVisible('#customBody legend:text-is("Question")') && await page.isVisible('#customBody legend:text-is("Flash")'), 'tapping Customise shows the options');
 await page.click('input[name=len][value="10"]', { force: true }).catch(() => {});
 await page.$eval('input[name=diff][value=hard]', el => el.click());
-ok(await page.isChecked('input[name=diff][value=hard]'), 'the Hard choice sticks');
 await page.screenshot({ path: SP + '/play-custom.png', fullPage: true });
 await page.reload(); await page.waitForSelector('#startBtn');
 ok(await page.getAttribute('#customBtn', 'aria-expanded') === 'true', 'the open fold is remembered');

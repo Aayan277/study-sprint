@@ -39,7 +39,6 @@ import { $, esc, plural, toast, onControl, setFocusMode, openSheet, closeSheet, 
 import * as fx from './fx.js';
 
 const FORMATS = { classic: 'Classic', survival: 'Survival', lightning: 'Lightning' };
-const QTYPES = { front: 'Front → back', back: 'Back → front', typing: 'Typing' };
 // qtypeByDeck remembers the question type you picked for each deck. Play is one deck (and its subdecks) per game: no 'all'.
 const DEFAULT_PREFS = { deckId: '', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 20, untimed: false, qtypeByDeck: {} };
 
@@ -159,7 +158,6 @@ export async function renderPlay(el) {
     // Your pick for this deck, or a sensible start: Back → front for definition-style decks.
     const picked = prefs.qtypeByDeck[prefs.deckId];
     prefs.qtype = picked || startType(pool);
-    const suggested = !picked && prefs.qtype === 'back';
     // Cloze and image-occlusion cards can't be asked back → front, so with some in the deck that choice only needs the other cards to fit.
     const hasCloze = pool.some(isFrontOnly);
     const mcFront = canMultipleChoice(pool, 'front'), mcBack = canMultipleChoice(pool, 'back');
@@ -220,10 +218,9 @@ export async function renderPlay(el) {
         </fieldset>
       </div>
 
-      <div class="settings">
+      ${prefs.fmt === 'lightning' ? '' : `<div class="settings">
         ${prefs.fmt === 'classic' ? `<fieldset><legend>Questions</legend>
           <div class="chips">${[10, 20, 40].map(n => radio('len', n, n, prefs.len === n)).join('')}</div></fieldset>` : ''}
-        ${prefs.fmt === 'lightning' ? '' : `
         <fieldset><legend id="paceLegend">${prefs.fmt === 'survival' ? 'Starting time per question' : 'Time per question'}</legend>
           <div class="slider-row">
             <input type="range" id="pace" min="3" max="20" step="1" value="${pace}" aria-labelledby="paceLegend" ${untimed ? 'disabled' : ''}>
@@ -231,8 +228,8 @@ export async function renderPlay(el) {
           </div>
           <label class="adv-row switch-row"><span><b>No time limit</b></span>
             <input id="untimed" type="checkbox" class="switch" ${untimed ? 'checked' : ''}></label>
-        </fieldset>`}
-      </div>
+        </fieldset>
+      </div>`}
       </div>
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>

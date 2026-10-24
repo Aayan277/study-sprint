@@ -43,11 +43,18 @@ ok(await p.evaluate(() => !document.getElementById('toast').hidden), 'a toast sh
 
 // Review: first focus is the Show answer button, which is described by the question; the counts have words.
 ok(await p.evaluate(() => document.activeElement?.id === 'showBtn' && document.getElementById('showBtn').getAttribute('aria-describedby') === 'rvQ'), 'Review: first focus is #showBtn, described by the question');
-const counts = await p.$eval('.rv-counts', e => e.textContent.replace(/\s+/g, ' ').trim());
-ok(/New \d+ Learn \d+ Due \d+/.test(counts), 'Review: the counts read "New n Learn n Due n" for screen readers: ' + counts);
+const counts = (await p.locator('.rv-counts').ariaSnapshot()).replace(/\s+/g, ' ');
+ok(/New \d+ Learn \d+ Due \d+/.test(counts) && !/\b(New|Learn|Due) \1\b/.test(counts), 'Review: the counts read "New n Learn n Due n" once each for screen readers: ' + counts);
 ok(await p.locator('.flash-hint, #longNote').count() === 0, 'Review: no hint line or flip note under the card');
 await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped');
 ok(await p.evaluate(() => document.activeElement?.classList.contains('rv-back')), 'Review: after Space the answer has focus');
+
+// A typing card: Esc from the card menu puts focus back in the answer box (Space there types, it does not answer "I don't know").
+await p.evaluate(async () => { const db = await import('./js/db.js'); await db.saveCards((await db.getAll('cards')).map(c => ({ ...c, typeIn: true }))); });      // (both cards ask for a typed answer)
+const q = await ctx.newPage(); await q.goto(URL + '#/today'); await q.waitForSelector('#startBtn'); await q.click('#startBtn'); await q.waitForSelector('#typeIn');
+await q.click('#moreBtn'); await q.waitForSelector('#sheet[open]'); await q.keyboard.press('Escape');
+await q.waitForFunction(() => !document.querySelector('#sheet[open]'));
+ok(await q.evaluate(() => document.activeElement?.id === 'typeIn'), 'typing card: after the card menu closes, focus is in the answer box');
 
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();

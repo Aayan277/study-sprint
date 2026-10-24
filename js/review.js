@@ -206,12 +206,11 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label; a visually hidden <b> before each
-  // number says it to screen readers (CSS text is not reliably read). It is a <b>, not a <span>: the CSS styles every
-  // `.rv-counts span`, and the number spans stay plain numbers for anything that reads them.
-  return `<b class="sr-only">New </b><span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
-    <b class="sr-only">Learn </b><span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
-    <b class="sr-only">Due </b><span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
+  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label, so the
+  // text inside each span stays just the number.
+  return `<span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
+    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
+    <span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
 // The face that is turned away is hidden from screen readers and can't be focused or tabbed to (inert).
@@ -773,7 +772,7 @@ document.getElementById('sheet')?.addEventListener('close', () => {
   const sheet = document.getElementById('sheet');
   if (sheet.open || !R?.active || !location.hash.startsWith('#/review')) return;
   const card = document.getElementById('flash');
-  (card?.querySelector('.rv-back:not([inert])') || document.getElementById('showBtn') || card)?.focus({ preventScroll: true });
+  (card?.classList.contains('flipped') && card.querySelector('.rv-back:not([inert])') || document.getElementById('typeIn') || document.getElementById('showBtn') || card)?.focus({ preventScroll: true });
 });
 
 // Quick keys: bury (-) or suspend (@) the card on screen without opening the panel.

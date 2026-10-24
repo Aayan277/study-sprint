@@ -88,6 +88,7 @@ ok((await p.textContent('#tsStudy')).trim() === 'Study 4 now', 'Study 4 now');
 await p.click('#tsStudy');
 await p.waitForFunction(() => location.hash.startsWith('#/review') && document.querySelector('.flash-front'));
 ok((await suspended(p)).length === 0, 'Study now unsuspended the cards (and started the session)');
+await p.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('started a session'));      // (shown once Review has drawn)
 const toastTxt = (await p.textContent('#toast')).trim();
 ok(toastTxt === 'Unsuspended 3 cards and started a session.', 'toast: ' + toastTxt);
 ok((await p.textContent('.flash-deck')).includes('Question IDs'), 'the session is named: ' + (await p.textContent('.flash-deck')).trim());

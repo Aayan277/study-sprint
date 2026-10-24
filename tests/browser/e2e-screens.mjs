@@ -33,7 +33,7 @@ await go('#/today', '#startBtn');
 ok(await page.title() === 'Today · Study Sprint' && (await focusInfo()).text === 'Today', 'Today: title and focus');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 ok(await page.title() === 'Review · Study Sprint' && (await focusInfo()).tag !== 'H1', 'a Review round keeps its own focus');
-ok(await page.evaluate(() => document.activeElement.id === 'flash'), 'focus stays on the card');
+ok(await page.evaluate(() => document.activeElement.id === 'showBtn'), 'focus is on the Show answer button');
 
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();
