@@ -5,7 +5,7 @@ import * as db from './db.js';
 import { parseText, parseBlocks, parseRows, buildCards, hasKeptFields, basicFieldsCut, isComplete, findDuplicates, dupKey, clearDupKeys, sheetsCsvUrl, claudePrompt } from './import.js';
 import { notesToImport, onlyDeck, deckList, replayHistory, subdeckPaths, soundReport, fieldReport } from './anki.js';
 import { canReverse, reverseOf } from './reverse.js';
-import { indexByGuid, matchRows, rowSlot, noteIdMap, applyUpdate, classifyRow, contentSig, MEDIA } from './anki-match.js';
+import { indexByGuid, matchRows, rowSlot, slotOf, noteIdMap, applyUpdate, classifyRow, contentSig, MEDIA } from './anki-match.js';
 import { clozeCard, withClozeLines, hasClozeLines } from './cloze.js';
 import { keepDraft, takeDraft } from './import-draft.js';
 import { formatHTML } from './format.js';
@@ -1336,7 +1336,7 @@ async function save() {
     // Notes that work in both directions: a reverse card for each (reverse.js). Both share a note id and the same change time; the reverse
     // card's history is replayed from its own Anki card.
     const ankiOf = new Map(cards.map((c, i) => [c.id, toAdd[i].ankiId]));
-    const reverses = [], revSource = [];          // revSource[k]: the index of the forward card that reverses[k] belongs to
+    const reverses = [];
     cards.forEach((card, i) => {
       const r = toAdd[i].reverse;
       if (!r) return;
@@ -1345,19 +1345,19 @@ async function save() {
       const rev = reverseOf(card, db.newId());
       rev.noteEditedAt = now;
       if (r.typeIn) rev.typeIn = true;
-      reverses.push(rev); revSource.push(i);
+      reverses.push(rev);
       ankiOf.set(rev.id, r.ankiId);
     });
     cards.push(...reverses);
     // Cards of a re-imported deck that are already saved are updated in place instead of added again (anki-match.js): the saved card
     // keeps its id, deck, schedule and review history (those live under its id) and takes the new content. The Anki history is not
-    // replayed onto it: its own progress is the one to keep. Matching uses the same keys as the preview did (rowSlot on the preview's
-    // rows), and only runs when the preview had read the saved cards and showed matches.
+    // replayed onto it: its own progress is the one to keep. Matching uses the same keys as the preview (anki-match.js), and only runs when the preview had read the saved cards and showed matches.
     // The merge itself happens inside the save (db.addImport `updates`), on the card as it is stored at that moment.
     let plans = [], candidates = [];
     if (S.updateOld && S.shownMatches > 0 && cards.some(c => c.ankiGuid)) {
       const index = indexByGuid(await db.getAll('cards'), S.inside);
-      const items = cards.map((c, j) => ({ guid: c.ankiGuid, slot: j < toAdd.length ? rowSlot(toAdd[j]) : rowSlot(toAdd[revSource[j - toAdd.length]], true) }));
+      // (the place is read from the cards as they are about to be saved: an occlusion note that fell back to a plain picture is a plain card)
+      const items = cards.map(c => ({ guid: c.ankiGuid, slot: slotOf(c) }));
       const found = matchRows(items, index);
       if (found.some(Boolean)) {
         const pairs = found.map((old, i) => (old ? [old, cards[i]] : null)).filter(Boolean);

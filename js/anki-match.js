@@ -24,23 +24,25 @@ import { isPair } from './reverse.js';
 const keyOf = (guid, slot) => `${guid}\u0001${slot}`;
 
 // Every saved card that has a guid, by identity. When one note is saved more than once (a deck imported twice by an older version of
-// the app), one copy is chosen for the whole note, so its cards are never joined across decks: the copy in one of the `prefer` decks (the
-// deck being imported into, and its subdecks) if there is one, else the copy that holds the oldest card (the one most likely to hold your
-// progress). Within the copy, the oldest card of each place wins.
+// the app), the saved cards fall into copies: the cards that share a noteId are one copy (a reversed pair, a cloze note's blanks, a
+// several-template note), and a card with no noteId is a copy of its own, wherever its deck is. Copies are ranked: one with a card in
+// one of the `prefer` decks (the deck being imported into, and its subdecks) first, then the one holding the oldest card (the one most
+// likely to hold your progress). Each place is filled from the best copy that has it, and the oldest card of a place wins within a copy.
 export function indexByGuid(cards, prefer = null) {
-  const copies = new Map();         // guid → Map deckId → [cards]
+  const byGuid = new Map();         // guid → Map copy key → [cards]
   for (const c of cards) {
     if (!c.ankiGuid) continue;
-    const byDeck = copies.get(c.ankiGuid) || copies.set(c.ankiGuid, new Map()).get(c.ankiGuid);
-    (byDeck.get(c.deckId) || byDeck.set(c.deckId, []).get(c.deckId)).push(c);
+    const copies = byGuid.get(c.ankiGuid) || byGuid.set(c.ankiGuid, new Map()).get(c.ankiGuid);
+    const key = typeof c.noteId === 'string' && c.noteId ? `n:${c.noteId}` : `c:${c.id}`;
+    (copies.get(key) || copies.set(key, []).get(key)).push(c);
   }
   const older = (a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : 1);
   const index = new Map();
-  for (const [guid, byDeck] of copies) {
-    const decks = [...byDeck.entries()].map(([id, list]) => ({ id, list: list.sort(older) }));
-    const oldest = d => d.list[0];
-    decks.sort((x, y) => (prefer && prefer.has(y.id)) - (prefer && prefer.has(x.id)) || older(oldest(x), oldest(y)));
-    for (const c of decks[0].list) {
+  for (const [guid, copies] of byGuid) {
+    const list = [...copies.values()].map(cs => cs.sort(older));
+    const chosen = cs => !!prefer && cs.some(c => prefer.has(c.deckId));
+    list.sort((x, y) => chosen(y) - chosen(x) || older(x[0], y[0]));
+    for (const cs of list) for (const c of cs) {
       const k = keyOf(guid, slotOf(c));
       if (!index.has(k)) index.set(k, c);
     }
@@ -135,7 +137,9 @@ function hashOf(text) {          // a small fast hash (cyrb53), as hex: this is 
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return ((h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0'));
 }
-export const contentSig = card => hashOf(JSON.stringify(SIG_FIELDS.map(k => card[k] ?? null)));
+// (Object keys are sorted first: the sync server stores cards as JSON that comes back with its keys in another order.)
+const canon = v => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon(v[k])])) : v);
+export const contentSig = card => hashOf(JSON.stringify(SIG_FIELDS.map(k => canon(card[k] ?? null))));
 const untouched = card => card.ankiSig !== undefined && card.ankiSig === contentSig(card);
 
 // What an update does to the card as it is saved RIGHT NOW (`cur`: read inside the save, so an edit or sync that landed a moment ago

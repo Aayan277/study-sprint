@@ -167,13 +167,37 @@ test('the preview judges a row the same way', () => {
   assert.equal(classifyRow(saved({ front: 'a', back: 'b' }), { front: 'b', back: 'a', reversed: {} }, true), 'same');
 });
 
-test('of several saved copies of a note, the one in the chosen deck wins, then the oldest, one copy for the whole note', () => {
+test('of several saved copies of a note, the one in the chosen deck wins, then the oldest; a missing place is filled from the next copy', () => {
   const cards = [
-    { id: 'a1', ankiGuid: 'G', cloze: 1, deckId: 'A', created: 1 }, { id: 'a2', ankiGuid: 'G', cloze: 2, deckId: 'A', created: 2 },
-    { id: 'b1', ankiGuid: 'G', cloze: 1, deckId: 'B', created: 5 }
+    { id: 'a1', ankiGuid: 'G', cloze: 1, noteId: 'NA', deckId: 'A', created: 1 }, { id: 'a2', ankiGuid: 'G', cloze: 2, noteId: 'NA', deckId: 'A', created: 2 },
+    { id: 'b1', ankiGuid: 'G', cloze: 1, noteId: 'NB', deckId: 'B', created: 5 }
   ];
   const ids = idx => matchRows([{ guid: 'G', slot: 'c1' }, { guid: 'G', slot: 'c2' }], idx).map(c => c?.id ?? null);
   assert.deepEqual(ids(indexByGuid(cards)), ['a1', 'a2']);                              // oldest copy
-  assert.deepEqual(ids(indexByGuid(cards, new Set(['B']))), ['b1', null]);              // B has no c2: it is added there, not joined to A's
+  assert.deepEqual(ids(indexByGuid(cards, new Set(['B']))), ['b1', 'a2']);              // B's copy first; it has no c2, so that comes from A's
   assert.deepEqual(ids(indexByGuid(cards, new Set(['A', 'B']))), ['a1', 'a2']);
+});
+
+test('a pair split across two decks is still found whole', () => {
+  const cards = [
+    { id: 'f', ankiGuid: 'G', noteId: 'P', deckId: 'A', created: 1 }, { id: 'r', ankiGuid: 'G', noteId: 'P', reverse: true, deckId: 'B', created: 2 },
+    { id: 'f2', ankiGuid: 'G', deckId: 'C', created: 9 }          // a later plain copy of the forward card
+  ];
+  const ids = prefer => matchRows([{ guid: 'G', slot: 'f' }, { guid: 'G', slot: 'r' }], indexByGuid(cards, prefer)).map(c => c?.id ?? null);
+  assert.deepEqual(ids(null), ['f', 'r']);
+  assert.deepEqual(ids(new Set(['B'])), ['f', 'r']);
+  assert.deepEqual(ids(new Set(['C'])), ['f2', 'r']);          // the preferred deck's own forward card, and the reverse from the pair
+});
+
+test('a note split across two subdecks keeps all its blanks', () => {
+  const cards = [1, 2, 3].map(n => ({ id: 'k' + n, ankiGuid: 'G', cloze: n, noteId: 'N', deckId: n === 3 ? 'Sub2' : 'Sub1', created: n }));
+  const m = matchRows([1, 2, 3].map(n => ({ guid: 'G', slot: 'c' + n })), indexByGuid(cards, new Set(['Parent', 'Sub1', 'Sub2'])));
+  assert.deepEqual(m.map(c => c.id), ['k1', 'k2', 'k3']);
+});
+
+test('the fingerprint does not depend on the order of an object\'s keys (the sync server reorders them)', () => {
+  const a = { front: 'f', back: 'b', noteFields: [{ name: 'F', text: 't' }], occlusion: { n: 1, w: 10, h: 20, masks: [{ x: 1, y: 2, w: 3, h: 4, n: 1 }] } };
+  const b = { occlusion: { masks: [{ n: 1, h: 4, w: 3, y: 2, x: 1 }], h: 20, w: 10, n: 1 }, noteFields: [{ text: 't', name: 'F' }], back: 'b', front: 'f' };
+  assert.equal(contentSig(a), contentSig(b));
+  assert.notEqual(contentSig(a), contentSig({ ...b, back: 'c' }));
 });
