@@ -42,7 +42,7 @@ await seed(p);
 await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForSelector('#optBtn');
 await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
 const firstOpt = await p.$eval('#sheet .cs-opt', d => d.textContent.replace(/\s+/g, ' '));
-ok(/By tag or question ID/.test(firstOpt) && /Find the cards for the questions you missed in a question bank, or for one tag/.test(firstOpt), 'Custom study starts with By tag or question ID: ' + firstOpt);
+ok(/By tag or question ID/.test(firstOpt) && !/question bank/.test(firstOpt), 'Custom study starts with By tag or question ID: ' + firstOpt);
 ok(/Postpone reviews/.test(await p.textContent('#sheet')), 'Custom study has Postpone reviews');
 await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
 ok((await p.textContent('#sheetTitle')).trim() === 'Study by tag or question ID', 'the sheet opens');

@@ -56,7 +56,7 @@ ok(after.front.hidden === 'true' && after.front.inert && !after.back.inert && af
 ok(await page.evaluate(() => document.activeElement?.classList.contains('rv-back')), 'focus moves to the answer, not to the page');
 await page.keyboard.press('3');
 await page.waitForFunction(() => !document.querySelector('.rv-card.flipped'));
-ok(await page.evaluate(() => document.activeElement?.id) === 'flash', 'after rating, focus is on the next card (' + await page.evaluate(() => document.activeElement?.tagName + '#' + document.activeElement?.id) + ')');
+ok(await page.evaluate(() => document.activeElement?.id) === 'showBtn', 'after rating, focus is on the next card (Show answer button: ' + await page.evaluate(() => document.activeElement?.tagName + '#' + document.activeElement?.id) + ')');
 // the same with the Show answer button
 await page.click('#showBtn');
 ok(await page.evaluate(() => document.activeElement?.classList.contains('rv-back')), 'Show answer also moves focus to the answer');

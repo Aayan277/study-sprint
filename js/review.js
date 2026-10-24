@@ -206,11 +206,12 @@ function countsHTML() {
   const all = [...R.queue, ...R.waiting];
   const n = k => all.filter(x => x.kind === k).length + (R.current?.kind === k ? 1 : 0);
   const cls = k => (R.current?.kind === k ? ' now' : '');
-  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label; the sr-only span says
-  // it to screen readers (CSS text is not reliably read).
-  return `<span class="c-new${cls('new')}" data-label="New"><span class="sr-only">New </span>${n('new')}</span>
-    <span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn"><span class="sr-only">Learn </span>${n('learn')}</span>
-    <span class="c-rev${cls('review')}" data-label="Due"><span class="sr-only">Due </span>${n('review')}</span>`;
+  // The word in front of each number (New, Learn, Due) is drawn by the CSS from data-label; a visually hidden <b> before each
+  // number says it to screen readers (CSS text is not reliably read). It is a <b>, not a <span>: the CSS styles every
+  // `.rv-counts span`, and the number spans stay plain numbers for anything that reads them.
+  return `<b class="sr-only">New </b><span class="c-new${cls('new')}" data-label="New">${n('new')}</span>
+    <b class="sr-only">Learn </b><span class="c-learn${cls('learn')}" data-label="Learn" data-short="Lrn">${n('learn')}</span>
+    <b class="sr-only">Due </b><span class="c-rev${cls('review')}" data-label="Due">${n('review')}</span>`;
 }
 
 // The face that is turned away is hidden from screen readers and can't be focused or tabbed to (inert).

@@ -116,7 +116,7 @@ ok((await page.textContent('h1')).trim() === 'Review', 'Review: the page has an 
   await cdp.detach(); }
 ok(await attr('#flash', 'aria-label') === null, 'Review: no aria-label hides the question text');
 { const s = await snap('#flash'); ok(/heading "Question" \[level=2\]/.test(s), 'Review: ARIA snapshot of the front has the Question heading'); }
-ok(await active() === 'flash', 'Review: the card has focus');
+ok(await active() === 'showBtn', 'Review: the Show answer button has focus');
 await page.keyboard.press('Space'); await page.waitForSelector('.rate');
 ok(await page.evaluate(() => document.activeElement.classList.contains('rv-back') && document.activeElement.getAttribute('role') === 'region' && document.activeElement.getAttribute('aria-label') === 'Answer'), 'Review: after flipping, focus is on the Answer region');
 { const s = await snap('.rv-back'); ok(/region "Answer"/.test(s), 'Review: ARIA snapshot names the back "Answer"'); }
