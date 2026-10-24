@@ -385,7 +385,7 @@ async function showMixedWith(card) {
     const mine = pairs.filter(p => p.a === card.id || p.b === card.id).slice(0, 2);
     if (!mine.length) return;
     box.innerHTML = mine.map(p => { const other = cardsById.get(p.a === card.id ? p.b : p.a);
-      return `<p class="mixed-line">Often mixed up with: <b>${esc(cardLabel(other, 40))}</b> <span class="mono">(${p.count}×)</span> · <button type="button" class="link" data-mix-with="${esc(other.id)}">Compare</button></p>`; }).join('');
+      return `<p class="mixed-line">Often mixed up with: <b>${mathHTML(cardLabel(other, 40), { inline: true })}</b> <span class="mono">(${p.count}×)</span> · <button type="button" class="link" data-mix-with="${esc(other.id)}">Compare</button></p>`; }).join('');
     box.hidden = false;
     box.addEventListener('click', async e => {
       const id = e.target.closest('[data-mix-with]')?.dataset.mixWith;

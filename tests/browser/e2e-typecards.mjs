@@ -294,6 +294,7 @@ const load = async (file, timeout = 30000) => {
   await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (the same notes are imported more than once on purpose: as new cards each time)
   await page.selectOption('#deckSel', '__new');
 };
 for (const [file, name] of [['anki-typein-new.apkg', 'Typein new'], ['anki-typein-legacy.apkg', 'Typein old']]) {

@@ -9,7 +9,7 @@
 import * as db from './db.js';
 import { mixPairs, pairKey, dismissPair, loadDismissed, saveDismissed, MIX_WINDOW_DAYS, cardLabel, comparisonText } from './confusion.js';
 import { daysAgoStart } from './stats-calc.js';
-import { mathHTML } from './format.js';
+import { mathHTML, plainText } from './format.js';
 import { imgHTML } from './media.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
 
@@ -27,9 +27,9 @@ export async function loadPairs({ now = Date.now(), extraLogs = [] } = {}) {
 const side = card => `
   <section class="cmp-col" aria-label="${esc(cardLabel(card))}">
     <p class="cmp-lbl">Front</p>
-    <div class="cmp-text">${imgHTML(card.frontImage, 'card-img cmp-img')}${mathHTML(card.front)}</div>
+    <div class="cmp-text">${imgHTML(card.frontImage, 'card-img cmp-img')}${mathHTML(plainText(card.front))}</div>
     <p class="cmp-lbl">Back</p>
-    <div class="cmp-text cmp-back">${imgHTML(card.backImage, 'card-img cmp-img')}${mathHTML(card.back)}</div>
+    <div class="cmp-text cmp-back">${imgHTML(card.backImage, 'card-img cmp-img')}${mathHTML(plainText(card.back))}</div>
   </section>`;
 
 // a, b: the two cards (from the database). onDismiss(pair) runs after "Not confused"; onDone() after a comparison card was added.

@@ -216,6 +216,29 @@ ok(/Alpha/.test(offText) && /Beta/.test(offText) && /2×/.test(offText), 'practi
 ok(await p.evaluate(async () => (await (await import('./js/compare-sheet.js')).loadPairs()).pairs.length) === 0, 'practice only: no lasting pair is saved (the card panel and later rounds see none)');
 await p.context().close();
 
+// ---------- 3c. Formulas and bold marks in the pair row and in Compare (they used to show as raw $x^2$ and **) ----------
+p = await open();
+await p.evaluate(async () => {
+  const db = await import('./js/db.js'); const now = Date.now();
+  await db.addDeckWithCards({ id: 'mt', name: 'Maths', color: '#46A758', created: now }, [
+    { id: 'mt0', deckId: 'mt', front: 'Slope of $x^2$', back: '**Bold** answer $y^2$', tags: [], created: 0 },
+    { id: 'mt1', deckId: 'mt', front: '**Heavy** card', back: 'Other', tags: [], created: 1 }]);
+  for (const [from, to, min] of [['mt0', 'mt1', 10], ['mt1', 'mt0', 20]])
+    await db.addLog({ cardId: from, timestamp: now - min * 60000, source: 'play', mode: 'front', format: 'classic', correct: false, ms: 2000, rating: 1, chars: 10, hard: false, state: 0, applied: false, reason: 'new', mixedWith: to });
+  const slot = document.createElement('div'); slot.id = 'mixSlot'; document.body.append(slot);
+  await (await import('./js/finish-extras.js')).drawFinishExtras(slot, { source: 'play', cardIds: ['mt0', 'mt1'] });
+});
+await p.waitForSelector('#mixSlot .mix-row');
+await p.waitForSelector('#mixSlot .mix-card .katex', { timeout: 20000 });         // (formulas are drawn a moment later, by KaTeX)
+const rowMath = await p.evaluate(() => ({ text: document.querySelector('#mixSlot .mix-pair').textContent, katex: document.querySelectorAll('#mixSlot .mix-card .katex').length, html: document.querySelector('#mixSlot .mix-pair').innerHTML }));
+ok(!/\$/.test(rowMath.text) && !/\*\*/.test(rowMath.text), 'pair row: no raw $ or ** in the text: ' + rowMath.text.replace(/\s+/g, ' ').trim());
+ok(rowMath.katex >= 1 && /Slope of/.test(rowMath.text) && /Heavy/.test(rowMath.text), 'pair row: the formula is drawn as maths, and the bold card shows its words');
+await p.click('#mixSlot .mix-row button'); await p.waitForSelector('#sheet .cmp-col');
+await p.waitForSelector('#sheet .cmp-text .katex', { timeout: 20000 });
+const cmpText = await p.evaluate(() => [...document.querySelectorAll('#sheet .cmp-text')].map(e => e.textContent).join(' | '));
+ok(!/\*\*/.test(cmpText) && !/\$/.test(cmpText) && /Bold answer/.test(cmpText) && /Heavy card/.test(cmpText), 'Compare sheet: no raw ** or $ ... ' + cmpText);
+await p.context().close();
+
 // ---------- 4. Looks: Compare and results at 375/1440, dark and light ----------
 for (const [w, scheme] of [[375, 'light'], [1440, 'dark'], [1440, 'light']]) {
   p = await open({ w, h: w > 600 ? 900 : 800, scheme });

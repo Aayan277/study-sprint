@@ -237,6 +237,7 @@ for (const file of ['anki-replay-new.apkg', 'anki-replay-legacy.apkg']) {
   await page.goto(URL + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
   await page.setInputFiles('#fileIn', SP + '/files/' + file);
   await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]'); if (await page.isVisible('#updRow')) await page.click('#updateOld');          // (this file imports the same notes twice on purpose: as new cards each time)
   const badges = await page.locator('.prow .badge:not([hidden])').allTextContents();
   ok(badges.filter(b => b.startsWith('Image occlusion: box')).join() === 'Image occlusion: box 1,Image occlusion: box 2', `${file}: the preview badges the occlusion rows "box 1" and "box 2"`);
   const roRows = await page.locator('.prow', { hasText: 'Image occlusion' }).locator('textarea').evaluateAll(t => t.every(x => x.readOnly));
