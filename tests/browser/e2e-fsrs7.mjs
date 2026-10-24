@@ -57,7 +57,7 @@ await page.waitForSelector('#fsrsChips');
 const chipText = await page.$$eval('#fsrsChips .chip', cs => cs.map(c => c.textContent.trim()));
 ok(JSON.stringify(chipText) === JSON.stringify(['FSRS-6 (standard)', 'FSRS-7 (beta)']), 'the Scheduler row offers FSRS-6 (standard) and FSRS-7 (beta): ' + chipText.join(' | '));
 ok((await page.textContent('#fsrsLbl')) === 'Scheduler', 'the row is labelled Scheduler');
-ok((await page.textContent('#fsrsHint')) === 'FSRS-7 models short-term memory better (same-day repeats, cramming). Beta: off by default. Your cards keep their history; switching back is safe.', 'the hint says what it does, that it is beta and that switching back is safe');
+ok(await page.locator('#fsrsHint').count() === 0 && chipText[1].includes('beta'), 'no hint text: the Beta chip is all the row says (the rest is in Help)');
 ok(await page.$eval('input[name=fsrsVersion][value="6"]', r => r.checked) && (await setting(page, 'fsrsVersion')) === 6, 'FSRS-6 is selected by default');
 ok(!(await page.textContent('#optStatus')).includes('FSRS-7'), 'with FSRS-6 the Optimize row is as before');
 await sideways(page, 'Settings');

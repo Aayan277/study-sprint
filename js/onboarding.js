@@ -82,9 +82,7 @@ function drawPitch(el, api) {
       <div class="wl-top"><span class="brand">${MARK} Study Sprint</span><button class="link" type="button" id="wlSkip">Skip</button></div>
       <div class="lp-grid">
         <div class="lp-copy">
-          <span class="lp-eyebrow">Free flashcards for university</span>
           <h1 tabindex="-1">Remember it for the exam, not just the night before.</h1>
-          <p class="lede">Each card comes back just before you'd forget it, so you're ready by exam day.</p>
           <div class="lp-demo lp-phone-only">${demoHTML()}</div>
           <ul class="lp-points">
             <li>${icon('clock')}<span><b>A few minutes a day.</b> The app picks what to review.</span></li>
@@ -93,7 +91,6 @@ function drawPitch(el, api) {
           </ul>
           <div class="lp-cta"><button class="btn primary wide cta" type="button" id="wlNext">Get started</button></div>
           <p class="lp-free">Free · no account · works offline</p>
-          <p class="lp-imports">Bring your cards: <span>Anki .apkg</span><span>Quizlet</span><span>CSV</span><span>Excel</span></p>
           <p class="wl-foot lp-signin">Already use Study Sprint? <a href="#/settings/sync" id="wlSignIn">Sign in or restore a backup</a></p>
         </div>
         <div class="lp-stage lp-desk-only" aria-hidden="true"><div class="lp-phone"><div class="lp-screen">
@@ -114,15 +111,13 @@ function drawName(el, api) {
       <div class="wl-top"><button class="back" type="button" id="wlBack">‹ Back</button><button class="link" type="button" id="wlSkip">Skip</button></div>
       ${stepBar(2)}
       <h1 tabindex="-1">Name your course</h1>
-      <p class="lede">Each course gets its own set of cards. You can add more courses later.</p>
       <form id="wlForm" novalidate>
         <label class="field"><span>Course name</span>
           <input id="wlName" maxlength="80" required placeholder="e.g. Cell Biology" autocomplete="off" value="${esc(flow.name)}"></label>
-        <label class="field"><span>Course code (optional)</span>
+        <label class="field"><span>Course code</span>
           <input id="wlCourse" maxlength="20" placeholder="e.g. BIOL 201" autocomplete="off" autocapitalize="characters" value="${esc(flow.course)}"></label>
-        <label class="field"><span>Exam date (optional)</span>
-          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}">
-          <small class="note" style="margin:4px 0 0">With a date, every card comes back before the exam and Exam prep goes over what you haven’t seen lately.</small></label>
+        <label class="field"><span>Exam date</span>
+          <input id="wlExam" type="date" class="${flow.exam ? '' : 'empty'}" min="${todayISO()}" value="${esc(flow.exam)}"></label>
         <p class="err" id="wlErr" role="alert" hidden></p>
         <button class="btn primary wide cta" type="submit">Create course</button>
       </form>
@@ -158,17 +153,14 @@ function drawAdd(el, api) {
       <div class="wl-top"><button class="back" type="button" id="wlBack">‹ Back</button><button class="link" type="button" id="wlSkip">Skip</button></div>
       ${stepBar(3)}
       <h1 tabindex="-1">Add cards to ${esc(flow.name)}</h1>
-      <p class="lede">Pick the quickest way in. You can do all of them later.</p>
       <div class="wl-opts">
         <button class="wl-opt fr-first" type="button" id="wlSample">
           <span class="wl-opt-t">Try it with sample cards <span class="fr-tag">Fastest · 30 s</span></span>
           <span class="wl-opt-d">Review 3 psychology cards to feel how it works. Your ${esc(flow.name)} deck stays ready for your own cards.</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlPaste">
-          <span class="wl-opt-t">Paste your notes</span>
-          <span class="wl-opt-d">One card per line, like “Mitosis - cell division”. Quizlet exports and tables work too.</span>${icon('chevron')}</button>
+          <span class="wl-opt-t">Paste your notes</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlFile">
-          <span class="wl-opt-t">Import a file or Anki deck</span>
-          <span class="wl-opt-d">A spreadsheet (.csv, .xlsx) or an Anki deck (.apkg).</span>${icon('chevron')}</button>
+          <span class="wl-opt-t">Import a file or Anki deck</span>${icon('chevron')}</button>
       </div>
       <p class="wl-foot"><button class="link" type="button" id="wlLater">I'll add cards later</button></p>
     </div>`;
@@ -349,7 +341,6 @@ async function drawGuideDone() {
       ${saved < cards.length ? '<p class="note">The scheduler could not load, so nothing was saved. Connect to the internet and review these cards from Today.</p>' : ''}
       ${sample ? `<div class="fr-next"><span class="fr-k">Next</span>
           <b>${course ? `Add your ${esc(course.name)} cards` : 'Add your own cards'}</b>
-          <p>Paste your notes or import a file. It takes about a minute.</p>
           <a class="btn primary wide cta" id="wlAdd" href="#/import${course ? '/' + esc(course.id) : ''}">${icon('paste')} ${course ? `Add ${esc(course.name)} cards` : 'Add cards'}</a></div>`
         : `<ul class="wl-points">
           <li>${icon('play')}<span><b>Today</b> has one Start button for everything due.</span></li>
