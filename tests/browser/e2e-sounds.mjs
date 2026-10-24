@@ -314,7 +314,7 @@ const quietInit = () => {
 // ---------- 4. the deck option "Play sounds automatically" ----------
 await page.goto(APP + '#/deck/listen'); await deckMenu(page); await page.click('#editDeck');
 await page.waitForSelector('#deckSoundAuto');
-ok((await page.textContent('#sheet')).includes('Play sounds automatically') && (await page.textContent('#sheet')).includes("In Review: the front's sounds when a card appears, the back's when you flip."), 'Edit deck: "Play sounds automatically" with its description');
+ok((await page.textContent('#sheet')).includes('Play sounds automatically'), 'Edit deck: "Play sounds automatically"');
 ok(await page.isChecked('#deckSoundAuto'), 'Edit deck: on by default');
 await page.screenshot({ path: SP + '/snd-deckopt-375.png' });
 await page.uncheck('#deckSoundAuto'); await page.evaluate(() => document.getElementById('deckForm').requestSubmit()); await page.waitForSelector('#sheet', { state: 'hidden' });

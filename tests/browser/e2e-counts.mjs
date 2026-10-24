@@ -206,8 +206,8 @@ await p.evaluate(async () => { const db = await import('./js/db.js'); const now 
   await db.putStates([{ cardId: 'dn1', due: now + 30 * 86400000, stability: 30, difficulty: 5, reps: 4, lapses: 0, state: 2, lastReview: now - 86400000, elapsedDays: 1, scheduledDays: 30, learningSteps: 0 }]); });
 await go(p, '#/decks', '.deck');
 ok(await p.locator('.deck', { hasText: 'Caught up' }).locator('.deck-go.done').count() === 1, 'a deck with cards and nothing due still gets the check');
-const ringTxt = (await p.locator('.deck:has-text("Chemistry") .deck-ring').textContent()).replace(/\s+/g, ' ').trim();
-ok(/^\d+%\s*learned$/.test(ringTxt), 'the ring reads "0% learned": ' + ringTxt);
+const ringLbl = await p.locator('.deck:has-text("Chemistry") .deck-ring').getAttribute('aria-label');
+ok(/^\d+% learned$/.test(ringLbl) && await p.locator('.deck:has-text("Chemistry") .deck-ring').getAttribute('role') === 'img', 'the ring is an image labelled "0% learned": ' + ringLbl);
 await noHScroll(p, 'decks, phone');
 await p.screenshot({ path: SP + '/c-decks-375.png', fullPage: true });
 // the empty Decks screen is the shared start block

@@ -136,7 +136,7 @@ export async function renderLibrary(el) {
             <span><b>${c.fresh.toLocaleString('en')}</b> new</span>` : '<span>No cards yet</span>'}
           </span>
         </button>
-        ${stats.total ? `<span class="deck-ring" title="${Math.round(learned * 100)}% of cards are learned (young or mature)">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}<span class="dr-cap">learned</span></span>` : ''}
+        ${stats.total ? `<span class="deck-ring" role="img" aria-label="${Math.round(learned * 100)}% learned">${ring(learned, 44, 4, `<span class="mono">${Math.round(learned * 100)}<small>%</small></span>`)}</span>` : ''}
         <button class="icon-btn" type="button" data-edit="${esc(deck.id)}" aria-label="Edit ${esc(deck.name)}">${icon('more')}</button>
         <div class="deck-act">
           ${!stats.total ? `<a class="${compact ? 'deck-go add' : 'btn ghost small'}" href="#/import/${esc(deck.id)}">+ Add cards</a>`
@@ -260,7 +260,7 @@ export async function renderDeck(el, deckId) {
     <div class="screen-head">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span> Every card is scheduled to come back before then.${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
+        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
         ${soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : ''}
@@ -281,7 +281,7 @@ export async function renderDeck(el, deckId) {
     </div>
     <div class="card section deck-summary" style="--deck:${esc(deck.color)}" ${cards.length ? '' : 'hidden'}>${summaryHTML(s, counts)}</div>
     ${kids.length ? `<section class="card section subdecks-page"><h2 class="mhead">Subdecks</h2>${subdeckRows(kids, item.depth, today)}
-      <p class="note" style="margin:8px 0 0">${shared ? `${esc(shared)} ` : ''}Card counts below include the subdecks' cards too.</p></section>` : ''}
+      ${shared ? `<p class="note" style="margin:8px 0 0">${esc(shared)}</p>` : ''}</section>` : ''}
     <section id="browser"></section>
     <aside class="deck-tree" aria-label="Decks">
       <div class="dt-head"><b>Decks</b><button class="btn primary small" type="button" id="dtNew">+ New</button></div>
@@ -442,8 +442,8 @@ async function openExport(deck, decks, deckCards) {
     })()}</p>
     ${cards.some(c => c.occlusion) ? '<p class="note">Image-occlusion cards need Anki 23.10+ (AnkiDroid 2.17+). In a spreadsheet they\'re text only.</p>' : ''}
     <div class="export-opts">
-      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b><span>Opens in Excel, Google Sheets or Numbers. Can be imported into Quizlet, or back into Study Sprint (cloze cards stay one note; image occlusion cards come back as plain cards, so use .apkg for those).</span></button>
-      <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b><span>For Anki on a computer, AnkiDroid or AnkiMobile: File → Import.</span></button>
+      <button class="btn ghost export-opt" type="button" id="exCsv"><b>Spreadsheet (.csv)</b>${cards.some(c => c.occlusion) ? '<span>Image occlusion comes back as plain cards.</span>' : ''}</button>
+      <button class="btn ghost export-opt" type="button" id="exApkg"><b>Anki deck (.apkg)</b></button>
     </div>
     <p class="err" id="exErr" role="alert" hidden></p>`);
   $('exCsv').addEventListener('click', () => {
@@ -494,12 +494,10 @@ function studyOptionsHTML(deck) {
       <summary>Study options for this deck</summary>
       <div class="deck-opts">
         <label class="field"><span>New cards per day</span>
-          <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="No limit of its own" value="${num(deck.newPerDay)}"></label>
+          <input id="deckNew" type="number" inputmode="numeric" min="0" max="999" placeholder="Overall" value="${num(deck.newPerDay)}"></label>
         <label class="field"><span>Reviews per day</span>
-          <input id="deckRev" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit of its own" value="${num(deck.reviewPerDay)}"></label>
-        <p class="note" style="margin:0">Blank = only the overall limits in Settings apply. They still cap the total.</p>
-        <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Use my overall settings</b>
-          <span>Retention, steps and maximum interval from Settings (a subdeck uses the deck it's inside). Turn off to give this deck its own.</span></span>
+          <input id="deckRev" type="number" inputmode="numeric" min="1" max="9999" placeholder="Overall" value="${num(deck.reviewPerDay)}"></label>
+        <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Use my overall settings</b></span>
           <input id="deckOwnOff" type="checkbox" class="switch" ${own ? '' : 'checked'}></label>
         <div id="deckOwn" ${own ? '' : 'hidden'}>
           <label class="field"><span>Target retention: <b id="deckRetOut">${Math.round((o.targetRetention ?? 0.9) * 100)}%</b></span>
@@ -574,11 +572,11 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="field"><span>Name</span>
         <input id="deckName" maxlength="80" required placeholder="e.g. Cell Biology" value="${esc(deck?.name || '')}" aria-describedby="deckErr"></label>
       <p class="err" id="deckErr" role="alert" hidden></p>
-      <label class="field"><span>Course code (optional)</span>
+      <label class="field"><span>Course code</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
-      <label class="field"><span>Exam date (optional)</span>
+      <label class="field"><span>Exam date</span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
-        <small class="note" style="margin:4px 0 0">Until then, every card in this deck (and its subdecks) comes back before the exam, reviews get a bit stricter in the last two weeks, and Exam prep goes over what you haven't seen lately. Clear it to turn this off.${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).` : ''}</small></label>
+        ${parentNow && effectiveDeck(decks, parentNow).examDate ? ` Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).</small>` : ''}</label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
@@ -588,14 +586,11 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       ${isNew ? '' : studyOptionsHTML(deck)}
       ${isNew ? '' : `<label class="field"><span>Read aloud in</span>
         <select id="deckTts" class="select">${SPEECH_LANGS.map(([code, name]) => `<option value="${code}" ${(deck.ttsLang || '') === code ? 'selected' : ''}>${esc(code || !parentNow ? name : 'Same as the deck it’s inside')}</option>`).join('')}</select></label>
-      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b>
-        <span>In Review: the front when it appears, the back when you flip. (The speaker button or R reads it any time.)</span></span>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Read cards aloud automatically</b></span>
         <input id="deckTtsAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).ttsAuto ? 'checked' : ''}></label>
-      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b>
-        <span>In Review: the front's sounds when a card appears, the back's when you flip.</span></span>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Play sounds automatically</b></span>
         <input id="deckSoundAuto" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).soundAuto ? 'checked' : ''}></label>
-      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Type the answers</b>
-        <span>In Review, this deck's cards (and its subdecks') show a box to type the answer when it is 40 characters or less. To set one card differently, use Answer by in its editor.</span></span>
+      <label class="adv-row switch-row" style="border:0;padding:0"><span><b>Type the answers</b></span>
         <input id="deckTypeIn" type="checkbox" class="switch" ${effectiveDeck(decks, deck.id).typeAnswers ? 'checked' : ''}></label>`}
       <div class="sheet-actions">
         <button class="btn ghost" type="button" id="deckCancel">Cancel</button>
