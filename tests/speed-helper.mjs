@@ -1,11 +1,11 @@
 // One shared way to time code on hostile input, used by every *-speed test (and the other tests that time hostile text).
 //
 // Why it looks like this: a limit of 300 ms on 50 KB failed on a busy computer and also let some old quadratic regexes pass
-// (they took only 125 to 400 ms at 50 KB). At 200 KB the old code took 2.2 to 6.5 s and the fixed code at most about 20 ms,
+// (they took only 125 to 400 ms at 50 KB). At 200 KB the old code took 2 to 70 s and the fixed code at most about 40 ms,
 // so 1500 ms separates the two with room on both sides. Two checks:
 //   1. the run at 200 KB must finish within LIMIT_MS (the first run fails at once, so slow old code does not take minutes);
-//   2. 4x the input must take less than 8x the time (best of 3 runs each), which a quadratic scan (16x) can not pass
-//      however fast the computer is. Runs under FLOOR_MS are too small to compare (a few ms of noise or a busy computer swings them 10x), so they count as FLOOR_MS.
+//   2. 4x the input must take less than 8x the time (best of 3 runs each). Because of check 1 and the floor below, this only
+//      bites when 200 KB takes 800 to 1500 ms; the limit in 1 does the real work. Runs under FLOOR_MS are too small to compare (a few ms of noise or a busy computer swings them 10x), so they count as FLOOR_MS.
 //      Old quadratic code took 125 to 400 ms at 50 KB, above the floor, and seconds at 200 KB, so the limit in 1 catches it too.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
