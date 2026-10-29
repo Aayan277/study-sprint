@@ -1628,6 +1628,8 @@ img[data-media][hidden]{display:none}
   main[data-route="review"] .flash{min-height:440px}
   main[data-route="review"] .rv-face{padding:var(--s-6) var(--s-10)}
   main[data-route="review"] .flash-front{font-size:3rem}
+  main[data-route="review"] .flash-front.long{font-size:2rem}
+  main[data-route="review"] .flash-front.xlong{font-size:1.25rem;font-weight:500;line-height:1.45;letter-spacing:0}
   main[data-route="review"] .flash-recap{font-size:1.75rem}
   main[data-route="review"] .flash-back{font-size:1.5rem}
   main[data-route="review"] .flash-back.long,main[data-route="review"] .flash-recap.small{font-size:1.15rem}
