@@ -8,6 +8,9 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.57', items: [
+    'Long questions now show in smaller text on a computer, and the answer side no longer has a big empty gap at the top.',
+  ] },
   { version: '4.56', items: [
     'Cleaner screens: taglines and helper text are gone, so each screen shows just what you need.',
     'The explanations moved to Help, with small "?" links next to the settings that need them.',

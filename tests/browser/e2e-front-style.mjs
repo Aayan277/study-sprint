@@ -79,6 +79,7 @@ async function run(tag, viewport, mobile, themeName, mode) {
   ok(/\b(long|xlong)\b/.test(pc) && !/multi/.test(pc) && await p.locator('.rv-front .fl-lead').count() === 0, `${T}: a paragraph keeps its long size (${pc})`);
   const para = await sizeOf(p, '.rv-front .flash-front');
   ok(para.px <= one.px, `${T}: and is never larger than a one-line front (${para.px}px, ${one.px}px)`);
+  if (viewport.width >= 1280) ok(/\bxlong\b/.test(pc) && para.px <= 22, `${T}: a front over 120 characters is small on a wide screen (${para.px}px)`);
   await flip(p);
   ok(await p.locator('.rv-back .fl-lead, .rv-back .fl-rest').count() === 0, `${T}: a paragraph's back has no lead and rest`);
   for (const id of ['longlines', 'two']) {

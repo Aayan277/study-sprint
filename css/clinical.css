@@ -301,10 +301,14 @@
 :root[data-ui="clinical"] .tdecks,:root[data-ui="clinical"] .decks{gap:6px}
 :root[data-ui="clinical"] .th-big{font-size:1.375rem}
 :root[data-ui="clinical"] .flash-front{font-size:clamp(1.5rem,6.6vw,2.125rem)}
+:root[data-ui="clinical"] .flash-front.long{font-size:clamp(1.2rem,5vw,1.5rem)}
+:root[data-ui="clinical"] .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0}
 :root[data-ui="clinical"] .flash-back{font-size:clamp(1.0625rem,4.6vw,1.25rem);line-height:1.5}
 :root[data-ui="clinical"] .flash-recap{font-size:clamp(1.0625rem,4.6vw,1.3rem)}
 @media (min-width:1024px){
   :root[data-ui="clinical"] main[data-route="review"] .flash-front{font-size:2.5rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-front.long{font-size:1.75rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-front.xlong{font-size:1.2rem;font-weight:500;line-height:1.45;letter-spacing:0}
   :root[data-ui="clinical"] main[data-route="review"] .flash-recap{font-size:1.4rem}
   :root[data-ui="clinical"] main[data-route="review"] .flash-back{font-size:1.3rem}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-5) var(--s-6)}
