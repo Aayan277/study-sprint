@@ -12,7 +12,7 @@ import { checkTyped } from './match.js';
 import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize, leadLines, isLead, FRONT_LINES, BACK_LINES } from './format.js';
+import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize, leadLines, leadPara, isLead, FRONT_LINES, BACK_LINES } from './format.js';
 import { cardMediaHTML, warmCards } from './media.js';
 import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
@@ -219,6 +219,14 @@ const HIDDEN = 'aria-hidden="true" inert';
 // Draw the card on screen. Both faces are in the page from the start: the front, and the back (the
 // question again, small, with the answer), so flip() only has to turn the card over.
 //   enter: a new card is coming in, so it rises into place
+// A back's HTML. A short first paragraph followed by more text (a multiple-choice answer and its explanation) leads: the answer is loud, the
+// explanation sits under it, quieter (.ans-lead and .ans-more in styles.css). Both parts are formatted (and escaped) like any back.
+function backHTML(back) {
+  const p = leadPara(back);
+  return p ? `<span class="ans-lead">${formatHTML(p.lead)}</span><span class="ans-more">${formatHTML(p.rest)}</span>`
+    : leadLines(answerText(back), formatHTML(back), BACK_LINES);
+}
+
 function renderSession(el, enter = false) {
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
@@ -258,7 +266,7 @@ function renderSession(el, enter = false) {
       ? cardMediaHTML(card, 'back', renderCloze(card.noteText, card.cloze, 'back'))
       : sp
         ? cardMediaHTML(card, 'back', stepsHTML(sp))
-        : cardMediaHTML(card, 'back', leadLines(answerText(card.back), formatHTML(card.back), BACK_LINES));
+        : cardMediaHTML(card, 'back', backHTML(card.back));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
   // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.

@@ -403,5 +403,19 @@ export function leadLines(text, html, { first, rest, total }) {
   if (cut < 1 || html.split('<br>').length !== lines.length) return html;
   return `<span class="fl-lead">${html.slice(0, cut + 4)}</span><span class="fl-rest">${html.slice(cut + 4)}</span>`;
 }
+// A multiple-choice style back: "C. Hashimoto thyroiditis\n\nlong explanation". Its first paragraph (the text before the first blank line) is the
+// answer itself when it is short (80 characters at most, measured as words) and more text follows; the rest is the explanation.
+// Returns { lead, rest } as written (nothing is escaped here), or null when the back is not of that shape (then the whole back is the answer).
+export function leadPara(text) {
+  const src = String(text ?? '');
+  const m = /\n[ \t]*\n/.exec(src);
+  if (!m) return null;
+  const lead = src.slice(0, m.index).trim(), rest = src.slice(m.index + m[0].length).trim();
+  if (!lead || !rest || answerText(lead).length > 80) return null;
+  if ((lead.replace(/\\\$/g, '').match(/\$/g) || []).length % 2) return null;      // (a formula must not be cut in half)
+  return { lead, rest };
+}
+// What an option in Play or a practice test shows for a card's back: the lead alone, so a long explanation can't give the answer away.
+export const optionText = text => leadPara(text)?.lead ?? text;
 export const isLead = html => html.startsWith('<span class="fl-lead">');
 export const FRONT_LINES = { first: 18, rest: 48, total: 120 }, BACK_LINES = { first: 18, rest: 80, total: 160 };

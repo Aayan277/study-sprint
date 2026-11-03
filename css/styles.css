@@ -801,6 +801,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0;text-align:left}
 .flash-front,.flash-recap{text-wrap:balance}
 .flash-front.xlong{text-wrap:pretty}
+.rv-front .flash-deck{margin-bottom:0}
 /* Review's card turns over: a front face and a back face, both always in the page. The flash itself
    is just the stage; each face is drawn like a card. A new card rises in. */
 .flash.rv-card{display:flex;flex-direction:column;gap:0;padding:0;background:none;box-shadow:none;perspective:1400px}
@@ -816,7 +817,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-card:not(.flipped) .rv-back{position:absolute;inset:0;overflow:hidden}
 .rv-card:not(.flipped) .rv-back,.rv-card.flipped .rv-front{pointer-events:none}
 /* The question again, smaller, above the answer */
-.flash-recap{margin:0;font-weight:600;font-size:clamp(1.25rem,5.4vw,1.6rem);color:var(--text-2);letter-spacing:-.02em;line-height:1.15;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
+.flash-recap{margin:0;font-weight:500;font-size:clamp(1rem,4.4vw,1.2rem);color:var(--text-2);letter-spacing:-.01em;line-height:1.3;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
 @keyframes card-in{from{opacity:0;transform:translateY(16px) scale(.985)}}
 /* Elements cards (item 4): "4 elements" under the question, a Got it / Missed toggle on each element, a ring on the suggested rating */
 .el-count{margin:var(--s-2) 0 0;text-align:center;font:500 var(--fs-sm) var(--f-ui);color:var(--text-3)}
@@ -829,12 +830,15 @@ main[data-route="import"] > .view > .savebar{order:5}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
-.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
+.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:500;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
 /* A long answer (about 160+ characters, set in review.js) is read, not glanced at: smaller, left-aligned, with its
    question shrunk to a one-or-two-line reminder. 320+ characters go one step smaller. */
-.flash-back.long{font-size:1.06rem;line-height:1.6;letter-spacing:-.005em;text-align:left}
+.flash-back.long{font-size:1.06rem;font-weight:450;line-height:1.6;letter-spacing:-.005em;text-align:left}
 .flash-back.xlong{font-size:1rem}
-.flash-recap.small{font-size:1.06rem;line-height:1.4;font-weight:600;text-align:left}
+/* A multiple-choice style back: its first paragraph is the answer and leads, the explanation sits under it (review.js backHTML). */
+.flash-back .ans-lead{display:block;font-size:1.2em;font-weight:650;line-height:1.3;color:var(--text);margin-bottom:.75em}
+.flash-back .ans-more{display:block;color:var(--text-2)}
+.flash-recap.small{font-size:.9375rem;line-height:1.4;font-weight:500;text-align:left;text-wrap:pretty}
 .rv-back:has(.flash-recap.small) .flash-ans{margin-top:0}
 .rv-typed:empty{display:none}
 .flash-hint{margin:auto 0 0;text-align:center;font:500 var(--fs-xs) var(--f-ui);color:var(--text-2)}
@@ -1440,6 +1444,9 @@ mark.cloze-ans{padding:0 .15em;border-radius:.25em;background:var(--accent-tint)
 .link-eg li{padding:8px 12px;border-left:3px solid var(--accent-line);font-size:var(--fs-sm);line-height:1.5;overflow-wrap:anywhere}
 .flash-extra{margin:var(--s-3) 0 0;font-size:var(--fs-sm);color:var(--text-2);line-height:1.5;text-align:center;overflow-wrap:anywhere;white-space:pre-line}
 .flash-back.cloze-full:not(.long){font-size:clamp(1.5rem,6.5vw,2rem);font-weight:550;line-height:1.35}
+/* A cloze or picture back has no question reminder above it, so no divider (and no gap for it) either. */
+.rv-back:not(:has(.flash-recap)) .flash-ans::before{display:none}
+.rv-back:not(:has(.flash-recap)) .flash-ans{padding-top:0}
 
 /* Settings → Appearance → Card text alignment (js/themes.js sets data-align on <html>).
    Auto leaves the rules above alone: short text centred, long answers left. */
@@ -1630,9 +1637,10 @@ img[data-media][hidden]{display:none}
   main[data-route="review"] .flash-front{font-size:3rem}
   main[data-route="review"] .flash-front.long{font-size:2rem}
   main[data-route="review"] .flash-front.xlong{font-size:1.25rem;font-weight:500;line-height:1.45;letter-spacing:0}
-  main[data-route="review"] .flash-recap{font-size:1.75rem}
+  main[data-route="review"] .flash-recap{font-size:1.25rem}
   main[data-route="review"] .flash-back{font-size:1.5rem}
-  main[data-route="review"] .flash-back.long,main[data-route="review"] .flash-recap.small{font-size:1.15rem}
+  main[data-route="review"] .flash-back.long{font-size:1.15rem}
+  main[data-route="review"] .flash-recap.small{font-size:1rem}
   main[data-route="review"] .flash-back.xlong{font-size:1.05rem}
   main[data-route="review"] .rate{min-height:68px}
   main[data-route="review"] .rate b{font-size:var(--fs-md)}
