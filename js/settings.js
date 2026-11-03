@@ -200,6 +200,10 @@ export async function renderSettings(el) {
           </div></div>
         <button class="btn ghost small" type="button" id="schedReset">Reset to defaults</button>
       </details>
+      <details class="advanced" id="labSection">
+        <summary>Lab</summary>
+        <div class="adv-row"><button class="btn ghost small" type="button" id="labOpen">Open RWKV lab</button> ${helpLink('rwkv-lab', '?', 'About the RWKV lab')}</div>
+      </details>
     </section>
 
     <section class="section" aria-labelledby="syncTitle">
@@ -326,6 +330,7 @@ export async function renderSettings(el) {
     $(key).addEventListener('change', e => { app.settings[key] = e.target.checked; db.setSetting(key, e.target.checked); fx.configure(app.settings); configureShortcuts(app.settings); });
   }
   $('glossaryUnderline').addEventListener('change', e => { app.settings.glossaryUnderline = e.target.checked; db.setSetting('glossaryUnderline', e.target.checked).then(() => dispatchEvent(new Event('glossary-changed'))); });
+  $('labOpen').addEventListener('click', () => navGo('#/lab'));
   $('glossBtn').addEventListener('click', () => import('./glossary-sheet.js').then(m => m.openGlossary()).catch(err => console.error(err)));
   const glossCount = async () => { const n = termCount(await db.getSettings()); if ($('glossSub')) $('glossSub').textContent = n ? `${n} term${n === 1 ? '' : 's'}` : ''; };
   addEventListener('glossary-changed', glossCount);

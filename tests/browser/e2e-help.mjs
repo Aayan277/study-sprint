@@ -23,7 +23,7 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   const n = await p.locator('details.help-q').count();
   ok(n >= 12, tag + `at least 12 questions (${n})`);
   ok(await p.locator('details.help-q[open]').count() === 0, tag + 'all start closed');
-  ok(await p.locator('section.help-sec h2').count() === 4, tag + 'four sections with headings');
+  ok(await p.locator('section.help-sec h2').count() === 5, tag + 'five sections with headings (the lab build adds Lab)');
   const heights = await p.$$eval('details.help-q > summary', els => els.map(e => e.getBoundingClientRect().height));
   ok(Math.min(...heights) >= 44, tag + 'every question is at least 44px tall: ' + Math.min(...heights));
   await p.goto(APP + '#/help/ratings');

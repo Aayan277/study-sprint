@@ -16,6 +16,13 @@ import { plural } from './ui.js';
 // Cards whose schedule a practice answer already changed today (at most one change per card per day, whichever of Play or a test).
 export const practicedToday = logs => new Set(logs.filter(l => (l.source === 'play' || l.source === 'test') && l.applied).map(l => l.cardId));
 
+// RWKV lab (shadow mode): tell the lab about an answer that changed the schedule. Does nothing unless the lab database exists and shadow
+// mode is on; never waits for the lab and never throws.
+function labShadow(logId, log, card, decks) {
+  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on && import('./rwkv-lab.js'))
+    .then(m => m && m.afterAnswer({ logId, log, card, decks })).catch(() => {});
+}
+
 // Save one answer.
 //   data   what the screen loaded: settings, decks, statesById, examCaps, playedToday, newLeft, speed (a Map, or none)
 //   entry  { card, ok, ms, limitMs, chars, given (null = ran out of time), mixedWith, overridden }; this function adds
@@ -66,6 +73,7 @@ export async function savePracticeAnswer(data, entry, { source = 'play', qtype, 
       log.applied = true;
       entry.logId = await db.saveReview(next, log);
       entry.applied = true;
+      labShadow(entry.logId, log, entry.card, data.decks);
       data.statesById.set(id, next);
       data.playedToday.add(id);
       entry.leeched = await afterApply?.(entry.card, prev, next, log);       // what it changed, so "I was right" can undo a leech

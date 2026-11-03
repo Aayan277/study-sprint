@@ -156,7 +156,26 @@ export const SECTIONS = [
     { id: 'reminders', q: 'How do the calendar reminders work?', a: `
       <p><b>Add to my calendar</b> in Settings → Study makes a daily calendar alert at the time you pick. It works best in Apple Calendar and Outlook; in Google Calendar, alerts follow your default notifications. Exams get an alert 3 days before and one on the day.</p>
       <p><b>Cards due on the app icon</b> shows today’s card count on the Study Sprint icon and updates when you open or leave the app.</p>` }
-  ] }
+  ] },
+  { title: 'Lab', items: [
+    { id: 'rwkv-lab', q: 'What is the RWKV lab?', a: `
+      <p>The lab is a personal test of a different memory model, <b>RWKV</b>, next to FSRS. It is for trying out, not for everyday studying. This lab build never syncs, so nothing it does can reach your real account.</p>
+      <p>You pick the model’s weights file yourself (<b>Choose weights file…</b>). It is kept only in this browser, in a separate store from your cards, and it is never uploaded. The lab makes no network requests of its own.</p>
+      <p><b>Shadow mode</b> watches your answers and records what the model would have predicted, without changing anything. FSRS stays in charge of when cards come back. Your cards, reviews, settings and backups are not touched by the lab.</p>` },
+    { id: 'rwkv-compare', q: 'How do I read the lab’s comparison?', a: `
+      <p>Each row is a model, scored on the same reviews: those where a day or more had passed since the card’s last answer. Lower is better for <b>Log loss</b> and <b>RMSE</b>, higher is better for <b>AUC</b>.</p>
+      <ul>
+        <li><b>Log loss</b>: how surprised the model was by what you remembered or forgot. It punishes confident wrong guesses.</li>
+        <li><b>AUC</b>: how well the model puts cards you forgot below cards you remembered. 0.5 is a coin flip, 1 is perfect.</li>
+        <li><b>RMSE</b>: how far the predicted chances are from what really happened, in groups of similar predictions.</li>
+      </ul>
+      <p><b>FSRS-6 (your settings)</b> was tuned on these same reviews, so it has seen the answers. RWKV never has. That favours FSRS, so also look at <b>FSRS-6 (default)</b>. <b>RWKV curve</b> uses the model’s forgetting curve at the real gap; <b>RWKV instant</b> asks the model just before you answered.</p>
+      <p><b>All history</b> uses every past review the lab replayed; <b>Since shadow mode</b> only the reviews after you switched it on.</p>` },
+    { id: 'rwkv-rebuild', q: 'When does the lab need a rebuild?', a: `
+      <p><b>Rebuild from history</b> makes the model read your whole review history again and saves what it remembers about each card. It can take a few minutes for a big collection, and it runs in the background.</p>
+      <p>You need one after choosing a new weights file, after reviews were taken back outside a session, after cards or reviews were deleted or imported, or after a rebuild was cancelled. The lab then shows <b>Out of date: rebuild needed</b> and stops following your answers until you rebuild. Answers made while shadow mode was off are caught up on their own.</p>
+      <p>Sync is off in this build, so a rebuild is never needed because of it.</p>` }
+  ] },
 ];
 
 export function renderHelp(el, id) {

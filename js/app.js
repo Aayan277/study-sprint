@@ -165,7 +165,8 @@ const ROUTES = {
   import: async (el, deckId) => (await lazy('./import-screen.js')).renderImport(el, deckId),
   stats: async el => (await lazy('./stats.js')).renderStats(el),
   settings: async el => (await loadSettings()).renderSettings(el),
-  help: async (el, arg) => (await lazy('./help.js')).renderHelp(el, arg)
+  help: async (el, arg) => (await lazy('./help.js')).renderHelp(el, arg),
+  lab: async el => (await lazy('./rwkv-screen.js')).renderLab(el)
 };
 
 // Remembered so the gear can take you back to where you were.
@@ -192,7 +193,7 @@ async function route() {
   const render = ROUTES[name] || ROUTES.today;
   // Highlight the right tab. A deck's page and the import screen count as the Decks tab.
   // (A running Review session counts as Today.)
-  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' ? 'settings' : name;
+  const tab = name === 'deck' || name === 'import' || name === 'browse' || name === 'test' ? 'decks' : name === 'review' ? 'today' : name === 'help' || name === 'lab' ? 'settings' : name;
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });

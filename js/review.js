@@ -38,6 +38,9 @@ import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
+// RWKV lab hook: set at the start of a session only when the lab database exists and shadow mode is on (js/rwkv-gate.js). Otherwise null,
+// and every use below does nothing.
+let labHook = null;
 // A computer with a mouse (vs a touchscreen): changes a hint's wording.
 const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
@@ -124,6 +127,8 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
+  labHook = null;
+  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on ? import('./rwkv-lab.js') : null).then(m => { labHook = m; }).catch(() => {});
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -643,6 +648,7 @@ async function answer(el, rating) {
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
+    labHook?.afterAnswer({ logId, log, card: item.card, prev, opts: schedFor(item.card, now), decks: R.decks });
     if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
@@ -681,6 +687,7 @@ async function undo(el) {
     const id = u.item.card.id;
     const inStep = R.version === db.scheduleVersion();
     await db.undoReview(id, u.prev, u.logId);
+    labHook?.afterUndo(u.logId);
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
     if (inStep) R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
