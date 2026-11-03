@@ -118,5 +118,63 @@ const runAll = async (p, rating = '4') => {
   await ctx.close();
 }
 
+// ---- Undo when the card you answered is the one on screen again (the only card left is a learning card) ----
+{
+  const { ctx, p } = await open();
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const keep = (await db.getAll('cards')).filter(c => c.id === 'L1');
+    await db.deleteDeck('D');
+    await db.saveDeck({ id: 'D', name: 'Order', course: '', color: '#46A758', parentId: '', created: Date.now() - 9000 });
+    await db.saveCards(keep);
+    const now = Date.now();
+    await db.putStates([{ cardId: 'L1', due: now - 5 * 60000, stability: 1, difficulty: 5, reps: 1, lapses: 0, state: 1, lastReview: now - 900000, elapsedDays: 0, scheduledDays: 0, learningSteps: 1 }]);
+  });
+  await start(p);
+  ok(await front(p) === 'L1', 'undo case: the only card is a learning card');
+  await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped'); await p.keyboard.press('1');
+  await p.waitForFunction(() => document.querySelector('#flash:not(.flipped)'));
+  ok(await front(p) === 'L1', 'Again: it is shown again at once');
+  await p.keyboard.press('z');
+  await p.waitForFunction(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length === 0);
+  await p.waitForFunction(() => document.querySelector('#flash:not(.flipped)'));
+  const counts = await p.$$eval('.rv-counts span', e => e.map(x => +x.textContent));
+  ok(counts.join('/') === '0/1/0', 'after Undo the Learn count is 1, not 2: ' + counts.join('/'));
+  await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped'); await p.keyboard.press('4');
+  await p.waitForFunction(() => !document.querySelector('#flash'), null, { timeout: 8000 });
+  ok(await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length) === 1, 'one Easy ends the session: no second copy of the card, one log row');
+  await ctx.close();
+}
+
+// ---- "After reviews" does not apply to Custom study (Study ahead keeps its own order) ----
+{
+  const { ctx, p } = await open();
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.deleteDeck('D');
+    await db.saveDeck({ id: 'A', name: 'Ahead', course: '', color: '#46A758', parentId: '', created: Date.now() - 9000 });
+    const now = Date.now(), D = 86400000;
+    const ids = ['a1', 'a2', 'a3'];
+    await db.saveCards(ids.map((id, i) => ({ id, deckId: 'A', front: id, back: 'A ' + id, created: now - 100000 + i })));
+    await db.putStates(ids.map((id, i) => ({ cardId: id, due: now + D + i * 1000, stability: 6, difficulty: 5, reps: 3, lapses: 0, state: 2, lastReview: now - 9 * D, elapsedDays: 9, scheduledDays: 6, learningSteps: 0 })));
+    await db.setSetting('learnOrder', 'after');
+  });
+  await p.goto('about:blank'); await p.goto(APP + '#/review/A'); await p.waitForSelector('#aheadBtn');
+  await p.click('#aheadBtn'); await p.waitForSelector('#flash');
+  const seen = [];
+  const answerNow = async key => {
+    const f = await front(p);
+    seen.push(f);
+    await p.keyboard.press('Space'); await p.waitForSelector('#flash.flipped'); await p.keyboard.press(key);
+    await p.waitForFunction(prev => document.querySelector('#flash:not(.flipped)') && document.querySelector('#flash .rv-front .flash-front')?.textContent.trim() !== prev, f);
+  };
+  await answerNow('1');                                                 // a1: Again (relearning step 10 minutes)
+  await ctx.clock.setFixedTime(new Date(2026, 9, 14, 12, 30));          // half an hour later: a1 is due again
+  await answerNow('4');                                                 // a2
+  seen.push(await front(p));
+  ok(seen.join(' ') === 'a1 a2 a1', 'Study ahead with "After reviews" on: the card you pressed Again on comes back as soon as it is due: ' + seen.join(' '));
+  await ctx.close();
+}
+
 ok(errors.length === 0, 'no page errors: ' + errors.slice(0, 3).join(' | '));
 await browser.close();

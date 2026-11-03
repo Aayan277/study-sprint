@@ -358,6 +358,11 @@ export async function renderSettings(el) {
   $('npdPlus').addEventListener('click', () => setNpd(app.settings.newPerDay + 5));
   // Play: practice only (default) or counted as reviews. Synced, so every device plays the same way.
   $('playCounts').addEventListener('change', e => { app.settings.playCountsAsReviews = e.target.checked; db.setSetting('playCountsAsReviews', e.target.checked); });
+  // Learning cards: before, mixed with or after the reviews (queue.js). Synced; the next Review session uses it.
+  el.querySelectorAll('input[name="learnOrder"]').forEach(r => r.addEventListener('change', async () => {
+    app.settings.learnOrder = cleanLearnOrder(r.value);
+    await db.setSetting('learnOrder', app.settings.learnOrder);
+  }));
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
@@ -476,10 +481,6 @@ function wireAdvanced(el) {
     $('advanced').open = true;
   };
   // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
-  el.querySelectorAll('input[name="learnOrder"]').forEach(r => r.addEventListener('change', () => {
-    app.settings.learnOrder = cleanLearnOrder(r.value);
-    db.setSetting('learnOrder', app.settings.learnOrder);        // synced; the next Review session uses it
-  }));
   el.querySelectorAll('input[name="fsrsVersion"]').forEach(r => r.addEventListener('change', async () => {
     app.settings.fsrsVersion = +r.value === 7 ? 7 : 6;
     await db.setSetting('fsrsVersion', app.settings.fsrsVersion);
