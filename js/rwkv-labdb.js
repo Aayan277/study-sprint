@@ -8,12 +8,17 @@ export const STORES = ['meta', 'weights', 'cards', 'notes', 'shared', 'preds'];
 const BATCH = 500;
 
 let dbp = null;
+let allowCreate = true;
+// The worker calls this: it only ever works on a lab that exists, so a timed save after the lab was removed (maybe in another tab) can't
+// bring back an empty database. Opening then fails with 'The lab was removed.'
+export const forbidCreate = () => { allowCreate = false; };
 
 export function openLab() {
   if (dbp) return dbp;
   dbp = new Promise((resolve, reject) => {
     const req = indexedDB.open(LAB_DB, LAB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = e => {
+      if (!allowCreate && e.oldVersion === 0) { req.transaction.abort(); return; }
       const db = req.result;
       for (const name of STORES) {
         if (db.objectStoreNames.contains(name)) continue;
@@ -26,7 +31,7 @@ export function openLab() {
       db.onclose = () => { dbp = null; };
       resolve(db);
     };
-    req.onerror = () => { dbp = null; reject(req.error); };
+    req.onerror = e => { dbp = null; if (!allowCreate) { e.preventDefault?.(); reject(new Error('The lab was removed.')); return; } reject(req.error); };
     req.onblocked = () => { dbp = null; reject(new Error('Close other Study Sprint tabs and try again.')); };
   });
   return dbp;

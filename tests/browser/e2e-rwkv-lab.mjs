@@ -243,6 +243,25 @@ for (const r of rwkvRuns) {
 ok(rwkvRuns.some(r => r.plan && r.plan.days[3] !== r.fsrs.scheduledDays), 'the RWKV gaps differ from FSRS for at least one card (the scheduler really changed something)');
 ok((await fallbackCount()) === 0, 'no fallback was counted while the plans worked');
 
+// switching to FSRS in the middle of a session (no reload): the session that is resumed schedules by FSRS from the very next card
+await makeDue(); await startSession();
+await waitFor(async () => !!(await labPlan()), 10000);
+await page.evaluate(() => { location.hash = '#/lab'; });
+await page.waitForSelector('#labSched');
+await page.click('#labSched label:has(input[value=fsrs])');
+await waitFor(async () => (await schedSetting()) === 'fsrs');
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#resumeBtn'); await page.click('#resumeBtn'); await page.waitForSelector('#flash .flash-front');
+{
+  const r = await goodOnce({ waitPlan: false });
+  ok(r.labels[2] === r.fsrsLabels[2] && r.labels[3] === r.fsrsLabels[3] && r.labels[4] === r.fsrsLabels[4], `FSRS chosen mid-session: the resumed card's labels are FSRS's (${r.labels[2]}, ${r.labels[3]}, ${r.labels[4]}), not the plan's`);
+  ok(r.after.due === r.fsrs.due && r.after.scheduledDays === r.fsrs.scheduledDays, 'and its saved due date is FSRS\'s');
+}
+await page.evaluate(() => { location.hash = '#/lab'; });
+await page.waitForSelector('#labSched');
+await page.click('#labSched label:has(input[value=rwkv])');
+await waitFor(async () => (await schedSetting()) === 'rwkv');
+ok((await schedSetting()) === 'rwkv', 'RWKV (lab) chosen again for the next checks');
+
 // the worker is broken: the next card is scheduled by FSRS, silently
 await makeDue();
 await page.goto(URL + '#/decks'); await page.reload(); await page.waitForSelector('.deck');

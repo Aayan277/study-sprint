@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const REAL_ROOT = fs.realpathSync(ROOT);
 const HOST = '127.0.0.1', PORT = 8137;
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -22,13 +23,18 @@ export function createServer() {
   return http.createServer((req, res) => {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400); res.end(); return; }
+    const host = String(req.headers.host || '').toLowerCase();
+    if (host !== `localhost:${PORT}` && host !== `${HOST}:${PORT}`) { res.writeHead(421); res.end(); return; }      // only the two addresses this server is for
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }); res.end(); return; }
     const file = path.resolve(ROOT, '.' + (pathname.endsWith('/') ? pathname + 'index.html' : pathname));
     const rel = path.relative(ROOT, file);
-    if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || hidden(rel) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404, { 'cache-control': 'no-store' }); res.end(); return; }
+    let real = null;
+    try { real = fs.realpathSync(file); } catch { /* not there */ }
+    const inside = real && !path.relative(REAL_ROOT, real).startsWith('..') && !path.isAbsolute(path.relative(REAL_ROOT, real));      // (a link that points out of the folder is refused)
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || hidden(rel) || !inside || fs.statSync(real).isDirectory()) { res.writeHead(404, { 'cache-control': 'no-store' }); res.end(); return; }
     res.writeHead(200, { 'content-type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-store' });
     if (req.method === 'HEAD') { res.end(); return; }
-    fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
+    fs.createReadStream(real).on('error', () => res.destroy()).pipe(res);
   });
 }
 

@@ -10,6 +10,7 @@ import { FeatureBuilder, modelRows } from './rwkv-features.js';
 import { encodeEntity, decodeEntity } from './rwkv-state.js';
 import { daysForButtons } from './rwkv-curve.js';
 import { FEATURE_VERSION, STATE_FORMAT } from './rwkv-spec.js';
+import { rowHash } from './rwkv-fresh.js';
 import { initState, nextState, forgettingCurve } from './fsrs-fit.js';
 import { deltaDays } from './fsrs-data.js';
 
@@ -30,6 +31,7 @@ const post = (msg) => self.postMessage(msg);
 
 // ---------- loading ----------
 async function init() {
+  lab.forbidCreate();
   const rec = await lab.get('weights', 'current');
   if (!rec) throw new Error('No weights file has been chosen.');
   const parsed = parseWeights(rec.bytes);
@@ -170,10 +172,10 @@ async function rebuild({ logs, cards, decks, fsrs }, id) {
   const puts = entityPuts(snap);
   await lab.putMany('cards', puts.cards, gen); await lab.putMany('notes', puts.notes, gen); await lab.putMany('shared', puts.shared, gen);
   await lab.putMany('preds', preds, gen);
-  let ts = -Infinity, lid = -Infinity, idSum = 0;
-  for (const l of logs) { idSum += l.id; if (l.timestamp > ts || (l.timestamp === ts && l.id > lid)) { ts = l.timestamp; lid = l.id; } }
+  let ts = -Infinity, lid = -Infinity, hash = 0;
+  for (const l of logs) { hash = (hash + rowHash(l.id, l.timestamp)) >>> 0; if (l.timestamp > ts || (l.timestamp === ts && l.id > lid)) { ts = l.timestamp; lid = l.id; } }
   state = { modelSha: sha, stateFormat: STATE_FORMAT, featureVersion: FEATURE_VERSION, rows: rows.length, lastTs: logs.length ? ts : 0,
-    lastLogId: logs.length ? lid : 0, totalLogRows: logs.length, idSum, rebuiltAt: Date.now(), rebuilding: false, fallbacks: before.fallbacks || 0 };
+    lastLogId: logs.length ? lid : 0, totalLogRows: logs.length, hash, rebuiltAt: Date.now(), rebuilding: false, fallbacks: before.fallbacks || 0 };
   await lab.commit({ meta: [['state', { ...state, builder: engine.builder.toJSON() }]] }, {}, gen);
   trim();
   return { rows: rows.length, cards: puts.cards.length, preds: preds.length };
@@ -181,9 +183,9 @@ async function rebuild({ logs, cards, decks, fsrs }, id) {
 
 // Is this log row newer than the bookmark? Rows at or before it were already handled (a rebuild or an earlier message read them).
 const isLater = l => l.timestamp > state.lastTs || (l.timestamp === state.lastTs && l.id > state.lastLogId);
-const bookmark = () => ({ totalLogRows: state.totalLogRows, idSum: state.idSum, lastTs: state.lastTs, lastLogId: state.lastLogId, rows: state.rows });
+const bookmark = () => ({ totalLogRows: state.totalLogRows, hash: state.hash, lastTs: state.lastTs, lastLogId: state.lastLogId, rows: state.rows });
 // The lab counts up by the rows it is given, so a row it was never told about (or one deleted behind its back) shows up as a mismatch.
-function counted(l) { state.totalLogRows++; state.idSum += l.id; state.lastTs = l.timestamp; state.lastLogId = l.id; }
+function counted(l) { state.totalLogRows++; state.hash = (state.hash + rowHash(l.id, l.timestamp)) >>> 0; state.lastTs = l.timestamp; state.lastLogId = l.id; }
 
 // New answers the lab missed (made while shadow mode was off, or before the worker saved): feed them in, without scoring.
 async function catchup({ logs, cards, decks, fsrs }) {
@@ -205,7 +207,7 @@ async function review({ log, card, decks, fsrs }) {
   if (!isLater(log)) return { skipped: 'handled' };         // already read (by a rebuild, or the catch-up that started this worker)
   walk.setParams(fsrs);
   const [row] = modelRows([log], [card], decks);
-  const cursor = { logId: log.id, before: bookmark(), modelled: !!row, cardKey: row?.cardKey, walkBefore: null };
+  const cursor = { logId: log.id, ts: log.timestamp, before: bookmark(), modelled: !!row, cardKey: row?.cardKey, walkBefore: null };
   if (!row) { cursors.push(cursor); counted(log); scheduleFlush(); return { skipped: 'not a memory event' }; }
   await loadFor(row);
   cursor.walkBefore = walk.cards.has(row.cardKey) ? structuredClone(walk.cards.get(row.cardKey)) : null;
@@ -237,7 +239,7 @@ async function undo({ logId }) {
   pendingPreds = pendingPreds.filter(p => p.logId !== logId);
   pendingDeletes.push(logId);
   scheduleFlush();
-  return true;
+  return { ts: c.ts };                                       // (the page needs the row's time to keep its own count in step)
 }
 
 // What would each answer do to the card's forgetting curve, and how many days until the chance falls to `target`?

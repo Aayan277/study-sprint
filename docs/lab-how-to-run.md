@@ -39,7 +39,7 @@ You now have a folder. Keep it somewhere easy to find, for example on the Deskto
 
 ### 4. Open the lab
 
-Open Chrome or Edge and go to:
+Open Chrome, Edge or Safari and go to:
 
 ```
 http://localhost:8137
@@ -50,18 +50,19 @@ empty lab. The first time, the page needs internet to load a few libraries.
 
 ## Put your cards in
 
-1. On the real Study Sprint site: **Settings**, then **Export backup**. A `.json` file is saved.
-2. In the lab at localhost:8137: **Settings**, then **Import backup**, choose that file, and press **Replace and restore**.
+1. On the real Study Sprint site: **Settings**, then **Your data**, then **Export backup**. A `.json` file is saved.
+2. In the lab at localhost:8137: **Settings**, then **Your data**, then **Import backup**, choose that file, and press **Replace and restore**.
 
 This makes a copy. Your real cards and your real account are not touched, and syncing is switched off in the lab.
-Do this before the steps below. If you restore a backup again later, the lab will ask for a rebuild (step 4 below).
+Do this before the steps below. If you restore a backup again later, the lab notices that the reviews changed and asks for a new
+**Rebuild from history**.
 
 ## Get the model file
 
-1. Open the model's public download page: https://github.com/JSchoreels/anki-rwkv (the files are under **Releases**:
-   https://github.com/JSchoreels/anki-rwkv/releases).
-2. Find the **SM72e25 int8** weights file and download it. It is small, under 0.5 MB, and is called `weights.int8.bin`.
-   Ignore the larger float version.
+1. Open the model's file on GitHub:
+   https://github.com/JSchoreels/anki-rwkv/blob/main/artifacts/models/sm72e25/weights.int8.bin
+2. Press the **Download raw file** button (the icon at the top right of the file box). The file is called `weights.int8.bin`, is
+   the **SM72e25 int8** model and is small, under 0.5 MB. Do not use the larger float version.
 3. Keep the file on your computer. The lab does not download it for you, and it is never uploaded anywhere.
 
 ## Turn the lab on

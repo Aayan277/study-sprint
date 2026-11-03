@@ -150,7 +150,7 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // The max interval, evening out and the exam limit still apply below. Without a plan (the normal case) nothing here changes.
   const plan = opts.rwkvPlan;
   if (plan && plan.cardId === cardId && plan.lastReview === (state?.lastReview ?? null) && Math.abs(now - plan.at) < 3600000
-      && state?.state === 2 && card.state === 2 && Number.isFinite(plan.days?.[rating]) && plan.days[rating] > 0) {
+      && state?.state === 2 && card.state === 2 && Number.isFinite(plan.days?.[rating]) && plan.days[rating] > 0 && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
     card.scheduled_days = Math.min(plan.days[rating], opts.maxInterval);
     card.due = new Date(now + card.scheduled_days * DAY);
   }

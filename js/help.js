@@ -174,6 +174,7 @@ export const SECTIONS = [
     { id: 'rwkv-rebuild', q: 'When does the lab need a rebuild?', a: `
       <p><b>Rebuild from history</b> makes the model read your whole review history again and saves what it remembers about each card. It can take a few minutes for a big collection, and it runs in the background.</p>
       <p>You need one after choosing a new weights file, after reviews were taken back outside a session, after cards or reviews were deleted or imported, or after a rebuild was cancelled. The lab then shows <b>Out of date: rebuild needed</b> and stops following your answers until you rebuild. Answers made while shadow mode was off are caught up on their own.</p>
+      <p>Play’s <b>I was right</b> takes an answer back after others were saved, so the lab often cannot follow it and asks for a rebuild. Restoring a backup does too.</p>
       <p>Sync is off in this build, so a rebuild is never needed because of it.</p>` },
     { id: 'rwkv-scheduler', q: 'What does the RWKV scheduler do?', a: `
       <p><b>Scheduler</b> decides who sets how long a card waits after you answer. <b>FSRS</b> is the normal choice. <b>RWKV (lab)</b> is for trying the model: it is only available once a weights file is loaded, shadow mode is on and the lab’s memory is up to date.</p>
