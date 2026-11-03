@@ -203,12 +203,15 @@ async function undo({ logId }) {
 
 // What would each answer do to the card's forgetting curve, and how many days until the chance falls to `target`?
 async function whatIf({ log, card, decks, ms, target, maxDays }) {
+  if (!state || state.rebuilding || !engine.builder) return null;
   const [row] = modelRows([{ ...log, rating: 3 }], [card], decks);
   if (!row) return null;
   await loadFor(row);
+  if (!engine.hasCard(row.cardKey) || !engine.cards.has(row.cardKey)) return null;     // the model has no memory of this card yet: FSRS schedules it
   const heads = engine.whatIf(row, ms);
-  if (!heads) { state.fallbacks = (state.fallbacks || 0) + 1; scheduleFlush(); return null; }       // not real numbers: FSRS schedules this card
+  if (!heads) return null;                                  // not real numbers: FSRS schedules this card (the page counts it)
   const days = daysForButtons(heads, target, maxDays);
+  if (![2, 3, 4].every(r => Number.isFinite(days[r]) && days[r] > 0)) return null;
   return { days, curves: Object.fromEntries(Object.entries(heads).map(([g, h]) => [g, { w: [...h.w], s: [...h.s], d: [...h.d] }])) };
 }
 

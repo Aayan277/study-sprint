@@ -1,4 +1,5 @@
-// RWKV lab (Stage 2): choose a weights file, rebuild from history, shadow mode, comparison, undo, remove. Uses made-up weights
+// RWKV lab (Stages 2 and 3): choose a weights file, rebuild from history, shadow mode, comparison, undo, the opt-in RWKV scheduler (and its
+// fallbacks to FSRS), remove. Uses made-up weights
 // (generated here, never saved in the repo) and the fake review history below. Sync is off in the lab build; no server request may be made.
 // Run with: node tests/browser/run.mjs rwkv-lab     (SHOTS=<folder> keeps screenshots of the Lab screen there)
 import fs from 'node:fs';
@@ -174,6 +175,131 @@ await page.reload(); await page.waitForSelector('#labRows tr');
 await page.waitForFunction(() => /5 cards/.test(document.getElementById('labMInfo').textContent), null, { timeout: 5000 });
 ok(/fake-rwkv\.bin/.test(await page.textContent('#labWInfo')) && await page.$eval('#labShadow', e => e.checked) && await page.$eval('#labMWarn', e => e.hidden), 'after a reload: the weights, shadow mode and the fresh state are still there');
 ok(await page.$eval('#labRows tr td:last-child', e => e.textContent) === '13', 'and the comparison');
+
+// ---- 11b. Stage 3: the RWKV (lab) scheduler ----
+const labPlan = () => run(async () => { const p = (await import('./js/rwkv-lab.js')).getLab().lastPlan; return p ? JSON.parse(JSON.stringify(p)) : null; });
+const fallbackCount = () => run(async () => (await (await import('./js/rwkv-labdb.js')).get('meta', 'fallbacks')) || 0);
+const schedSetting = () => run(async () => (await (await import('./js/rwkv-labdb.js')).getSettings()).scheduler);
+// every card is due again, in the state it was seeded with (a review-state card last seen 9 days ago)
+const makeDue = () => run(async seed => {
+  const d = await (await import('./js/db.js')).openDB();
+  await new Promise(r => { const tx = d.transaction('cardStates', 'readwrite'); for (const st of Object.values(seed)) tx.objectStore('cardStates').put({ ...st, state: 2, learningSteps: 0, due: Date.now() - 3600000 }); tx.oncomplete = r; });
+}, seeded);
+const startSession = async () => {
+  await page.goto(URL + '#/decks'); await page.reload(); await page.waitForSelector('.deck');      // (a reload: a fresh session, not a resumed one)
+  await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
+  await page.click('#startBtn'); await page.waitForSelector('#flash .flash-front');
+};
+// Flip the first card and answer Good. -> the labels shown, the plan, the card's state before and after, and what plain FSRS gives
+const goodOnce = async ({ waitPlan = 'sleep' } = {}) => {
+  const front = (await page.textContent('.flash-front')).trim();
+  const card = 'lab-' + front.replace('Question ', '');
+  const before = (await states())[card];
+  if (waitPlan === 'plan') await waitFor(async () => !!(await labPlan()), 10000);      // the plan is worked out while the question is read
+  else if (waitPlan) await sleep(900);
+  await page.keyboard.press('Space'); await page.waitForSelector('.rate');
+  const labels = await page.$$eval('.rate', bs => Object.fromEntries(bs.map(b => [b.dataset.rate, b.querySelector('.mono').textContent.trim()])));
+  const plan = await labPlan();
+  await page.keyboard.press('3');
+  await page.waitForFunction(f => !document.querySelector('.flash-front') || document.querySelector('.flash-front').textContent.trim() !== f, front);
+  await sleep(300);
+  const after = (await states())[card];
+  const info = await run(async ({ card, before }) => {
+    const { rate, previewIntervals } = await import('./js/srs.js'), { schedulerOptions } = await import('./js/sched-settings.js'), { formatInterval } = await import('./js/queue.js'), db = await import('./js/db.js');
+    const log = (await db.getCardLogs(card)).filter(l => l.source === 'review').sort((a, b) => b.timestamp - a.timestamp)[0];
+    const opts = schedulerOptions({ fuzz: false }), DAY = 86400000;
+    const fs = rate(card, before, 3, opts, log.timestamp);
+    const pv = previewIntervals(before, opts, log.timestamp, card);
+    return { at: log.timestamp, fsrs: fs, fsrsLabels: { 2: formatInterval(pv[2]), 3: formatInterval(pv[3]), 4: formatInterval(pv[4]) } };
+  }, { card, before });
+  return { card, labels, plan, before, after, ...info };
+};
+const fmtDays = days => run(async d => { const { formatInterval } = await import('./js/queue.js'); return formatInterval(d * 86400000); }, days);
+const sameFsrsFields = (a, b) => ['state', 'stability', 'difficulty', 'reps', 'lapses', 'learningSteps'].every(k => a[k] === b[k]);
+
+await page.goto(URL + '#/lab'); await page.waitForSelector('#labSched');
+ok(await page.locator('#labSH ~ .help-link[aria-label="About the RWKV scheduler"], .lab-h .help-link[aria-label="About the RWKV scheduler"]').count() === 1, 'the Scheduler section has a help link');
+ok(await page.$eval('#labSched input[value=fsrs]', e => e.checked) && !(await page.$eval('#labSched input[value=rwkv]', e => e.disabled)) && await page.$eval('#labSWarn', e => e.hidden), 'FSRS is chosen, and RWKV (lab) can be picked: weights, shadow mode on and a fresh memory');
+await page.click('#labSched label:has(input[value=rwkv])');
+await waitFor(async () => (await schedSetting()) === 'rwkv');
+ok((await schedSetting()) === 'rwkv' && await page.$eval('#labSched input[value=rwkv]', e => e.checked), 'choosing RWKV (lab) is saved in the lab database');
+ok(!('scheduler' in (await run(async () => (await (await import('./js/db.js')).getSettings())))) && JSON.stringify(await mainKeys()) === JSON.stringify(keysBefore), 'and nothing about it is in the main settings');
+
+// the RWKV scheduler sets Hard, Good and Easy on a review-state card
+const rwkvRuns = [];
+for (let i = 0; i < 3; i++) {
+  await makeDue(); await startSession();
+  rwkvRuns.push(await goodOnce({ waitPlan: 'plan' }));
+}
+for (const r of rwkvRuns) {
+  const d = r.plan?.days;
+  ok(!!d && [2, 3, 4].every(g => Number.isInteger(d[g]) && d[g] >= 1), `${r.card}: the lab made a plan (Hard ${d?.[2]}, Good ${d?.[3]}, Easy ${d?.[4]} days; FSRS says ${r.fsrs.scheduledDays} for Good)`);
+  if (!d) continue;
+  const want = await Promise.all([2, 3, 4].map(g => fmtDays(d[g])));
+  ok(r.labels[3] === want[1] && r.labels[2] === want[0] && r.labels[4] === want[2], `${r.card}: the Hard, Good and Easy labels are the plan's (${r.labels[2]}, ${r.labels[3]}, ${r.labels[4]})`);
+  ok(r.after.scheduledDays === d[3] && r.after.due === r.at + d[3] * 86400000, `${r.card}: the saved due date is the plan's Good gap (${d[3]} days after the answer)`);
+  ok(sameFsrsFields(r.after, r.fsrs) && r.after.lastReview === r.at, `${r.card}: state, stability, difficulty, reps and lapses are FSRS's own`);
+}
+ok(rwkvRuns.some(r => r.plan && r.plan.days[3] !== r.fsrs.scheduledDays), 'the RWKV gaps differ from FSRS for at least one card (the scheduler really changed something)');
+ok((await fallbackCount()) === 0, 'no fallback was counted while the plans worked');
+
+// the worker is broken: the next card is scheduled by FSRS, silently
+await makeDue();
+await page.goto(URL + '#/decks'); await page.reload(); await page.waitForSelector('.deck');
+await page.evaluate(async () => { await import('./js/rwkv-lab.js'); window.__rwkvBreak(); });      // (the test hook is there once the lab's code is loaded)
+await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn'); await page.click('#startBtn'); await page.waitForSelector('#flash .flash-front');
+{
+  const r = await goodOnce({ waitPlan: 'sleep' });
+  ok(r.plan === null, 'broken worker: no plan was made');
+  ok(r.labels[2] === r.fsrsLabels[2] && r.labels[3] === r.fsrsLabels[3] && r.labels[4] === r.fsrsLabels[4], `broken worker: the labels are FSRS's (${r.labels[2]}, ${r.labels[3]}, ${r.labels[4]})`);
+  ok(r.after.due === r.fsrs.due && r.after.scheduledDays === r.fsrs.scheduledDays && sameFsrsFields(r.after, r.fsrs), 'broken worker: the saved card is exactly what FSRS alone gives');
+  ok(!!(await waitFor(async () => (await fallbackCount()) >= 1, 5000)), 'the fallback was counted: ' + await fallbackCount());
+}
+ok(errors.length === 0, 'the broken worker made no page or console errors ' + errors.join(' | '));
+
+// back to FSRS on the Lab screen (a reload also starts a fresh worker)
+await page.goto(URL + '#/lab'); await page.reload(); await page.waitForSelector('#labSched');
+await waitFor(async () => (await page.$eval('#labSched input[value=rwkv]', e => e.checked)));
+await page.click('#labSched label:has(input[value=fsrs])');
+await waitFor(async () => (await schedSetting()) === 'fsrs');
+ok((await schedSetting()) === 'fsrs', 'switching back to FSRS is saved');
+await makeDue(); await startSession();
+{
+  const r = await goodOnce();
+  ok(r.plan === null, 'FSRS chosen: no plan is made');
+  ok(r.labels[3] === r.fsrsLabels[3] && r.after.due === r.fsrs.due && sameFsrsFields(r.after, r.fsrs), `FSRS chosen: label (${r.labels[3]}) and due date are FSRS's`);
+}
+// choose RWKV again; turning shadow mode off puts the scheduler back on FSRS
+await page.goto(URL + '#/lab'); await page.reload(); await page.waitForSelector('#labSched');
+await page.click('#labSched label:has(input[value=rwkv])');
+await waitFor(async () => (await schedSetting()) === 'rwkv');
+ok((await schedSetting()) === 'rwkv', 'RWKV (lab) chosen again');
+await page.click('#labShadow'); await waitFor(async () => (await schedSetting()) === 'fsrs');
+ok((await schedSetting()) === 'fsrs' && await page.$eval('#labSched input[value=rwkv]', e => e.disabled) && /shadow mode/i.test(await page.textContent('#labSWarn')), 'turning shadow mode off forces FSRS, and the screen says RWKV needs shadow mode');
+await page.click('#labShadow'); await waitFor(() => run(async () => (await (await import('./js/rwkv-labdb.js')).getSettings()).shadow));
+await waitFor(async () => !(await page.$eval('#labSched input[value=rwkv]', e => e.disabled)), 5000);
+await page.click('#labSched label:has(input[value=rwkv])');
+await waitFor(async () => (await schedSetting()) === 'rwkv', 3000);
+// the weights go away: the scheduler is forced to FSRS and cards are scheduled by FSRS
+ok((await schedSetting()) === 'rwkv', 'RWKV (lab) chosen once more, before the weights are taken away');
+await run(async () => { await (await import('./js/rwkv-labdb.js')).del('weights', 'current'); });
+await page.reload(); await page.waitForSelector('#labSched');
+await waitFor(async () => (await schedSetting()) === 'fsrs');
+ok((await schedSetting()) === 'fsrs' && await page.$eval('#labSched input[value=fsrs]', e => e.checked) && await page.$eval('#labSched input[value=rwkv]', e => e.disabled), 'without the weights the scheduler is FSRS and RWKV (lab) cannot be picked');
+ok(/weights file/i.test(await page.textContent('#labSWarn')), 'and the screen names the reason: ' + (await page.textContent('#labSWarn')).trim());
+await makeDue(); await startSession();
+{
+  const r = await goodOnce();
+  ok(r.plan === null && r.labels[3] === r.fsrsLabels[3] && r.after.due === r.fsrs.due, 'without the weights a card is scheduled by FSRS');
+}
+await page.goto(URL + '#/lab'); await page.waitForSelector('#labPick');
+await page.setInputFiles('#labFile', SP + '/files/fake-rwkv.bin');
+await page.waitForFunction(() => !document.getElementById('labWInfo').hidden, null, { timeout: 8000 });
+await page.click('#labRebuild');                                     // (the log has grown, and the old memory may be out of step)
+await page.waitForFunction(() => /5 cards · rebuilt/.test(document.getElementById('labMInfo').textContent) && document.getElementById('labProg').hidden, null, { timeout: 60000 });
+if (!(await page.$eval('#labShadow', e => e.checked))) await page.click('#labShadow');
+await waitFor(() => run(async () => (await (await import('./js/rwkv-labdb.js')).getSettings()).shadow));
+ok(errors.length === 0, 'no page or console errors in the scheduler checks ' + errors.join(' | '));
 
 // ---- 12. answers made while shadow was off are caught up, not lost; an outside change makes the state stale ----
 await page.click('#labShadow'); await sleep(300);

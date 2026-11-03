@@ -174,7 +174,12 @@ export const SECTIONS = [
     { id: 'rwkv-rebuild', q: 'When does the lab need a rebuild?', a: `
       <p><b>Rebuild from history</b> makes the model read your whole review history again and saves what it remembers about each card. It can take a few minutes for a big collection, and it runs in the background.</p>
       <p>You need one after choosing a new weights file, after reviews were taken back outside a session, after cards or reviews were deleted or imported, or after a rebuild was cancelled. The lab then shows <b>Out of date: rebuild needed</b> and stops following your answers until you rebuild. Answers made while shadow mode was off are caught up on their own.</p>
-      <p>Sync is off in this build, so a rebuild is never needed because of it.</p>` }
+      <p>Sync is off in this build, so a rebuild is never needed because of it.</p>` },
+    { id: 'rwkv-scheduler', q: 'What does the RWKV scheduler do?', a: `
+      <p><b>Scheduler</b> decides who sets how long a card waits after you answer. <b>FSRS</b> is the normal choice. <b>RWKV (lab)</b> is for trying the model: it is only available once a weights file is loaded, shadow mode is on and the lab’s memory is up to date.</p>
+      <p>With RWKV chosen, the model sets the wait after <b>Hard</b>, <b>Good</b> and <b>Easy</b> for a card that is already in review, using the day when its chance of being remembered falls to your target retention. The buttons show those same gaps. <b>Again</b>, new cards and learning steps are always FSRS’s. Your maximum interval, evening out of reviews and exam limit still apply, and RWKV gaps get no random fuzz.</p>
+      <p>FSRS keeps updating every card’s memory numbers on each answer, whichever scheduler is chosen, so switching back to FSRS loses nothing. If the model is late (over 0.3 seconds), stopped, out of date or has no memory of the card yet, FSRS schedules that card and the lab counts it. Turning shadow mode off or removing the weights puts the scheduler back on FSRS.</p>
+      <p>The model was trained on Anki users, not on you. Compare it with FSRS in the lab for a few weeks before relying on it.</p>` }
   ] },
 ];
 

@@ -9,9 +9,11 @@ import { compare } from './rwkv-metrics.js';
 import { forgettingCurve } from './fsrs-fit.js';
 import { deltaDays } from './fsrs-data.js';
 import { schedulerOptions } from './sched-settings.js';
+import { LAB_BUILD } from './rwkv-flag.js';
 import * as db from './db.js';
 
-const TIMEOUT = { review: 5000, whatIf: 300, init: 30000, catchup: 120000, flush: 10000, undo: 5000 };
+const PLAN_MS = 300;                 // how long the card's buttons wait for a plan (review.js); after that FSRS schedules the card
+const TIMEOUT = { review: 5000, whatIf: 2000, init: 30000, catchup: 120000, flush: 10000, undo: 5000 };
 const sha256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
 const slimDecks = decks => (decks || []).map(d => ({ id: d.id, options: !!d.options }));
 const slimCard = c => ({ id: c.id, deckId: c.deckId, noteId: c.noteId });
@@ -20,7 +22,7 @@ const slimLog = l => ({ id: l.id, cardId: l.cardId, timestamp: l.timestamp, sour
 class Lab {
   constructor() {
     this.worker = null; this.pending = new Map(); this.nextId = 1;
-    this.failed = false; this.rebuilding = false;
+    this.failed = false; this.rebuilding = false; this.planning = false;
     this.stateName = null;          // 'fresh' once the memory is in step with the log
     this._ready = null; this._inited = null;
     this._chain = Promise.resolve();         // answers and undos are handed over in the order they happened
@@ -68,10 +70,35 @@ class Lab {
   settings() { return lab.getSettings(); }
   async setShadow(on) {
     const s = await lab.getSettings();
-    const next = await lab.setSettings({ shadow: !!on, shadowSince: on ? (s.shadowSince ?? Date.now()) : s.shadowSince });
+    const next = await lab.setSettings({ shadow: !!on, shadowSince: on ? (s.shadowSince ?? Date.now()) : s.shadowSince, ...(on ? {} : { scheduler: 'fsrs' }) });
+    if (!on) this.planning = false;
     this._ready = null;
     if (on) { navigator.storage?.persist?.().catch(() => {}); this.ensureReady().catch(() => {}); }
     return next;
+  }
+
+  async setScheduler(name) {
+    if (name !== 'rwkv') return lab.setSettings({ scheduler: 'fsrs' });
+    const why = this.schedulerBlock(await this.status());
+    if (why) throw new Error(why);
+    this.planning = true;
+    this.ensureReady().catch(() => {});
+    return lab.setSettings({ scheduler: 'rwkv' });
+  }
+  // Why RWKV can't schedule right now (null when it can). Takes what status() gave.
+  schedulerBlock(s) {
+    if (!s.weights) return 'Choose a weights file first';
+    if (!s.settings.shadow) return 'Turn on shadow mode first';
+    if (s.failed) return 'The lab stopped. Rebuild to start it again';
+    if (s.state === 'rebuilding') return 'Rebuild in progress';
+    if (s.state !== 'fresh' && s.state !== 'catching-up') return 'Rebuild needed';
+    return null;
+  }
+  // The review session asks this once at the start (and again after the lab screen changes the choice).
+  async wantsPlans() {
+    this.planning = (await lab.getSettings()).scheduler === 'rwkv';
+    if (this.planning) this.ensureReady().catch(() => {});     // start the worker while the first card is being read
+    return this.planning;
   }
 
   // -> { ok: true, info } | { ok: false, error }
@@ -83,8 +110,11 @@ class Lab {
     const check = validateWeights(parsed.tensors);
     if (!check.ok) return { ok: false, error: check.errors[0] };
     const sha = await sha256(bytes);
+    const old = await lab.get('weights', 'current');
     const rec = { id: 'current', bytes, sha256: sha, name: file.name, size: bytes.byteLength, format: parsed.format, addedAt: Date.now() };
     await lab.put('weights', rec, 'current');
+    if (old && old.sha256 !== sha) { const s = await lab.getSettings(); if (s.scheduler !== 'fsrs') await lab.setSettings({ scheduler: 'fsrs' }); }   // other weights: back to FSRS until rebuilt
+    this.planning = false;
     this._stop(); this.failed = false; this.stateName = null;
     navigator.storage?.persist?.().catch(() => {});
     return { ok: true, info: this._weightsInfo(rec) };
@@ -104,14 +134,17 @@ class Lab {
     if (!(await lab.labExists())) {        // nothing saved (yet, or removed): reading must not create the database
       return { weights: null, state: 'none', reason: null, news: 0, rows: 0, cards: 0, rebuiltAt: null, fallbacks: 0, settings: { ...lab.DEFAULT_SETTINGS }, failed: this.failed, persisted: true };
     }
-    const [w, settings, st] = await Promise.all([lab.get('weights', 'current'), lab.getSettings(), lab.get('meta', 'state')]);
+    const [w, st, fallbacks] = await Promise.all([lab.get('weights', 'current'), lab.get('meta', 'state'), lab.get('meta', 'fallbacks')]);
+    let settings = await lab.getSettings();
+    // No weights, or shadow mode off: RWKV can't be in charge, so the choice goes back to FSRS.
+    if (settings.scheduler === 'rwkv' && (!w || !settings.shadow)) { settings = await lab.setSettings({ scheduler: 'fsrs' }); this.planning = false; }
     const f = w ? await this.checkFresh() : { status: 'none' };
     let state = f.status;
     if (this.rebuilding) state = 'rebuilding';
     const persisted = navigator.storage?.persisted ? await navigator.storage.persisted().catch(() => true) : true;
     return {
       weights: this._weightsInfo(w), state, reason: f.reason || null, news: f.rows ? f.rows.length : 0,
-      rows: st?.rows ?? 0, cards: await lab.count('cards'), rebuiltAt: st?.rebuiltAt ?? null, fallbacks: st?.fallbacks ?? 0,
+      rows: st?.rows ?? 0, cards: await lab.count('cards'), rebuiltAt: st?.rebuiltAt ?? null, fallbacks: fallbacks ?? 0,
       settings, failed: this.failed, persisted
     };
   }
@@ -129,6 +162,7 @@ class Lab {
     let f = await this.checkFresh();
     if (f.status === 'catching-up') { await this._catchUp(f.rows); f = { status: 'fresh' }; }
     this.stateName = f.status;
+    if (f.status === 'fresh') this.sha = (await lab.get('weights', 'current'))?.sha256 || null;
     return f.status === 'fresh';
   }
   async _catchUp(rows) {
@@ -164,6 +198,32 @@ class Lab {
     } catch (err) { console.warn('RWKV lab:', err?.message || err); }
   }
 
+  // ---- scheduling (only when the owner chose RWKV (lab)) ----
+  // The days until the card should come back after Hard, Good and Easy, worked out before the card is flipped (review.js freezes the result).
+  // -> { cardId, lastReview, at, days: { 2, 3, 4 }, modelSha } or null (then FSRS schedules the card). Never throws.
+  async plan({ card, state, now = Date.now(), opts, decks = [] }) {
+    try {
+      this.lastPlan = null;                                    // (the last plan made, for the browser tests)
+      if (!this.planning || this.failed || !state || state.state !== 2 || !(opts?.maxInterval > 0) || !(opts?.retention > 0)) return null;
+      await this._chain;                                       // the last answer (and any undo) must have reached the worker first
+      if (!(await this.ensureReady()) || this.stateName !== 'fresh') return null;
+      const logs = await db.getCardLogs(card.id);
+      const ms = recentMs(logs);
+      const r = await this.call('whatIf', { log: { id: -1, cardId: card.id, timestamp: now, source: 'review', mode: 'flip', correct: true, ms, rating: 3, state: state.state },
+        card: slimCard(card), decks: slimDecks(decks), ms, target: opts.retention, maxDays: opts.maxInterval }, TIMEOUT.whatIf);
+      const days = r && r.days;
+      if (!days || ![2, 3, 4].every(g => Number.isFinite(days[g]) && days[g] > 0)) return null;
+      return (this.lastPlan = { cardId: card.id, lastReview: state.lastReview ?? null, at: now, days: { 2: days[2], 3: days[3], 4: days[4] }, modelSha: this.sha || (this.sha = (await lab.get('weights', 'current'))?.sha256 || null) });
+    } catch (err) { console.warn('RWKV lab:', err?.message || err); return null; }
+  }
+  // A card that should have been scheduled by RWKV went to FSRS instead; the Lab screen shows the count.
+  noteFallback() {
+    this._fb = (this._fb || Promise.resolve()).then(async () => {
+      try { await lab.put('meta', ((await lab.get('meta', 'fallbacks')) || 0) + 1, 'fallbacks'); } catch { /* the count is only for show */ }
+    });
+    return this._fb;
+  }
+
   // ---- rebuild ----
   // Replays the whole review log. -> { rows, cards, preds }. onProgress({ done, total }).
   async rebuild(onProgress = () => {}) {
@@ -197,9 +257,16 @@ class Lab {
   }
 
   async deleteAll() {
-    this._stop(); this.failed = false; this.stateName = null; this.rebuilding = false;
+    this._stop(); this.failed = false; this.stateName = null; this.rebuilding = false; this.planning = false;
     await lab.deleteLab();
   }
+}
+
+// The middle of the card's last five answer times (milliseconds), 8 seconds when there are none to go by.
+export function recentMs(logs) {
+  const v = (logs || []).filter(l => l.source === 'review' && Number.isFinite(l.ms) && l.ms > 0).sort((a, b) => a.timestamp - b.timestamp).slice(-5).map(l => l.ms).sort((a, b) => a - b);
+  if (!v.length) return 8000;
+  return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
 }
 
 let single = null;
@@ -207,3 +274,11 @@ export const getLab = () => single || (single = new Lab());
 // What Review and Practice call (see the hooks there).
 export const afterAnswer = args => getLab().afterAnswer(args);
 export const afterUndo = logId => getLab().afterUndo(logId);
+export const wantsPlans = () => getLab().wantsPlans();
+export const plan = args => getLab().plan(args);
+export const isPlanning = () => getLab().planning === true;
+export const noteFallback = () => getLab().noteFallback();
+export { PLAN_MS };
+
+// For the browser tests only (this build only): stop the worker the way a crash would, so the next card has to fall back to FSRS.
+if (LAB_BUILD && typeof window !== 'undefined') window.__rwkvBreak = () => getLab()._fail(new Error('Broken on purpose for a test.'));

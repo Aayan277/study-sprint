@@ -41,8 +41,18 @@ export async function renderLab(el) {
     </section>
 
     <section class="section">
-      <label class="adv-row switch-row"><span><b id="labShadowLbl">Shadow mode</b> ${helpLink('rwkv-lab', '?', 'About shadow mode')}</span>
+      <label class="adv-row switch-row lab-switch"><span><b id="labShadowLbl">Shadow mode</b> ${helpLink('rwkv-lab', '?', 'About shadow mode')}</span>
         <input id="labShadow" type="checkbox" class="switch" aria-labelledby="labShadowLbl" disabled></label>
+    </section>
+
+    <section class="section" aria-labelledby="labSH">
+      <div class="lab-h"><h2 id="labSH">Scheduler</h2> ${helpLink('rwkv-scheduler', '?', 'About the RWKV scheduler')}</div>
+      <div class="chips" role="radiogroup" aria-labelledby="labSH" id="labSched">
+        <label class="chip"><input type="radio" name="labSched" value="fsrs" checked><span>FSRS</span></label>
+        <label class="chip"><input type="radio" name="labSched" value="rwkv" disabled><span>RWKV (lab)</span></label>
+      </div>
+      <p class="lab-warn" id="labSWarn" role="status" hidden></p>
+      <p class="lab-line" id="labSFb" hidden></p>
     </section>
 
     <section class="section" aria-labelledby="labCH">
@@ -83,6 +93,12 @@ export async function renderLab(el) {
     const sw = $('labShadow');
     sw.disabled = !w; sw.checked = !!(w && s.settings.shadow);
     $('labDelete').disabled = false;
+    const block = lab.schedulerBlock(s), on = s.settings.scheduler === 'rwkv';
+    el.querySelector('#labSched input[value=fsrs]').checked = !on;
+    const rw = el.querySelector('#labSched input[value=rwkv]');
+    rw.checked = on; rw.disabled = !!block && !on;
+    show('labSWarn', block ? (on ? `${block}. FSRS is scheduling for now` : block) : false);
+    show('labSFb', on && s.fallbacks > 0 ? `FSRS stepped in ${s.fallbacks} time${s.fallbacks === 1 ? '' : 's'}` : false);
     await drawTable();
   }
 
@@ -126,6 +142,13 @@ export async function renderLab(el) {
     try { await lab.setShadow($('labShadow').checked); } catch (e) { err(e.message); }
     await refresh();
   };
+
+  $('labSched').addEventListener('change', async e => {
+    if (e.target.name !== 'labSched') return;
+    err('');
+    try { await lab.setScheduler(e.target.value); } catch (x) { err(x.message); }
+    await refresh();
+  });
 
   $('labChips').addEventListener('change', e => { if (e.target.name === 'labSince') { since = e.target.value === 'shadow'; drawTable(); } });
 

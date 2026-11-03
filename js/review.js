@@ -5,7 +5,7 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, REVIEW, RELEARNING } from './queue.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
 import { checkTyped } from './match.js';
@@ -128,7 +128,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
   labHook = null;
-  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on ? import('./rwkv-lab.js') : null).then(m => { labHook = m; }).catch(() => {});
+  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on ? import('./rwkv-lab.js') : null).then(async m => { if (m) await m.wantsPlans().catch(() => {}); labHook = m; if (m && R?.current && !R.flipped) preparePlan(); }).catch(() => {});
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -157,8 +157,34 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
 // and evening out the reviews.
 const schedFor = (card, now = Date.now()) => {
   const deck = deckOf(card);
-  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance };
+  // rwkvPlan: only when the lab's scheduler (opt-in) made a plan for this very card; frozen when the buttons are drawn (see settlePlan).
+  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance, ...(R.rwkvPlan && R.rwkvPlan.cardId === card.id ? { rwkvPlan: R.rwkvPlan } : {}) };
 };
+
+// ---- RWKV lab scheduler (opt-in; every step is skipped unless the owner chose it on the Lab screen) ----
+// While the question is read, the lab works out the gaps for a card that is in review. When the card is turned over, the plan is waited for
+// at most PLAN_MS and then frozen: the buttons and the saved due date both come from it, so they agree. No plan (late, no memory of the card, not
+// fresh, the worker stopped...) means FSRS schedules the card, silently; the lab counts it.
+function preparePlan() {
+  R.rwkvPrep = R.rwkvSettle = null; R.rwkvPlan = null;
+  const card = R.current?.card, state = card && R.statesById.get(card.id);
+  if (!labHook?.plan || !labHook.isPlanning() || !state || state.state !== REVIEW || !R.current) return;
+  const now = Date.now();
+  R.rwkvPrep = labHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks });
+}
+// -> a promise that is done once the plan is frozen (or known to be missing). Safe to call again; the plan never changes after the first call.
+function settlePlan() {
+  if (!R.rwkvPrep) return null;
+  if (!R.rwkvSettle) {
+    const prep = R.rwkvPrep, id = R.current.card.id;
+    R.rwkvSettle = Promise.race([prep, new Promise(r => setTimeout(() => r(null), labHook.PLAN_MS))]).then(plan => {
+      if (R?.current?.card.id !== id || R.rwkvPrep !== prep) return;
+      R.rwkvPlan = plan || null;
+      if (!plan) labHook.noteFallback();
+    });
+  }
+  return R.rwkvSettle;
+}
 
 const deckOf = card => R.effective.get(card.deckId);
 // A step-by-step card: its back has "Step 1: ... Step 2: ..." lines (steps.js). An elements card has "Element 1: ..." lines and
@@ -197,6 +223,7 @@ function nextCard(el) {
   if (!R.current) return finish(el);
   // FSRS-7 (beta): get this card's FSRS-7 memory ready (rebuilt from its history the first time), while you read the question.
   R.prep = null;
+  preparePlan();
   if (usesFsrs7(R.settings)) {
     const p = prepare7([R.statesById.get(R.current.card.id)], db.getCardLogs).catch(err => console.error(err));
     R.prep = { id: R.current.card.id, done: false, p };
@@ -491,8 +518,15 @@ function flip(el) {
   back.removeAttribute('aria-hidden'); back.inert = false;
   if (R.typed) back.setAttribute('aria-describedby', 'rvTyped'); else back.removeAttribute('aria-describedby');      // "Correct" / "Not quite" is read when focus lands here
   $('typeForm')?.remove();
-  $('ratebar').innerHTML = backBarHTML();
-  wireRatebar(el);
+  const settling = settlePlan();
+  if (settling) {
+    // RWKV lab scheduler: the buttons are drawn once the plan is frozen (at most PLAN_MS). 1–4 meanwhile wait for it too (answer).
+    const card = R.current.card.id;
+    settling.then(() => { if (R?.current?.card.id === card && R.flipped && $('ratebar')) { $('ratebar').innerHTML = backBarHTML(); wireRatebar(el); ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' }); } });
+  } else {
+    $('ratebar').innerHTML = backBarHTML();
+    wireRatebar(el);
+  }
   // FSRS-7 and the card's memory is still being rebuilt: draw the buttons again with the right intervals when it is ready.
   if (R.prep && !R.prep.done) {
     const prep = R.prep;
@@ -631,6 +665,7 @@ async function answer(el, rating) {
   R.busy = true;
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
+  try { await settlePlan(); } catch { /* no plan: FSRS schedules */ }
   const now = Date.now();
   if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
   const next = rate(id, prev, rating, schedFor(item.card, now), now);
@@ -704,6 +739,7 @@ async function undo(el) {
     stopSound();
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
     R.shownAt = Date.now(); R.answerMs = 0;
+    preparePlan();
     renderSession(el, true);
     // Said aloud (the toast is a live region): the card is back, so a screen-reader user knows the rating was taken back.
     const front = spokenCard(String(u.item.card.front || '').replace(/<[^>]*>/g, ' '), '', 41);

@@ -39,7 +39,7 @@ export const RATINGS = [
 // (evening out the reviews runs without fuzz; FSRS-7 mode also steps the FSRS-6 memory without it) and they must not push each other out.
 const cached = new Map();
 function scheduler(opts) {
-  const { maxDue, balance, fsrsVersion, w7, ...lib } = opts;      // maxDue, balance and the FSRS-7 settings are applied here, not by the library
+  const { maxDue, balance, fsrsVersion, w7, rwkvPlan, ...lib } = opts;      // maxDue, balance, the FSRS-7 settings and the lab's plan are applied here, not by the library (and never part of the cache key)
   const key = JSON.stringify(lib);
   let f = cached.get(key);
   if (f) { cached.delete(key); cached.set(key, f); return f; }        // (most recently used last)
@@ -145,6 +145,15 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const { card } = opts.fsrsVersion === 7
     ? { card: rate7(cardId, state, rating, balanced ? { ...opts, fuzz: false } : opts, now, sixAfter(state, opts, now)) }
     : scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
+  // RWKV lab (opt-in, js/rwkv-lab.js): a plan made for this very card and answer moment sets the gap after Hard, Good and Easy on a card that
+  // was already in review. FSRS has just run, so the card's memory numbers, steps, reps and lapses stay FSRS's; Again and learning steps are untouched.
+  // The max interval, evening out and the exam limit still apply below. Without a plan (the normal case) nothing here changes.
+  const plan = opts.rwkvPlan;
+  if (plan && plan.cardId === cardId && plan.lastReview === (state?.lastReview ?? null) && Math.abs(now - plan.at) < 3600000
+      && state?.state === 2 && card.state === 2 && Number.isFinite(plan.days?.[rating]) && plan.days[rating] > 0) {
+    card.scheduled_days = Math.min(plan.days[rating], opts.maxInterval);
+    card.due = new Date(now + card.scheduled_days * DAY);
+  }
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
   let counted = false;                          // did balancing add this card to the load?
