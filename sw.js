@@ -9,7 +9,7 @@
 // Bump CACHE on every release that changes any app file, so phones throw the old copy away (not only when the
 // list of files below changes: old and new modules would mix). tests/sw.test.js fails until you do, and
 // `node tests/update-sw-hash.mjs` then saves the new fingerprint of the app files here.
-const CACHE = 'study-sprint-lab-v1';
+const CACHE = 'study-sprint-lab-v2';
 // files-hash: f21e8bd9acf88fe7
 const CORE = [
   './', 'index.html', 'privacy.html', 'terms.html', 'manifest.webmanifest', 'css/styles.css', 'css/clinical.css',
