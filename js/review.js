@@ -5,7 +5,7 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, RELEARNING } from './queue.js';
+import { buildQueue, cleanLearnOrder, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, RELEARNING } from './queue.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
 import { checkTyped } from './match.js';
@@ -123,7 +123,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue, cleanLearnOrder(data.settings.learnOrder));
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -136,7 +136,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     effective: new Map(data.decks.map(d => [d.id, effectiveDeck(data.decks, d.id)])),
     deckIds: [...new Set(cards.map(c => c.deckId))],
     statesById: data.statesById,
-    queue, waiting,
+    queue, waiting, learnOrder: cleanLearnOrder(data.settings.learnOrder),
     current: null, flipped: false, typed: null, suggest: null,
     gloss: hasTerms(data.settings),             // does the glossary have terms to underline? (glossary-view.js is only loaded then)
     shownAt: 0, answerMs: 0, busy: false,
@@ -186,7 +186,7 @@ function playSide(card, side) {
 function nextCard(el) {
   stopSpeaking();
   stopSound();
-  R.current = takeNext(R.queue, R.waiting);
+  R.current = takeNext(R.queue, R.waiting, Date.now(), R.learnOrder);
   R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);

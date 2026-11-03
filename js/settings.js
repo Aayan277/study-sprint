@@ -34,6 +34,7 @@ import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 import { contactHTML, legalLinksHTML } from './legal.js';
 import { helpLink } from './help.js';
+import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
@@ -106,6 +107,11 @@ export async function renderSettings(el) {
       <div class="set-row">
         <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
+      </div>
+      <div class="adv-row" id="learnOrderRow"><b id="learnOrderLbl">Learning cards</b> ${helpLink('learn-order', '?', 'About where learning cards go')}
+        <div class="chips" role="radiogroup" aria-labelledby="learnOrderLbl" id="learnOrderChips">
+          ${LEARN_ORDERS.map(v => `<label class="chip"><input type="radio" name="learnOrder" value="${v}" ${cleanLearnOrder(app.settings.learnOrder) === v ? 'checked' : ''}><span>${{ before: 'Before reviews', mixed: 'Mixed with reviews', after: 'After reviews' }[v]}</span></label>`).join('')}
+        </div>
       </div>
       <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
         <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
@@ -470,6 +476,10 @@ function wireAdvanced(el) {
     $('advanced').open = true;
   };
   // Scheduler: FSRS-6 or FSRS-7 (beta). Synced; cards keep their history and both memories (srs7.js), so switching back is safe.
+  el.querySelectorAll('input[name="learnOrder"]').forEach(r => r.addEventListener('change', () => {
+    app.settings.learnOrder = cleanLearnOrder(r.value);
+    db.setSetting('learnOrder', app.settings.learnOrder);        // synced; the next Review session uses it
+  }));
   el.querySelectorAll('input[name="fsrsVersion"]').forEach(r => r.addEventListener('change', async () => {
     app.settings.fsrsVersion = +r.value === 7 ? 7 : 6;
     await db.setSetting('fsrsVersion', app.settings.fsrsVersion);
