@@ -202,7 +202,8 @@ export async function renderSettings(el) {
       </details>
       <details class="advanced" id="labSection">
         <summary>Lab</summary>
-        <div class="adv-row"><button class="btn ghost small" type="button" id="labOpen">Open RWKV lab</button> ${helpLink('rwkv-lab', '?', 'About the RWKV lab')}</div>
+        <div class="adv-row"><b>RWKV lab</b> ${helpLink('rwkv-lab', '?', 'About the RWKV lab')}
+          <div><button class="btn ghost small" type="button" id="labOpen">Open RWKV lab</button></div></div>
       </details>
     </section>
 
