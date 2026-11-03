@@ -53,21 +53,38 @@ export async function del(store, key) { return done((await openLab()).transactio
 // Several writes in one all-or-nothing transaction.
 //   puts     { store: [[key, value], ...] }  (for preds, [value, ...])
 //   deletes  { store: [key, ...] }
-export async function commit(puts = {}, deletes = {}) {
+//   owner    (optional) a generation number: the writes happen only if meta 'gen' still has this value, so a second tab's worker that
+//            took over the lab can't be overwritten by this one (it throws 'superseded' and nothing is written)
+export async function commit(puts = {}, deletes = {}, owner = null) {
   const names = [...new Set([...Object.keys(puts), ...Object.keys(deletes)])].filter(n => (puts[n]?.length || deletes[n]?.length));
   if (!names.length) return;
+  if (owner !== null && !names.includes('meta')) names.push('meta');
   const tx = (await openLab()).transaction(names, 'readwrite');
-  for (const n of names) {
-    const os = tx.objectStore(n);
-    for (const k of deletes[n] || []) os.delete(k);
-    for (const item of puts[n] || []) { if (n === 'preds') os.put(item); else os.put(item[1], item[0]); }
-  }
-  await finished(tx);
+  const write = () => {
+    for (const n of names) {
+      const os = tx.objectStore(n);
+      for (const k of deletes[n] || []) os.delete(k);
+      for (const item of puts[n] || []) { if (n === 'preds') os.put(item); else os.put(item[1], item[0]); }
+    }
+  };
+  let superseded = false;
+  if (owner === null) write();
+  else tx.objectStore('meta').get('gen').onsuccess = e => { if ((e.target.result ?? 0) !== owner) { superseded = true; tx.abort(); } else write(); };
+  try { await finished(tx); } catch (err) { if (superseded) throw new Error('superseded'); throw err; }
+}
+// A worker takes over the lab: -> its generation number (one more than the last).
+export async function takeOver() {
+  const os = (await openLab()).transaction('meta', 'readwrite');
+  const store = os.objectStore('meta');
+  const g = ((await done(store.get('gen'))) ?? 0) + 1;
+  store.put(g, 'gen');
+  await finished(os);
+  return g;
 }
 
 // Many writes to one store, BATCH to a transaction.  items: [[key, value], ...] (preds: [value, ...])
-export async function putMany(store, items) {
-  for (let i = 0; i < items.length; i += BATCH) await commit({ [store]: items.slice(i, i + BATCH) });
+export async function putMany(store, items, owner = null) {
+  for (let i = 0; i < items.length; i += BATCH) await commit({ [store]: items.slice(i, i + BATCH) }, {}, owner);
 }
 
 // Forget the model's memory of the cards (and the comparison records), keeping the weights and settings.
@@ -80,11 +97,13 @@ export async function clearStates() {
 
 export async function deleteLab() {
   if (dbp) { try { (await dbp).close(); } catch { /* it never opened */ } dbp = null; }
+  // 'blocked' only means another tab still has the database open; it closes when it hears about the delete (see openLab), and the
+  // delete then goes through. So: wait for success, and complain only if nothing happened for a while.
   await new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(LAB_DB);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('Close other Study Sprint tabs and try again.'));
+    const timer = setTimeout(() => reject(new Error('Close other Study Sprint tabs and try again.')), 8000);
+    req.onsuccess = () => { clearTimeout(timer); resolve(); };
+    req.onerror = () => { clearTimeout(timer); reject(req.error); };
   });
 }
 
@@ -100,7 +119,7 @@ export async function labExists() {
     const req = indexedDB.open(LAB_DB);
     req.onupgradeneeded = () => { existed = false; req.transaction.abort(); };
     req.onsuccess = () => { req.result.close(); resolve(existed); };
-    req.onerror = () => resolve(false);
+    req.onerror = e => { e.preventDefault?.(); resolve(false); };      // (the aborted creation is an expected error: it must not reach the console)
     req.onblocked = () => resolve(false);
   });
 }

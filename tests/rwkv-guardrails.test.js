@@ -49,14 +49,32 @@ test('the fixture holds our inputs only, never an output of the model', () => {
   assert.deepEqual(seen, []);
 });
 
+const walkFiles = (dir, base = '') => fs.readdirSync(new URL(dir, root), { withFileTypes: true })
+  .flatMap(d => d.isDirectory() ? walkFiles(`${dir}${d.name}/`, base) : [`${dir}${d.name}`]);
+
 test('lab code makes no network requests', () => {
-  const files = fs.readdirSync(new URL('js/', root)).filter(f => /^rwkv-.*\.js$/.test(f));
+  // every lab file under js/, in any subfolder, and the files that register or load it
+  const files = walkFiles('js/').filter(f => /(^|\/)rwkv[^/]*\.js$/.test(f) || /\/rwkv[^/]*\//.test(f));
   assert.ok(files.length > 0);
   for (const f of files) {
-    const src = fs.readFileSync(new URL('js/' + f, root), 'utf8');
+    const src = fs.readFileSync(new URL(f, root), 'utf8');
     for (const bad of ['fetch(', 'XMLHttpRequest', 'importScripts(', 'http', 'WebSocket', 'sendBeacon', 'EventSource']) assert.ok(!src.includes(bad), `${f} contains ${bad}`);
   }
+  for (const f of ['sw.js', 'index.html']) {
+    for (const line of fs.readFileSync(new URL(f, root), 'utf8').split('\n')) assert.ok(!(/rwkv/i.test(line) && /https?:|\/\/(?!\/)/.test(line.replace(/^\s*\/\/.*$/, ''))), `${f} mentions the lab next to an address: ${line.trim().slice(0, 100)}`);
+  }
 });
+
+test('the network bypass for the sync tests only works in Node', async () => {
+  const src = fs.readFileSync(new URL('js/rwkv-flag.js', root), 'utf8');
+  assert.match(src, /typeof process !== 'undefined'/);
+  assert.match(src, /process\.versions\?\.node/);
+  const { labNetworkBlocked } = await import('../js/rwkv-flag.js');
+  const had = globalThis.__SS_TEST_NETWORK;
+  globalThis.__SS_TEST_NETWORK = false;
+  try { assert.equal(labNetworkBlocked(), true); } finally { if (had === undefined) delete globalThis.__SS_TEST_NETWORK; else globalThis.__SS_TEST_NETWORK = had; }
+});
+
 
 test('no lab setting is synced or backed up with the main settings', () => {
   for (const k of SYNCED_SETTINGS) assert.ok(!/rwkv|lab|shadow/i.test(k), k);
@@ -86,7 +104,7 @@ test('the network layer itself refuses in the lab build, so an account signed in
   assert.match(supaSrc, /async function call\([^)]*\) \{\n  labOff\(\);/);
   assert.match(supaSrc, /const labOff = \(\) => \{ if \(labNetworkBlocked\(\)\) throw/);
   // the only way past the block is a global that a page never has (it has `document`) and that nothing in the app sets
-  assert.match(fs.readFileSync(new URL('js/rwkv-flag.js', root), 'utf8'), /LAB_BUILD && !\(typeof document === 'undefined' && globalThis\.__SS_TEST_NETWORK === true\)/);
+  assert.match(fs.readFileSync(new URL('js/rwkv-flag.js', root), 'utf8'), /LAB_BUILD && !\(typeof document === 'undefined' && typeof process !== 'undefined' && !!process\.versions\?\.node && globalThis\.__SS_TEST_NETWORK === true\)/);
   assert.deepEqual(fs.readdirSync(new URL('js/', root)).filter(f => /\.js$/.test(f) && /__SS_TEST_NETWORK/.test(fs.readFileSync(new URL('js/' + f, root), 'utf8'))), ['rwkv-flag.js']);
   assert.match(supaSrc, /async function storage\([^)]*\) \{\n  labOff\(\);/);
   assert.equal((supaSrc.match(/\bfetch\(/g) || []).length, 2, 'every fetch in supa.js sits behind labOff');

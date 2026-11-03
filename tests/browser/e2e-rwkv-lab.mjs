@@ -301,7 +301,7 @@ if (!(await page.$eval('#labShadow', e => e.checked))) await page.click('#labSha
 await waitFor(() => run(async () => (await (await import('./js/rwkv-labdb.js')).getSettings()).shadow));
 ok(errors.length === 0, 'no page or console errors in the scheduler checks ' + errors.join(' | '));
 
-// ---- 12. answers made while shadow was off are caught up, not lost; an outside change makes the state stale ----
+// ---- 12. a review deleted outside the lab makes the state out of date (and shadow mode off then on again changes nothing about that) ----
 await page.click('#labShadow'); await sleep(300);
 const tamper = await run(async () => {          // a review in the main log that the lab never saw
   const db = await import('./js/db.js');
@@ -318,12 +318,24 @@ await page.waitForFunction(() => !document.getElementById('labMWarn').hidden, nu
 ok(/Out of date: rebuild needed/.test(await page.textContent('#labMWarn')), 'a review deleted outside the lab shows "Out of date: rebuild needed"');
 await page.click('#labShadow'); await sleep(300);
 
-// ---- 13. remove everything ----
+// ---- 13. remove everything (a second window has a review session open and answers a card after the removal) ----
+await makeDue();
+const page2 = await ctx.newPage();
+page2.on('pageerror', e => errors.push('pageerror(2) ' + e.message));
+page2.on('console', m => { if (m.type() === 'error') errors.push('console(2) ' + m.text()); });
+await page2.goto(URL + '#/decks'); await page2.waitForSelector('.deck');
+await page2.click('.tab[data-tab=today]'); await page2.waitForSelector('#startBtn'); await page2.click('#startBtn'); await page2.waitForSelector('#flash .flash-front');
+await sleep(1200);
+await page2.keyboard.press('Space'); await page2.waitForSelector('.rate');
 await page.click('#labDelete');
 ok(await page.$eval('#labConfirm', e => !e.hidden && /not touched/.test(e.textContent)), 'Remove asks first, and says the cards and reviews are not touched');
 await page.click('#labYes');
 await page.waitForFunction(() => document.getElementById('labWInfo').hidden, null, { timeout: 8000 });
 ok(!(await run(async () => (await indexedDB.databases()).some(d => d.name === 'study-sprint-rwkv-lab'))), 'the lab database is gone');
+ok(await page.$eval('#labErr', e => e.hidden), 'Remove did not complain about other windows, although one still had the lab open');
+await page2.keyboard.press('3'); await sleep(2000);
+ok(!(await run(async () => (await indexedDB.databases()).some(d => d.name === 'study-sprint-rwkv-lab'))), 'an answer in the other window after Remove does not bring the lab database back');
+await page2.close();
 ok((await page.textContent('#labMInfo')).startsWith('0 cards') && await page.$eval('#labShadow', e => e.disabled), 'the screen shows an empty lab');
 ok(Object.keys(await states()).length === 5 && (await run(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length)) >= 17, 'cards and reviews are untouched');
 

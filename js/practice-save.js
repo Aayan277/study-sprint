@@ -18,9 +18,14 @@ export const practicedToday = logs => new Set(logs.filter(l => (l.source === 'pl
 
 // RWKV lab (shadow mode): tell the lab about an answer that changed the schedule. Does nothing unless the lab database exists and shadow
 // mode is on; never waits for the lab and never throws.
+// Every row goes (also the ones that only logged an answer), so the lab's count of the review log stays exact. The lab is looked up once and
+// remembered (rwkv-gate.js), so the answers reach it in the order they were saved.
 function labShadow(logId, log, card, decks) {
-  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on && import('./rwkv-lab.js'))
-    .then(m => m && m.afterAnswer({ logId, log, card, decks })).catch(() => {});
+  import('./rwkv-gate.js').then(g => g.labModule()).then(m => m && m.afterAnswer({ logId, log, card, decks })).catch(() => {});
+}
+// An answer saved earlier is taken back (play.js "I was right"): the lab hears about it too.
+export function labForget(logId) {
+  import('./rwkv-gate.js').then(g => g.labModule()).then(m => m && m.afterUndo(logId)).catch(() => {});
 }
 
 // Save one answer.
@@ -67,6 +72,7 @@ export async function savePracticeAnswer(data, entry, { source = 'play', qtype, 
       else decision = 'not-due';
       log.reason = decision;
       entry.logId = await db.addLog(log);
+      labShadow(entry.logId, log, entry.card, data.decks);
     }
     // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
     if (next) {
@@ -80,6 +86,7 @@ export async function savePracticeAnswer(data, entry, { source = 'play', qtype, 
     }
   } else {
     entry.logId = await db.addLog(log);
+    labShadow(entry.logId, log, entry.card, data.decks);
   }
   entry.rating = rating;
   entry.decision = decision;

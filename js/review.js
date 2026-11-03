@@ -128,7 +128,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
   const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
   labHook = null;
-  import('./rwkv-gate.js').then(g => g.labActive()).then(on => on ? import('./rwkv-lab.js') : null).then(async m => { if (m) await m.wantsPlans().catch(() => {}); labHook = m; if (m && R?.current && !R.flipped) preparePlan(); }).catch(() => {});
+  import('./rwkv-gate.js').then(g => { g.resetGate(); return g.labModule(); }).then(async m => { if (m) await m.wantsPlans().catch(() => {}); labHook = m; if (m && R?.current && !R.flipped) preparePlan(); }).catch(() => {});
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -668,7 +668,8 @@ async function answer(el, rating) {
   try { await settlePlan(); } catch { /* no plan: FSRS schedules */ }
   const now = Date.now();
   if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
-  const next = rate(id, prev, rating, schedFor(item.card, now), now);
+  const opts = schedFor(item.card, now);
+  const next = rate(id, prev, rating, opts, now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
     mode: R.typed ? 'typing' : 'flip',
@@ -683,7 +684,7 @@ async function answer(el, rating) {
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
-    labHook?.afterAnswer({ logId, log, card: item.card, prev, opts: schedFor(item.card, now), decks: R.decks });
+    labHook?.afterAnswer({ logId, log, card: item.card, prev, opts, decks: R.decks });
     if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.

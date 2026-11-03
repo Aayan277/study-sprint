@@ -30,7 +30,7 @@ export async function renderLab(el) {
     </section>
 
     <section class="section" aria-labelledby="labMH">
-      <h2 id="labMH">Memory state</h2>
+      <div class="lab-h"><h2 id="labMH">Memory state</h2> ${helpLink('rwkv-rebuild', '?', 'About rebuilding the memory')}</div>
       <p class="lab-line mono" id="labMInfo"></p>
       <p class="lab-warn" id="labMWarn" role="status" hidden></p>
       <div class="lab-row">

@@ -6,23 +6,34 @@ import { parseWeights, validateWeights } from './rwkv-weights.js';
 import { KNOWN_MODELS, STATE_FORMAT, FEATURE_VERSION } from './rwkv-spec.js';
 import { freshness } from './rwkv-fresh.js';
 import { compare } from './rwkv-metrics.js';
-import { forgettingCurve } from './fsrs-fit.js';
-import { deltaDays } from './fsrs-data.js';
+import { resetGate } from './rwkv-gate.js';
 import { schedulerOptions } from './sched-settings.js';
 import { LAB_BUILD } from './rwkv-flag.js';
 import * as db from './db.js';
 
 const PLAN_MS = 300;                 // how long the card's buttons wait for a plan (review.js); after that FSRS schedules the card
+const MAX_WEIGHTS_BYTES = 20 * 1024 * 1024;        // the real files are 0.4 to 1.4 MB
+const MAX_TIMEOUTS = 3;                            // this many answers in a row that the worker never replied to: the lab stops (FSRS carries on)
 const TIMEOUT = { review: 5000, whatIf: 2000, init: 30000, catchup: 120000, flush: 10000, undo: 5000 };
 const sha256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
 const slimDecks = decks => (decks || []).map(d => ({ id: d.id, options: !!d.options }));
 const slimCard = c => ({ id: c.id, deckId: c.deckId, noteId: c.noteId });
+// Every review-log id and how many there are. The lab compares this with what it has been told (rwkv-fresh.js).
+async function logFingerprint() {
+  const d = await db.openDB();
+  return new Promise((resolve, reject) => {
+    const q = d.transaction('reviewLog').objectStore('reviewLog').getAllKeys();
+    q.onsuccess = () => { let idSum = 0; for (const k of q.result) idSum += k; resolve({ count: q.result.length, idSum }); };
+    q.onerror = () => reject(q.error);
+  });
+}
 const slimLog = l => ({ id: l.id, cardId: l.cardId, timestamp: l.timestamp, source: l.source, applied: l.applied, rating: l.rating, ms: l.ms, state: l.state });
 
 class Lab {
   constructor() {
     this.worker = null; this.pending = new Map(); this.nextId = 1;
-    this.failed = false; this.rebuilding = false; this.planning = false;
+    this.failed = false; this.rebuilding = false; this.planning = false; this.timeouts = 0;
+    this.mirror = null;             // { count, idSum }: the log as the lab knows it (kept in step with every answer and undo it is told about)
     this.stateName = null;          // 'fresh' once the memory is in step with the log
     this._ready = null; this._inited = null;
     this._chain = Promise.resolve();         // answers and undos are handed over in the order they happened
@@ -37,10 +48,11 @@ class Lab {
     const w = new Worker(new URL('./rwkv-worker.js', import.meta.url), { type: 'module' });
     w.onmessage = e => {
       const m = e.data || {}, p = this.pending.get(m.id);
+      if (m.type === 'error' && /superseded/.test(m.message || '')) { this._fail(new Error('Another tab is using the lab.')); return; }
       if (!p) { if (m.type === 'error' && m.id === 0) console.warn('RWKV lab:', m.message); return; }
       if (m.type === 'progress') { p.onProgress?.(m); return; }
       this.pending.delete(m.id); clearTimeout(p.timer);
-      if (m.type === 'done') p.resolve(m.result); else p.reject(new Error(m.message));
+      if (m.type === 'done') { this.timeouts = 0; p.resolve(m.result); } else p.reject(new Error(m.message));
     };
     w.onerror = e => { e.preventDefault?.(); this._fail(new Error(e.message || 'The lab worker stopped.')); };
     this.worker = w;
@@ -50,7 +62,10 @@ class Lab {
     const w = this._spawn();
     return new Promise((resolve, reject) => {
       const id = this.nextId++;
-      const timer = timeoutMs ? setTimeout(() => { this.pending.delete(id); reject(new Error('The lab did not answer in time.')); }, timeoutMs) : 0;
+      const timer = timeoutMs ? setTimeout(() => {
+        this.pending.delete(id); reject(new Error('The lab did not answer in time.'));
+        if (++this.timeouts >= MAX_TIMEOUTS) this._fail(new Error('The lab stopped answering.'));
+      }, timeoutMs) : 0;
       this.pending.set(id, { resolve, reject, timer, onProgress });
       w.postMessage({ id, type, ...payload });
     });
@@ -72,7 +87,7 @@ class Lab {
     const s = await lab.getSettings();
     const next = await lab.setSettings({ shadow: !!on, shadowSince: on ? (s.shadowSince ?? Date.now()) : s.shadowSince, ...(on ? {} : { scheduler: 'fsrs' }) });
     if (!on) this.planning = false;
-    this._ready = null;
+    this._ready = null; resetGate();
     if (on) { navigator.storage?.persist?.().catch(() => {}); this.ensureReady().catch(() => {}); }
     return next;
   }
@@ -103,6 +118,7 @@ class Lab {
 
   // -> { ok: true, info } | { ok: false, error }
   async loadWeightsFile(file) {
+    if (file.size > MAX_WEIGHTS_BYTES) return { ok: false, error: 'This file is too big to be a weights file.' };
     let bytes;
     try { bytes = await file.arrayBuffer(); } catch { return { ok: false, error: 'This file could not be read.' }; }
     let parsed;
@@ -114,7 +130,7 @@ class Lab {
     const rec = { id: 'current', bytes, sha256: sha, name: file.name, size: bytes.byteLength, format: parsed.format, addedAt: Date.now() };
     await lab.put('weights', rec, 'current');
     if (old && old.sha256 !== sha) { const s = await lab.getSettings(); if (s.scheduler !== 'fsrs') await lab.setSettings({ scheduler: 'fsrs' }); }   // other weights: back to FSRS until rebuilt
-    this.planning = false;
+    this.planning = false; resetGate();
     this._stop(); this.failed = false; this.stateName = null;
     navigator.storage?.persist?.().catch(() => {});
     return { ok: true, info: this._weightsInfo(rec) };
@@ -122,12 +138,19 @@ class Lab {
   _weightsInfo(rec) { return rec ? { name: rec.name, size: rec.size, sha: rec.sha256, format: rec.format, known: KNOWN_MODELS[rec.sha256] || null } : null; }
 
   // ---- is the saved memory in step with the review log? ----
-  async checkFresh() {
+  // except: the log row of the answer being handed over right now (the worker is about to get it as a live answer, so it is left out here)
+  async checkFresh(except = null) {
     const [st, w] = await Promise.all([lab.get('meta', 'state'), lab.get('weights', 'current')]);
     if (!w || !st) return { status: 'none' };
-    const count = await db.count('reviewLog');
-    const newRows = st.rebuilding ? [] : await db.getLogsSince(st.lastTs);
-    return freshness(st, { sha: w.sha256, stateFormat: STATE_FORMAT, featureVersion: FEATURE_VERSION, count, newRows });
+    let { count, idSum } = await logFingerprint();
+    let newRows = st.rebuilding ? [] : await db.getLogsSince(st.lastTs);
+    if (except !== null) {
+      const ex = newRows.find(r => r.id === except);
+      if (ex) { newRows = newRows.filter(r => r.id !== except); count--; idSum -= except; }
+    }
+    const f = freshness(st, { sha: w.sha256, stateFormat: STATE_FORMAT, featureVersion: FEATURE_VERSION, count, idSum, newRows });
+    if (f.status === 'fresh') this.mirror = { count, idSum };
+    return { ...f, fp: { count, idSum } };
   }
 
   async status() {
@@ -150,17 +173,18 @@ class Lab {
   }
 
   // ---- getting ready to follow live answers ----
-  ensureReady() {
+  ensureReady(except = null) {
     if (this.failed) return Promise.resolve(false);
-    if (!this._ready) this._ready = this._boot().catch(err => { this._fail(err); return false; });
+    if (!this._ready) this._ready = this._boot(except).catch(err => { this._fail(err); return false; });
     return this._ready;
   }
-  async _boot() {
+  async _boot(except = null) {
+    if (!(await lab.labExists())) { this._ready = null; return false; }      // removed (maybe in another tab): never bring the database back
     const [s, w] = await Promise.all([lab.getSettings(), lab.get('weights', 'current')]);
     if (!s.shadow || !w) { this._ready = null; return false; }
     await this._start();
-    let f = await this.checkFresh();
-    if (f.status === 'catching-up') { await this._catchUp(f.rows); f = { status: 'fresh' }; }
+    let f = await this.checkFresh(except);
+    if (f.status === 'catching-up') { await this._catchUp(f.rows); f = { status: 'fresh' }; await this._remirror(except); }
     this.stateName = f.status;
     if (f.status === 'fresh') this.sha = (await lab.get('weights', 'current'))?.sha256 || null;
     return f.status === 'fresh';
@@ -169,33 +193,47 @@ class Lab {
     const decks = slimDecks(await db.getAll('decks'));
     const cards = [];
     for (const id of new Set(rows.map(r => r.cardId))) { const c = await db.get('cards', id); if (c) cards.push(slimCard(c)); }
-    await this.call('catchup', { logs: rows.map(slimLog), cards, decks, count: await db.count('reviewLog'), newest: { timestamp: rows[rows.length - 1].timestamp, id: rows[rows.length - 1].id } }, TIMEOUT.catchup);
+    await this.call('catchup', { logs: rows.map(slimLog), cards, decks, fsrs: await this._fsrsParams() }, TIMEOUT.catchup);
+  }
+  // The log as it is now, less the row being handed over (see checkFresh): what the lab knows after a boot.
+  async _remirror(except) {
+    const fp = await logFingerprint();
+    this.mirror = except !== null ? { count: fp.count - 1, idSum: fp.idSum - except } : fp;
+  }
+  async _fsrsParams(opts = null) {
+    const { default_w } = await import('./srs.js');
+    return { w: opts?.w ?? null, wDefault: [...default_w] };
   }
 
   // ---- hooks (fire and forget: they never throw and FSRS never waits for them) ----
   afterAnswer(a) { return (this._chain = this._chain.then(() => this._answer(a))); }
   afterUndo(logId) { return (this._chain = this._chain.then(() => this._undo(logId))); }
-  async _answer({ logId, log, card, prev = null, opts = null, decks = [] }) {
+  afterDelete(logId) { return this.afterUndo(logId); }      // a log row deleted on its own (Play: "I was right" on an answer that was only logged)
+  async _answer({ logId, log, card, opts = null, decks = [] }) {
     try {
-      if (!(await this.ensureReady())) return;
-      let fsrsMine = null, fsrsDefault = null;
-      if (log.source === 'review' && prev && prev.lastReview && Number.isFinite(prev.stability)) {
-        const t = deltaDays(prev.lastReview, log.timestamp);
-        if (t >= 1) {
-          const { default_w } = await import('./srs.js');
-          fsrsMine = forgettingCurve(opts?.w ?? default_w, t, prev.stability);
-          fsrsDefault = forgettingCurve(default_w, t, prev.stability);
-        }
-      }
-      await this.call('review', { log: { ...log, id: logId }, card: slimCard(card), decks: slimDecks(decks), fsrsMine, fsrsDefault, count: await db.count('reviewLog') }, TIMEOUT.review);
+      if (this._rebuildP) await this._rebuildP.catch(() => {});      // (the rebuild may or may not have read this row; the worker skips it if it did)
+      if (!(await this.ensureReady(logId))) return;
+      const r = await this.call('review', { log: { ...log, id: logId }, card: slimCard(card), decks: slimDecks(decks), fsrs: await this._fsrsParams(opts) }, TIMEOUT.review);
+      if (r && r.skipped === 'handled') return;
+      await this._told(+1, logId);
     } catch (err) { console.warn('RWKV lab:', err?.message || err); }
   }
   async _undo(logId) {
     try {
       if (!(await this.ensureReady())) return;
       const ok = await this.call('undo', { logId }, TIMEOUT.undo);
-      if (!ok) { this.stateName = 'stale'; this._ready = Promise.resolve(false); }
+      if (!ok) { this._outOfStep(); return; }
+      await this._told(-1, logId);
     } catch (err) { console.warn('RWKV lab:', err?.message || err); }
+  }
+  _outOfStep() { this.stateName = 'stale'; this._ready = Promise.resolve(false); }
+  // The lab has just been told about a row (+1) or told to forget one (-1). The log must now be exactly what the lab thinks it is;
+  // if not, something else changed it (a card deleted, a row removed or imported) and the memory can't be trusted until a rebuild.
+  async _told(sign, logId) {
+    if (!this.mirror) return this._outOfStep();
+    this.mirror = { count: this.mirror.count + sign, idSum: this.mirror.idSum + sign * logId };
+    const fp = await logFingerprint();
+    if (fp.count !== this.mirror.count || fp.idSum !== this.mirror.idSum) this._outOfStep();
   }
 
   // ---- scheduling (only when the owner chose RWKV (lab)) ----
@@ -207,6 +245,7 @@ class Lab {
       if (!this.planning || this.failed || !state || state.state !== 2 || !(opts?.maxInterval > 0) || !(opts?.retention > 0)) return null;
       await this._chain;                                       // the last answer (and any undo) must have reached the worker first
       if (!(await this.ensureReady()) || this.stateName !== 'fresh') return null;
+      if (this.mirror && (await db.count('reviewLog')) !== this.mirror.count) { this._outOfStep(); return null; }      // the log changed behind the lab's back
       const logs = await db.getCardLogs(card.id);
       const ms = recentMs(logs);
       const r = await this.call('whatIf', { log: { id: -1, cardId: card.id, timestamp: now, source: 'review', mode: 'flip', correct: true, ms, rating: 3, state: state.state },
@@ -219,7 +258,7 @@ class Lab {
   // A card that should have been scheduled by RWKV went to FSRS instead; the Lab screen shows the count.
   noteFallback() {
     this._fb = (this._fb || Promise.resolve()).then(async () => {
-      try { await lab.put('meta', ((await lab.get('meta', 'fallbacks')) || 0) + 1, 'fallbacks'); } catch { /* the count is only for show */ }
+      try { if (await lab.labExists()) await lab.put('meta', ((await lab.get('meta', 'fallbacks')) || 0) + 1, 'fallbacks'); } catch { /* the count is only for show */ }
     });
     return this._fb;
   }
@@ -228,22 +267,36 @@ class Lab {
   // Replays the whole review log. -> { rows, cards, preds }. onProgress({ done, total }).
   async rebuild(onProgress = () => {}) {
     if (this.rebuilding) throw new Error('A rebuild is already running.');
-    if (this.failed) { this.failed = false; this._stop(); }
+    const token = this._token = { cancelled: false, sent: false };
+    const stopped = () => { if (token.cancelled) throw new Error('The rebuild was stopped.'); };
     this.rebuilding = true;
+    let finish;
+    this._rebuildP = new Promise(r => { finish = r; });
     try {
-      await this._start();
+      if (this.failed) { this.failed = false; this._stop(); }
+      await this._start(); stopped();
       const [logs, cards, decks, settings, srs] = await Promise.all([
         db.getAllInPieces('reviewLog'), db.getAll('cards'), db.getAll('decks'), db.getSettings(), import('./srs.js').catch(() => null)
       ]);
+      stopped();
       const fsrs = srs ? { w: schedulerOptions(settings).w ?? null, wDefault: [...srs.default_w] } : null;
+      token.sent = true;
       const result = await this.call('rebuild', { logs: logs.map(slimLog), cards: cards.map(slimCard), decks: slimDecks(decks), fsrs }, 0, onProgress);
-      this.stateName = 'fresh'; this._ready = Promise.resolve(true);
+      stopped();
+      this.mirror = { count: logs.length, idSum: logs.reduce((a, l) => a + l.id, 0) };
+      this.stateName = 'fresh'; this._ready = Promise.resolve(true); this.failed = false;
       return result;
     } finally {
-      this.rebuilding = false;
+      this.rebuilding = false; this._rebuildP = null; finish();
     }
   }
-  cancelRebuild() { if (!this.rebuilding) return; this._stop(); this.rebuilding = false; }
+  // Stops a rebuild. Before the replay starts nothing has been touched, so only the flag is set; once it is running the worker is stopped
+  // (the old memory then counts as out of date, because the replay had already cleared it).
+  cancelRebuild() {
+    if (!this.rebuilding || !this._token) return;
+    this._token.cancelled = true;
+    if (this._token.sent) { this._stop(); this.stateName = null; }
+  }
 
   async preds() {
     if (!(await lab.labExists())) return [];
@@ -257,7 +310,9 @@ class Lab {
   }
 
   async deleteAll() {
-    this._stop(); this.failed = false; this.stateName = null; this.rebuilding = false; this.planning = false;
+    this._stop(); this.failed = false; this.stateName = null; this.rebuilding = false; this.planning = false; this.mirror = null;
+    if (this._token) this._token.cancelled = true;
+    resetGate();
     await lab.deleteLab();
   }
 }
