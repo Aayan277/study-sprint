@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test",
     "test:browser": "node tests/browser/run.mjs",
-    "test:sql": "node tests/sql/run.mjs"
+    "test:sql": "node tests/sql/run.mjs",
+    "lab": "node tools/rwkv-lab/serve.mjs"
   },
   "devDependencies": {
     "ts-fsrs": "5.4.2",

@@ -7,7 +7,16 @@ owner's own testing. It is **not** part of the app that ships: no pull request, 
 
 - **Stage 0** (safety): the lab flag, the sync block, the ignore rules and a test that guards the rules below.
 - **Stage 1** (the engine): code that reads the weights file, builds the model's inputs from the review log, runs the model, and turns
-  its output into recall chances and intervals. Nothing in the app calls it yet (that is Stage 2).
+  its output into recall chances and intervals.
+- **Stage 2** (the lab screen): worker, lab database, shadow mode and the comparison table at `#/lab`.
+- **Stage 3** (opt-in scheduling): with the scheduler set to **RWKV (lab)**, a frozen plan (`rwkvPlan`, made while the question is read)
+  sets the Hard, Good and Easy gaps of a card that was already in review. FSRS still runs and keeps every card field, Again and learning
+  steps stay FSRS's, and the max interval, evening out and exam limit still apply. A missing, late (300 ms), stale or non-finite plan means
+  FSRS schedules the card, silently (counted on the Lab screen). Nothing changes while the scheduler is FSRS.
+- **Stage 4** (running it): `tools/rwkv-lab/serve.mjs` (`npm run lab`, 127.0.0.1:8137) and `docs/lab-how-to-run.md`.
+
+How the lab knows its memory is current: it counts up by the review rows it is told about (and the sum of their ids), and compares that
+with the real log. Anything it was not told about (a deleted card, an import, a restored backup) makes it stale until a rebuild.
 
 ## The rules (and the test that watches each one)
 
