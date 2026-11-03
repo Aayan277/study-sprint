@@ -28,21 +28,38 @@ const CARDS = [
 // An MC-style deck for Play and the Practice test: every explanation carries a marker that must never show up in an option.
 const PLAY = Array.from({ length: 8 }, (_, i) => ({ id: 'pl' + i, front: `Synthetic question ${i}?`, back: `${'ABCDE'[i % 5]}. Option text number ${i}\n\nEXPLAIN-${i} this is a long explanation of why the option is right, which would give the answer away if shown in an option.` }));
 
+// Twins: backs that open with the same words (and header-style backs) must not give identical options. Reversed: fronts with a second paragraph.
+const DUP = [
+  ...['a', 'b', 'c'].map((x, i) => ({ id: 'dp' + i, front: `Twin question ${x}?`, back: `Graves disease\n\nTWIN-${x} explanation that differs for each card of the same answer.` })),
+  ...['a', 'b', 'c'].map((x, i) => ({ id: 'dh' + i, front: `Header question ${x}?`, back: `Answer:\n\nHeader thing ${x}` })),
+  ...['a', 'b', 'c'].map((x, i) => ({ id: 'do' + i, front: `Other question ${x}?`, back: `Other answer ${x}\n\nBecause ${x}.` }))
+];
+const REV = Array.from({ length: 6 }, (_, i) => ({ id: 'rv' + i, front: `Front lead ${i}\n\nFRONT-MORE-${i} the second paragraph of the front`, back: `Term ${i}` }));
+const OCC_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 async function open(viewport, mobile, theme) {
   const ctx = await browser.newContext({ viewport, colorScheme: 'dark', serviceWorkers: 'block', ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push('pageerror ' + e.stack));
   page.on('console', m => { if (m.type() === 'error' && !/katex|jsdelivr|Failed to load resource|net::ERR/i.test(m.text())) errors.push('console ' + m.text()); });
   await page.goto(APP + '#/decks'); await page.waitForSelector('.deck');
-  await page.evaluate(async ({ CARDS, PLAY, theme }) => {
+  await page.evaluate(async ({ CARDS, PLAY, DUP, REV, OCC, theme }) => {
     const db = await import('./js/db.js'), cz = await import('./js/cloze.js');
     await db.setSetting('theme', theme);
     for (const c of CARDS) await db.addDeckWithCards({ id: 'd-' + c.id, name: 'Deck ' + c.id, color: '#3E63DD', created: 1 }, [{ id: c.id, deckId: 'd-' + c.id, front: c.front, back: c.back, tags: [], created: 1 }]);
     const deck = { id: 'd-cloze', name: 'Deck cloze', color: '#3E63DD', created: 1 };
     await db.saveDeck(deck);
     await db.saveNote(cz.planNoteSave([], 'The {{c1::mitochondria}} makes {{c2::ATP}} by oxidative phosphorylation'), { deckId: deck.id, noteId: 'n-cloze', tags: [] });
+    await db.addDeckWithCards({ id: 'd-dup', name: 'Twins', color: '#3E63DD', created: 3 }, DUP.map((c, i) => ({ ...c, deckId: 'd-dup', tags: [], created: i })));
+    await db.addDeckWithCards({ id: 'd-rev', name: 'Fronts', color: '#3E63DD', created: 4 }, REV.map((c, i) => ({ ...c, deckId: 'd-rev', tags: [], created: i })));
+    {
+      const occ = await import('./js/occlusion.js');
+      const masks = [{ id: 'm1', n: 1, shape: 'rect', x: 0.1, y: 0.1, w: 0.3, h: 0.3 }];
+      const { front, back } = occ.occFrontBack({ header: 'Name the part', masks }, 1);
+      await db.addDeckWithCards({ id: 'd-occ', name: 'Picture', color: '#3E63DD', created: 5 }, [{ id: 'occ1', deckId: 'd-occ', noteId: 'n-occ', front, back, frontImage: OCC, backImage: OCC, occlusion: { n: 1, w: 400, h: 300, header: 'Name the part', masks }, tags: [], created: 1 }]);
+    }
     await db.addDeckWithCards({ id: 'd-play', name: 'MC deck', color: '#3E63DD', created: 2 }, PLAY.map((c, i) => ({ ...c, deckId: 'd-play', tags: [], created: i })));
-  }, { CARDS, PLAY, theme });
+  }, { CARDS, PLAY, DUP, REV, OCC: OCC_PIXEL, theme });
   await page.reload(); await page.waitForSelector('.deck');
   return page;
 }
@@ -103,6 +120,9 @@ for (const [themeName, theme] of Object.entries(THEMES)) for (const [tag, viewpo
   if (themeName === 'clinical') ok(await px(p, '.rv-back .flash-back.cloze-full') <= 28.01, `${T}: clinical cloze answer uses the clinical size (${await px(p, '.rv-back .flash-back.cloze-full')}px)`);
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/cloze-back-${tag}-${themeName}.png` });
 
+  // ---- picture (occlusion) back: does the tighter top spacing look right? ----
+  if (SHOTS) { await show(p, 'occ'); await flip(p); await p.screenshot({ path: `${SHOTS}/occ-back-${tag}-${themeName}.png` }); }
+
   // ---- Play: an option is the lead of a back, never its explanation ----
   if (tag === 'phone') {
     await p.evaluate(async () => { const db = await import('./js/db.js'); await db.setSetting('playPrefs', { deckId: 'd-play', fmt: 'classic', qtype: 'front', hard: false, flash: 0, len: 10, qtypeByDeck: {} }); });
@@ -114,6 +134,45 @@ for (const [themeName, theme] of Object.entries(THEMES)) for (const [tag, viewpo
     ok(!texts.some(t => t.includes('EXPLAIN')), `${T}: no option contains the explanation`);
     if (SHOTS) await p.screenshot({ path: `${SHOTS}/play-mc-${tag}-${themeName}.png` });
     await p.click('#quitBtn').catch(() => {});
+
+    // twins: never two options that look alike; picking the right one scores right, the twin's lead is offered at most once
+    const play = async (deckId, qtype, rounds) => {
+      await p.evaluate(async ({ deckId, qtype }) => { const db = await import('./js/db.js'); await db.setSetting('playPrefs', { deckId, fmt: 'classic', qtype, hard: false, flash: 0, len: 10, qtypeByDeck: {} }); }, { deckId, qtype });
+      await p.goto(APP + '#/decks'); await p.waitForSelector('.deck'); await p.goto(APP + '#/play'); await p.waitForSelector('#startBtn');
+      for (const sel of ['input[name=fmt][value=classic]', `input[name=qtype][value=${qtype}]`, 'input[name=len][value="10"]']) await p.$eval(sel, el => el.click());
+      await p.click('#startBtn');
+      const rows = [];
+      for (let r = 0; r < rounds; r++) {
+        await p.waitForSelector('#options .opt:not([disabled])');
+        const texts = (await p.locator('#options .opt .lbl').allInnerTexts()).map(t => t.trim());
+        const prompt = (await p.locator('#pPrompt').innerText()).trim();
+        rows.push({ prompt, texts });
+        await p.keyboard.press('1'); await p.waitForTimeout(120);
+        if (await p.locator('#nextBtn').isVisible().catch(() => false)) await p.click('#nextBtn');
+        else await p.waitForTimeout(1300);
+      }
+      await p.click('#quitBtn').catch(() => {});
+      return rows;
+    };
+    const dup = await play('d-dup', 'front', 6);
+    ok(dup.length === 6 && dup.every(r => new Set(r.texts).size === r.texts.length), `${T}: Play options are never identical when backs share a lead (${JSON.stringify(dup.map(r => r.texts))})`);
+    ok(dup.every(r => r.texts.filter(t => t === 'Graves disease').length <= 1 && r.texts.filter(t => t === 'Answer:').length <= 1), `${T}: a repeated lead is offered once`);
+    // grading: the option that equals the question's right answer is marked right, whichever twin the card is
+    await p.goto(APP + '#/decks'); await p.waitForSelector('.deck'); await p.goto(APP + '#/play'); await p.waitForSelector('#startBtn');
+    for (const sel of ['input[name=fmt][value=classic]', 'input[name=qtype][value=front]', 'input[name=len][value="10"]']) await p.$eval(sel, el => el.click());
+    await p.click('#startBtn'); await p.waitForSelector('#options .opt:not([disabled])');
+    const right = await p.evaluate(() => { const prompt = document.querySelector('#pPrompt').innerText.trim(); return prompt; });
+    const want = /^Twin/.test(right) ? 'Graves disease' : /^Header/.test(right) ? 'Answer:' : null;
+    if (want) {
+      const i = (await p.locator('#options .opt .lbl').allInnerTexts()).findIndex(t => t.trim() === want);
+      await p.locator('#options .opt').nth(i).click(); await p.waitForTimeout(200);
+      ok(await p.locator('#options .opt.correct').count() === 1 && await p.locator('#options .opt.wrong').count() === 0, `${T}: picking the shown lead of the right card scores right`);
+    }
+    await p.click('#quitBtn').catch(() => {});
+
+    // reversed (Back → front): the options are fronts, shown whole, second paragraph and all
+    const rev = await play('d-rev', 'back', 3);
+    ok(rev.every(r => r.texts.length >= 3 && r.texts.every(t => /FRONT-MORE-\d/.test(t) && /Front lead \d/.test(t))), `${T}: reversed options are whole fronts (${JSON.stringify(rev[0].texts)})`);
   }
   // ---- Practice test: same ----
   if (tag === 'desktop') {

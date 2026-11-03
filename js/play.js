@@ -25,7 +25,7 @@ import { isTypingCard } from './type-in.js';
 import { openCardPanel } from './browse.js';
 import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
-import { plainText, mathHTML, answerText, answerTargets, optionText } from './format.js';
+import { plainText, mathHTML, answerText, answerTargets, shownOption } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML, warmCards } from './media.js';
 import { soundsHTML, stopSound } from './audio.js';
@@ -378,10 +378,10 @@ function showQuestion() {
     const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true });
     const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
     G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
-    const long = G.opts.some(o => optionText(o).length > 28);      // (an option shows only the lead of a long back, see optionText)
+    const long = G.opts.some(o => shownOption(o, G.qtype).length > 28);      // (a back as an option shows only its lead, see optionText)
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
-      `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(optionText(o), { inline: true })}</span></button>`).join('');
+      `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(shownOption(o, G.qtype), { inline: true })}</span></button>`).join('');
   }
   // Said by the screen reader (a polite live region of its own, next to the feedback one, which keeps "Correct +189"). A right answer moves
   // on by itself, so without this the next question would arrive in silence. With focus on the question it only gives the number (the
