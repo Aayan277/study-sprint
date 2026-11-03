@@ -15,3 +15,10 @@ node_modules/
 fsrs-data/
 results.jsonl
 *.revlog
+
+# RWKV lab: model weights, datasets and private test data must never be committed (tests/rwkv-guardrails.test.js checks this)
+*.bin
+*.pth
+*.npz
+rwkv-lab-private/
+weights*.json

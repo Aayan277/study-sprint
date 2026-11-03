@@ -12,6 +12,7 @@ import { initPanelResize } from './panel-resize.js';
 import { takeDraft } from './import-draft.js';
 import { $, esc, toast, openSheet, closeSheet, stashDraft, initSheet, initTapGuard, setFocusMode, sheetDirty } from './ui.js';
 import { account } from './sync-state.js';
+import { LAB_BUILD } from './rwkv-flag.js';
 import { initWhatsNew } from './whats-new.js';
 import { takeLaunch } from './study-data.js';
 import { configureShortcuts } from './shortcuts.js';
@@ -374,7 +375,7 @@ async function checkMinClient() {
 
 // js/sync.js (the server client, merge and push code) is not part of start-up: it loads here, once Today is drawn, and its
 // startAutoSync() does nothing until someone is signed in (Settings → Sync).
-const startSync = () => import('./sync.js').then(s => s.startAutoSync()).catch(err => console.error(err));
+const startSync = () => LAB_BUILD ? undefined : import('./sync.js').then(s => s.startAutoSync()).catch(err => console.error(err));
 function whenBrowserIdle(fn) {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2000 });
   else setTimeout(fn, 500);

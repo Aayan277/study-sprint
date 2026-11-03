@@ -21,6 +21,7 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely, nextBackoff, activeBackoff, deletedThroughAfter } from './sync-push.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
+import { LAB_BUILD } from './rwkv-flag.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
@@ -57,13 +58,14 @@ export { lastStatus, account };
 // captcha: the token from captcha.js, when the project uses one.
 // onConflict: asked when this device holds cards that don't belong to this account (see deviceVerdict); see signedIn.
 export async function createAccount(email, password, captcha, opts = {}) {
+  if (LAB_BUILD) throw new Error('Sync is off in the lab build.');
   const made = await supa.signUp(email.trim(), password, { captcha, redirectTo: appUrl() });
   if (made.pending) return { pending: true };
   await signedIn(made.session, opts);
   return { pending: false };
 }
 export const resendConfirmation = (email, captcha) => supa.resendSignup(email.trim(), { captcha, redirectTo: appUrl() });
-export async function signIn(email, password, captcha, opts = {}) { return signedIn(await supa.signIn(email.trim(), password, { captcha }), opts); }
+export async function signIn(email, password, captcha, opts = {}) { if (LAB_BUILD) throw new Error('Sync is off in the lab build.'); return signedIn(await supa.signIn(email.trim(), password, { captcha }), opts); }
 
 // ---------- whose cards are on this device ----------
 // Signing in copies everything on this device into the account (and the account's into this device). On a shared device that would
@@ -100,6 +102,7 @@ export async function deviceVerdict(userId) {
 // 'go' (the person chose: for 'other' the app has already removed this device's cards; for 'local' the cards are added to the account)
 // or 'cancel'. Without an answer the sign-in is cancelled: another account's cards are never merged silently.
 async function signedIn(session, { onConflict } = {}) {
+  if (LAB_BUILD) throw new Error('Sync is off in the lab build.');      // (also covers sign-in by an emailed link: no account is ever saved here)
   const verdict = await deviceVerdict(session.user.id);
   if (verdict.kind !== 'ok') {
     const answer = onConflict ? await onConflict(verdict) : 'cancel';
@@ -658,7 +661,7 @@ async function keepDeviceWhole({ onProgress, signal, anyway, isLive } = {}) {
 
 // ---------- when to sync ----------
 export function startAutoSync() {
-  if (started) return;
+  if (LAB_BUILD || started) return;
   started = true;
   db.onLocalChange(() => {
     clearTimeout(timer);
