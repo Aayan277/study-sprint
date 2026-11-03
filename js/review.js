@@ -624,6 +624,13 @@ function submitTyped(el) {
 async function answer(el, rating) {
   if (!R.flipped || R.busy) return;
   R.busy = true;
+  // The last answer may still be saving behind the card now showing (see "defer" below): this one goes in after it, in order.
+  // If that save failed, its card was taken back and is on screen again, so this rating is not for the card it was meant for.
+  const shown = R.current;
+  if (R.saving) {
+    await R.saving;
+    if (R.current?.card.id !== shown?.card.id || !R.flipped) { R.busy = false; return; }
+  }
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
   const now = Date.now();
@@ -640,13 +647,18 @@ async function answer(el, rating) {
   try {
     const inStep = R.version === db.scheduleVersion();       // (a change that landed earlier, e.g. new weights from sync, must not be absorbed below)
     const saving = db.saveReview(next, log);
-    // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
+    // Rating feedback plays alongside the save.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
-    const logId = await saving;
-    if (inStep) R.version = db.scheduleVersion();
-    R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
     const requeued = (next.state === LEARNING || next.state === RELEARNING) && next.due <= dayEnd(now);
+    // defer: the save was already sent to the database, so the next card can be drawn without waiting for it to finish (that wait is
+    // the ~10 ms the database takes to confirm a write, see tests/browser/perf-next-card.mjs). Not done when the answer can make a
+    // leech (that reads the log and may change the card first) or when it is the last card (the finish screen reads the database).
+    // Until it finishes, the next answer, Undo and End wait for it (R.saving), and if it fails the card is taken back (settleSave).
+    const defer = !(next.lapses > (prev?.lapses || 0)) && (R.queue.length > 0 || R.waiting.length > 0 || requeued);
+    const logId = defer ? saving : await saving;
+    if (!defer && inStep) R.version = db.scheduleVersion();
+    R.statesById.set(id, next);
     if (requeued) addWaiting(R.waiting, { card: item.card, kind: 'learn', due: next.due });
     // Forgotten too many times? It becomes a leech: tagged, and suspended unless Settings says tag only.
     let cardBefore = null, leeched = false;
@@ -666,37 +678,71 @@ async function answer(el, rating) {
     if (leeched) R.leeches.push(id);
     R.stats.reviewed++; R.stats.spent += spent;
     if (rating === Rating.Again) R.stats.again++;
+    if (defer) R.saving = settleSave(el, saving, inStep);
     nextCard(el);
   } finally {
     R.busy = false;
   }
 }
 
+// The end of a deferred save (see answer): note that the schedule changed in step with this session, or, if the database refused
+// the write, take the answer back (nothing was saved, so the card is still due) and show the card again.
+// R.saving is this promise until it is done; it never rejects.
+function settleSave(el, saving, inStep) {
+  const sess = R;
+  const me = (async () => {
+    try {
+      await saving;
+      if (inStep && R === sess) R.version = db.scheduleVersion();
+    } catch (err) {
+      console.error(err);
+      if (R !== sess || !sess.active) return;      // (the session has ended or a new one started: nothing to take back into)
+      const i = sess.undo.findIndex(x => x.logId === saving);
+      if (i < 0) return;
+      const [u] = sess.undo.splice(i, 1);
+      putBack(u);
+      if (el.isConnected) renderSession(el, true);
+      toast("That answer couldn't be saved, so the card is back. Try again.");
+    } finally {
+      if (sess.saving === me) sess.saving = null;
+    }
+  })();
+  return me;
+}
+
+// Back in the session, without touching the database: the card of an undone (or unsaved) answer is current again.
+function putBack(u) {
+  const id = u.item.card.id;
+  if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
+  if (u.requeued) {
+    const i = R.waiting.findIndex(w => w.card.id === id);
+    if (i >= 0) R.waiting.splice(i, 1);
+  }
+  if (R.current) R.queue.unshift(R.current);
+  R.stats.reviewed--; R.stats.spent -= u.spent;
+  if (!R.undo.some(x => x.item.card.id === id)) R.answered.delete(id);      // (a card answered twice stays answered until both are undone)
+  if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
+  if (u.again) R.stats.again--;
+  R.active = true;
+  stopSound();
+  R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
+  R.shownAt = Date.now(); R.answerMs = 0;
+}
+
 // Take back the last rating: restore the card's old schedule and show it again.
 async function undo(el) {
   if (R.busy || !R.undo.length) return;      // (check busy first: a second tap while the first undo is saving must not drop an entry)
-  const u = R.undo.pop();
   R.busy = true;
   try {
+    if (R.saving) await R.saving;            // the last answer is still being saved: it needs its log row's id, and may yet be taken back
+    if (!R.undo.length) return;
+    const u = R.undo.pop();
     const id = u.item.card.id;
     const inStep = R.version === db.scheduleVersion();
-    await db.undoReview(id, u.prev, u.logId);
+    await db.undoReview(id, u.prev, await u.logId);
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
     if (inStep) R.version = db.scheduleVersion();
-    if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
-    if (u.requeued) {
-      const i = R.waiting.findIndex(w => w.card.id === id);
-      if (i >= 0) R.waiting.splice(i, 1);
-    }
-    if (R.current) R.queue.unshift(R.current);
-    R.stats.reviewed--; R.stats.spent -= u.spent;
-    if (!R.undo.some(x => x.item.card.id === id)) R.answered.delete(id);      // (a card answered twice stays answered until both are undone)
-    if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
-    if (u.again) R.stats.again--;
-    R.active = true;
-    stopSound();
-    R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
-    R.shownAt = Date.now(); R.answerMs = 0;
+    putBack(u);
     renderSession(el, true);
     // Said aloud (the toast is a live region): the card is back, so a screen-reader user knows the rating was taken back.
     const front = spokenCard(String(u.item.card.front || '').replace(/<[^>]*>/g, ' '), '', 41);
@@ -803,6 +849,7 @@ function askEnd() {
 }
 
 async function finish(el) {
+  if (R.saving) await R.saving;      // a save running behind the card on screen (if it fails, that card is back and counts as not done)
   closeSheet();                 // a card panel or a question that was open belongs to the session that just ended
   releaseBack('session');
   destroyPad();
