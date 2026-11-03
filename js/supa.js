@@ -6,6 +6,10 @@
 
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
 import { readUsage, SERVER_FULL_MESSAGE } from './quota.js';
+import { labNetworkBlocked } from './rwkv-flag.js';
+
+// Lab build: nothing reaches the server, whatever was signed in before. Both network calls below start with this.
+const labOff = () => { if (labNetworkBlocked()) throw new Error('Sync is off in the lab build.'); };
 
 // No request is allowed to hang for ever: a frozen or stalled connection would hold the sync lock (and every other tab) with it.
 // The timeout has its own code, so it isn't taken for anything else.
@@ -27,6 +31,7 @@ export class SupaError extends Error {
 }
 
 async function call(path, { method = 'GET', body, token, headers = {} } = {}) {
+  labOff();
   let res;
   const limit = timeoutSignal(REQUEST_TIMEOUT);
   try {
@@ -235,6 +240,7 @@ export function deleteAllRows(token, userId) {
 const MEDIA_MISSING = 'Pictures can’t sync yet because the sync server isn’t ready for them. Everything else is syncing.';
 // ms: how long the request may take (until the answer starts; with keepTimer, until the caller has read it and calls res.limit.done()).
 async function storage(path, { method = 'GET', token, body, type, ms = 60000, keepTimer = false } = {}) {
+  labOff();
   let res;
   const limit = timeoutSignal(ms);
   try {

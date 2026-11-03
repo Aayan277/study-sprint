@@ -1,3 +1,4 @@
+import './rwkv-test-network.mjs';
 // Sign-in, sign-up and reset messages (js/supa.js): the duplicate-email answer, which box an error is about, and the wording.
 // Run with: node --test tests/auth-errors.test.js
 import test from 'node:test';

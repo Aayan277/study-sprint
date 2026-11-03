@@ -1,3 +1,4 @@
+import './rwkv-test-network.mjs';
 // The forced-update check (js/app-config.js): reading the server's minimum version, failing open, and the sync gate.
 // (The screen, with the fake server: tests/browser/e2e-forced-update.mjs.) Run with: node tests/app-config.test.js
 import { test } from 'node:test';

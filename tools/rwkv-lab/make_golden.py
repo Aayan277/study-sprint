@@ -12,7 +12,7 @@ Run it with isolated mode so nothing from the current folder is imported by acci
       --out tests/fixtures/rwkv/golden.json --private ~/rwkv-lab-private/golden-expected.json
 The reference is only imported from the path given; nothing of it is copied here.
 """
-import argparse, hashlib, json, math, os, random, sys
+import argparse, base64, hashlib, json, math, os, random, sys
 import numpy as np
 import pandas as pd
 
@@ -249,7 +249,17 @@ def main():
     def hash_id(text):
         return int(hashlib.sha256(text.encode()).hexdigest()[:12], 16)
 
-    expected = {'weightsSha256': sha, 'curveTimes': CURVE_TIMES, 'stateBits': {}}
+    expected = {'weightsSha256': sha, 'curveTimes': CURVE_TIMES, 'stateBits': {}, 'teacher': {}}
+    ID_NAMES = ['card_id', 'deck_id', 'note_id', 'preset_id', 'user_id']       # the order of the five streams in the model's store
+
+    def pack(entity):
+        # one entity's saved state as base64 of little-endian f32: for each layer, shift, then S, then the channel shift when it has one
+        if entity is None:
+            return None
+        parts = []
+        for _, ly in sorted(entity.items()):
+            parts += [ly['shift'].ravel(), ly['S'].ravel()] + ([ly['cshift'].ravel()] if 'cshift' in ly else [])
+        return base64.b64encode(np.concatenate(parts).astype('<f4').tobytes()).decode()
     for bits in (8, 0):
         model = RecurrentModel(tensors, spec, state_bits=bits)
         store = model.new_store()
@@ -264,6 +274,9 @@ def main():
                 h = model.step(q, ids, True, store)
                 pimm, prat = model.instant(h)
                 qrs[str(r['logId'])] = {'pImm': sig7(pimm), 'pRating': [sig7(float(v)) for v in prat]}
+            if bits == 8 and (i < 5 or i % 5 == 0):
+                # teacher forcing: the exact saved state the reference carried into this step (for the JS test to start from)
+                expected['teacher'][str(r['logId'])] = [pack(store[k].get(ids[name])) for k, name in enumerate(ID_NAMES)]
             h = model.step(upd[i], ids, False, store)
             rec = {'heads': cvec(h), 'pAt': [sig7(model.p_curve(h, t)) for t in CURVE_TIMES]}
             if qflag[i] and r['cardKey'] in last_heads:

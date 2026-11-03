@@ -157,7 +157,7 @@ export class FeatureBuilder {
 
   undo(token) {
     if (token.card) this.cards.set(token.key, token.card); else this.cards.delete(token.key);
-    this.firstDay = token.firstDay; this.prevDay = token.prevDay; this.th = token.th; this.cumNew = token.cumNew; this.today = token.today;
+    this.firstDay = token.firstDay; this.prevDay = token.prevDay; this.th = token.th; this.cumNew = token.cumNew; this.today = { ...token.today };
   }
 
   toJSON() {

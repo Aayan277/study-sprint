@@ -7,6 +7,7 @@
 // Only the pure parts and the small browser parts are here; app.js decides when to ask (once, after the first screen, when signed in).
 
 import { SUPABASE_URL, SUPABASE_KEY } from './sync-config.js';
+import { labNetworkBlocked } from './rwkv-flag.js';
 
 export const CONFIG_TIMEOUT = 8000;
 const CACHE_KEY = 'study-sprint-min-client';        // the last min_client the server named (this device only)
@@ -43,6 +44,7 @@ export async function fetchMinClient({ fetchFn = (...a) => fetch(...a), base = S
   const c = new AbortController();
   const timer = setTimeout(() => c.abort(), timeout);
   try {
+    if (labNetworkBlocked()) throw new Error('Sync is off in the lab build.');      // (caught below: the check fails quietly)
     const res = await fetchFn(base + '/rest/v1/rpc/app_config', {
       method: 'POST', signal: c.signal,
       headers: { apikey: key, 'Content-Type': 'application/json' }, body: '{}'

@@ -12,7 +12,7 @@ const SITE = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-upd-'));
 for (const f of ['index.html', 'sw.js', 'manifest.webmanifest', 'privacy.html', 'terms.html']) if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(SITE, f));
 for (const d of ['css', 'js', 'icons', 'fonts']) fs.cpSync(path.join(ROOT, d), path.join(SITE, d), { recursive: true });
 let version = 2000;
-const publish = () => { const f = path.join(SITE, 'sw.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/study-sprint-v\d+/, 'study-sprint-v' + (++version))); };
+const publish = () => { const f = path.join(SITE, 'sw.js'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/study-sprint-(?:lab-)?v\d+/, 'study-sprint-v' + (++version))); };
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
   const p = new URL(req.url, 'http://x').pathname;

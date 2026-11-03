@@ -111,3 +111,30 @@ test('int8 card and note states are small', () => {
   assert.equal([...e.notes.values()][0].byteLength, 1536);
   assert.ok(k.startsWith('c:'));
 });
+
+test('output numbers that are not real numbers give no answer, so FSRS takes over', () => {
+  // a broken model: the curve layer's biases are not numbers (a damaged or runaway file), so every output is NaN
+  const huge = parseWeights(fakeWeights({ seed: 3, format: 'f32', mutate: list => { for (const t of list) if (/^head_[wsd]\.4\.bias$/.test(t.name)) t.data.fill(NaN); } }).buffer).tensors;
+  const e = new Engine(huge);
+  replayAll(e, rows.slice(0, 40));
+  const last = rows[39];
+  const now = { ...last, t: last.t + 3 * 86400000, day: last.day + 3 };
+  assert.equal(e.whatIf(now, 6000), null);
+  const r = e.review({ ...now, logId: 99999 });
+  assert.ok(r.pCurve === null || Number.isFinite(r.pCurve));
+  assert.ok(r.pImm === null || Number.isFinite(r.pImm));
+});
+
+test('a replay forgets the undo list, and undoing a review restores the builder day counts', () => {
+  const e = new Engine(tensors);
+  e.review(rows[0]);
+  for (const _ of e.replay(rows.slice(0, 5))) { /* run */ }
+  assert.equal(e.undos.length, 0);
+  const b = new Engine(tensors);
+  b.review(rows[0]);
+  const before = JSON.stringify(b.builder);
+  const token = b.builder.commit(rows[1]);
+  b.builder.today.reviews += 5;                                   // must not leak into the saved copy
+  b.builder.undo(token);
+  assert.equal(JSON.stringify(b.builder), before);
+});

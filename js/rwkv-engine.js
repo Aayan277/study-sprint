@@ -4,7 +4,7 @@ import { STREAMS } from './rwkv-spec.js';
 import { createModel } from './rwkv-model.js';
 import { FeatureBuilder } from './rwkv-features.js';
 import { encodeEntity, decodeEntity } from './rwkv-state.js';
-import { pCurve, pImm, pRating } from './rwkv-curve.js';
+import { pCurve, pImm, pRating, headsFinite } from './rwkv-curve.js';
 
 const UNDO_KEEP = 50;
 const joinCurve = h => { const c = new Float32Array(9); c.set(h.w, 0); c.set(h.s, 3); c.set(h.d, 6); return c; };
@@ -53,15 +53,16 @@ export class Engine {
     const b = this.builder;
     const e = b.elapsed(row);
     let pi = null, pc = null, pr = null;
+    const states = this._states(row);       // decoded once, for the question and for the update
     if (score && !e.first) {
-      const qh = this.model.step(b.features(row, true), this._states(row), true).heads;
-      pi = pImm(qh); pr = pRating(qh);
+      const qh = this.model.step(b.features(row, true), states, true).heads;
+      if (headsFinite(qh)) { pi = pImm(qh); pr = pRating(qh); }
       const cur = this.curves.get(row.cardKey);
-      if (cur) pc = pCurve(splitCurve(cur), e.seconds);
+      if (cur && cur.every(Number.isFinite)) pc = pCurve(splitCurve(cur), e.seconds);
     }
     const keys = this.keys(row);
     const prev = keepToken ? { states: keys.map((k, i) => this._store(i).get(this._sk(i, k))), curve: this.curves.get(row.cardKey) } : null;
-    const { heads, next } = this.model.step(b.features(row, false), this._states(row), false);
+    const { heads, next } = this.model.step(b.features(row, false), states, false);
     keys.forEach((k, i) => this._put(i, k, next[i]));
     this.curves.set(row.cardKey, joinCurve(heads));
     this.dirty.cards.add(row.cardKey);
@@ -93,6 +94,7 @@ export class Engine {
 
   // Replay a whole history (rows in time order). Yields { done, total } every 500 rows; fills this.preds.
   *replay(rows, { score = true } = {}) {
+    this.undos = [];                  // a replay is not undoable
     for (let n = 0; n < rows.length; n++) {
       const r = this.review(rows[n], { score, keepToken: false });
       if (score) this.preds[rows[n].logId] = { pCurve: r.pCurve, pImm: r.pImm, elapsedDays: r.elapsedDays };
@@ -101,12 +103,14 @@ export class Engine {
     yield { done: rows.length, total: rows.length };
   }
 
-  // What would the card's curve be after each answer? -> { 1..4: heads }. Changes nothing.
+  // What would the card's curve be after each answer? -> { 1..4: heads }, or null when any of them is not a real number
+  // (the caller then leaves the card to FSRS). Changes nothing.
   whatIf(row, ms) {
     const states = this._states(row), out = {};
     for (let rating = 1; rating <= 4; rating++) {
       const r = { ...row, rating, ms };
       out[rating] = this.model.step(this.builder.features(r, false), states, true).heads;
+      if (!headsFinite(out[rating])) return null;
     }
     return out;
   }

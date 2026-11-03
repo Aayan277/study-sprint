@@ -1,3 +1,4 @@
+import './rwkv-test-network.mjs';
 // Tests for js/sync-data.js and js/sync-merge.js (syncing between devices). Run with: node tests/sync.test.js
 
 import { test } from 'node:test';

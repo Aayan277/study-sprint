@@ -8,9 +8,9 @@ import { createHash } from 'node:crypto';
 import { parseWeights, validateWeights } from '../js/rwkv-weights.js';
 import { createModel } from '../js/rwkv-model.js';
 import { Engine, splitCurve } from '../js/rwkv-engine.js';
-import { modelRows } from '../js/rwkv-features.js';
-import { pCurve } from '../js/rwkv-curve.js';
-import { LAYER_STEPS } from '../js/rwkv-spec.js';
+import { modelRows, FeatureBuilder } from '../js/rwkv-features.js';
+import { pCurve, pImm } from '../js/rwkv-curve.js';
+import { LAYER_STEPS, STREAMS, D } from '../js/rwkv-spec.js';
 import { fakeWeights } from './rwkv-fake-weights.mjs';
 
 const fake = parseWeights(fakeWeights({ seed: 9, format: 'int8' }).buffer).tensors;
@@ -129,6 +129,9 @@ test('golden: matches the reference model on a made-up history (stateBits 8 and 
   assert.ok(report[0].probs < 5e-5, 'probabilities, exact state: ' + report[0].probs);
   assert.ok(report[0].heads < 1e-4, 'curve heads, exact state: ' + report[0].heads);
   assert.ok(report[0].whatIf < 1e-4, 'what-if heads, exact state: ' + report[0].whatIf);
+  // THE REAL GUARD for the int8 state path: the strict first-25 check. The wide whole-history bounds below would not notice, for
+  // example, a missing f16 rounding of the saved shifts (it only shows as a small drift), but this strict check does.
+  // (The teacher-forced test after this one checks single steps from the reference's own saved states.)
   // int8 state: the first 25 reviews (before any rounding step can land on the other side of a tie) match to the same tolerance.
   // After that a one-step difference in a single saved number, caused by float rounding in the reference's matrix products, can move later
   // outputs a little, so the whole history gets wider bounds (see docs/design/rwkv-lab.md).
@@ -137,4 +140,51 @@ test('golden: matches the reference model on a made-up history (stateBits 8 and 
   assert.ok(report[8].heads < 3e-3, 'curve heads, int8 state: ' + report[8].heads);
   assert.ok(report[8].headsMean < 2e-4, 'mean curve-head error, int8 state: ' + report[8].headsMean);
   assert.ok(report[8].whatIf < 3e-3, 'what-if heads, int8 state: ' + report[8].whatIf);
+});
+
+// Teacher forcing: the long-history test above lets small differences pile up. Here every checked step starts from the reference's own
+// saved (int8-rounded) states for that review, so what is compared is one step of our model against one step of the reference.
+test('golden: one step from the reference\'s own saved int8 state matches to about 1e-5 (teacher forcing)', t => {
+  if (!fs.existsSync(weightsPath) || !fs.existsSync(expectedPath)) { t.skip('owner weights not present'); return; }
+  const bytes = fs.readFileSync(weightsPath);
+  const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
+  if (createHash('sha256').update(bytes).digest('hex') !== expected.weightsSha256) { t.skip('owner weights not present (a different weights file)'); return; }
+  if (!expected.teacher) { t.skip('regenerate ~/rwkv-lab-private/golden-expected.json with the current make_golden.py'); return; }
+  const parsed = parseWeights(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
+  const model = createModel(parsed.tensors);
+  const g = JSON.parse(fs.readFileSync(new URL('./fixtures/rwkv/golden.json', import.meta.url), 'utf8'));
+  const E = expected.stateBits[8];
+  const unpack = (stream, b64) => {
+    if (b64 === null) return null;
+    const raw = Buffer.from(b64, 'base64');
+    const f = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length));
+    let pos = 0;
+    const take = n => { const a = f.slice(pos, pos + n); pos += n; return a; };
+    const layers = [];
+    for (let l = 0; l < STREAMS[stream].layers; l++) {
+      const ly = { shift: take(D), S: take(1024) };
+      if (STREAMS[stream].mixer.includes(l)) ly.cshift = take(D);
+      layers.push(ly);
+    }
+    assert.equal(pos, f.length, 'the saved state has the expected size');
+    return { layers };
+  };
+  const builder = new FeatureBuilder();
+  let worst = 0, worstP = 0, checked = 0;
+  for (const r of modelRows(g.logs, g.cards, g.decks)) {
+    const saved = expected.teacher[r.logId];
+    if (saved) {
+      const states = saved.map((b64, i) => unpack(i, b64));
+      const q = E.queries[r.logId];
+      if (q) worstP = Math.max(worstP, Math.abs(q.pImm - pImm(model.step(builder.features(r, true), states, true).heads)));
+      const h = model.step(builder.features(r, false), states, false).heads;
+      [...h.w, ...h.s, ...h.d].forEach((v, k) => { worst = Math.max(worst, Math.abs(v - E.updates[r.logId].heads[k])); });
+      checked++;
+    }
+    builder.commit(r);
+  }
+  console.log(`golden teacher forcing: ${checked} steps, max curve-head error ${worst.toExponential(2)}, max pImm error ${worstP.toExponential(2)}`);
+  assert.ok(checked >= 50);
+  assert.ok(worst < 2e-5, 'curve heads from the reference\'s own state: ' + worst);
+  assert.ok(worstP < 2e-5, 'pImm from the reference\'s own state: ' + worstP);
 });

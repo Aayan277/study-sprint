@@ -54,3 +54,7 @@ export function daysForButtons(curves, target, maxDays) {
   out[4] = Math.max(out[4], out[3]);
   return out;
 }
+
+// Are all the model's output numbers real numbers? A broken weights file or a runaway state can make them NaN or infinite;
+// nothing may be computed from such heads (the caller then falls back to FSRS).
+export const headsFinite = h => ['w', 's', 'd', 'p'].every(k => !h[k] || Array.prototype.every.call(h[k], Number.isFinite));

@@ -21,7 +21,7 @@ import { planMedia, explainRefusal, fetchUsage } from './sync-quota.js';
 import { fullMessage, splitOversized, capTimes, rowLabel, rowBytes, bigRowsNote, dataFullMessage, SERVER_FULL_MESSAGE } from './quota.js';
 import { pushSafely, nextBackoff, activeBackoff, deletedThroughAfter } from './sync-push.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
-import { LAB_BUILD } from './rwkv-flag.js';
+import { LAB_BUILD, labNetworkBlocked } from './rwkv-flag.js';
 import { storedType } from './audio-type.js';
 import { planPrefetch, wantedMedia, canTry, failedAgain, PREFETCH_BYTES, NEW_AHEAD } from './lazy-media.js';
 import { rowFromRecord, rowFromTombstone, rowFromSetting, pullStart, startPull, pullPages, newestOnly, chunks, parseAuthLink, uploadMediaFiles, runPool, getPageSafely, withSyncLock, SKIPPED, trimForPush, overLimitDayFlags, isSoundRow, isWholeStorageError, SOUNDS_BLOCKED_NOTE, PICTURES_BLOCKED_NOTE } from './sync-merge.js';
@@ -314,6 +314,7 @@ export async function signOut({ forget = false } = {}) {
 
 // A sign-in that's still valid, refreshed if it's about to expire. null when signed out.
 async function session() {
+  if (labNetworkBlocked()) return null;
   const { syncAuth } = await db.getSettings();
   if (!syncAuth) return null;
   if (syncAuth.expires_at - 60 > Date.now() / 1000) return syncAuth;

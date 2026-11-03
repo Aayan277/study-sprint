@@ -64,7 +64,7 @@ ok(await inCache(first, CSS) === 'cors' && await inCache(first, FONT) === 'opaqu
 
 // 3. A new version of sw.js: a fresh copy of everything is installed, the old one removed, the app reloads once.
 setProbe('C');
-fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').replace(/study-sprint-v\d+/, 'study-sprint-v999'));
+fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').replace(/study-sprint-(?:lab-)?v\d+/, 'study-sprint-v999'));
 let loads = 0;
 page.on('load', () => { loads++; });
 await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.update()));

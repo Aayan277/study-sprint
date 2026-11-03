@@ -17,7 +17,7 @@ owner's own testing. It is **not** part of the app that ships: no pull request, 
 | Our test data holds only made-up inputs and numbers we computed ourselves. The model's answers on them live in `~/rwkv-lab-private/golden-expected.json`, outside the repo. | The answers are the model's output. | the same test, which also refuses output-looking keys in the fixture |
 | The engine is written from the published description, not from the authors' code. The authors' Python reference is only run, from a path outside the repo, to get expected numbers. | Licence. | review, and `tools/rwkv-lab/make_golden.py` (imports the reference at run time) |
 | Lab code makes no network requests. | The weights come only from the owner's own file. | `tests/rwkv-guardrails.test.js` (no `fetch(` and similar in `js/rwkv-*.js`) |
-| Sync is off. Signing in or creating an account says "Sync is off in the lab build." | Lab due dates must never reach the real account. | the same test, plus `js/sync.js` |
+| Sync is off. Signing in or creating an account says "Sync is off in the lab build." Even an account signed in earlier on this address cannot sync: the two places that talk to the server (`js/supa.js`) and the app-version check refuse, and `session()` says nobody is signed in. | Lab due dates must never reach the real account. | the same test, plus `js/sync.js`, `js/supa.js`, and `tests/browser/e2e-lab-sync.mjs` (seeds an old sign-in, presses Sync now and Sign out, counts server requests) |
 | The main database keeps its shape (`DB_VERSION` stays 3) and no lab setting is in the synced settings. | The real app must still open this browser's data later. | the same test |
 | FSRS stays the default and the fallback. | The lab can fail safely. | design (Stages 2 and 3) |
 
@@ -30,7 +30,7 @@ Study Sprint has no Anki note ids or presets, so the lab maps its own data onto 
 - **deck**: `d:` + the card's deck id (the deck it is in now, for its whole history).
 - **preset**: one shared preset, except a deck with its own options counts as its own preset.
 - **user**: one constant.
-- A review of a card that no longer exists gets its own note, deck `d:?` and the shared preset.
+- A review of a card that no longer exists gets its own note, deck `d:?` and the shared preset. (The model's published description says nothing about this case; `d:?` is our own choice, so such a review shares one "unknown deck" memory with the others.)
 - Rows used: real reviews and imported Anki reviews, plus Play/test answers that changed the schedule. Resets do not cut the history.
 - A new day starts at 4 am local time (same as Study Sprint's own rule, also on the days the clocks change).
 - Each entity gets a fixed random-looking code from our own hash (FNV-1a, then mulberry32). Nothing needs saving for it.
@@ -63,6 +63,7 @@ Result with the owner's weights:
   8.6e-5 on probabilities (mean curve-number difference 3e-5). That is not a bug: with int8 state, a saved number can land on the other side of a
   rounding tie because the two programs add floating-point numbers in a slightly different order, and one step of one number then nudges later outputs. We
   checked this directly: making our own model's weights differ by one part in ten million changes its int8-state curve numbers by up to 1.2e-3 but its exact-state ones by only 2e-6.
+  The first-25 strict check is the real guard for the int8 path (the wide whole-history bounds alone would miss, say, a missing f16 rounding of the saved shifts). A second, teacher-forced test starts each checked step from the reference's own saved int8 state (56 steps, their states kept in the private file) and agrees to 6e-6 on curve numbers and 7e-8 on pImm.
   The test therefore uses the strict limits (5e-5 on probabilities, 1e-4 on curve numbers) for exact state and for the first 25 reviews with int8 state, and wider limits (3e-4 and 3e-3) for the whole int8 history.
 
 ## Speed (Node 22 on the build machine, one core)

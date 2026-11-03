@@ -80,3 +80,31 @@ test('git ignores weights, checkpoints, datasets and the private folder', () => 
   const ignore = fs.readFileSync(new URL('.gitignore', root), 'utf8').split('\n').map(s => s.trim());
   for (const line of ['*.bin', '*.pth', '*.npz', 'rwkv-lab-private/', 'weights*.json']) assert.ok(ignore.includes(line), line);
 });
+
+test('the network layer itself refuses in the lab build, so an account signed in earlier cannot sync either', async () => {
+  const supaSrc = fs.readFileSync(new URL('js/supa.js', root), 'utf8');
+  assert.match(supaSrc, /async function call\([^)]*\) \{\n  labOff\(\);/);
+  assert.match(supaSrc, /const labOff = \(\) => \{ if \(labNetworkBlocked\(\)\) throw/);
+  // the only way past the block is a global that a page never has (it has `document`) and that nothing in the app sets
+  assert.match(fs.readFileSync(new URL('js/rwkv-flag.js', root), 'utf8'), /LAB_BUILD && !\(typeof document === 'undefined' && globalThis\.__SS_TEST_NETWORK === true\)/);
+  assert.deepEqual(fs.readdirSync(new URL('js/', root)).filter(f => /\.js$/.test(f) && /__SS_TEST_NETWORK/.test(fs.readFileSync(new URL('js/' + f, root), 'utf8'))), ['rwkv-flag.js']);
+  assert.match(supaSrc, /async function storage\([^)]*\) \{\n  labOff\(\);/);
+  assert.equal((supaSrc.match(/\bfetch\(/g) || []).length, 2, 'every fetch in supa.js sits behind labOff');
+  assert.match(fs.readFileSync(new URL('js/app-config.js', root), 'utf8'), /if \(labNetworkBlocked\(\)\) throw new Error\('Sync is off in the lab build\.'\)/);
+  assert.match(fs.readFileSync(new URL('js/sync.js', root), 'utf8'), /async function session\(\) \{\n  if \(labNetworkBlocked\(\)\) return null;/);
+  // And in practice: none of the server calls (sign in, password reset, resend, token refresh, sync reads and writes) reaches fetch.
+  const real = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = () => { calls++; return Promise.reject(new Error('network')); };
+  try {
+    const supa = await import('../js/supa.js');
+    for (const run of [() => supa.signIn('a@b.c', 'x'), () => supa.sendPasswordReset('a@b.c', 'x'), () => supa.resendSignup('a@b.c'),
+      () => supa.setPassword('t', 'x'), () => supa.refresh('r'), () => supa.getChanges('t', 0), () => supa.putRows('t', []), () => supa.myUsage('t'),
+      () => supa.deleteAccount('t'), () => supa.uploadMedia('t', 'u', 'i', 'image/png', new Uint8Array(1))]) {
+      await assert.rejects(run, /Sync is off in the lab build\./);
+    }
+    const { fetchMinClient } = await import('../js/app-config.js');
+    assert.equal(await fetchMinClient({ base: 'x', key: 'y' }), null);
+  } finally { globalThis.fetch = real; }
+  assert.equal(calls, 0);
+});

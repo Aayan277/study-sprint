@@ -1,3 +1,4 @@
+import './rwkv-test-network.mjs';
 // The 30-day wait before pictures and sounds are deleted from the account (js/media-sweep.js), the import's "too big" sentences
 // and the check for files the account already holds (js/sync-quota.js). Run with: node tests/media-sweep.test.js
 

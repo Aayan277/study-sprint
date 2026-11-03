@@ -21,4 +21,19 @@ ok(await page.evaluate(async () => { const s = await (await import('./js/db.js')
 ok(supabaseRequests === 0, 'no request went to the server (' + supabaseRequests + ')');
 ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll at 375px');
 ok(errors.length === 0, 'no page errors ' + errors.join('|'));
+
+// An account that was signed in on this origin before (syncAuth is still in IndexedDB): the network layer itself must refuse.
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  await db.setSetting('syncAuth', { access_token: 'a', refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: 'u1', email: 'old@example.com' } });
+});
+await page.goto('http://localhost:8123/#/today'); await page.reload(); await page.waitForSelector('.view');
+await page.waitForTimeout(1500);                                     // start-up: automatic sync, the minimum-version check
+await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#syncNowBtn');
+await page.click('#syncNowBtn'); await page.waitForTimeout(800);
+await page.click('#signOutBtn'); await page.waitForSelector('#soKeep'); await page.waitForTimeout(500);
+await page.click('#soKeep'); await page.waitForTimeout(1500);
+ok(supabaseRequests === 0, 'with an old sign-in on the device: start-up, Sync now and Sign out sent no request (' + supabaseRequests + ')');
+ok(await page.evaluate(() => !!document.querySelector('#screen, main')), 'the app is still standing');
+ok(errors.length === 0, 'and no page errors ' + errors.join('|'));
 await browser.close();
