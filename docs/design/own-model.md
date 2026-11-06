@@ -85,6 +85,36 @@ Own is "better" when the mean per-user log-loss difference (Own real plus fine-t
 
 Time-ordered split with the same cutoff rule. All models replay the whole history for state but learn only from before the cutoff. FSRS-6 is fitted on the train part only. Fewer than 50 holdout predictions or fewer than 1,000 scored reviews gives "Not enough reviews yet" and no verdict. The confidence interval is a bootstrap over cards (1,000 resamples). Own may schedule only after a "Better" verdict on your own reviews.
 
+## 3b. How the model and engine are built (stage S3)
+
+Two files: `js/own-model.js` (the network) and `js/own-engine.js` (remembers every card, note, deck and you, and answers "what is the chance?").
+
+**One answer, step by step.**
+
+1. The note, deck and you memories relax toward their resting vector by the time that passed since each was last used.
+2. Prediction: the head reads the four memories plus context features 3 to 11 and draws the curve. The curve is read at the card's real gap in days. This number is what the loss is measured on, and it never sees the button, the time taken or the replay flag.
+3. Update: the cell reads all 18 features plus the four (relaxed) memories and rewrites all four memories at once.
+
+**Two copies of the same recipe.** The app uses plain loops (fast, states stored as 32-bit floats). Training uses the tape from `own-grad.js` (it can walk backwards to get gradients). Tests check that they agree to 1e-6, and check the tape's gradients against nudging numbers by hand through a chunk of a made-up history (3 cards, 2 decks).
+
+**Training in chunks (TBPTT).** A learner's history is cut into chunks of events. Inside a chunk gradients flow through every step. Between chunks the memories are carried over as plain numbers, so no gradient crosses a chunk border (that is the "truncated" part, and it keeps memory use small). `trainChunk` returns the summed BCE loss over the scored answers; a card's first answer is not scored.
+
+**Choices worth knowing.**
+
+- After an answer, the engine saves the card's curve: it is the head read on the new memories with the same context features the answer had. `whatIf` does exactly this for each of Again, Hard, Good, Easy (without changing anything), so a what-if curve equals the curve a real answer would leave behind (a test checks this).
+- Starting values: gates start mostly closed (bias -1), resting vectors start at 0, memory times are log-spaced from 0.05 to 100 days, the curve starts with a ceiling near 0.9 and stabilities of 0.5, 5 and 50 days. All from a seed.
+- Saved per card: 32 float32 numbers plus 10 curve numbers (168 bytes). Note, deck and you: 16 float32 numbers each.
+- Undo keeps the previous arrays and the previous feature counters, so undoing gives back the exact bytes (tested).
+
+**Speed** (`node tools/own-model/bench.mjs`, Node v22.22.0, one core of the build machine, 20,000 made-up answers over 1,500 cards; a guide, not a test):
+
+| Size | Parameters | Per review | Per what-if (4 curves) | Training speed (forward and backward) | Saved state (1,500 cards, JSON) |
+|---|---|---|---|---|---|
+| s (ships) | 19,178 | 0.07 ms | 0.19 ms | 6,200 answers/s (about 160 s per million answers) | 598 KB |
+| m (research) | 63,306 | 0.15 ms | 0.53 ms | 2,600 answers/s (about 390 s per million answers) | 912 KB |
+
+Both are well inside the guide (review at most 0.5 ms, what-if at most 2 ms).
+
 ## 4. Results
 
 None yet. Aggregate numbers and the git stamp of each run will be pasted here, whatever they are.
