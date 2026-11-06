@@ -6,7 +6,7 @@ import { dupKey } from './import.js';
 import { hasMasks, occLabel } from './occlusion.js';
 import { isStepped, finalStep, parseElements } from './steps.js';
 import { maskMath } from './math.js';
-import { answerText } from './format.js';
+import { answerText, shownOption } from './format.js';
 import { playRole } from './reverse.js';
 
 export const LIGHTNING_MS = 60000;   // Lightning: 60 seconds on the clock
@@ -95,9 +95,12 @@ export function defaultQuestionType(cards, isTyping = null) {
   return cards.length && long > cards.length / 2 ? 'back' : 'front';
 }
 
+// What two options are compared by: the text the options show (a long back shows only its lead), so two options never look the same.
+const shownKey = (label, qtype) => dupKey(shownOption(label, qtype));
+
 // Multiple choice needs at least 4 different possible answers.
 export function canMultipleChoice(cards, qtype) {
-  return new Set(playableCards(cards, qtype).map(c => dupKey(questionFor(c, qtype).answer))).size >= MIN_CARDS;
+  return new Set(playableCards(cards, qtype).map(c => shownKey(questionFor(c, qtype).answer, qtype))).size >= MIN_CARDS;
 }
 
 // ---------- distractors (wrong options) ----------
@@ -142,18 +145,18 @@ function candidatesFor(card, pool, rnd) {
 // card a "You mix these up" pair is confused with.
 export function pickDistractors(card, pool, qtype, { hard = false, count = hard ? 5 : 3, rnd = Math.random, withIds = false, include = [] } = {}) {
   const answer = questionFor(card, qtype).answer;
-  const seen = new Set([dupKey(answer)]);
+  const seen = new Set([shownKey(answer, qtype)]);
   const words = contentWords(answer);
   const tags = new Set(card.tags || []);
   const scored = [];
-  const want = new Set(include.map(dupKey).filter(Boolean));
+  const want = new Set(include.map(l => shownKey(l, qtype)).filter(Boolean));
   const consider = other => {
     // Never a sibling: its answer is on this card's front. (For an image-occlusion card the other boxes' labels are the
     // best wrong options: the picture doesn't show them.)
     if (other.id === card.id || (card.noteId && other.noteId === card.noteId && !hasMasks(card))) return;
     const label = questionFor(other, qtype).answer;
-    const key = dupKey(label);
-    if (!key || seen.has(key)) return;      // no duplicate options, and never the right answer twice
+    const key = shownKey(label, qtype);
+    if (!key || seen.has(key)) return;      // no duplicate options (as shown), and never the right answer twice
     seen.add(key);
     let score = 0;
     if (other.deckId === card.deckId) score += 2;
@@ -172,7 +175,7 @@ export function pickDistractors(card, pool, qtype, { hard = false, count = hard 
   sample.forEach(consider);
   // A sample of a big pool can hold too few different answers (e.g. mostly Yes/No): look through the rest.
   if (scored.length < count && pool.length > sample.length) shuffle(pool.slice(), rnd).forEach(consider);
-  if (want.size && [...want].some(k => !seen.has(k))) pool.forEach(o => { if (want.has(dupKey(questionFor(o, qtype)?.answer))) consider(o); });
+  if (want.size && [...want].some(k => !seen.has(k))) pool.forEach(o => { if (want.has(shownKey(questionFor(o, qtype)?.answer, qtype))) consider(o); });
   const top = scored.sort((a, b) => b.score - a.score).slice(0, count);
   return withIds ? top.map(({ label, id }) => ({ label, id })) : top.map(s => s.label);
 }

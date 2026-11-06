@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.58', items: [
+    'New setting: choose whether cards you are still learning today come before, mixed with, or after your reviews.',
+    'Undo no longer shows a card twice when it came back right away.',
+    'Play answer choices no longer give the answer away, and long questions and formulas show whole.',
+  ] },
   { version: '4.57', items: [
     'Long questions now show in smaller text on a computer, and the answer side no longer has a big empty gap at the top.',
   ] },

@@ -27,6 +27,7 @@ import { cleanFsrsParams, cleanIgnoreBefore, cleanFsrsVersion } from './sched-se
 import { cleanGlossary } from './glossary.js';
 import { decide, MERGERS, recordFromRow, needsPush, tombstoneNeedsPush, badRow, addDamaged } from './sync-merge.js';
 import { dayStart, dayEnd } from './days.js';
+import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 import { validOcclusion, cleanAccept, cleanTypeIn } from './card-checks.js';
 import { validFields, cleanFields } from './note-fields.js';
 
@@ -49,6 +50,7 @@ export const DEFAULT_SETTINGS = {
   fuzz: true,
   leechThreshold: 8,         // forgotten this many times = a leech (0 = off); see browse-logic.js
   leechAction: 'suspend',    // 'suspend' or 'tag'
+  learnOrder: 'mixed',       // where same-day learning cards go in Review: 'before' | 'mixed' (as always) | 'after' the reviews (queue.js). Synced, newest wins
   reviewLimit: null,         // reviews per day across all decks (null = no limit)
   ignoreBefore: null,        // 'YYYY-MM-DD' or null: the optimizer and the health check ignore reviews before this day (messy early history). Synced, newest wins
   fsrsParams: null,          // your own FSRS weights from the optimizer: { w, at, reviews, cards, logLoss, rmse, version } or null (the standard ones); see sched-settings.js. Synced, newest wins
@@ -551,7 +553,7 @@ export async function getSettings() {
   const os = await store('settings');
   const [keys, values] = await Promise.all([done(os.getAllKeys()), done(os.getAll())]);
   const saved = Object.fromEntries(keys.map((k, i) => [k, values[i]]).filter(([k]) => !String(k).startsWith(PENDING)));
-  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore), fsrsVersion: cleanFsrsVersion(saved.fsrsVersion) };
+  return { ...DEFAULT_SETTINGS, ...saved, fsrsParams: cleanFsrsParams(saved.fsrsParams), ignoreBefore: cleanIgnoreBefore(saved.ignoreBefore), fsrsVersion: cleanFsrsVersion(saved.fsrsVersion), learnOrder: cleanLearnOrder(saved.learnOrder) };
 }
 // The settings store keeps its key outside the value, so the key is passed separately.
 // Settings that sync also note when they changed, in the '_times' setting.
@@ -784,6 +786,7 @@ export function restoredSettings(settings) {
     .filter(([k]) => !isLocalOnly(k))
     .filter(([k, v]) => k !== 'fsrsParams' || v === null || cleanFsrsParams(v))
     .filter(([k, v]) => k !== 'ignoreBefore' || v === null || cleanIgnoreBefore(v))      // a junk or future date is left out
+    .filter(([k, v]) => k !== 'learnOrder' || LEARN_ORDERS.includes(v))       // junk is left out, not stored as 'mixed'
     .filter(([k, v]) => k !== 'fsrsVersion' || v === 6 || v === 7)       // junk is left out, not stored as 6 (a stamped 6 would switch other devices back)
     .filter(([k, v]) => k !== 'statsLayout' || acceptStatsLayout(v).ok)         // junk is left out
     .map(([k, v]) => (k === 'fsrsParams' && v !== null ? [k, cleanFsrsParams(v)] : k === 'statsLayout' ? [k, acceptStatsLayout(v).value] : [k, v]));

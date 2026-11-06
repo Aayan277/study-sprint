@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatHTML, plainText, hasFormatting, htmlToMarks, toggleWrap, toggleBullets, mathHTML, answerText } from '../js/format.js';
+import { formatHTML, plainText, hasFormatting, htmlToMarks, toggleWrap, toggleBullets, mathHTML, answerText, leadPara, optionText, shownOption } from '../js/format.js';
 
 test('showing formatted text', () => {
   assert.equal(formatHTML('The **mitochondria** is *the* powerhouse'), 'The <b>mitochondria</b> is <i>the</i> powerhouse');
@@ -155,4 +155,43 @@ test('private characters in the text survive (the rich editor round trip) and ar
   assert.equal(htmlToMarks(formatHTML(text, { math: 'raw' })), text);
   // a lone character with nothing to swap behaves as before
   assert.deepEqual(holdMath('plain'), { text: 'plain', items: [] });
+});
+
+test('leadPara: the first short paragraph of a back is its lead', () => {
+  assert.deepEqual(leadPara('C. Hashimoto\n\nBecause of antibodies.'), { lead: 'C. Hashimoto', rest: 'Because of antibodies.' });
+  assert.deepEqual(leadPara('C. Hashimoto\r\n\r\nBecause.'), { lead: 'C. Hashimoto', rest: 'Because.' });    // Windows line ends
+  assert.deepEqual(leadPara('Lead\n \t\nRest'), { lead: 'Lead', rest: 'Rest' });                          // a blank line may hold spaces
+  assert.equal(leadPara('Just one paragraph'), null);
+  assert.equal(leadPara(''), null);
+  assert.equal(leadPara(null), null);
+  assert.equal(leadPara('\n\nonly a rest'), null);                  // empty lead
+  assert.equal(leadPara('only a lead\n\n  \n'), null);             // empty rest
+  assert.equal(leadPara('Line one\nLine two'), null);                // a single line break is not a paragraph
+});
+
+test('leadPara: 80 characters at most', () => {
+  const ok = 'x'.repeat(80), long = 'x'.repeat(81);
+  assert.equal(leadPara(`${ok}\n\nmore`)?.lead, ok);
+  assert.equal(leadPara(`${long}\n\nmore`), null);
+  assert.equal(optionText(`${long}\n\nmore`), `${long}\n\nmore`);      // too long to be a lead: the whole back is the answer
+});
+
+test('leadPara: a formula is never cut in half', () => {
+  assert.equal(leadPara('$$x\n\ny$$'), null);
+  assert.equal(leadPara('\\[a\n\nb\\]'), null);
+  assert.deepEqual(leadPara('$$x\n\ny$$\n\nBecause.'), { lead: '$$x\n\ny$$', rest: 'Because.' });
+  assert.deepEqual(leadPara('Costs \\$5 or \\$6\n\nmore'), { lead: 'Costs \\$5 or \\$6', rest: 'more' });   // escaped dollars are not maths
+  assert.deepEqual(leadPara('$a+b$\n\nmore'), { lead: '$a+b$', rest: 'more' });
+});
+
+test('leadPara: a list can be the lead', () => {
+  assert.deepEqual(leadPara('- nucleus\n- ribosome\n\nBoth are organelles.'), { lead: '- nucleus\n- ribosome', rest: 'Both are organelles.' });
+});
+
+test('optionText and shownOption: only a back is shortened', () => {
+  const back = 'Graves disease\n\nAntibodies stimulate the TSH receptor.';
+  assert.equal(optionText(back), 'Graves disease');
+  assert.equal(optionText('Plain'), 'Plain');
+  assert.equal(shownOption(back, 'front'), 'Graves disease');         // options are backs
+  assert.equal(shownOption(back, 'back'), back);                       // options are fronts: shown whole
 });
