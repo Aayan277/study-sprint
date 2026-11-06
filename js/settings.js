@@ -34,6 +34,7 @@ import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 import { contactHTML, legalLinksHTML } from './legal.js';
 import { helpLink } from './help.js';
+import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
@@ -106,6 +107,11 @@ export async function renderSettings(el) {
       <div class="set-row">
         <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
+      </div>
+      <div class="adv-row" id="learnOrderRow"><b id="learnOrderLbl">Learning cards</b> ${helpLink('learn-order', '?', 'About where learning cards go')}
+        <div class="chips" role="radiogroup" aria-labelledby="learnOrderLbl" id="learnOrderChips">
+          ${LEARN_ORDERS.map(v => `<label class="chip"><input type="radio" name="learnOrder" value="${v}" ${cleanLearnOrder(app.settings.learnOrder) === v ? 'checked' : ''}><span>${{ before: 'Before reviews', mixed: 'Mixed with reviews', after: 'After reviews' }[v]}</span></label>`).join('')}
+        </div>
       </div>
       <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
         <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
@@ -352,6 +358,11 @@ export async function renderSettings(el) {
   $('npdPlus').addEventListener('click', () => setNpd(app.settings.newPerDay + 5));
   // Play: practice only (default) or counted as reviews. Synced, so every device plays the same way.
   $('playCounts').addEventListener('change', e => { app.settings.playCountsAsReviews = e.target.checked; db.setSetting('playCountsAsReviews', e.target.checked); });
+  // Learning cards: before, mixed with or after the reviews (queue.js). Synced; the next Review session uses it.
+  el.querySelectorAll('input[name="learnOrder"]').forEach(r => r.addEventListener('change', async () => {
+    app.settings.learnOrder = cleanLearnOrder(r.value);
+    await db.setSetting('learnOrder', app.settings.learnOrder);
+  }));
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));

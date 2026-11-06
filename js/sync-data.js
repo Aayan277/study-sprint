@@ -13,6 +13,7 @@
 import { cleanFsrsParams, cleanIgnoreBefore } from './sched-settings.js';
 import { isMarkKey, validMark } from './media-sweep.js';
 import { acceptStatsLayout } from './stats-layout.js';
+import { LEARN_ORDERS } from './queue.js';
 
 // The stores that sync, and which field is each record's id across devices.
 export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewLog: 'uid' };
@@ -20,7 +21,7 @@ export const SYNC_ID = { decks: 'id', cards: 'id', cardStates: 'cardId', reviewL
 // Settings that follow you between devices. Theme, light/dark and screen choices stay per device.
 export const SYNCED_SETTINGS = [
   'targetRetention', 'newPerDay', 'learningSteps', 'relearningSteps', 'maxInterval', 'fuzz',
-  'leechThreshold', 'leechAction', 'reviewLimit', 'easyDays', 'restDays', 'idleDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
+  'leechThreshold', 'leechAction', 'reviewLimit', 'learnOrder', 'easyDays', 'restDays', 'idleDays', 'rescue', 'dailyGoal', 'playCountsAsReviews',
   'fsrsParams',         // your own FSRS weights from the optimizer (null = the standard ones); newest wins
   'ignoreBefore',       // 'YYYY-MM-DD' or null: the optimizer and health check ignore reviews before this day; newest wins
   'statsLayout',        // which Stats cards show, their order and width (js/stats-layout.js); null = the default; newest wins
@@ -40,6 +41,7 @@ export const SETTING_TIMES = '_times';
 export function acceptSetting(key, value) {
   if (key === 'ignoreBefore') return value === null || value === undefined ? { ok: true, value: null } : cleanIgnoreBefore(value) ? { ok: true, value } : { ok: false };
   if (key === 'statsLayout') return acceptStatsLayout(value);
+  if (key === 'learnOrder') return LEARN_ORDERS.includes(value) ? { ok: true, value } : { ok: false };      // 'before' | 'mixed' | 'after'; junk is ignored
   if (key === 'fsrsVersion') return value === 6 || value === 7 ? { ok: true, value } : { ok: false };
   if (isMarkKey(key)) return validMark(value) ? { ok: true, value } : { ok: false };
   if (key !== 'fsrsParams') return { ok: true, value };

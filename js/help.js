@@ -104,7 +104,7 @@ export const SECTIONS = [
       <p>With an account, a copy is also kept on the app’s server (Supabase), and each account can only read its own data. Details are on the <a href="privacy.html">Privacy</a> page.</p>` },
     { id: 'device-only', q: 'Which settings are only on this device?', a: `
       <p>Look and feel stays on the device you set it on: everything under Settings → Appearance (style, colours, Light or dark, OLED black, Card text alignment, Compact deck list, Rating feedback, Smooth transitions, Exam readiness in Stats and Glossary underlines), Single-key shortcuts, Play timer, Cards due on the app icon and the reminder time.</p>
-      <p>With an account, your study settings sync to your other devices: New cards per day, Reviews per day, Target retention, the scheduling options, Play counting as reviews, your Stats layout and your Glossary.</p>` },
+      <p>With an account, your study settings sync to your other devices: New cards per day, Reviews per day, Learning cards order, Target retention, the scheduling options, Play counting as reviews, your Stats layout and your Glossary.</p>` },
     { id: 'device', q: 'How do I move my cards to a new phone?', a: `
       <p>Easiest: make an account on the old device (Settings → Sync), then sign in with the same email on the new one. Without an account: Settings → Your data → <b>Export backup</b> on the old device, send the file to the new one, and use <b>Import backup</b> there.</p>` },
     { id: 'email', q: 'I didn’t get the confirmation or password email.', a: `
@@ -118,6 +118,15 @@ export const SECTIONS = [
     { id: 'steps', q: 'How do I type learning steps?', a: `
       <p><b>Learning steps</b> are the short gaps while a card is new: you see it again after each one, until it moves on to normal reviews. <b>Relearning steps</b> are the gaps after you press Again on a normal review.</p>
       <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m). The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
+    { id: 'learn-order', q: 'Where do learning cards go in a session?', a: `
+      <p>Learning cards are the ones the <b>Learn</b> number at the top of Review counts: cards on their short learning steps, or relearning after you pressed Again, that are due today. A learning step of a day or more counts too once it has come due. New cards you haven’t answered yet are not learning cards.</p>
+      <p>Settings → Study → <b>Learning cards</b> chooses where they go:</p>
+      <ul>
+        <li><b>Mixed with reviews</b> (the default, as the app has always worked): learning cards and reviews come in the order they became due, with new cards spread through them.</li>
+        <li><b>Before reviews</b>: learning cards first, then reviews and new cards.</li>
+        <li><b>After reviews</b>: reviews and new cards first, then the learning cards. A card you press Again on waits for the end of the session too, however short its step.</li>
+      </ul>
+      <p>Daily limits count the same in all three. It syncs to your other devices and applies from the next time you press Start. Custom study sessions keep their own order.</p>` },
     { id: 'advanced', q: 'What do the other Advanced scheduling settings do?', a: `
       <p>Changes apply to future reviews; cards already scheduled keep their dates until you next review them.</p>
       <ul>
