@@ -117,7 +117,16 @@ Both are well inside the guide (review at most 0.5 ms, what-if at most 2 ms).
 
 ## 4. Results
 
-None yet. Aggregate numbers and the git stamp of each run will be pasted here, whatever they are.
+No model results yet. Aggregate numbers and the git stamp of each run will be pasted here, whatever they are.
+
+### Data conversion (aggregate counts only, stage S4)
+
+- The raw files have these columns: `card_id, day_offset, rating, state, duration, elapsed_days, elapsed_seconds` (all whole numbers; `duration` is the answer time in milliseconds, `elapsed_seconds` is -1 on a card's first answer). There is no note, deck or preset column in them.
+- Note, deck and preset ids exist only in the separate meta files: `cards-<u>` has `card_id, note_id, deck_id`, and `decks-<u>` has `deck_id, parent_id, preset_id`. Those exist for 36 users.
+- Converted: 2,004 users and 141.6 million rows. Every user has answer times; 36 users (1.8%) also have notes, decks and presets. No row or file was dropped by the checks (0 bad rows, 0 bad elapsed or duration values, 0 files refused, 0 users with days going backwards).
+- By the hash rule the 2,004 users split into 1,345 train, 269 validation and 390 test.
+- Because only 36 users have notes and decks, the note and deck memories mostly see "note = card, deck = unknown" on real data. Results will be reported with and without those users.
+- A first reading of 200 of the users with the source (cap 40,000 rows each) gave 5.3 million rows, of which 2.9 million are later-day ("long") reviews and 1.5 million same-day ones.
 
 ## 5. Honest expectations
 
@@ -125,3 +134,27 @@ None yet. Aggregate numbers and the git stamp of each run will be pasted here, w
 - With a few thousand reviews of your own, the intervals are wide. "Not better" or "Not enough data" will be common and correct.
 - On real data, Own is likely better than FSRS-6 default, and uncertain against per-user fitted FSRS-6.
 - Once Own schedules, its own gaps shape its future training data. FSRS fields stay current so you can switch back.
+
+## 6. Test data: the simulator and the data sources
+
+### The simulator (`tools/own-model/sim.mjs`, `npm run own:sim`)
+
+It makes made-up learners who study like an Anki user with FSRS-6 default scheduling, and writes Study Sprint log rows. The hidden truth (`truth`) lives next to the rows, never inside them.
+
+- **Hidden memory.** Every card has a fast trace (about 1 day) and a slow trace (about 30 days). A success adds to the slow trace, more when the recall was hard (the spacing effect). A failure shrinks the slow trace. This is not FSRS on purpose.
+- **Six switchable effects FSRS cannot see:** `siblings` (cards of one note share difficulty and prime each other), `interference` (answering a card weakens the other cards of a hidden confusion group), `drift` (the learning gain wanders from day to day, with exam-term steps), `badDays` (a two-state chain of normal and bad days that lowers recall), `answerTime` (slower answers when recall was less likely), and `schedNoise` (days off, a backlog, late and off-schedule reviews).
+- **Control world** (`world: 'fsrs'`): memory follows FSRS-6 exactly with weights jittered per learner. No model should beat FSRS-6 there.
+- **Oracle:** `sim-report.mjs` prints the log loss of a predictor that knows the truth, next to a constant guess and FSRS-6 default. The gap is the most any model could gain.
+- Settings I chose where the plan left room: card difficulty has a share that belongs to the note (0.5) and a per-deck offset; the success gain is proportional to (1 + current slow trace) so the traces can grow into months; the base logit is around 2.5 and the gain about 2.5 so that recall lands near 87% under FSRS scheduling. With the plan's 5 to 20 new cards a day over 60 to 400 days a learner has about 24,000 reviews, not 1,900, so the trainer should choose `days` and `count` itself.
+
+### Data sources (`tools/own-model/sources/`)
+
+Each source is `{ id, licence, node, browser, available(), describe(), *learners() }`; splits are by learner.
+
+- `sim`: the simulator (seeds 1.., 10001.., 20001.., control 30001..).
+- `fixture`: four tiny made-up learners kept in the repo, for tests.
+- `anki10k`: real logs, from a folder outside the repo (`FSRS_DATA`, default `~/fsrs-data`). Used only when asked for and when the folder exists; otherwise skipped cleanly. It reads `own/users/<u>.json` (made by `data/convert.py`, with answer time, note, deck, preset) and falls back to `users/<u>.json` (six basic columns). The converted file wins when both exist, because it holds the same rows plus more columns. Every user file that exists is used. Each file is checked (types, ranges, equal lengths, row and size caps, no unknown columns) and refused whole if anything is wrong.
+- The data has days but no clock. Rows get a made-up clock (day at 04:00 plus the running answer times of that day, 10 s when unknown); only the gaps between different cards, notes and decks use it. A card's own gap comes from `elapsed_seconds` and its study day from `day_offset` (the `gapSec` and `day` overrides in `js/own-features.js`). Unknown answer times read as the neutral 8,000 ms.
+- Rules as in `tests/realdata/lib.mjs`: ratings 1 to 4; a state-0 row after earlier rows is a reset (the card gets a new life `c<id>~2`, the note, deck and user memories carry on); only the last life of a card is scored, and only if it starts at state 0. Rows that are not scored carry `scored: false` and still update the memories. `rowsOf()` adds `dDays` (whole days since the card's previous row): later-day ("long") rows have `dDays > 0`, same-day rows 0.
+- Split by learner: `fnv1a('own-split|' + id) mod 100`: 0 to 66 train, 67 to 79 validation, 80 to 99 test. A per-user cap (default 40,000 rows) thins by whole cards, seeded by the user id.
+- `data/convert.py` turns raw files into the converted ones (resumable, refuses folders inside the repo, drops bad rows and counts them).
