@@ -22,3 +22,8 @@ results.jsonl
 *.npz
 rwkv-lab-private/
 weights*.json
+
+# Own model: converted data, caches, model files and run output stay out of git (tests/own-guardrails.test.js checks this)
+*.own
+tools/own-model/out/
+tools/own-model/.cache/
