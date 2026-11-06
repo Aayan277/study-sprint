@@ -21,7 +21,9 @@ The summary contains only aggregate numbers.
        python3 -m venv ~/fsrs-venv && ~/fsrs-venv/bin/pip install pyarrow
        HF_TOKEN=... ~/fsrs-venv/bin/python -I tests/realdata/fetch.py
 
-   It can be stopped and started again; finished users are skipped.
+   It can be stopped and started again; finished users are skipped. Add `--meta` to also download each user's cards and decks tables
+   (note, deck and preset ids) into `~/fsrs-data/meta/cards-<user>.parquet` and `decks-<user>.parquet`, where `tools/own-model/data/convert.py` reads them
+   (a table that fails to download is skipped and tried again next time).
 2. Score the users (needs `npm install` once, for the ts-fsrs default weights and bounds):
 
        node tests/realdata/run.mjs [--users 1,2,3 | --limit N] [--jobs 4] [--out file] [--cap N]

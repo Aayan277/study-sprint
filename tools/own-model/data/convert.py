@@ -1,7 +1,7 @@
 # Convert raw review logs (one parquet file per user, kept OUTSIDE the repo) into the small JSON files the Own model tools read.
 # One of the two files that may name the dataset (the other is sources/anki10k.mjs). Run it with the isolated interpreter:
 #
-#   ~/fsrs-venv/bin/python -I tools/own-model/data/convert.py [--schema] [--users 1,2,3] [--limit N] [--data DIR]
+#   ~/fsrs-venv/bin/python -I tools/own-model/data/convert.py [--schema] [--users 1,2,3] [--limit N] [--data DIR] [--force]
 #
 # Reads    <data>/raw/<u>.parquet and, when present, <data>/meta/cards-<u>.parquet (note and deck per card)
 #          and <data>/meta/decks-<u>.parquet (preset per deck).
@@ -9,6 +9,7 @@
 #          card_id, day_offset, rating, state, elapsed_seconds, duration_ms, note_id, deck_id, preset_id (a column is null where unknown)
 # Rules    every value is checked; a bad row is dropped and counted; a bad file is skipped and counted. Users already converted are
 #          skipped, so the script can be stopped and started again, and a download still running does no harm (only finished files are read).
+#          --force converts them again (for example after the meta files arrived).
 #          It never writes inside the repo. <data> defaults to the FSRS_DATA environment variable, then ~/fsrs-data.
 # Needs    pyarrow (python3 -m venv ~/fsrs-venv && ~/fsrs-venv/bin/pip install pyarrow). Nothing here touches the network.
 import argparse, json, os, re, sys, time
@@ -122,6 +123,7 @@ def main():
     ap.add_argument('--schema', action='store_true', help='print the column names and types of one raw file (and its meta files), then stop')
     ap.add_argument('--users', help='comma-separated user ids')
     ap.add_argument('--limit', type=int)
+    ap.add_argument('--force', action='store_true', help='convert users again even when their converted file exists')
     ap.add_argument('--max-rows', type=int, default=5_000_000)
     ap.add_argument('--max-bytes', type=int, default=400 * 1024 * 1024)
     a = ap.parse_args()
@@ -147,7 +149,7 @@ def main():
         want = {int(x) for x in a.users.split(',')}
         users = [u for u in users if u in want]
     os.makedirs(out_dir, exist_ok=True)
-    todo = [u for u in users if not os.path.exists(os.path.join(out_dir, f'{u}.json'))]
+    todo = [u for u in users if a.force or not os.path.exists(os.path.join(out_dir, f'{u}.json'))]
     if a.limit:
         todo = todo[:a.limit]
     print(f'{len(users)} raw users, {len(users) - len(todo) if not a.limit else "?"} already converted, {len(todo)} to do', flush=True)

@@ -7,7 +7,12 @@
     "test:browser": "node tests/browser/run.mjs",
     "test:sql": "node tests/sql/run.mjs",
     "lab": "node tools/rwkv-lab/serve.mjs",
-    "own:sim": "node tools/own-model/sim-report.mjs"
+    "own:sim": "node tools/own-model/sim-report.mjs",
+    "own:train": "node tools/own-model/train.mjs --source sim",
+    "own:train:real": "node tools/own-model/train.mjs --source anki10k",
+    "own:eval": "node tools/own-model/eval.mjs --source sim",
+    "own:eval:real": "node tools/own-model/eval.mjs --source anki10k",
+    "own:all": "node tools/own-model/all.mjs"
   },
   "devDependencies": {
     "ts-fsrs": "5.4.2",

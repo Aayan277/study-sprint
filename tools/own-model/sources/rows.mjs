@@ -2,6 +2,7 @@
 // modelRows() (js/rwkv-features.js) does the work. On top of it we carry over the few things only some sources know:
 //   log.day, log.gapSec   overrides for data without a wall clock (see js/own-features.js)
 //   log.msUnknown         the answer time is missing: use the neutral 8000 ms (feature 16 = 0) instead of 0 ms
+//   log.rawRow            the row's position in the user's data file (so outside predictions can be lined up with it)
 //   log.scored === false  the row updates the memory but is not part of the score (earlier lives of a reset card, cards whose start is unknown)
 // and add row.dDays: whole days since this card's previous row (undefined on its first row). 'long' rows have dDays > 0, 'same' rows 0.
 import { modelRows } from '../../../js/own-features.js';
@@ -17,6 +18,7 @@ export function rowsOf(learner) {
       if (Number.isFinite(l.gapSec)) r.gapSec = l.gapSec;
       if (l.msUnknown === true) r.ms = 8000;
       if (l.scored === false) r.scored = false;
+      if (Number.isFinite(l.rawRow)) r.rawRow = l.rawRow;
     }
     const prev = lastDay.get(r.cardKey);
     if (prev !== undefined) r.dDays = Math.max(0, r.day - prev);

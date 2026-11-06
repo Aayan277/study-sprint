@@ -308,7 +308,38 @@ put('raw/3.parquet', {'card_id': [1], 'day_offset': [0], 'rating': [3]})
   r = run();
   assert.match(r.stdout, /"users": 0/);
   assert.equal(fs.readFileSync(path.join(root, 'own', 'users', '1.json'), 'utf8'), before);
+  // --force converts finished users again (after the meta files arrived, say): a changed meta file shows up in the new output
+  fs.rmSync(path.join(root, 'meta', 'cards-1.parquet'));
+  r = spawnSync(PY, ['-I', CONVERT, '--data', root, '--force'], { encoding: 'utf8' });
+  assert.match(r.stdout, /"users": 2/);
+  assert.equal(out(1).note_id, null, 'converted again without the removed meta file');
   // the schema command prints names and types only
   const s = spawnSync(PY, ['-I', CONVERT, '--data', root, '--schema'], { encoding: 'utf8' });
-  assert.match(s.stdout, /card_id/); assert.match(s.stdout, /cards:/);
+  assert.match(s.stdout, /card_id/);
+});
+
+test('fetch.py --meta: downloads cards and decks tables under the names convert.py reads, skips finished ones, survives a failure (no network: fake downloader)', t => {
+  const FETCH = fileURLToPath(new URL('./realdata/fetch.py', import.meta.url));
+  const dir = fs.mkdtempSync(path.join(tmp, 'meta-'));
+  const script = `
+import sys, os, types
+for name in ('pyarrow', 'pyarrow.parquet'): sys.modules[name] = types.ModuleType(name)
+src = open(sys.argv[1]).read().replace('\\nmain()\\n', '\\n')
+g = {'__name__': 'fetch_under_test'}
+exec(compile(src, 'fetch.py', 'exec'), g)
+urls = []
+def fake(url, token):
+    urls.append(url)
+    if 'decks/user_id=8/' in url: raise OSError('down')
+    return b'PAR1'
+g['get'] = fake
+d = sys.argv[2]
+g['fetch_meta'](7, d, 't'); g['fetch_meta'](8, d, 't'); g['fetch_meta'](7, d, 't')
+print(sorted(os.listdir(d)), len(urls))
+`;
+  const r = spawnSync('python3', ['-I', '-c', script, FETCH, dir], { encoding: 'utf8' });
+  if (r.error) return t.skip('python3 is not available');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\['cards-7\.parquet', 'cards-8\.parquet', 'decks-7\.parquet'\] 4/);
+  assert.match(fs.readFileSync(FETCH, 'utf8'), /--meta/);
 });

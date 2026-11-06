@@ -20,6 +20,7 @@ import { fnv1a } from '../../../js/rwkv-features.js';
 import { insideRepo } from '../../../tests/realdata/lib.mjs';
 import { splitOf } from './split.mjs';
 
+export const DATASET_ID = 'anki-revlogs-10k';          // the id written into a model's trainedOn
 export const LICENCE = 'anki-revlogs-10k: research use by students/individuals, no redistribution';
 export const LIMITS = {
   maxFileBytes: 400 * 1024 * 1024,   // size of one user file
@@ -130,7 +131,7 @@ export function userToLearner(u, { cap = 40000, seed = 0, id = String(u.user) } 
     const dur = hasDuration && u.duration_ms[r] !== null ? u.duration_ms[r] : null;
     const t = day * DAY_MS + DAY_START_MS + offset;
     offset = Math.min(MAX_OFFSET_MS, offset + (dur ?? DEFAULT_ANSWER_MS));
-    const log = { id: logs.length, cardId: c.key, timestamp: t, source: 'review', mode: 'flip', rating: u.rating[r], ms: dur ?? 0, state: u.state[r], day };
+    const log = { id: logs.length, cardId: c.key, timestamp: t, source: 'review', mode: 'flip', rating: u.rating[r], ms: dur ?? 0, state: u.state[r], day, rawRow: r };
     if (dur === null) { log.msUnknown = true; countNoDuration++; }
     if (!c.scored) log.scored = false;
     if (x.i > 0) {
@@ -160,6 +161,15 @@ function userFiles(root) {
     for (const f of readdirSync(d)) { const m = /^(\d{1,12})\.json$/.exec(f); if (m) found.set(m[1], join(d, f)); }
   }
   return found;
+}
+
+// [{ id, split }] for every user file in the data folder, by id (no file is read). For tools that plan work per user.
+export function listUsers(opts = {}) {
+  const root = dataRoot(opts);
+  if (insideRepo(root)) throw new Error('Refusing: the data folder is inside the repo. Real review data must stay outside it.');
+  let ids = [...userFiles(root).keys()].sort((a, b) => a - b);
+  if (ids.length > LIMITS.maxUsers) ids = ids.slice(0, LIMITS.maxUsers);
+  return ids.map(id => ({ id, split: splitOf(id) }));
 }
 
 export default {
