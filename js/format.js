@@ -7,7 +7,7 @@
 // Cards stay plain text underneath, so they sync, back up and export cleanly. The marks only count when
 // they hug a word: "5 * 3 * 2" stays as it is. card-editor.js gives the B / I / • buttons.
 
-import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain } from './math.js';
+import { holdMath, unholdMath, unescapeDollar, splitMath, texToPlain, maskMath } from './math.js';
 
 const escapeHTML = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
@@ -403,5 +403,20 @@ export function leadLines(text, html, { first, rest, total }) {
   if (cut < 1 || html.split('<br>').length !== lines.length) return html;
   return `<span class="fl-lead">${html.slice(0, cut + 4)}</span><span class="fl-rest">${html.slice(cut + 4)}</span>`;
 }
+// A multiple-choice style back: "C. Hashimoto thyroiditis\n\nlong explanation". Its first paragraph (the text before the first blank line) is the
+// answer itself when it is short (80 characters at most, measured as words) and more text follows; the rest is the explanation.
+// Returns { lead, rest } as written (nothing is escaped here), or null when the back is not of that shape (then the whole back is the answer).
+export function leadPara(text) {
+  const src = String(text ?? '');
+  const m = /\r?\n[ \t]*\r?\n/.exec(maskMath(src));       // (looked for with the maths masked, so a formula is never cut in half; same length, so the index fits the original)
+  if (!m) return null;
+  const lead = src.slice(0, m.index).trim(), rest = src.slice(m.index + m[0].length).trim();
+  if (!lead || !rest || answerText(lead).length > 80) return null;
+  return { lead, rest };
+}
+// What an option in Play or a practice test shows for a card's back: the lead alone, so a long explanation can't give the answer away.
+export const optionText = text => leadPara(text)?.lead ?? text;
+// The same for a question type: only when the options are backs ('front' = the front is asked), never when they are fronts.
+export const shownOption = (text, qtype) => (qtype === 'front' ? optionText(text) : text);
 export const isLead = html => html.startsWith('<span class="fl-lead">');
 export const FRONT_LINES = { first: 18, rest: 48, total: 120 }, BACK_LINES = { first: 18, rest: 80, total: 160 };

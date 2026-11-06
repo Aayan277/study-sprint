@@ -174,3 +174,21 @@ test('clock formats minutes and hours', () => {
   assert.equal(clock(65000), '1:05');
   assert.equal(clock(3725000), '1:02:05');
 });
+
+test('buildTest: backs that open with the same lead never give two options that look alike, and grading stays right', async () => {
+  const { optionText } = await import('../js/format.js');
+  const deck = [
+    ...Array.from({ length: 4 }, (_, i) => card(i, { back: `Graves disease\n\nExplanation number ${i} of the same answer.` })),
+    ...Array.from({ length: 6 }, (_, i) => card(10 + i, { back: `Answer:\n\nThing ${i}` })),
+    ...Array.from({ length: 6 }, (_, i) => card(20 + i, { back: `Distinct ${i}\n\nBecause ${i}.` }))
+  ];
+  for (let s = 1; s < 25; s++) {
+    const { questions } = buildTest(deck, { count: 16, kinds: ['mc'] }, { rnd: seeded(s) });
+    for (const q of questions.filter(x => x.kind === 'mc' && x.qtype === 'front')) {
+      const shown = q.options.map(optionText);
+      assert.equal(new Set(shown).size, shown.length, `seed ${s}: ${JSON.stringify(shown)}`);
+      assert.equal(q.options.filter((o, j) => gradeAnswer(q, j)).length, 1);
+      assert.ok(gradeAnswer(q, q.options.indexOf(q.answer)));
+    }
+  }
+});

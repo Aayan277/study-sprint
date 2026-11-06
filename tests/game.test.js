@@ -6,6 +6,7 @@ import {
   questionFor, playableCards, canMultipleChoice, similarity, pickDistractors, weightedQueue,
   timeLimit, scoreAnswer, gradeFor, bestKey, defaultQuestionType, LIGHTNING_MS
 } from '../js/game.js';
+import { optionText } from '../js/format.js';
 
 // A repeatable "random" number source so tests always give the same result.
 const seeded = (seed = 1) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -372,4 +373,38 @@ test('defaultQuestionType: a pool that is mostly typing cards starts on Typing, 
   assert.equal(defaultQuestionType([], isTyping), 'front');
   const long = Array.from({ length: 3 }, (_, i) => ({ id: 'l' + i, front: 'q', back: 'x'.repeat(50) }));
   assert.equal(defaultQuestionType(long, isTyping), 'back', 'long definitions without typing cards keep their default');
+});
+
+test('options that show the same text are never both offered (long backs show only their lead)', () => {
+  const target = card('Which disease?', 'Graves disease\n\nAntibodies stimulate the TSH receptor.');
+  const twin = card('Exophthalmos is seen in?', 'Graves disease\n\nA different explanation of the same answer.');
+  const hdr1 = card('Q1?', 'Answer:\n\nHashimoto thyroiditis');
+  const hdr2 = card('Q2?', 'Answer:\n\nRiedel thyroiditis');
+  const others = ['Hashimoto', 'Riedel', 'De Quervain', 'Toxic adenoma'].map((b, i) => card(`Other ${i}?`, `${b}\n\nExplained ${i}.`));
+  const pool = [target, twin, hdr1, hdr2, ...others];
+  for (let seed = 1; seed < 40; seed++) {
+    const shown = pickDistractors(target, pool, 'front', { rnd: seeded(seed), count: 5 }).map(optionText);
+    shown.push(optionText(questionFor(target, 'front').answer));
+    assert.equal(new Set(shown).size, shown.length, `seed ${seed}: ${JSON.stringify(shown)}`);
+    assert.equal(shown.filter(s => s === 'Graves disease').length, 1);
+    assert.ok(shown.filter(s => s === 'Answer:').length <= 1);
+  }
+  // grading stays on the full text: the right option is the one equal to the answer, and no other option shows like it
+  const q = questionFor(target, 'front');
+  const opts = [q.answer, ...pickDistractors(target, pool, 'front', { rnd: seeded(2) })];
+  assert.equal(opts.filter(o => o === q.answer).length, 1);
+  assert.ok(opts.filter(o => optionText(o) === optionText(q.answer)).length === 1);
+});
+
+test('when the options are fronts they are compared whole', () => {
+  const a = card('Graves disease\n\nfirst', 'x1'), b = card('Graves disease\n\nsecond', 'x2');
+  const pool = [a, b, card('Other 1', 'x3'), card('Other 2', 'x4'), card('Other 3', 'x5')];
+  const got = pickDistractors(pool[2], pool, 'back', { rnd: seeded(1), count: 4 });
+  assert.ok(got.includes(a.front) && got.includes(b.front));        // both fronts differ, so both may be offered
+});
+
+test('multiple choice counts answers by what the options show', () => {
+  const same = ['a', 'b', 'c', 'd'].map((x, i) => card(`q${i}`, `Graves disease\n\nexplanation ${x}`));
+  assert.equal(canMultipleChoice(same, 'front'), false);            // four backs, one look
+  assert.equal(canMultipleChoice(same, 'back'), true);              // the fronts are all different
 });
