@@ -146,3 +146,20 @@ test('the committed js/own-params.js decodes to a model that matches its own sha
   assert.equal(sha256OfParams(new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))), OWN_PARAMS.sha256);
   assert.deepEqual(OWN_PARAMS.trainedOn, ['sim-v1']);
 });
+
+test('--ema: the saved model is the moving average, a resume restores it, and off (0) changes nothing', async () => {
+  const off = path.join(tmp, 'e0.own'), on = path.join(tmp, 'e1.own'), full = path.join(tmp, 'e2.own'), part = path.join(tmp, 'e3.own');
+  await train({ ...TINY, out: off });
+  await train({ ...TINY, ema: 0, out: path.join(tmp, 'e0b.own') });
+  assert.ok(same(paramsOf(off), paramsOf(path.join(tmp, 'e0b.own'))));
+  const r = await train({ ...TINY, ema: 0.9, out: on });
+  assert.ok(!same(paramsOf(off), paramsOf(on)), 'averaged weights differ from raw weights');
+  assert.equal(JSON.parse(fs.readFileSync(on + '.run.json', 'utf8')).ema, 0.9);
+  assert.ok(r.history.at(-1).val < r.history[0].val - 0.05);
+  await train({ ...TINY, epochs: 3, ema: 0.9, out: full });
+  await train({ ...TINY, epochs: 3, ema: 0.9, out: part, stopAfter: 1 });
+  assert.ok(JSON.parse(fs.readFileSync(part + '.ckpt', 'utf8')).ema, 'the checkpoint holds the average');
+  await train({ ...TINY, epochs: 3, ema: 0.9, out: part, resume: true });
+  assert.ok(same(paramsOf(full), paramsOf(part)));
+  await assert.rejects(train({ ...TINY, ema: 1.5, out: path.join(tmp, 'e4.own') }), /--ema must be/);
+});

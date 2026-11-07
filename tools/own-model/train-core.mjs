@@ -26,6 +26,7 @@ export const SOURCE_IDS = ['sim', 'anki10k', 'sim+anki10k'];
 export const DEFAULTS = {
   source: 'sim', size: DEFAULT_SIZE, cap: 40000, epochs: 8, seed: 1, workers: Math.max(1, cpus().length),
   lr: 3e-3, lrEnd: 3e-4, clip: 1, l2: 1e-5, batch: 16, chunk: 128, patience: 2,
+  ema: 0,                            // moving-average decay of the weights (0 = off; typical 0.999)
   usersPerEpoch: 0,                  // 0 = every train user, every epoch
   valUsers: 24, valCap: 20000,       // the fixed validation subset
   simTrain: 200, simVal: 16,         // how many made-up learners
@@ -96,7 +97,13 @@ class Pool {
 }
 
 // ---------- validation ----------
-async function validate(pool, valSpecs) {
+// ema (Float64Array or null): judge these weights instead of the raw ones; the pool reads pool.params, so they are swapped in and back.
+async function validate(pool, valSpecs, ema = null) {
+  const raw = ema ? Float64Array.from(pool.params) : null;
+  if (ema) pool.params.set(ema);
+  try { return await validateRaw(pool, valSpecs); } finally { if (raw) pool.params.set(raw); }
+}
+async function validateRaw(pool, valSpecs) {
   const N = pool.workers.length, per = Array.from({ length: N }, () => []);
   valSpecs.forEach((spec, i) => per[i % N].push({ i, spec }));
   const got = await Promise.all(pool.workers.map((w, k) => (per[k].length ? pool.ask(w, { type: 'val', specs: per[k] }) : { results: [] })));
@@ -117,6 +124,7 @@ export async function train(userCfg, hooks = {}) {
   refuseInsideRepo('--out', cfg.out);
   const n = paramCount(cfg.size);
   const frozen = frozenFor(cfg.size, cfg.ablate);
+  if (cfg.ema && !(cfg.ema > 0 && cfg.ema < 1)) throw new Error('--ema must be between 0 and 1 (for example 0.999), or 0 for off.');
   const { train: trainAll, val: valSpecs, trainedOn: dataTrainedOn, valKind } = planData(cfg);
 
   // start: from --init, from scratch, or from a checkpoint
@@ -129,12 +137,13 @@ export async function train(userCfg, hooks = {}) {
     initTrainedOn = f.header.trainedOn;
   } else startParams = initParams(cfg.size, cfg.seed);
   applyFrozen(startParams, frozen);
-  const key = JSON.stringify({ ...Object.fromEntries(KEY_FIELDS.map(k => [k, cfg[k]])), init: initInfo });
+  const key = JSON.stringify({ ...Object.fromEntries(KEY_FIELDS.map(k => [k, cfg[k]])), init: initInfo, ...(cfg.ema ? { ema: cfg.ema } : {}) });
   const ckptFile = cfg.out + '.ckpt';
 
   const pool = new Pool({ size: cfg.size, n, batch: cfg.batch, chunk: cfg.chunk, workers: Math.max(1, cfg.workers) });
   const params = pool.params;
   params.set(startParams);
+  const ema = cfg.ema ? Float64Array.from(params) : null;     // weights averaged over the steps; validation and the saved model use these
   const adam = new Adam(n, { lr: cfg.lr, l2: cfg.l2, clip: cfg.clip });
   const t0 = Date.now();
   let epoch = 0, best = null, bad = 0, history = [], startLoss = null, usedSeconds = 0;
@@ -143,15 +152,16 @@ export async function train(userCfg, hooks = {}) {
       const c = JSON.parse(readFileSync(ckptFile, 'utf8'));
       if (c.key !== key) throw new Error('The checkpoint was made with different settings; start again without --resume (or delete the .ckpt file).');
       params.set(unb64(c.params));
+      if (ema && c.ema) ema.set(unb64(c.ema)); else if (ema) ema.set(params);
       adam.t = c.adam.t; adam.m.set(unb64(c.adam.m)); adam.v.set(unb64(c.adam.v));
       epoch = c.epoch; bad = c.bad; history = c.history; startLoss = c.startLoss; usedSeconds = c.usedSeconds || 0;
       best = c.best ? { epoch: c.best.epoch, loss: c.best.loss, params: unb64(c.best.params) } : null;
       log(`resuming after epoch ${epoch} (validation loss ${history.at(-1)?.val?.toFixed(4)})`);
     } else if (cfg.resume) log('no checkpoint found; starting from the beginning');
     if (startLoss === null) {
-      const v = await validate(pool, valSpecs);
+      const v = await validate(pool, valSpecs, ema);
       startLoss = v.loss;
-      best = { epoch: 0, loss: v.loss, params: Float64Array.from(params) };
+      best = { epoch: 0, loss: v.loss, params: Float64Array.from(ema || params) };
       history.push({ epoch: 0, val: v.loss, valCount: v.count });
       log(`start: validation loss ${v.loss.toFixed(4)} on ${v.count} later-day answers of ${valSpecs.length} learners (${v.skipped} skipped)`);
     }
@@ -189,6 +199,7 @@ export async function train(userCfg, hooks = {}) {
           const lr = cosineLr(epoch + next / queue.length, cfg.epochs, cfg.lr, cfg.lrEnd);
           adam.step(params, total, lr);
           applyFrozen(params, frozen);
+          if (ema) { const d = cfg.ema, e = 1 - d; for (let i = 0; i < n; i++) ema[i] = d * ema[i] + e * params[i]; }
           if (!params.every(Number.isFinite)) throw new Error('Training broke: a parameter is no longer a number. Try a lower --lr.');
           lossSum += loss; lossCount += count; answers += count; steps++;
         }
@@ -201,16 +212,16 @@ export async function train(userCfg, hooks = {}) {
         }
       }
       epoch++;
-      const v = await validate(pool, valSpecs);
+      const v = await validate(pool, valSpecs, ema);
       const trainLoss = lossSum / Math.max(1, lossCount), secs = (Date.now() - epochT0) / 1000;
       history.push({ epoch, train: trainLoss, val: v.loss, valCount: v.count, seconds: Math.round(secs), answers, steps });
       let tag = '';
-      if (v.loss < best.loss - 1e-5) { best = { epoch, loss: v.loss, params: Float64Array.from(params) }; bad = 0; tag = '  (best)'; } else bad++;
+      if (v.loss < best.loss - 1e-5) { best = { epoch, loss: v.loss, params: Float64Array.from(ema || params) }; bad = 0; tag = '  (best)'; } else bad++;
       log(`epoch ${epoch}/${cfg.epochs} done in ${fmt(secs)}: ${answers} answers, train loss ${trainLoss.toFixed(4)}, validation loss ${v.loss.toFixed(4)}${tag}`);
       mkdirSync(dirname(ckptFile), { recursive: true });
       writeFileSync(ckptFile + '.part', JSON.stringify({
         key, epoch, bad, history, startLoss, usedSeconds: usedSeconds + (Date.now() - t0) / 1000,
-        params: b64(params), adam: { t: adam.t, m: b64(adam.m), v: b64(adam.v) }, best: { epoch: best.epoch, loss: best.loss, params: b64(best.params) }
+        params: b64(params), ...(ema ? { ema: b64(ema) } : {}), adam: { t: adam.t, m: b64(adam.m), v: b64(adam.v) }, best: { epoch: best.epoch, loss: best.loss, params: b64(best.params) }
       }));
       renameSync(ckptFile + '.part', ckptFile);
       if (cfg.stopAfter && epoch >= cfg.stopAfter && epoch < cfg.epochs) { stopped = true; break; }
@@ -223,7 +234,7 @@ export async function train(userCfg, hooks = {}) {
     const info = {
       source: cfg.source, size: cfg.size, epochsRun: epoch, bestEpoch: best.epoch, valLoss: +best.loss.toFixed(5), valLossStart: +startLoss.toFixed(5),
       valKind, cap: cfg.cap, usersPerEpoch: cfg.usersPerEpoch, trainLearners: trainAll.length, valLearners: valSpecs.length,
-      ablate: cfg.ablate.join(',') || 'none', initFrom: initInfo || 'none', node: process.version, seconds: Math.round(seconds), batch: cfg.batch, lr: cfg.lr
+      ablate: cfg.ablate.join(',') || 'none', initFrom: initInfo || 'none', node: process.version, seconds: Math.round(seconds), batch: cfg.batch, lr: cfg.lr, ema: cfg.ema || 0
     };
     const trainedOn = mergeTrainedOn(initTrainedOn, dataTrainedOn);
     const bytes = writeOwnFile({ size: cfg.size, params: Float32Array.from(final), trainedOn, seed: cfg.seed, gitStamp: gitStamp(), info });
