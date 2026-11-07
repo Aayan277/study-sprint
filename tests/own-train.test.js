@@ -163,3 +163,46 @@ test('--ema: the saved model is the moving average, a resume restores it, and of
   assert.ok(same(paramsOf(full), paramsOf(part)));
   await assert.rejects(train({ ...TINY, ema: 1.5, out: path.join(tmp, 'e4.own') }), /--ema must be/);
 });
+
+test('a checkpoint inside an epoch resumes to the identical model (with and without --ema), also with another worker count', async () => {
+  for (const ema of [0, 0.9]) {
+    // batch 3 on 8 learners, so learners finish and new ones move into slots before and after the stop
+    const base = { ...TINY, epochs: 3, batch: 3, ema, ckptMin: 0 };
+    const full = path.join(tmp, `m${ema}-full.own`), part = path.join(tmp, `m${ema}-part.own`);
+    const rf = await train({ ...base, out: full });
+    for (const [stopAt, workers] of [[7, 1], [20, 2]]) {
+      const s = await train({ ...base, out: part, stopAfterSteps: stopAt });
+      assert.equal(s.stopped, true);
+      const c = JSON.parse(fs.readFileSync(part + '.ckpt', 'utf8'));
+      assert.ok(c.mid && c.mid.slots.length > 0, 'the checkpoint holds the position inside the epoch');
+      assert.equal(!!c.ema, !!ema);
+      assert.ok(!fs.existsSync(part + '.ckpt.part'));
+      const r = await train({ ...base, out: part, resume: true, workers });
+      assert.equal(r.stopped, false);
+      assert.ok(same(paramsOf(full), paramsOf(part)), `ema ${ema}, stop at step ${stopAt}`);
+      assert.deepEqual(r.history.map(h => h.val), rf.history.map(h => h.val));
+      assert.deepEqual(r.history.map(h => h.train), rf.history.map(h => h.train));
+      fs.rmSync(part + '.ckpt'); fs.rmSync(part);
+    }
+  }
+});
+
+test('a stop twice in a row inside epochs, and --ckpt-min is not part of the resume key', async () => {
+  const base = { ...TINY, epochs: 2, batch: 3 };
+  const full = path.join(tmp, 'k-full.own'), part = path.join(tmp, 'k-part.own');
+  await train({ ...base, out: full });
+  await train({ ...base, out: part, stopAfterSteps: 5, ckptMin: 0 });
+  await train({ ...base, out: part, resume: true, stopAfterSteps: 9, ckptMin: 7 });
+  await train({ ...base, out: part, resume: true, ckptMin: 3 });
+  assert.ok(same(paramsOf(full), paramsOf(part)));
+});
+
+test('an end-of-epoch checkpoint (no position inside the epoch) still resumes', async () => {
+  const base = { ...TINY, epochs: 3, batch: 3, ckptMin: 0 };
+  const full = path.join(tmp, 'o-full.own'), part = path.join(tmp, 'o-part.own');
+  await train({ ...base, out: full });
+  await train({ ...base, out: part, stopAfter: 1 });
+  assert.equal(JSON.parse(fs.readFileSync(part + '.ckpt', 'utf8')).mid, undefined);
+  await train({ ...base, out: part, resume: true });
+  assert.ok(same(paramsOf(full), paramsOf(part)));
+});

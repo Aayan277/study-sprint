@@ -7,7 +7,9 @@
 //     blocks up in slot order. Adding in a fixed order makes the numbers identical for any number of workers.
 //   * Adam steps with a cosine learning rate (3e-3 falling to 3e-4 over the run), gradients clipped to a norm of 1, a small pull of 1e-5 towards 0.
 //   * After each epoch: log loss on a fixed seeded subset of validation learners (later-day scored answers only). The best epoch's parameters are kept;
-//     training stops early when the loss has not improved for `patience` epochs. A checkpoint is written after every epoch, so a stopped run can --resume.
+//     training stops early when the loss has not improved for `patience` epochs. A checkpoint is written after every epoch, and also every
+//     `ckptMin` minutes in the middle of an epoch (between two optimizer steps; it keeps each slot's learner, position and remembered states, the Adam and
+//     EMA numbers, the loss sums and the position in the epoch), so a stopped run can --resume and gives exactly the model an uninterrupted run would.
 import { Worker } from 'node:worker_threads';
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -26,13 +28,14 @@ export const SOURCE_IDS = ['sim', 'anki10k', 'sim+anki10k'];
 export const DEFAULTS = {
   source: 'sim', size: DEFAULT_SIZE, cap: 40000, epochs: 8, seed: 1, workers: Math.max(1, cpus().length),
   lr: 3e-3, lrEnd: 3e-4, clip: 1, l2: 1e-5, batch: 16, chunk: 128, patience: 2,
+  ckptMin: 20,                       // minutes between checkpoints inside an epoch (0 = only after each epoch). Not part of the resume key.
   ema: 0,                            // moving-average decay of the weights (0 = off; typical 0.999)
   usersPerEpoch: 0,                  // 0 = every train user, every epoch
   valUsers: 24, valCap: 20000,       // the fixed validation subset
   simTrain: 200, simVal: 16,         // how many made-up learners
   simConfig: { days: [40, 150] },    // simulator settings (days of study, new cards a day, ...)
   init: null,                        // a .own file to continue from
-  ablate: [], out: null, resume: false, stopAfter: null, root: undefined, quiet: false
+  ablate: [], out: null, resume: false, stopAfter: null, stopAfterSteps: null, root: undefined, quiet: false
 };
 
 // The settings that must not change between a run and its --resume.
@@ -146,7 +149,7 @@ export async function train(userCfg, hooks = {}) {
   const ema = cfg.ema ? Float64Array.from(params) : null;     // weights averaged over the steps; validation and the saved model use these
   const adam = new Adam(n, { lr: cfg.lr, l2: cfg.l2, clip: cfg.clip });
   const t0 = Date.now();
-  let epoch = 0, best = null, bad = 0, history = [], startLoss = null, usedSeconds = 0;
+  let mid = null, epoch = 0, best = null, bad = 0, history = [], startLoss = null, usedSeconds = 0;
   try {
     if (cfg.resume && existsSync(ckptFile)) {
       const c = JSON.parse(readFileSync(ckptFile, 'utf8'));
@@ -156,7 +159,8 @@ export async function train(userCfg, hooks = {}) {
       adam.t = c.adam.t; adam.m.set(unb64(c.adam.m)); adam.v.set(unb64(c.adam.v));
       epoch = c.epoch; bad = c.bad; history = c.history; startLoss = c.startLoss; usedSeconds = c.usedSeconds || 0;
       best = c.best ? { epoch: c.best.epoch, loss: c.best.loss, params: unb64(c.best.params) } : null;
-      log(`resuming after epoch ${epoch} (validation loss ${history.at(-1)?.val?.toFixed(4)})`);
+      mid = c.mid || null;
+      log(`resuming after epoch ${epoch}${mid ? ` (inside epoch ${epoch + 1}, ${mid.learnersDone} learners done)` : ''} (validation loss ${history.at(-1)?.val?.toFixed(4)})`);
     } else if (cfg.resume) log('no checkpoint found; starting from the beginning');
     if (startLoss === null) {
       const v = await validate(pool, valSpecs, ema);
@@ -167,17 +171,51 @@ export async function train(userCfg, hooks = {}) {
     }
 
     const B = cfg.batch, N = pool.workers.length;
-    let stopped = false;
+    let stopped = false, stepsRun = 0, lastCkpt = Date.now();
+    const saveCkpt = midState => {
+      mkdirSync(dirname(ckptFile), { recursive: true });
+      writeFileSync(ckptFile + '.part', JSON.stringify({
+        key, epoch, bad, history, startLoss, usedSeconds: usedSeconds + (Date.now() - t0) / 1000,
+        params: b64(params), ...(ema ? { ema: b64(ema) } : {}), adam: { t: adam.t, m: b64(adam.m), v: b64(adam.v) }, best: { epoch: best.epoch, loss: best.loss, params: b64(best.params) },
+        ...(midState ? { mid: midState } : {})
+      }));
+      renameSync(ckptFile + '.part', ckptFile);
+      lastCkpt = Date.now();
+    };
+    // the state of the epoch in progress, taken between two steps: which learner sits in which slot, how far it got, and what it remembers
+    const snapshotMid = async s => {
+      const act = [];
+      for (let k = 0; k < B; k++) if (s.slotActive[k]) act.push(k);
+      const per = Array.from({ length: N }, () => []);
+      for (const k of act) per[k % N].push(k);
+      const got = await Promise.all(pool.workers.map((w, k) => (per[k].length ? pool.ask(w, { type: 'dump', slots: per[k] }) : { results: [] })));
+      const by = new Map();
+      for (const g of got) for (const r of g.results) by.set(r.slot, r);
+      return {
+        queueLen: s.queueLen, next: s.next, steps: s.steps, answers: s.answers, lossSum: s.lossSum, lossCount: s.lossCount, learnersDone: s.learnersDone,
+        epochSeconds: (Date.now() - s.epochT0) / 1000, slots: act.map(k => ({ slot: k, qi: s.slotQ[k], pos: by.get(k).pos, store: by.get(k).store }))
+      };
+    };
+    outer:
     while (epoch < cfg.epochs && bad < cfg.patience) {
       const queue = epochList(trainAll, epoch, cfg);
-      const slotActive = new Array(B).fill(false);
-      let next = 0, steps = 0, answers = 0, lossSum = 0, lossCount = 0, lastLog = Date.now(), epochStart = Date.now(), learnersDone = 0;
-      const epochT0 = Date.now();
+      const slotActive = new Array(B).fill(false), slotQ = new Array(B).fill(-1);
+      let next = 0, steps = 0, answers = 0, lossSum = 0, lossCount = 0, lastLog = Date.now(), learnersDone = 0;
+      let epochT0 = Date.now();
+      if (mid) {                                                  // continue the epoch a checkpoint stopped in
+        if (mid.queueLen !== queue.length) throw new Error('The checkpoint does not match the learner list (the data changed); start again without --resume.');
+        ({ next, steps, answers, lossSum, lossCount, learnersDone } = mid);
+        epochT0 = Date.now() - mid.epochSeconds * 1000;
+        const per = Array.from({ length: N }, () => []);
+        for (const a of mid.slots) { slotActive[a.slot] = true; slotQ[a.slot] = a.qi; per[a.slot % N].push({ slot: a.slot, spec: queue[a.qi], pos: a.pos, store: a.store }); }
+        await Promise.all(pool.workers.map((w, k) => (per[k].length ? pool.ask(w, { type: 'load', slots: per[k] }) : null)));
+        mid = null;
+      }
       for (;;) {
         const assign = Array.from({ length: N }, () => []);
         let active = 0;
         for (let s = 0; s < B; s++) {
-          if (!slotActive[s] && next < queue.length) { assign[s % N].push({ slot: s, spec: queue[next++] }); slotActive[s] = true; }
+          if (!slotActive[s] && next < queue.length) { slotQ[s] = next; assign[s % N].push({ slot: s, spec: queue[next++] }); slotActive[s] = true; }
           else if (slotActive[s]) assign[s % N].push({ slot: s });
           if (slotActive[s]) active++;
         }
@@ -203,6 +241,12 @@ export async function train(userCfg, hooks = {}) {
           if (!params.every(Number.isFinite)) throw new Error('Training broke: a parameter is no longer a number. Try a lower --lr.');
           lossSum += loss; lossCount += count; answers += count; steps++;
         }
+        stepsRun++;
+        const dueSteps = cfg.stopAfterSteps && stepsRun >= cfg.stopAfterSteps;
+        if (dueSteps || (cfg.ckptMin > 0 && Date.now() - lastCkpt >= cfg.ckptMin * 60000)) {
+          saveCkpt(await snapshotMid({ slotActive, slotQ, queueLen: queue.length, next, steps, answers, lossSum, lossCount, learnersDone, epochT0 }));
+          if (dueSteps) { stopped = true; break outer; }
+        }
         if (Date.now() - lastLog > 20000) {
           lastLog = Date.now();
           const frac = Math.min(0.999, (learnersDone / queue.length)), el = (Date.now() - epochT0) / 1000;
@@ -218,15 +262,10 @@ export async function train(userCfg, hooks = {}) {
       let tag = '';
       if (v.loss < best.loss - 1e-5) { best = { epoch, loss: v.loss, params: Float64Array.from(ema || params) }; bad = 0; tag = '  (best)'; } else bad++;
       log(`epoch ${epoch}/${cfg.epochs} done in ${fmt(secs)}: ${answers} answers, train loss ${trainLoss.toFixed(4)}, validation loss ${v.loss.toFixed(4)}${tag}`);
-      mkdirSync(dirname(ckptFile), { recursive: true });
-      writeFileSync(ckptFile + '.part', JSON.stringify({
-        key, epoch, bad, history, startLoss, usedSeconds: usedSeconds + (Date.now() - t0) / 1000,
-        params: b64(params), ...(ema ? { ema: b64(ema) } : {}), adam: { t: adam.t, m: b64(adam.m), v: b64(adam.v) }, best: { epoch: best.epoch, loss: best.loss, params: b64(best.params) }
-      }));
-      renameSync(ckptFile + '.part', ckptFile);
+      saveCkpt(null);
       if (cfg.stopAfter && epoch >= cfg.stopAfter && epoch < cfg.epochs) { stopped = true; break; }
     }
-    if (stopped) { log(`stopped after epoch ${epoch} as asked; checkpoint ${ckptFile}`); return { stopped: true, history, config: cfg }; }
+    if (stopped) { log(`stopped after ${cfg.stopAfterSteps && stepsRun >= cfg.stopAfterSteps ? `${stepsRun} steps` : `epoch ${epoch}`} as asked; checkpoint ${ckptFile}`); return { stopped: true, history, config: cfg }; }
 
     // the best epoch becomes the model
     const final = best.params;

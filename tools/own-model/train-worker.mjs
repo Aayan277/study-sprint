@@ -15,6 +15,17 @@ const model = createOwnModel(params, size);
 const tape = new Tape();
 const slots = new Map();      // slot -> { events, pos, store }
 
+const b64 = f64 => Buffer.from(f64.buffer, f64.byteOffset, f64.byteLength).toString('base64');
+const unb64 = text => { const b = Buffer.from(text, 'base64'); return new Float64Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
+// A slot's remembered states, as plain JSON (for a mid-epoch checkpoint) and back. Map order and key types are kept.
+const packStore = st => ({ cards: [...st.cards].map(([k, v]) => [k, b64(v)]), notes: [...st.notes].map(([k, v]) => [k, b64(v)]), decks: [...st.decks].map(([k, v]) => [k, b64(v)]), user: st.user ? b64(st.user) : null });
+const unpackStore = p => {
+  const st = new StateStore();
+  for (const key of ['cards', 'notes', 'decks']) for (const [k, v] of p[key]) st[key].set(k, unb64(v));
+  st.user = p.user ? unb64(p.user) : null;
+  return st;
+};
+
 const prepare = spec => {
   const { rows } = loadLearner(spec);
   return { events: eventsFromRows(rows), rows };
@@ -39,6 +50,11 @@ parentPort.on('message', msg => {
         results.push({ slot: a.slot, loss: r.loss, count: r.count, done, events: a.spec ? s.events.length : undefined });
       }
       parentPort.postMessage({ type: 'step', results });
+    } else if (msg.type === 'dump') {
+      parentPort.postMessage({ type: 'dump', results: msg.slots.map(slot => { const s = slots.get(slot); return { slot, pos: s.pos, store: packStore(s.store) }; }) });
+    } else if (msg.type === 'load') {
+      for (const a of msg.slots) slots.set(a.slot, { events: prepare(a.spec).events, pos: a.pos, store: unpackStore(a.store) });
+      parentPort.postMessage({ type: 'load', results: [] });
     } else if (msg.type === 'val') {
       // forward only over each learner's whole history; the loss counts later-day scored rows only
       const out = [];
