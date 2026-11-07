@@ -206,3 +206,28 @@ test('an end-of-epoch checkpoint (no position inside the epoch) still resumes', 
   await train({ ...base, out: part, resume: true });
   assert.ok(same(paramsOf(full), paramsOf(part)));
 });
+
+test('a mid-epoch checkpoint keeps its slot states in a binary file; a missing, damaged or mismatched one is refused', async () => {
+  const base = { ...TINY, epochs: 2, batch: 3, ckptMin: 0 };
+  const out = path.join(tmp, 's.own'), slots = out + '.ckpt.slots', ckpt = out + '.ckpt';
+  await train({ ...base, out, stopAfterSteps: 6 });
+  assert.ok(fs.existsSync(slots) && !fs.existsSync(slots + '.part'));
+  const c = JSON.parse(fs.readFileSync(ckpt, 'utf8'));
+  assert.equal(c.mid.slotsBytes, fs.statSync(slots).size);
+  assert.ok(fs.readFileSync(slots).toString('latin1', 0, 32) === c.mid.slotsId);
+  const good = fs.readFileSync(slots);
+  const refuse = async what => assert.rejects(train({ ...base, out, resume: true }), /slot file \(\.ckpt\.slots\)/, what);
+  fs.writeFileSync(slots, good.subarray(0, good.length - 8)); await refuse('truncated');
+  const other = Buffer.from(good); other.write('f'.repeat(32), 0, 'latin1'); fs.writeFileSync(slots, other); await refuse('other id');
+  fs.rmSync(slots); await refuse('missing');
+  fs.writeFileSync(slots, good);
+  const r = await train({ ...base, out, resume: true });
+  assert.equal(r.stopped, false);
+  assert.ok(!fs.existsSync(slots) || fs.existsSync(ckpt));
+});
+
+test('--ckpt-min must be a number of minutes, 0 or more', async () => {
+  for (const bad of [NaN, -1, 'x']) await assert.rejects(train({ ...TINY, ckptMin: bad, out: path.join(tmp, 'c.own') }), /--ckpt-min must be a number/);
+  const r = spawnSync(process.execPath, ['tools/own-model/train.mjs', '--source', 'sim', '--ckpt-min', 'abc', '--out', path.join(tmp, 'c2.own')], { cwd: REPO, encoding: 'utf8' });
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /--ckpt-min must be a number/);
+});

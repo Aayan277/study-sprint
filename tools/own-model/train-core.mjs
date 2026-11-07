@@ -11,7 +11,8 @@
 //     `ckptMin` minutes in the middle of an epoch (between two optimizer steps; it keeps each slot's learner, position and remembered states, the Adam and
 //     EMA numbers, the loss sums and the position in the epoch), so a stopped run can --resume and gives exactly the model an uninterrupted run would.
 import { Worker } from 'node:worker_threads';
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, openSync, writeSync, closeSync, unlinkSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { cpus } from 'node:os';
 import { initParams } from '../../js/own-model.js';
@@ -41,6 +42,23 @@ export const DEFAULTS = {
 // The settings that must not change between a run and its --resume.
 const KEY_FIELDS = ['source', 'size', 'cap', 'epochs', 'seed', 'lr', 'lrEnd', 'clip', 'l2', 'batch', 'chunk', 'patience', 'usersPerEpoch', 'valUsers', 'valCap', 'simTrain', 'simVal', 'simConfig', 'ablate', 'legacyGap'];
 
+// Mid-epoch slot states live in <out>.ckpt.slots: a 32-character id, then raw Float64 bytes. The JSON checkpoint holds offsets and lengths plus the same id.
+const SLOT_ID_LEN = 32;
+const refuseSlots = why => new Error(`The checkpoint's slot file (.ckpt.slots) ${why}; start again without --resume (or delete the .ckpt file).`);
+function readSlots(file, mid) {
+  if (!existsSync(file)) throw refuseSlots('is missing');
+  const buf = readFileSync(file);
+  if (buf.length !== mid.slotsBytes || buf.length < SLOT_ID_LEN || buf.toString('latin1', 0, SLOT_ID_LEN) !== mid.slotsId) throw refuseSlots('does not belong to this checkpoint (or is damaged)');
+  const take = (off, len) => {
+    if (!(off >= SLOT_ID_LEN && len >= 0 && off + len * 8 <= buf.length)) throw refuseSlots('is damaged');
+    return new Float64Array(buf.buffer.slice(buf.byteOffset + off, buf.byteOffset + off + len * 8));
+  };
+  return mid.slots.map(a => {
+    const lists = {};
+    for (const key of ['cards', 'notes', 'decks']) lists[key] = a[key].map(([k, off, len]) => [k, take(off, len)]);
+    return { ...a, store: { ...lists, user: a.user ? take(a.user[0], a.user[1]) : null } };
+  });
+}
 const b64 = f64 => Buffer.from(f64.buffer, f64.byteOffset, f64.byteLength).toString('base64');
 const unb64 = text => { const b = Buffer.from(text, 'base64'); return new Float64Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
 
@@ -127,6 +145,7 @@ export async function train(userCfg, hooks = {}) {
   refuseInsideRepo('--out', cfg.out);
   const n = paramCount(cfg.size);
   const frozen = frozenFor(cfg.size, cfg.ablate);
+  if (!(typeof cfg.ckptMin === 'number' && Number.isFinite(cfg.ckptMin) && cfg.ckptMin >= 0)) throw new Error('--ckpt-min must be a number of minutes, 0 or more (0 = only after each epoch).');
   if (cfg.ema && !(cfg.ema > 0 && cfg.ema < 1)) throw new Error('--ema must be between 0 and 1 (for example 0.999), or 0 for off.');
   const { train: trainAll, val: valSpecs, trainedOn: dataTrainedOn, valKind } = planData(cfg);
 
@@ -149,7 +168,7 @@ export async function train(userCfg, hooks = {}) {
   const ema = cfg.ema ? Float64Array.from(params) : null;     // weights averaged over the steps; validation and the saved model use these
   const adam = new Adam(n, { lr: cfg.lr, l2: cfg.l2, clip: cfg.clip });
   const t0 = Date.now();
-  let mid = null, epoch = 0, best = null, bad = 0, history = [], startLoss = null, usedSeconds = 0;
+  let mid = null, midSlots = null, epoch = 0, best = null, bad = 0, history = [], startLoss = null, usedSeconds = 0;
   try {
     if (cfg.resume && existsSync(ckptFile)) {
       const c = JSON.parse(readFileSync(ckptFile, 'utf8'));
@@ -160,6 +179,7 @@ export async function train(userCfg, hooks = {}) {
       epoch = c.epoch; bad = c.bad; history = c.history; startLoss = c.startLoss; usedSeconds = c.usedSeconds || 0;
       best = c.best ? { epoch: c.best.epoch, loss: c.best.loss, params: unb64(c.best.params) } : null;
       mid = c.mid || null;
+      if (mid) midSlots = readSlots(ckptFile + '.slots', mid);
       log(`resuming after epoch ${epoch}${mid ? ` (inside epoch ${epoch + 1}, ${mid.learnersDone} learners done)` : ''} (validation loss ${history.at(-1)?.val?.toFixed(4)})`);
     } else if (cfg.resume) log('no checkpoint found; starting from the beginning');
     if (startLoss === null) {
@@ -181,6 +201,29 @@ export async function train(userCfg, hooks = {}) {
       }));
       renameSync(ckptFile + '.part', ckptFile);
       lastCkpt = Date.now();
+      if (!midState) { try { unlinkSync(ckptFile + '.slots'); } catch { /* none */ } }
+    };
+    // The slot states go to a binary file first (renamed into place before the JSON, so the JSON never points at a file that does not match it).
+    const saveMid = snap => {
+      const id = randomBytes(SLOT_ID_LEN / 2).toString('hex'), file = ckptFile + '.slots';
+      mkdirSync(dirname(ckptFile), { recursive: true });
+      const fd = openSync(file + '.part', 'w');
+      let at = 0;
+      const put = buf => { let o = 0; while (o < buf.length) o += writeSync(fd, buf, o, buf.length - o); at += buf.length; };
+      const putF64 = f => { const off = at; put(Buffer.from(f.buffer, f.byteOffset, f.byteLength)); return [off, f.length]; };
+      let slots;
+      try {
+        put(Buffer.from(id, 'latin1'));
+        slots = snap.slots.map(a => {
+          const o = { slot: a.slot, qi: a.qi, pos: a.pos };
+          for (const key of ['cards', 'notes', 'decks']) o[key] = a.store[key].map(([k, v]) => [k, ...putF64(v)]);
+          o.user = a.store.user ? putF64(a.store.user) : null;
+          return o;
+        });
+      } finally { closeSync(fd); }
+      renameSync(file + '.part', file);
+      const { slots: _drop, ...rest } = snap;
+      saveCkpt({ ...rest, slots, slotsId: id, slotsBytes: at });
     };
     // the state of the epoch in progress, taken between two steps: which learner sits in which slot, how far it got, and what it remembers
     const snapshotMid = async s => {
@@ -207,9 +250,9 @@ export async function train(userCfg, hooks = {}) {
         ({ next, steps, answers, lossSum, lossCount, learnersDone } = mid);
         epochT0 = Date.now() - mid.epochSeconds * 1000;
         const per = Array.from({ length: N }, () => []);
-        for (const a of mid.slots) { slotActive[a.slot] = true; slotQ[a.slot] = a.qi; per[a.slot % N].push({ slot: a.slot, spec: queue[a.qi], pos: a.pos, store: a.store }); }
+        for (const a of midSlots) { slotActive[a.slot] = true; slotQ[a.slot] = a.qi; per[a.slot % N].push({ slot: a.slot, spec: queue[a.qi], pos: a.pos, store: a.store }); }
         await Promise.all(pool.workers.map((w, k) => (per[k].length ? pool.ask(w, { type: 'load', slots: per[k] }) : null)));
-        mid = null;
+        mid = null; midSlots = null;
       }
       for (;;) {
         const assign = Array.from({ length: N }, () => []);
@@ -244,7 +287,13 @@ export async function train(userCfg, hooks = {}) {
         stepsRun++;
         const dueSteps = cfg.stopAfterSteps && stepsRun >= cfg.stopAfterSteps;
         if (dueSteps || (cfg.ckptMin > 0 && Date.now() - lastCkpt >= cfg.ckptMin * 60000)) {
-          saveCkpt(await snapshotMid({ slotActive, slotQ, queueLen: queue.length, next, steps, answers, lossSum, lossCount, learnersDone, epochT0 }));
+          try {
+            saveMid(await snapshotMid({ slotActive, slotQ, queueLen: queue.length, next, steps, answers, lossSum, lossCount, learnersDone, epochT0 }));
+          } catch (e) {
+            if (dueSteps) throw e;
+            lastCkpt = Date.now();
+            log(`warning: could not write the mid-epoch checkpoint (${String(e.message || e).slice(0, 150)}); training goes on`);
+          }
           if (dueSteps) { stopped = true; break outer; }
         }
         if (Date.now() - lastLog > 20000) {

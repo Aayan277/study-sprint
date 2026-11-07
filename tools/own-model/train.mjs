@@ -10,7 +10,7 @@ process.env.TZ = 'UTC';
 //   --out FILE      where to write the model. Never inside the repo. Default: ~/own-model-private/ (override: OWN_PRIVATE)
 //   --legacy-gap    real data: keep the old card gap that still contains the answer's own duration (only to repeat a model trained before the fix)
 //   --ema D         keep a moving average of the weights (decay D, 0 = off, typical 0.999); validation and the saved model use the average
-//   --ckpt-min M    also save a checkpoint every M minutes inside an epoch (default 20, 0 = only after each epoch); --resume then continues mid-epoch with the same result
+//   --ckpt-min M    also save a checkpoint every M minutes inside an epoch (number >= 0, default 20, 0 = only after each epoch; states go in <out>.ckpt.slots); --resume then continues mid-epoch with the same result
 //   --resume        continue from the checkpoint next to --out (<out>.ckpt) after a stop
 //   more: --lr --lr-end --clip --l2 --batch --chunk --patience --val-users --val-cap --sim-train --sim-val --sim-days a,b
 import { join } from 'node:path';
