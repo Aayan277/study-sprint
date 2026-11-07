@@ -22,7 +22,7 @@ import { eval6, Metrics } from '../../tests/realdata/lib.mjs';
 import { isLong, isSame, predictAll, applyFrozen, zeroFrozen, frozenFor } from './common.mjs';
 import { readNpz } from './npz.mjs';
 
-const ts = await import(pathToFileURL(createRequire(import.meta.url).resolve('ts-fsrs')).href);
+export const ts = await import(pathToFileURL(createRequire(import.meta.url).resolve('ts-fsrs')).href);
 export const DEFAULT_W = Array.from(ts.default_w);
 export const BOUNDS = ts.CLAMP_PARAMETERS(ts.W17_W18_Ceiling, true);
 const RELEARN_STEPS = 1;
