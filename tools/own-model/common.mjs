@@ -49,14 +49,14 @@ export const isLong = row => row.scored !== false && row.dDays > 0;
 export const isSame = row => row.scored !== false && row.dDays === 0;
 
 // ---------- loading one learner ----------
-// spec: { kind: 'sim', split, k, config }  or  { kind: 'real', id, cap, seed, root }
+// spec: { kind: 'sim', split, k, config }  or  { kind: 'real', id, cap, seed, root, legacyGap }
 // -> { id, rows, meta } (rows as rowsOf makes them); throws when a real user's file is refused (DataError)
 export function loadLearner(spec) {
   let learner;
   if (spec.kind === 'sim') {
     learner = getSource('sim').learners({ ...(spec.config || {}), split: spec.split, seed: spec.k, count: 1 }).next().value;
   } else if (spec.kind === 'real') {
-    learner = getSource('anki10k').learners({ users: [spec.id], cap: spec.cap, seed: spec.seed ?? 0, root: spec.root, onSkip: (id, why) => { throw new Error(`user ${id} refused: ${why}`); } }).next().value;
+    learner = getSource('anki10k').learners({ users: [spec.id], cap: spec.cap, legacyGap: spec.legacyGap, seed: spec.seed ?? 0, root: spec.root, onSkip: (id, why) => { throw new Error(`user ${id} refused: ${why}`); } }).next().value;
     if (!learner) throw new Error(`user ${spec.id} not found`);
   } else throw new Error(`unknown learner kind: ${spec.kind}`);
   return { id: learner.id, rows: rowsOf(learner), meta: learner.meta || { hasNote: true, hasDeck: true, rawRows: learner.logs.length }, learner };

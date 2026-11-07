@@ -8,6 +8,7 @@ process.env.TZ = 'UTC';
 //   --split test|val   real data only (default test; val is for choosing settings, the test users are counted: see test-runs.json)
 //   --limit N, --users 1,2,3, --cap N (rows per user, default 40000), --jobs N, --tag NAME (reuse a tag to continue a stopped run)
 //   --count N, --days a,b, --seed N   simulator learners (default 200, days 40,150)
+//   --legacy-gap        real data: keep the old card gap that still contains the answer's own duration (for models trained before the fix)
 //   --no-fit            skip the FSRS-6 fit (quick check of the Own side only)
 //   --ft-epochs N --ft-lr X --ft-l2 X   per-user fine-tune settings
 // Per-user records go to ~/own-model-private/results/<tag>.jsonl (override: OWN_PRIVATE), the aggregate report to summary-<tag>.md and the screen.
@@ -22,7 +23,7 @@ import { listUsers, dataRoot, LICENCE } from './sources/anki10k.mjs';
 import { getSource } from './sources/index.mjs';
 
 helpAndExit(process.argv.slice(2), import.meta.url);
-const flags = parseArgs(process.argv.slice(2), ['no-fit']);
+const flags = parseArgs(process.argv.slice(2), ['no-fit', 'legacy-gap']);
 const num = (k, d) => (flags[k] === undefined ? d : Number(flags[k]));
 const source = flags.source || 'sim';
 if (!['sim', 'anki10k'].includes(source)) { console.error('Use --source sim or --source anki10k.'); process.exit(2); }
@@ -67,7 +68,7 @@ function plan() {
   let users = listUsers({}).filter(u => u.split === split);
   if (flags.users) { const want = new Set(String(flags.users).split(',')); users = users.filter(u => want.has(String(u.id))); }
   if (flags.limit) users = users.slice(0, num('limit', 0));
-  return [{ name: split, world: null, specs: users.map(u => ({ kind: 'real', id: String(u.id), key: String(u.id), cap: num('cap', 40000), seed: 0 })) }];
+  return [{ name: split, world: null, specs: users.map(u => ({ kind: 'real', id: String(u.id), key: String(u.id), cap: num('cap', 40000), seed: 0, legacyGap: !!flags['legacy-gap'] })) }];
 }
 
 function runPool(specs, workerData, onResult) {
@@ -106,7 +107,7 @@ for (const sec of sections) {
     console.log(`${n}/${todo.length} ${r.ok ? `user ${r.user}: ${r.reviews} reviews, ${r.n} held out, ${r.seconds}s` : `user ${r.user}: FAILED ${r.error}`}  (ETA ${Math.round(el / n * (todo.length - n) / 60)} min)`);
   });
   const results = [...done.values()];
-  const header = [`Code ${git}; Node ${process.version}; model file ${Object.entries(shas).map(([f, s]) => `${f} (${s})`).join(', ')}; fine-tune: ${ft.epochs} epochs, lr ${ft.lr}, leash ${ft.l2}${source === 'anki10k' ? `; cap ${num('cap', 40000)} rows per user; data licence: ${LICENCE}` : ''}.`];
+  const header = [`Code ${git}; Node ${process.version}; model file ${Object.entries(shas).map(([f, s]) => `${f} (${s})`).join(', ')}; fine-tune: ${ft.epochs} epochs, lr ${ft.lr}, leash ${ft.l2}${source === 'anki10k' ? `; cap ${num('cap', 40000)} rows per user${flags['legacy-gap'] ? '; legacy card gap' : ''}; data licence: ${LICENCE}` : ''}.`];
   if (source === 'anki10k') {
     const rw = results.filter(r => r.rwkv === 'used').length, rwNo = results.filter(r => r.rwkv && r.rwkv !== 'used').length, rs = results.filter(r => r.rs === 'used').length;
     header.push(`Reference rows: fsrs-rs weights matched the split for ${rs} users; outside RWKV predictions lined up for ${rw} users${rwNo ? ` (${rwNo} present but not used)` : ''}.`);

@@ -35,7 +35,7 @@ export const DEFAULTS = {
 };
 
 // The settings that must not change between a run and its --resume.
-const KEY_FIELDS = ['source', 'size', 'cap', 'epochs', 'seed', 'lr', 'lrEnd', 'clip', 'l2', 'batch', 'chunk', 'patience', 'usersPerEpoch', 'valUsers', 'valCap', 'simTrain', 'simVal', 'simConfig', 'ablate'];
+const KEY_FIELDS = ['source', 'size', 'cap', 'epochs', 'seed', 'lr', 'lrEnd', 'clip', 'l2', 'batch', 'chunk', 'patience', 'usersPerEpoch', 'valUsers', 'valCap', 'simTrain', 'simVal', 'simConfig', 'ablate', 'legacyGap'];
 
 const b64 = f64 => Buffer.from(f64.buffer, f64.byteOffset, f64.byteLength).toString('base64');
 const unb64 = text => { const b = Buffer.from(text, 'base64'); return new Float64Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
@@ -54,8 +54,8 @@ export function planData(cfg) {
     const src = getSource('anki10k'), avail = src.available({ root: cfg.root });
     if (!avail.ok) throw new Error(`The real-data source is not available: ${avail.reason}.`);
     const users = listUsers({ root: cfg.root });
-    for (const u of users) if (u.split === 'train') train.push({ kind: 'real', id: String(u.id), cap: cfg.cap, seed: cfg.seed, root: cfg.root });
-    const pool = users.filter(u => u.split === 'val').map(u => ({ kind: 'real', id: String(u.id), cap: cfg.valCap, seed: 0, root: cfg.root }));
+    for (const u of users) if (u.split === 'train') train.push({ kind: 'real', id: String(u.id), cap: cfg.cap, seed: cfg.seed, root: cfg.root, legacyGap: cfg.legacyGap });
+    const pool = users.filter(u => u.split === 'val').map(u => ({ kind: 'real', id: String(u.id), cap: cfg.valCap, seed: 0, root: cfg.root, legacyGap: cfg.legacyGap }));
     val.push(...shuffled(pool, `own-val|${cfg.seed}`).slice(0, cfg.valUsers));
     valKind = 'real';
     trainedOn.push({ id: DATASET_ID, licence: LICENCE });

@@ -99,8 +99,8 @@ test('a user in the dataset shape becomes a learner: ratings, resets, unknown st
   assert.ok(byKey('c11~2').length === 2 && byKey('c11~2').every(x => x.scored !== false));
   assert.ok(byKey('c13').every(x => x.scored === false));
   assert.ok(byKey('c10').every(x => x.scored !== false));
-  // card gaps come from elapsed_seconds; a dropped row's seconds still count towards the next gap
-  assert.equal(byKey('c10')[1].gapSec, 600);
+  // card gaps come from elapsed_seconds minus this answer's own duration (5000 ms here); a dropped row's seconds still count towards the next gap
+  assert.equal(byKey('c10')[1].gapSec, 595);
   assert.equal(byKey('c12')[0].gapSec, undefined);
   assert.equal(byKey('c12')[0].day, 4);
   // notes, decks
@@ -149,7 +149,8 @@ test('features from the overrides equal features from timestamps when the two te
   // one made-up user; elapsed_seconds are set from the made-up clock itself, so the two sources must agree
   const first = userToLearner(validateUser(user(ROWS.map(r => [r[0], r[1], r[2] || 3, r[3], null, r[5] - (r[5] % 1000), r[6], r[7]]), 8)), { id: '8' });
   const prevT = new Map(), es = [];
-  for (const x of first.logs) { const p = prevT.get(x.cardId); es.push(p === undefined ? -1 : (x.timestamp - p) / 1000); prevT.set(x.cardId, x.timestamp); }
+  for (const x of first.logs) { const p = prevT.get(x.cardId); es.push(p === undefined ? -1 : (x.timestamp - p + x.ms) / 1000); prevT.set(x.cardId, x.timestamp); }
+  // elapsed_seconds runs to the END of the answer, so this answer's own duration is added here and taken off again by the loader
   // rebuild with those seconds (rows are in the same order because they were sorted by day then file order; compare by card)
   const order = ROWS.map(r => [r[0], r[1], r[2] || 3, r[3], r[5] - (r[5] % 1000), r[6], r[7]]);
   const sorted = order.map((r, i) => ({ r, i })).sort((a, b) => a.r[1] - b.r[1] || a.i - b.i);
@@ -342,4 +343,13 @@ print(sorted(os.listdir(d)), len(urls))
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /\['cards-7\.parquet', 'cards-8\.parquet', 'decks-7\.parquet'\] 4/);
   assert.match(fs.readFileSync(FETCH, 'utf8'), /--meta/);
+});
+
+test('the card gap leaves out the duration of the answer being predicted (--legacy-gap keeps it)', () => {
+  const rows = (d2, d1 = 5000) => [[10, 0, 3, 0, -1, d1], [10, 0, 3, 1, 600, d2]];
+  const gap = (rs, o) => userToLearner(validateUser(user(rs, 20)), { id: '20', ...o }).logs[1].gapSec;
+  assert.equal(gap(rows(8000)), 592);
+  assert.equal(gap(rows(8000), { legacyGap: true }), 600);
+  assert.equal(gap(rows(null)), 600);
+  assert.equal(gap(rows(900000)), 0);
 });

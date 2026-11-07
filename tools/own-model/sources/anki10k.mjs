@@ -84,7 +84,8 @@ export function parseUserText(text, limits = LIMITS) {
 //   a state-0 row after earlier rows of the card is a reset: it starts a new life of the card (key c<id>~2, ~3 ...), the note, deck and you carry on;
 //   only the last life of a card is scored, and only if it starts at state 0; everything else still updates the memory (log.scored = false).
 // cap: at most this many rows, thinned by whole cards picked by a shuffle seeded with `seed` (like capCards in tests/realdata/run.mjs).
-export function userToLearner(u, { cap = 40000, seed = 0, id = String(u.user) } = {}) {
+// legacyGap: keep the old card gap, which still contains the duration of the answer being predicted (only to judge models trained that way).
+export function userToLearner(u, { cap = 40000, seed = 0, id = String(u.user), legacyGap = false } = {}) {
   const n = u.card_id.length;
   const byCard = new Map();
   for (let r = 0; r < n; r++) { let l = byCard.get(u.card_id[r]); if (!l) byCard.set(u.card_id[r], l = []); l.push(r); }
@@ -136,7 +137,8 @@ export function userToLearner(u, { cap = 40000, seed = 0, id = String(u.user) } 
     if (!c.scored) log.scored = false;
     if (x.i > 0) {
       const gapDays = Math.max(0, day - prevDay.get(c.key));
-      log.gapSec = Number.isFinite(x.sec) ? x.sec : gapDays * 86400;
+      // elapsed_seconds ends at the END of this answer, so it holds this answer's own duration; slow answers go with forgetting, which would leak the outcome into the gap
+      log.gapSec = Number.isFinite(x.sec) ? (legacyGap || dur === null ? x.sec : Math.max(0, x.sec - dur / 1000)) : gapDays * 86400;
     }
     prevDay.set(c.key, day);
     logs.push(log);
@@ -189,7 +191,7 @@ export default {
     for (const id of ids) split[splitOf(id)]++;
     return { learners: ids.length, reviews: null, split };
   },
-  // opts: { split, seed, cap (rows per user, default 40000), root, users (only these ids), limit, onSkip(id, why) }
+  // opts: { split, seed, cap (rows per user, default 40000), legacyGap, root, users (only these ids), limit, onSkip(id, why) }
   *learners(opts = {}) {
     const root = dataRoot(opts);
     if (insideRepo(root)) throw new Error('Refusing: the data folder is inside the repo. Real review data must stay outside it.');
@@ -206,7 +208,7 @@ export default {
         if (statSync(path).size > LIMITS.maxFileBytes) bad('file too large');
         const u = parseUserText(readFileSync(path, 'utf8'));
         u.user = Number(id);
-        learner = userToLearner(u, { cap: opts.cap ?? 40000, seed: opts.seed ?? 0, id });
+        learner = userToLearner(u, { cap: opts.cap ?? 40000, seed: opts.seed ?? 0, id, legacyGap: !!opts.legacyGap });
       } catch (e) {
         if (!(e instanceof DataError)) throw e;
         opts.onSkip?.(id, e.message);
