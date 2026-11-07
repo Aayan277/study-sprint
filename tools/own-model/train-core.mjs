@@ -137,7 +137,7 @@ export async function train(userCfg, hooks = {}) {
     initTrainedOn = f.header.trainedOn;
   } else startParams = initParams(cfg.size, cfg.seed);
   applyFrozen(startParams, frozen);
-  const key = JSON.stringify({ ...Object.fromEntries(KEY_FIELDS.map(k => [k, cfg[k]])), init: initInfo, ...(cfg.ema ? { ema: cfg.ema } : {}) });
+  const key = JSON.stringify({ ...Object.fromEntries(KEY_FIELDS.map(k => [k, cfg[k]])), legacyGap: !!cfg.legacyGap, init: initInfo, ...(cfg.ema ? { ema: cfg.ema } : {}) });
   const ckptFile = cfg.out + '.ckpt';
 
   const pool = new Pool({ size: cfg.size, n, batch: cfg.batch, chunk: cfg.chunk, workers: Math.max(1, cfg.workers) });

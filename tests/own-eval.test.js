@@ -103,6 +103,16 @@ test('FSRS histories made from rows are the same as the existing reader makes fr
   assert.deepEqual(mine.map(norm).sort(), theirs.map(norm).sort());
 });
 
+test('with duration_ms, tFrac is elapsed minus the answer\'s duration and the FSRS day deltas are unchanged', () => {
+  const u = { ...userOf(ROWS), duration_ms: ROWS.map(() => 8000), note_id: ROWS.map(() => null), deck_id: ROWS.map(() => null), preset_id: ROWS.map(() => null) };
+  const mine = fsrsCardsFromRows(rowsOf(userToLearner(u, { cap: 1e6, id: '1' }))), theirs = toHistories(u).cards;
+  const card10 = mine.find(c => c.cardId === 'c:c10'), ref10 = theirs.find(c => String(c.cardId) === '10');
+  assert.deepEqual(mine.map(c => Array.from(c.deltas)).sort(), theirs.map(c => Array.from(c.deltas)).sort());
+  assert.ok(Math.abs(card10.tFrac[1] - 592 / 86400) < 1e-9, 'same-day row: 600 s minus 8 s');
+  assert.ok(Math.abs(card10.tFrac[2] - (3 * 86400 - 608) / 86400) < 1e-9);
+  assert.ok(ref10 && Math.abs(ref10.tFrac[1] - 600 / 86400) < 1e-9, 'the raw reader keeps the old gap');
+});
+
 // ---------- one learner ----------
 const tiny = k => loadLearner({ kind: 'sim', split: 'test', k, config: { days: [30, 40] } });
 

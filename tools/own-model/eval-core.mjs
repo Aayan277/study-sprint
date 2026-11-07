@@ -39,6 +39,8 @@ export function loadModelFile(path) {
 // ---------- FSRS histories from rows ----------
 // Same cards and numbers as toHistories (tests/realdata/lib.mjs) makes from the raw columns: only scored lives of a card; deltas are whole days
 // between rows; tFrac is the card gap in days (from gapSec when the data has it, else from the row times).
+// gapSec leaves out the current answer's own duration (see userToLearner), so tFrac no longer matches toHistories on same-day rows when
+// duration_ms is known (FSRS sees the same corrected gap as the Own model); later-day rows (deltas, and so long-term numbers) still match.
 export function fsrsCardsFromRows(rows) {
   const by = new Map();
   for (const r of rows) {

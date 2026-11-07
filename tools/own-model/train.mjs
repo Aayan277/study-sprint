@@ -34,7 +34,7 @@ const cfg = {
   workers: num('workers', DEFAULTS.workers), lr: num('lr', DEFAULTS.lr), lrEnd: num('lr-end', DEFAULTS.lrEnd), clip: num('clip', DEFAULTS.clip), l2: num('l2', DEFAULTS.l2),
   batch: num('batch', DEFAULTS.batch), chunk: num('chunk', DEFAULTS.chunk), patience: num('patience', DEFAULTS.patience), usersPerEpoch: num('users-per-epoch', 0),
   ema: num('ema', DEFAULTS.ema), valUsers: num('val-users', DEFAULTS.valUsers), valCap: num('val-cap', DEFAULTS.valCap), simTrain: num('sim-train', DEFAULTS.simTrain), simVal: num('sim-val', DEFAULTS.simVal),
-  init: flags.init || null, ablate: flags.ablate ? String(flags.ablate).split(',').filter(Boolean) : [], resume: !!flags.resume, legacyGap: flags['legacy-gap'] ? true : undefined, quiet: !!flags.quiet,
+  init: flags.init || null, ablate: flags.ablate ? String(flags.ablate).split(',').filter(Boolean) : [], resume: !!flags.resume, legacyGap: !!flags['legacy-gap'], quiet: !!flags.quiet,
   out: flags.out || join(privateDir(), defaultName)
 };
 if (flags['sim-days']) cfg.simConfig = { days: String(flags['sim-days']).split(',').map(Number) };
