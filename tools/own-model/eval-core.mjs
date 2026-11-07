@@ -129,6 +129,7 @@ export function alignRwkv(rows, meta, pred) {
 // ---------- one learner ----------
 // loaded: { id, rows, meta }. ctx: {
 //   own: [{ key, params, size, ablate, finetune }]   models to run (zero-shot always; finetune: true adds '<key>_ft'... the main one is key 'own_zero' with finetune)
+//   (own: hidden: true runs the model but does not score it; ensembles: [{ key, members: [own keys] }] score the plain mean of the members' probabilities, zero-shot)
 //   ft: fine-tune settings, rs(id) -> weights file content or null, rwkv(id) -> { n, p } or null, fitFsrs: true }
 export function evalLearner(loaded, ctx) {
   const t0 = performance.now(), { rows, meta } = loaded;
@@ -170,13 +171,22 @@ export function evalLearner(loaded, ctx) {
   const predictions = {};
   for (const m of ctx.own || []) {
     const model = createOwnModel(m.params, m.size);
-    predictions[m.key] = score(m.key, predictAll(model, events, new StateStore()));
+    const ps = predictAll(model, events, new StateStore());
+    predictions[m.key] = m.hidden ? ps : score(m.key, ps);
     if (m.finetune) {
       const tf = performance.now();
       const ft = finetuneParams({ params: m.params, size: m.size, events, rows, cutoff, frozen: frozenFor(m.size, m.ablate || []), cfg: ctx.ft });
       res.ft = { epochsRun: ft.epochsRun, bestEpoch: ft.bestEpoch, skipped: ft.skipped || null, valStart: ft.valStart ?? null, valBest: ft.valBest ?? null, seconds: seconds(tf) };
       predictions[m.finetune] = score(m.finetune, predictAll(createOwnModel(ft.params, m.size), events, new StateStore()));
     }
+  }
+  // an ensemble row is scored like any other: the same reviews, the mean probability of its members
+  for (const e of ctx.ensembles || []) {
+    const parts = e.members.map(k => predictions[k]);
+    if (parts.some(p => !p)) throw new Error(`ensemble ${e.key}: unknown member`);
+    const ps = new Float64Array(rows.length);
+    for (let i = 0; i < ps.length; i++) { let s = 0; for (const p of parts) s += p[i]; ps[i] = s / parts.length; }
+    predictions[e.key] = score(e.key, ps);
   }
   if (res.models.fsrs6_default.long.n !== longIdx.length) res.countMismatch = [res.models.fsrs6_default.long.n, longIdx.length];
 

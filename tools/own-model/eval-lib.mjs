@@ -87,7 +87,7 @@ export function summarize(results, opts = {}) {
   const vline = (label, v) => `| ${label} | ${v.n} | ${sgn(v.meanDiff)} | [${sgn(v.lo)}, ${sgn(v.hi)}] | ${sgn(v.rmseMeanDiff)} | ${(v.improvedShare * 100).toFixed(1)}% | ${v.better ? 'BETTER' : 'not better'} |`;
   lines.push('', '### Pre-registered comparison (log-loss difference per user: first model minus second; below 0 is better)', '', '| Comparison | Users | Mean diff | 95% CI (2,000 resamples) | RMSE diff | Users improved | Verdict |', '|---|---|---|---|---|---|---|');
   data.verdicts = {};
-  const compare = [[main, base], ['own_zero', 'fsrs6_default'], ['own_zero', 'fsrs6_fitted'], ['own_ft', 'own_zero'], ['own_ft', 'fsrs6_default'], ['own_sim', 'fsrs6_fitted'], ['own_ft', 'fsrs6_rs'], ...modelKeys.filter(k => k.startsWith('x_')).map(k => [k, base])];
+  const compare = [[main, base], ['own_zero', 'fsrs6_default'], ['own_zero', 'fsrs6_fitted'], ['own_ft', 'own_zero'], ['own_ft', 'fsrs6_default'], ['own_sim', 'fsrs6_fitted'], ['own_ft', 'fsrs6_rs'], ...modelKeys.filter(k => k.startsWith('x_') || k.startsWith('e_')).map(k => [k, base])];
   const seen = new Set();
   for (const [a, b] of compare) {
     if (a === b || seen.has(a + b) || !modelKeys.includes(a) || !modelKeys.includes(b)) continue;

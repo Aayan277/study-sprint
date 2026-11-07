@@ -106,6 +106,16 @@ test('FSRS histories made from rows are the same as the existing reader makes fr
 // ---------- one learner ----------
 const tiny = k => loadLearner({ kind: 'sim', split: 'test', k, config: { days: [30, 40] } });
 
+test('an ensemble of a model with itself scores exactly like that model; two different models give a row of their own', () => {
+  const params = initParams('s', 7), other = initParams('s', 8);
+  const own = [{ key: 'own_zero', params, size: 's' }, { key: 'm1', params, size: 's', hidden: true }, { key: 'm2', params, size: 's', hidden: true }, { key: 'm3', params: other, size: 's', hidden: true }];
+  const r = evalLearner(tiny(0), { fitFsrs: false, own, ensembles: [{ key: 'e_1', members: ['m1', 'm2'] }, { key: 'e_2', members: ['m1', 'm3'] }] });
+  assert.ok(!('m1' in r.models) && !('m3' in r.models), 'members are not scored by themselves');
+  assert.deepEqual(r.models.e_1, r.models.own_zero);
+  assert.ok(r.models.e_2.long.n === r.models.own_zero.long.n && r.models.e_2.long.logLoss !== r.models.own_zero.long.logLoss);
+  assert.throws(() => evalLearner(tiny(0), { fitFsrs: false, own, ensembles: [{ key: 'e_3', members: ['nope'] }] }), /unknown member/);
+});
+
 test('a tiny learner is scored by every model on the same reviews, with finite numbers', () => {
   const params = initParams('s', 7);
   const l = tiny(0), r = evalLearner(l, { own: [{ key: 'own_zero', params, size: 's', finetune: 'own_ft' }, { key: 'x_1', params: initParams('s', 8), size: 's' }] });

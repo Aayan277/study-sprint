@@ -9,6 +9,7 @@ process.env.TZ = 'UTC';
 //   --limit N, --users 1,2,3, --cap N (rows per user, default 40000), --jobs N, --tag NAME (reuse a tag to continue a stopped run)
 //   --count N, --days a,b, --seed N   simulator learners (default 200, days 40,150)
 //   --legacy-gap        real data: keep the old card gap that still contains the answer's own duration (for models trained before the fix)
+//   --ensemble "label=FILE,FILE[,FILE]"   zero-shot row that averages the predicted recall probabilities of these models, review by review (repeat it)
 //   --no-fit            skip the FSRS-6 fit (quick check of the Own side only)
 //   --ft-epochs N --ft-lr X --ft-l2 X   per-user fine-tune settings
 // Per-user records go to ~/own-model-private/results/<tag>.jsonl (override: OWN_PRIVATE), the aggregate report to summary-<tag>.md and the screen.
@@ -52,6 +53,15 @@ if (source === 'anki10k') {
   labels[key] = `${e.slice(0, at)} (zero-shot)`;
   models.push({ key, path: e.slice(at + 1) });
   shas[basename(e.slice(at + 1))] = sha256OfParams(loadModelFile(e.slice(at + 1)).params).slice(0, 12);
+});
+// an ensemble runs its members unscored (hidden) and scores the plain mean of their probabilities, like an extra
+const ensembles = [];
+[].concat(flags.ensemble || []).forEach((e, i) => {
+  const at = e.indexOf('='), files = at < 1 ? [] : e.slice(at + 1).split(',').filter(Boolean);
+  if (files.length < 2) { console.error('--ensemble needs label=FILE,FILE[,FILE]'); process.exit(2); }
+  const key = `e_${i + 1}`;
+  labels[key] = `${e.slice(0, at)} (ensemble, zero-shot)`;
+  ensembles.push({ key, members: files.map((p, j) => { models.push({ key: `${key}_m${j + 1}`, path: p, hidden: true }); shas[basename(p)] = sha256OfParams(loadModelFile(p).params).slice(0, 12); return `${key}_m${j + 1}`; }) });
 });
 if (source === 'sim') { labels.own_zero = 'Own pretrained, zero-shot'; labels.own_ft = 'Own pretrained + per-learner fine-tune'; }
 const ft = { ...FT_DEFAULTS };
@@ -100,7 +110,7 @@ for (const sec of sections) {
   const todo = sec.specs.filter(s => !done.has(s.key));
   console.log(`[${sec.name}] ${sec.specs.length} learners, ${done.size} already done, ${todo.length} to do, ${jobs} jobs; model ${basename(modelPath)}; code ${git}`);
   const t0 = Date.now();
-  await runPool(todo, { models, ft, rsDir, rwkvDir, fitFsrs: !flags['no-fit'] }, (r, n) => {
+  await runPool(todo, { models, ensembles, ft, rsDir, rwkvDir, fitFsrs: !flags['no-fit'] }, (r, n) => {
     appendFileSync(file, JSON.stringify(r) + '\n');
     done.set(String(r.user), r);
     const el = (Date.now() - t0) / 1000;
