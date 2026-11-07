@@ -102,6 +102,30 @@ test('whatIf does not change anything and gives four sensible curves', () => {
   assert.deepEqual(e.whatIf({ ...row, rating: 1, ms: 99 }, 8000), w);
 });
 
+test('daysForButtons and intervalDays use the faded prediction: whole days, ordered, the prediction at review time meets R, nothing changes', () => {
+  const rows = miniRows(), e = run(new Engine(params()), rows.slice(0, 10));
+  e.snapshotDirty();
+  const before = bytes(e), row = rows[10], m = e.model;
+  for (const R of [0.7, 0.9]) {
+    const d = e.daysForButtons(row, 8000, R, 365);
+    assert.deepEqual(Object.keys(d), ['2', '3', '4']);
+    for (const r of [2, 3, 4]) assert.ok(Number.isInteger(d[r]) && d[r] >= 1 && d[r] <= 365);
+    assert.ok(d[2] <= d[3] && d[3] <= d[4]);
+    // Good: the same states the engine reads for a real answer; the model's own prediction at the chosen day is at or above R (unless it is floored at 1)
+    const dec = m.decayAll(e._states(row), e.builder.gaps(row)), fq = e.builder.features(row, true);
+    const next = m.advance(e.builder.features({ ...row, rating: 3, ms: 8000 }, false), dec);
+    const p = t => pAt(m.headOf(m.decayAll(next, { note: t, deck: 0, user: 0 }), fq), t);
+    if (d[3] > 1 && d[3] === m.fadedDays(next, fq, R, 365)) assert.ok(p(d[3]) >= R);
+  }
+  assert.deepEqual(e.daysForButtons(row, 8000, 0.9, 365), e.daysForButtons({ ...row, rating: 1, ms: 5 }, 8000, 0.9, 365));
+  assert.equal(bytes(e), before);
+  assert.equal(e.snapshotDirty().cards.length, 0);
+  const g = e.intervalDays(rows[9], 0.8, 365);                                    // from the stored states of a known card
+  assert.ok(Number.isInteger(g) && g >= 1 && g <= 365);
+  assert.equal(e.intervalDays({ ...rows[9], cardKey: 'c:unknown' }, 0.8, 365), null);
+  assert.equal(bytes(e), before);
+});
+
 test('saved states are float32 of the right sizes, and the curve round-trips', () => {
   const e = run(new Engine(params()), miniRows());
   assert.ok(e.cards.get('c:1') instanceof Float32Array); assert.equal(e.cards.get('c:1').length, 32);

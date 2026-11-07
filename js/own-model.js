@@ -18,7 +18,7 @@
 //   y       1 if you passed (not Again), else 0
 import { mulberry32 } from './fsrs-fit.js';
 import { OwnFeatures } from './own-features.js';
-import { headFromRaw, pAt } from './own-curve.js';
+import { headFromRaw, pAt, largestDayAtLeast } from './own-curve.js';
 import {
   CURVE, DEFAULT_SIZE, DECAY_STREAMS, F, F_HEAD, HEAD_OUT, K, STABILITY_INIT_DAYS, STREAMS, TAU_MAX_DAYS, TAU_MIN_DAYS,
   headInputSize, inputSize, paramCount, paramLayout, paramOffsets, sizesOf
@@ -85,19 +85,20 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
   // ---------- fast path ----------
   // states: { card, note, deck, user } arrays or undefined (never seen -> the starting vector). gaps: { note, deck, user } days or null.
   // Returns decayed copies (Float64Array) that the prediction and the update both read.
+  // One stream relaxed toward its starting vector by dt days (dt null or 0: no relaxation; h undefined: the starting vector).
+  function decayStream(tag, h, dt) {
+    const n = s[tag], o = new Float64Array(n), h0 = O(`${tag}.h0`);
+    if (!h) for (let j = 0; j < n; j++) o[j] = params[h0 + j];
+    else if (dt === null || !(dt > 0)) for (let j = 0; j < n; j++) o[j] = h[j];
+    else {
+      const th = O(`${tag}.theta`);
+      for (let j = 0; j < n; j++) { const a = params[h0 + j]; o[j] = a + (h[j] - a) * Math.exp(-dt * Math.exp(-params[th + j])); }
+    }
+    return o;
+  }
   function decayAll(states, gaps) {
     const out = {};
-    for (const tag of STREAMS) {
-      const n = s[tag], h = states[tag], o = new Float64Array(n), h0 = O(`${tag}.h0`);
-      const dt = tag === 'card' || !gaps ? null : gapOrNull(gaps[tag]);
-      if (!h) for (let j = 0; j < n; j++) o[j] = params[h0 + j];
-      else if (dt === null || !(dt > 0)) for (let j = 0; j < n; j++) o[j] = h[j];
-      else {
-        const th = O(`${tag}.theta`);
-        for (let j = 0; j < n; j++) { const a = params[h0 + j]; o[j] = a + (h[j] - a) * Math.exp(-dt * Math.exp(-params[th + j])); }
-      }
-      out[tag] = o;
-    }
+    for (const tag of STREAMS) out[tag] = decayStream(tag, states[tag], tag === 'card' || !gaps ? null : gapOrNull(gaps[tag]));
     return out;
   }
 
@@ -123,6 +124,44 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
     return raw;
   }
   const headOf = (dec, f) => headFromRaw(headRaw(dec, f));
+
+  // The interval for a target R when the note memory fades before the card comes back.
+  //   next: the four states right after an answer ({ card, note, deck, user }); fq: the query features (OwnFeatures.features(row, true)).
+  // After t days the note memory has relaxed by t (deck and you by 0, as they will have been used again), so the model's own prediction at
+  // review time is p(t) = pAt(head(states faded by t), t), lower than the curve read straight after the answer. Returns the largest whole
+  // day in 1..maxDays with p >= target (at least 1), or null when p is not a real number. Only the note part of the head's first layer
+  // depends on t, so the rest of it is computed once.
+  function fadedDays(next, fq, target, maxDays) {
+    const base = decayAll(next, { note: 0, deck: 0, user: 0 });
+    const q = new Float64Array(qn);
+    let at = 0;
+    for (const tag of STREAMS) { q.set(base[tag], at); at += s[tag]; }
+    for (let i = 0; i < F_HEAD; i++) q[at + i] = fq[HEAD_FROM + i];
+    const w1 = O('head.W1'), b1 = O('head.b1'), w2 = O('head.W2'), b2 = O('head.b2'), n0 = s.card, n1 = s.card + s.note;
+    const pre = new Float64Array(hid);
+    for (let i = 0; i < hid; i++) {
+      let a = params[b1 + i];
+      for (let j = 0, r = w1 + i * qn; j < qn; j++) if (j < n0 || j >= n1) a += params[r + j] * q[j];
+      pre[i] = a;
+    }
+    const u = new Float64Array(hid), raw = new Float64Array(HEAD_OUT);
+    const pOf = t => {
+      const note = decayStream('note', next.note, t);
+      for (let i = 0; i < hid; i++) {
+        let a = pre[i];
+        for (let j = 0, r = w1 + i * qn + n0; j < s.note; j++) a += params[r + j] * note[j];
+        u[i] = Math.tanh(a);
+      }
+      for (let k = 0; k < HEAD_OUT; k++) {
+        let a = params[b2 + k];
+        for (let i = 0, r = w2 + k * hid; i < hid; i++) a += params[r + i] * u[i];
+        raw[k] = a;
+      }
+      return pAt(headFromRaw(raw), t);
+    };
+    if (!Number.isFinite(pOf(1))) return null;
+    return largestDayAtLeast(pOf, target, maxDays);
+  }
 
   // The update: all four memories from the same input. Returns Float32Array states (what gets stored).
   function advance(f, dec) {
@@ -228,6 +267,6 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
   return {
     size, sizes: s, params, paramCount: params.length,
     initVector: tag => params.slice(O(`${tag}.h0`), O(`${tag}.h0`) + s[tag]),
-    decayAll, headRaw, headOf, advance, predictChunk, trainChunk
+    decayAll, headRaw, headOf, fadedDays, advance, predictChunk, trainChunk
   };
 }

@@ -120,6 +120,35 @@ export class Engine {
     return out;
   }
 
+  // The whole days the Hard, Good and Easy buttons would give (target retention R, at most maxDays), the way the replay test schedules:
+  // each what-if answer's states are read with the note memory faded over the gap, so the prediction at review time (not the curve right
+  // after the answer) is what meets R. -> { 2, 3, 4 } at least 1, never decreasing, or null when a head is not made of real numbers
+  // (the caller then leaves the card to FSRS). Changes nothing.
+  daysForButtons(row, ms, target, maxDays) {
+    const b = this.builder, m = this.model;
+    const dec = m.decayAll(this._states(row), b.gaps(row)), fq = b.features(row, true), out = {};
+    for (const rating of [2, 3, 4]) {
+      const next = m.advance(b.features({ ...row, rating, ms }, false), dec);
+      if (!headFinite(m.headOf(next, fq))) return null;
+      const d = m.fadedDays(next, fq, target, maxDays);
+      if (d === null) return null;
+      out[rating] = Math.max(1, Math.min(maxDays, d));
+    }
+    out[3] = Math.max(out[3], out[2]);
+    out[4] = Math.max(out[4], out[3]);
+    return out;
+  }
+
+  // The interval for a card from its stored states (what is saved right after its last answer, as the stored curve is), read for `row`'s
+  // query features: whole days at least 1, at most maxDays, or null when the card is unknown or its numbers are not real numbers.
+  intervalDays(row, target, maxDays) {
+    const st = this._states(row);
+    if (!st.card) return null;
+    const m = this.model, fq = this.builder.features(row, true), next = m.decayAll(st, null);
+    if (!headFinite(m.headOf(next, fq))) return null;
+    return m.fadedDays(next, fq, target, maxDays);
+  }
+
   // The records changed since the last call, ready to save. Clears the changed marks.
   snapshotDirty() {
     const pick = (set, map) => [...set].filter(k => map.has(k)).map(k => [k, map.get(k)]);

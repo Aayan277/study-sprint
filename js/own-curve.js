@@ -44,6 +44,26 @@ export function intervalDays(head, target, maxDays) {
   return Math.exp(hi);
 }
 
+// The largest whole day d in 1..maxDays with pOf(d) >= target, never less than 1. pOf is any chance-of-remembering function of whole days
+// (it need not fall steadily: the answer is always a day that was checked to be at or above the target, and no day above it that was
+// looked at is). Whole days 1..dense are scanned, then days grow by `ratio` each step; after a first miss the scan goes on until
+// `patience` misses in a row. The last hit and the first miss after it are then narrowed by bisection on log(day).
+export function largestDayAtLeast(pOf, target, maxDays, { dense = 8, ratio = 1.25, patience = 3 } = {}) {
+  const top = Math.max(1, Math.floor(maxDays));
+  if (top === 1 || !(pOf(1) >= target)) return 1;
+  let best = 1, miss = 0, firstMiss = 0, d = 1;
+  while (d < top && miss < patience) {
+    d = d < dense ? d + 1 : Math.min(top, Math.max(d + 1, Math.ceil(d * ratio)));
+    if (pOf(d) >= target) { best = d; miss = 0; firstMiss = 0; } else { if (!firstMiss) firstMiss = d; miss++; }
+  }
+  let lo = best, hi = firstMiss;
+  while (hi - lo > 1) {
+    const mid = clip(Math.round(Math.sqrt(lo * hi)), lo + 1, hi - 1);
+    if (pOf(mid) >= target) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
 // heads: { 2, 3, 4 } for what-if answers Hard, Good, Easy. -> { 2, 3, 4 } whole days, at least 1, at most maxDays, never decreasing.
 export function daysForButtons(heads, target, maxDays) {
   const out = {};
