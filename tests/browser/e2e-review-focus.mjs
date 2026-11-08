@@ -60,5 +60,21 @@ const shown = (p, sel) => p.$eval(sel, e => getComputedStyle(e).display !== 'non
   const h = await p.$eval('#showBtn', b => b.getBoundingClientRect().height);
   ok(h >= 64, `phone: Show answer is at least 64px tall (${h})`);
 }
+// A tall card (long front, long back with the recap): the deck label never sits on the first line of content
+for (const [name, vp] of [['phone', PHONE], ['desktop', DESK]]) {
+  const p = await open(vp);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'); const w = n => Array.from({ length: n }, (_, i) => 'word' + i).join(' ');
+    await db.saveCards((await db.getAll('cards')).map(c => ({ ...c, front: w(110), back: w(160) })));
+  });
+  await p.reload(); await p.waitForSelector('#startBtn'); await p.click('#startBtn'); await p.waitForSelector('#showBtn');
+  const clear = (face, first) => p.evaluate(([f, s]) => {
+    const r = a => document.querySelector(f + ' ' + a).getBoundingClientRect(), d = r('.flash-deck'), c = r(s);
+    return d.bottom <= c.top + 0.5 || d.right <= c.left || c.right <= d.left;
+  }, [face, first]);
+  ok(await clear('.rv-front', '.flash-front'), name + ': tall front: the deck label does not overlap the first line');
+  await p.click('#showBtn'); await p.waitForSelector('.rv-back:not([hidden]) .flash-recap');
+  ok(await clear('.rv-back', '.flash-recap'), name + ': tall back: the deck label does not overlap the recap');
+}
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();
