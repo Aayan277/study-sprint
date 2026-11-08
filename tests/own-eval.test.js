@@ -150,7 +150,7 @@ test('per-user fine-tuning: it never ends worse than where it started on its own
   const free = finetuneParams({ params, size: 's', events, rows: l.rows, cutoff, cfg: { epochs: 3, l2: 0 } });
   if (free.skipped) return;
   assert.ok(free.valBest <= free.valStart + 1e-12, 'the best epoch is never worse than the start (epoch 0 is the start)');
-  const leashed = finetuneParams({ params, size: 's', events, rows: l.rows, cutoff, cfg: { epochs: 3, l2: 1e6, lr: 1e-3 } });
+  const leashed = finetuneParams({ params, size: 's', events, rows: l.rows, cutoff, cfg: { epochs: 3, l2: 1e6 } });
   let far = 0, near = 0;
   for (let i = 0; i < params.length; i++) { far = Math.max(far, Math.abs(free.params[i] - params[i])); near = Math.max(near, Math.abs(leashed.params[i] - params[i])); }
   assert.ok(near <= far + 1e-12);

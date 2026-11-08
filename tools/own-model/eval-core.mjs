@@ -28,7 +28,7 @@ export const BOUNDS = ts.CLAMP_PARAMETERS(ts.W17_W18_Ceiling, true);
 const RELEARN_STEPS = 1;
 const drive = gen => { for (;;) { const r = gen.next(); if (r.done) return r.value; } };
 
-export const FT_DEFAULTS = { epochs: 4, lr: 1e-3, l2: 1e-3, chunk: 128, perStep: 2, patience: 2, minVal: 30, minFit: 50, share: 0.9 };
+export const FT_DEFAULTS = { epochs: 4, lr: 3e-5, l2: 1e-3, chunk: 128, perStep: 2, patience: 2, minVal: 30, minFit: 50, share: 0.9 };
 
 export function loadModelFile(path) {
   const { header, params } = parseOwnFile(readFileSync(path));
