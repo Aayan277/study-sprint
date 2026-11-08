@@ -3155,6 +3155,8 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 88px)}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash{min-height:min(60dvh,560px)}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face{padding:var(--s-8) 72px}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-deck{margin:calc(var(--s-5) - var(--s-8)) calc(var(--s-5) - 72px) 0}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face::after{margin-bottom:calc(var(--s-5) - var(--s-8))}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-front:not(.long):not(.xlong){font-size:4rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-recap:not(.small){font-size:1.375rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full){font-size:2rem;max-width:30ch;margin:0 auto}
