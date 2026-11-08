@@ -3128,7 +3128,7 @@ main h2[tabindex="-1"]{outline:none}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face{justify-content:center;background:var(--surface-1)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-deck{position:absolute;top:var(--s-5);left:var(--s-5);right:64px;margin:0;color:var(--text-3)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-front{margin:0}
-:root:not([data-ui="clinical"]) main[data-route="review"] .flash-ans{margin:var(--s-2) 0 0;padding-top:var(--s-6)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-back:has(.flash-recap) .flash-ans{margin:var(--s-2) 0 0;padding-top:var(--s-6)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .flash-ans::before{left:30%;right:30%}
 :root:not([data-ui="clinical"]) main[data-route="review"] .flash-front:not(.long):not(.xlong){font-size:clamp(2.25rem,10vw,3rem);letter-spacing:-.035em;line-height:1.1}
 :root:not([data-ui="clinical"]) main[data-route="review"] .flash-recap:not(.small){font-size:clamp(1.05rem,4.6vw,1.25rem);color:var(--text-3)}
@@ -3156,5 +3156,6 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-front:not(.long):not(.xlong){font-size:4rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-recap:not(.small){font-size:1.375rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full){font-size:2rem;max-width:30ch;margin:0 auto}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full):has(.tex-d){max-width:none;font-size:1.5rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rate{min-height:76px}
 }
