@@ -46,12 +46,12 @@
   --ease:cubic-bezier(.2,.8,.2,1); --t-fast:120ms; --t-med:200ms;
 
   /* How strong the accent is when it is used as a tint, an edge or a glow (light mode turns these down) */
-  --a-tint:.14; --a-line:.42; --a-glow:.16; --a-soft:.05; --a-hero:.10;
+  --a-tint:.14; --a-line:.42; --a-glow:0; --a-soft:0; --a-hero:0;
   --accent-tint:rgb(var(--acc) / var(--a-tint));
   --accent-line:rgb(var(--acc) / var(--a-line));
-  --glow:rgb(var(--acc) / var(--a-glow));
-  --glow-soft:rgb(var(--acc) / var(--a-soft));
-  --hero:radial-gradient(120% 140% at 0% 0%,rgb(var(--acc) / var(--a-hero)),transparent 55%),radial-gradient(80% 120% at 100% 100%,rgb(var(--acc) / .1),transparent 60%),var(--surface-1);
+  --glow:transparent;                       /* no glows anywhere: these stay so every rule that names them is flat */
+  --glow-soft:transparent;
+  --hero:var(--surface-1);
 
   /* Mastery levels and the study calendar are steps of the accent, so they follow the theme */
   --lv-new:var(--surface-3); --lv-learning:var(--hard);
@@ -81,7 +81,7 @@
 }
 /* ----- light mode ----- */
 :root[data-theme="light"]{
-  --a-tint:.09; --a-line:.35; --a-glow:.35; --a-soft:.14; --a-hero:.14;
+  --a-tint:.09; --a-line:.35; --a-glow:0; --a-soft:0; --a-hero:0;
   --line:rgb(11 13 18 / .09); --line-strong:rgb(11 13 18 / .15); --hi:rgb(255 255 255 / .7);
   --again:#BE123C; --again-tint:#FDE8EC; --again-line:#F4B6C3;
   --hard:#8F5300;  --hard-tint:#FFF3DF;  --hard-line:#EBCF9E;
@@ -226,7 +226,7 @@ main:focus{outline:none}
 .icon-btn svg{width:22px;height:22px}
 main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-inset-bottom,0px))}
 
-/* Docked glass tab bar with a glowing indicator over the current tab */
+/* Docked glass tab bar with an indicator over the current tab */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;padding-bottom:env(safe-area-inset-bottom,0px);
   background:color-mix(in srgb,var(--surface-1) 92%,transparent);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border-top:1px solid var(--line)}
 .tabs-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -432,7 +432,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .deck-go{all:unset;box-sizing:border-box;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text);cursor:pointer}
 .deck-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .deck-go .ico{width:17px;height:17px;margin-left:2px}
-.deck-go.lead{background:var(--accent);color:var(--on-accent);box-shadow:0 6px 18px -6px var(--glow)}
+.deck-go.lead{background:var(--accent);color:var(--on-accent)}
 .deck-go.done{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good);cursor:default}
 .deck-go.done .ico{margin:0}
 .decks.compact .subdecks{margin-top:var(--s-2)}
@@ -494,7 +494,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .lv-new{background:var(--lv-new)}
 .lv-learning{background:var(--lv-learning)}
 .lv-young{background:var(--lv-young)}
-.lv-mature{background:var(--lv-mature);box-shadow:0 0 10px var(--glow-soft)}
+.lv-mature{background:var(--lv-mature)}
 .sw.lv-new,.mtile.lv-new{background:transparent;box-shadow:inset 0 0 0 1.5px var(--control)}
 .sw.lv-learning,.mtile.lv-learning{background:repeating-linear-gradient(135deg,var(--lv-learning) 0 3px,var(--pattern) 3px 5px),var(--lv-learning)}
 .sw.lv-young,.mtile.lv-young{background:linear-gradient(135deg,var(--lv-mature) 50%,var(--surface-3) 50%)}
@@ -502,7 +502,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 
 /* ---------- 8. Deck page and card list ---------- */
 .deck-summary{position:relative;overflow:hidden;padding:var(--s-3) var(--s-4) var(--s-3) 20px}
-.deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
+.deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 .deck-summary .deck-counts .due{order:0}
 main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3);margin-bottom:var(--s-4)}
 .exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--exam-tint);color:var(--exam);box-shadow:inset 0 0 0 1px var(--exam-line);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
@@ -603,7 +603,7 @@ dialog.sheet > .sheet-in{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-b
 .opt-run p{margin:0}
 .opt-intro,.opt-note,.opt-detail{font-size:var(--fs-sm);color:var(--text-2);line-height:1.55}
 .opt-bar{height:8px;border-radius:var(--r-pill);background:var(--surface-3);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
-.opt-bar i{display:block;height:100%;width:0;border-radius:var(--r-pill);background:var(--accent);box-shadow:0 0 10px var(--glow);transition:width 200ms var(--ease)}
+.opt-bar i{display:block;height:100%;width:0;border-radius:var(--r-pill);background:var(--accent);transition:width 200ms var(--ease)}
 .opt-phase{font-size:var(--fs-base);font-weight:600;display:flex;flex-wrap:wrap;gap:0 var(--s-2)}
 .opt-phase .mono{color:var(--text-2);font-variant-numeric:tabular-nums}
 .opt-result{font-size:var(--fs-base);line-height:1.55}
@@ -708,7 +708,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .doc-parts li>span{min-width:0;display:flex;flex-direction:column;font-size:var(--fs-sm)}
 .doc-parts .muted{font-size:var(--fs-sm)}
 .row-form input{flex:1;min-width:0;font-size:var(--fs-md);padding:10px 12px}
-#claudeBtn{background:linear-gradient(90deg,var(--accent-tint),rgb(var(--acc) / .06));border-color:var(--accent-line);color:var(--text);box-shadow:0 0 20px -8px var(--glow)}
+#claudeBtn{background:linear-gradient(90deg,var(--accent-tint),rgb(var(--acc) / .06));border-color:var(--accent-line);color:var(--text)}
 #claudeBtn::before{content:"";width:15px;height:15px;background:var(--accent);
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.4L21 10l-6.8 1.6L12 18l-2.2-6.4L3 10l6.8-1.6zM19 15l.9 2.6L22 18l-2.1.6L19 21l-.9-2.4L16 18l2.1-.4z'/%3E%3C/svg%3E") center/contain no-repeat;
           mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.4L21 10l-6.8 1.6L12 18l-2.2-6.4L3 10l6.8-1.6zM19 15l.9 2.6L22 18l-2.1.6L19 21l-.9-2.4L16 18l2.1-.4z'/%3E%3C/svg%3E") center/contain no-repeat}
@@ -788,7 +788,7 @@ main[data-route="import"] > .view > .savebar{order:5}
   .rv-counts span[data-short]::before{content:attr(data-short)}
 }
 
-.flash{position:relative;display:flex;flex-direction:column;gap:var(--s-3);min-height:min(58dvh,520px);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);margin-bottom:var(--s-2);cursor:default}
+.flash{position:relative;display:flex;flex-direction:column;gap:var(--s-3);min-height:min(58dvh,520px);padding:var(--s-5) var(--s-5) var(--s-4);background:var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);margin-bottom:var(--s-2);cursor:default}
 .flash[role="button"]{cursor:pointer}
 /* Quick taps on the card or rating buttons shouldn't select text or show the iPhone tap menu. */
 .flash,.rate,.ratebar .btn,.opt{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -808,7 +808,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .flash.rv-card.enter{animation:card-in 300ms var(--ease)}
 .rv-turn{position:relative;flex:1 1 auto;display:grid;transform-style:preserve-3d;transition:transform 350ms var(--ease)}
 .rv-card.flipped .rv-turn{transform:rotateY(180deg)}
-.rv-face{grid-area:1 / 1;min-width:0;display:flex;flex-direction:column;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);background:radial-gradient(90% 60% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.rv-face{grid-area:1 / 1;min-width:0;display:flex;flex-direction:column;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);background:var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .rv-back{transform:rotateY(180deg)}
 .rv-back:focus:not(:focus-visible){outline:none}
 .rv-back:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
@@ -827,7 +827,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .el-tick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .el-sum{margin:0 0 var(--s-2);font-weight:600;color:var(--text)}
 .rate .sug-l{font:600 var(--fs-xs) var(--f-ui);letter-spacing:.02em;text-transform:uppercase;color:inherit}
-/* The answer: a hairline with a glowing middle, then the back of the card */
+/* The answer: a plain hairline, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
 .flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:var(--line-strong)}
 .flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.55;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
@@ -988,7 +988,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .play-card.no{box-shadow:var(--e-3),inset 0 0 0 1.5px var(--again);animation:fx-shake 380ms var(--out-expo)}
 .flash-q{position:absolute;bottom:10px;right:14px;font-size:var(--fs-xs);color:var(--text-2)}
 .timer{height:3px;margin:12px 0 var(--s-4);background:var(--surface-3);border-radius:3px;overflow:hidden}
-.timer-fill{height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow);transform-origin:left center}
+.timer-fill{height:100%;background:var(--accent);transform-origin:left center}
 .timer-fill.low{background:var(--again)}
 .options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2)}
 .options.six{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1017,7 +1017,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 
 .res-head{display:flex;align-items:center;gap:18px;margin-bottom:22px}
 @media (max-width:480px){.res-head .stamp{width:78px;height:78px;font-size:2.5rem;border-width:3px}}
-.stamp{width:104px;height:104px;flex:none;border:4px solid var(--accent);border-radius:50%;color:var(--accent-text);display:grid;place-items:center;font-weight:700;font-size:3.4rem;line-height:1;transform:rotate(-8deg);text-shadow:0 0 24px var(--glow)}
+.stamp{width:104px;height:104px;flex:none;border:4px solid var(--accent);border-radius:50%;color:var(--accent-text);display:grid;place-items:center;font-weight:700;font-size:3.4rem;line-height:1;transform:rotate(-8deg)}
 .stamp.press{position:relative;animation:fx-stamp 520ms cubic-bezier(.2,.9,.25,1.25) backwards}
 .res-grade{margin:0;font-weight:600;color:var(--text-2);font-size:var(--fs-base);overflow-wrap:anywhere}
 .res-score{margin:0;font:600 clamp(2.3rem,9vw,3.2rem)/1.1 var(--f-num);letter-spacing:-.04em}
@@ -1216,13 +1216,12 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
 .pgrid .card p{margin:var(--s-2) 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-2)}
 .pgrid .big{font:600 2.5rem/1 var(--f-num);letter-spacing:-.06em;margin-top:var(--s-3);color:var(--text)}
-.pgrid .pc-streak .big{text-shadow:0 0 24px var(--glow)}
 .pgrid .big small{font:500 var(--fs-sm) var(--f-ui);letter-spacing:0;color:var(--text-2);margin-left:5px}
 /* The last 7 days: a check mark in a filled square means studied (not only a color) */
 .week{display:flex;gap:4px;justify-content:space-between;margin-top:auto;padding-top:var(--s-3)}
 .wd{display:flex;flex-direction:column;align-items:center;gap:4px;font:500 .625rem var(--f-num);color:var(--text-2)}
 .wd i{display:grid;place-items:center;width:16px;height:16px;border-radius:4px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line-strong)}
-.wd.on i{background:var(--accent);box-shadow:0 0 8px var(--glow)}
+.wd.on i{background:var(--accent)}
 .wd.on i::after{content:"";width:4px;height:8px;border:solid var(--on-accent);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-.5px,-1px)}
 .wd.today span{color:var(--text);font-weight:600}
 .card.section{margin-bottom:var(--s-2)}
@@ -1241,8 +1240,8 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .col{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;background:none;border:0;padding:0;cursor:pointer;border-radius:4px}
 .col:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .bar{position:relative;display:block;width:calc(100% - 3px);max-width:16px;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 70%,transparent),var(--accent));border-radius:3px 3px 1px 1px}
-.col:last-child .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}
-@media (hover:hover) and (pointer:fine){.col:hover .bar{background:var(--accent);box-shadow:0 0 14px var(--glow)}}
+.col:last-child .bar{background:var(--accent)}
+@media (hover:hover) and (pointer:fine){.col:hover .bar{background:var(--accent)}}
 .cap{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font:500 .625rem var(--f-num);color:var(--text-2);white-space:nowrap}
 .chart-x{display:flex;gap:0;margin:6px 0 0 26px;font:.625rem var(--f-num);color:var(--text-2)}
 /* Each label is centered under its column; the first and last are pinned to the chart's edges so they never stick out. */
@@ -1295,7 +1294,6 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(21px,1fr));gap:3px}   /* 21px + 3px gap: every tile is at least 24px from the next (2.5.8) */
 .mtile{aspect-ratio:1;border-radius:4px;border:0;padding:0;cursor:pointer;min-width:0}
 .mtile[aria-pressed="true"]{outline:2px solid var(--text);outline-offset:1px}
-.mtile.lv-mature{box-shadow:0 0 8px var(--glow-soft)}
 
 /* Study calendar: a year of days, one column per week, Monday at the top */
 .cal-card{--c:12px}
@@ -1312,7 +1310,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .cal-grid i.lv1,.cal-key i.lv1{background:var(--heat-1)}
 .cal-grid i.lv2,.cal-key i.lv2{background:var(--heat-2)}
 .cal-grid i.lv3,.cal-key i.lv3{background:var(--heat-3)}
-.cal-grid i.lv4,.cal-key i.lv4{background:var(--heat-4);box-shadow:0 0 8px var(--glow-soft)}
+.cal-grid i.lv4,.cal-key i.lv4{background:var(--heat-4)}
 .cal-grid i[data-t]{cursor:pointer}
 .cal-grid i.today{outline:1.5px solid var(--text);outline-offset:1px}
 .cal-grid i.sel{outline:2px solid var(--accent-text);outline-offset:1px}
@@ -1356,7 +1354,7 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 /* A switch: its edge is a 3:1 color, and a checked switch is accent with the knob on the right */
 .switch{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:var(--r-pill);background:var(--surface-3);border:1px solid var(--control);position:relative;cursor:pointer;margin:0;flex:none;transition:background var(--t-fast)}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--text-2);box-shadow:0 1px 3px rgb(0 0 0 / .25);transition:transform var(--t-fast),background var(--t-fast)}
-.switch:checked{background:var(--accent);border-color:var(--accent);box-shadow:0 0 12px -2px var(--glow)}
+.switch:checked{background:var(--accent);border-color:var(--accent)}
 .switch:checked::after{transform:translateX(20px);background:var(--on-accent)}
 .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* High-contrast mode: an on switch must differ from an off one. This sits after the rules above on purpose (same specificity, later wins),
@@ -1731,7 +1729,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .wl-count{font-size:var(--fs-sm);color:var(--text-2)}
 .wl-bar{display:flex;gap:6px}
 .wl-bar i{flex:1;height:4px;border-radius:var(--r-pill);background:var(--surface-3)}
-.wl-bar i.on{background:var(--accent);box-shadow:0 0 10px var(--glow-soft)}
+.wl-bar i.on{background:var(--accent)}
 .welcome h1{font-size:var(--fs-xl);line-height:1.15;letter-spacing:-.03em;margin:var(--s-2) 0 0;outline:none}
 .welcome .lede{max-width:none}
 .welcome form{display:grid;gap:var(--s-4);margin-top:var(--s-2)}
@@ -1754,7 +1752,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .coach-key{display:block;margin-top:4px;font-size:var(--fs-sm);color:var(--text-2)}
 .guide .flash{min-height:min(50dvh,420px)}
 .guide #gStage{display:contents}
-.wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line);box-shadow:0 0 28px -6px var(--glow)}
+.wl-done{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent-line)}
 .wl-done .ico{width:30px;height:30px}
 @media (min-width:1024px){
   body.welcome main{margin-left:0;padding-top:56px}
@@ -1809,10 +1807,10 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 /* C1. Rating feedback: the rating's colour, for one moment, on each piece (JS sets data-r) */
 [data-r="1"]{--rc:var(--again)} [data-r="2"]{--rc:var(--hard)} [data-r="3"]{--rc:var(--good)} [data-r="4"]{--rc:var(--easy)}
 .fx-ring{position:fixed;z-index:30;pointer-events:none;border-radius:var(--r-md);
-  box-shadow:0 0 0 1.5px var(--rc),0 0 18px -2px var(--rc);animation:fx-ring 420ms var(--out-expo) forwards}
+  box-shadow:0 0 0 1.5px var(--rc);animation:fx-ring 420ms var(--out-expo) forwards}
 @keyframes fx-ring{from{opacity:.95;transform:scale(1)}to{opacity:0;transform:scale(1.14,1.3)}}
 .fx-ivl{position:fixed;z-index:31;pointer-events:none;transform:translate(-50%,0);font:600 var(--fs-sm)/1 var(--f-num);
-  color:var(--rc);text-shadow:0 0 12px var(--rc);animation:fx-ivl 640ms var(--out-expo) forwards}
+  color:var(--rc);animation:fx-ivl 640ms var(--out-expo) forwards}
 @keyframes fx-ivl{0%{opacity:0;transform:translate(-50%,6px)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-34px)}}
 /* The old card leaves as an outline (a plain box in the card's shape, so no text can overlap the next card): Again goes back into the pile (left and down), Hard drops a little, Good lifts,
    Easy lifts further and faster. */
@@ -1825,15 +1823,15 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 @keyframes fx-out-hard{to{opacity:0;transform:translateY(14px) scale(.97)}}
 @keyframes fx-out-good{to{opacity:0;transform:translateY(-30px) scale(.96)}}
 @keyframes fx-out-easy{to{opacity:0;transform:translateY(-48px) scale(.95)}}
-.fx-ghost{border-radius:var(--r-xl);background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--rc) 22%,transparent),transparent 70%),var(--surface-1);
-  box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent),0 0 40px -12px var(--rc)}
+.fx-ghost{border-radius:var(--r-xl);background:var(--surface-1);
+  box-shadow:var(--e-3),inset 0 0 0 1.5px color-mix(in srgb,var(--rc) 70%,transparent)}
 
 /* C2. Today: the today ring fills from where it was; a finished day is green, with a halo and a check that pops */
 .ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
 .ring.is-full .ring-fg{stroke:var(--good)}
 .ring.fx-win{isolation:isolate}
 .ring.fx-win::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
-  box-shadow:0 0 0 2px var(--good),0 0 24px 4px var(--good-line);animation:fx-halo-ring 900ms 650ms var(--out-expo) both}
+  box-shadow:0 0 0 2px var(--good);animation:fx-halo-ring 900ms 650ms var(--out-expo) both}
 @keyframes fx-halo-ring{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.45)}}
 .ring.fx-win .ring-check{animation:fx-check 520ms 750ms var(--spring) backwards}
 @keyframes fx-check{from{opacity:0;transform:scale(.3) rotate(-25deg)}}
@@ -1850,9 +1848,6 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
   color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line);animation:fx-pop 420ms 400ms var(--spring) backwards}
 @keyframes fx-pop{from{opacity:0;transform:scale(.6)}}
 .fx-glow-h1{position:relative}
-.fx-glow-h1::before{content:"";position:absolute;inset:-60px -80px;z-index:-1;pointer-events:none;
-  background:radial-gradient(closest-side,var(--glow),transparent);opacity:0;animation:fx-halo 1100ms var(--out-expo)}
-@keyframes fx-halo{0%{opacity:0;transform:scale(.5)}30%{opacity:.9}100%{opacity:0;transform:scale(1.25)}}
 .fx-confetti{position:fixed;inset:0;width:100%;height:100%;z-index:35;pointer-events:none}
 
 /* C4. Play: the combo pill (a flame that gets hotter at x3, x5 and x10; the tiers are still colours with reduced motion) */
@@ -1862,8 +1857,8 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 :root{--flame:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .3 1.2 1 2 2 2.2C10.5 8.5 11 5.5 12 3z'/%3E%3C/svg%3E")}
 #streakWrap.streak-on::before{opacity:1;transform:none}
 #streakWrap[data-tier="1"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard-line)}
-#streakWrap[data-tier="2"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard),0 0 16px -4px var(--hard)}
-#streakWrap[data-tier="3"]{color:var(--again);background:var(--again-tint);box-shadow:inset 0 0 0 1px var(--again),0 0 20px -2px var(--again)}
+#streakWrap[data-tier="2"]{color:var(--hard);background:var(--hard-tint);box-shadow:inset 0 0 0 1px var(--hard)}
+#streakWrap[data-tier="3"]{color:var(--again);background:var(--again-tint);box-shadow:inset 0 0 0 1px var(--again)}
 #streakWrap[data-tier] b{color:inherit!important}
 #streakWrap[data-tier="3"]::before{animation:fx-flicker 900ms ease-in-out infinite}
 @keyframes fx-flicker{0%,100%{transform:scale(1) rotate(0)}30%{transform:scale(1.1,1.18) rotate(-4deg)}60%{transform:scale(.96,1.05) rotate(3deg)}}
@@ -1938,18 +1933,18 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .lp-free{margin:-6px 0 0;text-align:center;font-size:var(--fs-sm);color:var(--text-2)}
 .lp-signin{margin-top:2px}
 .lp-demo{position:relative;height:194px;margin:2px 0 0}
-.lp-card{position:absolute;left:8%;right:8%;top:8px;height:124px;border-radius:18px;background:radial-gradient(90% 70% at 50% 0%,var(--glow-soft),transparent 70%),var(--surface-1);box-shadow:var(--e-3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px;transform:rotate(-2.5deg)}
+.lp-card{position:absolute;left:8%;right:8%;top:8px;height:124px;border-radius:18px;background:var(--surface-1);box-shadow:var(--e-3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px;transform:rotate(-2.5deg)}
 .lp-card.lp-back{background:var(--surface-2);transform:rotate(4deg) translate(10px,6px);opacity:.8;box-shadow:var(--e-1)}
 .lp-deck{position:absolute;top:10px;left:14px;font-size:var(--fs-2xs);color:var(--text-3)}
 .lp-q{font-size:1.3rem;letter-spacing:-.03em;font-weight:650}
-.lp-line{width:70%;height:1px;background:linear-gradient(90deg,transparent,var(--accent) 50%,transparent);box-shadow:0 0 10px var(--glow)}
+.lp-line{width:70%;height:1px;background:var(--line-strong)}
 .lp-a{font-size:var(--fs-base);color:var(--text-2)}
 .lp-rates{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:6px}
 .lp-rates span{display:flex;flex-direction:column;align-items:center;min-width:62px;padding:5px 4px;border-radius:9px;background:var(--surface-1);box-shadow:var(--e-1);font:500 var(--fs-2xs) var(--f-num);line-height:1.3}
 .lp-rates b{font:600 var(--fs-xs) var(--f-ui);color:var(--text)}
 .lp-rates .r1{color:var(--again);box-shadow:inset 0 2px 0 var(--again),var(--e-1)}
 .lp-rates .r2{color:var(--hard);box-shadow:inset 0 2px 0 var(--hard),var(--e-1)}
-.lp-rates .r3{color:var(--good);box-shadow:inset 0 2px 0 var(--good),0 0 0 1px var(--good-line),0 0 18px -4px var(--good-line)}
+.lp-rates .r3{color:var(--good);box-shadow:inset 0 2px 0 var(--good),0 0 0 1px var(--good-line)}
 .lp-rates .r4{color:var(--easy);box-shadow:inset 0 2px 0 var(--easy),var(--e-1)}
 .lp-desk-only{display:none}
 @media (min-width:1024px){
@@ -1967,7 +1962,6 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
   .lp-copy .wl-foot{text-align:left}
   .lp-points{gap:14px;margin:4px 0 6px}
   .lp-stage{position:relative;height:640px;display:grid;place-items:center}
-  .lp-stage::before{content:"";position:absolute;inset:6% 0;border-radius:50%;background:radial-gradient(closest-side,rgb(var(--acc) / .3),transparent);filter:blur(10px)}
   .lp-phone{position:relative;width:300px;height:610px;border-radius:46px;padding:10px;background:linear-gradient(160deg,#2a2c36,#0d0e13);box-shadow:0 40px 80px -30px rgb(0 0 0 / .8),inset 0 0 0 1px rgb(255 255 255 / .12)}
   .lp-screen{position:relative;height:100%;border-radius:37px;background:var(--bg);overflow:hidden;padding:46px 14px 14px}
   .lp-ph-head{display:flex;justify-content:space-between;align-items:center}
@@ -1975,7 +1969,7 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
   .lp-pill i{font:500 var(--fs-2xs) var(--f-ui);color:var(--text-2);font-style:normal;margin:0 2px 0 4px}
   .lp-dots .ico{width:20px;height:20px;color:var(--text-2)}
   .lp-ph-prog{height:3px;border-radius:3px;background:var(--surface-3);margin:12px 0 0;overflow:hidden}
-  .lp-ph-prog i{display:block;width:42%;height:100%;background:var(--accent);box-shadow:0 0 10px var(--glow)}
+  .lp-ph-prog i{display:block;width:42%;height:100%;background:var(--accent)}
   .lp-screen .lp-card{left:14px;right:14px;top:104px;height:380px;transform:none;border-radius:22px;gap:14px}
   .lp-screen .lp-card.lp-back{transform:translateY(8px) scale(.95);opacity:.6;top:112px}
   .lp-screen .lp-q{font-size:1.9rem}
@@ -2006,7 +2000,7 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 
 /* Install card on Today (js/install.js) */
 .inst{position:relative;display:flex;gap:14px;align-items:flex-start;margin:0 0 var(--s-4);padding:14px 44px 14px 14px;border-radius:var(--r-lg);background:var(--surface-1);box-shadow:var(--e-1)}
-.inst-icon{width:48px;height:48px;border-radius:12px;flex:none;box-shadow:0 0 0 1px var(--line-strong),0 8px 18px -8px var(--glow)}
+.inst-icon{width:48px;height:48px;border-radius:12px;flex:none;box-shadow:0 0 0 1px var(--line-strong)}
 .inst-txt{min-width:0}
 .inst-txt > b{display:block;font-size:var(--fs-base);letter-spacing:-.01em}
 .inst-txt p{margin:2px 0 0;font-size:var(--fs-sm);color:var(--text-2);line-height:1.45}
@@ -2024,7 +2018,7 @@ html[data-vt-dir="back"]::view-transition-new(root){animation-name:fx-vt-in-back
 .remind-pick{display:flex;margin-top:10px}
 @media (max-width:480px){.remind-icon{display:none}.remind{padding-left:16px}}
 .remind-time{font:600 var(--fs-md) var(--f-num);color:var(--text);padding:8px 10px;min-height:36px;border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color-scheme:inherit}
-.remind-time:focus{outline:2px solid transparent;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+.remind-time:focus{outline:2px solid transparent;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
 /* After the rule above on purpose: same specificity, so the later one wins and the keyboard ring keeps its colour */
 .remind-time:focus-visible{outline-color:var(--accent)}
 @media (forced-colors:active){.remind-time:focus{outline:2px solid Highlight;outline-offset:2px}}
@@ -2255,7 +2249,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   .side-streak{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--r-sm);color:var(--text);text-decoration:none}
   @media (hover:hover) and (pointer:fine){.side-streak:hover{background:var(--surface-2)}}
   .side-streak .ring-in .ico{width:13px;height:13px;color:var(--text-3)}
-  .side-streak.kept .ring-in .ico{color:var(--hard);filter:drop-shadow(0 0 4px var(--hard-line))}
+  .side-streak.kept .ring-in .ico{color:var(--hard)}
   .side-streak .ring-fg{filter:none}
   .side-st{display:grid;gap:1px;line-height:1.25;min-width:0}
   .side-st b{font-size:var(--fs-sm);font-weight:600;letter-spacing:-.01em}
