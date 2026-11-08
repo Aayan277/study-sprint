@@ -194,6 +194,16 @@ The full real-data training is run separately. This only proves the pipeline end
 - Held-out later-day reviews: 102,141 over 40 users. Mean per-user log loss: FSRS-6 default 0.4123, FSRS-6 fitted 0.3955, Own zero-shot 0.3719, Own + fine-tune 0.3538 (RMSE 0.0792 against 0.0934; AUC 0.761 against 0.694). Own + fine-tune minus FSRS-6 fitted: -0.0417, interval [-0.0626, -0.0219], 33 of 40 users improved. The made-up-learner weights alone scored 0.5502 on real users (clearly worse than FSRS). These 40 users are too few and the model had one short epoch; read this only as "the pipeline runs and the direction is plausible".
 - Reference rows worked: fsrs-rs weights matched the split for 5 of the 40 users (the others are capped or have no weights), and RWKV predictions lined up with the rows for 2 users (both checks passed: same row count, every row with an earlier answer has a prediction, every first answer has none). On those 2 users, mean log loss: Own + fine-tune 0.3275, Own zero-shot 0.3239, RWKV 0.3366, FSRS-6 fitted 0.3397.
 
+### Real data: final test (model A6, code bb5cae5)
+
+The one allowed run on the test split, made once for the model chosen on validation. The test split is now used up: later models can only be compared on validation, and a new test number needs a fresh untouched user group.
+
+- Model A6: size s (19,178 parameters), 3,359 train users, 8 epochs; fine-tune at learning rate 3e-5. Chosen over A7 (size m) and A5 on 268 validation users (fine-tuned log loss 0.2971, 0.2973, 0.2977; FSRS-6 fitted 0.3687).
+- 390 original test users: mean per-user log loss Own + fine-tune 0.3049 (RMSE 0.0440, AUC 0.7838), Own zero-shot 0.3066, FSRS-6 fitted 0.3723 (RMSE 0.0840), FSRS-6 default 0.4003. Own + fine-tune minus FSRS-6 fitted: -0.0674, interval [-0.0770, -0.0577], 98.5% of users improved.
+- All 988 test users (984 compared): Own + fine-tune 0.3043 (RMSE 0.0426), Own zero-shot 0.3062, FSRS-6 fitted 0.3697, FSRS-6 default 0.3934. Difference -0.0655, interval [-0.0718, -0.0597], 98.3% improved.
+- Fine-tuning on a user's own history adds -0.0017 to -0.0018 over zero-shot (about 60% of users improved).
+- Review-count savings are not measured on real people. A 180-day replay on 60 validation users (fade scheduler) gave about 36% fewer reviews when the Own model is treated as the truth and 15-19% more when FSRS is, so the honest estimate is "about the same to about a third fewer".
+
 ### Speed on real data (4 workers on the 4-core build machine, node v22.22.0, one epoch over 32 random train users)
 
 | Size | Cap | Answers per second | Projected epoch over all 1,345 train users |
