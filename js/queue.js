@@ -43,7 +43,7 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   rescue    optional: today's catch-up plan, from rescueToday() (see queueFrom)
 //   learnOrder  optional: 'before' | 'mixed' (default) | 'after', where learning cards go (see queueFrom)
 export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined, rescue = null, learnOrder = LEARN_ORDER_DEFAULT) {
-  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered, rescue, learnOrder);
+  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered, rescue, learnOrder, now);
 }
 
 // Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
@@ -84,9 +84,9 @@ export function splitCards(cards, statesById, now = Date.now(), exam = null) {
 // learnOrder (cleanLearnOrder) is where the learning cards (kind 'learn') go, after the limits have been applied (learning
 // cards are never held back, so the limits count the same in all three):
 //   'mixed'   by due time among the reviews, new cards spread through all of them (the default, as before)
-//   'before'  learning cards first (by due time), then the reviews with the new cards spread through them
+//   'before'  learning cards that are due first (by due time; not yet due ones wait in `waiting`), then the reviews with the new cards spread through them
 //   'after'   the reviews with the new cards spread through them, then the learning cards
-export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map(), rescue = null, learnOrder = LEARN_ORDER_DEFAULT) {
+export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map(), rescue = null, learnOrder = LEARN_ORDER_DEFAULT, now = Date.now()) {
   let { reviews, waiting, fresh } = withoutSiblings(split, answered);
   const newAvailable = fresh.length;
   if (rescue) {
@@ -102,7 +102,11 @@ export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = ne
   const order = cleanLearnOrder(learnOrder);
   if (order === 'mixed') return { queue: interleave(capped, news), waiting, newAvailable };
   const learn = capped.filter(x => x.kind === 'learn'), rest = capped.filter(x => x.kind !== 'learn');
-  const queue = order === 'before' ? [...learn, ...interleave(rest, news)] : [...interleave(rest, news), ...learn];
+  if (order === 'before') {       // a learning card still inside the look-ahead waits for its time, as in 'mixed'
+    waiting = [...waiting, ...learn.filter(x => x.due > now)].sort((a, b) => a.due - b.due);
+    return { queue: [...learn.filter(x => x.due <= now), ...interleave(rest, news)], waiting, newAvailable };
+  }
+  const queue = [...interleave(rest, news), ...learn];
   return { queue, waiting, newAvailable };
 }
 
