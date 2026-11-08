@@ -123,7 +123,7 @@ export const SECTIONS = [
       <p>Settings → Study → <b>Learning cards</b> chooses where they go:</p>
       <ul>
         <li><b>Mixed with reviews</b> (the default, as the app has always worked): learning cards and reviews come in the order they became due, with new cards spread through them.</li>
-        <li><b>Before reviews</b>: learning cards first, then reviews and new cards.</li>
+        <li><b>Before reviews</b>: learning cards first once their step is up, then reviews and new cards.</li>
         <li><b>After reviews</b>: reviews and new cards first, then the learning cards. A card you press Again on waits for the end of the session too, however short its step.</li>
       </ul>
       <p>Daily limits count the same in all three. It syncs to your other devices and applies from the next time you press Start. Custom study sessions keep their own order.</p>` },
