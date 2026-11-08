@@ -42,15 +42,31 @@ test('mixed gives exactly the queue the app built before the setting existed', (
 });
 
 test('before: learning cards first (by due time), then reviews with the new cards spread through them', () => {
-  assert.deepEqual(ids(build('before').queue), ['L3', 'L1', 'L2', 'r1', 'r2', 'n1', 'r3', 'n2', 'r4', 'n3']);
+  assert.deepEqual(ids(build('before').queue), ['L3', 'L1', 'r1', 'r2', 'n1', 'r3', 'n2', 'r4', 'n3']);
+});
+
+test('before: a learning card not yet due waits in the waiting list, and takeNext never returns it early', () => {
+  const b = build('before');
+  assert.deepEqual(b.waiting.map(x => x.card.id), ['L2']);
+  assert.ok(!ids(b.queue).includes('L2'));
+  const queue = b.queue.slice(), waiting = b.waiting.slice();
+  for (let x; (x = takeNext(queue, waiting, NOW, 'before')) && x.card.id !== 'L2';) assert.ok(x.kind !== 'learn' || x.due <= NOW);
+  // 10-minute step answered a minute ago: it is not returned before its due while other cards remain
+  const w = { cards: [card('A'), card('r')], states: new Map([['A', { state: LEARNING, due: NOW + 9 * MIN }], ['r', { state: REVIEW, due: NOW - DAY }]]) };
+  const q = build('before', 0, Infinity, w);
+  assert.equal(takeNext(q.queue, q.waiting, NOW, 'before').card.id, 'r');
+});
+
+test('mixed and after keep a learning card inside the look-ahead in the queue, as before', () => {
+  for (const o of ['mixed', 'after']) { const b = build(o); assert.ok(ids(b.queue).includes('L2')); assert.deepEqual(b.waiting, []); }
 });
 
 test('after: reviews with the new cards spread through them, then the learning cards', () => {
   assert.deepEqual(ids(build('after').queue), ['r1', 'r2', 'n1', 'r3', 'n2', 'r4', 'n3', 'L3', 'L1', 'L2']);
 });
 
-test('all three modes hold the same cards, and the same waiting list', () => {
-  const sets = LEARN_ORDERS.map(o => build(o)).map(b => [[...ids(b.queue)].sort().join(), b.waiting.length, b.newAvailable]);
+test('all three modes hold the same cards (queue and waiting together), and the same newAvailable', () => {
+  const sets = LEARN_ORDERS.map(o => build(o)).map(b => [[...ids(b.queue), ...ids(b.waiting)].sort().join(), b.newAvailable]);
   assert.deepEqual(sets[0], sets[1]);
   assert.deepEqual(sets[1], sets[2]);
 });
@@ -60,18 +76,18 @@ test('learning cards due later today wait, in every mode', () => {
   w.cards.push(card('LL')); w.states.set('LL', { state: LEARNING, due: NOW + 2 * HOUR });
   for (const o of LEARN_ORDERS) {
     const b = build(o, 3, Infinity, w);
-    assert.deepEqual(b.waiting.map(x => x.card.id), ['LL']);
+    assert.deepEqual(b.waiting.map(x => x.card.id), o === 'before' ? ['L2', 'LL'] : ['LL']);    // 'before' also holds L2 (due in 5 min)
     assert.ok(!ids(b.queue).includes('LL'));
   }
 });
 
 test('a review limit holds back reviews only, never learning cards, and the same reviews in every mode', () => {
   for (const o of LEARN_ORDERS) {
-    const q = ids(build(o, 3, 2).queue);
+    const b = build(o, 3, 2), q = [...ids(b.queue), ...ids(b.waiting)];
     assert.deepEqual(q.filter(x => x.startsWith('r')), ['r1', 'r2']);             // the 2 most overdue
     assert.deepEqual(q.filter(x => x.startsWith('L')).sort(), ['L1', 'L2', 'L3']);
   }
-  assert.deepEqual(ids(build('before', 3, 0).queue), ['L3', 'L1', 'L2', 'n1', 'n2', 'n3']);
+  assert.deepEqual(ids(build('before', 3, 0).queue), ['L3', 'L1', 'n1', 'n2', 'n3']);
   assert.deepEqual(ids(build('after', 3, 0).queue), ['n1', 'n2', 'n3', 'L3', 'L1', 'L2']);
   // a per-deck limit
   const perDeck = { total: Infinity, byDeck: new Map([['d', 1]]) };
