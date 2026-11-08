@@ -77,6 +77,23 @@ export function frozenFor(size, ablate = []) {
   if (ablate.includes('decay')) for (const tag of DECAY_STREAMS) if (!ablate.includes(tag)) freeze(`${tag}.theta`, Math.log(1e7));
   return { idx: Int32Array.from(idx), val: Float64Array.from(val) };
 }
+// ---------- fine-tune scope ----------
+// --ft-scope all|head|states for the per-user fine-tune. all: every weight may move. head: only the head (head.W1, head.b1, head.W2, head.b2).
+// states: only the starting memory vectors of the you and deck streams (user.h0, deck.h0), so each learner gets a starting state of their own.
+export const FT_SCOPES = ['all', 'head', 'states'];
+const SCOPE_FREE = { head: ['head.W1', 'head.b1', 'head.W2', 'head.b2'], states: ['user.h0', 'deck.h0'] };
+// Returns { idx, val }: the numbers held fixed at their starting values. 'base' (for example an ablation) is kept and wins where both apply.
+export function scopeFrozen(size, scope, params, base) {
+  if (!FT_SCOPES.includes(scope)) throw new Error(`Unknown fine-tune scope: ${scope} (use ${FT_SCOPES.join(', ')})`);
+  if (scope === 'all') return base || { idx: new Int32Array(0), val: new Float64Array(0) };
+  const off = paramOffsets(size), n = params.length;
+  const frozen = new Uint8Array(n).fill(1), value = Float64Array.from(params);
+  for (const name of SCOPE_FREE[scope]) { const { offset, length } = off[name]; for (let i = 0; i < length; i++) frozen[offset + i] = 0; }
+  if (base) for (let k = 0; k < base.idx.length; k++) { frozen[base.idx[k]] = 1; value[base.idx[k]] = base.val[k]; }
+  const idx = [], val = [];
+  for (let i = 0; i < n; i++) if (frozen[i]) { idx.push(i); val.push(value[i]); }
+  return { idx: Int32Array.from(idx), val: Float64Array.from(val) };
+}
 export const applyFrozen = (params, fz) => { for (let i = 0; i < fz.idx.length; i++) params[fz.idx[i]] = fz.val[i]; };
 export const zeroFrozen = (grad, fz) => { for (let i = 0; i < fz.idx.length; i++) grad[fz.idx[i]] = 0; };
 

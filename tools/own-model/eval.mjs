@@ -12,12 +12,13 @@ process.env.TZ = 'UTC';
 //   --ensemble "label=FILE,FILE[,FILE]"   zero-shot row that averages the predicted recall probabilities of these models, review by review (repeat it)
 //   --no-fit            skip the FSRS-6 fit (quick check of the Own side only)
 //   --ft-epochs N --ft-lr X --ft-l2 X   per-user fine-tune settings
+//   --ft-scope all|head|states   what the fine-tune may change: all weights (default), only the head, or only the learner's starting you/deck memory vectors
 // Per-user records go to ~/own-model-private/results/<tag>.jsonl (override: OWN_PRIVATE), the aggregate report to summary-<tag>.md and the screen.
 import { Worker } from 'node:worker_threads';
 import { readFileSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { cpus } from 'node:os';
-import { privateDir, parseArgs, refuseInsideRepo, gitStamp, sha256OfParams, helpAndExit } from './common.mjs';
+import { privateDir, parseArgs, refuseInsideRepo, gitStamp, sha256OfParams, helpAndExit, FT_SCOPES } from './common.mjs';
 import { summarize } from './eval-lib.mjs';
 import { loadModelFile, loadShippedParams, FT_DEFAULTS } from './eval-core.mjs';
 import { listUsers, dataRoot, LICENCE } from './sources/anki10k.mjs';
@@ -66,6 +67,7 @@ const ensembles = [];
 if (source === 'sim') { labels.own_zero = 'Own pretrained, zero-shot'; labels.own_ft = 'Own pretrained + per-learner fine-tune'; }
 const ft = { ...FT_DEFAULTS };
 for (const [k, f] of [['ft-epochs', 'epochs'], ['ft-lr', 'lr'], ['ft-l2', 'l2']]) if (flags[k] !== undefined) ft[f] = Number(flags[k]);
+if (flags['ft-scope'] !== undefined) { ft.scope = String(flags['ft-scope']); if (!FT_SCOPES.includes(ft.scope)) { console.error(`--ft-scope must be one of ${FT_SCOPES.join(', ')}`); process.exit(2); } }
 
 // ---------- who is evaluated ----------
 function plan() {
@@ -117,7 +119,7 @@ for (const sec of sections) {
     console.log(`${n}/${todo.length} ${r.ok ? `user ${r.user}: ${r.reviews} reviews, ${r.n} held out, ${r.seconds}s` : `user ${r.user}: FAILED ${r.error}`}  (ETA ${Math.round(el / n * (todo.length - n) / 60)} min)`);
   });
   const results = [...done.values()];
-  const header = [`Code ${git}; Node ${process.version}; model file ${Object.entries(shas).map(([f, s]) => `${f} (${s})`).join(', ')}; fine-tune: ${ft.epochs} epochs, lr ${ft.lr}, leash ${ft.l2}${source === 'anki10k' ? `; cap ${num('cap', 40000)} rows per user${flags['legacy-gap'] ? '; legacy card gap' : ''}; data licence: ${LICENCE}` : ''}.`];
+  const header = [`Code ${git}; Node ${process.version}; model file ${Object.entries(shas).map(([f, s]) => `${f} (${s})`).join(', ')}; fine-tune: ${ft.epochs} epochs, lr ${ft.lr}, leash ${ft.l2}${ft.scope !== 'all' ? `, scope ${ft.scope}` : ''}${source === 'anki10k' ? `; cap ${num('cap', 40000)} rows per user${flags['legacy-gap'] ? '; legacy card gap' : ''}; data licence: ${LICENCE}` : ''}.`];
   if (source === 'anki10k') {
     const rw = results.filter(r => r.rwkv === 'used').length, rwNo = results.filter(r => r.rwkv && r.rwkv !== 'used').length, rs = results.filter(r => r.rs === 'used').length;
     header.push(`Reference rows: fsrs-rs weights matched the split for ${rs} users; outside RWKV predictions lined up for ${rw} users${rwNo ? ` (${rwNo} present but not used)` : ''}.`);

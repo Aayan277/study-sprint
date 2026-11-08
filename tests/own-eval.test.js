@@ -7,7 +7,8 @@ import zlib from 'node:zlib';
 import { bootstrapMeanCI, verdictOf, sizeBucket, summarize, BOOT, RMSE_SLACK, CONTROL_TOLERANCE } from '../tools/own-model/eval-lib.mjs';
 import { evalLearner, fsrsCardsFromRows, finetuneParams, alignRwkv } from '../tools/own-model/eval-core.mjs';
 import { readNpz, NpzError } from '../tools/own-model/npz.mjs';
-import { loadLearner, isLong, isSame, frozenFor } from '../tools/own-model/common.mjs';
+import { loadLearner, isLong, isSame, frozenFor, scopeFrozen, FT_SCOPES } from '../tools/own-model/common.mjs';
+import { paramOffsets } from '../js/own-spec.js';
 import { userToLearner } from '../tools/own-model/sources/anki10k.mjs';
 import { rowsOf } from '../tools/own-model/sources/index.mjs';
 import { toHistories } from './realdata/lib.mjs';
@@ -158,6 +159,36 @@ test('per-user fine-tuning: it never ends worse than where it started on its own
   const kept = finetuneParams({ params: (() => { const p = Float64Array.from(params); for (let i = 0; i < fz.idx.length; i++) p[fz.idx[i]] = fz.val[i]; return p; })(), size: 's', events, rows: l.rows, cutoff, frozen: fz, cfg: { epochs: 2 } });
   for (let i = 0; i < fz.idx.length; i++) assert.equal(kept.params[fz.idx[i]], fz.val[i]);
 });
+
+test('fine-tune scope: head frees only the head, states frees only the you and deck starting vectors, all frees everything', () => {
+  const params = initParams('s', 7), off = paramOffsets('s');
+  const freeOf = scope => { const fz = scopeFrozen('s', scope, params, null), fixed = new Set(fz.idx); return Object.entries(off).filter(([, o]) => { for (let i = 0; i < o.length; i++) if (fixed.has(o.offset + i)) return false; return true; }).map(([name]) => name).sort(); };
+  assert.deepEqual(FT_SCOPES, ['all', 'head', 'states']);
+  assert.equal(scopeFrozen('s', 'all', params, null).idx.length, 0);
+  assert.deepEqual(freeOf('head'), ['head.W1', 'head.W2', 'head.b1', 'head.b2']);
+  assert.deepEqual(freeOf('states'), ['deck.h0', 'user.h0']);
+  for (const scope of ['head', 'states']) { const fz = scopeFrozen('s', scope, params, null); for (let k = 0; k < fz.idx.length; k++) assert.equal(fz.val[k], params[fz.idx[k]], 'held at the starting value'); }
+  const ab = frozenFor('s', ['user']), both = scopeFrozen('s', 'states', params, ab), at = new Map(); for (let k = 0; k < both.idx.length; k++) at.set(both.idx[k], both.val[k]);
+  for (let k = 0; k < ab.idx.length; k++) assert.equal(at.get(ab.idx[k]), ab.val[k], 'an ablation stays frozen at its own value and wins');
+  assert.throws(() => scopeFrozen('s', 'nope', params, null), /Unknown fine-tune scope/);
+});
+
+for (const scope of ['head', 'states']) {
+  test(`per-user fine-tune with scope ${scope}: numbers outside the scope really stay unchanged, and the ones inside move`, () => {
+    const l = tiny(1), events = eventsFromRows(l.rows), params = initParams('s', 7), off = paramOffsets('s');
+    const cards = fsrsCardsFromRows(l.rows);
+    const days = []; for (const c of cards) { let d = c.day0; for (let i = 0; i < c.ratings.length; i++) { d += c.deltas[i]; if (i > 0 && c.deltas[i] > 0) days.push(d); } }
+    days.sort((a, b) => a - b);
+    const cutoff = days[Math.floor(days.length * 0.8)];
+    const r = finetuneParams({ params, size: 's', events, rows: l.rows, cutoff, cfg: { epochs: 3, lr: 1e-2, l2: 0, patience: 3, minVal: 1, minFit: 1, scope } });
+    assert.ok(!r.skipped, 'the tiny learner is big enough with the small minimums');
+    const free = new Set(), names = scope === 'head' ? ['head.W1', 'head.b1', 'head.W2', 'head.b2'] : ['user.h0', 'deck.h0'];
+    for (const nm of names) for (let i = 0; i < off[nm].length; i++) free.add(off[nm].offset + i);
+    let moved = 0;
+    for (let i = 0; i < params.length; i++) { if (!free.has(i)) assert.equal(r.params[i], params[i], `number ${i} is outside the scope and must not change`); else if (r.params[i] !== params[i]) moved++; }
+    if (r.bestEpoch > 0) assert.ok(moved > 0, 'a kept epoch changed something inside the scope');
+  });
+}
 
 test('a learner too small to fine-tune says so and keeps the starting weights', () => {
   const l = loadLearner({ kind: 'sim', split: 'test', k: 2, config: { days: [3, 4], newPerDay: [2, 3] } });

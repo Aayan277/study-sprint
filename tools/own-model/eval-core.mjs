@@ -19,7 +19,7 @@ import { createOwnModel, StateStore, eventsFromRows } from '../../js/own-model.j
 import { Tape, Adam } from '../../js/own-grad.js';
 import { parseOwnFile } from '../../js/own-file.js';
 import { eval6, Metrics } from '../../tests/realdata/lib.mjs';
-import { isLong, isSame, predictAll, applyFrozen, zeroFrozen, frozenFor } from './common.mjs';
+import { isLong, isSame, predictAll, applyFrozen, zeroFrozen, frozenFor, scopeFrozen } from './common.mjs';
 import { readNpz } from './npz.mjs';
 
 export const ts = await import(pathToFileURL(createRequire(import.meta.url).resolve('ts-fsrs')).href);
@@ -28,7 +28,7 @@ export const BOUNDS = ts.CLAMP_PARAMETERS(ts.W17_W18_Ceiling, true);
 const RELEARN_STEPS = 1;
 const drive = gen => { for (;;) { const r = gen.next(); if (r.done) return r.value; } };
 
-export const FT_DEFAULTS = { epochs: 4, lr: 3e-5, l2: 1e-3, chunk: 128, perStep: 2, patience: 2, minVal: 30, minFit: 50, share: 0.9 };
+export const FT_DEFAULTS = { epochs: 4, lr: 3e-5, l2: 1e-3, chunk: 128, perStep: 2, patience: 2, minVal: 30, minFit: 50, share: 0.9, scope: 'all' };
 
 export function loadModelFile(path) {
   const { header, params } = parseOwnFile(readFileSync(path));
@@ -82,7 +82,7 @@ export function finetuneParams({ params, size, events, rows, cutoff, frozen, cfg
   for (let i = 0; i < nTrain; i++) if (events[i].score) { if (i >= nFit) { if (isLong(rows[i])) valN++; } else fitN++; }
   if (valN < c.minVal || fitN < c.minFit) return { params, epochsRun: 0, bestEpoch: 0, skipped: 'little', valN, fitN };
   const p = Float64Array.from(params), model = createOwnModel(p, size), tape = new Tape();
-  const fz = frozen || { idx: new Int32Array(0), val: new Float64Array(0) };
+  const fz = scopeFrozen(size, c.scope, params, frozen);
   const n = p.length, grads = new Float64Array(n), adam = new Adam(n, { lr: c.lr, l2: c.l2, anchor: params, clip: 1 });
   const valLoss = () => {
     const ps = predictAll(model, events.slice(0, nTrain), new StateStore());
