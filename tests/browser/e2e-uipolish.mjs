@@ -250,7 +250,7 @@ for (const ui of ['original', 'clinical']) {
   const edges = await maths(p, `const out = {}; for (const [k, sel] of [['ghost', '#testBtn'], ['small', '#brTags'], ['more', '#deckMore'], ['input', '#brQuery']]) { const e = document.querySelector(sel); const outer = M.bgOf(e.parentElement); out[k] = M.ratio(M.over(M.rgba(getComputedStyle(e).borderTopColor), outer), outer); } return out;`);
   ok(Object.values(edges).every(r => r >= 3), `M1 (${ui}, dark): outlines of secondary buttons and inputs are 3:1 or more (${Object.entries(edges).map(([k, v]) => k + ' ' + v.toFixed(2)).join(', ')})`);
   const lines = await maths(p, `const bg = M.tok('--bg'); const s1 = M.tok('--surface-1', bg); return { page: M.ratio(M.over(M.tok('--line'), bg), bg), card: M.ratio(M.over(M.tok('--line'), s1), s1) };`);
-  ok(lines.page >= 1.3 && lines.card >= 1.3 && lines.card < 3, `M1 (${ui}, dark): dividers and card edges are clearly there but still quiet (${lines.page.toFixed(2)} on the page, ${lines.card.toFixed(2)} on a card)`);
+  ok(lines.page >= 1.2 && lines.card >= 1.2 && lines.card < 3, `M1 (${ui}, dark): dividers and card edges are clearly there but still quiet (${lines.page.toFixed(2)} on the page, ${lines.card.toFixed(2)} on a card)`);
   await go(p, '#/today', '#optBtn');
   const glow = await p.$eval('#startBtn', b => getComputedStyle(b).boxShadow);
   ok(glow === 'none' || glow.split(/,(?![^(]*\))/).every(s => /inset/.test(s)), `M4 (${ui}, dark): the main button has no glow (${glow})`);

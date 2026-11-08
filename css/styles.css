@@ -41,12 +41,12 @@
   /* spacing (4px steps) */
   --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px; --s-6:24px; --s-8:32px; --s-10:40px;
   /* corner radii */
-  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:16px; --r-xl:20px; --r-pill:999px;
+  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:16px; --r-pill:999px;
   /* motion */
-  --ease:cubic-bezier(.2,.8,.2,1); --t-fast:120ms; --t-med:220ms;
+  --ease:cubic-bezier(.2,.8,.2,1); --t-fast:120ms; --t-med:200ms;
 
   /* How strong the accent is when it is used as a tint, an edge or a glow (light mode turns these down) */
-  --a-tint:.14; --a-line:.42; --a-glow:.45; --a-soft:.18; --a-hero:.28;
+  --a-tint:.14; --a-line:.42; --a-glow:.16; --a-soft:.05; --a-hero:.10;
   --accent-tint:rgb(var(--acc) / var(--a-tint));
   --accent-line:rgb(var(--acc) / var(--a-line));
   --glow:rgb(var(--acc) / var(--a-glow));
@@ -63,7 +63,7 @@
   --heat-4:var(--accent-hover);
 
   /* ----- dark mode (the default), same for every accent ----- */
-  --line:rgb(255 255 255 / .14); --line-strong:rgb(255 255 255 / .22); --hi:rgb(255 255 255 / .06);
+  --line:rgb(255 255 255 / .10); --line-strong:rgb(255 255 255 / .16); --hi:rgb(255 255 255 / .04);
   /* Rating colors. Fixed: they do not change with the accent. Again is crimson, so it differs from Ember's orange. */
   --again:#FF5C7A; --again-tint:rgb(255 92 122 / .13); --again-line:rgb(255 92 122 / .4);
   --hard:#FFC53D;  --hard-tint:rgb(255 197 61 / .12);  --hard-line:rgb(255 197 61 / .34);
@@ -72,8 +72,8 @@
   --on-role:#0A0C12;                    /* text on a solid rating color (the Stats answer bars) */
   --pattern:rgb(255 255 255 / .3);      /* stripes and dots drawn on a solid color, a second cue besides the color */
   --e-1:inset 0 1px 0 var(--hi),0 0 0 1px var(--line);
-  --e-2:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong),0 12px 28px -12px rgb(0 0 0 / .8);
-  --e-3:inset 0 1px 0 rgb(255 255 255 / .08),0 0 0 1px var(--line-strong),0 30px 60px -20px rgb(0 0 0 / .9);
+  --e-2:inset 0 1px 0 var(--hi),0 0 0 1px var(--line-strong),0 8px 20px -12px rgb(0 0 0 / .6);
+  --e-3:inset 0 1px 0 var(--hi),0 0 0 1px var(--line),0 16px 40px -20px rgb(0 0 0 / .7);
   --scrim:rgb(3 4 8 / .7);
   /* Exams are amber (a plan, not an alarm); red is kept for the last 3 days (.exam-badge.soon) */
   --exam:var(--hard); --exam-tint:var(--hard-tint); --exam-line:var(--hard-line);
@@ -90,8 +90,8 @@
   --on-role:#FFFFFF;
   --pattern:rgb(0 0 0 / .22);
   --e-1:0 1px 2px rgb(11 13 18 / .05),0 0 0 1px var(--line);
-  --e-2:0 10px 24px -10px rgb(11 13 18 / .18),0 0 0 1px var(--line);
-  --e-3:0 28px 56px -18px rgb(11 13 18 / .28),0 0 0 1px var(--line);
+  --e-2:0 4px 12px rgb(11 13 18 / .08),0 0 0 1px var(--line);
+  --e-3:0 16px 48px -8px rgb(11 13 18 / .16),0 0 0 1px var(--line);
   --scrim:rgb(11 13 18 / .45);
   color-scheme:light;
 }
@@ -102,7 +102,7 @@
 :root[data-skin="violet"],
 .pv[data-skin="violet"]{
   --bg:#08090C; --surface-1:#11131A; --surface-2:#181A23; --surface-3:#20232F; --surface-sunken:#0B0C11;
-  --text:#F2F3F8; --text-2:#A8ACBD; --text-3:#8F93A3; --control:#676C7E;
+  --text:#ECEDF3; --text-2:#A8ACBD; --text-3:#8F93A3; --control:#676C7E;
   --accent:#8F80FF; --accent-text:#B1A7FF; --accent-hover:#A497FF; --on-accent:#0B0A1A; --acc:143 128 255;
 }
 /* Violet light */
@@ -201,7 +201,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 ::selection{background:var(--accent-tint)}
 ::placeholder{color:var(--text-3);opacity:1}
 h1[tabindex="-1"]{outline:none}   /* focused by the app after a screen change, not by the person tabbing */
-h1{font-family:var(--f-ui);font-weight:650;font-size:var(--fs-2xl);letter-spacing:-.035em;line-height:1.1;margin:0;overflow-wrap:anywhere}
+h1{font-family:var(--f-ui);font-weight:600;font-size:var(--fs-2xl);letter-spacing:-.025em;line-height:1.1;margin:0;overflow-wrap:anywhere}
 h2,h3,.label,legend{font-size:var(--fs-sm);font-weight:600;letter-spacing:-.005em;color:var(--text);margin:0 0 var(--s-3);padding:0}
 .eyebrow{display:block;font:500 var(--fs-2xs)/1.4 var(--f-num);letter-spacing:.06em;color:var(--accent-text);margin-bottom:var(--s-1)}
 .lede{margin:0}
@@ -219,7 +219,7 @@ main:focus{outline:none}
   background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--line)}
 .top-in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:var(--s-3);padding:6px 12px 6px 16px}
 .brand{font-weight:650;font-size:var(--fs-md);letter-spacing:-.02em;margin-right:auto;color:var(--text);text-decoration:none;padding:4px 0;cursor:pointer;display:flex;align-items:center;gap:9px}
-.brand-mark{width:24px;height:24px;flex:none;filter:drop-shadow(0 0 10px var(--glow-soft))}
+.brand-mark{width:24px;height:24px;flex:none}
 .icon-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-md);background:none;border:1px solid transparent;color:var(--text-2);cursor:pointer;padding:0}
 .icon-btn[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--surface-2)}
 @media (hover:hover) and (pointer:fine){.icon-btn:hover{color:var(--text);border-color:var(--line);background:var(--surface-2)}}
@@ -233,8 +233,8 @@ main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-i
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;min-height:56px;background:none;border:0;color:var(--text-3);font-size:var(--fs-2xs);font-weight:500;cursor:pointer;text-decoration:none;transition:color var(--t-fast)}
 .tab svg{width:22px;height:22px;stroke-width:1.6}
 .tab[aria-current="page"]{color:var(--text)}
-.tab[aria-current="page"] svg{color:var(--accent);stroke-width:2;filter:drop-shadow(0 0 8px var(--glow))}
-.tab[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;border-radius:0 0 2px 2px;background:var(--accent);box-shadow:0 0 12px 1px var(--glow)}
+.tab[aria-current="page"] svg{color:var(--accent);stroke-width:2}
+.tab[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;border-radius:0 0 2px 2px;background:var(--accent)}
 
 /* Toasts sit at the bottom, above the tab bar and the sticky bars (select, save, rate) and the update button, so they never cover the header or its back link. During a round the header is hidden and
    Quit is up there, so the toast goes above the docked answer/rating bar instead. The first-run start has no header. */
@@ -254,8 +254,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 /* ---------- 5. Buttons, chips, form controls ---------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:var(--fs-base);letter-spacing:-.01em;padding:10px 18px;min-height:44px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent;text-decoration:none;transition:background var(--t-fast),box-shadow var(--t-fast),transform var(--t-fast)}
 .btn:active:not(:disabled){transform:scale(.98)}
-.btn.primary{background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 1px rgb(255 255 255 / .12) inset,0 6px 20px -6px var(--glow)}
-@media (hover:hover) and (pointer:fine){.btn.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 1px rgb(255 255 255 / .16) inset,0 8px 26px -6px var(--glow)}}
+.btn.primary{background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 1px rgb(255 255 255 / .12) inset}
+@media (hover:hover) and (pointer:fine){.btn.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 1px rgb(255 255 255 / .16) inset}}
 .btn.ghost{background:var(--surface-2);color:var(--text);border-color:var(--line)}
 @media (hover:hover) and (pointer:fine){.btn.ghost:hover{background:var(--surface-3);border-color:var(--line-strong)}}
 .btn.small{padding:6px 12px;font-size:var(--fs-sm);min-height:34px;border-radius:var(--r-sm)}
@@ -270,7 +270,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 /* One pill shape for every chip-like button */
 .chip span,.tchip,.flagbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--r-pill);border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);font-size:var(--fs-sm);font-weight:500}
 @media (hover:hover) and (pointer:fine){.chip:hover span,.tchip:hover{border-color:var(--accent-line)}}
-.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 14px -4px var(--glow)}
+.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
 .chip:has(input:focus-visible) span{outline:2px solid var(--accent);outline-offset:2px}
 .chip input:disabled + span{opacity:.45;cursor:not-allowed}
 .tchip{min-height:40px;cursor:pointer;max-width:100%}
@@ -284,7 +284,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
   border:1px solid var(--control);border-radius:var(--r-md);background:var(--surface-sunken);color:var(--text);transition:border-color var(--t-fast),box-shadow var(--t-fast)}
 .field input:focus,.field select:focus,.field textarea:focus,.br-controls input:focus,.br-controls select:focus,.row-form input:focus,
 #pasteBox:focus,.typeform input:focus,.rich:focus,.adv-row input:focus,.pcells textarea:focus{
-  outline:2px solid transparent;outline-offset:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint),0 0 18px -6px var(--glow)}
+  outline:2px solid transparent;outline-offset:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
 /* The ring itself (1.4.11, 2.4.7): a 2px accent outline, drawn for keyboard focus and in text boxes. The transparent outline above
    is what Windows high-contrast mode turns into a visible line. */
 .field input:focus-visible,.field select:focus-visible,.field textarea:focus-visible,.br-controls input:focus-visible,.br-controls select:focus-visible,.row-form input:focus-visible,
@@ -340,7 +340,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .goal{display:none}      /* Today's goal line (a sentence and a bar): only the Clinical style shows it, in place of the ring (css/clinical.css) */
 .ring > svg{position:absolute;inset:0;width:100%;height:100%}
 .ring-bg{fill:none;stroke:color-mix(in srgb,var(--text) 13%,transparent)}
-.ring-fg{fill:none;stroke:var(--accent);filter:drop-shadow(0 0 4px var(--glow))}
+.ring-fg{fill:none;stroke:var(--accent)}
 .ring-in{position:relative;display:flex;flex-direction:column;align-items:center;line-height:1;color:var(--text)}
 .ring-check{width:30px;height:30px;color:var(--good)}
 
@@ -350,14 +350,14 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .th-main .ring-in b{font-size:1.5rem;font-weight:600;letter-spacing:-.04em}
 .th-main .ring-in small{font-size:var(--fs-2xs);color:var(--text-2);margin-top:3px}
 .th-text{display:flex;flex-direction:column;gap:2px;min-width:0}
-.th-big{font-size:var(--fs-xl);font-weight:650;letter-spacing:-.035em;line-height:1.1;text-shadow:0 0 28px var(--glow)}
+.th-big{font-size:var(--fs-xl);font-weight:600;letter-spacing:-.03em;line-height:1.1}
 .th-sub{font-size:var(--fs-sm);color:var(--text-2)}
 .th-sub b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
 .streak{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:var(--s-4) 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
 .streak .ico{width:18px;height:18px;color:var(--text-3)}
 .streak b{color:var(--text);font-size:var(--fs-md)}
 .streak span{flex-basis:100%;padding-left:24px;color:var(--text-2)}
-.streak.kept .ico{color:var(--hard);filter:drop-shadow(0 0 6px var(--hard-line))}
+.streak.kept .ico{color:var(--hard)}
 .btn.big{min-height:56px;font-size:var(--fs-md);font-weight:600;letter-spacing:-.01em;line-height:1.2}
 .btn.big .ico{width:18px;height:18px}
 .th-done > b{display:block;font-size:var(--fs-md);margin-bottom:2px}
@@ -400,7 +400,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .exam-quick{display:flex;gap:8px;flex-wrap:wrap}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
-.tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
+.tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 @media (hover:hover) and (pointer:fine){.tdeck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .tdeck:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .td-main{flex:1;min-width:0;display:grid;gap:2px}
@@ -443,7 +443,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .decks.compact .subdecks[open] summary .sub-chev{transform:rotate(90deg)}
 .decks{display:grid;gap:var(--s-2)}
 .deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
-.deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck);box-shadow:0 0 12px var(--deck)}
+.deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 @media (hover:hover) and (pointer:fine){.deck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .deck-open{all:unset;cursor:pointer;min-width:0;display:block}
 .deck-open:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
@@ -776,7 +776,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 #endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
 /* Progress: done ÷ (done + left), relearning cards included. It lives outside what is redrawn per card. */
 .rv-prog{height:2px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-3)}
-.rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);box-shadow:0 0 8px var(--glow);transition:width 350ms var(--ease)}
+.rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);transition:width 350ms var(--ease)}
 @media (prefers-reduced-motion:reduce){.rv-prog i{transition:none}}
 /* Very narrow phones: shorter label, tighter buttons, so the whole toolbar fits */
 @media (max-width:359px){
@@ -796,7 +796,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .flash-front,.flash-recap,.flash-back,.flash-extra,.flash-ans .typed{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 .flash-back .occ,.flash-front .occ{-webkit-user-select:none;user-select:none}
 .flash-deck{display:block;align-self:stretch;margin-bottom:auto;font:500 var(--fs-xs)/1.3 var(--f-ui);color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.flash-front{font-weight:600;font-size:clamp(1.75rem,8vw,2.5rem);letter-spacing:-.035em;line-height:1.15;text-align:center;margin:auto 0;overflow-wrap:anywhere;white-space:pre-line}
+.flash-front{font-weight:600;font-size:clamp(1.75rem,8vw,2.5rem);letter-spacing:-.03em;line-height:1.15;text-align:center;margin:auto 0;overflow-wrap:anywhere;white-space:pre-line}
 .flash-front.long{font-size:clamp(1.3rem,5.6vw,1.7rem);letter-spacing:-.02em}
 .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0;text-align:left}
 .flash-front,.flash-recap{text-wrap:balance}
@@ -829,8 +829,8 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rate .sug-l{font:600 var(--fs-xs) var(--f-ui);letter-spacing:.02em;text-transform:uppercase;color:inherit}
 /* The answer: a hairline with a glowing middle, then the back of the card */
 .flash-ans{position:relative;padding:var(--s-5) 0 0;margin:var(--s-1) 0 auto}
-.flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-line) 30%,var(--accent) 50%,var(--accent-line) 70%,transparent);box-shadow:0 0 12px var(--glow)}
-.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:500;line-height:1.5;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
+.flash-ans::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:var(--line-strong)}
+.flash-back{font-size:clamp(1.15rem,5vw,1.35rem);font-weight:450;line-height:1.55;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere;white-space:pre-line;text-wrap:pretty}
 /* A long answer (about 160+ characters, set in review.js) is read, not glanced at: smaller, left-aligned, with its
    question shrunk to a one-or-two-line reminder. 320+ characters go one step smaller. */
 .flash-back.long{font-size:1.06rem;font-weight:450;line-height:1.6;letter-spacing:-.005em;text-align:left}
@@ -859,14 +859,14 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 /* Each rating keeps its own color in every theme: Again red, Hard amber, Good green, Easy blue */
 .rate{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:64px;padding:6px 2px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);cursor:pointer;font-size:var(--fs-base);overflow:hidden;transition:transform var(--t-fast),box-shadow var(--t-fast)}
-.rate::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:currentColor}
+.rate::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:currentColor}
 .rate b{font-weight:600;letter-spacing:-.01em;color:var(--text)}
 .rate span{font:500 var(--fs-xs) var(--f-num);color:inherit}
-.rate.r1{color:var(--again);background:linear-gradient(to bottom,var(--again-tint),transparent 80%),var(--surface-1)}
-.rate.r2{color:var(--hard);background:linear-gradient(to bottom,var(--hard-tint),transparent 80%),var(--surface-1)}
-.rate.r3{color:var(--good);background:linear-gradient(to bottom,var(--good-tint),transparent 80%),var(--surface-1)}
-.rate.r4{color:var(--easy);background:linear-gradient(to bottom,var(--easy-tint),transparent 80%),var(--surface-1)}
-@media (hover:hover) and (pointer:fine){.rate:hover{border-color:currentColor;box-shadow:0 0 22px -6px currentColor}}
+.rate.r1{color:var(--again);border-color:var(--again-line);background:linear-gradient(to bottom,var(--again-tint),transparent 80%),var(--surface-1)}
+.rate.r2{color:var(--hard);border-color:var(--hard-line);background:linear-gradient(to bottom,var(--hard-tint),transparent 80%),var(--surface-1)}
+.rate.r3{color:var(--good);border-color:var(--good-line);background:linear-gradient(to bottom,var(--good-tint),transparent 80%),var(--surface-1)}
+.rate.r4{color:var(--easy);border-color:var(--easy-line);background:linear-gradient(to bottom,var(--easy-tint),transparent 80%),var(--surface-1)}
+@media (hover:hover) and (pointer:fine){.rate:hover{border-color:currentColor}}
 .rate-note{margin:var(--s-2) 0 0;text-align:center;font-size:var(--fs-xs);color:var(--text-2)}
 .rate:active{transform:scale(.97)}
 .rate.suggested{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}
@@ -946,7 +946,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .mode{position:relative;display:flex;flex-direction:column;gap:2px;padding:14px var(--s-4);cursor:pointer;min-width:0}
 @media (hover:hover) and (pointer:fine){.mode:hover,.skin:hover,.opt:hover:not(:disabled){border-color:var(--accent-line)}}
 .mode input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.mode:has(input:checked),.skin[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint);box-shadow:0 0 22px -8px var(--glow)}
+.mode:has(input:checked),.skin[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
 .mode:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .mode-ex{font-weight:700;font-size:1.25rem;line-height:1.3;margin-bottom:2px}
 .mode-ex .clock{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600}
@@ -1830,7 +1830,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 
 /* C2. Today: the today ring fills from where it was; a finished day is green, with a halo and a check that pops */
 .ring-fg.fx-fill{transition:stroke-dasharray 800ms var(--out-expo)}
-.ring.is-full .ring-fg{stroke:var(--good);filter:drop-shadow(0 0 6px var(--good-line))}
+.ring.is-full .ring-fg{stroke:var(--good)}
 .ring.fx-win{isolation:isolate}
 .ring.fx-win::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
   box-shadow:0 0 0 2px var(--good),0 0 24px 4px var(--good-line);animation:fx-halo-ring 900ms 650ms var(--out-expo) both}
@@ -2544,9 +2544,9 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 /* Settings: jump links that stay under the header while you scroll */
 .set-nav{position:sticky;top:var(--top-h,57px);z-index:4;display:flex;gap:var(--s-2);overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--s-4)) var(--s-3);padding:var(--s-2) var(--s-4);background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .set-nav::-webkit-scrollbar{display:none}
-.set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);font:550 var(--fs-sm) var(--f-ui);text-decoration:none}
+.set-nav a{flex:none;display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--text-2);font:500 var(--fs-sm) var(--f-ui);text-decoration:none}
 @media (max-width:359px){.set-nav{gap:6px}.set-nav a{padding:0 8px;font-size:var(--fs-xs)}}
-@media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--accent-line);background:var(--accent-tint)}}
+@media (hover:hover) and (pointer:fine){.set-nav a:hover{border-color:var(--line-strong);background:var(--surface-2);color:var(--text)}}
 main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57px) + 60px);font-size:1.25rem;font-weight:650;letter-spacing:-.015em;line-height:1.25;margin-bottom:var(--s-2)}
 .set-sub{margin:var(--s-4) 0 var(--s-2);font-size:var(--fs-base);color:var(--text-2);font-weight:600}
 /* One row-title style (16px, 600) for every setting: plain rows, switch rows, the "Advanced" folds and the help rows. Small words in <b> inside a hint stay inline. */
@@ -3060,7 +3060,7 @@ a.back{text-decoration:none}
    Everything here is dark only (":root:not([data-theme="light"])"), so light mode looks as before. */
 /* The edge of a secondary button, an unselected chip and the like is the --control color (3:1 against the page), so a control can be
    found in the dark. Selected chips keep their accent edge. Cards and dividers stay on the softer --line / --line-strong. */
-:root:not([data-theme="light"]) :where(.btn.ghost,.btn.danger:not(.armed,.solid),.more-btn:not([aria-expanded="true"]),.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"],.on),.flagbtn:not([aria-pressed="true"]),.pick-btn,.set-nav a,.stepper .icon-btn,.step-btn,.sl-btn,.snd-btn:not(.playing),.img-retry,.occ-peek:not([aria-pressed="true"])){border-color:var(--control)}
+:root:not([data-theme="light"]) :where(.btn.ghost,.btn.danger:not(.armed,.solid),.more-btn:not([aria-expanded="true"]),.chip input:not(:checked) + span,.tchip:not([aria-pressed="true"],.on),.flagbtn:not([aria-pressed="true"]),.pick-btn,.stepper .icon-btn,.step-btn,.sl-btn,.snd-btn:not(.playing),.img-retry,.occ-peek:not([aria-pressed="true"])){border-color:var(--control)}
 /* (:where keeps this rule weak, so every state rule that sets its own edge still wins: selected, playing, hover.) A hovered ghost button
    or ⋯ button keeps the --control edge instead of dropping to the dimmer --line-strong. */
 @media (hover:hover) and (pointer:fine){
@@ -3072,16 +3072,16 @@ a.back{text-decoration:none}
 /* The open ⋯ menu button keeps the same 3:1 edge as the closed one (it used to drop to the dimmer --line-strong). Not :where, so it beats Clinical's own .more-btn edge too. */
 :root:not([data-theme="light"]) .more-btn[aria-expanded="true"]{border-color:var(--control)}
 /* A selected chip: a clear tinted fill, the accent edge drawn twice as thick, and a check mark (so it is not color alone). Same specificity as before on purpose: this is a state. */
-:root:not([data-theme="light"]) :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:rgb(var(--acc) / .3);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+:root:not([data-theme="light"]) :is(.chip input:checked + span,.tchip[aria-pressed="true"],.flagbtn[aria-pressed="true"]){background:rgb(var(--acc) / .3);border-color:var(--accent);box-shadow:none}
 .chip span,.tchip{position:relative}
 .chip input:checked + span,.tchip[aria-pressed="true"]{padding-left:19px;padding-right:5px}      /* room for the check mark; the same total width as unselected (12 + 12) */
 .chip input:checked + span::after,.tchip[aria-pressed="true"]::after{content:"";position:absolute;left:8px;top:50%;width:3px;height:6px;margin-top:-5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}      /* drawn inside the chip's left padding, so a chip does not get wider when it is selected */
 /* Primary buttons (Show answer, Start...): no glow, and a fill a little deeper than the accent so it is not the brightest thing on the page.
    The dark text on it stays above 4.5:1 in every accent. Clinical already has no glow and keeps its own fill. */
-:root:not([data-theme="light"]) .btn.primary{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .1)}
+:root:not([data-theme="light"]) .btn.primary{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .12)}
 :root:not([data-theme="light"]):not([data-ui="clinical"]) .btn.primary{background:color-mix(in srgb,var(--accent) 85%,var(--bg))}
 @media (hover:hover) and (pointer:fine){
-  :root:not([data-theme="light"]) .btn.primary:hover{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .14)}
+  :root:not([data-theme="light"]) .btn.primary:hover{box-shadow:inset 0 0 0 1px rgb(255 255 255 / .16)}
   :root:not([data-theme="light"]):not([data-ui="clinical"]) .btn.primary:hover{background:var(--accent)}
 }
 :root:not([data-theme="light"]) .deck-go.lead{box-shadow:none}
