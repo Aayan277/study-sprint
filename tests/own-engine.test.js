@@ -102,11 +102,12 @@ test('whatIf does not change anything and gives four sensible curves', () => {
   assert.deepEqual(e.whatIf({ ...row, rating: 1, ms: 99 }, 8000), w);
 });
 
-test('daysForButtons and intervalDays use the faded prediction: whole days, ordered, the prediction at review time meets R, nothing changes', () => {
+test('daysForButtons uses the faded prediction: whole days, ordered, the faded prediction meets R, nothing changes', () => {
   const rows = miniRows(), e = run(new Engine(params()), rows.slice(0, 10));
   e.snapshotDirty();
   const before = bytes(e), row = rows[10], m = e.model;
-  for (const R of [0.7, 0.9]) {
+  let checked = 0;
+  for (const R of [0.5, 0.7, 0.9]) {
     const d = e.daysForButtons(row, 8000, R, 365);
     assert.deepEqual(Object.keys(d), ['2', '3', '4']);
     for (const r of [2, 3, 4]) assert.ok(Number.isInteger(d[r]) && d[r] >= 1 && d[r] <= 365);
@@ -115,15 +116,28 @@ test('daysForButtons and intervalDays use the faded prediction: whole days, orde
     const dec = m.decayAll(e._states(row), e.builder.gaps(row)), fq = e.builder.features(row, true);
     const next = m.advance(e.builder.features({ ...row, rating: 3, ms: 8000 }, false), dec);
     const p = t => pAt(m.headOf(m.decayAll(next, { note: t, deck: 0, user: 0 }), fq), t);
-    if (d[3] > 1 && d[3] === m.fadedDays(next, fq, R, 365)) assert.ok(p(d[3]) >= R);
+    if (d[3] > 1 && d[3] === m.fadedDays(next, fq, R, 365)) { assert.ok(p(d[3]) >= R); checked++; }
   }
+  assert.ok(checked > 0, 'the check on the prediction at the chosen day ran at least once');
   assert.deepEqual(e.daysForButtons(row, 8000, 0.9, 365), e.daysForButtons({ ...row, rating: 1, ms: 5 }, 8000, 0.9, 365));
   assert.equal(bytes(e), before);
   assert.equal(e.snapshotDirty().cards.length, 0);
-  const g = e.intervalDays(rows[9], 0.8, 365);                                    // from the stored states of a known card
-  assert.ok(Number.isInteger(g) && g >= 1 && g <= 365);
-  assert.equal(e.intervalDays({ ...rows[9], cardKey: 'c:unknown' }, 0.8, 365), null);
-  assert.equal(bytes(e), before);
+});
+
+test('daysForButtons gives null for a maxDays or target that makes no sense, or for heads that are not real numbers', () => {
+  const rows = miniRows(), e = run(new Engine(params()), rows.slice(0, 10)), row = rows[10];
+  assert.ok(e.daysForButtons(row, 8000, 0.9, 365));
+  for (const [t, md] of [[0.9, 0], [0.9, NaN], [0, 365], [1, 365], [NaN, 365]]) assert.equal(e.daysForButtons(row, 8000, t, md), null, `target ${t}, maxDays ${md}`);
+  const P = params();
+  for (let i = 0; i < P.length; i += 7) P[i] = NaN;
+  assert.equal(run(new Engine(P), rows.slice(0, 10)).daysForButtons(row, 8000, 0.9, 365), null);
+});
+
+test('daysForButtons never goes over maxDays', () => {
+  const rows = miniRows(), e = run(new Engine(params()), rows.slice(0, 10)), row = rows[10];
+  assert.ok(e.daysForButtons(row, 8000, 0.3, 365)[3] > 2, 'without the clamp Good would be over 2 days');
+  const two = e.daysForButtons(row, 8000, 0.3, 2), one = e.daysForButtons(row, 8000, 0.3, 1);
+  for (const r of [2, 3, 4]) { assert.ok(two[r] >= 1 && two[r] <= 2); assert.equal(one[r], 1); }
 });
 
 test('saved states are float32 of the right sizes, and the curve round-trips', () => {

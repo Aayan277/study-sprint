@@ -12,8 +12,8 @@ process.env.TZ = 'UTC';
 //   --limit N (default 60), --users 1,2,3, --cap N (rows per user as in eval, default 40000), --legacy-gap (as in eval)
 //   --days H           days to simulate after the cutoff (default 180); the headline numbers start on day 2, day 1 is the backlog and is listed apart
 //   --active-days N    simulate only cards last reviewed within N days before the cutoff (default 90), the same cards for both schedulers
-//   --own-sched M      head: Own's interval is read from the curve right after the answer; fade (default): from the model's own prediction at
-//                      review time, with the note memory faded over the gap (the interval the app gives)
+//   --own-sched M      head: Own's interval is read from the curve right after the answer; fade (default): note memory faded over the
+//                      gap, other query features as of the answer (the interval the app gives)
 //   --own-grid LIST    Own's R values (default 0.65,0.70,0.75,0.80,0.85,0.90,0.92);  --fsrs-grid LIST  FSRS-6's (default 0.80,0.85,0.90,0.95)
 //   --no-fsrs-fit      use FSRS-6's default weights instead of fitting them per user (faster, for smoke tests)
 //   --max-cards K      keep a seeded random subset of K whole cards when the user has more (default 800; all rows still warm up the states)
@@ -23,6 +23,7 @@ process.env.TZ = 'UTC';
 // Per-user records go to ~/own-model-private/results/replay-<tag>.jsonl (override: OWN_PRIVATE); the aggregate report to summary-replay-<tag>.md and the screen.
 import { readFileSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
 import { privateDir, parseArgs, refuseInsideRepo, gitStamp, sha256OfParams, helpAndExit } from './common.mjs';
 import { loadModelFile } from './eval-core.mjs';
@@ -68,10 +69,12 @@ if (flags.users) { const want = new Set(String(flags.users).split(',')); users =
 users = users.slice(0, limit);
 const specs = users.map(u => ({ kind: 'real', id: String(u.id), key: String(u.id), cap, seed: 0, legacyGap: !!flags['legacy-gap'] }));
 
+// a short hash of the app files the replay runs on, so a change to them is a change of settings
+const libs = createHash('sha256').update(['own-model', 'own-curve', 'fsrs-fit'].map(n => readFileSync(new URL(`../../js/${n}.js`, import.meta.url))).join('\0')).digest('hex').slice(0, 12);
 // the settings that make records comparable; a record made with other settings is not reused
 const cfg = {
   version: REPLAY_VERSION, days, maxCards, seed, cap, legacyGap: !!flags['legacy-gap'], model: sha, code: git, ownTargets, fsrsTargets, maxDays: DEFAULTS.maxDays,
-  snapshotEvery: DEFAULTS.snapshotEvery, retryMinutes: DEFAULTS.retryMinutes, maxRetries: DEFAULTS.maxRetries, fitFsrs, activeDays, ownSched
+  snapshotEvery: DEFAULTS.snapshotEvery, retryMinutes: DEFAULTS.retryMinutes, maxRetries: DEFAULTS.maxRetries, fitFsrs, activeDays, ownSched, libs
 };
 cfg.id = JSON.stringify({ ...cfg, code: undefined });
 const tag = flags.tag || `${split}-${new Date().toISOString().replace(/[-:]/g, '').slice(0, 13).replace('T', '-')}`;

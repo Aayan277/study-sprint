@@ -30,7 +30,7 @@ export function pAt(head, tDays) {
   return clip(head.a * r, CURVE.pMin, CURVE.pMax);
 }
 
-// The first day (between 1 and maxDays) when the curve is at or below `target`; maxDays if it never gets there, 1 if the curve
+// Head mode only (the curve right after the answer, no fading; the app and the engine use model.fadedDays). The first day (between 1 and maxDays) when the curve is at or below `target`; maxDays if it never gets there, 1 if the curve
 // starts out at or below the target (this includes a ceiling under the target). Bisection on log(t), 50 rounds.
 export function intervalDays(head, target, maxDays) {
   if (!(maxDays > 1)) return maxDays;
@@ -64,7 +64,7 @@ export function largestDayAtLeast(pOf, target, maxDays, { dense = 8, ratio = 1.2
   return lo;
 }
 
-// heads: { 2, 3, 4 } for what-if answers Hard, Good, Easy. -> { 2, 3, 4 } whole days, at least 1, at most maxDays, never decreasing.
+// Head mode only (the curve right after the answer, no fading; the app and the engine use model.fadedDays). heads: { 2, 3, 4 } for what-if answers Hard, Good, Easy. -> { 2, 3, 4 } whole days, at least 1, at most maxDays, never decreasing.
 export function daysForButtons(heads, target, maxDays) {
   const out = {};
   for (const r of [2, 3, 4]) out[r] = clip(Math.round(intervalDays(heads[r], target, maxDays)), 1, maxDays);

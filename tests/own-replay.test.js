@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLearner } from '../tools/own-model/common.mjs';
 import { loadShippedParams } from '../tools/own-model/eval-core.mjs';
-import { warmUp, simulate, replayUser, crnU, cutoffOf, interpAt, curveOf, matchedPct, matchedPctAtOwn, summarizeReplay, runKey, FSRS_TARGETS, OWN_TARGETS, TRUTHS, SCHEDS, REPLAY_VERSION } from '../tools/own-model/replay-core.mjs';
+import { warmUp, simulate, replayUser, crnU, cutoffOf, interpAt, curveOf, matchedPct, matchedPctAtOwn, matchedSideAtOwn, summarizeReplay, runKey, FSRS_TARGETS, OWN_TARGETS, TRUTHS, SCHEDS, REPLAY_VERSION } from '../tools/own-model/replay-core.mjs';
 import { runPool } from '../tools/own-model/replay-pool.mjs';
 import { createOwnModel } from '../js/own-model.js';
 import { pAt, largestDayAtLeast, intervalDays } from '../js/own-curve.js';
@@ -51,7 +51,7 @@ test('day 1, scheduled and repeat reviews are counted apart; the headline starts
   assert.equal(r.reviews, r.scheduled + r.retries);
   assert.ok(r.retries <= retries.length && r.retries > 0, 'some cards lapse and are repeated');
   assert.ok(r.scheduledP > 0 && r.scheduledP < 1 && r.retryP >= 0 && r.retryP <= 1);
-  assert.ok(r.ownIntervals > 0 && r.ownFloored >= 0 && r.ownFloored <= r.ownIntervals);
+  assert.ok(r.ownIntervals > 0 && r.ownOneDay >= 0 && r.ownOneDay <= r.ownIntervals);
   assert.equal(simulate(warm, { truth: 'own', sched: 'fsrs', R: 0.9 }, O).ownIntervals, 0);
 });
 
@@ -184,7 +184,7 @@ test('interpolation and the matched-knowledge headline on hand-made numbers; the
   const cost = k => 400 + 2000 * (k - 0.8);
   const mk = (id, own) => {
     const runs = {};
-    const run = (k, factor) => ({ reviews: factor * cost(k), totalReviews: factor * cost(k) + 50, day1Reviews: 50, scheduled: 90, scheduledP: k, retries: 10, retryP: 0.6, lapses: 5, meanP: k, kEnd: k, kAvg: k, perCard: 1, cards: 10, ownIntervals: 10, ownFloored: 2 });
+    const run = (k, factor) => ({ reviews: factor * cost(k), totalReviews: factor * cost(k) + 50, day1Reviews: 50, scheduled: 90, scheduledP: k, retries: 10, retryP: 0.6, lapses: 5, meanP: k, kEnd: k, kAvg: k, perCard: 1, cards: 10, ownIntervals: 10, ownOneDay: 2 });
     for (const truth of TRUTHS) {
       for (const R of FSRS_TARGETS) runs[runKey(truth, 'fsrs', R)] = run(R, 1);
       OWN_TARGETS.forEach((R, i) => { runs[runKey(truth, 'own', R)] = run(R, own); });
@@ -213,7 +213,7 @@ test('interpolation and the matched-knowledge headline on hand-made numbers; the
 });
 
 test('replay version is a number and the pool marks a crashed or silent worker as failed and carries on', async () => {
-  assert.ok(Number.isInteger(REPLAY_VERSION) && REPLAY_VERSION >= 2);
+  assert.ok(Number.isInteger(REPLAY_VERSION) && REPLAY_VERSION >= 3);
   const specs = ['a', 'crash', 'b', 'silent', 'c', 'd', 'e'].map(key => ({ key }));
   const got = [];
   await runPool(specs, (r, n) => got.push({ ...r, n }), { workerUrl: new URL('./own-pool.child.mjs', import.meta.url), workerData: {}, jobs: 2 });
@@ -223,4 +223,46 @@ test('replay version is a number and the pool marks a crashed or silent worker a
   assert.equal(by.crash.ok, false); assert.match(by.crash.error, /exited with code 3/);
   assert.equal(by.silent.ok, false);
   for (const k of ['a', 'b', 'c', 'd', 'e']) assert.equal(by[k].ok, true);
+});
+
+test('a worker that answers and then exits does not fail the spec it was handed next: that spec is tried again', async () => {
+  for (const jobs of [1, 2]) {
+    const specs = ['post-exit', 'a', 'b', 'c'].map(key => ({ key })), got = [];
+    await runPool(specs, (r, n) => got.push({ ...r, n }), { workerUrl: new URL('./own-pool.child.mjs', import.meta.url), workerData: {}, jobs });
+    assert.equal(got.length, specs.length);
+    assert.deepEqual(got.map(r => r.n), [1, 2, 3, 4]);
+    assert.deepEqual(got.map(r => r.user).sort(), ['a', 'b', 'c', 'post-exit']);
+    assert.ok(got.every(r => r.ok === true), `jobs ${jobs}: ${JSON.stringify(got.filter(r => !r.ok))}`);
+  }
+});
+
+test('head mode schedules from the curve right after the answer; an unknown ownSched is refused', () => {
+  const warm = warmUp(learner(0), O), run = { truth: 'own', sched: 'own', R: 0.9 };
+  const head = simulate(warm, run, { ...O, ownSched: 'head' }), fade = simulate(warm, run, { ...O, ownSched: 'fade' });
+  for (const r of [head, fade]) assert.ok(Number.isFinite(r.reviews) && r.reviews > 0 && Number.isFinite(r.kAvg) && r.ownIntervals > 0);
+  assert.notDeepEqual(head, fade, 'the two modes schedule differently');
+  assert.throws(() => simulate(warm, run, { ...O, ownSched: 'nope' }), /ownSched/);
+});
+
+test('users left out of the headline are counted by reason: Own below / above, FSRS-6 with 0 reviews', () => {
+  const cost = k => 400 + 2000 * (k - 0.8);
+  // knowledge = R + shift for Own (shift 0 for FSRS-6); fsrsCost 0 gives FSRS-6 users with no reviews
+  const mk = (id, shift, fsrsCost = 1) => {
+    const runs = {}, run = (k, f) => ({ reviews: f * cost(k), kAvg: k, ownIntervals: 10, ownOneDay: 2 });
+    for (const truth of TRUTHS) {
+      for (const R of FSRS_TARGETS) runs[runKey(truth, 'fsrs', R)] = run(R, fsrsCost);
+      for (const R of OWN_TARGETS) runs[runKey(truth, 'own', R)] = run(R + shift, 0.7);
+    }
+    return { user: id, ok: true, runs };
+  };
+  const recs = [mk('in', 0), mk('lo', -0.2), mk('hi', 0.3), mk('zero', 0, 0)];
+  assert.equal(matchedSideAtOwn(recs[1], 'own', 0.9), 'below');
+  assert.equal(matchedSideAtOwn(recs[2], 'own', 0.9), 'above');
+  assert.equal(matchedSideAtOwn(recs[0], 'own', 0.9), null);
+  const { markdown, data } = summarizeReplay(recs, { tag: 't' });
+  const A = data.truths.own.headline['0.90'], B = data.truths.own.atOwn['0.90'];
+  assert.deepEqual([A.users, A.below, A.above, A.zeroFsrs, A.leftOut], [1, 1, 1, 1, 3]);
+  assert.deepEqual([B.users, B.below, B.above, B.zeroFsrs, B.leftOut], [1, 1, 1, 1, 3]);
+  assert.match(markdown, /\| 3: 1 \/ 1 \/ 1 \|/);
+  assert.match(markdown, /Left out: Own below \/ above FSRS-6's range \/ FSRS-6 0 reviews/);
 });

@@ -127,8 +127,8 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
 
   // The interval for a target R when the note memory fades before the card comes back.
   //   next: the four states right after an answer ({ card, note, deck, user }); fq: the query features (OwnFeatures.features(row, true)).
-  // After t days the note memory has relaxed by t (deck and you by 0, as they will have been used again), so the model's own prediction at
-  // review time is p(t) = pAt(head(states faded by t), t), lower than the curve read straight after the answer. Returns the largest whole
+  // After t days the note memory has relaxed by t (deck and you by 0, as they will have been used again); the other query features are as of the
+  // answer, not of the review. So p(t) = pAt(head(states faded by t), t) is lower than the curve read straight after the answer. Returns the largest whole
   // day in 1..maxDays with p >= target (at least 1), or null when p is not a real number. Only the note part of the head's first layer
   // depends on t, so the rest of it is computed once.
   function fadedDays(next, fq, target, maxDays) {
@@ -159,8 +159,9 @@ export function createOwnModel(params, size = DEFAULT_SIZE) {
       }
       return pAt(headFromRaw(raw), t);
     };
-    if (!Number.isFinite(pOf(1))) return null;
-    return largestDayAtLeast(pOf, target, maxDays);
+    const p1 = pOf(1);
+    if (!Number.isFinite(p1)) return null;
+    return largestDayAtLeast(t => (t === 1 ? p1 : pOf(t)), target, maxDays);
   }
 
   // The update: all four memories from the same input. Returns Float32Array states (what gets stored).

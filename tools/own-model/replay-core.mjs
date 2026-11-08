@@ -22,13 +22,13 @@ import { fnv1a } from '../../js/rwkv-features.js';
 import { ts, DEFAULT_W, BOUNDS, fsrsCardsFromRows } from './eval-core.mjs';
 import { BOOT, mean, bootstrapMeanCI } from './eval-lib.mjs';
 
-// Bump when a change to this file changes what a run computes: it is part of the resume key (replay.mjs), so old records are not reused.
-export const REPLAY_VERSION = 2;
+// Bump when a change to this file changes what a run computes: it is part of the resume key (replay.mjs), so old records are not reused. The app files the replay uses (js/own-model.js, js/own-curve.js, js/fsrs-fit.js) are covered by the hash in replay.mjs.
+export const REPLAY_VERSION = 3;
 export const FSRS_TARGETS = [0.80, 0.85, 0.90, 0.95];
 export const OWN_TARGETS = [0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.92];
 export const TRUTHS = ['own', 'fsrs'];
 export const SCHEDS = ['fsrs', 'own'];
-export const OWN_SCHEDS = ['head', 'fade'];   // head: the curve right after the answer; fade: the model's own prediction at review time (note memory faded)
+export const OWN_SCHEDS = ['head', 'fade'];   // head: the curve right after the answer; fade: note memory faded over the gap, other query features as of the answer
 export const DEFAULTS = {
   days: 180, maxCards: 800, seed: 0, maxDays: 36500, snapshotEvery: 7, retryMinutes: 10, maxRetries: 3, activeDays: 90, ownSched: 'fade',
   ownTargets: OWN_TARGETS, fsrsTargets: FSRS_TARGETS
@@ -171,7 +171,7 @@ export function warmUp(loaded, opts) {
 // Starts from a clone of the warm state (the warm state is not changed). Days cutoff+1 .. cutoff+days.
 // Headline counts (reviews, mean p, lapses) start on day cutoff+2; day 1 is reported as day1Reviews. totalReviews is everything.
 // Returns { reviews, totalReviews, day1Reviews, scheduled, scheduledP, retries, retryP, meanP, lapses, kEnd, kAvg, perCard, cards,
-//           ownIntervals, ownFloored, ownFallbacks }.
+//           ownIntervals, ownOneDay, ownFallbacks }.
 export function simulate(warm, run, opts = {}) {
   const o = { ...DEFAULTS, ...opts }, { truth, sched, R } = run, seed = opts.seed ?? warm.seed;
   if (!TRUTHS.includes(truth) || !SCHEDS.includes(sched)) throw new Error('truth and sched must be own or fsrs');
@@ -179,7 +179,7 @@ export function simulate(warm, run, opts = {}) {
   const own = warm.own.clone(), w = warm.w, fsrsInterval = fsrsIntervals(w, warm.maxDays), ms = warm.ms, model = warm.model;
   const cards = warm.cards.map(c => ({ ...c, n: 0, due: 0, fails: 0 }));
   const owned = truth === 'own';
-  let fallbacks = 0, ownIntervals = 0, ownFloored = 0;
+  let fallbacks = 0, ownIntervals = 0, ownOneDay = 0;
   // the next gap in whole days after a pass; `count` says whether to count it in the share of Own intervals at 1 day
   const intervalOf = (c, after, count) => {
     if (sched === 'own' && after) {
@@ -191,7 +191,7 @@ export function simulate(warm, run, opts = {}) {
       }
       if (d !== null) {
         d = clip(d, 1, warm.maxDays);
-        if (count) { ownIntervals++; if (d === 1) ownFloored++; }
+        if (count) { ownIntervals++; if (d === 1) ownOneDay++; }
         return d;
       }
     }
@@ -260,7 +260,7 @@ export function simulate(warm, run, opts = {}) {
   return {
     reviews, totalReviews: reviews + day1, day1Reviews: day1, scheduled, scheduledP: scheduled ? schedP / scheduled : NaN, retries, retryP: retries ? retryP / retries : NaN,
     meanP: reviews ? sumP / reviews : NaN, lapses, kEnd: snaps.length ? snaps[snaps.length - 1] : NaN, kAvg: snaps.length ? mean(snaps) : NaN,
-    perCard: total ? reviews / total : NaN, cards: total, ownIntervals, ownFloored, ownFallbacks: fallbacks
+    perCard: total ? reviews / total : NaN, cards: total, ownIntervals, ownOneDay, ownFallbacks: fallbacks
   };
 }
 
@@ -318,6 +318,21 @@ export function matchedSide(rec, truth, R0, grids = GRIDS) {
   return f.kAvg > Math.max(...xs) ? 'below' : f.kAvg < Math.min(...xs) ? 'above' : null;
 }
 
+// Why matchedPctAtOwn is null: 'below' when Own's knowledge is under the lowest FSRS-6 point, 'above' when it is over the highest.
+export function matchedSideAtOwn(rec, truth, Rown, grids = GRIDS) {
+  const o = rec.runs[runKey(truth, 'own', Rown)], xs = curveOf(rec, truth, 'fsrs', grids.fsrs).map(q => q.x);
+  if (!o || !Number.isFinite(o.kAvg) || !xs.length) return null;
+  return o.kAvg < Math.min(...xs) ? 'below' : o.kAvg > Math.max(...xs) ? 'above' : null;
+}
+
+// Also null in direction B when FSRS-6's reviews at Own's knowledge are not above 0: true then (the user is left out for that reason).
+export function zeroFsrsAtOwn(rec, truth, Rown, grids = GRIDS) {
+  const o = rec.runs[runKey(truth, 'own', Rown)];
+  if (!o || !Number.isFinite(o.kAvg) || !Number.isFinite(o.reviews)) return false;
+  const y = interpAt(curveOf(rec, truth, 'fsrs', grids.fsrs), o.kAvg);
+  return y !== null && !(y > 0);
+}
+
 // Direction B. One user's % change in reviews at the knowledge Own reaches with target Rown: Own's reviews against FSRS's reviews read off
 // FSRS's monotone curve at Own's knowledge. null when Own's knowledge is outside the range of FSRS's points.
 export function matchedPctAtOwn(rec, truth, Rown, grids = GRIDS) {
@@ -354,7 +369,7 @@ export function summarizeReplay(records, meta = {}) {
   const lines = [`# Replay test: ${meta.tag || ''}`, ''];
   lines.push(`Code ${meta.git || 'unknown'}; replay version ${REPLAY_VERSION}; model ${meta.modelName || 'n/a'}${meta.modelSha ? ` (${meta.modelSha})` : ''}; split ${meta.split || 'n/a'}; ${meta.cfg || ''}.`);
   lines.push(`Own scheduler mode: ${ownSched} (${ownSched === 'fade'
-    ? 'an interval is the longest whole gap at which the model\'s own prediction at review time, with the note memory faded over the gap, still meets R'
+    ? 'an interval is the longest whole gap at which the model\'s prediction still meets R with the note memory faded over the gap and the other query features as of the answer'
     : 'an interval is read from the curve right after the answer, without fading the note memory'}). Own R values: ${grids.own.map(x => x.toFixed(2)).join(' ')}; FSRS-6 R values: ${grids.fsrs.map(x => x.toFixed(2)).join(' ')}.`);
   lines.push(`FSRS-6 uses weights fitted per user on that user's own reviews before the cutoff${meta.fitFsrs === false ? ' (this run used the default weights instead)' : ''}; Own is zero-shot: one shared model, nothing fitted to the user. This favours FSRS-6.`);
   lines.push(`${ok.length} users${failed ? `, ${failed} failed and left out` : ''}. Per scheduler and target retention R, means over users. Simulated cards: those last reviewed within the active window before the cutoff, the same cards for both schedulers. Reviews, mean p and lapses start on day 2 (day 1 is the backlog due right after the cutoff and is listed apart; Total includes it). Mean p is over scheduled reviews only (first review of a card that day); repeats after a lapse are counted and averaged apart.`, '');
@@ -375,30 +390,34 @@ export function summarizeReplay(records, meta = {}) {
       const row = {
         users: rs.length, reviews: stat(rs, r => r.reviews), perCard: stat(rs, r => r.perCard), totalReviews: stat(rs, r => r.totalReviews), day1Reviews: stat(rs, r => r.day1Reviews),
         scheduledP: stat(rs, r => r.scheduledP), retries: stat(rs, r => r.retries), retryP: stat(rs, r => r.retryP), meanP: stat(rs, r => r.meanP),
-        floored: sched === 'own' ? stat(rs, r => (r.ownIntervals ? r.ownFloored / r.ownIntervals : NaN)) : NaN,
+        oneDay: sched === 'own' ? stat(rs, r => (r.ownIntervals ? r.ownOneDay / r.ownIntervals : NaN)) : NaN,
         kEnd: stat(rs, r => r.kEnd), kAvg: stat(rs, r => r.kAvg), lapses: stat(rs, r => r.lapses)
       };
       T.table[`${sched}|${R.toFixed(2)}`] = row;
-      lines.push(`| ${sched === 'own' ? 'Own' : 'FSRS-6'} | ${R.toFixed(2)} | ${f1(row.reviews)} | ${f1(row.perCard)} | ${f1(row.totalReviews)} | ${f1(row.day1Reviews)} | ${f3(row.scheduledP)} | ${f1(row.retries)} | ${f3(row.retryP)} | ${sched === 'own' ? share(row.floored) : '-'} | ${f3(row.kEnd)} | ${f3(row.kAvg)} | ${f1(row.lapses)} |`);
+      lines.push(`| ${sched === 'own' ? 'Own' : 'FSRS-6'} | ${R.toFixed(2)} | ${f1(row.reviews)} | ${f1(row.perCard)} | ${f1(row.totalReviews)} | ${f1(row.day1Reviews)} | ${f3(row.scheduledP)} | ${f1(row.retries)} | ${f3(row.retryP)} | ${sched === 'own' ? share(row.oneDay) : '-'} | ${f3(row.kEnd)} | ${f3(row.kAvg)} | ${f1(row.lapses)} |`);
     }
     lines.push('', `Headline, truth ${truth === 'own' ? 'Own' : 'FSRS-6'}: change in reviews for Own against FSRS-6 at matched knowledge, Own's reviews read at FSRS-6's knowledge. For each user, Own's ${grids.own.length} points (time-averaged knowledge, reviews) are made monotone in knowledge (sorted by R, running maximum) and joined by straight lines; reviews are read at the knowledge FSRS-6 reaches with the given R. Negative means Own needs fewer reviews. The headline covers only users inside the range: users whose Own points do not reach FSRS-6's knowledge are left out of that row (counted below), so the users shown can differ from all users.`, '',
-      '| FSRS-6 at R | Users covered | Left out: Own stays below / above | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|---|');
+      '| FSRS-6 at R | Users covered | Left out: Own stays below / above / FSRS-6 0 reviews | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|---|');
     for (const R0 of [0.85, 0.90]) {
       if (!has(grids.fsrs, R0)) continue;
       const d = ok.map(r => matchedPct(r, truth, R0, grids)).filter(x => x !== null);
       const m = bootstrapMeanCI(d, { seed: fnv1a(`replay|${truth}|${R0}`) }), md = bootstrapMedianCI(d, { seed: fnv1a(`replay-median|${truth}|${R0}`) });
-      const below = ok.filter(r => matchedSide(r, truth, R0, grids) === 'below').length, above = ok.filter(r => matchedSide(r, truth, R0, grids) === 'above').length;
-      T.headline[R0.toFixed(2)] = { users: d.length, leftOut: ok.length - d.length, below, above, mean: m.mean, meanLo: m.lo, meanHi: m.hi, median: md.median, medianLo: md.lo, medianHi: md.hi };
-      lines.push(`| ${R0.toFixed(2)} | ${d.length} of ${ok.length} | ${ok.length - d.length}: ${below} / ${above} | ${pct(m.mean)} | [${pct(m.lo)}, ${pct(m.hi)}] | ${pct(md.median)} | [${pct(md.lo)}, ${pct(md.hi)}] |`);
+      const zeroF = r => { const f = r.runs[runKey(truth, 'fsrs', R0)]; return !!f && !(f.reviews > 0); };
+      const zeroFsrs = ok.filter(zeroF).length;
+      const below = ok.filter(r => !zeroF(r) && matchedSide(r, truth, R0, grids) === 'below').length, above = ok.filter(r => !zeroF(r) && matchedSide(r, truth, R0, grids) === 'above').length;
+      T.headline[R0.toFixed(2)] = { users: d.length, leftOut: ok.length - d.length, below, above, zeroFsrs, mean: m.mean, meanLo: m.lo, meanHi: m.hi, median: md.median, medianLo: md.lo, medianHi: md.hi };
+      lines.push(`| ${R0.toFixed(2)} | ${d.length} of ${ok.length} | ${ok.length - d.length}: ${below} / ${above} / ${zeroFsrs} | ${pct(m.mean)} | [${pct(m.lo)}, ${pct(m.hi)}] | ${pct(md.median)} | [${pct(md.lo)}, ${pct(md.hi)}] |`);
     }
     const mid = grids.own.slice().sort((a, b) => a - b).slice(1, -1);
     lines.push('', `The other direction, truth ${truth === 'own' ? 'Own' : 'FSRS-6'}: Own's middle points (the ${mid.length} Own R values that are neither the lowest nor the highest), with FSRS-6's reviews read off FSRS-6's monotone curve at Own's knowledge. This too covers only users whose Own knowledge lies inside FSRS-6's range.`, '',
-      '| Own at R | Users covered | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|');
+      '| Own at R | Users covered | Left out: Own below / above FSRS-6\'s range / FSRS-6 0 reviews | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|---|');
     for (const R of mid) {
       const d = ok.map(r => matchedPctAtOwn(r, truth, R, grids)).filter(x => x !== null);
       const m = bootstrapMeanCI(d, { seed: fnv1a(`replay-own|${truth}|${R}`) }), md = bootstrapMedianCI(d, { seed: fnv1a(`replay-own-median|${truth}|${R}`) });
-      T.atOwn[R.toFixed(2)] = { users: d.length, leftOut: ok.length - d.length, mean: m.mean, meanLo: m.lo, meanHi: m.hi, median: md.median, medianLo: md.lo, medianHi: md.hi };
-      lines.push(`| ${R.toFixed(2)} | ${d.length} of ${ok.length} | ${pct(m.mean)} | [${pct(m.lo)}, ${pct(m.hi)}] | ${pct(md.median)} | [${pct(md.lo)}, ${pct(md.hi)}] |`);
+      const below = ok.filter(r => matchedSideAtOwn(r, truth, R, grids) === 'below').length, above = ok.filter(r => matchedSideAtOwn(r, truth, R, grids) === 'above').length;
+      const zeroFsrs = ok.filter(r => zeroFsrsAtOwn(r, truth, R, grids)).length;
+      T.atOwn[R.toFixed(2)] = { users: d.length, leftOut: ok.length - d.length, below, above, zeroFsrs, mean: m.mean, meanLo: m.lo, meanHi: m.hi, median: md.median, medianLo: md.lo, medianHi: md.hi };
+      lines.push(`| ${R.toFixed(2)} | ${d.length} of ${ok.length} | ${ok.length - d.length}: ${below} / ${above} / ${zeroFsrs} | ${pct(m.mean)} | [${pct(m.lo)}, ${pct(m.hi)}] | ${pct(md.median)} | [${pct(md.lo)}, ${pct(md.hi)}] |`);
     }
     lines.push('');
   }
