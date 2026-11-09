@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.63', items: [
+    'New in Advanced scheduling: you can load your own model file. It watches FSRS first and only takes over once it does better.',
+    'Easier taps on a phone, the Review button comes first on a computer\'s deck page, and Clinical shows upcoming exams again.',
+  ] },
   { version: '4.62', items: [
     'Calmer screens: only the main button is coloured, and Decks takes less space on a phone.',
     'Fixed: the card no longer jumps on a phone when you flip it, and the streak shows a snowflake only when a freeze was used.',
