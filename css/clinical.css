@@ -65,6 +65,8 @@
 :root[data-ui="clinical"] .btn.primary{box-shadow:none}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.primary:hover{box-shadow:none}}
 :root[data-ui="clinical"] .btn.ghost{background:var(--surface-1);border-color:var(--line-strong)}
+/* the invisible click layer over an exam row on Today stays invisible (it is a ghost button, painted solid above) */
+:root[data-ui="clinical"] .exam-row > .btn.ghost[data-prep]{background:none;border-color:transparent}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.ghost:hover{background:var(--surface-2)}}
 :root[data-ui="clinical"] .btn:active:not(:disabled){transform:none}
 :root[data-ui="clinical"] .btn.big{min-height:48px;font-size:var(--fs-base)}
