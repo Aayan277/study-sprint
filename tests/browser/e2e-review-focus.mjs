@@ -92,10 +92,11 @@ for (const [name, vp] of [['phone', PHONE], ['desktop', DESK]]) {
   }, [face, sel]);
   await go('d-short');
   const [fa, fb] = await gap('.rv-front', '.flash-front');
-  ok(Math.abs(fa - fb) <= 14, `${name}: a short front stays centred (above ${fa.toFixed(0)}px, below ${fb.toFixed(0)}px of free space)`);
+  // (round 3: the question sits a little above the middle, where it stays when the answer shows)
+  ok(fa > 20 && fa < fb, `${name}: a short front sits a little above the middle (above ${fa.toFixed(0)}px, below ${fb.toFixed(0)}px of free space)`);
   await go('d-cz'); await p.keyboard.press('Space'); await p.waitForSelector('.rv-back:not([inert])'); await p.waitForTimeout(450);
   const [a, b] = await gap('.rv-back', '.flash-ans');
-  ok(Math.abs(a - b) <= 2, `${name}: a cloze back with no recap is centred (above ${a.toFixed(0)}px, below ${b.toFixed(0)}px)`);
+  ok(a > 20 && a < b, `${name}: a cloze back with no recap starts where the question did, a little above the middle (above ${a.toFixed(0)}px, below ${b.toFixed(0)}px)`);
 }
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();

@@ -126,7 +126,7 @@ ok(names.length === 4 && names.every(n => /^(Again|Hard|Good|Easy), next review 
 ok(/^Again, next review in 1 minute/.test(names[0]) || /^Again, next review in \d+ minutes?/.test(names[0]), 'Review: Again is a few minutes for a new card');
 { const s = await snap('#ratebar'); ok(/button "Good, next review in /.test(s), 'Review: ARIA snapshot shows the spoken name of Good'); }
 ok(await attr('#flash', 'aria-labelledby') === null && await attr('#flash', 'aria-describedby') === null, 'Review: after flipping the card drops its question name and hint');
-ok(await page.locator('.rate kbd.key-hint').count() === 4 && (await page.textContent('#keyLine')).includes('1–4'), 'Review: key hints are shown while shortcuts are on');
+ok(await page.locator('.rate kbd.key-hint').count() === 4 && await page.locator('#keyLine').count() === 0, 'Review: key hints are shown on the buttons while shortcuts are on (and there is no shortcut line)');
 
 // ---------- 4. Single-key shortcuts ----------
 await page.keyboard.press('i');
@@ -147,7 +147,7 @@ await page.goto(URL + '#/today'); await page.waitForSelector('#startBtn, #flash'
 if (await page.locator('#startBtn').count()) { await page.focus('#startBtn'); await page.keyboard.press('Enter'); }
 await page.waitForSelector('#flash');
 console.log('   active before keys:', await active());
-ok(await page.locator('kbd').count() === 0 && (await page.textContent('#keyLine')).trim() === '', 'Shortcuts off: Review shows no key hints');
+ok(await page.locator('kbd').count() === 0, 'Shortcuts off: Review shows no key hints');
 ok(await page.locator('[aria-keyshortcuts]').count() === 0, 'Shortcuts off: no aria-keyshortcuts left on the page');
 ok(await page.evaluate(() => [...document.querySelectorAll('[title]')].every(e => !/\((?:[A-Z]|@|-|Space)\)$/.test(e.title))), 'Shortcuts off: no "(R)" or "(D)" in button titles');
 await page.keyboard.press('i'); await page.waitForTimeout(200);

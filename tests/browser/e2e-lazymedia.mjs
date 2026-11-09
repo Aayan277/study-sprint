@@ -96,9 +96,9 @@ await B.click('.flash-front .img-missing', { position: { x: 5, y: 5 } });
 await B.waitForSelector('.rate');
 ok(true, 'a tap on the placeholder still flips the card');
 await B.context().setOffline(false);
-await B.waitForSelector('.flash-front img.card-img[src^="blob:"]', { timeout: 15000 });
+await B.waitForSelector('.flash-front img.card-img[src^="blob:"]', { timeout: 15000, state: 'attached' });      // (the card was flipped above: its front is hidden behind the answer, which repeats the picture)
 ok(downloads.some(d => d.who === 'B' && d.id === 'pic-45'), 'back online: the picture loads by itself');
-ok(!(await B.$('.flash-front .img-missing')) && await B.isVisible('.flash-front img.card-img'), 'and the placeholder is gone');
+ok(!(await B.$('.flash-front .img-missing')) && await B.isVisible('.flash-recap img.card-img'), 'and the placeholder is gone (the picture shows with the question above the answer)');
 await B.click('#endBtn').catch(() => {});
 
 // ---- the sweep and the re-upload ignore files this device never downloaded ----

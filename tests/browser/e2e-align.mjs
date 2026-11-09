@@ -45,7 +45,7 @@ ok(await p.evaluate(async () => !(await import('./js/sync-data.js')).SYNCED_SETT
 
 // Review: Center centres even the long answer, Left left-aligns even a short question
 await p.goto('http://localhost:8123/#/review/low'); await p.waitForSelector('.flash');
-await p.waitForSelector('.flash-front');
+await p.waitForSelector('.flash-front', { state: 'attached' });      // (a card left flipped has its question hidden behind the answer, which repeats it)
 const frontText = async () => (await p.textContent('.rv-front .flash-front')).trim();
 const flipOne = async () => { await p.waitForTimeout(300); await p.click('#flash'); await p.waitForSelector('.rate'); await p.waitForTimeout(450); };
 // (the short card was answered above, so the long one comes first now)

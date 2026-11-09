@@ -78,11 +78,15 @@ for (const [themeName, theme] of Object.entries(THEMES)) for (const [tag, viewpo
   // ---- term card: the recap is quieter than the answer; the front sits in the middle; the divider shows ----
   await show(p, 'term');
   const c1 = await frontCentre(p);
-  ok(c1 >= .45 && c1 <= .58, `${T}: a short front sits in the vertical middle of its card (${c1.toFixed(2)})`);
+  // (round 3: in the Original style the question sits a little above the middle, at the same spot on both sides, so it never jumps on flip)
+  if (themeName === 'original') ok(c1 >= .2 && c1 < .45, `${T}: a short front sits a little above the middle of its card (${c1.toFixed(2)})`);
+  else ok(c1 >= .45 && c1 <= .58, `${T}: a short front sits in the vertical middle of its card (${c1.toFixed(2)})`);
+  const frontPx = await px(p, '.rv-front .flash-front');
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/term-front-${tag}-${themeName}.png` });
   await flip(p);
   const recap = await px(p, '.rv-back .flash-recap'), back = await px(p, '.rv-back .flash-back');
-  ok(recap < back, `${T}: the recap (${recap}px) is smaller than the answer (${back}px)`);
+  if (themeName === 'original') ok(recap === frontPx, `${T}: the question keeps its size when the answer shows (${frontPx}px, then ${recap}px)`);
+  else ok(recap < back, `${T}: the recap (${recap}px) is smaller than the answer (${back}px)`);
   ok(await p.locator('.rv-back .flash-ans').first().evaluate(el => getComputedStyle(el, '::before').display) !== 'none', `${T}: a back with a recap keeps its divider`);
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/term-back-${tag}-${themeName}.png` });
 
@@ -104,8 +108,11 @@ for (const [themeName, theme] of Object.entries(THEMES)) for (const [tag, viewpo
     ok(small <= (viewport.width >= 1024 ? 16 : 15) + .01, `${T}: clinical keeps the compact recap (${small}px)`);
   }
   if (SHOTS) await p.screenshot({ path: `${SHOTS}/mc-back-${tag}-${themeName}.png` });
-  await show(p, 'mcshort'); await flip(p);
-  ok(await px(p, '.rv-back .flash-recap') < await px(p, '.rv-back .ans-lead'), `${T}: a short multiple-choice back leads too, above its recap`);
+  await show(p, 'mcshort');
+  const shortFrontPx = await px(p, '.rv-front .flash-front');
+  await flip(p);
+  if (themeName === 'original') ok(await px(p, '.rv-back .flash-recap') === shortFrontPx && await px(p, '.rv-back .ans-lead') > await px(p, '.rv-back .ans-more'), `${T}: a short multiple-choice back keeps the question's size and its lead still leads the explanation`);
+  else ok(await px(p, '.rv-back .flash-recap') < await px(p, '.rv-back .ans-lead'), `${T}: a short multiple-choice back leads too, above its recap`);
 
   // ---- a very long front keeps its small, even weight in both looks ----
   await show(p, 'xlong');
