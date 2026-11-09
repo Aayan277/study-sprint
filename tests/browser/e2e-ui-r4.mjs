@@ -125,8 +125,24 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   const p = await open(PHONE, true);
   await seed(p, [1, 2, 3, 4]);
   await p.reload(); await p.waitForSelector('#startBtn');
-  ok(await p.locator('.today-hero .streak').count() === 1 && await p.locator('.today-hero .streak .frz-pill').count() === 0 && await p.locator('.today-hero .streak svg.ico').count() === 2, 'a freeze that is only ready: no snowflake on Today (flame and chevron only)');
+  ok(await p.locator('.today-hero .streak').count() === 1 && await p.locator('.today-hero .streak .frz-pill:visible').count() === 0 && await p.locator('.today-hero .streak svg.ico:visible').count() === 2, 'a freeze that is only ready: no visible snowflake on Today in Original (flame and chevron only)');
+  // Clinical keeps its own look: the ready-freeze pill is still shown there
+  await p.evaluate(() => document.documentElement.setAttribute('data-ui', 'clinical'));
+  ok(await p.locator('.today-hero .streak .frz-pill:not(.used):visible').count() === 1, 'Clinical still shows the ready-freeze pill');
+  await p.evaluate(() => document.documentElement.removeAttribute('data-ui'));
   ok(/freeze ready/i.test(await norm(p, '.today-hero .streak')), 'and the "freeze ready" words are still there for a screen reader: ' + await norm(p, '.today-hero .streak'));
+  await p.close();
+}
+
+// ---------- the deck page shows the deck colour even with no course code and no parent ----------
+{
+  const p = await open(PHONE, true);
+  await seed(p, [2, 3, 4, 5, 6]);
+  await p.evaluate(async () => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'solo', name: 'Solo', color: '#E5484D', created: Date.now() + 9 }, [{ id: 'solo0', deckId: 'solo', front: 'q', back: 'a', tags: [], created: 0 }]); });
+  await go(p, '#/deck/solo', '#reviewBtn');
+  ok(await p.locator('.screen-head .eyebrow').count() === 0, 'the solo deck has no course code and no parent (no eyebrow)');
+  const dot = await p.$eval('main[data-route="deck"] .screen-head h1', e => { const b = getComputedStyle(e, '::before'); return { w: b.width, bg: b.backgroundColor, content: b.content }; });
+  ok(dot.content === '""' && dot.w === '10px' && dot.bg === 'rgb(229, 72, 77)', 'the deck colour dot shows beside the title: ' + JSON.stringify(dot));
   await p.close();
 }
 

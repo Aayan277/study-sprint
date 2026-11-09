@@ -132,7 +132,7 @@ await p.click('.subdecks summary'); await p.waitForTimeout(100); await p.reload(
 ok(!(await p.$eval('.subdecks', d => d.open)), 'and so is a closed one');
 // small round play buttons
 ok(await p.$$eval('.deck-act .btn', b => b.length) === 0, 'no full-width Study buttons');
-const go1 = await box(p, '.deck-go'); ok(go1.w === go1.h && go1.w >= 40 && go1.w <= 44, 'the play button is a round tap target of 40 to 44px (round 4: 44px on a phone), ' + go1.w + 'x' + go1.h);
+const go1 = await box(p, '.deck-go'); ok(go1.w === 44 && go1.h === 44, 'the play button is a 44px circle on a phone (round 4), ' + go1.w + 'x' + go1.h);
 ok((await p.getAttribute('[data-study="econ"]', 'aria-label')) === 'Study Microeconomics: 6 cards', 'with an accessible name: ' + await p.getAttribute('[data-study="econ"]', 'aria-label'));
 ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e), 'a deck with cards to study has a play button');
 // Round 2 A6: a deck with no cards at all is not "done": it offers + Add cards (the check is for decks that are caught up; see e2e-counts.mjs)

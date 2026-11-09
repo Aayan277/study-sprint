@@ -130,11 +130,11 @@ export function streakHTML(streak, { button = false, chip = false } = {}) {
   const { line, sub } = streakText(streak);
   const kept = streak.studiedToday;
   const asChip = button || chip;
-  // On Today (and at the end of a session) the streak is a one-line chip: the flame, the number, a snowflake only when a freeze was
-  // actually used (a freeze that is merely ready shows nothing), and on Today a chevron. "Kept for today" (the amber flame says it)
-  // and the freeze words stay for screen readers; the nudge for a streak not yet kept stays visible.
+  // On Today (and at the end of a session) the streak is a one-line chip: the flame, the number, a snowflake (the Original style
+  // shows it only when a freeze was used: css/styles.css hides a "ready" pill; Clinical keeps it), and on Today a chevron. "Kept for today"
+  // (the amber flame says it) and the freeze words stay for screen readers; the nudge for a streak not yet kept stays visible.
   const used = !!streak.freeze.usedOn;
-  const pill = sub && (used || !asChip) ? `<span class="frz-pill${used ? ' used' : ''}"${button ? ` title="${esc(sub)}"` : ''}>${icon('snow')}${asChip ? `<span class="chip-sr">${esc(sub)}</span>` : esc(sub)}</span>` : sub && asChip ? `<span class="chip-sr">${esc(sub)}</span>` : '';
+  const pill = sub ? `<span class="frz-pill${used ? ' used' : ''}"${button ? ` title="${esc(sub)}"` : ''}>${icon('snow')}${asChip ? `<span class="chip-sr">${esc(sub)}</span>` : esc(sub)}</span>` : '';
   const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span${asChip && kept ? ' class="chip-sr"' : ''}>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
   const cls = `streak${kept ? ' kept' : ''}`;
   return button

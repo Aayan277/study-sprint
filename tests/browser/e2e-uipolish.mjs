@@ -385,7 +385,7 @@ for (const ui of ['original', 'clinical']) {
     await go(d, hash, wait);
     const [l, r, w] = await gaps('main > .view');
     // (round 4: in the Original style the narrow columns sit on the same left edge as Today; Clinical keeps them centred)
-    ok(ui === 'original' ? (Math.abs(l - 0) <= 2 || Math.abs(l - leftToday) <= 2) && w <= 1000 : Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
+    ok(ui === 'original' ? Math.abs(l - leftToday) <= 2 && w <= 1000 : Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
   }
   await go(d, '#/browse', '.crow');
   { const [l, r, w] = await gaps('main > .view'); ok((ui === 'original' ? Math.abs(l - leftToday) <= 2 : Math.abs(l - r) <= 2) && w <= 900, `M9 (${ui}): Browse is ${ui === 'original' ? 'left-aligned' : 'centred'} and at most 900px wide (left ${l}, right ${r}, ${w}px)`); }

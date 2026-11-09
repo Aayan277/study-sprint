@@ -551,7 +551,7 @@ main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;g
 :root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge{background:none;box-shadow:none;border:0;padding:0;color:var(--text-2);font-weight:500}
 :root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge.near{color:var(--exam)}
 :root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge.soon{color:var(--again)}
-:root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .eyebrow::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-right:8px;vertical-align:1px}
+:root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head h1::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--deck);margin-right:10px;vertical-align:.1em}
 .exam-line{margin:var(--s-2) 0 0;font-size:var(--fs-base);color:var(--text-2)}
 .br-head h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em}
 .br-head h2 .count{font:400 var(--fs-sm) var(--f-num);letter-spacing:0;color:var(--text-2)}
@@ -2452,6 +2452,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .chip-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill{margin:0;padding:0;background:none;box-shadow:none;border:0;gap:0}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill .ico{width:15px;height:15px}
+/* a freeze that is only ready shows nothing (the snowflake means one was used); the words stay in the button's title */
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill:not(.used){display:none}
 /* the end of a session: the same chip as Today, without the chevron */
 :root:not([data-ui="clinical"]) .finish-next{margin-top:var(--s-3);padding:0;background:none;box-shadow:none}
 :root:not([data-ui="clinical"]) .finish-next .streak-chip{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:6px;min-height:40px;margin:0;padding:0 14px 0 12px;border:1px solid var(--line-strong);border-radius:var(--r-pill);white-space:nowrap}
