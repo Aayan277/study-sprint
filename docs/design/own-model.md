@@ -354,3 +354,14 @@ base64 -w0 ~/own-model-private/own-real-VARIANT.own
 ```
 
 Paste the output of `base64` on the other machine into `echo '...' | base64 -d > own-real-VARIANT.own` and compare the `sha256sum` of the two files (it must be identical). `~/own-model-private/own-real-VARIANT.own.run.json` has the settings, git stamp and per-epoch history of the run. Per-user results (`results/*.jsonl`) stay on the machine that made them.
+
+### Val: fine-tune scope sweep (model A5b, val split, 268 users)
+Zero-shot log loss 0.3034 per user. Fine-tune minus zero-shot (mean, 95% CI, % users improved):
+
+| scope | lr 3e-5 | lr 1e-4 | lr 1e-3 | lr 3e-3 | lr 1e-2 |
+|---|---|---|---|---|---|
+| all | -0.0034 [-0.0041,-0.0028] 68.3% | -0.0035 [-0.0043,-0.0027] 61.6% | +0.0008 [-0.0009,+0.0027] 38.8% | | |
+| head | -0.0025 [-0.0030,-0.0020] 71.6% | -0.0031 [-0.0038,-0.0023] 67.9% | -0.0022 [-0.0037,-0.0001] 56.0% | | |
+| states | -0.0002 [-0.0002,-0.0001] 73.9% | -0.0005 [-0.0006,-0.0004] 73.1% | -0.0017 [-0.0021,-0.0014] 70.1% | -0.0022 [-0.0027,-0.0017] 66.8% | -0.0022 [-0.0027,-0.0017] 60.4% |
+
+Conclusion: `all` at a low lr (3e-5) stays best. `head` is the safest at a high lr. `states` levels off at about -0.0022. No scope is faster (about 23 s per user).
