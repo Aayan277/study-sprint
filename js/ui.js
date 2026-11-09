@@ -128,9 +128,12 @@ export const icon = (name, cls = '') =>
 // Keep both the same text: tests compare Today's streak with the one at the end of a session.
 export function streakHTML(streak, { button = false } = {}) {
   const { line, sub } = streakText(streak);
-  const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}">${icon('snow')}${esc(sub)}</span>` : '';
-  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
-  const cls = `streak${streak.studiedToday ? ' kept' : ''}`;
+  const kept = streak.studiedToday;
+  // On Today the streak is a one-line chip: the flame, the number, a snowflake when a freeze was used, a chevron. "Kept for today"
+  // (the amber flame says it) and the freeze words stay for screen readers; the nudge for a streak not yet kept stays visible.
+  const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}"${button ? ` title="${esc(sub)}"` : ''}>${icon('snow')}${button ? `<span class="chip-sr">${esc(sub)}</span>` : esc(sub)}</span>` : '';
+  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span${button && kept ? ' class="chip-sr"' : ''}>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
+  const cls = `streak${kept ? ' kept' : ''}`;
   return button
     ? `<button type="button" class="${cls} streak-btn" id="streakBtn" aria-haspopup="dialog" title="Your streak, streak freeze and days off">${inner}${icon('chevron', 'sb-go')}</button>`
     : `<p class="${cls}">${inner}</p>`;

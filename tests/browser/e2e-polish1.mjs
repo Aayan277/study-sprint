@@ -47,7 +47,7 @@ const badges = await p.$$eval('.exam-row .exam-badge', bs => bs.map(b => ({ t: b
 const soon = badges.find(b => /in 2 days/.test(b.t)), far = badges.find(b => /in 20 days/.test(b.t));
 ok(soon && soon.soon && far && !far.soon, 'only the exam within 3 days is marked "soon": ' + JSON.stringify(badges.map(b => [b.t, b.soon])));
 const rgb = c => c.match(/\d+/g).slice(0, 3).map(Number);
-ok(rgb(far.color)[0] > rgb(far.color)[2] + 60 && rgb(far.color)[1] > 60, 'a far exam is amber: ' + far.color);
+ok(!(rgb(far.color)[0] > rgb(far.color)[2] + 60), 'an exam more than 14 days away is plain text, not amber (round 3): ' + far.color);
 ok(rgb(soon.color)[0] > 150 && rgb(soon.color)[1] < 110 && rgb(soon.color)[2] < 140, 'a near exam is red: ' + soon.color);
 // Again vs Ember's accent: far apart in hue (crimson, not orange)
 const hueOf = ([r, g, b]) => { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };

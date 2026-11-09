@@ -20,7 +20,7 @@ const open = async (width, height, scheme = 'dark') => {
 };
 const go = async (p, hash, sel = '.today-hero') => { await p.goto('about:blank'); await p.goto('http://localhost:8123/' + hash); await p.waitForSelector(sel); await p.waitForTimeout(150); };
 const num = async (p, sel) => +(await p.locator(sel).first().textContent()).trim();
-const startCount = async p => +(/Start · (\d+) card/.exec(await p.textContent('#startBtn'))?.[1]);
+const startCount = async p => +(/Start · (\d+) card/.exec(await p.getAttribute('#startBtn', 'aria-label'))?.[1]);
 const sideCount = async p => +((await p.textContent('#sideBadge')).match(/\d+/)?.[0] || 0);
 const noHScroll = async (p, what) => ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + what);
 const lineText = async p => (await p.textContent('.rescue-line')).replace(/\s+/g, ' ').trim();
@@ -106,9 +106,9 @@ ok(rv.reduce((a, b) => a + b, 0) === 60, 'Review starts with 60 cards: ' + rv.jo
 await go(p, '#/today', '.rescue-line');
 await p.click('#rescueManage'); await p.waitForSelector('#rsPause');
 ok(/Day 1 of 3/.test(await p.textContent('#sheet')) && /150 overdue cards left/.test(await p.textContent('#sheet')), 'Details shows day 1 of 3 and 150 left');
-await p.uncheck('#rsPause'); await p.waitForFunction(() => document.querySelector('#startBtn')?.textContent.includes('80'));
+await p.uncheck('#rsPause'); await p.waitForFunction(() => document.querySelector('#startBtn')?.getAttribute('aria-label').includes('80'));
 ok((await plan(p)).pauseNew === false && await startCount(p) === 80, 'pause off: 20 new cards join, Start = 80');
-await p.check('#rsPause'); await p.waitForFunction(() => document.querySelector('#startBtn')?.textContent.includes('60'));
+await p.check('#rsPause'); await p.waitForFunction(() => document.querySelector('#startBtn')?.getAttribute('aria-label').includes('60'));
 ok((await plan(p)).pauseNew === true, 'pause on again: back to 60');
 await p.keyboard.press('Escape');
 
