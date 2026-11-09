@@ -176,12 +176,15 @@ const d = await open(1440, 900, { touch: false });
 await d.goto(URL + '#/today'); await d.waitForSelector('.today-hero');
 await seed(d, [2, 3, 4, 5, 6]);
 await d.reload(); await d.waitForSelector('#startBtn'); await d.waitForSelector('.side-deck');
-await d.waitForSelector('#sideStreak .side-snow');
+// (round 4: Today shows the streak itself, so the sidebar copy is hidden there; check it on Decks)
+await go(d, '#/decks', '.deck'); await d.waitForSelector('#sideStreak .side-snow');
 const aria = await d.getAttribute('#sideStreak', 'aria-label');
 ok(/^5-day streak, freeze used \w+\./.test(aria) && aria.includes('freeze'), 'sidebar aria-label mentions the freeze: ' + aria);
 ok((await d.getAttribute('#sideStreak', 'data-tip')).includes('freeze used'), 'and so does its tooltip: ' + await d.getAttribute('#sideStreak', 'data-tip'));
 ok(await d.locator('#sideStreak .side-snow').count() === 1 && await d.$eval('#sideStreak .side-snow', e => e.getBoundingClientRect().width) <= 13, 'a 12px snowflake shows while a freeze was used in the last 7 days');
 ok((await d.textContent('#sideStreak')).includes('5-day streak'), 'the sidebar text is still "5-day streak"');
+await go(d, '#/today', '#startBtn');
+ok(!(await d.isVisible('#sideStreak')), 'on Today the sidebar streak is hidden: the hero chip is the one streak');
 await noHScroll(d, 'Today at 1440');
 await d.screenshot({ path: SP + '/streak-today-1440-dark.png' });
 await d.click('#streakBtn'); await d.waitForSelector('#sheet[open] .ys');

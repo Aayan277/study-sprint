@@ -80,6 +80,8 @@ export function examInfo(deck, now = Date.now()) {
 
 // The class for an exam countdown badge: amber, and red only in the last 3 days.
 export const badgeClass = info => (info && info.daysLeft <= 3 ? 'exam-badge soon' : 'exam-badge');
+// The badge on Decks and the deck page: plain text, amber only inside 14 days ("near"), red inside 3 ("soon").
+export const badgeNear = info => badgeClass(info) + (info && info.daysLeft > 3 && info.daysLeft <= 14 ? ' near' : '');
 
 export function countdown(info) {
   if (!info) return '';

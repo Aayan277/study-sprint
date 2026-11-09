@@ -126,17 +126,20 @@ export const icon = (name, cls = '') =>
 // The streak line shared by Today and the end of a Review session: flame, the count, what to do about it, and
 // (when there is one) a freeze note. `button` makes it a button that opens the "Your streak" sheet (Today).
 // Keep both the same text: tests compare Today's streak with the one at the end of a session.
-export function streakHTML(streak, { button = false } = {}) {
+export function streakHTML(streak, { button = false, chip = false } = {}) {
   const { line, sub } = streakText(streak);
   const kept = streak.studiedToday;
-  // On Today the streak is a one-line chip: the flame, the number, a snowflake when a freeze was used, a chevron. "Kept for today"
+  const asChip = button || chip;
+  // On Today (and at the end of a session) the streak is a one-line chip: the flame, the number, a snowflake (the Original style
+  // shows it only when a freeze was used: css/styles.css hides a "ready" pill; Clinical keeps it), and on Today a chevron. "Kept for today"
   // (the amber flame says it) and the freeze words stay for screen readers; the nudge for a streak not yet kept stays visible.
-  const pill = sub ? `<span class="frz-pill${streak.freeze.usedOn ? ' used' : ''}"${button ? ` title="${esc(sub)}"` : ''}>${icon('snow')}${button ? `<span class="chip-sr">${esc(sub)}</span>` : esc(sub)}</span>` : '';
-  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span${button && kept ? ' class="chip-sr"' : ''}>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
+  const used = !!streak.freeze.usedOn;
+  const pill = sub ? `<span class="frz-pill${used ? ' used' : ''}"${button ? ` title="${esc(sub)}"` : ''}>${icon('snow')}${asChip ? `<span class="chip-sr">${esc(sub)}</span>` : esc(sub)}</span>` : '';
+  const inner = `${icon('flame')}<b class="mono">${streak.days}</b> day streak <span${asChip && kept ? ' class="chip-sr"' : ''}>${esc(line)}</span>${pill}${button ? '<span class="sr-only">, details</span>' : ''}`;
   const cls = `streak${kept ? ' kept' : ''}`;
   return button
     ? `<button type="button" class="${cls} streak-btn" id="streakBtn" aria-haspopup="dialog" title="Your streak, streak freeze and days off">${inner}${icon('chevron', 'sb-go')}</button>`
-    : `<p class="${cls}">${inner}</p>`;
+    : `<p class="${cls}${chip ? ' streak-chip' : ''}">${inner}</p>`;
 }
 
 // The last 7 days as little squares (Stats and the "Your streak" sheet): a check = studied, a snowflake = a streak

@@ -132,12 +132,15 @@ ok((await p.getAttribute('#sideDecksH', 'aria-expanded')) === 'false' && !(await
 await p.click('#sideDecksH');
 ok(await p.isVisible('.side-deck[data-key=bio]') && (await p.getAttribute('#sideDecksH', 'aria-expanded')) === 'true', 'the heading opens it again');
 
-// the footer: ring and streak
+// the footer: ring and streak (round 4: hidden on Today, where the hero chip is the streak, so look at it on Decks)
+ok(!(await p.isVisible('#sideStreak')), 'on Today the sidebar streak is hidden (one streak on screen)');
+await go(p, '#/decks', '.deck');
 const streakText = await p.textContent('#sideStreak');
 ok(/3-day streak/.test(streakText) && (await p.getAttribute('#sideStreak', 'aria-label')).startsWith('3-day streak'), 'footer: "3-day streak" from the log');
 ok((await box(p, '#sideStreak .ring')).w === 30, 'the goal ring is 30px');
 ok(await p.$eval('#sideStreak .ring-fg', e => !!e).catch(() => false), 'the ring shows today\'s answers over the daily goal');
 ok(/1 of \d+ today/.test(streakText), 'and says how many answers: ' + streakText.replace(/\s+/g, ' ').trim());
+await go(p, '#/today', '#startBtn');
 
 // sync status
 ok((await p.textContent('#sideSync')).trim() === 'Sign in to sync', 'signed out: "Sign in to sync"');
@@ -245,7 +248,7 @@ for (let i = 0; i < 40; i++) {
 }
 const ids = order.map(o => o.id.split(' ')[0]);
 ok(ids[0] === 'brand' && ids[1] === 'side-add' && ids.slice(2, 6).join() === 'today,decks,play,stats' && ids[6] === 'sideDecksH', 'Tab order: logo, Add cards, the four sections, the Decks heading: ' + ids.slice(0, 8));
-ok(ids.slice(-7).join() === 'new,sideStreak,sideSync,sideHelp,sideSet,sideMode,sideCollapse', 'then + New deck and the footer: streak, sync, Help, Settings, light/dark, collapse: ' + ids.slice(-7));
+ok(ids.slice(-6).join() === 'new,sideSync,sideHelp,sideSet,sideMode,sideCollapse', 'then + New deck and the footer: sync, Help, Settings, light/dark, collapse (no streak on Today, round 4): ' + ids.slice(-6));
 ok(order.slice(1).every((o, i) => o.top >= order[i].top - 1), 'every Tab stop is at or below the one before (top to bottom): ' + order.length + ' stops');
 ok(await p.evaluate(() => !document.activeElement.closest('nav.tabs') && document.activeElement !== document.body), 'the stop after the sidebar is in the page');
 const mainFirst = await p.evaluate(() => { const a = document.activeElement; return a.closest('main') ? 'main' : a.tagName; });
@@ -331,6 +334,7 @@ await p.waitForSelector('.side-tip:not([hidden])');
 ok((await p.textContent('.side-tip')) === 'Microeconomics · 0 due', 'the tooltip also shows on keyboard focus');
 await p.keyboard.press('Escape');
 ok(await p.isHidden('.side-tip'), 'Escape dismisses it');
+await go(p, '#/decks', '.deck');
 ok(!(await p.isVisible('#sideSync')) && await p.isVisible('#sideSet') && await p.isVisible('#sideMode') && await p.isVisible('#sideStreak'), 'footer: ring, Settings, light/dark and the toggle stay; the text goes');
 ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth) && (await box(p, '#sideCollapse')).b <= 900, 'the rail fits');
 await p.click('.side-deck[data-key=org]'); await p.waitForSelector('main[data-route=deck] h1');

@@ -369,7 +369,9 @@ for (const ui of ['original', 'clinical']) {
     return { h2: [...document.querySelectorAll('.section > h2')].map(cs), titles: titles.map(e => cs(e).join('/')), n: titles.length };
   });
   ok(r.h2.length === 5 && r.h2.every(([f, w]) => f === 20 && w >= 600), `M8 (${ui}): the five section headings are 20px bold (${JSON.stringify(r.h2[0])})`);
-  ok(r.n >= 30 && r.titles.every(t => t === '16/600'), `M8 (${ui}): all ${r.n} row titles are 16px / 600 (${[...new Set(r.titles)].join(', ')})`);
+  // (round 4: in the Original style the row titles are one quieter 13px / 600 grey; Clinical keeps 16px)
+  const want = ui === 'original' ? '13/600' : '16/600';
+  ok(r.n >= 30 && r.titles.every(t => t === want), `M8 (${ui}): all ${r.n} row titles are ${want.replace('/', 'px / ')} (${[...new Set(r.titles)].join(', ')})`);
   await p.context().close();
 }
 
@@ -378,13 +380,15 @@ for (const ui of ['original', 'clinical']) {
   const d = await open(DESK, { ui });
   await seedDecks(d);
   const gaps = async sel => d.evaluate(sel => { const m = document.querySelector('main').getBoundingClientRect(), v = document.querySelector(sel).getBoundingClientRect(); return [Math.round(v.left - m.left), Math.round(m.right - v.right), Math.round(v.width)]; }, sel);
+  await go(d, '#/decks', '.deck'); const leftToday = (await gaps('main > .view'))[0];
   for (const [hash, wait, name] of [['#/settings', '#exportBtn', 'Settings'], ['#/import', '#pasteBox', 'Import'], ['#/play', '#startBtn', 'Play']]) {
     await go(d, hash, wait);
     const [l, r, w] = await gaps('main > .view');
-    ok(Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a centred column (left ${l}px, right ${r}px, ${w}px wide)`);
+    // (round 4: in the Original style the narrow columns sit on the same left edge as Today; Clinical keeps them centred)
+    ok(ui === 'original' ? Math.abs(l - leftToday) <= 2 && w <= 1000 : Math.abs(l - r) <= 2 && w <= 1000 && l > 40, `M9 (${ui}): ${name} is a ${ui === 'original' ? 'left-aligned' : 'centred'} column (left ${l}px, right ${r}px, ${w}px wide)`);
   }
   await go(d, '#/browse', '.crow');
-  { const [l, r, w] = await gaps('main > .view'); ok(Math.abs(l - r) <= 2 && w <= 900, `M9 (${ui}): Browse is centred and at most 900px wide (left ${l}, right ${r}, ${w}px)`); }
+  { const [l, r, w] = await gaps('main > .view'); ok((ui === 'original' ? Math.abs(l - leftToday) <= 2 : Math.abs(l - r) <= 2) && w <= 900, `M9 (${ui}): Browse is ${ui === 'original' ? 'left-aligned' : 'centred'} and at most 900px wide (left ${l}, right ${r}, ${w}px)`); }
   await go(d, '#/deck/B', '.crow');
   { const w = await d.$eval('#browser', e => Math.round(e.getBoundingClientRect().width)); ok(w <= 900, `M9 (${ui}): the deck's card list is at most 900px wide (${w}px)`); }
   // what stays wide on purpose
@@ -483,8 +487,8 @@ for (const ui of ['original', 'clinical']) {
   const p = await open(PHONE);
   await go(p, '#/decks', '.deck');
   await go(p, '#/browse', '.crow, .brow, #brCount');
-  const head = await p.textContent('.br-head h2');
-  ok(head.trim() === 'Cards' && /\d+ cards?/.test(await p.textContent('#brCount')), `L6: Browse says "Cards" once and the count once ("${head.trim()}" + "${(await p.textContent('#brCount')).trim()}")`);
+  // (round 4: the page title is "All cards", so the second "Cards" heading is gone; the count stays once)
+  ok(await p.locator('.br-head h2').count() === 0 && /\d+ cards?/.test(await p.textContent('#brCount')), `L6: Browse has no second "Cards" heading and the count once ("${(await p.textContent('#brCount')).trim()}")`);
   await go(p, '#/deck/sample', '#deckMore'); await p.click('#deckMore'); await p.click('#editDeck'); await p.waitForSelector('.swatches');
   const rows = await p.$$eval('.swatch', bs => [...new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)))].length);
   const per = await p.$$eval('.swatch', bs => { const t = {}; bs.forEach(b => { const k = Math.round(b.getBoundingClientRect().top); t[k] = (t[k] || 0) + 1; }); return Object.values(t); });
