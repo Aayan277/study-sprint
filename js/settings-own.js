@@ -17,15 +17,20 @@ function verdictHTML(st) {
       <span class="own-nums mono">${signed(v.meanDiff)} (${signed(v.lo)} to ${signed(v.hi)})</span>`;
   }
   const need = (v && v.need) || { scored: { have: st.scored || 0, need: st.minScored || 1000 }, live: { have: st.records || 0, need: 300 }, days: null };
-  const parts = [`${num(need.scored.have)} of ${num(need.scored.need)}`, `${num(need.live.have)} of ${num(need.live.need)}`];
-  if (need.days) parts.push(`${num(need.days.have)} of ${num(need.days.need)} days`);
+  // each count has its name for a screen reader (hidden words), so "1,200 of 1,000" is not just numbers
+  const part = (n, name, unit = '') => `<span>${num(n.have)} of ${num(n.need)}${unit}<span class="sr-only"> ${name}</span></span>`;
+  const parts = [part(need.scored, 'scored reviews'), part(need.live, 'reviews made while watching')];
+  if (need.days) parts.push(part(need.days, 'of watching', ' days'));
   return `<span class="badge own-badge">Not enough reviews yet</span><span class="own-nums mono">${parts.join(' · ')}</span>`;
 }
 
+// Is the memory being built right now (or about to be)? A memory that is simply not loaded yet (nothing has opened it since the page
+// loaded) is not building: nothing will change on its own, so nothing is shown and nothing is polled.
+const isBuilding = st => !!(st.building || st.rebuildPending || st.memory === 'rebuilding');
 const schedLabel = st => {
   if (!st.on) return 'FSRS';
   if (st.paused) return 'FSRS (paused)';
-  if (st.memory !== 'fresh' && st.scheduler !== 'own') return st.memory === 'error' ? 'FSRS' : 'Building memory…';
+  if (st.scheduler !== 'own' && isBuilding(st)) return 'Building memory…';
   return st.scheduler === 'own' ? 'Own' : 'FSRS';
 };
 
@@ -40,8 +45,7 @@ export async function wireOwn(root) {
   const stopPoll = () => { clearTimeout(timer); timer = 0; };
   const poll = () => {
     stopPoll();
-    if (!root.isConnected || !st.loaded || !st.on || (st.memory === 'fresh' && !st.building)) return;
-    if (st.memory === 'error') return;
+    if (!root.isConnected || !st.loaded || !st.on || !isBuilding(st)) return;
     timer = setTimeout(async () => { await refresh(); }, POLL_MS);
   };
 
@@ -138,5 +142,8 @@ export async function wireOwn(root) {
     });
   }
 
+  // Another tab turned Own on or off, loaded or removed the model, or Own switched scheduler: look again at once.
+  const again = () => { if (!root.isConnected) { window.removeEventListener('own-changed', again); return; } if (!busy) refresh(); };
+  window.addEventListener('own-changed', again);
   await refresh();
 }

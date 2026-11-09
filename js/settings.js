@@ -1249,6 +1249,7 @@ async function wipeThisDevice() {
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = app.settings;
   await db.resetAll();
+  try { await (await import('./own-gate.js')).wipeOwn(); } catch (err) { console.warn('Own model:', (err && err.message) || err); }      // Own's separate database goes too
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);

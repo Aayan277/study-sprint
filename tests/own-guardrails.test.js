@@ -1,6 +1,7 @@
 // Rules for the "Own" memory model in the app. They run on every `npm test`; the git checks skip when git is missing.
 // 1. A model file (or any dataset) is never committed. 2. Own's code never touches the network. 3. The dataset is never named in
-// app code or tests. 4. Own's storage stays out of the main database, sync, export and backup. 5. The service worker never caches a model.
+// app code or tests. 4. Own's storage stays out of the main database, sync, export and backup, and only the wipe path reaches it from outside.
+// 5. The service worker never caches a model. 6. A reset of this device removes the Own database. 7. The word for the other model family never appears.
 // Each rule is a small function over text, and the self-test at the bottom feeds every one a planted bad input to prove it catches it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,6 +28,35 @@ const OWN_DB = 'study-sprint-own';
 // files: { name: text }
 const networkProblems = files => Object.entries(files).flatMap(([f, src]) => NET_WORDS.filter(w => src.includes(w)).map(w => `${f} contains ${w}`));
 const datasetProblems = files => Object.entries(files).flatMap(([f, src]) => DATASET_WORDS.filter(w => src.includes(w)).map(w => `${f} names ${w}`));
+// Own's code is every js/own-*.js file, its Settings section and its Today note
+const ownFilesOf = names => names.filter(f => /^js\/(own-[^/]*|settings-own|today-own)\.js$/.test(f));
+// Any way of reaching Own's code from a file that must not know of it: an import (static or dynamic) of './own-...', './settings-own' or
+// './today-own', or the words own-db / own-load. `allow` lists, per file, the few files it may import, and only dynamically (import('...')).
+const OWN_SPEC = /(import\s*\(\s*|\bfrom\s+|\bimport\s+|\brequire\s*\(\s*)['"](\.\/(?:own-|settings-own|today-own)[^'"]*)['"]/g;
+const ownReachProblems = (files, allow = {}) => Object.entries(files).flatMap(([f, src]) => {
+  const out = [...src.matchAll(OWN_SPEC)].filter(m => !(/^import\s*\(/.test(m[1]) && (allow[f] || []).includes(m[2]))).map(m => `${f} imports ${m[2]}${/^import\s*\(/.test(m[1]) ? ' (not an allowed one)' : ' (statically)'}`);
+  if (/\bown-(?:db|load)\b/.test(src.replace(OWN_SPEC, ''))) out.push(`${f} names own-db or own-load`);
+  return out;
+});
+// settings.js may reach Own in exactly two ways, both loaded only when needed: import('./own-gate.js') (the wipe) and import('./settings-own.js') (its section).
+const SETTINGS_ALLOW = { 'js/settings.js': ['./own-gate.js', './settings-own.js'] };
+const settingsOwnProblems = src => ownReachProblems({ 'js/settings.js': src }, SETTINGS_ALLOW);
+// sync.js may ask the gate (and only the gate) whether Own's memory needs a rebuild after a review arrives
+const SYNC_ALLOW = { 'js/sync.js': ['./own-gate.js'] };
+// the one place that clears this device's data: it must remove the Own database right after the main one; nothing else may call resetAll
+const wipeProblems = (settingsSrc, others) => {
+  const m = settingsSrc.match(/async function wipeThisDevice\(\) \{([\s\S]*?)\n\}/);
+  if (!m) return ['wipeThisDevice not found in settings.js'];
+  const body = m[1], out = [];
+  const a = body.indexOf('db.resetAll('), b = body.indexOf('.wipeOwn(');
+  if (a < 0) out.push('wipeThisDevice does not clear the main database');
+  if (b < 0 || b < a) out.push('wipeThisDevice does not remove the Own database after the main one');
+  if (b >= 0 && !/import\(\s*['"]\.\/own-gate\.js['"]\s*\)/.test(body)) out.push('wipeThisDevice does not reach Own through its gate');
+  for (const [f, src] of Object.entries(others)) if (/\bresetAll\s*\(/.test(src)) out.push(`${f} calls resetAll outside the wipe`);
+  return out;
+};
+const WORD = 'rw' + 'kv';          // (spelled in two pieces so this file does not hold it)
+const wordProblems = files => Object.entries(files).filter(([, src]) => src.toLowerCase().includes(WORD)).map(([f]) => `${f} holds the word`);
 const ownDbProblems = files => Object.entries(files).filter(([, src]) => src.includes(OWN_DB)).map(([f]) => `${f} mentions ${OWN_DB}`);
 const badTrackedNames = names => names.filter(f => /\.(own|npz|parquet)$/i.test(f)).map(f => `${f} is tracked`);
 const syncedKeyProblems = (keys, isSynced) => [
@@ -56,12 +86,13 @@ const trainedOnProblems = (name, bytes) => {
   } catch (e) { return [`${name} does not parse: ${e.message}`]; }
 };
 
-const ownJs = () => walkFiles('js/').filter(f => /^js\/own-[^/]*\.js$/.test(f));
+const ownJs = () => ownFilesOf(walkFiles('js/'));
 const texts = list => Object.fromEntries(list.map(f => [f, readText(f)]));
 
 // ---------- the checks on the real repository ----------
-test('Own code makes no network requests', () => {
+test('Own code makes no network requests (every own-*.js file, its Settings section and its Today note)', () => {
   assert.ok(ownJs().length >= 6, 'expected the Own runtime files');
+  assert.ok(ownJs().includes('js/settings-own.js') && ownJs().includes('js/today-own.js') && ownJs().includes('js/own-core.js'), 'expected the Settings section and the Today note');
   assert.deepEqual(networkProblems(texts(ownJs())), []);
 });
 
@@ -102,6 +133,35 @@ test('export, sync, backup and the main database never mention the Own database'
   assert.deepEqual(ownDbProblems(texts(names)), []);
 });
 
+test('export, sync, backup, import and the main database import nothing from Own', () => {
+  const names = walkFiles('js/').filter(f => /^js\/(export[^/]*|sync[^/]*|backup[^/]*|db|import[^/]*|doc-import|anki[^/]*)\.js$/.test(f));
+  assert.ok(names.length >= 6, 'expected the real files');
+  assert.ok(names.includes('js/sync.js') && names.includes('js/export.js') && names.includes('js/db.js'));
+  assert.deepEqual(ownReachProblems(texts(names), SYNC_ALLOW), []);
+});
+
+test('settings.js reaches Own only through import() of its gate (the wipe) and of its Settings section', () => {
+  const src = readText('js/settings.js');
+  assert.deepEqual(settingsOwnProblems(src), []);
+  assert.match(src, /import\(\s*['"]\.\/own-gate\.js['"]\s*\)/);
+});
+
+test('"Reset all data" and "Just this device" (wipeThisDevice) remove the Own database; no other code resets the main database', () => {
+  const others = texts(walkFiles('js/').filter(f => f !== 'js/db.js' && f !== 'js/settings.js'));
+  assert.deepEqual(wipeProblems(readText('js/settings.js'), others), []);
+  // every caller of resetAll in settings.js sits inside wipeThisDevice
+  const src = readText('js/settings.js');
+  assert.equal((src.match(/\bresetAll\s*\(/g) || []).length, 1);
+});
+
+test('the word for the other model family is nowhere in js/ or tests/', () => {
+  const list = [...walkFiles('js/'), ...walkFiles('tests/')].filter(f => !f.startsWith('tests/browser/out/') && !/\.(png|jpe?g|webp|ico|woff2?|zst|gz|db|sqlite|own|mp3|ogg|wav|bin)$/i.test(f));
+  const files = {};
+  for (const f of list) { try { files[f] = readText(f); } catch { /* unreadable: skip */ } }
+  assert.ok(Object.keys(files).length > 50);
+  assert.deepEqual(wordProblems(files), []);
+});
+
 test('the service worker caches no model file', () => {
   assert.deepEqual(swCoreProblems(readText('sw.js')), []);
 });
@@ -122,6 +182,32 @@ test('self-test: each rule flags a planted bad input and passes a clean one', ()
   // the Own database name
   assert.equal(ownDbProblems({ 'js/export.js': `indexedDB.open('${OWN_DB}')` }).length, 1);
   assert.deepEqual(ownDbProblems({ 'js/export.js': 'indexedDB.open("study-sprint")' }), []);
+  // reaching into Own
+  assert.equal(ownReachProblems({ 'js/export.js': "import { x } from './own-load.js';" }).length, 1);
+  assert.equal(ownReachProblems({ 'js/sync.js': "import('./own-gate.js')" }, SYNC_ALLOW).length, 0);
+  assert.equal(ownReachProblems({ 'js/sync.js': "import('./own-gate.js')" }).length, 1);
+  assert.equal(ownReachProblems({ 'js/sync.js': "import { g } from './own-gate.js'" }, SYNC_ALLOW).length, 1);
+  assert.equal(ownReachProblems({ 'js/sync.js': "import('./own-load.js')" }, SYNC_ALLOW).length, 1);
+  assert.equal(ownReachProblems({ 'js/sync.js': "await import('./own-shadow.js')" }).length, 1);
+  assert.equal(ownReachProblems({ 'js/backup.js': "import('./settings-own.js')" }).length, 1);
+  assert.equal(ownReachProblems({ 'js/db.js': 'const a = own-db;' }).length, 1);
+  assert.deepEqual(ownReachProblems({ 'js/export.js': "import { x } from './owner.js'; // own words" }), []);
+  // settings.js: only dynamic imports of two files
+  assert.deepEqual(settingsOwnProblems("const g = await import('./own-gate.js'); import('./settings-own.js');"), []);
+  assert.equal(settingsOwnProblems("import { wipeOwn } from './own-gate.js';").length, 1);
+  assert.equal(settingsOwnProblems("await import('./own-db.js')").length, 1);
+  assert.equal(settingsOwnProblems("await import('./own-load.js')").length, 1);
+  assert.deepEqual(settingsOwnProblems("import { a } from './owner-name.js'"), []);
+  // the wipe
+  const good = "async function wipeThisDevice() {\n  await db.resetAll();\n  await (await import('./own-gate.js')).wipeOwn();\n}\n";
+  assert.deepEqual(wipeProblems(good, {}), []);
+  assert.equal(wipeProblems(good.replace('.wipeOwn()', '.nothing()'), {}).length, 1);
+  assert.equal(wipeProblems("async function wipeThisDevice() {\n  await (await import('./own-gate.js')).wipeOwn();\n  await db.resetAll();\n}\n", {}).length, 1);
+  assert.equal(wipeProblems(good, { 'js/x.js': 'await db.resetAll()' }).length, 1);
+  assert.equal(wipeProblems('nothing here', {}).length, 1);
+  // the word
+  assert.equal(wordProblems({ 'js/a.js': 'x ' + WORD.toUpperCase() }).length, 1);
+  assert.deepEqual(wordProblems({ 'js/a.js': 'nothing' }), []);
   // tracked names
   assert.equal(badTrackedNames(['a.js', 'models/a6.own', 'x/y.NPZ', 'z.parquet']).length, 3);
   assert.deepEqual(badTrackedNames(['a.js', 'owner.md', 'own.json']), []);

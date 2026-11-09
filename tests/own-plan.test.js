@@ -60,7 +60,11 @@ test('freezePlan waits at most the freeze time (300 ms by default)', async () =>
 });
 
 // ---------- inside the scheduler ----------
-async function sched() { return import('../js/srs.js'); }
+async function sched() {
+  const m = await import('../js/srs.js');
+  m.useOwnPlan({ planFits, clampOwnDays });           // (Review hands these over when an Own session starts)
+  return m;
+}
 async function reviewCard(rate, opts = OPTS) {
   let st = rate('a', null, 3, opts, NOW - 60 * DAY);                       // new -> learning
   let t = NOW - 60 * DAY;
@@ -151,4 +155,15 @@ test('recallNow is the FSRS forgetting curve at this moment, with the owner\'s o
   assert.notEqual(recallNow(st, { ...OPTS, w }, NOW), recallNow(st, OPTS, NOW));
   assert.equal(recallNow(null, OPTS, NOW), null); assert.equal(recallNow({ stability: 0 }, OPTS, NOW), null);
   const p = recallNow(st, OPTS, NOW); assert.ok(p > 0 && p < 1);
+});
+
+test('the study path does not load own-plan.js: srs.js and review.js only import it when an Own session starts, and a plan is ignored until then', { skip }, async () => {
+  const { readFileSync } = await import('node:fs');
+  for (const f of ['js/srs.js', 'js/review.js']) assert.doesNotMatch(readFileSync(new URL('../' + f, import.meta.url), 'utf8'), /^import[^\n]*\.\/own-plan\.js/m, f);
+  assert.match(readFileSync(new URL('../js/review.js', import.meta.url), 'utf8'), /await import\('\.\/own-plan\.js'\)/);
+  const m = await import('../js/srs.js');
+  m.useOwnPlan(null);
+  const st = { cardId: 'a', state: 2, due: NOW, stability: 20, difficulty: 5, elapsedDays: 20, scheduledDays: 20, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - 20 * DAY };
+  const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: 5, 3: 5, 4: 5 } };
+  assert.deepEqual(m.rate('a', st, 3, { ...OPTS, ownPlan: plan }, NOW), m.rate('a', st, 3, OPTS, NOW));
 });

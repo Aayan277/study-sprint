@@ -8,7 +8,7 @@
 import { OwnCore } from './own-core.js';
 import { modelRows, studyDay } from './own-rows.js';
 import { removeModel } from './own-load.js';
-import { resetOwnGate } from './own-gate.js';
+import { resetOwnGate, ownPing, onOwnPing } from './own-gate.js';
 import { PLAN_MS } from './own-plan.js';
 
 export { PLAN_MS };
@@ -128,9 +128,12 @@ export class OwnClient {
 
   // Called when a review or practice session starts (and before any answer is handed over). Resolves true when Own is switched on and
   // ready to follow answers. Safe to call again: the memory is only loaded once, and the daily check runs once per study day.
-  begin() {
+  // { session: true }: a review or practice session is starting. The saved memory is then compared with the review log again (once per
+  // session, not once per page load): reviews may have come in by sync, import or restore, or another tab may have changed things.
+  begin({ session = false } = {}) {
     const today = studyDay(this.now());
     if (this.failed) { this.failed = false; this.ready = false; this.beginP = null; }        // a new session tries the worker again
+    if (session && this.beginP && !this.starting && !this.rebuilding) { this.beginP = null; this.ready = false; }
     if (this.beginP) {
       if (this.beginDay !== today && this.ready) {       // the app stayed open past the start of a new study day: its daily check is due
         this.beginDay = today;
@@ -169,6 +172,17 @@ export class OwnClient {
     if (!c) return;
     if (c.scheduler) this.scheduler = c.scheduler;
     if ('noticePending' in c) this.noticePending = c.noticePending;
+    if (c.switched) ownPing('switch');                       // Own took over or went back to FSRS: other tabs follow at once
+  }
+  // Another tab changed Own (see own-gate.js): the model or its data changed (load, remove) -> start again; the switch or the scheduler
+  // changed (on, off, switch) -> read them again.
+  listen() {
+    return onOwnPing(kind => {
+      resetOwnGate();
+      if (kind === 'load' || kind === 'remove') this.modelChanged(false);
+      else if (this.t || this.local) this._counter().call('status', {}, TIMEOUT.status).then(s => this._learn(s)).catch(() => {});
+      if (typeof window !== 'undefined' && window.dispatchEvent && typeof Event === 'function') window.dispatchEvent(new Event('own-changed'));
+    });
   }
 
   // ---- rebuilding ----
@@ -236,6 +250,9 @@ export class OwnClient {
       await this._chain;                                         // the last answer and undo must have reached the engine first
       const ms = recentMs(await this.source.cardLogs(card.id));
       const r = await this.call('plan', { card: slimCard(card), decks: slimDecks(decks), now, ms, target: opts.retention, maxDays: opts.maxInterval }, TIMEOUT.plan);
+      if (r && r.fail === 'unknown-card') { this.markStale(); return { skip: true }; }      // the memory is missing a card: not a failed plan, rebuild it
+      if (r && (r.skip === 'off' || r.skip === 'gone' || r.skip === 'changed')) { this.scheduler = 'fsrs'; this.ready = false; return { skip: true }; }
+      if (r && r.days && r.scheduler && r.scheduler !== 'own') { this.scheduler = r.scheduler; return { skip: true }; }   // another tab switched back to FSRS
       if (r && r.days) return { cardId: card.id, lastReview: state.lastReview ?? null, at: now, days: r.days, modelSha: r.modelSha };
       if (r && r.skip) return { skip: true };
       return null;
@@ -253,7 +270,7 @@ export class OwnClient {
   async status() {
     const s = await this._counter().call('status', {}, TIMEOUT.status);
     this._learn(s);
-    return { ...s, building: this.rebuilding, rebuildPending: this.rebuildPending, workerFailed: this.failed };
+    return { ...s, building: this.rebuilding || s.memory === 'rebuilding', rebuildPending: this.rebuildPending, workerFailed: this.failed };
   }
   async setOn(on) {
     const r = await this._counter().call('setOn', { on: !!on }, TIMEOUT.setOn);
@@ -261,6 +278,7 @@ export class OwnClient {
     if (r && r.ok) {
       this.scheduler = 'fsrs'; this.ready = false; this.beginP = null;
       resetOwnGate();
+      ownPing(on ? 'on' : 'off');
       if (on) this.begin();                                      // builds the memory in the background
     }
     return r;
@@ -271,23 +289,26 @@ export class OwnClient {
   }
   dismissNotice() { this.noticePending = null; return this._counter().call('dismissNotice', {}, TIMEOUT.small); }
   // A model file was loaded or replaced: forget everything held in memory (the memory is rebuilt for the new model).
-  modelChanged() {
+  modelChanged(tell = true) {
     if (this.t) { try { this.t.stop(); } catch { /* gone */ } this.t = null; }
-    this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null;
+    this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null;
     resetOwnGate();
+    if (tell) ownPing('load');
   }
   // Deletes the model and everything Own saved. Cards, reviews and due dates are not touched.
   async removeAll() {
     if (this.t) { try { this.t.stop(); } catch { /* gone */ } this.t = null; }
     this.local = null; this.failed = false; this.ready = false; this.beginP = null; this.scheduler = 'fsrs'; this.noticePending = null;
     resetOwnGate();
-    return removeModel({ idb: this.idb });
+    const r = await removeModel({ idb: this.idb });
+    if (r && r.ok) ownPing('remove');
+    return r;
   }
 }
 
 let single = null;
-export const getOwn = () => (single ||= new OwnClient());
-export const begin = () => getOwn().begin();
+export const getOwn = () => { if (!single) { single = new OwnClient(); single.listen(); } return single; };
+export const begin = opts => getOwn().begin(opts);
 export const afterAnswer = a => getOwn().afterAnswer(a);
 export const afterUndo = logId => getOwn().afterUndo(logId);
 export const plan = a => getOwn().plan(a);

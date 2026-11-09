@@ -7,7 +7,7 @@ import { OwnClient, fingerprintOf, recentMs } from '../js/own-shadow.js';
 import { OwnCore } from '../js/own-core.js';
 import { ownModule, resetOwnGate } from '../js/own-gate.js';
 import { makeFakeIdb } from './own-idb-fake.mjs';
-import { DAY, T0, DECKS, CARDS, loadedIdb, setSettings, history, rowsOf, reviewAt, clock } from './own-helpers.mjs';
+import { poke, DAY, T0, DECKS, CARDS, loadedIdb, setSettings, history, rowsOf, reviewAt, clock } from './own-helpers.mjs';
 
 // A client wired to a stand-in database and a review log you can add to. calls: every message sent to the engine room.
 function makeClient(idb, { logs = history(6), clk = clock() } = {}) {
@@ -109,7 +109,7 @@ test('Play and the practice test never ask Own for a plan and never hand a plan 
 test('plans: only while Own schedules; a plan is made from the saved memory and counts when settled', async () => {
   const idb = await loadedIdb(), { client, core } = makeClient(idb);
   await client.setOn(true); await client.begin();
-  client.scheduler = 'own';
+  await poke(core, { scheduler: 'own' }); client.scheduler = 'own';
   const plan = await client.plan(planArgs(client));
   assert.deepEqual(Object.keys(plan.days), ['2', '3', '4']);
   assert.equal(plan.cardId, 'a'); assert.equal(plan.lastReview, T0 + 10 * DAY); assert.equal(plan.at, T0 + 14 * DAY); assert.equal(plan.modelSha.length, 64);
@@ -127,9 +127,9 @@ test('plans: only while Own schedules; a plan is made from the saved memory and 
 test('too many failed plans in a day send Own back to FSRS through the page too', async () => {
   const idb = await loadedIdb(), { client, core } = makeClient(idb);
   await client.setOn(true); await client.begin();
-  core.state = { ...core.state, scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] }; client.scheduler = 'own';
+  await poke(core, { scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] }); client.scheduler = 'own';
   for (let i = 0; i < 20; i++) client.settled(null);
-  await new Promise(r => setTimeout(r, 50));
+  await client.status(); await new Promise(r => setTimeout(r, 0));       // (the status call waits behind the 20 notes in the queue)
   assert.equal(client.isPlanning(), false);
   assert.equal((await client.status()).paused, true);
 });
@@ -168,7 +168,7 @@ test('a plan request that throws is a failed plan, not an error', async () => {
 test('a review from another device only changes the memory (after a rebuild); it never makes a record; plans wait meanwhile', async () => {
   const idb = await loadedIdb(), { client, core, state } = makeClient(idb);
   await client.setOn(true); await client.begin();
-  client.scheduler = 'own';
+  await poke(core, { scheduler: 'own' }); client.scheduler = 'own';
   const fp0 = core.fp.rows;
   state.logs.push(reviewAt(900, 'a', 12));                  // arrives by sync: it is in the log, nobody told Own about the answer
   await client.markStale();

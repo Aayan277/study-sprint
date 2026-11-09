@@ -4,6 +4,7 @@ const later = fn => setTimeout(fn, 0);
 
 export function makeFakeIdb({ blockDelete = false, failWrites = false } = {}) {
   const dbs = new Map(); // name -> { version, stores: Map(name -> { keyPath, rows: Map }) }
+  const conns = new Map(); // name -> the connections opened so far
   const log = { opened: 0 };
   const idb = {
     log, dbs,
@@ -25,6 +26,7 @@ export function makeFakeIdb({ blockDelete = false, failWrites = false } = {}) {
           dbs.set(name, draft);
         }
         const db = makeDb(name, dbs.get(name));
+        (conns.get(name) || conns.set(name, new Set()).get(name)).add(db);
         req.result = db;
         if (req.onsuccess) req.onsuccess({});
       });
@@ -34,6 +36,8 @@ export function makeFakeIdb({ blockDelete = false, failWrites = false } = {}) {
       const req = {};
       later(() => {
         if (blockDelete) { if (req.onblocked) req.onblocked({}); return; }
+        for (const c of conns.get(name) || []) if (!c.closed && c.onversionchange) c.onversionchange({});      // like a real browser: connections are told and step aside
+        conns.delete(name);
         dbs.delete(name);
         if (req.onsuccess) req.onsuccess({});
       });
@@ -47,6 +51,7 @@ export function makeFakeIdb({ blockDelete = false, failWrites = false } = {}) {
       createObjectStore(n, opts) { rec.stores.set(n, { keyPath: opts && opts.keyPath, rows: new Map() }); },
       close() { db.closed = true; },
       transaction(names) {
+        if (db.closed) throw new Error('InvalidStateError');
         const list = Array.isArray(names) ? names : [names];
         for (const n of list) if (!rec.stores.has(n)) throw new Error('NotFoundError');
         const tx = { oncomplete: null, onerror: null, onabort: null };

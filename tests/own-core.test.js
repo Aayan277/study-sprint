@@ -8,7 +8,7 @@ import { parseOwnFile } from '../js/own-file.js';
 import { openOwnDb } from '../js/own-db.js';
 import { fingerprintOf } from '../js/own-shadow.js';
 import { studyDay } from '../js/own-rows.js';
-import { DAY, T0, DECKS, CARDS, loadedIdb, setSettings, history, rowsOf, slim, reviewAt, clock, modelBytes } from './own-helpers.mjs';
+import { poke, DAY, T0, DECKS, CARDS, loadedIdb, setSettings, history, rowsOf, slim, reviewAt, clock, modelBytes } from './own-helpers.mjs';
 
 async function fresh({ on = true, n = 6, clk = clock() } = {}) {
   const idb = await loadedIdb();
@@ -172,7 +172,7 @@ test('the daily check: nothing before enough records; Better twice (days may be 
   assert.equal((await core.handle('check', {})).ran, false);                 // once per study day
   await synthetic(core, 400);
   core.fp = { ...core.fp, scored: 5000 };
-  core.state = { ...core.state, watchDay: Math.floor(clk.t / DAY) - 30 };
+  await poke(core, { watchDay: Math.floor(clk.t / DAY) - 30 });
   clk.advance(2);                                                             // every other day is fine
   let s = await core.handle('check', {});
   assert.equal(s.verdict.status, 'better'); assert.equal(s.scheduler, 'fsrs'); assert.equal(s.switched, null);
@@ -190,7 +190,7 @@ test('"Check now" refreshes the verdict but does not run the daily switch rule t
   const { core, clk } = await fresh();
   await synthetic(core, 400);
   core.fp = { ...core.fp, scored: 5000 };
-  core.state = { ...core.state, watchDay: Math.floor(clk.t / DAY) - 30 };
+  await poke(core, { watchDay: Math.floor(clk.t / DAY) - 30 });
   await core.handle('check', {});
   const s = await core.handle('check', { force: true });
   assert.equal(s.ran, false); assert.equal(s.verdict.status, 'better'); assert.equal(s.verdicts.length, 1);
@@ -206,7 +206,7 @@ test('records of another model, or from before the watch started, do not count',
 
 test('turning Own off while it schedules goes back to FSRS at once (no notice); turning it on starts a fresh state', async () => {
   const { core, clk } = await fresh();
-  core.state = { ...core.state, scheduler: 'own', switches: [{ day: 5, to: 'own', why: 'better' }], noticePending: 1 };
+  await poke(core, { scheduler: 'own', switches: [{ day: 5, to: 'own', why: 'better' }], noticePending: 1 });
   const off = await core.handle('setOn', { on: false });
   assert.equal(off.scheduler, 'fsrs');
   const s = await core.handle('status');
@@ -219,7 +219,7 @@ test('turning Own off while it schedules goes back to FSRS at once (no notice); 
 
 test('plan errors: more than 5% of at least 20 plans in a day goes back to FSRS at once and pauses; fewer than 20 cannot', async () => {
   const { core } = await fresh();
-  core.state = { ...core.state, scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] };
+  await poke(core, { scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] });
   for (let i = 0; i < 19; i++) await core.handle('notePlan', { ok: false });
   assert.equal(core.state.scheduler, 'own');                                  // 19 plans, all failed: too few to trip
   const r = await core.handle('notePlan', { ok: false });                    // the 20th
@@ -228,7 +228,7 @@ test('plan errors: more than 5% of at least 20 plans in a day goes back to FSRS 
   assert.equal(s.paused, true); assert.equal(s.fallbacks, 20); assert.equal(s.switches.at(-1).why, 'error');
   // 20 plans with exactly one failure (5%) is fine
   const f = await fresh();
-  f.core.state = { ...f.core.state, scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] };
+  await poke(f.core, { scheduler: 'own', switches: [{ day: 1, to: 'own', why: 'better' }] });
   await f.core.handle('notePlan', { ok: false });
   for (let i = 0; i < 19; i++) await f.core.handle('notePlan', { ok: true });
   assert.equal(f.core.state.scheduler, 'own');

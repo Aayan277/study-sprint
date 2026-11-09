@@ -10,7 +10,6 @@ import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PA
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
 import { examGainFrom, examClamp, recallAt } from './exam.js';
-import { planFits, clampOwnDays } from './own-plan.js';
 import { W7_DEFAULT } from './fsrs7-model.js';
 import { rate7, preview7, prepare7 } from './srs7.js';     // FSRS-7 (setting fsrsVersion 7): our own port, no library to load; see srs7.js
 
@@ -138,6 +137,11 @@ function seven(cardId, state, opts, now) {
   return Object.fromEntries(Object.entries(cards).map(([g, card]) => [g, { card }]));
 }
 
+// Own model (opt-in): the rules for using its plan (js/own-plan.js) are handed over by Review when an Own session starts, so nobody who has
+// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays }
+let ownTools = null;
+export const useOwnPlan = tools => { ownTools = tools; };
+
 // Apply a rating and return the card's new saved state.
 //   opts.balance (optional): { load, easyDays } to even out reviews instead of random fuzz (balance.js).
 export function rate(cardId, state, rating, opts, now = Date.now()) {
@@ -152,8 +156,9 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // (the ratio of its fuzzed gap to its exact gap) is applied to Own's days too. The max interval, evening out and the exam limit still
   // apply below. Without a plan (the normal case) nothing here changes.
   const plan = opts.ownPlan;
-  if (plan && planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
+  if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
     const fsrsDays = card.scheduled_days;
+    const { clampOwnDays } = ownTools;
     let days = clampOwnDays(plan.days[rating], fsrsDays, opts.maxInterval);
     if (opts.fuzz && !balanced) {
       const exact = opts.fsrsVersion === 7

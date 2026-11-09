@@ -46,7 +46,18 @@ export async function loadModelFile(file, { idb, now = Date.now } = {}) {
   let h;
   try {
     h = await openOwnDb({ idb });
+    const before = await h.get('model', 'current');
+    const changed = !!before && before.sha256 !== checked.sha256;
+    if (changed) {
+      // A different model: nothing that belongs to the old one may carry over. Its memory, its records and its verdicts go, and the next
+      // open starts watching from scratch (state is made fresh then). The owner's switch stays as it was; a lock on FSRS is lifted.
+      await Promise.all(['cards', 'notes', 'shared', 'preds'].map(st => h.clear(st)));
+      for (const k of ['state', 'fingerprint', 'builder']) await h.delete('meta', k);
+      const s = await h.get('meta', 'settings');
+      if (s) await h.put('meta', 'settings', { ...s, autoLocked: false });
+    }
     await h.put('model', 'current', { bytes: checked.bytes, sha256: checked.sha256, header: checked.header, name, loadedAt: now() });
+    await h.put('meta', 'modelSha', checked.sha256);          // (a small note other tabs can read cheaply to see the model changed)
     if (!(await h.get('meta', 'settings'))) await h.put('meta', 'settings', { on: false, autoLocked: false });
   } catch (e) { return dbFail(e); } finally { if (h) h.close(); }
   return { ok: true, name, sha256: checked.sha256, header: checked.header };

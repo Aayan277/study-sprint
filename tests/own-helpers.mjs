@@ -39,3 +39,5 @@ export const slim = (l, id = l.id) => ({ id, cardId: l.cardId, timestamp: l.time
 export const reviewAt = (id, cardId, days, over = {}) => ({ id, cardId, timestamp: T0 + days * DAY, source: 'review', rating: 3, ms: 4000, state: 2, ...over });
 // a clock that tests move by hand
 export const clock = (start = T0 + 40 * DAY) => { const c = { t: start, now: () => c.t, advance: d => { c.t += d * DAY; } }; return c; };
+// Change the saved state of an engine room the way the engine itself would (in memory and in the database: the room reads it again before it acts).
+export async function poke(core, patch) { core.state = { ...core.state, ...patch }; await core._saveState(); }

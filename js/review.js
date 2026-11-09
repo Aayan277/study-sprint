@@ -7,8 +7,7 @@ import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
 import { buildQueue, cleanLearnOrder, LEARN_ORDER_DEFAULT, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, REVIEW, RELEARNING } from './queue.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
-import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7, recallNow } from './srs.js';
-import { freezePlan } from './own-plan.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7, recallNow, useOwnPlan } from './srs.js';
 import { checkTyped } from './match.js';
 import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
@@ -42,6 +41,7 @@ let R = null;
 // Own model hook: set at the start of a session only when the Own database exists, a model is loaded and the owner's switch is on
 // (js/own-gate.js). Otherwise null, and every use below does nothing at all.
 let ownHook = null;
+let ownLib = null;      // js/own-plan.js, loaded together with ownHook (never for anyone who has no Own model loaded)
 // A computer with a mouse (vs a touchscreen): changes a hint's wording.
 const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
@@ -154,12 +154,18 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   };
   ownHook = null;
   const session = R;
-  import('./own-gate.js').then(g => { g.resetOwnGate(); return g.ownModule(); }).then(async m => {
-    if (!m || !(await m.begin())) return;
-    if (R !== session) return;                       // another session started meanwhile
-    ownHook = m;
-    if (R.current && !R.flipped) preparePlan();
-  }).catch(() => {});
+  // session.ownWait settles to Own's module, or to null when Own is off. Answers and undos given before it settles wait for it (in order),
+  // so none is lost; session.ownOn says whether Own is (still) worth preparing for: undefined while not known.
+  session.ownWait = import('./own-gate.js').then(g => { g.resetOwnGate(); return g.ownModule(); }).then(async m => {
+    if (!m || !(await m.begin({ session: true }))) { session.ownOn = false; return null; }
+    ownLib = await import('./own-plan.js'); useOwnPlan(ownLib);
+    session.ownOn = true;
+    if (R === session) {                             // (not when another session started meanwhile)
+      ownHook = m;
+      if (R.current && !R.flipped) preparePlan();
+    }
+    return m;
+  }).catch(() => { session.ownOn = false; return null; });
   nextCard(el);
 }
 
@@ -168,15 +174,15 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
 const schedFor = (card, now = Date.now()) => {
   const deck = deckOf(card);
   // ownPlan: only when Own's scheduler (opt-in) made a plan for this very card; frozen when the buttons are drawn (see settlePlan).
-  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance, ...(planFor(card, now) || {}) };
+  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance, ...(planFor(card) || {}) };
 };
 
-// The frozen plan for this card, ready for rate(), or null. Only while Own is the scheduler (so switching back to FSRS takes effect at once,
-// also in a session that carries on). Its time is the moment asked: the plan was frozen when the buttons were drawn, and the label and the
-// saved gap must both use it however long the card stays on screen.
-const planFor = (card, now) => (R.ownPlan && R.ownPlan.cardId === card.id && ownHook?.isPlanning?.() ? { ownPlan: { ...R.ownPlan, at: now } } : null);
+// The frozen plan for this card, ready for rate(), or null. Whether to plan was decided in preparePlan (Own was the scheduler when the card
+// came up), and a plan that was frozen is used for that card whatever happens meanwhile, so the label and the saved gap agree. It keeps the
+// moment it was made (`at`): a plan more than an hour old is refused by planFits, and FSRS schedules the card.
+const planFor = card => (R.ownPlan && R.ownPlan.cardId === card.id ? { ownPlan: R.ownPlan } : null);
 // Waiting for the plan to be frozen: no rating buttons are drawn meanwhile (their labels would not be the gaps that get saved).
-const planPending = () => !!R.ownPrep && !R.ownDone && !!ownHook?.isPlanning?.();
+const planPending = () => !!R.ownPrep && !R.ownDone;
 
 // ---- Own scheduler (opt-in; every step is skipped unless the owner's switch is on and Own is the scheduler) ----
 // While the question is read, Own works out the gaps for a card that is in review. When the card is turned over, the plan is waited for at
@@ -194,7 +200,7 @@ function settlePlan() {
   if (!R.ownPrep) return null;
   if (!R.ownSettle) {
     const prep = R.ownPrep, id = R.current.card.id;
-    R.ownSettle = freezePlan(prep, plan => ownHook.settled(plan)).then(plan => {        // (a missing plan is counted by settled)
+    R.ownSettle = ownLib.freezePlan(prep, plan => ownHook.settled(plan)).then(plan => {        // (a missing plan is counted by settled)
       if (R?.current?.card.id !== id || R.ownPrep !== prep) return;
       R.ownPlan = plan; R.ownDone = true;
       // the buttons wait for this: draw them now, whichever screen code asked for them
@@ -690,7 +696,7 @@ async function answer(el, rating) {
   if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
   const opts = schedFor(item.card, now);
   // Own's shadow record: the scheduling FSRS's chance of remembering the card, worked out from its state before this answer is rated.
-  const pFsrs = ownHook && prev?.state === REVIEW ? recallNow(prev, opts, now) : null;
+  const gate = R.ownWait, pFsrs = R.ownOn !== false && prev?.state === REVIEW ? recallNow(prev, opts, now) : null;
   const next = rate(id, prev, rating, opts, now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
@@ -706,7 +712,8 @@ async function answer(el, rating) {
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
-    ownHook?.afterAnswer({ logId, log, card: item.card, decks: R.decks, pFsrs, fsrsKind: usesFsrs7(R.settings) ? 7 : 6 });
+    // (through the gate, so an answer given before Own finished starting up is handed over, in order, once it has)
+    gate?.then(m => m && m.afterAnswer({ logId, log, card: item.card, decks: R.decks, pFsrs, fsrsKind: usesFsrs7(R.settings) ? 7 : 6 }));
     if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
@@ -745,7 +752,7 @@ async function undo(el) {
     const id = u.item.card.id;
     const inStep = R.version === db.scheduleVersion();
     await db.undoReview(id, u.prev, u.logId);
-    ownHook?.afterUndo(u.logId);
+    R.ownWait?.then(m => m && m.afterUndo(u.logId));
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
     if (inStep) R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);

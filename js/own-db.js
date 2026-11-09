@@ -15,6 +15,14 @@ export class OwnDbError extends Error {
 }
 
 const factory = idb => idb || (typeof indexedDB !== 'undefined' ? indexedDB : null);
+// Where the browser can list its databases (indexedDB.databases()), look there first. Anywhere else (or on any doubt) -> true.
+async function mayExist(f) {
+  try {
+    if (typeof f.databases !== 'function') return true;
+    const list = await f.databases();
+    return !Array.isArray(list) || list.some(d => d && d.name === OWN_DB_NAME);
+  } catch { return true; }
+}
 const wrap = req => new Promise((res, rej) => {
   req.onsuccess = () => res(req.result);
   req.onerror = () => rej(new OwnDbError('The Own database could not be read or written.'));
@@ -22,9 +30,10 @@ const wrap = req => new Promise((res, rej) => {
 
 // Opens (and, unless forbidCreate, creates) the database. With forbidCreate it returns null when the database does not exist yet,
 // and creates nothing (used by the worker and by anything that only reads). Throws OwnDbError in plain English.
-export function openOwnDb({ idb, forbidCreate = false } = {}) {
+export async function openOwnDb({ idb, forbidCreate = false } = {}) {
   const f = factory(idb);
-  if (!f) return Promise.reject(new OwnDbError('This browser cannot store the Own model (no database available).'));
+  if (!f) throw new OwnDbError('This browser cannot store the Own model (no database available).');
+  if (forbidCreate && !(await mayExist(f))) return null;       // the browser's own list says there is none: do not even try to open it
   return new Promise((resolve, reject) => {
     let req, missing = false;
     try { req = f.open(OWN_DB_NAME, OWN_DB_VERSION); } catch { reject(new OwnDbError('The Own database could not be opened.')); return; }

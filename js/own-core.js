@@ -91,9 +91,36 @@ export class OwnCore {
 
   // ---------- settings and state ----------
   async _loadMeta() {
-    const [s, st] = await this._do(h => Promise.all([h.get('meta', 'settings'), h.get('meta', 'state')]));
+    const [s, st, sha] = await this._do(h => Promise.all([h.get('meta', 'settings'), h.get('meta', 'state'), h.get('meta', 'modelSha')]));
     this.settings = { ...DEFAULT_SETTINGS, ...(s || {}) };
     this.state = st ? { verdicts: [], verdict: null, noticePending: null, fallbacks: 0, errors: 0, plans: { day: null, total: 0, failed: 0 }, ...st } : null;
+    return { hasSettings: !!s, sha: sha || null };
+  }
+  // Another tab may have changed the switch, the verdicts or the model since this one last looked: read them again before anything is
+  // worked out from them or written back. -> 'ok' | 'gone' (the Own database or its settings are gone) | 'changed' (another model file was loaded:
+  // what was held here belongs to the old one, so the next open starts again).
+  async _sync() {
+    try {
+      const m = await this._loadMeta();
+      if (!m.hasSettings) return this._lost();
+      if (m.sha && this.model && m.sha !== this.model.sha256) {
+        this.model = null; this.engine = null; this.status = 'none'; this.fp = null; clearTimeout(this.saveTimer);
+        return 'changed';
+      }
+      return 'ok';
+    } catch (err) {
+      if (this.gone) return this._lost();
+      throw err;
+    }
+  }
+  _lost() {
+    this.model = null; this.engine = null; this.status = 'none'; this.fp = null; this.state = null; this.settings = { ...DEFAULT_SETTINGS };
+    clearTimeout(this.saveTimer);
+    if (this.h) { this.h.close(); this.h = null; }
+    return 'gone';
+  }
+  async _ensureState() {
+    if (!this.state) { this.state = this._freshState(this._today()); await this._saveState(); }
   }
   async _saveState() { if (this.state) await this._do(h => h.put('meta', 'state', this.state)); }
   async _saveSettings() { await this._do(h => h.put('meta', 'settings', this.settings)); }
@@ -112,7 +139,7 @@ export class OwnCore {
     if (!m.ok || !m.loaded) { this.status = 'none'; this.model = null; return { ok: m.ok, loaded: false, on: false, fresh: false, status: 'none', message: m.message || null }; }
     this.model = { name: m.name, sha256: m.sha256, header: m.header, params: m.params };
     await this._loadMeta();
-    if (!this.state) { this.state = this._freshState(this._today()); await this._saveState(); }
+    await this._ensureState();
     if (!fp) return { ok: true, loaded: true, on: this.settings.on, fresh: false, status: this.status };
     if (this.status === 'fresh' && this.engine && this.fp && this.fp.rows === fp.rows && this.fp.idSum === fp.idSum && this.fp.sha === m.sha256) {
       return { ok: true, loaded: true, on: this.settings.on, fresh: true, status: 'fresh' };      // already loaded in this worker
@@ -266,24 +293,31 @@ export class OwnCore {
   async plan({ card, decks = [], now, ms, target, maxDays }) {
     if (!this.engine || this.status !== 'fresh') return this.status === 'stale' ? { fail: 'stale' } : { skip: this.status };
     try {
+      const seen = await this._sync();                                  // another tab may have switched Own off or removed the model
+      if (seen !== 'ok') return { skip: seen };
+      if (!this.settings.on) return { skip: 'off' };
       const rows = modelRows([{ id: -1, cardId: card.id, timestamp: now, source: 'review', rating: 3, ms }], [card], decks);
       if (!rows.length || !this.engine.hasCard(rows[0].cardKey)) return { fail: 'unknown-card' };
       const days = this.engine.daysForButtons(rows[0], ms, target, Math.min(maxDays, OWN_MAX_DAYS));
       if (!days || ![2, 3, 4].every(g => Number.isFinite(days[g]) && days[g] > 0)) return { fail: 'bad-numbers' };
-      return { days: { 2: days[2], 3: days[3], 4: days[4] }, modelSha: this.model.sha256 };
+      return { days: { 2: days[2], 3: days[3], 4: days[4] }, modelSha: this.model.sha256, scheduler: this.state && this.state.scheduler === 'own' ? 'own' : 'fsrs' };
     } catch (err) {
       await this._bump('errors').catch(() => {});
       return { fail: 'error', message: String(err && err.message || err) };
     }
   }
 
-  async _bump(field) { if (this.state) { this.state[field] = (this.state[field] || 0) + 1; await this._saveState(); } }
+  async _bump(field) {
+    try { if ((await this._sync()) !== 'ok' || !this.state) return; } catch { return; }
+    this.state[field] = (this.state[field] || 0) + 1; await this._saveState();
+  }
 
   // The page reports what happened to a plan it asked for: ok true (used), false (a failed plan: FSRS scheduled the card).
   // The day's counts feed the error rule (more than 5% of at least 20 plans: back to FSRS at once).
   async notePlan({ ok }) {
-    if (!this.state) await this._loadMeta();
-    if (!this.state) return { ok: false };
+    if ((await this._sync()) !== 'ok') return { ok: false, gone: true };         // the numbers below are read fresh: another tab may have changed them
+    if (!this.settings.on) return { ok: true, ignored: true, scheduler: 'fsrs', switched: null };
+    await this._ensureState();
     const today = this._today(), p = this.state.plans && this.state.plans.day === today ? this.state.plans : { day: today, total: 0, failed: 0 };
     this.state.plans = { day: today, total: p.total + 1, failed: p.failed + (ok ? 0 : 1) };
     if (!ok) this.state.fallbacks = (this.state.fallbacks || 0) + 1;
@@ -302,9 +336,10 @@ export class OwnCore {
 
   // ---------- the owner's switch, the daily check ----------
   async setOn({ on }) {
+    await this._sync();
     if (!this.model) { const o = await this.open({}); if (!o.loaded) return { ok: false, message: 'Load a model file first.' }; }
     const today = this._today();
-    if (!this.state) await this._loadMeta();
+    await this._ensureState();
     if (on) {
       this.settings = { ...this.settings, on: true, autoLocked: false };
       this.state = this._freshState(today);                           // a fresh start every time it is turned on
@@ -327,8 +362,9 @@ export class OwnCore {
   // The daily check (once per study day) and the refresh behind the "Check now" button.
   // payload: { force } -> the status (see getStatus) plus { ran: bool, switched }
   async check({ force = false } = {}) {
+    await this._sync();
     if (!this.model) { const o = await this.open({}); if (!o.loaded) return { ...(await this.getStatus()), ran: false, switched: null }; }
-    if (!this.state) await this._loadMeta();
+    await this._ensureState();
     const today = this._today(), s = this.state;
     const due = checkDue(s, today);
     const fresh = this.status === 'fresh';
@@ -351,16 +387,17 @@ export class OwnCore {
   }
 
   async dismissNotice() {
-    if (!this.state) await this._loadMeta();
+    await this._sync();
     if (this.state) { this.state = { ...this.state, noticePending: null }; await this._saveState(); }
     return { ok: true };
   }
 
   // Everything the Settings screen needs.
   async getStatus() {
+    try { await this._sync(); } catch { /* show what is known */ }
     let m = this.model;
     if (!m) { const o = await this.open({}); m = this.model; if (!o.loaded) return { loaded: false, on: false, scheduler: 'fsrs', status: 'none' }; }
-    if (!this.state) await this._loadMeta();
+    if (!this.state && this.model) await this._loadMeta().catch(() => {});
     const s = this.state || {}, today = this._today();
     let records = 0;
     try { records = (await this._records()).length; } catch { /* the count is only for show */ }
