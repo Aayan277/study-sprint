@@ -16,16 +16,16 @@ import { plural } from './ui.js';
 // Cards whose schedule a practice answer already changed today (at most one change per card per day, whichever of Play or a test).
 export const practicedToday = logs => new Set(logs.filter(l => (l.source === 'play' || l.source === 'test') && l.applied).map(l => l.cardId));
 
-// RWKV lab (shadow mode): tell the lab about an answer that changed the schedule. Does nothing unless the lab database exists and shadow
-// mode is on; never waits for the lab and never throws.
-// Every row goes (also the ones that only logged an answer), so the lab's count of the review log stays exact. The lab is looked up once and
-// remembered (rwkv-gate.js), so the answers reach it in the order they were saved.
-function labShadow(logId, log, card, decks) {
-  import('./rwkv-gate.js').then(g => g.labModule()).then(m => m && m.afterAnswer({ logId, log, card, decks })).catch(() => {});
+// Own model: tell it about an answer (Play and the Practice test only change its memory: they never make a shadow record and Own never
+// schedules them, they stay on FSRS). Does nothing, and loads nothing, unless Own is on; never waits for it and never throws.
+// Every row goes (also the ones that only logged an answer), so Own's count of the review log stays exact. Own is looked up once and
+// remembered (own-gate.js), so the answers reach it in the order they were saved.
+function ownShadow(logId, log, card, decks) {
+  import('./own-gate.js').then(g => g.ownModule()).then(m => m && m.afterAnswer({ logId, log, card, decks, memoryOnly: true })).catch(() => {});
 }
-// An answer saved earlier is taken back (play.js "I was right"): the lab hears about it too.
-export function labForget(logId) {
-  import('./rwkv-gate.js').then(g => g.labModule()).then(m => m && m.afterUndo(logId)).catch(() => {});
+// An answer saved earlier is taken back (play.js "I was right"): Own hears about it too.
+export function ownForget(logId) {
+  import('./own-gate.js').then(g => g.ownModule()).then(m => m && m.afterUndo(logId)).catch(() => {});
 }
 
 // Save one answer.
@@ -72,21 +72,21 @@ export async function savePracticeAnswer(data, entry, { source = 'play', qtype, 
       else decision = 'not-due';
       log.reason = decision;
       entry.logId = await db.addLog(log);
-      labShadow(entry.logId, log, entry.card, data.decks);
+      ownShadow(entry.logId, log, entry.card, data.decks);
     }
     // Saving is outside the try, so an error after the review is saved can't add the same answer a second time.
     if (next) {
       log.applied = true;
       entry.logId = await db.saveReview(next, log);
       entry.applied = true;
-      labShadow(entry.logId, log, entry.card, data.decks);
+      ownShadow(entry.logId, log, entry.card, data.decks);
       data.statesById.set(id, next);
       data.playedToday.add(id);
       entry.leeched = await afterApply?.(entry.card, prev, next, log);       // what it changed, so "I was right" can undo a leech
     }
   } else {
     entry.logId = await db.addLog(log);
-    labShadow(entry.logId, log, entry.card, data.decks);
+    ownShadow(entry.logId, log, entry.card, data.decks);
   }
   entry.rating = rating;
   entry.decision = decision;

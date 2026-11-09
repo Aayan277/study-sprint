@@ -92,11 +92,11 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
         <button class="btn ghost" type="button" id="brAddFirst">${icon('plus')} Add one card</button></div></div>
     <div id="brMain">
     <div class="mhead br-head">
-      <h2>Cards</h2>
+      ${deckId ? '<h2>Cards</h2>' : ''}
       <div class="head-actions">
         <button class="btn ghost small" type="button" id="brTags">Tools</button>
         <button class="btn ghost small" type="button" id="brSelect">Select</button>
-        <button class="btn primary small" type="button" id="brAdd">+ Add card</button>
+        <button class="btn ${deckId ? 'ghost' : 'primary'} small" type="button" id="brAdd">+ Add card</button>
       </div>
     </div>
     <div class="br-controls">
@@ -510,7 +510,7 @@ const cardFieldsHTML = (card, maxN = 0, pair = null, deckDefault = false) => `
       ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
       ${noteFieldsEditHTML('ce', card.noteFields)}`}
       ${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
-      <label class="field"><span>Tags (separated by spaces or commas)</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
+      <label class="field"><span>Tags</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
       ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" role="alert" hidden></p>`;

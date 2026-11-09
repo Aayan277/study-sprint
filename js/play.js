@@ -16,7 +16,7 @@ import {
 import { questionAnnouncement, spokenPrompt } from './game.js';
 import { singleKeysOn, keyHint } from './shortcuts.js';
 import { speedProfiles, playCountsAsReviews } from './autograde.js';
-import { savePracticeAnswer, labForget, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
+import { savePracticeAnswer, ownForget, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
 import { loadAll } from './study-data.js';
 import { pickPlayDeck } from './exam.js';
 import { giveBackNewFor } from './queue.js';
@@ -25,7 +25,7 @@ import { isTypingCard } from './type-in.js';
 import { openCardPanel } from './browse.js';
 import { checkTyped, buildAnswerIndex, indexedMixup } from './match.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
-import { plainText, mathHTML, answerText, answerTargets } from './format.js';
+import { plainText, mathHTML, answerText, answerTargets, shownOption } from './format.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
 import { imgHTML, warmCards } from './media.js';
 import { soundsHTML, stopSound } from './audio.js';
@@ -192,11 +192,6 @@ export async function renderPlay(el) {
         </div>
       </fieldset>
 
-      <div class="start-row">
-        <button class="btn primary" type="button" id="startBtn">Start round</button>
-        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
-      </div>
-
       <button class="fold-toggle" type="button" id="customBtn" aria-expanded="${customOpen}" aria-controls="customBody">
         <span>Customise</span>${icon('chevron')}</button>
       <div id="customBody" ${customOpen ? '' : 'hidden'}>
@@ -230,6 +225,11 @@ export async function renderPlay(el) {
             <input id="untimed" type="checkbox" class="switch" ${untimed ? 'checked' : ''}></label>
         </fieldset>
       </div>`}
+      </div>
+
+      <div class="start-row">
+        <button class="btn primary" type="button" id="startBtn">Start round</button>
+        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
       </div>
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
@@ -378,10 +378,10 @@ function showQuestion() {
     const wrong = pickDistractors(card, G.all, G.qtype, { hard: G.hard, withIds: true });
     const items = shuffle([{ label: q.answer, id: card.id }, ...wrong]);
     G.opts = items.map(o => o.label); G.optIds = items.map(o => o.id);
-    const long = G.opts.some(o => o.length > 28);
+    const long = G.opts.some(o => shownOption(o, G.qtype).length > 28);      // (a back as an option shows only its lead, see optionText)
     $('options').className = `options${G.opts.length > 4 ? ' six' : ''}${long ? ' long' : ''}`;
     $('options').innerHTML = G.opts.map((o, i) =>
-      `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></button>`).join('');
+      `<button type="button" class="opt" data-i="${i}">${keyHint(`<span class="key">${i + 1}</span>`)}<span class="lbl">${mathHTML(shownOption(o, G.qtype), { inline: true })}</span></button>`).join('');
   }
   // Said by the screen reader (a polite live region of its own, next to the feedback one, which keeps "Correct +189"). A right answer moves
   // on by itself, so without this the next question would arrive in silence. With focus on the question it only gives the number (the
@@ -597,13 +597,13 @@ async function rerecord(round, old, fixed) {
   if (old.logId !== undefined) {
     if (old.applied) {
       await db.undoReview(id, old.prev, old.logId);          // the old schedule back, and the log row gone
-      labForget(old.logId);
+      ownForget(old.logId);
       if (old.prev) data.statesById.set(id, old.prev); else data.statesById.delete(id);
       data.playedToday.delete(id);
       if (old.decision === 'first') giveBackNewFor(data.newLeft, old.card.deckId);
     } else {
       await db.deleteLogRow(old.logId);                      // it was only logged
-      labForget(old.logId);
+      ownForget(old.logId);
     }
   }
   if (old.leeched) await undoLeech(round, old);

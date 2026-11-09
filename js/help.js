@@ -61,6 +61,7 @@ export const SECTIONS = [
       <p>A subdeck with no date of its own uses its parent’s. Set a date in its Edit deck to give it its own.</p>` },
     { id: 'shortcuts', q: 'What are the single-key shortcuts? How do I turn them off?', a: `
       <p>In Review, Play and the card sheet, single keys act on a card: E, I, R, D, Z, A, X, M, -, @ and 1 to 6. Space and Enter always work on the focused card.</p>
+      <p>In Review: Space shows the answer, 1 to 4 rate it, D opens the scratchpad, Z undoes the last answer, and on a step-by-step card Space or → reveals the next step (A shows them all). On a card where you type the answer, Enter checks it and Esc leaves the box so the single keys work again.</p>
       <p>If voice control or a switch triggers them by accident, turn off <b>Single-key shortcuts</b> in Settings → Study. That setting is for this device only.</p>` }
   ] },
   { title: 'Your cards', items: [
@@ -68,11 +69,11 @@ export const SECTIONS = [
       <p>Tap <b>Import</b> (on the Decks screen or on a deck’s page), or <b>Add cards</b> in the sidebar on a computer. Paste one card per line, with the front and back separated by a dash, tab, colon, <code>|</code>, <code>=</code> or comma, for example ${code('Mitosis - cell division into 2 identical cells')}. Quizlet exports and tables from Notion, Excel or Google Sheets work too, and so do .csv and .xlsx files and Anki decks (.apkg).</p>
       <p>Notes written in paragraphs don’t split into cards by themselves. Tap <b>Suggest cards</b> and the app picks out definitions, lists, key terms and dates for you to tick and check (it works on your device), or use <b>Make cards with Claude</b> for an AI version.</p>` },
     { id: 'tags', q: 'Can the app tag my cards for me?', a: `
-      <p>Yes. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck, tap ⋯ → <b>Suggest tags</b> (or in Browse, Tools → <b>Suggest tags for these cards</b>). The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
+      <p>Tags on a card are separated by spaces or commas. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck, tap ⋯ → <b>Suggest tags</b> (or in Browse, Tools → <b>Suggest tags for these cards</b>). The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
     { id: 'tools', q: 'What is in Browse → Tools?', a: `
       <p>Tools works on the cards in the list you’re looking at: <b>Find by tag or question ID</b>, rename or remove a tag everywhere in the list, <b>Suggest tags for these cards</b> (needs 10 or more cards), and <b>Link cloze cards</b>, which turns older separate fill-in-the-blank cards into one note.</p>` },
     { id: 'reverse', q: 'What is a reverse card?', a: `
-      <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one.</p>` },
+      <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. Turn on <b>Both directions</b> when you add or edit a card: it also asks the back and expects the front, each direction has its own schedule, and Review shows one of the two a day. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one.</p>` },
     { id: 'anki-import', q: 'What happens to my Anki deck when I import it?', a: `
       <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you may have edited here are left alone unless you turn on <b>Overwrite … you may have edited here too</b>. Each of those rows says “Kept as you edited it”, or “Overwrites your edits” when that switch is on.</p>` },
     { id: 'typing', q: 'Can I type my answers instead of flipping?', a: `
@@ -104,7 +105,7 @@ export const SECTIONS = [
       <p>With an account, a copy is also kept on the app’s server (Supabase), and each account can only read its own data. Details are on the <a href="privacy.html">Privacy</a> page.</p>` },
     { id: 'device-only', q: 'Which settings are only on this device?', a: `
       <p>Look and feel stays on the device you set it on: everything under Settings → Appearance (style, colours, Light or dark, OLED black, Card text alignment, Compact deck list, Rating feedback, Smooth transitions, Exam readiness in Stats and Glossary underlines), Single-key shortcuts, Play timer, Cards due on the app icon and the reminder time.</p>
-      <p>With an account, your study settings sync to your other devices: New cards per day, Reviews per day, Target retention, the scheduling options, Play counting as reviews, your Stats layout and your Glossary.</p>` },
+      <p>With an account, your study settings sync to your other devices: New cards per day, Reviews per day, Learning cards order, Target retention, the scheduling options, Play counting as reviews, your Stats layout and your Glossary.</p>` },
     { id: 'device', q: 'How do I move my cards to a new phone?', a: `
       <p>Easiest: make an account on the old device (Settings → Sync), then sign in with the same email on the new one. Without an account: Settings → Your data → <b>Export backup</b> on the old device, send the file to the new one, and use <b>Import backup</b> there.</p>` },
     { id: 'email', q: 'I didn’t get the confirmation or password email.', a: `
@@ -118,6 +119,15 @@ export const SECTIONS = [
     { id: 'steps', q: 'How do I type learning steps?', a: `
       <p><b>Learning steps</b> are the short gaps while a card is new: you see it again after each one, until it moves on to normal reviews. <b>Relearning steps</b> are the gaps after you press Again on a normal review.</p>
       <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m). The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
+    { id: 'learn-order', q: 'Where do learning cards go in a session?', a: `
+      <p>Learning cards are the ones the <b>Learn</b> number at the top of Review counts: cards on their short learning steps, or relearning after you pressed Again, that are due today. A learning step of a day or more counts too once it has come due. New cards you haven’t answered yet are not learning cards.</p>
+      <p>Settings → Study → <b>Learning cards</b> chooses where they go:</p>
+      <ul>
+        <li><b>Mixed with reviews</b> (the default, as the app has always worked): learning cards and reviews come in the order they became due, with new cards spread through them.</li>
+        <li><b>Before reviews</b>: learning cards first once their step is up, then reviews and new cards.</li>
+        <li><b>After reviews</b>: reviews and new cards first, then the learning cards. A card you press Again on waits for the end of the session too, however short its step.</li>
+      </ul>
+      <p>Daily limits count the same in all three. It syncs to your other devices and applies from the next time you press Start. Custom study sessions keep their own order.</p>` },
     { id: 'advanced', q: 'What do the other Advanced scheduling settings do?', a: `
       <p>Changes apply to future reviews; cards already scheduled keep their dates until you next review them.</p>
       <ul>
@@ -128,6 +138,12 @@ export const SECTIONS = [
         <li><b>Leech after</b>: a card you forget this many times is a leech, and again every half that many after (8, 12, 16…). 0 turns this off. Leeches are tagged “leech”: find them in Browse with the Leeches filter, then rewrite or split them.</li>
         <li><b>Scheduler</b>: FSRS-7 (beta) models short-term memory better, for same-day repeats and cramming. It is off by default, your cards keep their history, and switching back is safe.</li>
       </ul>` },
+    { id: 'own-model', q: 'What is the Own model?', a: `
+      <p>The Own model is an optional file (ending in <b>.own</b>) that you load in Settings → Study → Advanced scheduling → <b>Own model</b>. It is a second way to guess when you will forget a card. FSRS keeps scheduling your reviews, and the Own model only watches at first: for every review it makes its own guess, and the app compares both guesses with what you really remembered.</p>
+      <p>The app checks once a study day. Own takes over scheduling after <b>two Better checks in a row</b>, and only once there are at least <b>1,000 scored reviews</b>, <b>300 of them made while watching</b>, and <b>7 days</b> of watching. “Better” means Own’s guesses were clearly closer than FSRS’s. The card shows <b>Not enough reviews yet</b> with your counts until then.</p>
+      <p>Safety limits: Own can only pick a gap between a quarter and four times what FSRS would pick, and never longer than 10 years (or your Maximum interval, if that is lower). If a plan ever fails, that card is scheduled by FSRS.</p>
+      <p>While Own schedules, it keeps being checked. When Own is no longer ahead of FSRS (its guesses stop being clearly closer than FSRS’s, or are worse), the app goes back to FSRS by itself and shows a note on Today. After it has gone back <b>twice</b>, it stays locked on FSRS: turn the switch off and on again to start over. Turning the switch off puts FSRS back right away. Loading a different model file starts the watching again from scratch. Due dates that Own already chose stay until the card’s next review.</p>
+      <p>The model file and everything Own works out stay on this device. They are never uploaded, never synced to your other devices, and never included in an export or backup. <b>Remove model…</b> deletes the file and Own’s records; your cards, reviews and due dates stay.</p>` },
     { id: 'fit-check', q: 'What does “Check how well it fits you” do?', a: `
       <p>In Settings → Study → Advanced scheduling → Personal parameters, <b>Check how well it fits you</b> compares what the scheduler predicted with what you actually remembered, and says whether to tune it or leave it. See “How is the fit judged?” for the three checks.</p>
       <p><b>Ignore reviews before</b> skips old history when tuning and checking, for example a messy Anki import. Cards first studied before that date are skipped too, since their start is unknown.</p>` },
@@ -146,7 +162,7 @@ export const SECTIONS = [
     { id: 'stats-calendar', q: 'How does the Study calendar work?', a: `
       <p>Each square in the <b>Study calendar</b> is a day; darker means more answers. Tap a day to read its numbers, or use <b>Pick a day</b> to do it without a mouse. A diagonal hatch is a day covered by a streak freeze, and a day off you planned is marked too.</p>` },
     { id: 'streak-freeze', q: 'What is a streak freeze?', a: `
-      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. To rest on purpose, tap <b>Plan a day off</b>.</p>` },
+      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. To rest on purpose, tap <b>Plan a day off</b>. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
     { id: 'readiness', q: 'What does Exam readiness mean?', a: `
       <p>On Stats, pick a course. <b>Exam readiness</b> is the share of its cards you would still remember (90% or better) on exam day if you stopped reviewing now. Without an exam date it shows <b>Readiness today</b>, and <b>Add exam date</b> lets you set one. It’s an estimate: <b>How sure is this?</b> says what it’s based on. You can turn the header off with Exam readiness in Stats in Settings → Appearance.</p>` },
     { id: 'retention-planner', q: 'How does Help me choose pick a retention?', a: `

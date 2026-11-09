@@ -34,6 +34,7 @@ import { backupNote } from './backup-nudge.js';
 import { leftOutNote, notDownloadedLine, estimateBytes } from './lazy-media.js';
 import { contactHTML, legalLinksHTML } from './legal.js';
 import { helpLink } from './help.js';
+import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 
 
 // ---------- settings ----------
@@ -107,6 +108,11 @@ export async function renderSettings(el) {
         <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
+      <div class="adv-row" id="learnOrderRow"><b id="learnOrderLbl">Learning cards</b> ${helpLink('learn-order', '?', 'About where learning cards go')}
+        <div class="chips" role="radiogroup" aria-labelledby="learnOrderLbl" id="learnOrderChips">
+          ${LEARN_ORDERS.map(v => `<label class="chip"><input type="radio" name="learnOrder" value="${v}" ${cleanLearnOrder(app.settings.learnOrder) === v ? 'checked' : ''}><span>${{ before: 'Before reviews', mixed: 'Mixed with reviews', after: 'After reviews' }[v]}</span></label>`).join('')}
+        </div>
+      </div>
       <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
         <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play answers as reviews</b> ${helpLink('play', '?', 'About counting Play answers as reviews')}</span>
@@ -155,6 +161,7 @@ export async function renderSettings(el) {
             ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(app.settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
           </div>
         </div>
+        <details class="advanced" id="ownSection"><summary>Own model</summary><div id="ownBody"></div></details>
         <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
@@ -358,6 +365,11 @@ export async function renderSettings(el) {
   $('npdPlus').addEventListener('click', () => setNpd(app.settings.newPerDay + 5));
   // Play: practice only (default) or counted as reviews. Synced, so every device plays the same way.
   $('playCounts').addEventListener('change', e => { app.settings.playCountsAsReviews = e.target.checked; db.setSetting('playCountsAsReviews', e.target.checked); });
+  // Learning cards: before, mixed with or after the reviews (queue.js). Synced; the next Review session uses it.
+  el.querySelectorAll('input[name="learnOrder"]').forEach(r => r.addEventListener('change', async () => {
+    app.settings.learnOrder = cleanLearnOrder(r.value);
+    await db.setSetting('learnOrder', app.settings.learnOrder);
+  }));
   // Leeches: how many times forgotten (0–99, 0 = off), and suspend or just tag.
   const setLeech = v => {
     const n = Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
@@ -483,6 +495,14 @@ function wireAdvanced(el) {
     await redrawAdvanced();
     $('fsrsChips').querySelector('input:checked')?.focus();
   }));
+  // Own model: nothing of it is loaded until the section is opened for the first time.
+  let ownWired = false;
+  $('ownSection').addEventListener('toggle', async () => {
+    if (!$('ownSection').open || ownWired) return;
+    ownWired = true;
+    try { (await import('./settings-own.js')).wireOwn($('ownBody')); }
+    catch (err) { console.error(err); ownWired = false; $('ownBody').innerHTML = '<p class="err" role="alert">Couldn\u2019t open that. Check your connection and try again.</p>'; }
+  });
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
@@ -1235,6 +1255,7 @@ async function wipeThisDevice() {
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = app.settings;
   await db.resetAll();
+  try { await (await import('./own-gate.js')).wipeOwn(); } catch (err) { console.warn('Own model:', (err && err.message) || err); }      // Own's separate database goes too
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);

@@ -65,6 +65,8 @@
 :root[data-ui="clinical"] .btn.primary{box-shadow:none}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.primary:hover{box-shadow:none}}
 :root[data-ui="clinical"] .btn.ghost{background:var(--surface-1);border-color:var(--line-strong)}
+/* the invisible click layer over an exam row on Today stays invisible (it is a ghost button, painted solid above) */
+:root[data-ui="clinical"] .exam-row > .btn.ghost[data-prep]{background:none;border-color:transparent}
 @media (hover:hover) and (pointer:fine){:root[data-ui="clinical"] .btn.ghost:hover{background:var(--surface-2)}}
 :root[data-ui="clinical"] .btn:active:not(:disabled){transform:none}
 :root[data-ui="clinical"] .btn.big{min-height:48px;font-size:var(--fs-base)}
@@ -304,13 +306,16 @@
 :root[data-ui="clinical"] .flash-front.long{font-size:clamp(1.2rem,5vw,1.5rem)}
 :root[data-ui="clinical"] .flash-front.xlong{font-size:1.0625rem;font-weight:500;line-height:1.45;letter-spacing:0}
 :root[data-ui="clinical"] .flash-back{font-size:clamp(1.0625rem,4.6vw,1.25rem);line-height:1.5}
-:root[data-ui="clinical"] .flash-recap{font-size:clamp(1.0625rem,4.6vw,1.3rem)}
+:root[data-ui="clinical"] .flash-recap{font-size:clamp(1rem,4.2vw,1.125rem)}
 @media (min-width:1024px){
   :root[data-ui="clinical"] main[data-route="review"] .flash-front{font-size:2.5rem}
   :root[data-ui="clinical"] main[data-route="review"] .flash-front.long{font-size:1.75rem}
   :root[data-ui="clinical"] main[data-route="review"] .flash-front.xlong{font-size:1.2rem;font-weight:500;line-height:1.45;letter-spacing:0}
-  :root[data-ui="clinical"] main[data-route="review"] .flash-recap{font-size:1.4rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-recap{font-size:1.125rem}
   :root[data-ui="clinical"] main[data-route="review"] .flash-back{font-size:1.3rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-back.long{font-size:1.2rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-back.xlong{font-size:1.125rem}
+  :root[data-ui="clinical"] main[data-route="review"] .flash-recap.small{font-size:1rem}
   :root[data-ui="clinical"] .today-hero{padding:var(--s-5) var(--s-6)}
   :root[data-ui="clinical"] .th-big{font-size:1.75rem}
 }
@@ -364,7 +369,8 @@
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exams,.tdecks){gap:0;border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line);background:var(--surface-1);overflow:hidden}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck){border-radius:0;box-shadow:none;background:var(--surface-1)}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck) + :is(.exam-row,.tdeck){box-shadow:inset 0 1px 0 var(--line)}
-@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .exam-row:hover{background:var(--surface-2)}
+:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
   :root[data-ui="clinical"][data-ui="clinical"] .tdeck + .tdeck:hover{box-shadow:inset 0 1px 0 var(--line)}}
 :root[data-ui="clinical"][data-ui="clinical"] .tdeck{min-height:64px;padding:10px 12px 10px 16px}
 :root[data-ui="clinical"][data-ui="clinical"] .td-name{font-size:var(--fs-base);font-weight:600}
@@ -386,6 +392,12 @@
 :root[data-ui="clinical"][data-ui="clinical"] .rv-head .link{box-shadow:0 0 0 1px var(--line)}
 :root[data-ui="clinical"][data-ui="clinical"] .rv-prog{height:3px;background:var(--surface-3)}
 :root[data-ui="clinical"][data-ui="clinical"] .flash-front{font-weight:600;letter-spacing:-.02em}
+:root[data-ui="clinical"][data-ui="clinical"] .flash-front.xlong{font-weight:500;letter-spacing:0}
+/* Size classes the look must not flatten: a long answer is smaller (left alignment comes from styles.css, and Settings' data-align still wins). */
+:root[data-ui="clinical"] .flash-back.long{font-size:1.0625rem}
+:root[data-ui="clinical"] .flash-back.xlong{font-size:1rem}
+:root[data-ui="clinical"] .flash-recap.small{font-size:.9375rem;line-height:1.4;font-weight:500}
+:root[data-ui="clinical"] .flash-back.cloze-full:not(.long){font-size:clamp(1.375rem,6vw,1.75rem);font-weight:500;line-height:1.35}
 :root[data-ui="clinical"][data-ui="clinical"] .ratebar .btn.wide{min-height:52px}
 :root[data-ui="clinical"][data-ui="clinical"] .rate{min-height:60px;border-color:var(--line-strong)}
 :root[data-ui="clinical"][data-ui="clinical"] .rate b{font-size:var(--fs-base)}
@@ -570,7 +582,7 @@
   /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row{grid-template-columns:minmax(0,1fr) auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row{grid-template-columns:minmax(0,1fr)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero{grid-template-columns:minmax(0,1fr) 260px;padding:var(--s-5) var(--s-5)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .th-big{font-size:1.75rem}

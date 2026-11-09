@@ -5,14 +5,14 @@
 
 import * as db from './db.js';
 import { dayStart, dayEnd } from './days.js';
-import { buildQueue, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, REVIEW, RELEARNING } from './queue.js';
+import { buildQueue, cleanLearnOrder, LEARN_ORDER_DEFAULT, takeNext, addWaiting, formatInterval, formatIntervalLong, NEW, LEARNING, REVIEW, RELEARNING } from './queue.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
-import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7 } from './srs.js';
+import { RATINGS, Rating, previewIntervals, rate, examGain, prepare7, recallNow, useOwnPlan } from './srs.js';
 import { checkTyped } from './match.js';
 import { typeFacts, answerMode } from './type-in.js';
 import { withAccepted, canAccept, addAccepted } from './accept.js';
 import { diffAgainstBack, diffHTML, hasMarks } from './answer-diff.js';
-import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize, leadLines, isLead, FRONT_LINES, BACK_LINES } from './format.js';
+import { formatHTML, mathHTML, answerText, spokenCard, answerTargets, shortDeckPath, answerSize, leadLines, leadPara, isLead, FRONT_LINES, BACK_LINES } from './format.js';
 import { cardMediaHTML, warmCards } from './media.js';
 import { noteFieldsHTML } from './note-fields.js';
 import { playSounds, stopSound, hasSounds, autoplayBlocked } from './audio.js';
@@ -38,9 +38,10 @@ import { go as navGo, replace as navReplace, holdBack, releaseBack } from './nav
 
 // The session in progress. Kept while you visit other tabs, so you can come back to it.
 let R = null;
-// RWKV lab hook: set at the start of a session only when the lab database exists and shadow mode is on (js/rwkv-gate.js). Otherwise null,
-// and every use below does nothing.
-let labHook = null;
+// Own model hook: set at the start of a session only when the Own database exists, a model is loaded and the owner's switch is on
+// (js/own-gate.js). Otherwise null, and every use below does nothing at all.
+let ownHook = null;
+let ownLib = null;      // js/own-plan.js, loaded together with ownHook (never for anyone who has no Own model loaded)
 // A computer with a mouse (vs a touchscreen): changes a hint's wording.
 const MOUSE = matchMedia('(hover: hover) and (pointer: fine)');
 // Per-card time counted toward "time spent", so leaving the phone on one card doesn't inflate it.
@@ -55,7 +56,7 @@ export async function renderReview(el, deckId) {
   // (Unless Play changed some schedules meanwhile: then start fresh so no card is graded twice.)
   const launch = takeLaunch();         // Today may be starting something new: then don't resume the old session
   if (!launch && R?.active && R.day === dayStart() && (!deckId || R.deckId === deckId) && R.version === db.scheduleVersion()) {
-    if (labHook && R.current && !R.flipped && !R.rwkvPrep) preparePlan();         // (the lab's scheduler may have been switched on meanwhile)
+    if (ownHook && R.current && !R.flipped && !R.ownPrep) preparePlan();         // (Own's scheduler may have been switched on meanwhile)
     return renderSession(el);
   }
 
@@ -129,8 +130,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
   // The plan (caps) is Today's, made for the whole exam; only the order is this session's.
   const exam = custom ? null : examSchedule(data.decks, cards, data.statesById, now, (card, st, examStart) =>
     examGain(st, examStart, now, deckSchedulerOptions(data.settings, effectiveDeck(data.decks, card.deckId))), data.exam.caps, undefined, personalW20(data.settings));
-  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue);
-  labHook = null;
+  const { queue, waiting } = custom || buildQueue(cards, data.statesById, data.newLeft, now, data.reviewLeft, exam, data.answered, data.rescue, cleanLearnOrder(data.settings.learnOrder));
   R = {
     active: true, day: dayStart(), deckId, scope, typing, custom: custom?.label || null,
     settings: data.settings,                      // retention, steps, max interval, fuzz: per deck via schedFor
@@ -143,7 +143,7 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     effective: new Map(data.decks.map(d => [d.id, effectiveDeck(data.decks, d.id)])),
     deckIds: [...new Set(cards.map(c => c.deckId))],
     statesById: data.statesById,
-    queue, waiting,
+    queue, waiting, learnOrder: custom ? LEARN_ORDER_DEFAULT : cleanLearnOrder(data.settings.learnOrder),
     current: null, flipped: false, typed: null, suggest: null,
     gloss: hasTerms(data.settings),             // does the glossary have terms to underline? (glossary-view.js is only loaded then)
     shownAt: 0, answerMs: 0, busy: false,
@@ -152,13 +152,20 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
     answered: new Set(), leeches: [],      // cards answered and leeches caught this session (for the finish screen), kept in step with Undo
     version: db.scheduleVersion()
   };
+  ownHook = null;
   const session = R;
-  import('./rwkv-gate.js').then(g => { g.resetGate(); return g.labModule(); }).then(async m => {
-    if (m) await m.wantsPlans().catch(() => {});
-    if (R !== session) return;                       // another session started meanwhile
-    labHook = m;
-    if (m && R.current && !R.flipped) preparePlan();
-  }).catch(() => {});
+  // session.ownWait settles to Own's module, or to null when Own is off. Answers and undos given before it settles wait for it (in order),
+  // so none is lost; session.ownOn says whether Own is (still) worth preparing for: undefined while not known.
+  session.ownWait = import('./own-gate.js').then(g => { g.resetOwnGate(); return g.ownModule(); }).then(async m => {
+    if (!m || !(await m.begin({ session: true }))) { session.ownOn = false; return null; }
+    ownLib = await import('./own-plan.js'); useOwnPlan(ownLib);
+    session.ownOn = true;
+    if (R === session) {                             // (not when another session started meanwhile)
+      ownHook = m;
+      if (R.current && !R.flipped) preparePlan();
+    }
+    return m;
+  }).catch(() => { session.ownOn = false; return null; });
   nextCard(el);
 }
 
@@ -166,37 +173,36 @@ function start(el, data, cards, typing, deckId, custom = null, scope = '') {
 // and evening out the reviews.
 const schedFor = (card, now = Date.now()) => {
   const deck = deckOf(card);
-  // rwkvPlan: only when the lab's scheduler (opt-in) made a plan for this very card; frozen when the buttons are drawn (see settlePlan).
-  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance, ...(planFor(card, now) || {}) };
+  // ownPlan: only when Own's scheduler (opt-in) made a plan for this very card; frozen when the buttons are drawn (see settlePlan).
+  return { ...examOptions(deckSchedulerOptions(R.settings, deck), deck, now), balance: R.balance, ...(planFor(card) || {}) };
 };
 
-// The frozen plan for this card, ready for rate(), or null. Only while the lab's scheduler is on (so switching back to FSRS takes effect at
-// once, also in a session that carries on). Its time is the moment asked: the plan was frozen when the buttons were drawn, and the label and the
-// saved gap must both use it however long the card stays on screen.
-const planFor = (card, now) => (R.rwkvPlan && R.rwkvPlan.cardId === card.id && labHook?.isPlanning?.() ? { rwkvPlan: { ...R.rwkvPlan, at: now } } : null);
+// The frozen plan for this card, ready for rate(), or null. Whether to plan was decided in preparePlan (Own was the scheduler when the card
+// came up), and a plan that was frozen is used for that card whatever happens meanwhile, so the label and the saved gap agree. It keeps the
+// moment it was made (`at`): a plan more than an hour old is refused by planFits, and FSRS schedules the card.
+const planFor = card => (R.ownPlan && R.ownPlan.cardId === card.id ? { ownPlan: R.ownPlan } : null);
 // Waiting for the plan to be frozen: no rating buttons are drawn meanwhile (their labels would not be the gaps that get saved).
-const planPending = () => !!R.rwkvPrep && !R.rwkvDone && !!labHook?.isPlanning?.();
+const planPending = () => !!R.ownPrep && !R.ownDone;
 
-// ---- RWKV lab scheduler (opt-in; every step is skipped unless the owner chose it on the Lab screen) ----
-// While the question is read, the lab works out the gaps for a card that is in review. When the card is turned over, the plan is waited for
-// at most PLAN_MS and then frozen: the buttons and the saved due date both come from it, so they agree. No plan (late, no memory of the card, not
-// fresh, the worker stopped...) means FSRS schedules the card, silently; the lab counts it.
+// ---- Own scheduler (opt-in; every step is skipped unless the owner's switch is on and Own is the scheduler) ----
+// While the question is read, Own works out the gaps for a card that is in review. When the card is turned over, the plan is waited for at
+// most PLAN_MS (300 ms) and then frozen: the buttons and the saved due date both come from it, so they agree. No plan (late, no memory of the
+// card, out of date, the worker stopped...) means FSRS schedules the card, silently; Own counts it as a failed plan.
 function preparePlan() {
-  R.rwkvPrep = R.rwkvSettle = null; R.rwkvPlan = null; R.rwkvDone = false;
+  R.ownPrep = R.ownSettle = null; R.ownPlan = null; R.ownDone = false;
   const card = R.current?.card, state = card && R.statesById.get(card.id);
-  if (!labHook?.plan || !labHook.isPlanning() || !state || state.state !== REVIEW || !R.current) return;
+  if (!ownHook?.plan || !ownHook.isPlanning() || !state || state.state !== REVIEW || !R.current) return;
   const now = Date.now();
-  R.rwkvPrep = labHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks });
+  R.ownPrep = ownHook.plan({ card, state, now, opts: schedFor(card, now), decks: R.decks });
 }
 // -> a promise that is done once the plan is frozen (or known to be missing). Safe to call again; the plan never changes after the first call.
 function settlePlan() {
-  if (!R.rwkvPrep) return null;
-  if (!R.rwkvSettle) {
-    const prep = R.rwkvPrep, id = R.current.card.id;
-    R.rwkvSettle = Promise.race([prep, new Promise(r => setTimeout(() => r(null), labHook.PLAN_MS))]).then(plan => {
-      if (R?.current?.card.id !== id || R.rwkvPrep !== prep) return;
-      R.rwkvPlan = plan || null; R.rwkvDone = true;
-      if (!plan && labHook.isPlanning()) labHook.noteFallback();
+  if (!R.ownPrep) return null;
+  if (!R.ownSettle) {
+    const prep = R.ownPrep, id = R.current.card.id;
+    R.ownSettle = ownLib.freezePlan(prep, plan => ownHook.settled(plan)).then(plan => {        // (a missing plan is counted by settled)
+      if (R?.current?.card.id !== id || R.ownPrep !== prep) return;
+      R.ownPlan = plan; R.ownDone = true;
       // the buttons wait for this: draw them now, whichever screen code asked for them
       if (R.flipped && R.el?.isConnected && $('ratebar')) {
         $('ratebar').innerHTML = backBarHTML(); wireRatebar(R.el);
@@ -204,7 +210,7 @@ function settlePlan() {
       }
     });
   }
-  return R.rwkvSettle;
+  return R.ownSettle;
 }
 
 const deckOf = card => R.effective.get(card.deckId);
@@ -238,7 +244,7 @@ function playSide(card, side) {
 function nextCard(el) {
   stopSpeaking();
   stopSound();
-  R.current = takeNext(R.queue, R.waiting);
+  R.current = takeNext(R.queue, R.waiting, Date.now(), R.learnOrder);
   R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
   R.shownAt = Date.now(); R.answerMs = 0;
   if (!R.current) return finish(el);
@@ -272,6 +278,14 @@ const HIDDEN = 'aria-hidden="true" inert';
 // Draw the card on screen. Both faces are in the page from the start: the front, and the back (the
 // question again, small, with the answer), so flip() only has to turn the card over.
 //   enter: a new card is coming in, so it rises into place
+// A back's HTML. A short first paragraph followed by more text (a multiple-choice answer and its explanation) leads: the answer is loud, the
+// explanation sits under it, quieter (.ans-lead and .ans-more in styles.css). Both parts are formatted (and escaped) like any back.
+function backHTML(back) {
+  const p = leadPara(back);
+  return p ? `<span class="ans-lead">${formatHTML(p.lead)}</span><span class="ans-more">${formatHTML(p.rest)}</span>`
+    : leadLines(answerText(back), formatHTML(back), BACK_LINES);
+}
+
 function renderSession(el, enter = false) {
   if (!el.isConnected) return;       // you already moved to another screen: don't draw (or hide the tab bar) there
   R.el = el;
@@ -292,7 +306,10 @@ function renderSession(el, enter = false) {
   const cloze = hasBlank(card);
   const frontFmt = occ || cloze ? '' : leadLines(answerText(card.front), formatHTML(card.front), FRONT_LINES);          // (several short lines: the first leads, see leadLines)
   const multi = isLead(frontFmt);
-  const size = multi ? ' multi' : frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
+  // (a long unbroken word, like a URL or a chemical name, gets the smaller size even when the text is short)
+  const size = multi ? ' multi' : frontLen > 120 ? ' xlong' : frontLen > 50 || (!occ && /\S{20,}/.test(answerText(card.front))) ? ' long' : '';
+  // A tiny card (a word or two on each side) gets a smaller answer and sits in the middle of the card on a computer.
+  const tiny = !size && !cloze && !occ && !sp && frontLen <= 14 && answerText(card.back).length <= 24;
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
@@ -311,12 +328,8 @@ function renderSession(el, enter = false) {
       ? cardMediaHTML(card, 'back', renderCloze(card.noteText, card.cloze, 'back'))
       : sp
         ? cardMediaHTML(card, 'back', stepsHTML(sp))
-        : cardMediaHTML(card, 'back', leadLines(answerText(card.back), formatHTML(card.back), BACK_LINES));
+        : cardMediaHTML(card, 'back', backHTML(card.back));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
-
-  // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.
-  // Z is undo (on a picture card Z zooms the picture instead).
-  const keyLine = keyLineFor(sp, occ);
 
   // The page heading is for screen readers only; it sits beside the bar, not in it, so the bar holds just its buttons.
   const head = `
@@ -329,7 +342,7 @@ function renderSession(el, enter = false) {
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
-    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+    <article class="flash rv-card${tiny ? ' tiny' : ''}${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
         ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
@@ -357,8 +370,7 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? typingKeys() : keyLine)}</p>`;
+    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>`;
   drawSessionPage(el, stripKeys(head), stripKeys(body));
   glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
@@ -392,12 +404,7 @@ function renderSession(el, enter = false) {
   $('flash').addEventListener('toggle', e => { const d = e.target.closest?.('.note-field'); if (d) saveFold('field:' + d.dataset.field, d.open); }, true);
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
-  if (typeThis && !R.flipped) {
-    $('typeIn').focus();
-    // The shortcut keys work again once the cursor leaves the box.
-    $('typeIn').addEventListener('focus', () => { $('keyLine').textContent = typingKeys(); });
-    $('typeIn').addEventListener('blur', () => { $('keyLine').textContent = $('keyLine').dataset.normal; });
-  }
+  if (typeThis && !R.flipped) $('typeIn').focus();
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else ($('showBtn') || $('flash')).focus({ preventScroll: true });      // the Show answer button is announced as a button, and Space or Enter on it flips the card
   publishLive();
@@ -533,6 +540,7 @@ function flip(el) {
   if (typesAnswer(R.current.card) && !R.typed) R.suggest = Rating.Again;
   const flash = $('flash');
   flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
+  document.scrollingElement?.scrollTo(0, 0);      // a long answer must not push the question out of place: the card is turned from the top
   flash.classList.add('flipped');
   ['role', 'tabindex', 'aria-label', 'aria-labelledby', 'aria-describedby'].forEach(a => flash.removeAttribute(a));
   const front = flash.querySelector('.rv-front'), back = flash.querySelector('.rv-back');
@@ -542,7 +550,7 @@ function flip(el) {
   $('typeForm')?.remove();
   const settling = settlePlan();
   if (settling) {
-    // RWKV lab scheduler: the buttons are drawn once the plan is frozen (at most PLAN_MS, see settlePlan). 1–4 meanwhile wait for it too (answer).
+    // Own scheduler: the buttons are drawn once the plan is frozen (at most PLAN_MS, see settlePlan). 1-4 meanwhile wait for it too (answer).
   } else {
     $('ratebar').innerHTML = backBarHTML();
     wireRatebar(el);
@@ -556,7 +564,9 @@ function flip(el) {
   // keyboard stays where it was (1–4 and Space still rate).
   back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
-  ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
+  // The rating bar sticks to the bottom of the screen, so the page stays where it is (the question does not move). Only in a window so
+  // short that the bar scrolls with the page does the page go to the buttons.
+  if (matchMedia('(max-height:260px)').matches) ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
 }
 
 // ---------- step-by-step cards (B5) ----------
@@ -575,8 +585,6 @@ const tickRaw = i => {
   const missed = R.elMissed.has(i);
   return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
-// The shortcut line under the card. On a step-by-step card, once the last step is on screen Space no longer does anything: it says "1–4 to rate".
-const keyLineFor = (sp, occ) => !singleKeysOn() ? '' : `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() { return stripKeys(backBarRaw()); }
@@ -615,8 +623,6 @@ function revealStep(el, all = false) {
   if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
-  const kl = $('keyLine');
-  if (kl) { kl.dataset.normal = keyLineFor(sp, false); kl.textContent = kl.dataset.normal; }
   const final = flash.querySelector('.steps-final');
   if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
   else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)
@@ -685,10 +691,12 @@ async function answer(el, rating) {
   R.busy = true;
   const item = R.current, id = item.card.id;
   const prev = R.statesById.get(id) || null;
-  if (R.rwkvPrep) { try { await settlePlan(); } catch { /* no plan: FSRS schedules */ } }
+  if (R.ownPrep) { try { await settlePlan(); } catch { /* no plan: FSRS schedules */ } }
   const now = Date.now();
   if (usesFsrs7(R.settings)) await prepare7([prev], db.getCardLogs);       // (nearly always done already, see nextCard)
   const opts = schedFor(item.card, now);
+  // Own's shadow record: the scheduling FSRS's chance of remembering the card, worked out from its state before this answer is rated.
+  const gate = R.ownWait, pFsrs = R.ownOn !== false && prev?.state === REVIEW ? recallNow(prev, opts, now) : null;
   const next = rate(id, prev, rating, opts, now);
   const log = {
     cardId: id, timestamp: now, source: 'review',
@@ -704,7 +712,8 @@ async function answer(el, rating) {
     // Rating feedback plays alongside the save and nothing waits for it: the next card is drawn the moment the save is done.
     fx.rated(rating, $('flash'), el.querySelector(`.rate[data-rate="${rating}"]`));
     const logId = await saving;
-    labHook?.afterAnswer({ logId, log, card: item.card, prev, opts, decks: R.decks });
+    // (through the gate, so an answer given before Own finished starting up is handed over, in order, once it has)
+    gate?.then(m => m && m.afterAnswer({ logId, log, card: item.card, decks: R.decks, pFsrs, fsrsKind: usesFsrs7(R.settings) ? 7 : 6 }));
     if (inStep) R.version = db.scheduleVersion();
     R.statesById.set(id, next);
     // Still learning and due again today (in a few minutes)? It comes back this session.
@@ -743,7 +752,7 @@ async function undo(el) {
     const id = u.item.card.id;
     const inStep = R.version === db.scheduleVersion();
     await db.undoReview(id, u.prev, u.logId);
-    labHook?.afterUndo(u.logId);
+    R.ownWait?.then(m => m && m.afterUndo(u.logId));
     if (u.cardBefore) { await db.saveCards([u.cardBefore]); u.item = { ...u.item, card: u.cardBefore }; }   // un-leech it
     if (inStep) R.version = db.scheduleVersion();
     if (u.prev) R.statesById.set(id, u.prev); else R.statesById.delete(id);
@@ -751,7 +760,7 @@ async function undo(el) {
       const i = R.waiting.findIndex(w => w.card.id === id);
       if (i >= 0) R.waiting.splice(i, 1);
     }
-    if (R.current) R.queue.unshift(R.current);
+    if (R.current && R.current.card.id !== id) R.queue.unshift(R.current);      // (the card just answered can be the current one again: a learning card shown again at once; it is put back below, not twice)
     R.stats.reviewed--; R.stats.spent -= u.spent;
     if (!R.undo.some(x => x.item.card.id === id)) R.answered.delete(id);      // (a card answered twice stays answered until both are undone)
     if (u.leeched) { const i = R.leeches.lastIndexOf(id); if (i >= 0) R.leeches.splice(i, 1); }
@@ -760,7 +769,7 @@ async function undo(el) {
     stopSound();
     R.current = u.item; R.flipped = false; R.typed = null; R.suggest = null; R.stepShown = 0; R.elMissed = new Set();
     R.shownAt = Date.now(); R.answerMs = 0;
-    preparePlan();
+    preparePlan();                    // (Own's plan for the card that is back, like nextCard does)
     renderSession(el, true);
     // Said aloud (the toast is a live region): the card is back, so a screen-reader user knows the rating was taken back.
     const front = spokenCard(String(u.item.card.front || '').replace(/<[^>]*>/g, ' '), '', 41);
@@ -904,7 +913,8 @@ async function finish(el) {
   if (!R || !location.hash.startsWith('#/review')) return;
   if (reviewed) noteSession();            // a finished session: Today may now offer to install the app (install.js)
   const acc = reviewed ? Math.round((reviewed - again) / reviewed * 100) : 0;
-  const mins = Math.floor(spent / 60000), secs = Math.round((spent % 60000) / 1000);
+  // Under a minute reads "<1 min" (a clock showing 0:00 looks like nothing was timed); from a minute on it is m:ss.
+  const spentText = spent < 60000 ? '&lt;1 min' : `${Math.floor(spent / 60000)}:${String(Math.floor((spent % 60000) / 1000)).padStart(2, '0')}`;
   const title = endedEarly ? 'Session ended' : reviewed && !rest.total ? 'Nice work' : 'Session done';
 
   el.innerHTML = `
@@ -912,7 +922,7 @@ async function finish(el) {
     <div class="stats4">
       <div><div class="v">${cardsDone}</div><div class="l">Cards reviewed</div></div>
       <div><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
-      <div><div class="v">${mins}:${String(secs).padStart(2, '0')}</div><div class="l">Time spent</div></div>
+      <div><div class="v">${spentText}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
     ${endedEarly || reviewed > cardsDone ? `<p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.` : ''}</p>` : ''}
@@ -925,7 +935,7 @@ async function finish(el) {
     <p class="fin-links"><a class="link" href="#/decks">Decks</a>${R.undo.length ? '<span aria-hidden="true">·</span><button class="link" type="button" id="undoLast">Undo last</button>' : ''}</p>
     <div id="finishMore" class="finish-more" hidden></div>
     <section class="finish-next" aria-label="What's next">
-      ${streakHTML(streak)}
+      ${streakHTML(streak, { chip: true })}
     </section>`;
   $('againBtn').addEventListener('click', () => { R = null; publishLive(); navGo('#/today'); });
   $('keepBtn')?.addEventListener('click', async () => {
@@ -943,7 +953,6 @@ async function finish(el) {
   fx.finished(el, { complete: !R.current, reviewed });
 }
 
-const typingKeys = () => singleKeysOn() ? 'Enter to check · Esc to leave the box for shortcuts' : 'Enter to check';
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
 // Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.

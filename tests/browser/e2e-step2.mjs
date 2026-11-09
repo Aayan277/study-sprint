@@ -17,7 +17,7 @@ const goToday = async () => { await page.evaluate(() => { location.hash = '#/tod
 await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('.tdeck');
 
 // ---- Today's number is the size of the queue Start builds ----
-const shown = +(await page.textContent('#startBtn')).match(/(\d+) cards?/)[1];
+const shown = +(await page.getAttribute('#startBtn', 'aria-label')).match(/(\d+) cards?/)[1];
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 ok(shown === 12 && (await counts()) === shown, `Today says ${shown} cards and the session has ${await counts()}`);
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
@@ -46,7 +46,7 @@ await page.click('#optBtn'); await page.click('#modeChips [data-typing="0"]'); a
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 const face = sel => page.$eval(sel, f => ({ hidden: f.getAttribute('aria-hidden'), inert: f.inert }));
 const before = { front: await face('.rv-front'), back: await face('.rv-back') };
-ok(await page.locator('.key-line').count() === 1 && await page.isHidden('.key-line'), 'phones do not see the keyboard hint');
+ok(await page.locator('.key-line').count() === 0, 'phones do not see the keyboard hint (nor does anyone: the line is gone)');
 ok(before.back.hidden === 'true' && before.back.inert && !before.front.inert && before.front.hidden === null, 'before the flip the back is hidden and inert, the front is not');
 ok(await page.evaluate(() => { const b = document.querySelector('.rv-back'); b.focus(); return document.activeElement === b; }) === false, 'the back cannot be focused before the flip');
 await page.focus('#flash'); await page.keyboard.press('Space');
@@ -117,7 +117,7 @@ await page.click('#soNew'); await page.waitForSelector('#flash');
 ok((await page.textContent('.flash-deck')).includes('Exam prep') && (await page.textContent('.flash-deck')).includes('Short answers'), 'and then starts the exam prep session, not the old one: ' + (await page.textContent('.flash-deck')).trim());
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
 // from Today's exam list, with no session going: straight in
-await page.click('[data-prep="T"]'); await page.waitForSelector('#flash');
+await page.click('[data-prep="T"]', { position: { x: 6, y: 6 } }); await page.waitForSelector('#flash');      // (the button covers the whole card; its middle can have another button on top)
 ok((await page.textContent('.flash-deck')).includes('Exam prep'), 'Exam prep from the Today list starts the exam session');
 await page.click('#endBtn'); await page.waitForSelector('.finish-next'); await page.click('#againBtn'); await page.waitForSelector('.today-hero');
 // the deck page's Review button never leaves a stale prep behind
@@ -168,6 +168,6 @@ ok(+tNew <= 3 && +tDue + +tNew === +study.match(/: (\d+) cards?/)[1] && +tNew > 
 // ---- The keyboard hint shows on a computer only ----
 const desk = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
 await desk.goto('http://localhost:8123/#/today'); await desk.waitForSelector('#startBtn'); await desk.click('#startBtn'); await desk.waitForSelector('#flash');
-ok(await desk.isVisible('.key-line') && (await desk.textContent('.key-line')).includes('Space to flip'), 'computers see "Space to flip · 1–4 rate"');
+ok(await desk.locator('.key-line').count() === 0, 'computers no longer see the "Space to flip" line (it is in Help)');
 ok(errors.length === 0, 'no console errors or browser dialogs ' + errors.join(' | '));
 await browser.close();

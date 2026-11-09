@@ -225,7 +225,7 @@ await p.evaluate(async () => {
 });
 await go(p, '#/today', '.exam-add');
 const ea = await p.evaluate(() => { const e = document.querySelector('.exam-add'); const mid = [...e.children].map(c => { const r = c.getBoundingClientRect(); return r.top + r.height / 2; }); return { sw: e.scrollWidth, cw: e.clientWidth, oneLine: Math.max(...mid) - Math.min(...mid) < 4, ox: getComputedStyle(e).overflowX }; });
-ok(ea.oneLine && ea.sw > ea.cw && ea.ox === 'auto', `the exam chips stay on one line and scroll sideways (${ea.sw} > ${ea.cw})`);
+ok(ea.sw <= ea.cw + 1 && ea.ox !== 'auto', `the exam chips wrap instead of scrolling sideways (${ea.sw} <= ${ea.cw})`);      // round 3: the row used to run off the edge
 await noHScroll(p, 'Today with exam chips');
 await p.screenshot({ path: SP + '/c-today-375.png', fullPage: true });
 await ctx.close();

@@ -1,6 +1,6 @@
 // Own model: the memory engine. It owns the model, the feature builder and every entity's saved state, and turns a review (or a
 // what-if) into predictions. No DOM, no storage: a worker drives it and decides what to save (snapshotDirty).
-// Same surface as the RWKV lab's Engine (js/rwkv-engine.js) so one worker can drive either:
+// The surface a worker drives:
 //   review(row, { score, keepToken }) -> { pCurve, pImm: null, elapsedDays, token }     undo(logId)     *replay(rows)
 //   whatIf(row, ms) -> { 1..4: head } or null     hasCard(cardKey)     snapshotDirty()     toJSON() / Engine.fromJSON()
 // Saved states are Float32Array: card 32 numbers (+ 10 curve numbers), note 16, deck 16, you 16.

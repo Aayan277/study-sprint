@@ -9,7 +9,7 @@
 import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
 import { dayKey } from './stats-calc.js';
-import { examGainFrom, examClamp } from './exam.js';
+import { examGainFrom, examClamp, recallAt } from './exam.js';
 import { W7_DEFAULT } from './fsrs7-model.js';
 import { rate7, preview7, prepare7 } from './srs7.js';     // FSRS-7 (setting fsrsVersion 7): our own port, no library to load; see srs7.js
 
@@ -39,7 +39,7 @@ export const RATINGS = [
 // (evening out the reviews runs without fuzz; FSRS-7 mode also steps the FSRS-6 memory without it) and they must not push each other out.
 const cached = new Map();
 function scheduler(opts) {
-  const { maxDue, balance, fsrsVersion, w7, rwkvPlan, ...lib } = opts;      // maxDue, balance, the FSRS-7 settings and the lab's plan are applied here, not by the library (and never part of the cache key)
+  const { maxDue, balance, fsrsVersion, w7, ownPlan, ...lib } = opts;      // maxDue, balance, the FSRS-7 settings and Own's plan are applied here, not by the library (and are never part of the cache key)
   const key = JSON.stringify(lib);
   let f = cached.get(key);
   if (f) { cached.delete(key); cached.set(key, f); return f; }        // (most recently used last)
@@ -137,6 +137,11 @@ function seven(cardId, state, opts, now) {
   return Object.fromEntries(Object.entries(cards).map(([g, card]) => [g, { card }]));
 }
 
+// Own model (opt-in): the rules for using its plan (js/own-plan.js) are handed over by Review when an Own session starts, so nobody who has
+// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays }
+let ownTools = null;
+export const useOwnPlan = tools => { ownTools = tools; };
+
 // Apply a rating and return the card's new saved state.
 //   opts.balance (optional): { load, easyDays } to even out reviews instead of random fuzz (balance.js).
 export function rate(cardId, state, rating, opts, now = Date.now()) {
@@ -145,14 +150,24 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const { card } = opts.fsrsVersion === 7
     ? { card: rate7(cardId, state, rating, balanced ? { ...opts, fuzz: false } : opts, now, sixAfter(state, opts, now)) }
     : scheduler(balanced ? { ...opts, fuzz: false } : opts).next(toLibrary(state, now), new Date(now), rating);
-  // RWKV lab (opt-in, js/rwkv-lab.js): a plan made for this very card and answer moment sets the gap after Hard, Good and Easy on a card that
-  // was already in review. FSRS has just run, so the card's memory numbers, steps, reps and lapses stay FSRS's; Again and learning steps are untouched.
-  // The max interval, evening out and the exam limit still apply below. Without a plan (the normal case) nothing here changes.
-  const plan = opts.rwkvPlan;
-  if (plan && plan.cardId === cardId && plan.lastReview === (state?.lastReview ?? null) && Math.abs(now - plan.at) < 3600000
-      && state?.state === 2 && card.state === 2 && Number.isFinite(plan.days?.[rating]) && plan.days[rating] > 0 && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
-    card.scheduled_days = Math.min(plan.days[rating], opts.maxInterval);
-    card.due = new Date(now + card.scheduled_days * DAY);
+  // Own model (opt-in, js/own-shadow.js): a plan made for this very card and answer moment sets the gap after Hard, Good and Easy on a card
+  // that was already in review. FSRS has just run, so the memory numbers, steps, reps and lapses stay FSRS's; Again and learning steps are
+  // untouched. Own's gap is held between 0.25x and 4x of FSRS's gap and at most 3,650 days (own-plan.js). With fuzz on, FSRS's own fuzz
+  // (the ratio of its fuzzed gap to its exact gap) is applied to Own's days too. The max interval, evening out and the exam limit still
+  // apply below. Without a plan (the normal case) nothing here changes.
+  const plan = opts.ownPlan;
+  if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
+    const fsrsDays = card.scheduled_days;
+    const { clampOwnDays } = ownTools;
+    let days = clampOwnDays(plan.days[rating], fsrsDays, opts.maxInterval);
+    if (opts.fuzz && !balanced) {
+      const exact = opts.fsrsVersion === 7
+        ? rate7(cardId, state, rating, { ...opts, fuzz: false }, now, sixAfter(state, opts, now))
+        : scheduler({ ...opts, fuzz: false }).next(toLibrary(state, now), new Date(now), rating).card;
+      if (exact.scheduled_days > 0) days = clampOwnDays(days * (fsrsDays / exact.scheduled_days), exact.scheduled_days, opts.maxInterval);
+    }
+    card.scheduled_days = days;
+    card.due = new Date(now + days * DAY);
   }
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
@@ -173,6 +188,15 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
     load.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
   }
   return fromLibrary(cardId, card);
+}
+
+// The chance of remembering the card right now, by the FSRS that schedules it (FSRS-6, or FSRS-7 when that is on), with the owner's own
+// weights. null when there is no usable number. Used only by Own's shadow records (js/own-shadow.js). opts: the card's scheduler options.
+export function recallNow(state, opts, now = Date.now()) {
+  if (!state || !(state.stability > 0)) return null;
+  const model = opts?.fsrsVersion === 7 ? { w20: opts.w?.[20], w7: opts.w7 ?? W7_DEFAULT } : opts?.w?.[20];
+  const p = recallAt(state, now, model);
+  return Number.isFinite(p) && p > 0 && p <= 1 ? p : null;
 }
 
 // How much a review now would add to the chance of remembering the card on exam day (see examGainFrom in exam.js).

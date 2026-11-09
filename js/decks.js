@@ -7,7 +7,7 @@ import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
 import { isHidden } from './browse-logic.js';
 import { mountBrowser } from './browse.js';
-import { examInfo, countdown, badgeClass, MOCK_DAYS } from './exam.js';
+import { examInfo, countdown, badgeNear, MOCK_DAYS } from './exam.js';
 import { drawSidebar } from './sidebar.js';
 import { emptyStartHTML, wireEmptyStart } from './empty-state.js';
 import { commitDeck, examDateError, openExamSheet } from './exam-sheet.js';
@@ -129,7 +129,7 @@ export async function renderLibrary(el) {
         <button class="deck-open" type="button" data-open="${esc(deck.id)}">
           ${deck.course ? `<span class="deck-code">${esc(deck.course)}</span>` : ''}
           <span class="deck-name">${esc(deck.name)}</span>
-          ${examInfo(deck) ? `<span class="${badgeClass(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
+          ${examInfo(deck) ? `<span class="${badgeNear(examInfo(deck))}">${esc(countdown(examInfo(deck)))}</span>` : ''}
           <span class="deck-counts">
             ${stats.total ? `<span><b>${stats.total.toLocaleString('en')}</b> ${stats.total === 1 ? 'card' : 'cards'}</span>
             <span class="due${c.due ? "" : " zero"}"><b>${c.due.toLocaleString('en')}</b> due</span>
@@ -257,10 +257,10 @@ export async function renderDeck(el, deckId) {
 
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
-    <div class="screen-head">
+    <div class="screen-head" style="--deck:${esc(deck.color)}">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeClass(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
+        ${exam ? `<p class="exam-line"><span class="${badgeNear(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
         ${soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : ''}

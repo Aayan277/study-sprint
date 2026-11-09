@@ -1,4 +1,4 @@
-import './rwkv-utc.mjs';
+import './own-utc.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Engine, headToCurve, curveToHead } from '../js/own-engine.js';

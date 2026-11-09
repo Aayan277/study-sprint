@@ -5,9 +5,8 @@
 //   2. PREDICTION (what the loss is measured on): the head reads the four memories plus context features 3..11 and draws a
 //      forgetting curve; the curve is read at the card's real gap. It never sees the rating, the time taken or the replay flag.
 //   3. UPDATE: a GRU-like cell reads all 18 features plus the four memories and rewrites each memory:  h' = h + z * (c - h)
-// There are two implementations of this one recipe: plain Float64-arithmetic loops for the app (states are stored as Float32),
-// and a version on the autodiff tape (js/own-grad.js) for training. tests/own-model.test.js checks they agree to 1e-6 and
-// checks the tape's gradients against finite differences.
+// The app runs this recipe as plain Float64-arithmetic loops (states are stored as Float32). The training tools keep a second
+// version on an autodiff tape; it is not shipped in the app.
 //
 // An EVENT (what both paths read) is { f, ck, nk, dk, dt, gn, gd, gu, score, y }:
 //   f       Float32Array(18), the features of the answer (OwnFeatures.features)

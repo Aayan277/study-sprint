@@ -8,6 +8,30 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.63', items: [
+    'New in Advanced scheduling: you can load your own model file. It watches FSRS first and only takes over once it does better.',
+    'Easier taps on a phone, the Review button comes first on a computer\'s deck page, and Clinical shows upcoming exams again.',
+  ] },
+  { version: '4.62', items: [
+    'Calmer screens: only the main button is coloured, and Decks takes less space on a phone.',
+    'Fixed: the card no longer jumps on a phone when you flip it, and the streak shows a snowflake only when a freeze was used.',
+  ] },
+  { version: '4.61', items: [
+    'A calmer study screen: plain rating buttons, and the question stays put when you flip.',
+    'Today shows how long your reviews will take, and exam cards are simpler.',
+  ] },
+  { version: '4.60', items: [
+    'A cleaner look: no more glows, calmer borders and corners.',
+    'Studying cards is more focused: bigger text, taller rating buttons, and on a computer the side menu hides until you finish.',
+  ] },
+  { version: '4.59', items: [
+    'Learning cards are no longer shown early when they come before your reviews.',
+  ] },
+  { version: '4.58', items: [
+    'New setting: choose whether cards you are still learning today come before, mixed with, or after your reviews.',
+    'Undo no longer shows a card twice when it came back right away.',
+    'Play answer choices no longer give the answer away, and long questions and formulas show whole.',
+  ] },
   { version: '4.57', items: [
     'Long questions now show in smaller text on a computer, and the answer side no longer has a big empty gap at the top.',
   ] },

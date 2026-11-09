@@ -63,7 +63,7 @@ await page.click('.sheet-x');
 
 // Review and Play skip suspended / buried
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
-ok((await page.textContent('#startBtn')).includes('9 cards'), 'Review leaves out the suspended and buried cards (12 − 2 hidden − 1 not due): ' + await page.textContent('#startBtn'));
+ok((await page.getAttribute('#startBtn', 'aria-label')).includes('9 cards'), 'Review leaves out the suspended and buried cards (12 − 2 hidden − 1 not due): ' + await page.getAttribute('#startBtn', 'aria-label'));
 await page.click('.tab[data-tab=play]'); await page.waitForSelector('#pDeck');
 ok((await page.textContent('#pDeck option:checked')).includes('(10)'), 'Play leaves them out too (v4.9: the deck option shows its own count, the "All decks (10 cards)" row is gone)');
 

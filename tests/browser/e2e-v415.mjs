@@ -37,7 +37,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   // ----- the card editor -----
   await go(p, '#/browse', '.crow');
   await p.locator('.crow', { hasText: 'Which drugs' }).click(); await p.waitForSelector('#ceForm');
-  ok((await norm(p, '#ceForm label:has(#ceTags) span')) === 'Tags (separated by spaces or commas)', 'the editor label: "Tags (separated by spaces or commas)"');
+  ok((await norm(p, '#ceForm label:has(#ceTags) span')) === 'Tags', 'the editor label is just "Tags" (round 4: the "separated by" hint lives in Help)');
   await p.fill('#ceTags', '#AK_Step1_v12::#UWorld::23456 #AK_Step1_v12::#Subject::Pulm, Exam');
   await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(500);
   const tags = await p.evaluate(async () => (await (await import('./js/db.js')).get('cards', 'c1')).tags);
@@ -166,12 +166,12 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
     await db.setSetting('newPerDay', 50);
   });
 
-  // ----- the shortcut line in the answer box -----
+  // ----- no shortcut line under the card (round 3: its words are in Help); Esc still leaves the answer box -----
   await go(p, '#/review/A', '#typeIn');
-  ok((await norm(p, '#keyLine')).includes('Esc to leave the box for shortcuts') && !(await norm(p, '#keyLine')).includes('D scratchpad'), 'in the answer box the line says "Esc to leave the box for shortcuts" (no single-key hints): ' + await norm(p, '#keyLine'));
+  ok(await p.locator('#keyLine, .key-line').count() === 0, 'no shortcut line under the card');
   await p.keyboard.press('Escape');
-  ok(await p.evaluate(() => document.activeElement?.id !== 'typeIn') && (await norm(p, '#keyLine')).includes('D scratchpad'), 'Esc leaves the box and the shortcut hints come back: ' + await norm(p, '#keyLine'));
-  ok(!(await norm(p, '#keyLine')).includes('Z undo'), 'no "Z undo" before anything was answered');
+  ok(await p.evaluate(() => document.activeElement?.id !== 'typeIn'), 'Esc leaves the answer box');
+  ok(await p.locator('#undoBtn').count() === 0, 'no Undo button before anything was answered');
 
   // Answer one card, then Z undoes it.
   await p.keyboard.press('Space'); await p.waitForSelector('.rate');
@@ -180,7 +180,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   const second = await p.textContent('.rv-front .flash-front');
   ok(second !== 'A front 0', 'the next card shows (' + second + ')');
   await p.waitForSelector('#typeIn'); await p.keyboard.press('Escape');
-  ok((await norm(p, '#keyLine')).includes('Z undo'), 'after an answer the line shows "Z undo": ' + await norm(p, '#keyLine'));
+  ok(await p.locator('#undoBtn').count() === 1, 'after an answer the Undo button is there');
   await p.keyboard.press('z');
   await p.waitForFunction(() => document.querySelector('.rv-front .flash-front')?.textContent === 'A front 0');
   ok(await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).filter(l => l.source === 'review').length) === 0, 'Z undid the answer (the log row is gone too)');
@@ -192,7 +192,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await p.keyboard.press('Space');                 // step 2: the last one, and the final answer shows
   await p.waitForFunction(() => document.querySelectorAll('.rate').length === 4);
   ok(await p.locator('.steps-final:not([hidden])').count() === 1, 'the last step shows the final answer and the rating buttons');
-  ok((await norm(p, '#keyLine')).startsWith('1–4 to rate') && !(await norm(p, '#keyLine')).includes('Space'), 'after the last step the key line reads "1–4 to rate": ' + await norm(p, '#keyLine'));
+  ok(await p.locator('#keyLine, .key-line').count() === 0 && await p.locator('#stepBtn').count() === 0, 'after the last step the step button is gone (only the ratings are left)');
   await p.keyboard.press('Space'); await p.keyboard.press('Enter'); await p.waitForTimeout(400);
   ok(await p.locator('.rate').count() === 4 && await p.evaluate(async () => (await (await import('./js/db.js')).getAll('reviewLog')).length) === 0, 'Space and Enter after the last step do not rate the card');
   await p.keyboard.press('3');

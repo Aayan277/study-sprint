@@ -132,7 +132,7 @@ await p.click('.subdecks summary'); await p.waitForTimeout(100); await p.reload(
 ok(!(await p.$eval('.subdecks', d => d.open)), 'and so is a closed one');
 // small round play buttons
 ok(await p.$$eval('.deck-act .btn', b => b.length) === 0, 'no full-width Study buttons');
-const go1 = await box(p, '.deck-go'); ok(go1.w === 40 && go1.h === 40, 'the play button is a 40px circle');
+const go1 = await box(p, '.deck-go'); ok(go1.w === 44 && go1.h === 44, 'the play button is a 44px circle on a phone (round 4), ' + go1.w + 'x' + go1.h);
 ok((await p.getAttribute('[data-study="econ"]', 'aria-label')) === 'Study Microeconomics: 6 cards', 'with an accessible name: ' + await p.getAttribute('[data-study="econ"]', 'aria-label'));
 ok(await p.$eval('.deck:has([data-study="zed"]) .deck-go', e => !!e), 'a deck with cards to study has a play button');
 // Round 2 A6: a deck with no cards at all is not "done": it offers + Add cards (the check is for decks that are caught up; see e2e-counts.mjs)
@@ -232,7 +232,7 @@ await go(p, '#/today', '[data-start="econ"]'); await p.click('[data-start="econ"
 const bar = () => p.$eval('.rv-prog', e => ({ now: +e.getAttribute('aria-valuenow'), max: +e.getAttribute('aria-valuemax'), min: e.getAttribute('aria-valuemin'), role: e.getAttribute('role'), label: e.getAttribute('aria-label'), w: parseFloat(e.firstElementChild.style.width), keep: !!e.__keep }));
 let b = await bar();
 ok(b.role === 'progressbar' && b.min === '0' && b.now === 0 && b.max === 6 && b.w === 0 && b.label, 'progress bar: role, 0 of 6 at the start: ' + JSON.stringify(b));
-ok((await box(p, '.rv-prog')).h <= 2.5, 'it is 2px tall');
+ok((await box(p, '.rv-prog')).h >= 3.5 && (await box(p, '.rv-prog')).h <= 4.5, 'it is 4px tall (round 3: a thicker bar)');
 // the tests run with reduced motion on (pw.mjs): the bar has no transition then, and the normal one comes back without it
 ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transitionDuration === '0s'), 'with reduced motion the fill changes without a transition');
 await p.emulateMedia({ reducedMotion: 'no-preference' });

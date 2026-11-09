@@ -7,7 +7,7 @@
 //   row.day     the study-day number to use instead of studyDay(row.t)
 //   row.gapSec  seconds since this card's previous answer, instead of (row.t - previous t) / 1000
 // The app's own rows never set them, so in the app everything comes from timestamps.
-import { modelRows, studyDay, fnv1a } from './rwkv-features.js';
+import { modelRows, studyDay, fnv1a } from './own-rows.js';
 import { F, F_CONTEXT } from './own-spec.js';
 
 export { modelRows, studyDay, fnv1a, F, F_CONTEXT };

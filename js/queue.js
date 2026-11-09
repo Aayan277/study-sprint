@@ -11,6 +11,14 @@ export const NEW = 0, LEARNING = 1, REVIEW = 2, RELEARNING = 3;
 export const isPracticeSource = source => source === 'play' || source === 'test';
 const isLearning = s => s === LEARNING || s === RELEARNING;
 
+// Where today's learning cards go in a session (the synced setting `learnOrder`): 'before' the reviews, 'mixed' in with them
+// (by due time: the way it has always been, so this is the default) or 'after' them. "Learning cards" are exactly the ones the
+// Learn count at the top of Review counts: cards in the learning or relearning state that are due today (kind 'learn'). That
+// includes a learning step of a day or more that has come due today. New cards are not learning cards until you first answer them.
+export const LEARN_ORDERS = ['before', 'mixed', 'after'];
+export const LEARN_ORDER_DEFAULT = 'mixed';
+export const cleanLearnOrder = v => (LEARN_ORDERS.includes(v) ? v : LEARN_ORDER_DEFAULT);
+
 // A learning card due within this long is shown now rather than making you wait (Anki does the same).
 export const LEARN_AHEAD = 20 * 60 * 1000;
 
@@ -33,8 +41,9 @@ export function newStudiedToday(logs, now = Date.now()) {
 //   exam      optional, from examSchedule() in exam.js: the exam's final pass (see splitCards)
 //   answered  optional: the cards of each cloze note answered today, from answeredNotes() (see limitSiblings)
 //   rescue    optional: today's catch-up plan, from rescueToday() (see queueFrom)
-export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined, rescue = null) {
-  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered, rescue);
+//   learnOrder  optional: 'before' | 'mixed' (default) | 'after', where learning cards go (see queueFrom)
+export function buildQueue(cards, statesById, newLimit, now = Date.now(), reviewLimit = Infinity, exam = null, answered = undefined, rescue = null, learnOrder = LEARN_ORDER_DEFAULT) {
+  return queueFrom(splitCards(cards, statesById, now, exam), newLimit, reviewLimit, answered, rescue, learnOrder, now);
 }
 
 // Step 1 of buildQueue: sort the cards into reviews (due now), waiting (learning, due later today) and fresh (new).
@@ -72,7 +81,12 @@ export function splitCards(cards, statesById, now = Date.now(), exam = null) {
 // rescue (optional) is today's catch-up plan from rescueToday(): after the sibling rule and before the review limit,
 // only the first `allow` backlog cards stay (still most overdue first); other cards are never touched by the plan.
 // With rescue.pauseNew, decks without an exam get no new cards while the plan runs.
-export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map(), rescue = null) {
+// learnOrder (cleanLearnOrder) is where the learning cards (kind 'learn') go, after the limits have been applied (learning
+// cards are never held back, so the limits count the same in all three):
+//   'mixed'   by due time among the reviews, new cards spread through all of them (the default, as before)
+//   'before'  learning cards that are due first (by due time; not yet due ones wait in `waiting`), then the reviews with the new cards spread through them
+//   'after'   the reviews with the new cards spread through them, then the learning cards
+export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = new Map(), rescue = null, learnOrder = LEARN_ORDER_DEFAULT, now = Date.now()) {
   let { reviews, waiting, fresh } = withoutSiblings(split, answered);
   const newAvailable = fresh.length;
   if (rescue) {
@@ -84,7 +98,16 @@ export function queueFrom(split, newLimit, reviewLimit = Infinity, answered = ne
     if (rescue.pauseNew) fresh = fresh.filter(c => rescue.exempt?.has(c.deckId));
   }
   const news = pickNew(fresh, newLimit).map(card => ({ card, kind: 'new' }));
-  return { queue: interleave(capReviews(reviews, reviewLimit), news), waiting, newAvailable };
+  const capped = capReviews(reviews, reviewLimit);
+  const order = cleanLearnOrder(learnOrder);
+  if (order === 'mixed') return { queue: interleave(capped, news), waiting, newAvailable };
+  const learn = capped.filter(x => x.kind === 'learn'), rest = capped.filter(x => x.kind !== 'learn');
+  if (order === 'before') {       // a learning card still inside the look-ahead waits for its time, as in 'mixed'
+    waiting = [...waiting, ...learn.filter(x => x.due > now)].sort((a, b) => a.due - b.due);
+    return { queue: [...learn.filter(x => x.due <= now), ...interleave(rest, news)], waiting, newAvailable };
+  }
+  const queue = [...interleave(rest, news), ...learn];
+  return { queue, waiting, newAvailable };
 }
 
 // ---------- "back from a break" catch-up plan ----------
@@ -358,8 +381,10 @@ export function interleave(reviews, news) {
 // Which card comes next? A waiting learning card whose time has come goes first, then the queue.
 // When only waiting cards are left, show the soonest one early instead of making you wait.
 // Takes the card off the list it came from.
-export function takeNext(queue, waiting, now = Date.now()) {
-  if (waiting.length && waiting[0].due <= now) return waiting.shift();
+// With learnOrder 'after', a waiting card whose time has come also waits until the reviews and new cards are done (the learning
+// cards left in the queue are all at its end), so that "after reviews" holds for cards you press Again on during the session too.
+export function takeNext(queue, waiting, now = Date.now(), learnOrder = LEARN_ORDER_DEFAULT) {
+  if (waiting.length && waiting[0].due <= now && !(learnOrder === 'after' && queue.length && queue[0].kind !== 'learn')) return waiting.shift();
   if (queue.length) return queue.shift();
   if (waiting.length) return waiting.shift();
   return null;

@@ -1,4 +1,4 @@
-import './rwkv-utc.mjs';
+import './own-utc.mjs';
 import { studyDay } from '../js/own-features.js';
 
 export const DAY = 86400000;

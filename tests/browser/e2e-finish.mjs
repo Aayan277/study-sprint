@@ -162,12 +162,12 @@ await noSideways(p, 'in the Review bar');
 const mouse = await open({ width: 800, height: 760 });
 await seedDecks(mouse, ['B']); await goToday(mouse);
 await mouse.click('#startBtn'); await mouse.waitForSelector('#flash');
-ok(await mouse.isVisible('.key-line'), 'a mouse at 800px wide (under 1024) sees the key hint line');
+ok(await mouse.locator('.key-line').count() === 0, 'no key hint line under the card, even with a mouse');
 ok(await mouse.isVisible('#showBtn .key-hint'), 'and the Space hint on Show answer');
 const touch = await open({ width: 1100, height: 760 }, { hasTouch: true, isMobile: true });
 await seedDecks(touch, ['B']); await goToday(touch);
 await touch.click('#startBtn'); await touch.waitForSelector('#flash');
-ok(await touch.isHidden('.key-line') && await touch.isHidden('#showBtn .key-hint'), 'a touch screen (no hover) never sees key hints, whatever its width');
+ok(await touch.locator('.key-line').count() === 0 && await touch.isHidden('#showBtn .key-hint'), 'a touch screen (no hover) never sees key hints, whatever its width');
 
 // ---------- 8. Image occlusion in Review: bigger picture, light masks, header, small zoom ----------
 const seedOcc = async q => q.evaluate(async () => {

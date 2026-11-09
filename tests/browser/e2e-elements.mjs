@@ -88,7 +88,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   // tapping Got it / Missed must not take the keyboard away: Space still reveals the next element
   await p.click('#steps > li:nth-child(1) .el-tick'); await p.click('#steps > li:nth-child(1) .el-tick');
   ok(await p.evaluate(() => !document.activeElement?.matches('.el-tick')), `${tag}: a tap on a toggle leaves the focus where it was`);
-  ok(/X marks a miss/.test(await p.textContent('.key-line')), `${tag}: the key line mentions X`);
+  ok(await p.locator('.key-line').count() === 0 && await p.locator('.el-tick[aria-keyshortcuts="X"]').count() > 0, `${tag}: no key line; the toggles still declare X`);
   await p.keyboard.press('Space');                 // element 2
   ok(await shown(p) === 2, `${tag}: Space revealed element 2 after the taps`);
   await p.keyboard.press('x');                     // miss the latest (element 2)

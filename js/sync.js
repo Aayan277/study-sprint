@@ -405,6 +405,7 @@ async function run() {
     apply: async rows => {
       const got = await db.applyRemote(rows);
       applied += got;
+      if (got && rows.some(r => r.store === 'reviewLog')) import('./own-gate.js').then(g => g.ownSynced()).catch(() => {});      // Own's memory must be rebuilt (it never makes records for these)
       if (got && rows.some(r => r.store === 'cards' && r.data?.noteId)) gotNotes = true;     // (rows read again that changed nothing don't count)
       pulled += rows.length;
       if (pulled >= PAGE) emit({ progress: `Downloaded ${pulled.toLocaleString()} changes…` });   // big first syncs

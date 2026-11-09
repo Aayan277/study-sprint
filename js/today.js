@@ -113,13 +113,14 @@ export async function renderToday(el) {
         </div>
         ${streakHTML(streak, { button: true })}
         ${tr.state === 'todo'
-          ? `<button class="btn primary wide big" type="button" id="startBtn">${icon('play')} Start · ${plural(c.total, 'card')} · ${minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards))}</button>`
+          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
       </section>
       ${rescueHTML()}
       <div id="whatsNewSlot"></div>
+      <div id="ownNoticeSlot"></div>
       <div id="installSlot"></div>
       <div id="remindSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
@@ -128,10 +129,9 @@ export async function renderToday(el) {
         <h2 id="exTitle">Upcoming exams</h2>
         <div class="exams">${exams.map(({ deck, info }) => `
           <div class="exam-row" style="--deck:${esc(deck.color)}">
-            <a href="#/deck/${esc(deck.id)}" class="exam-link">${icon('calendar')}<span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}">${esc(countdown(info))}</span></a>
-            <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}">Exam prep</button>
-            ${info.daysLeft <= MOCK_DAYS ? `<button class="btn ghost small" type="button" data-mock="${esc(deck.id)}">Take a mock exam</button>` : ''}
-            ${newPlanHTML(deck, info)}
+            <div class="exam-link"><span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}${info.daysLeft > 3 && info.daysLeft <= 14 ? ' near' : ''}">${esc(countdown(info))}</span></div>
+            <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}" aria-label="Exam prep for ${esc(deckPath(data.decks, deck.id))}" title="${esc(deckPath(data.decks, deck.id))}"></button>
+            ${newPlanHTML(deck, info, info.daysLeft <= MOCK_DAYS ? `<button class="btn ghost small" type="button" data-mock="${esc(deck.id)}">Take a mock exam</button>` : '')}
           </div>`).join('')}</div>
       </section>` : ''}
       ${noExam.length ? `
@@ -148,7 +148,9 @@ export async function renderToday(el) {
     if (tr.state === 'nothing') el.querySelector('.today-hero .ring')?.classList.add('is-full');    // calm, no "you did it" pop when there was nothing to do
     else fx.goalRing(el, tr.n, tr.of);
     // One card at a time: what's new (once after an update) goes first, the install and reminder cards wait for the next visit.
-    drawWhatsNew($('whatsNewSlot')).then(shown => {
+    // (Own's note about the scheduler is next in line: it is not drawn, or marked as seen, on a visit that shows what's new.)
+    drawWhatsNew($('whatsNewSlot')).then(async shown => {
+      if (!shown && el.isConnected) shown = await import('./today-own.js').then(m => m.drawOwnNotice($('ownNoticeSlot'))).catch(() => false);
       if (shown || !el.isConnected) return;
       drawInstallCard($('installSlot'));      // only after a finished Review session, see install.js
       drawRemindPrompt($('remindSlot'));      // also after the first finished session, and never beside the install card (reminders.js)
@@ -212,16 +214,20 @@ export async function renderToday(el) {
     const lowest = others.reduce((a, b) => (b.limit < a.limit ? b : a));
     return { unstarted, n, now: Math.min(own(deck), lowest.limit), blocked: lowest.limit < n ? lowest.text : '' };
   };
-  const newPlanHTML = (deck, info) => {
+  const newPlanHTML = (deck, info, mock = '') => {
     const { unstarted, n, now, blocked } = newPlan(deck, info);
-    if (!unstarted || info.daysLeft < 1) return '';
+    const inside = subtreeIds(data.decks, deck.id);
+    const total = data.cards.filter(c => inside.has(c.deckId)).length, started = total - unstarted;
+    const ok = !!unstarted && info.daysLeft >= 1 && now >= n;
     const by = new Date(info.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
-    return `<p class="exam-new" data-newplan="${esc(deck.id)}">
+    const plan = !unstarted || info.daysLeft < 1 ? '' : `<p class="exam-new" data-newplan="${esc(deck.id)}">
       <span><b>${n} new a day</b> to start all ${plural(unstarted, 'unstarted card')} by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}.</span>
-      ${now >= n ? `<span class="on-track small">${icon('check')} On track</span>`
-        : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
+      ${ok ? '' : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
         : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
+    // One bar per exam: the cards started out of all the cards in the deck and its subdecks, with "On track" beside it.
+    const bar = !total ? '' : `<div class="exam-prog"><span class="exam-bar" role="progressbar" aria-label="Cards started" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${started}" aria-valuetext="${started} of ${total} cards started"><i style="width:${Math.round(started / total * 100)}%"></i></span>${ok ? `<span class="on-track small">${icon('check')} On track</span>` : ''}</div>`;
+    return plan + mock + bar;
   };
   // The confirm is a sheet in the page (not the browser's confirm box).
   const askSetNew = deckId => {
@@ -444,7 +450,7 @@ export async function renderToday(el) {
 
   draw();
   // The browser may announce that the app can be installed a moment after this screen is drawn, or the card may be closed.
-  const onInstall = () => { if (el.isConnected) { if ($('whatsNewSlot')?.firstChild) return; drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
+  const onInstall = () => { if (el.isConnected) { if ($('whatsNewSlot')?.firstChild || $('ownNoticeSlot')?.firstChild) return; drawInstallCard($('installSlot')); stepAsideRemind($('remindSlot')); } else window.removeEventListener('install-change', onInstall); };
   window.addEventListener('install-change', onInstall);
   // Get Review's code (and the scheduling library it loads) ready in the background, so Start is instant. Not while this screen is
   // still being drawn and made ready: when the browser is idle (at the latest after 4 s), or as soon as a finger or the pointer is on Start.

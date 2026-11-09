@@ -1,4 +1,4 @@
-import './rwkv-utc.mjs';           // study days and the 4am rollover are worked out in UTC here
+import './own-utc.mjs';           // study days and the 4am rollover are worked out in UTC here
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

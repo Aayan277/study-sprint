@@ -58,7 +58,7 @@ await page.click('.tab[data-tab=decks]'); await page.waitForSelector('.deck');
 
 // review setup
 await page.click('.tab[data-tab=today]'); await page.waitForSelector('#startBtn');
-ok((await page.textContent('#startBtn')).includes('12 cards'), 'setup: 12 new cards from the sample deck');
+ok((await page.getAttribute('#startBtn', 'aria-label')).includes('12 cards'), 'setup: 12 new cards from the sample deck');
 await page.screenshot({ path: SP + '/r-setup.png', fullPage: true }); await noHScroll('review setup');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 const focusOn = () => page.evaluate(() => document.body.classList.contains('focus'));

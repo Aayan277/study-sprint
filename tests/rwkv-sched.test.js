@@ -21,7 +21,9 @@ const planFor = (id, state, over = {}) => ({ cardId: id, lastReview: state.lastR
 const FSRS_FIELDS = ['state', 'stability', 'difficulty', 'reps', 'lapses', 'learningSteps', 'lastReview'];
 const pick = (s, keys = FSRS_FIELDS) => Object.fromEntries(keys.map(k => [k, s[k]]));
 
-test('a valid plan sets the Hard, Good and Easy gaps of a review card', { skip }, async () => {
+// Research branch: js/srs.js is main's, which has no rwkvPlan hook, so the two tests that call rate()/previewIntervals() with a plan are skipped.
+const NO_SRS_HOOK = 'js/srs.js is main\'s: no rwkvPlan hook';
+test('a valid plan sets the Hard, Good and Easy gaps of a review card', { skip: NO_SRS_HOOK }, async () => {
   const { rate, schedulerOptions } = await load();
   const opts = { ...schedulerOptions({ fuzz: false }) };
   const st = review('a');
@@ -81,7 +83,7 @@ test('the card\'s FSRS fields equal those of a plain FSRS rate(), so switching b
   }
 });
 
-test('previewIntervals matches rate() with and without a plan, with fuzz and with evening out', { skip }, async () => {
+test('previewIntervals matches rate() with and without a plan, with fuzz and with evening out', { skip: NO_SRS_HOOK }, async () => {
   const { rate, previewIntervals, schedulerOptions, formatInterval } = await load();
   const st = review('a');
   for (const base of [schedulerOptions({ fuzz: false }), schedulerOptions({ fuzz: true }), { ...schedulerOptions({ fuzz: true }), balance: { load: new Map(), easyDays: ['normal', 'reduced', 'normal', 'minimum', 'normal', 'normal', 'normal'] } }]) {

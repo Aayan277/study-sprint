@@ -47,7 +47,7 @@ const badges = await p.$$eval('.exam-row .exam-badge', bs => bs.map(b => ({ t: b
 const soon = badges.find(b => /in 2 days/.test(b.t)), far = badges.find(b => /in 20 days/.test(b.t));
 ok(soon && soon.soon && far && !far.soon, 'only the exam within 3 days is marked "soon": ' + JSON.stringify(badges.map(b => [b.t, b.soon])));
 const rgb = c => c.match(/\d+/g).slice(0, 3).map(Number);
-ok(rgb(far.color)[0] > rgb(far.color)[2] + 60 && rgb(far.color)[1] > 60, 'a far exam is amber: ' + far.color);
+ok(!(rgb(far.color)[0] > rgb(far.color)[2] + 60), 'an exam more than 14 days away is plain text, not amber (round 3): ' + far.color);
 ok(rgb(soon.color)[0] > 150 && rgb(soon.color)[1] < 110 && rgb(soon.color)[2] < 140, 'a near exam is red: ' + soon.color);
 // Again vs Ember's accent: far apart in hue (crimson, not orange)
 const hueOf = ([r, g, b]) => { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
@@ -67,7 +67,8 @@ ok(await p.$$eval('.view .empty:not([hidden])', e => e.filter(x => x.offsetParen
 await p.click('#brAddFirst'); await p.waitForSelector('#acFront');
 await p.fill('#acFront', 'First'); await p.fill('#acBack', 'Card'); await p.click('button[type=submit][form=acForm]'); await p.waitForTimeout(300); await p.click('#acDone'); await p.waitForTimeout(400);
 ok(!(await p.isVisible('#brEmpty')) && await p.isVisible('#brQuery') && await p.isVisible('.deck-summary'), 'adding the first card brings the list and summary back');
-ok(await p.$eval('.deck-summary', e => e.style.borderLeft === '' && getComputedStyle(e, '::before').width === '3px'), 'the deck summary uses the 3px stripe, not an inline 6px border');
+// (round 4: the stripe is gone; the deck colour is a dot before the course code)
+ok(await p.$eval('.deck-summary', e => e.style.borderLeft === '' && getComputedStyle(e, '::before').content === 'none'), 'the deck summary has no stripe and no inline border (the colour is a dot by the title)');
 
 // ----- A5: stats -----
 await go(p, '#/stats', '.chart');
@@ -101,7 +102,8 @@ for (const [n, h, s] of [['today', '#/today', '.tdeck'], ['decks', '#/decks', '.
 const wide = ['today', 'decks', 'stats'].map(n => edges[n]);
 ok(wide.every(e => e[0] === edges.today[0] && e[1] === 1120 && e[2] === edges.today[0]), 'Today, Decks and Stats share one left edge and are 1120px wide: ' + JSON.stringify(wide));
 const mainBox = await d.evaluate(() => { const m = document.querySelector('main').getBoundingClientRect(); return [Math.round(m.left), Math.round(m.right)]; });
-ok(['play', 'settings', 'browse'].every(n => Math.abs((edges[n][0] - mainBox[0]) - (mainBox[1] - edges[n][0] - edges[n][1])) <= 2 && edges[n][1] <= 900), 'Play, Settings and Browse are narrow columns centred in the page: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
+// (round 4, intended change: the narrow columns start at the same left edge as Today and Decks instead of floating in the middle)
+ok(['play', 'settings', 'browse'].every(n => Math.abs(edges[n][0] - edges.today[0]) <= 2 && edges[n][1] <= 900), 'Play, Settings and Browse are narrow columns on the same left edge as Today: ' + JSON.stringify(['play', 'settings', 'browse'].map(n => edges[n])));
 await go(d, '#/play', '#startBtn');
 ok(await d.$eval('#startBtn', e => e.getBoundingClientRect().width <= 760), 'Play keeps a 760px reading column inside it');
 await go(d, '#/today', '.today-hero');

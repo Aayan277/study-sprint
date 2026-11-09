@@ -19,7 +19,7 @@ const badgeCalls = page => page.evaluate(() => window.__badge);
   const page = await ctx.newPage(); watch(page);
   await page.goto('http://localhost:8123/'); await page.waitForSelector('.today-hero');
   ok(await page.locator('#remindSlot .remind').count() === 0, 'no reminder card before a session is finished');
-  const startText = (await page.textContent('#startBtn'));
+  const startText = (await page.getAttribute('#startBtn', 'aria-label'));
   const due = +/(\d+)\s*cards?/.exec(startText)[1];
   await page.goto('http://localhost:8123/#/settings'); await page.waitForSelector('#remAdd');
   ok((await page.textContent('#remTitle')).trim() === 'Reminders', 'Settings has a Reminders heading in Study');

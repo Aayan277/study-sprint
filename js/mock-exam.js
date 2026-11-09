@@ -14,7 +14,7 @@ import { loadAll, launchStudy } from './study-data.js';
 import { questionAnnouncement, spokenPrompt } from './game.js';
 import { singleKeysOn, keyHint } from './shortcuts.js';
 import { deckPath } from './deck-tree.js';
-import { mathHTML, answerText } from './format.js';
+import { mathHTML, answerText, shownOption } from './format.js';
 import { imgHTML, warmCards } from './media.js';
 import { soundsHTML, stopSound } from './audio.js';
 import { occlusionHTML } from './occlusion.js';
@@ -191,11 +191,11 @@ function showQuestion(i, { first = false } = {}) {
 function drawAnswer(question, given) {
   const box = $('tAnswer');
   if (question.kind === 'mc') {
-    const long = question.options.some(o => o.length > 28);
+    const long = question.options.some(o => shownOption(o, question.qtype).length > 28);
     box.innerHTML = `<div class="options t-options${question.options.length > 4 ? ' six' : ''}${long ? ' long' : ''}" role="radiogroup" aria-labelledby="tPrompt">
-      ${question.options.map((o, j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${j}" ${given === j ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${mathHTML(o, { inline: true })}</span></label>`).join('')}</div>`;
+      ${question.options.map((o, j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${j}" ${given === j ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${mathHTML(shownOption(o, question.qtype), { inline: true })}</span></label>`).join('')}</div>`;
   } else if (question.kind === 'tf') {
-    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Proposed answer</span><div class="t-claim-v" id="tClaim">${mathHTML(question.shown)}</div></div>
+    box.innerHTML = `<div class="t-claim"><span class="t-claim-l">Proposed answer</span><div class="t-claim-v" id="tClaim">${mathHTML(shownOption(question.shown, question.qtype))}</div></div>
       <div class="options t-options" role="radiogroup" aria-labelledby="tPrompt tClaim">
         ${[['true', 'True'], ['false', 'False']].map(([v, label], j) => `<label class="opt t-opt"><input type="radio" name="tq" value="${v}" ${given === (v === 'true') ? 'checked' : ''}>${keyHint(`<span class="key" aria-hidden="true">${j + 1}</span>`)}<span class="lbl">${label}</span></label>`).join('')}</div>`;
   } else {

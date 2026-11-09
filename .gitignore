@@ -5,25 +5,22 @@ tests/sim/compare/deps/
 tests/sim/compare/base/
 tests/sim/compare/new/
 tests/sim/compare/*.jsonl
-
 # local test dependency (npm install --no-save ts-fsrs@5.4.2), see tests/fsrs-parity.test.js
 node_modules/
-
 # real review data and anything with secrets must never be committed (tests/realdata keeps its data outside the repo)
 .env*
 *.parquet
 fsrs-data/
 results.jsonl
 *.revlog
-
 # RWKV lab: model weights, datasets and private test data must never be committed (tests/rwkv-guardrails.test.js checks this)
 *.bin
 *.pth
 *.npz
 rwkv-lab-private/
 weights*.json
-
 # Own model: converted data, caches, model files and run output stay out of git (tests/own-guardrails.test.js checks this)
 *.own
 tools/own-model/out/
 tools/own-model/.cache/
+# Own model files are private: never commit them
