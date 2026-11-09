@@ -61,7 +61,7 @@ export async function renderSettings(el) {
     </nav>
 
     <section class="section" aria-labelledby="appearTitle">
-      <h2 id="appearTitle">Appearance</h2>
+      <h2 id="appearTitle" class="sr-only">Appearance</h2>
       <p class="note">These settings apply to this device only. <a href="#/help/device-only">Which settings sync?</a></p>
       <h3 class="set-sub" id="uiTitle">Style</h3>
       <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">

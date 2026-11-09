@@ -2645,6 +2645,7 @@ main[data-route="settings"] .section > h2{scroll-margin-top:calc(var(--top-h,57p
 /* One row-title style (16px, 600) for every setting: plain rows, switch rows, the "Advanced" folds and the help rows. Small words in <b> inside a hint stay inline. */
 main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b,.advanced > summary){font-size:var(--fs-md);font-weight:600;color:var(--text);letter-spacing:-.005em}
 #appearTitle + .set-sub{margin-top:var(--s-2)}
+#appearTitle + .note{margin-top:0}   /* the Appearance heading is hidden (the jump bar already says it): its first line starts where the section starts */
 @media (min-width:1024px){
   .set-nav{top:0;margin-inline:0;padding-inline:0;background:color-mix(in srgb,var(--bg) 94%,transparent)}
   main[data-route="settings"] .section > h2{scroll-margin-top:64px}
