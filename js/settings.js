@@ -161,6 +161,7 @@ export async function renderSettings(el) {
             ${[[6, 'FSRS-6 (standard)'], [7, 'FSRS-7 (beta)']].map(([v, l]) => `<label class="chip"><input type="radio" name="fsrsVersion" value="${v}" ${(usesFsrs7(app.settings) ? 7 : 6) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
           </div>
         </div>
+        <details class="advanced" id="ownSection"><summary>Own model</summary><div id="ownBody"></div></details>
         <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
           <span id="optStatus">${esc(personal.status)}</span>
           <div class="opt-actions">
@@ -488,6 +489,14 @@ function wireAdvanced(el) {
     await redrawAdvanced();
     $('fsrsChips').querySelector('input:checked')?.focus();
   }));
+  // Own model: nothing of it is loaded until the section is opened for the first time.
+  let ownWired = false;
+  $('ownSection').addEventListener('toggle', async () => {
+    if (!$('ownSection').open || ownWired) return;
+    ownWired = true;
+    try { (await import('./settings-own.js')).wireOwn($('ownBody')); }
+    catch (err) { console.error(err); ownWired = false; $('ownBody').innerHTML = '<p class="err" role="alert">Couldn\u2019t open that. Check your connection and try again.</p>'; }
+  });
   $('optOpen').addEventListener('click', async () => {
     try { (await import('./optimize-sheet.js')).openOptimizeSheet({ changed: redrawAdvanced }); }
     catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
@@ -1240,6 +1249,7 @@ async function wipeThisDevice() {
   clearDraft();                   // pasted text on the Import screen belongs to the data that was just wiped
   const { theme, cardAlign, compactDecks, statsReadiness, ratingFeedback, smoothMotion, singleKeys, appBadge, reminderTime, whatsNewSeen } = app.settings;
   await db.resetAll();
+  try { await (await import('./own-gate.js')).wipeOwn(); } catch (err) { console.warn('Own model:', (err && err.message) || err); }      // Own's separate database goes too
   clearDismissals();              // "not confused" pairs and the catch-up banner's "Not today" belong to the data that was just wiped
   await db.setSetting('theme', theme);
   await db.setSetting('cardAlign', cardAlign);

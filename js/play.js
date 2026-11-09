@@ -16,7 +16,7 @@ import {
 import { questionAnnouncement, spokenPrompt } from './game.js';
 import { singleKeysOn, keyHint } from './shortcuts.js';
 import { speedProfiles, playCountsAsReviews } from './autograde.js';
-import { savePracticeAnswer, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
+import { savePracticeAnswer, ownForget, markLeechIfDue, practicedToday, scheduleSummaryHTML } from './practice-save.js';
 import { loadAll } from './study-data.js';
 import { pickPlayDeck } from './exam.js';
 import { giveBackNewFor } from './queue.js';
@@ -597,11 +597,13 @@ async function rerecord(round, old, fixed) {
   if (old.logId !== undefined) {
     if (old.applied) {
       await db.undoReview(id, old.prev, old.logId);          // the old schedule back, and the log row gone
+      ownForget(old.logId);
       if (old.prev) data.statesById.set(id, old.prev); else data.statesById.delete(id);
       data.playedToday.delete(id);
       if (old.decision === 'first') giveBackNewFor(data.newLeft, old.card.deckId);
     } else {
       await db.deleteLogRow(old.logId);                      // it was only logged
+      ownForget(old.logId);
     }
   }
   if (old.leeched) await undoLeech(round, old);
