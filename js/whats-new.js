@@ -8,6 +8,10 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.62', items: [
+    'Calmer screens: only the main button is coloured, and Decks takes less space on a phone.',
+    'Fixed: the card no longer jumps on a phone when you flip it, and the streak shows a snowflake only when a freeze was used.',
+  ] },
   { version: '4.61', items: [
     'A calmer study screen: plain rating buttons, and the question stays put when you flip.',
     'Today shows how long your reviews will take, and exam cards are simpler.',

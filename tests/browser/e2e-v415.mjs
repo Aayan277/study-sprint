@@ -37,7 +37,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   // ----- the card editor -----
   await go(p, '#/browse', '.crow');
   await p.locator('.crow', { hasText: 'Which drugs' }).click(); await p.waitForSelector('#ceForm');
-  ok((await norm(p, '#ceForm label:has(#ceTags) span')) === 'Tags (separated by spaces or commas)', 'the editor label: "Tags (separated by spaces or commas)"');
+  ok((await norm(p, '#ceForm label:has(#ceTags) span')) === 'Tags', 'the editor label is just "Tags" (round 4: the "separated by" hint lives in Help)');
   await p.fill('#ceTags', '#AK_Step1_v12::#UWorld::23456 #AK_Step1_v12::#Subject::Pulm, Exam');
   await p.click('button[type=submit][form=ceForm]'); await p.waitForTimeout(500);
   const tags = await p.evaluate(async () => (await (await import('./js/db.js')).get('cards', 'c1')).tags);

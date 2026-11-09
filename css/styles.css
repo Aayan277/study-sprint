@@ -1024,7 +1024,7 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 /* Round 4 (Original style): one label style on Play and Settings */
 :root:not([data-ui="clinical"]) main[data-route="play"] legend,
 :root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub,
-:root:not([data-ui="clinical"]) main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b){color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
+:root:not([data-ui="clinical"]) main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b,.advanced > summary){color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
 @media (max-width:700px){
   :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions{flex-wrap:nowrap;gap:6px}
   :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions .btn{flex:0 1 auto;min-width:0;padding:6px 10px;font-size:var(--fs-sm);white-space:nowrap}
