@@ -367,7 +367,8 @@
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exams,.tdecks){gap:0;border-radius:var(--r-lg);box-shadow:0 0 0 1px var(--line);background:var(--surface-1);overflow:hidden}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck){border-radius:0;box-shadow:none;background:var(--surface-1)}
 :root[data-ui="clinical"][data-ui="clinical"] :is(.exam-row,.tdeck) + :is(.exam-row,.tdeck){box-shadow:inset 0 1px 0 var(--line)}
-@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
+@media (hover:hover) and (pointer:fine){:root[data-ui="clinical"][data-ui="clinical"] .exam-row:hover{background:var(--surface-2)}
+:root[data-ui="clinical"][data-ui="clinical"] .tdeck:hover{background:var(--surface-2);box-shadow:none}
   :root[data-ui="clinical"][data-ui="clinical"] .tdeck + .tdeck:hover{box-shadow:inset 0 1px 0 var(--line)}}
 :root[data-ui="clinical"][data-ui="clinical"] .tdeck{min-height:64px;padding:10px 12px 10px 16px}
 :root[data-ui="clinical"][data-ui="clinical"] .td-name{font-size:var(--fs-base);font-weight:600}
@@ -579,7 +580,7 @@
   /* Today's page width and its exams column: section 6 */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams{grid-template-columns:1fr!important}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exams .exam-row + .exam-row{box-shadow:inset 0 1px 0 var(--line)!important}
-  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row{grid-template-columns:minmax(0,1fr) auto}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .exam-row{grid-template-columns:minmax(0,1fr)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero{grid-template-columns:minmax(0,1fr) 260px;padding:var(--s-5) var(--s-5)}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .today-hero .th-done{grid-column:2}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .th-big{font-size:1.75rem}

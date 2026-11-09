@@ -216,7 +216,7 @@ main:focus{outline:none}
 
 /* ---------- 4. App frame: header on top, screen in the middle, tab bar at the bottom ---------- */
 .top{position:sticky;top:0;z-index:5;padding-top:env(safe-area-inset-top,0px);
-  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--line)}
+  background:var(--bg);border-bottom:1px solid var(--line)}
 .top-in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:var(--s-3);padding:6px 12px 6px 16px}
 .brand{font-weight:650;font-size:var(--fs-md);letter-spacing:-.02em;margin-right:auto;color:var(--text);text-decoration:none;padding:4px 0;cursor:pointer;display:flex;align-items:center;gap:9px}
 .brand-mark{width:24px;height:24px;flex:none}
@@ -228,7 +228,7 @@ main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-i
 
 /* Docked glass tab bar with an indicator over the current tab */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;padding-bottom:env(safe-area-inset-bottom,0px);
-  background:color-mix(in srgb,var(--surface-1) 92%,transparent);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border-top:1px solid var(--line)}
+  background:var(--surface-1);border-top:1px solid var(--line)}
 .tabs-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;min-height:56px;background:none;border:0;color:var(--text-3);font-size:var(--fs-2xs);font-weight:500;cursor:pointer;text-decoration:none;transition:color var(--t-fast)}
 .tab svg{width:22px;height:22px;stroke-width:1.6}
@@ -310,9 +310,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .link.more{min-width:38px;color:var(--text-2);font-size:1.2rem;line-height:1}
 .link.inline-btn{min-height:24px;padding:2px 4px}
 .key-hint{display:none}
-.key-line{display:none;margin:var(--s-2) 0 0;text-align:center;font:var(--fs-2xs) var(--f-num);color:var(--text-3)}
-/* A mouse and keyboard (any window width): remind what the keys do */
-@media (hover:hover) and (pointer:fine){.key-line{display:block}}
 
 /* ---------- 6. Screen head ---------- */
 .screen-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;margin:4px 0 var(--s-5)}
@@ -372,26 +369,37 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .sec-head h2{margin:0}
 .sec-head .link{padding:4px 6px;min-height:32px}
 .exams{display:grid;gap:var(--s-2)}
-.exam-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 12px;padding:12px 12px 12px 18px;background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);overflow:hidden}
-.exam-row::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
-.exam-link{display:flex;flex-wrap:wrap;align-items:center;gap:6px var(--s-2);grid-column:1;grid-row:1;min-width:0;color:var(--text);text-decoration:none;font-weight:600}
-.exam-link .ico{color:var(--text-2)}
-.exam-name{overflow-wrap:anywhere}
-.exam-row > [data-prep]{grid-column:2;grid-row:1}
-.exam-new{grid-column:1 / -1;grid-row:2;margin:0;font-size:var(--fs-sm);line-height:1.45;color:var(--text-2)}
+/* An exam card: the deck's colour as a dot, the days as plain text, one bar, and the whole card opens Exam prep
+   (the empty button laid over it; the buttons that do something else sit above that one). */
+.exam-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:14px 16px 16px;background:var(--surface-1);border-radius:var(--r-md);box-shadow:var(--e-1);overflow:hidden;transition:background var(--t-fast)}
+.exam-link{display:flex;align-items:center;gap:8px;min-width:0;color:var(--text);font-weight:600}
+.exam-link::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--deck)}
+.exam-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* amber only within 14 days (.near), red in the last 3 (.soon) */
+.exam-row .exam-badge,.exam-row .exam-badge.soon{margin-left:auto;padding:0;background:none;box-shadow:none;color:var(--text-2);font-weight:500;font-size:var(--fs-sm)}
+.exam-row .exam-badge.near{color:var(--exam)}
+.exam-row .exam-badge.soon{color:var(--again)}
+:root .exam-row > .btn[data-prep]{position:absolute;inset:0;z-index:1;width:100%;height:100%;min-height:0;margin:0;padding:0;border:0;border-radius:inherit;background:none;box-shadow:none;cursor:pointer}
+:root .exam-row > .btn[data-prep]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media (hover:hover) and (pointer:fine){.exam-row:hover{background:var(--surface-2)}:root .exam-row > .btn[data-prep]:hover{background:none;border:0}}
+.exam-row > [data-mock],.exam-new .btn{position:relative;z-index:2}
+.exam-row > [data-mock]{justify-self:start}
+.exam-new{grid-column:1;margin:0;font-size:var(--fs-sm);line-height:1.45;color:var(--text-2)}
 .exam-new > span:first-child{display:inline}
-.on-track{display:inline-flex;align-items:center;gap:3px;margin-left:6px;vertical-align:-1px;color:var(--good);font-weight:600;white-space:nowrap}
-.on-track .ico{width:15px;height:15px}
-.exam-new .small:not(.on-track){display:block;margin-top:4px}
+.exam-new .small{display:block;margin-top:4px}
 .exam-new .btn{margin-top:var(--s-2)}
 .exam-new b{color:var(--text)}
-/* Upcoming exams and "Add exam date" share a wrapper (js/today.js) so the Clinical style can put them in a side column; here it adds no box */
-.today-side{display:contents}
-.exam-add{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
-.exam-add::-webkit-scrollbar{display:none}
-.exam-add > *{flex:none;white-space:nowrap}
+.exam-prog{display:flex;align-items:center;gap:12px;margin-top:6px}
+.exam-bar{flex:1;height:4px;border-radius:4px;background:color-mix(in srgb,var(--text) 12%,transparent);overflow:hidden}
+.exam-bar i{display:block;height:100%;border-radius:4px;background:var(--text-2)}
+.on-track{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:var(--fs-xs);color:var(--text-2);white-space:nowrap}
+.on-track .ico{width:14px;height:14px;color:var(--good)}
+/* Add exam date: the row wraps (the label on its own line on a phone) instead of running off the edge */
+.exam-add{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 var(--s-5);font-size:var(--fs-sm);color:var(--text-2)}
+.exam-add > *{max-width:100%}
+@media (max-width:1023px){.exam-add > span:first-child{flex-basis:100%}}
 .exam-add .link{padding:4px 6px;min-height:32px}
-.exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
+.exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
 @media (hover:hover) and (pointer:fine){.exam-chip:hover{background:var(--surface-2)}}
 .exam-chip .ico{width:15px;height:15px;color:var(--accent-text)}
 .exam-chip i{width:8px;height:8px;border-radius:50%;flex:none}
@@ -764,6 +772,11 @@ main[data-route="import"] > .view > .savebar{order:5}
 .c-new{color:var(--easy)}
 .c-learn{color:var(--hard)}
 .c-rev{color:var(--good)}
+/* Original style: the counts are neutral; only the queue being studied right now is tinted */
+:root:not([data-ui="clinical"]) .rv-counts span{color:var(--text-2)}
+:root:not([data-ui="clinical"]) .rv-counts .now.c-new{color:var(--easy)}
+:root:not([data-ui="clinical"]) .rv-counts .now.c-learn{color:var(--hard)}
+:root:not([data-ui="clinical"]) .rv-counts .now.c-rev{color:var(--good)}
 #speakBtn{display:inline-grid;place-items:center}
 #speakBtn svg{width:19px;height:19px}
 /* The toolbar: Undo, Read aloud and ⋯ are square icon buttons, End has a word */
@@ -775,8 +788,8 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-head .link .ico,.rv-head .link svg{width:19px;height:19px}
 #endBtn{width:auto;padding:0 14px;color:var(--text);font-weight:600}
 /* Progress: done ÷ (done + left), relearning cards included. It lives outside what is redrawn per card. */
-.rv-prog{height:2px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:0 0 var(--s-3)}
-.rv-prog i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);transition:width 350ms var(--ease)}
+.rv-prog{height:4px;border-radius:4px;background:color-mix(in srgb,var(--text) 12%,transparent);overflow:hidden;margin:2px 0 var(--s-3)}
+.rv-prog i{display:block;height:100%;width:0;border-radius:4px;background:var(--accent);transition:width 350ms var(--ease)}
 @media (prefers-reduced-motion:reduce){.rv-prog i{transition:none}}
 /* Very narrow phones: shorter label, tighter buttons, so the whole toolbar fits */
 @media (max-width:359px){
@@ -811,7 +824,7 @@ main[data-route="import"] > .view > .savebar{order:5}
 .rv-face{grid-area:1 / 1;min-width:0;display:flex;flex-direction:column;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);background:var(--surface-1);border-radius:var(--r-xl);box-shadow:var(--e-3);backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .rv-back{transform:rotateY(180deg)}
 .rv-back:focus:not(:focus-visible){outline:none}
-.rv-back:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+:root[data-ui="clinical"] .rv-back:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
 /* Until the card is turned, the back is laid over the front instead of beside it, so a long answer doesn't
    stretch the front face. It takes its own height once the card is turned. */
 .rv-card:not(.flipped) .rv-back{position:absolute;inset:0;overflow:hidden}
@@ -858,17 +871,17 @@ main[data-route="import"] > .view > .savebar{order:5}
 .ratebar .btn.wide{min-height:56px;font-size:var(--fs-md)}
 .rates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 /* Each rating keeps its own color in every theme: Again red, Hard amber, Good green, Easy blue */
-.rate{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:64px;padding:6px 2px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);cursor:pointer;font-size:var(--fs-base);overflow:hidden;transition:transform var(--t-fast),box-shadow var(--t-fast)}
-.rate::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:currentColor}
-.rate b{font-weight:600;letter-spacing:-.01em;color:var(--text)}
-.rate span{font:500 var(--fs-xs) var(--f-num);color:inherit}
-.rate.r1{color:var(--again);border-color:var(--again-line);background:linear-gradient(to bottom,var(--again-tint),transparent 80%),var(--surface-1)}
-.rate.r2{color:var(--hard);border-color:var(--hard-line);background:linear-gradient(to bottom,var(--hard-tint),transparent 80%),var(--surface-1)}
-.rate.r3{color:var(--good);border-color:var(--good-line);background:linear-gradient(to bottom,var(--good-tint),transparent 80%),var(--surface-1)}
-.rate.r4{color:var(--easy);border-color:var(--easy-line);background:linear-gradient(to bottom,var(--easy-tint),transparent 80%),var(--surface-1)}
-@media (hover:hover) and (pointer:fine){.rate:hover{border-color:currentColor}}
+.rate{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:64px;padding:6px 2px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface-1);color:var(--text);cursor:pointer;font-size:var(--fs-base);overflow:hidden;transition:transform 80ms var(--ease),border-color var(--t-fast),background var(--t-fast)}
+.rate b{font-weight:550;letter-spacing:-.01em;color:var(--text)}
+.rate span{font:600 var(--fs-xs) var(--f-num);color:inherit}
+.rate.r1{color:var(--again)}
+.rate.r2{color:var(--hard)}
+.rate.r3{color:var(--good)}
+.rate.r4{color:var(--easy)}
+@media (hover:hover) and (pointer:fine){.rate:hover{border-color:currentColor;background:var(--surface-2);box-shadow:none}}
+.rate:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .rate-note{margin:var(--s-2) 0 0;text-align:center;font-size:var(--fs-xs);color:var(--text-2)}
-.rate:active{transform:scale(.97)}
+.rate:active{transform:scale(.98)}
 .rate.suggested{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}
 .stats4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));background:var(--surface-1);box-shadow:var(--e-1);border-radius:var(--r-lg);overflow:hidden;margin-bottom:10px}
 @media (min-width:520px){.stats4{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -1214,6 +1227,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pgrid .card{height:100%;padding:var(--s-3) var(--s-3) var(--s-4);display:flex;flex-direction:column}
 .pgrid .pc-streak{background:var(--hero)}
 .pgrid .card h2{font:500 var(--fs-2xs)/1.3 var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:0}
+:root:not([data-ui="clinical"]) .pgrid .card h2{font:500 var(--fs-sm)/1.3 var(--f-ui);letter-spacing:0;text-transform:none}
 .pgrid .card p{margin:var(--s-2) 0 0;font-size:var(--fs-xs);line-height:1.45;color:var(--text-2)}
 .pgrid .big{font:600 2.5rem/1 var(--f-num);letter-spacing:-.06em;margin-top:var(--s-3);color:var(--text)}
 .pgrid .big small{font:500 var(--fs-sm) var(--f-ui);letter-spacing:0;color:var(--text-2);margin-left:5px}
@@ -1541,10 +1555,10 @@ img[data-media][hidden]{display:none}
   *,*::before,*::after{animation:none!important;transition:none!important}
   /* The card doesn't turn: the two faces cross-fade instead (a short fade is fine for most motion settings) */
   .rv-turn,.rv-card.flipped .rv-turn{transform:none!important}
-  .rv-face{backface-visibility:visible;-webkit-backface-visibility:visible;transition:opacity 160ms linear!important}
-  .rv-back{transform:none;opacity:0}
-  .rv-card.flipped .rv-front{opacity:0}
-  .rv-card.flipped .rv-back{opacity:1}
+  :root[data-ui="clinical"] .rv-face{backface-visibility:visible;-webkit-backface-visibility:visible;transition:opacity 160ms linear!important}
+  :root[data-ui="clinical"] .rv-back{transform:none;opacity:0}
+  :root[data-ui="clinical"] .rv-card.flipped .rv-front{opacity:0}
+  :root[data-ui="clinical"] .rv-card.flipped .rv-back{opacity:1}
 }
 
 /* ---------- 15. Desktop layout ----------
@@ -2367,6 +2381,25 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   background:var(--easy-tint);box-shadow:inset 0 0 0 1px var(--easy-line);color:var(--text);font-size:var(--fs-xs);font-weight:500}
 .streak .frz-pill .ico,.streak.kept .frz-pill .ico{width:13px;height:13px;color:var(--easy);filter:none}
 .streak .frz-pill:not(.used){background:none;box-shadow:none;border:1px dashed var(--line-strong);padding:1px 9px 1px 6px;color:var(--text-2)}
+/* Original style: the streak is a one-line chip (flame, number, a snowflake if a freeze was used, a chevron). "Kept for today" and the
+   freeze words are for screen readers only (.chip-sr); the nudge for a streak not yet kept stays on screen. */
+:root:not([data-ui="clinical"]) .today-hero .streak-btn{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:6px;width:auto;min-width:0;max-width:100%;isolation:isolate;
+  min-height:44px;margin:var(--s-3) 0 var(--s-4);padding:0 14px 0 12px;background:none;font-size:var(--fs-sm);color:var(--text-2);white-space:nowrap}
+:root:not([data-ui="clinical"]) .today-hero .streak-btn::after{content:"";position:absolute;inset:6px 0;border:1px solid var(--line-strong);border-radius:var(--r-pill);pointer-events:none}
+@media (hover:hover) and (pointer:fine){
+  :root:not([data-ui="clinical"]) .today-hero .streak-btn:hover{background:none}
+  :root:not([data-ui="clinical"]) .today-hero .streak-btn:hover::after{background:var(--surface-2);z-index:-1}
+}
+:root:not([data-ui="clinical"]) .today-hero .streak b{font-size:var(--fs-sm);font-weight:600}
+:root:not([data-ui="clinical"]) .today-hero .streak .ico{width:16px;height:16px}
+:root:not([data-ui="clinical"]) .today-hero .streak > span:not(.frz-pill):not(.sr-only){flex-basis:auto;padding-left:0}
+:root:not([data-ui="clinical"]) .today-hero .streak .chip-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:root:not([data-ui="clinical"]) .today-hero .streak .frz-pill{margin:0;padding:0;background:none;box-shadow:none;border:0;gap:0}
+:root:not([data-ui="clinical"]) .today-hero .streak .frz-pill .ico{width:15px;height:15px}
+:root:not([data-ui="clinical"]) .today-hero .streak .sb-go{position:static;margin:0;width:14px;height:14px}
+/* a nudge ("Study today to keep it") is longer than a chip: it wraps, and the outline becomes a rounded box */
+:root:not([data-ui="clinical"]) .today-hero .streak-btn:not(.kept){white-space:normal;flex-wrap:wrap;padding-block:6px}
+:root:not([data-ui="clinical"]) .today-hero .streak-btn:not(.kept)::after{inset:4px 0;border-radius:var(--r-md)}
 /* the last 7 days (Stats and the sheet): hatch + snowflake = covered, dotted + moon = day off */
 .wd.frz i{background-color:var(--easy-tint);background-image:var(--hatch);box-shadow:inset 0 0 0 1px var(--easy);color:var(--easy)}
 .wd.rest i{background-color:transparent;background-image:var(--dots);background-size:4px 4px;box-shadow:none;border:1.5px dotted var(--text-2);color:var(--text-2)}
@@ -2416,6 +2449,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 @media (min-width:1024px){
   /* On a computer the streak button is only as wide as its text, so the arrow stays next to it */
   .today-hero .streak-btn{width:fit-content;min-width:280px;max-width:100%}
+  :root:not([data-ui="clinical"]) .today-hero .streak-btn{min-width:0;margin:var(--s-4) 0 0;justify-self:start}
 }
 
 /* ---------- 25. Maths on cards (js/math.js draws them with KaTeX, which is fetched when a card first shows maths) ----------
@@ -2850,7 +2884,7 @@ main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > spa
   html:not([data-ui="clinical"]) #forgotBtn::before{inset:-12px -6px}
   html:not([data-ui="clinical"]) summary::before{inset:-6px 0}
   html:not([data-ui="clinical"]) .file-btn{overflow:visible}   /* its hidden file picker already fits inside, and the tap box must not be cut off */
-  html:not([data-ui="clinical"]) .exam-add{padding-block:5px;margin-block:-2px calc(var(--s-5) - 2px)}   /* was 3px padding: room for the chips' tap boxes, which this sideways-scrolling row would cut off */
+  html:not([data-ui="clinical"]) .exam-add{padding-block:5px;margin-block:-2px calc(var(--s-5) - 2px)}   /* room for the chips' tap boxes */
   /* Review header: round buttons 40px, 4px apart (36px and 3px at 320px), so their tap areas meet without overlapping */
   html:not([data-ui="clinical"]) .rv-head{gap:4px}
   html:not([data-ui="clinical"]) .rv-head .link{width:40px;height:40px;min-height:40px}
@@ -3125,24 +3159,44 @@ main h2[tabindex="-1"]{outline:none}
    and on a computer the sidebar steps away while a round is open (body.focus is on while review, Play and tests are open;
    the :has() keeps this to review). The End button stays in the review header, and the sidebar comes back the moment the
    round closes. The sidebar is display:none meanwhile, as the tab bar already is on a phone: nothing in it can take focus. */
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face{background:var(--surface-1)}
+/* The card does not turn: the answer replaces the front face at once, the question is drawn at the same size and the same spot on
+   both sides (set by the question's own length only, see --q-*), and the answer fades in below a rule. Clinical keeps its turning card. */
+:root:not([data-ui="clinical"]) .rv-turn,
+:root:not([data-ui="clinical"]) .rv-card.flipped .rv-turn{transform:none;transition:none}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face{background:var(--surface-1);justify-content:flex-start;backface-visibility:visible;-webkit-backface-visibility:visible;transition:none}
+:root:not([data-ui="clinical"]) .rv-back{transform:none;opacity:0}
+:root:not([data-ui="clinical"]) .rv-card.flipped .rv-front{opacity:0;visibility:hidden}
+:root:not([data-ui="clinical"]) .rv-card.flipped .rv-back{opacity:1}
+:root:not([data-ui="clinical"]) .rv-back:focus,
+:root:not([data-ui="clinical"]) .rv-back:focus-visible{outline:none}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-deck{margin:0;color:var(--text-3)}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-front{margin:0}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-deck + *{margin-top:auto}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card{--q-size:clamp(1.75rem,8vw,2rem);--q-top:20dvh;--q-lh:1.15;--q-w:600;--q-ls:-.025em}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front.long){--q-size:clamp(1.3rem,5.6vw,1.5rem);--q-top:12dvh;--q-lh:1.3;--q-ls:-.015em}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front.xlong){--q-size:1.0625rem;--q-top:12px;--q-lh:1.5;--q-w:500;--q-ls:0}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front :is(.occ,.card-img)){--q-top:var(--s-3)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face :is(.flash-front,.flash-recap){margin:var(--q-top) 0 0;font-size:var(--q-size);font-weight:var(--q-w);
+  line-height:var(--q-lh);letter-spacing:var(--q-ls);text-align:center;color:var(--text)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:where(:has(.flash-front.xlong)) .rv-face :is(.flash-front,.flash-recap){text-align:left}
+:root[data-align="left"]:not([data-ui="clinical"]) main[data-route="review"] .rv-face :is(.flash-front,.flash-recap){text-align:left}
+:root[data-align="center"]:not([data-ui="clinical"]) main[data-route="review"] .rv-face :is(.flash-front,.flash-recap){text-align:center}
+/* the question dims a step once the answer is up, so the eye lands on the answer (a colour change, not a move) */
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card.flipped .flash-recap{color:var(--text-2)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-ans{margin-bottom:0}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-face::after{content:"";height:calc(var(--fs-xs)*1.3);margin-top:auto}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-back:has(.flash-recap) .flash-ans{margin:var(--s-2) 0 0;padding-top:var(--s-6)}
-:root:not([data-ui="clinical"]) main[data-route="review"] .flash-ans::before{left:30%;right:30%}
-:root:not([data-ui="clinical"]) main[data-route="review"] .flash-front:not(.long):not(.xlong){font-size:clamp(2.25rem,10vw,3rem);letter-spacing:-.035em;line-height:1.1}
-:root:not([data-ui="clinical"]) main[data-route="review"] .flash-recap:not(.small){font-size:clamp(1.05rem,4.6vw,1.25rem);color:var(--text-3)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-back:has(.flash-recap) .flash-ans{margin:var(--s-5) 0 0;padding-top:var(--s-5)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-back:not(:has(.flash-recap)) .flash-ans{margin-top:var(--q-top)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .flash-ans::before{left:30%;right:30%;background:var(--line)}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front.xlong) .flash-ans::before{left:0;right:auto;width:96px}
 :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full){font-size:clamp(1.4rem,6.2vw,1.75rem);font-weight:450;line-height:1.45;letter-spacing:-.015em;color:var(--text)}
+@media (prefers-reduced-motion:no-preference){
+  :root:not([data-ui="clinical"]) .rv-card.flipped .flash-ans{animation:ans-in 150ms var(--ease) both}
+}
+@keyframes ans-in{from{opacity:0;transform:translateY(6px)}}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-counts{background:transparent;box-shadow:none}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rv-head .link{background:transparent;box-shadow:none}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rv-prog{height:2px;background:var(--line)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rates{gap:8px}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rate{min-height:80px;border-radius:var(--r-lg);gap:4px}
 :root:not([data-ui="clinical"]) main[data-route="review"] .rate b{font-size:var(--fs-md)}
-:root:not([data-ui="clinical"]) main[data-route="review"] .rate span{font-size:var(--fs-sm);font-weight:600}
+:root:not([data-ui="clinical"]) main[data-route="review"] .rate span{font-size:var(--fs-sm)}
 :root:not([data-ui="clinical"]) main[data-route="review"] .ratebar .btn.wide{min-height:64px;border-radius:var(--r-lg)}
 @media (max-width:1023px){
   :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) .ratebar{padding-top:var(--s-3);background:var(--bg)}
@@ -3153,13 +3207,18 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) body.focus:has(main[data-route="review"]) :is(.toast,.update-bar){left:50%}
   :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view,
   :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view > *{max-width:980px}
-  :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 88px)}
+  /* the card is pinned to the top (not centred), so a longer answer never pushes the question up */
+  :root:not([data-ui="clinical"]) body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 88px);justify-content:flex-start}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash{min-height:min(60dvh,560px)}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face{padding:var(--s-8) 72px}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face .flash-deck{max-width:none;margin:calc(var(--s-5) - var(--s-8)) calc(var(--s-5) - 72px) 0}
-  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-face::after{margin-bottom:calc(var(--s-5) - var(--s-8))}
-  :root:not([data-ui="clinical"]) main[data-route="review"] .flash-front:not(.long):not(.xlong){font-size:4rem}
-  :root:not([data-ui="clinical"]) main[data-route="review"] .flash-recap:not(.small){font-size:1.375rem}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card{--q-size:2.5rem;--q-top:clamp(40px,11dvh,96px)}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front.long){--q-size:1.75rem;--q-top:clamp(32px,8dvh,64px)}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front.xlong){--q-size:1.25rem;--q-top:12px}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card:has(.flash-front :is(.occ,.card-img)){--q-top:var(--s-3)}
+  /* a tiny card (a word and a word): the answer is smaller, and the pair sits in the middle of the card instead of its top third */
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card.tiny{--q-top:calc(min(60dvh,560px) * .5 - 96px)}
+  :root:not([data-ui="clinical"]) main[data-route="review"] .rv-card.tiny .flash-back:not(.long):not(.xlong):not(.cloze-full){font-size:1.5rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full){font-size:2rem;max-width:30ch;margin:0 auto}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full):has(.tex-d){max-width:none;font-size:1.5rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rate{min-height:76px}

@@ -17,7 +17,7 @@ await page.goto('http://localhost:8123/'); await page.waitForSelector('.today-he
 ok(page.url().endsWith('#/today'), 'app opens on Today');
 ok((await page.textContent('.tab[aria-current=page]')).trim() === 'Today', 'Today tab is highlighted');
 ok(JSON.stringify(await page.$$eval('.tab', t => t.map(x => x.textContent.trim()))) === '["Today","Decks","Play","Stats"]', 'tabs: Today, Decks, Play, Stats');
-ok((await page.textContent('#startBtn')).includes('12 cards') && (await page.textContent('#startBtn')).includes('min'), 'Start shows 12 cards and a time estimate');
+ok((await page.getAttribute('#startBtn', 'aria-label')).includes('12 cards') && (await page.getAttribute('#startBtn', 'aria-label')).includes('min'), 'Start shows 12 cards and a time estimate');
 ok(+(await page.textContent('[data-count=new]')) === 12 && +(await page.textContent('[data-count=due]')) === 0, 'counts: 12 new, 0 due');
 ok((await page.textContent('.streak')).includes('0') && (await page.textContent('.streak')).includes('Study today to start one'), 'no streak yet');
 ok(await page.evaluate(() => { const g = document.querySelector('.today-hero .goal'); return !!g && getComputedStyle(g).display === 'none'; }), "Original: Today's goal line (Clinical's) is in the page but hidden");
@@ -37,7 +37,7 @@ const rowB = await page.locator('.tdeck', { hasText: 'Second' }).textContent();
 // (UI audit L2, intended change: the exam countdown is said once, in Upcoming exams, so the deck row no longer repeats it)
 ok(/2\s*due/.test(rowB) && /2\s*new/.test(rowB) && !rowB.includes('Exam in') && (await page.locator('.exams').textContent()).includes('Exam in'), 'deck row: due and new; the exam countdown is in Upcoming exams, not repeated here: ' + rowB.replace(/\s+/g, ' ').trim());
 ok((await page.textContent('.exams')).includes('Second') && (await page.textContent('.exams')).includes('Exam in'), 'upcoming exams lists the deck');
-ok((await page.textContent('#startBtn')).includes('16 cards'), 'Start counts every deck: 16');
+ok((await page.getAttribute('#startBtn', 'aria-label')).includes('16 cards'), 'Start counts every deck: 16');
 
 // One tap on a deck row starts just that deck
 await page.click('.tdeck:has-text("Second")'); await page.waitForSelector('#flash');
@@ -63,7 +63,7 @@ ok(page.url().endsWith('#/today'), '#/review with nothing started goes to Today'
 await page.click('#optBtn'); await page.waitForSelector('#deckChips');
 ok(await page.locator('#modeChips [data-typing]').count() === 2 && await page.locator('#customBtn').count() === 1 && await page.locator('#deckChips [data-deck]').count() === 2, 'Options has decks, answer by and Custom study');
 await page.click('#deckChips [data-deck="B"]');
-ok((await page.textContent('#startBtn')).includes('3 cards') && (await page.textContent('.filtered')).includes('1 of 2'), 'choosing a deck narrows Start to its cards: ' + await page.textContent('#startBtn') + ' | ' + await page.textContent('.filtered'));
+ok((await page.getAttribute('#startBtn', 'aria-label')).includes('3 cards') && (await page.textContent('.filtered')).includes('1 of 2'), 'choosing a deck narrows Start to its cards: ' + await page.getAttribute('#startBtn', 'aria-label') + ' | ' + await page.textContent('.filtered'));
 await page.click('#optDone');
 await page.click('#startBtn'); await page.waitForSelector('#flash');
 ok((await page.textContent('.flash-deck')).includes('Second'), 'Start follows the chosen decks');
@@ -87,7 +87,7 @@ const planLine = (await page.locator('[data-newplan=Nx]').textContent()).replace
 // 6 days left, 30 unstarted: 30 ÷ (6 − 4) = 15 a day
 ok(/15 new a day/.test(planLine) && /30 unstarted cards/.test(planLine), 'Today shows "15 new a day" for 30 unstarted cards and 6 days left: ' + planLine);
 ok((await page.locator('[data-newplan=Nx] [data-setnew]').textContent()).includes('Set to 15 a day'), 'with a button to set it');
-ok(await page.locator('[data-newplan=B]').count() === 1 && /On track/.test(await page.locator('[data-newplan=B]').textContent()), 'a deck whose limit already covers it says On track (no button)');
+ok(await page.locator('[data-newplan=B]').count() === 1 && await page.locator('.exam-row:has([data-newplan=B]) .on-track').count() === 1, 'a deck whose limit already covers it says On track (no button)');
 await page.click('[data-setnew=Nx]'); await page.waitForSelector('#sheet[open] #snYes');
 ok((await page.textContent('#sheetTitle')).includes('Set 15 new cards a day'), 'the button asks first, in the page (no browser dialog)');
 ok(await page.evaluate(async () => (await (await import('./js/db.js')).getDeck('Nx')).newPerDay) === 5, 'nothing changed yet');
@@ -97,14 +97,14 @@ await page.click('[data-setnew=Nx]'); await page.waitForSelector('#snYes'); awai
 await page.waitForFunction(() => /15 new cards a day/.test(document.getElementById('toast').textContent));
 ok(await page.evaluate(async () => (await (await import('./js/db.js')).getDeck('Nx')).newPerDay) === 15, 'Set 15 a day saves the deck\'s new-cards-per-day');
 await page.waitForSelector('[data-newplan=Nx]');
-ok(/On track/.test(await page.locator('[data-newplan=Nx]').textContent()) && await page.locator('[data-setnew=Nx]').count() === 0, 'afterwards the line says On track');
+ok(await page.locator('.exam-row:has([data-newplan=Nx]) .on-track').count() === 1 && await page.locator('[data-setnew=Nx]').count() === 0, 'afterwards the line says On track');
 await page.screenshot({ path: SP + '/t-exam-new.png', fullPage: true }); await noHScroll('today with the new-a-day line');
 // When a limit the button can't change is what holds it back, the line says which one instead of offering a button
 // that wouldn't get there: the overall limit, a parent deck's, or a subdeck's.
 await run(async () => { await (await import('./js/db.js')).setSetting('newPerDay', 10); });
 await page.reload(); await page.waitForSelector('[data-newplan=Nx]');
 let nx = await page.locator('[data-newplan=Nx]').textContent();
-ok(/Raise New cards per day in Settings to 15/.test(nx) && await page.locator('[data-setnew=Nx]').count() === 0 && !/On track/.test(nx), 'the overall limit holds it back: a note, no button: ' + nx.replace(/\s+/g, ' '));
+ok(/Raise New cards per day in Settings to 15/.test(nx) && await page.locator('[data-setnew=Nx]').count() === 0 && await page.locator('.exam-row:has([data-newplan=Nx]) .on-track').count() === 0, 'the overall limit holds it back: a note, no button: ' + nx.replace(/\s+/g, ' '));
 await run(async () => {
   const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
   await db.setSetting('newPerDay', 20);

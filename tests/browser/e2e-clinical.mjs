@@ -497,6 +497,24 @@ for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900], [1600, 900], [1920,
   await ctx.close();
 }
 
+// Clinical Today at 1280px: an exam card is one column (a mock-exam button must not take a second one and squeeze the countdown), and the card shows it is clickable
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  await ctx.addInitScript(() => { try { localStorage.setItem('study-sprint-theme', JSON.stringify({ ui: 'clinical', skin: 'ocean', mode: 'dark' })); localStorage.setItem('study-sprint-rail', '0'); } catch { /* fine */ } });
+  const page = await ctx.newPage(); watch(page, 'exam card');
+  await page.goto(URL); await page.waitForSelector('.today-hero');
+  await seed(page, { ui: 'clinical', skin: 'ocean', mode: 'dark', oled: false }); await page.reload(); await page.waitForSelector('.exam-row');
+  const g = await page.evaluate(() => {
+    const row = document.querySelector('.exam-row'), cs = getComputedStyle(row), r = row.getBoundingClientRect(), b = row.querySelector('.exam-badge').getBoundingClientRect();
+    return { cols: cs.gridTemplateColumns.split(' ').length, gap: r.right - parseFloat(cs.paddingRight) - b.right, mock: !!row.querySelector('[data-mock]') };
+  });
+  ok(g.cols === 1, `Clinical 1280: the exam card has a single column (${g.cols})`);
+  ok(g.gap >= -1 && g.gap <= 24, `Clinical 1280: the countdown ends within 24px of the card's right content edge (${g.gap.toFixed(1)}px)${g.mock ? ', with a mock-exam button in the card' : ''}`);
+  await page.hover('.exam-row', { position: { x: 6, y: 6 } });
+  ok(await page.evaluate(() => { const row = document.querySelector('.exam-row'); const a = getComputedStyle(row).backgroundColor; const i = document.createElement('i'); i.style.background = 'var(--surface-2)'; document.body.appendChild(i); const b = getComputedStyle(i).backgroundColor; i.remove(); return a === b; }), 'Clinical 1280: the exam card shows a hover background');
+  await ctx.close();
+}
+
 console.log(`info: the contrast audit left out ${skippedText} text nodes that are hidden from users (aria-hidden, disabled, KaTeX); all other visible text was measured, faded text included`);
 ok(!errors.length, 'no console errors on any screen' + (errors.length ? ': ' + [...new Set(errors)].slice(0, 5).join(' | ') : ''));
 await browser.close();

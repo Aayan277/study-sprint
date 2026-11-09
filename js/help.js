@@ -61,6 +61,7 @@ export const SECTIONS = [
       <p>A subdeck with no date of its own uses its parent’s. Set a date in its Edit deck to give it its own.</p>` },
     { id: 'shortcuts', q: 'What are the single-key shortcuts? How do I turn them off?', a: `
       <p>In Review, Play and the card sheet, single keys act on a card: E, I, R, D, Z, A, X, M, -, @ and 1 to 6. Space and Enter always work on the focused card.</p>
+      <p>In Review: Space shows the answer, 1 to 4 rate it, D opens the scratchpad, Z undoes the last answer, and on a step-by-step card Space or → reveals the next step (A shows them all). On a card where you type the answer, Enter checks it and Esc leaves the box so the single keys work again.</p>
       <p>If voice control or a switch triggers them by accident, turn off <b>Single-key shortcuts</b> in Settings → Study. That setting is for this device only.</p>` }
   ] },
   { title: 'Your cards', items: [

@@ -232,7 +232,7 @@ await go(p, '#/today', '[data-start="econ"]'); await p.click('[data-start="econ"
 const bar = () => p.$eval('.rv-prog', e => ({ now: +e.getAttribute('aria-valuenow'), max: +e.getAttribute('aria-valuemax'), min: e.getAttribute('aria-valuemin'), role: e.getAttribute('role'), label: e.getAttribute('aria-label'), w: parseFloat(e.firstElementChild.style.width), keep: !!e.__keep }));
 let b = await bar();
 ok(b.role === 'progressbar' && b.min === '0' && b.now === 0 && b.max === 6 && b.w === 0 && b.label, 'progress bar: role, 0 of 6 at the start: ' + JSON.stringify(b));
-ok((await box(p, '.rv-prog')).h <= 2.5, 'it is 2px tall');
+ok((await box(p, '.rv-prog')).h >= 3.5 && (await box(p, '.rv-prog')).h <= 4.5, 'it is 4px tall (round 3: a thicker bar)');
 // the tests run with reduced motion on (pw.mjs): the bar has no transition then, and the normal one comes back without it
 ok(await p.$eval('.rv-prog', e => getComputedStyle(e.firstElementChild).transitionDuration === '0s'), 'with reduced motion the fill changes without a transition');
 await p.emulateMedia({ reducedMotion: 'no-preference' });

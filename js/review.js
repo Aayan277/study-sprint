@@ -247,7 +247,10 @@ function renderSession(el, enter = false) {
   const cloze = hasBlank(card);
   const frontFmt = occ || cloze ? '' : leadLines(answerText(card.front), formatHTML(card.front), FRONT_LINES);          // (several short lines: the first leads, see leadLines)
   const multi = isLead(frontFmt);
-  const size = multi ? ' multi' : frontLen > 120 ? ' xlong' : frontLen > 50 ? ' long' : '';
+  // (a long unbroken word, like a URL or a chemical name, gets the smaller size even when the text is short)
+  const size = multi ? ' multi' : frontLen > 120 ? ' xlong' : frontLen > 50 || (!occ && /\S{20,}/.test(answerText(card.front))) ? ' long' : '';
+  // A tiny card (a word or two on each side) gets a smaller answer and sits in the middle of the card on a computer.
+  const tiny = !size && !cloze && !occ && !sp && frontLen <= 14 && answerText(card.back).length <= 24;
   const fullPath = R.deckNames.get(card.deckId) || '';
   const deckLabel = `<span class="flash-deck" title="${esc(fullPath)}">${esc(shortDeckPath(fullPath))}${R.custom ? ` · ${esc(R.custom)}` : ''}</span>`;
   // A cloze card shows its note's text with the blank hidden; its back is the same text with the answer marked, and
@@ -269,10 +272,6 @@ function renderSession(el, enter = false) {
         : cardMediaHTML(card, 'back', backHTML(card.back));
   if (occ) import('./occlusion-view.js').catch(err => console.error(err));      // the zoom viewer, loaded the first time a picture card shows
 
-  // The shortcut line under the card (desktop). In the answer box the single keys type letters, so it says how to get to them.
-  // Z is undo (on a picture card Z zooms the picture instead).
-  const keyLine = keyLineFor(sp, occ);
-
   // The page heading is for screen readers only; it sits beside the bar, not in it, so the bar holds just its buttons.
   const head = `
     <h1 class="sr-only">Review</h1>
@@ -284,7 +283,7 @@ function renderSession(el, enter = false) {
       <button class="link" type="button" id="endBtn">End</button>
     </div>`;
   const body = `
-    <article class="flash rv-card${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
+    <article class="flash rv-card${tiny ? ' tiny' : ''}${R.flipped ? ' flipped' : ''}${enter ? ' enter' : ''}" id="flash" ${R.flipped ? '' : `aria-labelledby="rvQ"${typeThis ? '' : ' aria-describedby="rvHint"'}`} ${R.flipped || typeThis ? '' : 'tabindex="0"'}>
       ${canSpeak() || hasSounds(card, 'front') || hasSounds(card, 'back')
         ? `<button class="rv-speak" type="button" id="speakBtn" aria-label="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud' : 'Read aloud'}" title="${hasSounds(card, 'front') || hasSounds(card, 'back') ? 'Play the sound or read aloud (R)' : 'Read aloud (R)'}" aria-keyshortcuts="R">${SPEAKER_ICON}</button>` : ''}
       <div class="rv-turn">
@@ -312,8 +311,7 @@ function renderSession(el, enter = false) {
         <input id="typeIn" type="text" maxlength="500" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Type the answer" aria-label="Your answer">
         <button class="btn primary" type="submit">Check</button>
       </form>` : ''}
-    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>
-    <p class="key-line" id="keyLine" aria-hidden="true" data-normal="${esc(keyLine)}">${esc(typeThis && !R.flipped ? typingKeys() : keyLine)}</p>`;
+    <div class="ratebar" id="ratebar">${R.flipped ? backBarHTML() : showButtonHTML(typeThis)}</div>`;
   drawSessionPage(el, stripKeys(head), stripKeys(body));
   glossHook();
   setFocusMode(true);               // only once the round has drawn, so a failed draw can't leave the tabs hidden
@@ -347,12 +345,7 @@ function renderSession(el, enter = false) {
   $('flash').addEventListener('toggle', e => { const d = e.target.closest?.('.note-field'); if (d) saveFold('field:' + d.dataset.field, d.open); }, true);
   $('typeForm')?.addEventListener('submit', e => { e.preventDefault(); submitTyped(el); });
   // Keep focus on the card (the page was just redrawn, so it would drop to the page itself).
-  if (typeThis && !R.flipped) {
-    $('typeIn').focus();
-    // The shortcut keys work again once the cursor leaves the box.
-    $('typeIn').addEventListener('focus', () => { $('keyLine').textContent = typingKeys(); });
-    $('typeIn').addEventListener('blur', () => { $('keyLine').textContent = $('keyLine').dataset.normal; });
-  }
+  if (typeThis && !R.flipped) $('typeIn').focus();
   else if (R.flipped) $('flash').querySelector('.rv-back').focus({ preventScroll: true });
   else ($('showBtn') || $('flash')).focus({ preventScroll: true });      // the Show answer button is announced as a button, and Space or Enter on it flips the card
   publishLive();
@@ -487,6 +480,7 @@ function flip(el) {
   if (typesAnswer(R.current.card) && !R.typed) R.suggest = Rating.Again;
   const flash = $('flash');
   flash.querySelector('.rv-typed').innerHTML = R.typed ? typedResultHTML() : '';
+  document.scrollingElement?.scrollTo(0, 0);      // a long answer must not push the question out of place: the card is turned from the top
   flash.classList.add('flipped');
   ['role', 'tabindex', 'aria-label', 'aria-labelledby', 'aria-describedby'].forEach(a => flash.removeAttribute(a));
   const front = flash.querySelector('.rv-front'), back = flash.querySelector('.rv-back');
@@ -505,7 +499,9 @@ function flip(el) {
   // keyboard stays where it was (1–4 and Space still rate).
   back.focus({ preventScroll: true });
   autoSpeak(R.current.card);
-  ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
+  // The rating bar sticks to the bottom of the screen, so the page stays where it is (the question does not move). Only in a window so
+  // short that the bar scrolls with the page does the page go to the buttons.
+  if (matchMedia('(max-height:260px)').matches) ($('ratebar').querySelector('.rate') || $('stepBtn'))?.scrollIntoView({ block: 'nearest' });
 }
 
 // ---------- step-by-step cards (B5) ----------
@@ -524,8 +520,6 @@ const tickRaw = i => {
   const missed = R.elMissed.has(i);
   return `<button type="button" class="el-tick" aria-pressed="${!missed}" data-tick="${i}" aria-keyshortcuts="X" aria-label="Element ${i + 1}: ${missed ? 'missed' : 'got it'}. Press to change.">${missed ? '✗ Missed' : '✓ Got it'}</button>`;
 };
-// The shortcut line under the card. On a step-by-step card, once the last step is on screen Space no longer does anything: it says "1–4 to rate".
-const keyLineFor = (sp, occ) => !singleKeysOn() ? '' : `${sp && R.flipped && R.stepShown >= sp.steps.length ? '1–4 to rate' : 'Space to flip · 1–4 rate'} · D scratchpad${R.undo.length && !occ ? ' · Z undo' : ''}${sp?.kind === 'elements' ? ' · X marks a miss' : ''}`;
 // What sits under a flipped card: the step buttons while steps are hidden, otherwise the four ratings.
 // Elements cards: once every element is on screen, "You got 3 of 4. Suggested: Hard." sits above the ratings (suggestRating, steps.js).
 function backBarHTML() { return stripKeys(backBarRaw()); }
@@ -564,8 +558,6 @@ function revealStep(el, all = false) {
   if (R.stepShown >= sp.steps.length) flash.querySelectorAll('.steps-final, .flash-extra, .flash-fields').forEach(x => { x.hidden = false; });
   $('ratebar').innerHTML = backBarHTML();
   wireRatebar(el);
-  const kl = $('keyLine');
-  if (kl) { kl.dataset.normal = keyLineFor(sp, false); kl.textContent = kl.dataset.normal; }
   const final = flash.querySelector('.steps-final');
   if (!all && final && R.stepShown >= sp.steps.length) final.focus();         // the last step also shows the final answer: read that
   else items[from]?.focus();                    // the step just revealed (the first of them, for Show all)
@@ -887,7 +879,6 @@ async function finish(el) {
   fx.finished(el, { complete: !R.current, reviewed });
 }
 
-const typingKeys = () => singleKeysOn() ? 'Enter to check · Esc to leave the box for shortcuts' : 'Enter to check';
 // ---------- keyboard ----------
 // Space or Enter flips. 1–4 rate. After flipping, Space or Enter picks the suggested button (Good unless typing said otherwise).
 // Like Anki: E edits, I shows card info, - buries, @ suspends, R reads the card aloud.
