@@ -370,7 +370,7 @@ export async function renderStats(el) {
       <div class="card pc-streak">
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
-        <p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : streak.studiedToday ? 'You studied today.' : 'Study today to keep it going.'} ${course ? 'All decks count.' : 'Any deck counts.'}</p>
+        ${streak.studiedToday ? '' : `<p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : 'Study today to keep it going.'}</p>`}
         ${weekDotsHTML(streak.week)}
         <p class="frz-note"><button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>`,

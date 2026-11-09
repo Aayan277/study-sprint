@@ -283,7 +283,7 @@ export function basicFields(p, { front = '', back = '', frontImage = null, backI
   const parsed = st || el, rows = st ? st.steps : el ? el.items : ['', ''], word = NOUN[mode] || 'Step';
   return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
       <div class="chips answer-mode" role="radiogroup" aria-label="Answer">
-        <span class="answer-mode-l">Answer:</span>
+        <span class="answer-mode-l">Answer</span>
         ${MODES.map(([k, l, id]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${id}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>

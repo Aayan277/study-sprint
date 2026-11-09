@@ -131,7 +131,7 @@ export function skinButtonsHTML(selected) {
   return Object.entries(SKINS).map(([id, s]) =>
     `<button type="button" class="skin" data-skin="${id}" aria-pressed="${selected === id}">
       <span class="pv" aria-hidden="true" data-skin="${id}" data-theme="${mode}"${oled}><b>Aa</b></span>
-      <span style="min-width:0"><span class="nm">${names ? CLINICAL_NAMES[id] : s.name}</span><span class="nt">${s.note}</span></span></button>`
+      <span style="min-width:0"><span class="nm">${names ? CLINICAL_NAMES[id] : s.name}</span></span></button>`
   ).join('');
 }
 
