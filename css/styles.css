@@ -247,7 +247,8 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
   body.focus .top,body.focus .tabs{display:none}
   body.focus main{padding:calc(6px + env(safe-area-inset-top,0px)) 12px calc(16px + env(safe-area-inset-bottom,0px))}
   body.focus main[data-route="review"]{padding-bottom:0}
-  body.focus main[data-route="review"] > .view{min-height:100dvh;display:flex;flex-direction:column}
+  /* the page already has 6px (plus the safe area) of padding above the view: without taking it off, the page is taller than the screen and scrolls 6px when the answer opens */
+  body.focus main[data-route="review"] > .view{min-height:calc(100dvh - 6px - env(safe-area-inset-top,0px));display:flex;flex-direction:column}
   body.focus main[data-route="review"] .flash{flex:1 1 auto}
 }
 
@@ -408,7 +409,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .exam-quick{display:flex;gap:8px;flex-wrap:wrap}
 .tdecks{display:grid;gap:var(--s-2)}
 .tdeck{all:unset;box-sizing:border-box;position:relative;display:flex;align-items:center;gap:var(--s-3);min-height:68px;padding:var(--s-3) var(--s-3) var(--s-3) var(--s-4);background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);overflow:hidden;cursor:pointer;color:var(--text);transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
-.tdeck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 @media (hover:hover) and (pointer:fine){.tdeck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .tdeck:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .td-main{flex:1;min-width:0;display:grid;gap:2px}
@@ -423,6 +423,15 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .td-go .ico{width:36px;height:36px;padding:9px;border-radius:50%;background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .tdeck.done .td-go .ico{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good)}
 .tdeck.done .td-name{color:var(--text-2)}
+/* Round 4 (Original style): one accent per screen. Start is the only filled accent on Today. The deck colour is a dot before the name (no stripe),
+   the due count is plain text, and the play circle is quiet until you hover or focus the row. */
+:root:not([data-ui="clinical"]) :is(.td-name,.deck-name){display:flex;align-items:flex-start;gap:8px}
+:root:not([data-ui="clinical"]) :is(.td-name,.deck-name)::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-top:calc(.65em - 4px)}
+:root:not([data-ui="clinical"]) .td-counts .due:not(.zero){background:none;box-shadow:none;padding:0;color:var(--text);font-weight:600}
+:root:not([data-ui="clinical"]) .td-counts .due:not(.zero) b{color:var(--text)}
+:root:not([data-ui="clinical"]) .tdeck:not(.done) .td-go .ico{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--text-2)}
+@media (hover:hover) and (pointer:fine){:root:not([data-ui="clinical"]) .tdeck:not(.done):hover .td-go .ico{background:var(--accent);box-shadow:none;color:var(--on-accent)}}
+:root:not([data-ui="clinical"]) .tdeck:not(.done):focus-visible .td-go .ico{background:var(--accent);box-shadow:none;color:var(--on-accent)}
 
 /* Compact deck list (Settings → Appearance): search and sort on top, a small round play button, subdecks folded */
 .deck-tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:var(--s-3)}
@@ -443,6 +452,23 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .deck-go.lead{background:var(--accent);color:var(--on-accent)}
 .deck-go.done{background:var(--good-tint);box-shadow:inset 0 0 0 1px var(--good-line);color:var(--good);cursor:default}
 .deck-go.done .ico{margin:0}
+:root:not([data-ui="clinical"]) .deck-go:not(.done),:root:not([data-ui="clinical"]) .deck-go.lead:not(.done){background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);color:var(--text-2)}
+@media (hover:hover) and (pointer:fine){:root:not([data-ui="clinical"]) .deck-go:not(.done):hover{background:var(--accent);box-shadow:none;color:var(--on-accent)}}
+:root:not([data-ui="clinical"]) .deck-go:not(.done):focus-visible{background:var(--accent);box-shadow:none;color:var(--on-accent)}
+/* Phone: the compact rows keep the name, ring, menu and play button on one line (about 115px a row instead of 230px; the play button stays 44px) */
+@media (max-width:700px){
+  :root:not([data-ui="clinical"]) .decks.compact .deck{grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:0 8px;padding:12px 10px 12px 14px}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-open{grid-row:1;grid-column:1}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring{grid-row:1;grid-column:2;margin:0}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring .ring{width:36px!important;height:36px!important}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring .ring-in .mono{font-size:.625rem}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-ring small{display:none}
+  :root:not([data-ui="clinical"]) .decks.compact .deck > .icon-btn{grid-row:1;grid-column:3}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-act{grid-row:1;grid-column:4;margin:0;align-self:center;justify-self:end}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-go{width:44px;height:44px}
+  :root:not([data-ui="clinical"]) .decks.compact .deck-go.add{width:auto}
+  :root:not([data-ui="clinical"]) .decks.compact .deck .subdecks{grid-column:1 / -1;grid-row:2}
+}
 .decks.compact .subdecks{margin-top:var(--s-2)}
 .decks.compact .subdecks summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:36px;color:var(--text-2);font-weight:500}
 .decks.compact .subdecks summary::-webkit-details-marker{display:none}
@@ -451,7 +477,6 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .decks.compact .subdecks[open] summary .sub-chev{transform:rotate(90deg)}
 .decks{display:grid;gap:var(--s-2)}
 .deck{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px var(--s-2);align-items:start;background:var(--surface-1);border-radius:var(--r-lg);box-shadow:var(--e-1);padding:var(--s-3) var(--s-2) var(--s-3) var(--s-4);overflow:hidden;transition:box-shadow var(--t-med) var(--ease),background var(--t-med)}
-.deck::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 @media (hover:hover) and (pointer:fine){.deck:hover{background:var(--surface-2);box-shadow:var(--e-2)}}
 .deck-open{all:unset;cursor:pointer;min-width:0;display:block}
 .deck-open:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
@@ -461,6 +486,9 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .deck-counts b{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:500;color:var(--text)}
 .deck-counts .due{order:-1;padding:0 8px;border-radius:var(--r-pill);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line);color:var(--accent-text)}
 .deck-counts .due b{color:var(--accent-text)}
+/* Round 4 (Original style): plain due counts, a quiet play circle (accent on hover or focus), exam text that is amber only inside 14 days (.near) and red inside 3 (.soon) */
+:root:not([data-ui="clinical"]) .deck-counts .due:not(.zero){background:none;box-shadow:none;padding:0;color:var(--text);font-weight:600}
+:root:not([data-ui="clinical"]) .deck-counts .due:not(.zero) b{color:var(--text)}
 .deck .icon-btn{width:36px;height:36px}
 .deck-ring{grid-row:1;grid-column:2;margin-top:2px}
 .deck-ring small{font-size:.625rem;font-weight:500;color:var(--text)}
@@ -510,12 +538,20 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 
 /* ---------- 8. Deck page and card list ---------- */
 .deck-summary{position:relative;overflow:hidden;padding:var(--s-3) var(--s-4) var(--s-3) 20px}
-.deck-summary::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--deck)}
 .deck-summary .deck-counts .due{order:0}
 main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;gap:var(--s-3);margin-bottom:var(--s-4)}
+@media (max-width:700px){
+  :root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .head-actions{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:stretch}
+  :root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .head-actions .btn.primary{grid-column:1 / -1}
+  :root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .head-actions .more-wrap{display:flex}
+}
 .exam-badge{display:inline-block;padding:1px 8px;border-radius:var(--r-pill);background:var(--exam-tint);color:var(--exam);box-shadow:inset 0 0 0 1px var(--exam-line);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
 .exam-badge.soon{background:var(--again-tint);color:var(--again);box-shadow:inset 0 0 0 1px var(--again-line)}
 .deck .exam-badge{margin-top:4px;justify-self:start}
+:root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge{background:none;box-shadow:none;border:0;padding:0;color:var(--text-2);font-weight:500}
+:root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge.near{color:var(--exam)}
+:root:not([data-ui="clinical"]) :is(.deck,.exam-line) .exam-badge.soon{color:var(--again)}
+:root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .eyebrow::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--deck);margin-right:8px;vertical-align:1px}
 .exam-line{margin:var(--s-2) 0 0;font-size:var(--fs-base);color:var(--text-2)}
 .br-head h2{font-size:var(--fs-lg);font-weight:600;letter-spacing:-.025em}
 .br-head h2 .count{font:400 var(--fs-sm) var(--f-num);letter-spacing:0;color:var(--text-2)}
@@ -548,6 +584,13 @@ main[data-route="deck"] .screen-head{flex-direction:column;align-items:stretch;g
 .st-suspended{color:var(--text);background:var(--surface-3)}
 .st-buried{background:transparent;color:var(--text-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
 #sheetTitle .st{vertical-align:middle;margin-left:6px}
+/* Round 4 (Original style): the status is its word with a coloured dot (the word stays: colour alone is not enough) */
+:root:not([data-ui="clinical"]) .st{background:none;box-shadow:none;border:0;padding:0;color:var(--text-2);font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:6px}
+:root:not([data-ui="clinical"]) .st::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:currentColor}
+:root:not([data-ui="clinical"]) .st-new::before{background:var(--easy)}
+:root:not([data-ui="clinical"]) .st-learning::before{background:var(--hard)}
+:root:not([data-ui="clinical"]) .st-due::before{background:var(--accent)}
+:root:not([data-ui="clinical"]) :is(.st-suspended,.st-buried)::before{background:var(--text-3)}
 .flagdot{width:12px;height:12px;border-radius:3px;display:inline-block}
 #brMore{margin:12px auto 0;display:block}
 .bulkbar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:4;display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap;margin-top:var(--s-3);padding:10px var(--s-3);background:var(--surface-2);border:1px solid var(--accent-line);border-radius:var(--r-lg);box-shadow:var(--e-3)}
@@ -977,6 +1020,15 @@ fieldset{border:0;padding:0;margin:0 0 22px;min-width:0}
 .slider-row output b{color:var(--text);font:600 var(--fs-md) var(--f-num)}
 .start-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
 .start-row .btn{padding:14px 30px;font-size:1.05rem}
+@media (min-width:701px){:root:not([data-ui="clinical"]) main[data-route="play"] .start-row .btn{flex:none;min-width:240px}}
+/* Round 4 (Original style): one label style on Play and Settings */
+:root:not([data-ui="clinical"]) main[data-route="play"] legend,
+:root:not([data-ui="clinical"]) main[data-route="settings"] .set-sub,
+:root:not([data-ui="clinical"]) main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > span:first-child > b,.adv-row > b,.adv-row > label > b){color:var(--text-2);font-weight:600;font-size:var(--fs-sm)}
+@media (max-width:700px){
+  :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions{flex-wrap:nowrap;gap:6px}
+  :root:not([data-ui="clinical"]) main[data-route="import"] .pane-actions .btn{flex:0 1 auto;min-width:0;padding:6px 10px;font-size:var(--fs-sm);white-space:nowrap}
+}
 
 .hud{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--text-2);margin-bottom:14px}
 .hud b{color:var(--text);font:600 1.05rem var(--f-num)}
@@ -1338,7 +1390,6 @@ main[data-route="stats"] .card.section > .note:last-child{margin-top:auto;paddin
 .skin .pv{flex:none;position:relative;width:52px;height:40px;border-radius:7px;background:var(--bg);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgb(127 127 127 / .3)}
 .skin .pv b{width:38px;height:26px;border-radius:4px;background:var(--surface-1);color:var(--text);display:grid;place-items:center;font-size:var(--fs-sm);border-top:3px solid var(--accent)}
 .skin .nm{font-weight:600;line-height:1.2;display:block;overflow-wrap:anywhere}
-.skin .nt{font-size:var(--fs-xs);color:var(--text-2);display:block}
 .set-row{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);flex-wrap:wrap;padding:14px 0;border-top:1px solid var(--line)}
 .set-row p{margin:2px 0 0;font-size:var(--fs-sm);color:var(--text-2)}
 .set-row.column{flex-direction:column;align-items:stretch}
@@ -1585,6 +1636,8 @@ img[data-media][hidden]{display:none}
   /* One content width for every screen (1120px), so the left edges line up when you switch tabs.
      Screens that read better narrow keep their content in a 760px column at the same left edge. */
   main > .view{max-width:1120px;margin:0 auto}
+  /* Original style: every screen starts at the same left edge (the centred 760px and 900px columns used to sit at their own x); only the focused review stays centred */
+  :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - 1120px) / 2));margin-right:auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
   main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
   main[data-route="review"] > .view{max-width:780px}
@@ -1618,6 +1671,9 @@ img[data-media][hidden]{display:none}
   .today-hero .th-main{grid-column:1;grid-row:1}
   .today-hero .streak{grid-column:1;grid-row:2;margin-bottom:0}
   .today-hero .btn.big,.today-hero .th-done{grid-column:2;grid-row:1 / span 2}
+  /* Round 4 (Original style): Start sits beside the text instead of at the far edge */
+  :root:not([data-ui="clinical"]) .today-hero{grid-template-columns:auto auto;justify-content:start;column-gap:56px}
+  :root:not([data-ui="clinical"]) .today-hero .btn.big{min-width:220px}
   .tdecks{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--s-3)}
   /* Stats: two columns of panels */
   main[data-route="stats"] > .view{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2) var(--s-3);align-items:stretch}
@@ -2390,12 +2446,15 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   :root:not([data-ui="clinical"]) .today-hero .streak-btn:hover{background:none}
   :root:not([data-ui="clinical"]) .today-hero .streak-btn:hover::after{background:var(--surface-2);z-index:-1}
 }
-:root:not([data-ui="clinical"]) .today-hero .streak b{font-size:var(--fs-sm);font-weight:600}
-:root:not([data-ui="clinical"]) .today-hero .streak .ico{width:16px;height:16px}
-:root:not([data-ui="clinical"]) .today-hero .streak > span:not(.frz-pill):not(.sr-only){flex-basis:auto;padding-left:0}
-:root:not([data-ui="clinical"]) .today-hero .streak .chip-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-:root:not([data-ui="clinical"]) .today-hero .streak .frz-pill{margin:0;padding:0;background:none;box-shadow:none;border:0;gap:0}
-:root:not([data-ui="clinical"]) .today-hero .streak .frz-pill .ico{width:15px;height:15px}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak b{font-size:var(--fs-sm);font-weight:600}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .ico{width:16px;height:16px}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak > span:not(.frz-pill):not(.sr-only){flex-basis:auto;padding-left:0}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .chip-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill{margin:0;padding:0;background:none;box-shadow:none;border:0;gap:0}
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill .ico{width:15px;height:15px}
+/* the end of a session: the same chip as Today, without the chevron */
+:root:not([data-ui="clinical"]) .finish-next{margin-top:var(--s-3);padding:0;background:none;box-shadow:none}
+:root:not([data-ui="clinical"]) .finish-next .streak-chip{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:6px;min-height:40px;margin:0;padding:0 14px 0 12px;border:1px solid var(--line-strong);border-radius:var(--r-pill);white-space:nowrap}
 :root:not([data-ui="clinical"]) .today-hero .streak .sb-go{position:static;margin:0;width:14px;height:14px}
 /* a nudge ("Study today to keep it") is longer than a chip: it wraps, and the outline becomes a rounded box */
 :root:not([data-ui="clinical"]) .today-hero .streak-btn:not(.kept){white-space:normal;flex-wrap:wrap;padding-block:6px}
@@ -2415,6 +2474,8 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 .cal-key2 i:first-child{margin-left:0}
 /* the sidebar footer: a small snowflake while a freeze was used in the last 7 days */
 .side-snow{width:12px;height:12px;margin-left:5px;vertical-align:-1px;color:var(--easy)}
+/* Original style: a screen that already shows the streak (Today, the end of a session) does not show it a second time in the sidebar */
+:root:not([data-ui="clinical"]) body:has(.today-hero .streak,.finish-next .streak) .side-streak{display:none}
 /* the "Your streak" sheet */
 .ys{display:grid;gap:var(--s-4)}
 .ys .streak{margin:0}
@@ -3147,6 +3208,8 @@ a.back{text-decoration:none}
 main h2[tabindex="-1"]{outline:none}
 #syncForm > .field:first-of-type{margin-top:var(--s-3)}
 .fin-links .link{color:var(--accent-text);text-decoration:underline;text-underline-offset:3px}
+:root:not([data-ui="clinical"]) .fin-links .link{text-decoration:none;color:var(--text-2)}
+@media (hover:hover) and (pointer:fine){:root:not([data-ui="clinical"]) .fin-links .link:hover{color:var(--text)}}
 @media (pointer:coarse){
   .toast-link,.fr-how,.deck-open{min-height:44px}
 }
