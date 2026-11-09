@@ -125,12 +125,23 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   const p = await open(PHONE, true);
   await seed(p, [1, 2, 3, 4]);
   await p.reload(); await p.waitForSelector('#startBtn');
-  ok(await p.locator('.today-hero .streak').count() === 1 && await p.locator('.today-hero .streak .frz-pill:visible').count() === 0 && await p.locator('.today-hero .streak svg.ico:visible').count() === 2, 'a freeze that is only ready: no visible snowflake on Today in Original (flame and chevron only)');
+  ok(await p.locator('.today-hero .streak').count() === 1 && await p.locator('.today-hero .streak > svg.ico').count() === 2, 'a freeze that is only ready: no visible snowflake on Today in Original (flame and chevron only)');
   // Clinical keeps its own look: the ready-freeze pill is still shown there
   await p.evaluate(() => document.documentElement.setAttribute('data-ui', 'clinical'));
   ok(await p.locator('.today-hero .streak .frz-pill:not(.used):visible').count() === 1, 'Clinical still shows the ready-freeze pill');
   await p.evaluate(() => document.documentElement.removeAttribute('data-ui'));
-  ok(/freeze ready/i.test(await norm(p, '.today-hero .streak')), 'and the "freeze ready" words are still there for a screen reader: ' + await norm(p, '.today-hero .streak'));
+  const box1 = await p.locator('.today-hero .streak .frz-pill').boundingBox();
+  ok(!box1 || (box1.width <= 1 && box1.height <= 1), 'the ready snowflake is not visible (1px or less): ' + JSON.stringify(box1));
+  const snap = await p.locator('#streakBtn').ariaSnapshot();
+  ok(/freeze ready/i.test(snap), 'Today: the accessible name still says "freeze ready" (not display:none): ' + snap.replace(/\s+/g, ' '));
+  // the finish screen: same chip, same words for a screen reader
+  await p.click('#startBtn'); await p.waitForSelector('#flash'); await p.tap('#showBtn'); await p.waitForSelector('.rate'); await p.click('.rate.r3');
+  await p.waitForSelector('#endBtn'); await p.click('#endBtn'); await p.waitForSelector('.finish-next .streak');
+  const fbox = await p.locator('.finish-next .streak .frz-pill').boundingBox();
+  ok(!fbox || (fbox.width <= 1 && fbox.height <= 1), 'finish: the ready snowflake is not visible: ' + JSON.stringify(fbox));
+  const fsnap = await p.locator('.finish-next .streak').ariaSnapshot();
+  ok(/freeze ready/i.test(fsnap), 'finish: the accessible name still says "freeze ready": ' + fsnap.replace(/\s+/g, ' '));
+  ok(await p.$eval('.finish-next .streak', e => e.getBoundingClientRect().height <= 48), 'finish: the chip is still one line (no gap from the hidden pill)');
   await p.close();
 }
 

@@ -2452,11 +2452,12 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .chip-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill{margin:0;padding:0;background:none;box-shadow:none;border:0;gap:0}
 :root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill .ico{width:15px;height:15px}
-/* a freeze that is only ready shows nothing (the snowflake means one was used); the words stay in the button's title */
-:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill:not(.used){display:none}
+/* a freeze that is only ready shows nothing (the snowflake means one was used), but its words stay in the accessible name:
+   visually hidden like .chip-sr (not display:none), and out of the flex flow so no gap is left */
+:root:not([data-ui="clinical"]) :is(.today-hero,.finish-next) .streak .frz-pill:not(.used){position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 /* the end of a session: the same chip as Today, without the chevron */
 :root:not([data-ui="clinical"]) .finish-next{margin-top:var(--s-3);padding:0;background:none;box-shadow:none}
-:root:not([data-ui="clinical"]) .finish-next .streak-chip{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:6px;min-height:40px;margin:0;padding:0 14px 0 12px;border:1px solid var(--line-strong);border-radius:var(--r-pill);white-space:nowrap}
+:root:not([data-ui="clinical"]) .finish-next .streak-chip{position:relative;display:inline-flex;flex-wrap:nowrap;align-items:center;gap:6px;min-height:40px;margin:0;padding:0 14px 0 12px;border:1px solid var(--line-strong);border-radius:var(--r-pill);white-space:nowrap}
 :root:not([data-ui="clinical"]) .today-hero .streak .sb-go{position:static;margin:0;width:14px;height:14px}
 /* a nudge ("Study today to keep it") is longer than a chip: it wraps, and the outline becomes a rounded box */
 :root:not([data-ui="clinical"]) .today-hero .streak-btn:not(.kept){white-space:normal;flex-wrap:wrap;padding-block:6px}
