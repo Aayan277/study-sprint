@@ -76,5 +76,26 @@ for (const [name, vp] of [['phone', PHONE], ['desktop', DESK]]) {
   await p.click('#showBtn'); await p.waitForSelector('.rv-back:not([hidden]) .flash-recap');
   ok(await clear('.rv-back', '.flash-recap'), name + ': tall back: the deck label does not overlap the recap');
 }
+// Short cards stay centred: a short front, and a cloze back with no recap (the space above and below the answer matches)
+for (const [name, vp] of [['phone', PHONE], ['desktop', DESK]]) {
+  const p = await open(vp);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'), cz = await import('./js/cloze.js');
+    await db.addDeckWithCards({ id: 'd-short', name: 'Short', color: '#3E63DD', created: 1 }, [{ id: 'sh1', deckId: 'd-short', front: 'Q', back: 'A', tags: [], created: 1 }]);
+    await db.saveDeck({ id: 'd-cz', name: 'Cz', color: '#3E63DD', created: 2 });
+    await db.saveNote(cz.planNoteSave([], 'The {{c1::mitochondria}} makes ATP'), { deckId: 'd-cz', noteId: 'n-cz', tags: [] });
+  });
+  const go = async id => { await p.goto(URL + '#/review/' + id); await p.waitForSelector('#flash'); await p.waitForTimeout(450); };
+  const gap = (face, sel) => p.evaluate(([f, s]) => {
+    const fr = document.querySelector(f).getBoundingClientRect(), cs = getComputedStyle(document.querySelector(f)), c = document.querySelector(f + ' ' + s).getBoundingClientRect();
+    return [c.top - fr.top - parseFloat(cs.paddingTop), fr.bottom - c.bottom - parseFloat(cs.paddingBottom)];
+  }, [face, sel]);
+  await go('d-short');
+  const [fa, fb] = await gap('.rv-front', '.flash-front');
+  ok(Math.abs(fa - fb) <= 14, `${name}: a short front stays centred (above ${fa.toFixed(0)}px, below ${fb.toFixed(0)}px of free space)`);
+  await go('d-cz'); await p.keyboard.press('Space'); await p.waitForSelector('.rv-back:not([inert])'); await p.waitForTimeout(450);
+  const [a, b] = await gap('.rv-back', '.flash-ans');
+  ok(Math.abs(a - b) <= 2, `${name}: a cloze back with no recap is centred (above ${a.toFixed(0)}px, below ${b.toFixed(0)}px)`);
+}
 ok(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
 await browser.close();
