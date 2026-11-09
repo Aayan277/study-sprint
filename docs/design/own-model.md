@@ -365,3 +365,9 @@ Zero-shot log loss 0.3034 per user. Fine-tune minus zero-shot (mean, 95% CI, % u
 | states | -0.0002 [-0.0002,-0.0001] 73.9% | -0.0005 [-0.0006,-0.0004] 73.1% | -0.0017 [-0.0021,-0.0014] 70.1% | -0.0022 [-0.0027,-0.0017] 66.8% | -0.0022 [-0.0027,-0.0017] 60.4% |
 
 Conclusion: `all` at a low lr (3e-5) stays best. `head` is the safest at a high lr. `states` levels off at about -0.0022. No scope is faster (about 23 s per user).
+
+### Val: longer training from A6 (A6L)
+- Setup: init from A6, lr 3e-4→3e-5, EMA 0.999, check-set early stopping (patience rule).
+- Check-set loss started at 0.2860 and reached 0.2867, 0.2864 and 0.2861 after epochs 1–3, so it never beat the start.
+- It stopped after 3 of 8 epochs, and the best checkpoint was the init itself.
+- Conclusion: no gain from longer training at these settings. A6 stays the model. The A6+A6L average was not run, because the two are the same weights.
