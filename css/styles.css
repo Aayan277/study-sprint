@@ -400,6 +400,7 @@ body.welcome:not(.focus) .toast{top:calc(56px + env(safe-area-inset-top,0px));bo
 .exam-add > *{max-width:100%}
 @media (max-width:1023px){.exam-add > span:first-child{flex-basis:100%}}
 .exam-add .link{padding:4px 6px;min-height:32px}
+@media (max-width:1023.98px){:root:not([data-ui="clinical"]) main[data-route="today"] .exam-add .link{min-height:44px;display:inline-flex;align-items:center}}
 .exam-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:var(--r-pill);border:1px dashed var(--control);background:none;color:var(--text);font:500 var(--fs-sm) var(--f-ui);cursor:pointer}
 @media (hover:hover) and (pointer:fine){.exam-chip:hover{background:var(--surface-2)}}
 .exam-chip .ico{width:15px;height:15px;color:var(--accent-text)}
@@ -1640,6 +1641,7 @@ img[data-media][hidden]{display:none}
   :root:not([data-ui="clinical"]) body:not(.focus) main > .view{margin-left:max(0px,calc((100% - 1120px) / 2));margin-right:auto}
   /* (the narrow screens are one centred column: the view itself is capped, not just what is in it, so nothing hangs on the left of an empty page) */
   main:is([data-route="play"],[data-route="settings"],[data-route="import"]) > .view{max-width:760px}
+  :root:not([data-ui="clinical"]) main[data-route="help"] > .view{max-width:760px}
   main[data-route="review"] > .view{max-width:780px}
   main[data-route="browse"] > .view{max-width:900px}
   body.has-side main{margin-right:var(--panel)}
@@ -1796,6 +1798,7 @@ body.welcome.focus main{padding-bottom:calc(16px + env(safe-area-inset-bottom,0p
 .wl-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);min-height:44px}
 .wl-top .brand{margin:0;font-size:var(--fs-md)}
 .wl-top .back{margin:0;min-height:40px}
+@media (max-width:1023.98px){:root:not([data-ui="clinical"]) #wlSkip{min-height:44px;min-width:44px}}
 .wl-count{font-size:var(--fs-sm);color:var(--text-2)}
 .wl-bar{display:flex;gap:6px}
 .wl-bar i{flex:1;height:4px;border-radius:var(--r-pill);background:var(--surface-3)}
@@ -2579,6 +2582,8 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 @media (min-width:1024px){
   main[data-route="deck"] .screen-head .head-actions .btn{flex:none;padding:6px 14px}
   main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:none;order:0;min-height:40px;font-size:var(--fs-sm)}
+  /* Original: the main button (Review) stays first on a computer, as on a phone */
+  :root:not([data-ui="clinical"]) main[data-route="deck"] .screen-head .head-actions .btn.primary{order:-1}
 }
 /* Today: keep a little room so the chips' focus rings aren't clipped by the sideways scroll */
 .exam-add{padding:3px 2px;margin-left:-2px;margin-right:-2px}
@@ -2616,6 +2621,7 @@ main[data-route="deck"] .screen-head .head-actions .btn.primary{flex:1 1 100%;or
 /* The finish screen: the primary action, then a quiet row of links */
 .fin-links{display:flex;align-items:center;justify-content:flex-start;gap:var(--s-1);margin:var(--s-3) 0 0;color:var(--text-3)}
 .fin-links .link{display:inline-flex;align-items:center;text-decoration:none}
+@media (max-width:1023.98px){:root:not([data-ui="clinical"]) .fin-links .link{min-height:44px}}
 .fin-links .link:first-child{padding-left:0}   /* the first link starts exactly where the buttons above it do */
 .res-actions.ahead{flex-wrap:wrap}      /* one row when both fit; on narrow phones the second button wraps instead of pushing the page sideways */
 .res-actions.ahead .btn{flex:1 1 auto;white-space:nowrap;padding-inline:12px}
@@ -2733,6 +2739,7 @@ main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > spa
 /* Card editor: Answer in steps, Memory hook */
 .answer-mode{align-items:center;margin:var(--s-1) 0}
 .answer-mode-l{font:600 var(--fs-sm) var(--f-ui);color:var(--text-2);margin-right:var(--s-1)}
+:root:not([data-ui="clinical"]) .answer-mode-l{flex-basis:100%;margin:0 0 2px}   /* its own line, so the three choices fit one row on a phone */
 .steps-ed{display:grid;gap:var(--s-3)}
 .step-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s-2)}
 .step-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s-2);align-items:start}
