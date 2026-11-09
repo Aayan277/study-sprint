@@ -3290,3 +3290,12 @@ main h2[tabindex="-1"]{outline:none}
   :root:not([data-ui="clinical"]) main[data-route="review"] .flash-back:not(.long):not(.xlong):not(.cloze-full):has(.tex-d){max-width:none;font-size:1.5rem}
   :root:not([data-ui="clinical"]) main[data-route="review"] .rate{min-height:76px}
 }
+
+/* Own model (Settings → Advanced scheduling) */
+#ownSection{margin-top:var(--s-2)}
+.own-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-width:0}
+.own-name{font-size:var(--fs-sm);color:var(--text-2);overflow-wrap:anywhere}
+.own-nums{font-size:var(--fs-sm);color:var(--text-2)}
+.own-badge{margin-left:0}
+.own-badge.better{color:var(--accent-text);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.own-lock{margin:0;font-size:var(--fs-sm)}

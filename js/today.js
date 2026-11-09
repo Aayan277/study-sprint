@@ -120,6 +120,7 @@ export async function renderToday(el) {
       </section>
       ${rescueHTML()}
       <div id="whatsNewSlot"></div>
+      <div id="ownNoticeSlot"></div>
       <div id="installSlot"></div>
       <div id="remindSlot"></div>
       ${chosen.length ? `<p class="note filtered">Showing ${chosen.length} of ${plural(allIds.length, 'deck')}. <button class="link" type="button" id="allDecksBtn">Show all</button></p>` : ''}
@@ -147,6 +148,7 @@ export async function renderToday(el) {
     if (tr.state === 'nothing') el.querySelector('.today-hero .ring')?.classList.add('is-full');    // calm, no "you did it" pop when there was nothing to do
     else fx.goalRing(el, tr.n, tr.of);
     // One card at a time: what's new (once after an update) goes first, the install and reminder cards wait for the next visit.
+    import('./today-own.js').then(m => m.drawOwnNotice($('ownNoticeSlot'))).catch(() => {});
     drawWhatsNew($('whatsNewSlot')).then(shown => {
       if (shown || !el.isConnected) return;
       drawInstallCard($('installSlot'));      // only after a finished Review session, see install.js
