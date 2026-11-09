@@ -113,7 +113,7 @@ export async function renderToday(el) {
         </div>
         ${streakHTML(streak, { button: true })}
         ${tr.state === 'todo'
-          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${plural(c.total, 'card')} · ${mins}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
+          ? (mins => `<button class="btn primary wide big" type="button" id="startBtn" aria-label="Start · ${mins} · ${plural(c.total, 'card')}">${icon('play')} Start · ${mins}</button>`)(minutesText(c.total, cardMs, c.fresh, learnSteps(c.cards)))
           : `<div class="th-done">
               <p>Nothing is due right now. ${nextDueText(data, c.cards)}${data.hiddenCount ? ` ${plural(data.hiddenCount, 'card')} ${data.hiddenCount === 1 ? 'is' : 'are'} suspended or buried.` : ''}</p>
               <button class="btn ghost th-extra" type="button" id="customLink">Extra study</button></div>`}
@@ -129,7 +129,7 @@ export async function renderToday(el) {
         <div class="exams">${exams.map(({ deck, info }) => `
           <div class="exam-row" style="--deck:${esc(deck.color)}">
             <div class="exam-link"><span class="exam-name">${esc(deckPath(data.decks, deck.id))}</span><span class="${badgeClass(info)}${info.daysLeft > 3 && info.daysLeft <= 14 ? ' near' : ''}">${esc(countdown(info))}</span></div>
-            <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}" aria-label="Exam prep for ${esc(deckPath(data.decks, deck.id))}"></button>
+            <button class="btn ghost small" type="button" data-prep="${esc(deck.id)}" aria-label="Exam prep for ${esc(deckPath(data.decks, deck.id))}" title="${esc(deckPath(data.decks, deck.id))}"></button>
             ${newPlanHTML(deck, info, info.daysLeft <= MOCK_DAYS ? `<button class="btn ghost small" type="button" data-mock="${esc(deck.id)}">Take a mock exam</button>` : '')}
           </div>`).join('')}</div>
       </section>` : ''}

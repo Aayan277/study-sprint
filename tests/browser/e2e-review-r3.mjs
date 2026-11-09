@@ -91,6 +91,7 @@ for (const [tag, viewport, mobile] of [['pc', { width: 1440, height: 900 }, fals
     const n = (/^(\d[\d,]*) to go/.exec(hero.big) || [])[1];
     ok(/^Start · ~/.test(hero.text) && !/card/.test(hero.text), `${tag}: Start reads "${hero.text}" (the count is not repeated)`);
     ok(n && hero.label.includes(n), `${tag}: its aria-label still carries the count: ${hero.label}`);
+    ok(hero.label.includes(hero.text), `${tag}: the aria-label contains the visible text (label in name): "${hero.label}" has "${hero.text}"`);
   } else ok(true, `${tag}: nothing left to study, no Start button`);
   await ctx.close();
 }

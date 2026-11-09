@@ -20,7 +20,7 @@ const open = async (width, height, scheme = 'dark') => {
 };
 const go = async (p, hash, sel = '.today-hero') => { await p.goto('about:blank'); await p.goto('http://localhost:8123/' + hash); await p.waitForSelector(sel); await p.waitForTimeout(150); };
 const num = async (p, sel) => +(await p.locator(sel).first().textContent()).trim();
-const startCount = async p => +(/Start · (\d+) card/.exec(await p.getAttribute('#startBtn', 'aria-label'))?.[1]);
+const startCount = async p => +(/(\d+) cards?/.exec(await p.getAttribute('#startBtn', 'aria-label'))?.[1]);
 const sideCount = async p => +((await p.textContent('#sideBadge')).match(/\d+/)?.[0] || 0);
 const noHScroll = async (p, what) => ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll: ' + what);
 const lineText = async p => (await p.textContent('.rescue-line')).replace(/\s+/g, ' ').trim();

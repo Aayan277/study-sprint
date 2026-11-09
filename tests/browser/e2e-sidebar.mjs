@@ -61,7 +61,7 @@ ok((await p.textContent('#sideDecksH')).trim() === 'Decks', 'the heading says "D
 ok(await p.evaluate(() => !/courses/i.test(document.querySelector('.side-decks').textContent)), 'the word "Courses" appears nowhere in the list');
 
 // the Today badge is the number on Start
-const startN = +(await p.getAttribute('#startBtn', 'aria-label')).match(/Start · (\d+) card/)[1];
+const startN = +(await p.getAttribute('#startBtn', 'aria-label')).match(/(\d+) cards?/)[1];
 const badge = +(await p.textContent('#sideBadge > [aria-hidden]'));
 ok(startN > 0 && badge === startN, `Today badge ${badge} equals the Start button's ${startN}`);
 ok(/cards? to study/.test(await p.textContent('#sideBadge')), 'the badge has a spoken label');
