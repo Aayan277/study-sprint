@@ -142,6 +142,11 @@ for (const [label, viewport, touch] of [['PC 1440x900', PC, false], ['phone 390x
   const fsnap = await p.locator('.finish-next .streak').ariaSnapshot();
   ok(/freeze ready/i.test(fsnap), 'finish: the accessible name still says "freeze ready": ' + fsnap.replace(/\s+/g, ' '));
   ok(await p.$eval('.finish-next .streak', e => e.getBoundingClientRect().height <= 48), 'finish: the chip is still one line (no gap from the hidden pill)');
+  // Clinical's finish screen keeps its 4.61 look: the freeze words sit right after the snowflake, in a one-line pill
+  await p.evaluate(() => document.documentElement.setAttribute('data-ui', 'clinical'));
+  const cl = await p.$eval('.finish-next .frz-pill', e => { const s = e.querySelector(':scope > span'), r = e.getBoundingClientRect(); return { pad: getComputedStyle(s).paddingLeft, h: Math.round(r.height), visible: r.width > 1 }; });
+  ok(cl.visible && cl.pad === '0px' && cl.h <= 28, 'Clinical finish: the freeze pill is visible, one line, and the words have no left padding: ' + JSON.stringify(cl));
+  await p.evaluate(() => document.documentElement.removeAttribute('data-ui'));
   await p.close();
 }
 
