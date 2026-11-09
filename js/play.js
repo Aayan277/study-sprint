@@ -192,11 +192,6 @@ export async function renderPlay(el) {
         </div>
       </fieldset>
 
-      <div class="start-row">
-        <button class="btn primary" type="button" id="startBtn">Start round</button>
-        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
-      </div>
-
       <button class="fold-toggle" type="button" id="customBtn" aria-expanded="${customOpen}" aria-controls="customBody">
         <span>Customise</span>${icon('chevron')}</button>
       <div id="customBody" ${customOpen ? '' : 'hidden'}>
@@ -230,6 +225,11 @@ export async function renderPlay(el) {
             <input id="untimed" type="checkbox" class="switch" ${untimed ? 'checked' : ''}></label>
         </fieldset>
       </div>`}
+      </div>
+
+      <div class="start-row">
+        <button class="btn primary" type="button" id="startBtn">Start round</button>
+        ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
       </div>
 
       <details class="how-score"><summary>ⓘ How scoring works</summary>
