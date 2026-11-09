@@ -51,7 +51,7 @@ function makeHandle(db) {
   const run = (store, mode, fn) => new Promise((resolve, reject) => {
     let tx, out;
     try { tx = db.transaction(store, mode); out = fn(tx.objectStore(store)); } catch { reject(new OwnDbError('The Own database could not be used.')); return; }
-    tx.oncomplete = () => resolve(out && out.__req ? out.__req.result : out);
+    tx.oncomplete = () => resolve(out && out.__reqs ? out.__reqs.map(r => r.result) : out && out.__req ? out.__req.result : out);
     tx.onerror = tx.onabort = () => reject(new OwnDbError('The Own database could not be read or written. The device may be out of space.'));
   });
   const req = r => ({ __req: r });
@@ -62,6 +62,11 @@ function makeHandle(db) {
     // `key` is ignored for stores that carry their own key (preds)
     put: (store, key, value) => run(store, 'readwrite', s => { s.put(...(store === 'preds' ? [value] : [value, key])); }),
     putMany: (store, rows) => run(store, 'readwrite', s => { for (const r of rows) s.put(r); }), // preds only
+    // Many entries of one store in a single transaction: [[key, value], ...] (stores that carry their own key use the value only)
+    putEntries: (store, entries) => run(store, 'readwrite', s => { for (const [k, v] of entries) s.put(...(store === 'preds' ? [v] : [v, k])); }),
+    deleteKeys: (store, keys) => run(store, 'readwrite', s => { for (const k of keys) s.delete(k); }),
+    // Every entry of a store as [[key, value], ...]
+    getEntries: store => run(store, 'readonly', s => ({ __reqs: [s.getAllKeys(), s.getAll()] })).then(([ks, vs]) => ks.map((k, i) => [k, vs[i]])),
     delete: (store, key) => run(store, 'readwrite', s => { s.delete(key); }),
     clear: store => run(store, 'readwrite', s => { s.clear(); }),
     close: () => { try { db.close(); } catch { /* already closed */ } }

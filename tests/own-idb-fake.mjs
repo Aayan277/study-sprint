@@ -63,6 +63,7 @@ export function makeFakeIdb({ blockDelete = false, failWrites = false } = {}) {
             },
             get: key => act(() => (st.rows.has(key) ? structuredClone(st.rows.get(key)) : undefined)),
             getAll: () => act(() => [...st.rows.values()].map(v => structuredClone(v))),
+            getAllKeys: () => act(() => [...st.rows.keys()]),
             delete: key => act(() => { st.rows.delete(key); }),
             clear: () => act(() => { st.rows.clear(); })
           };

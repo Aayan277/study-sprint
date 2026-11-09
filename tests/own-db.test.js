@@ -100,3 +100,16 @@ test('a delete held up by another tab says to close other tabs', async () => {
 test('no database in the browser gives a plain error, not a crash', async () => {
   await assert.rejects(openOwnDb({ idb: null }), e => e instanceof OwnDbError && /cannot store/.test(e.message));
 });
+
+test('putEntries, getEntries and deleteKeys work on many entries at once', async () => {
+  const h = await openOwnDb({ idb: makeFakeIdb() });
+  await h.putEntries('cards', [['c:1', { state: new Float32Array([1, 2]) }], ['c:2', { state: new Float32Array([3]) }]]);
+  const got = await h.getEntries('cards');
+  assert.deepEqual(got.map(e => e[0]), ['c:1', 'c:2']);
+  assert.deepEqual([...got[0][1].state], [1, 2]);
+  await h.putEntries('preds', [[7, { logId: 7, y: null }]]);
+  assert.deepEqual((await h.getEntries('preds')).map(e => e[0]), [7]);
+  await h.deleteKeys('cards', ['c:1']);
+  assert.deepEqual((await h.getEntries('cards')).map(e => e[0]), ['c:2']);
+  h.close();
+});

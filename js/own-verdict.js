@@ -20,6 +20,8 @@ export const BINS = 20;               // bins for the RMSE
 export const ERROR_SHARE = 0.05;      // more than 5% of plans failing means error
 export const ERROR_PAUSE_DAYS = 14;   // wait this long after an error return
 export const CHECKS_IN_A_ROW = 2;
+export const MAX_CHECK_GAP_DAYS = 7;  // the two Better checks may be up to this many days apart (people do not study every day)
+export const MIN_PLANS_FOR_ERROR = 20; // the error pause needs at least this many plans in the day
 export const DEFAULT_SEED = 20240611; // same records + same seed = same answer
 const EPS = 1e-6;                     // keeps log() away from 0
 
@@ -199,18 +201,21 @@ export function recordCheck(verdicts, day, status) {
   return list.slice(-CHECKS_IN_A_ROW);
 }
 
-// True when the last 2 checks were both 'better' on days right after each other.
+// True when the last 2 daily checks were both 'better', made on different days no more than 7 days apart.
+// (The days need not be next to each other: someone who studies every other day must still be able to switch.
+// Only the last two checks are kept, so a 'not' in between would be one of them and break the run.)
 export function betterTwiceInARow(verdicts) {
   const v = verdicts || [];
   if (v.length < CHECKS_IN_A_ROW) return false;
   const [a, b] = v.slice(-CHECKS_IN_A_ROW);
-  return a.status === 'better' && b.status === 'better' && b.day - a.day === 1;
+  const gap = b.day - a.day;
+  return a.status === 'better' && b.status === 'better' && gap >= 1 && gap <= MAX_CHECK_GAP_DAYS;
 }
 
-// True when more than 5% of the day's plans failed.
+// True when more than 5% of the day's plans failed, and there were at least 20 plans that day.
 export function planErrorsTooMany(plans) {
   const total = plans?.total ?? 0, failed = plans?.failed ?? 0;
-  return total > 0 && failed * 100 > total * (ERROR_SHARE * 100);
+  return total >= MIN_PLANS_FOR_ERROR && failed * 100 > total * (ERROR_SHARE * 100);
 }
 
 // How many automatic returns to FSRS have happened (turning Own off does not count).

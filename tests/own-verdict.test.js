@@ -157,15 +157,18 @@ const better = d => ({ day: d, status: 'better' });
 const withState = (o = {}) => ({ ...V.newState(0), ...o });
 const ready = (o = {}) => ({ on: true, verdicts: [better(9), better(10)], recordsSinceSwitch: 500, plans: { total: 100, failed: 0 }, ...o });
 
-test('two Better checks on consecutive days switch to Own', () => {
+test('two Better checks (up to 7 days apart) switch to Own', () => {
   const r = V.nextScheduler(withState(), ready(), 10);
   assert.equal(r.scheduler, 'own'); assert.equal(r.switched, true); assert.equal(r.why, 'better');
   assert.deepEqual(r.state.switches, [{ day: 10, to: 'own', why: 'better' }]);
   assert.equal(r.state.sinceDay, 10);
 });
-test('one Better check is not enough; a gap or a Not breaks the run', () => {
+test('one Better check is not enough; a Not or a gap over 7 days breaks the run', () => {
   assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(10)] }), 10).switched, false);
-  assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(8), better(10)] }), 10).switched, false);
+  assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(8), better(10)] }), 10).switched, true);   // every other day is fine
+  assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(3), better(10)] }), 10).switched, true);   // 7 days apart is the most
+  assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(2), better(10)] }), 10).switched, false);  // 8 days apart is too far
+  assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(10), better(10)] }), 10).switched, false); // the same day twice is one check
   assert.equal(V.nextScheduler(withState(), ready({ verdicts: [better(9), { day: 10, status: 'not' }] }), 10).switched, false);
   assert.equal(V.nextScheduler(withState(), ready({ verdicts: [{ day: 9, status: 'few' }, better(10)] }), 10).switched, false);
 });
@@ -241,6 +244,11 @@ test('error share: exactly 5% is fine, above 5% is an error', () => {
   assert.equal(V.planErrorsTooMany({ total: 200, failed: 10 }), false);
   assert.equal(V.planErrorsTooMany({ total: 200, failed: 11 }), true);
   assert.equal(V.planErrorsTooMany({ total: 0, failed: 0 }), false);
+  // fewer than 20 plans in the day can never trip it
+  assert.equal(V.planErrorsTooMany({ total: 19, failed: 19 }), false);
+  assert.equal(V.planErrorsTooMany({ total: 20, failed: 1 }), false);
+  assert.equal(V.planErrorsTooMany({ total: 20, failed: 2 }), true);
+  assert.equal(V.MIN_PLANS_FOR_ERROR, 20);
   assert.equal(V.planErrorsTooMany(undefined), false);
 });
 test('error returns to FSRS at once (even inside the 14-day gap) and pauses 14 days', () => {
