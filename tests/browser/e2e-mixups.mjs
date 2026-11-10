@@ -9,8 +9,8 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 
 // Math.random is seeded in the page, so the order of questions is the same every run.
 const SEED = `(() => { let s = 20261014; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })();`;
-const open = async ({ w = 375, h = 800, scheme = 'dark' } = {}) => {
-  const touch = w < 600;
+const open = async ({ w = 375, h = 800, scheme = 'dark', forceTouch = false } = {}) => {
+  const touch = w < 600 || forceTouch;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: 'block', isMobile: touch, hasTouch: touch, colorScheme: scheme });
   await ctx.clock.setFixedTime(new Date(2026, 9, 14, 12));
   await ctx.addInitScript(SEED);
@@ -275,6 +275,23 @@ for (const [w, scheme] of [[375, 'light'], [1440, 'dark'], [1440, 'light']]) {
   await p.waitForFunction(() => location.hash === '#/help/compare', null, { timeout: 5000 }).catch(() => {});
   ok(await p.evaluate(() => location.hash) === '#/help/compare', 'touch: tapping the "?" in the Compare sheet opens #/help/compare');
   ok(await p.evaluate(() => window.__captured) === 0, 'touch: the "?" sits in the sheet header, and the swipe-to-close drag does not capture the pointer (Safari sends the click to the captured header)');
+  await p.context().close();
+}
+
+// On a touch screen 600px and wider, the "?" tap area (::before, inset -11px) must stay around the "?" and not cover the close button.
+{
+  const p = await open({ w: 800, h: 900, forceTouch: true });
+  await seed4(p, false);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'); const m = await import('./js/compare-sheet.js');
+    await m.openCompare(await db.get('cards', 'mx0'), await db.get('cards', 'mx1'));
+  });
+  await p.waitForSelector('#sheet .cmp');
+  ok(await p.evaluate(() => {
+    const x = document.querySelector('#sheet .sheet-x'), r = x.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && (hit === x || x.contains(hit)) && !hit.closest('.help-link');
+  }), 'touch 800px: the centre of the close button hits the button, not the "?" help link');
   await p.context().close();
 }
 

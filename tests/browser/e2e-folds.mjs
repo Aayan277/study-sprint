@@ -92,5 +92,34 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   await p.screenshot({ path: SP + '/folds-filter.png' });
   await p.context().close();
 }
+
+// Settings drawn again and again leaves at most one live 'install-change' listener (the old ones let go once their screen is gone).
+{
+  const p = await open(1440, 900);
+  await p.addInitScript(() => {
+    const live = new Set(); window.__live = live;
+    const add = EventTarget.prototype.addEventListener, rem = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.addEventListener = function (t, f, ...r) { if (t === 'install-change' && this === window) live.add(f); return add.call(this, t, f, ...r); };
+    EventTarget.prototype.removeEventListener = function (t, f, ...r) { if (t === 'install-change' && this === window) live.delete(f); return rem.call(this, t, f, ...r); };
+  });
+  await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#storageWarn');
+  for (let i = 0; i < 3; i++) {
+    await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck, .empty');
+    await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#storageWarn');
+  }
+  await p.evaluate(() => { const m = import('./js/settings.js'); return m.then(x => x.renderSettings(x.settingsView())); }).catch(() => {});
+  await p.waitForSelector('#storageWarn');
+  // Old listeners let go when the event next fires; after one event, only the live Settings screen's listener is left, and it acts once.
+  const ran = await p.evaluate(() => {
+    const w = document.getElementById('storageWarn'); let sets = 0;
+    const mo = new MutationObserver(rs => { sets += rs.length; }); mo.observe(w, { childList: true });
+    window.dispatchEvent(new Event('install-change'));
+    const recs = mo.takeRecords(); mo.disconnect();
+    return { n: sets + recs.length, live: window.__live.size };
+  });
+  ok(ran.live === 1, `Settings drawn several times: one live install-change listener is left after an event (${ran.live})`);
+  ok(ran.n <= 1, `an install-change event updates the storage note at most once (${ran.n})`);
+  await p.context().close();
+}
 await browser.close();
 if (errors.length) { console.log('ERRORS\n' + errors.join('\n')); process.exitCode = 1; }

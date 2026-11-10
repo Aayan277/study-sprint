@@ -482,7 +482,7 @@ const book = await run(async () => {
   const db = await import('./js/db.js'), media = await import('./js/media.js');
   // The imports above each started the 2-minute "Undo can still need the files" hold (db.holdMedia). Let it run out, as it would
   // for a person: move the clock on 3 minutes for this block (put back at the end).
-  const realNow = Date.now; let offset = 3 * 60000, held, afterHold, result;
+  const realNow = Date.now, realGet0 = IDBObjectStore.prototype.get; let offset = 3 * 60000, held, afterHold, result;
   Date.now = () => realNow.call(Date) + offset;
   try {
   const kind = m => (m.type.startsWith('audio/') ? 'sounds' : 'pictures');
@@ -517,7 +517,7 @@ const book = await run(async () => {
   result = { held: held.length === 0 && heldStill, afterHold: afterHold.includes(s2.id), same1: JSON.stringify(t1) === JSON.stringify(a1), same2: t2.sounds === t1.sounds + 777, pending: pending.includes(s.id), removedFresh: removedFresh.includes(s.id), stillThere,
     pendingAfter: pendingAfter.includes(s.id), removedOld: removedOld.includes(s.id), gone, same3: JSON.stringify(t3) === JSON.stringify(a3) && t3.sounds === t1.sounds,
     readSound: asked.some(k => soundIds.has(k)), exported: !bk.media.some(m => m.type.startsWith('audio/')) };
-  } finally { Date.now = realNow; }
+  } finally { Date.now = realNow; IDBObjectStore.prototype.get = realGet0; }
   return result;
 });
 ok(book.same1 && book.same2 && book.same3, 'Book-keeping: the totals record matches the real sizes, and follows an add and a removal');
