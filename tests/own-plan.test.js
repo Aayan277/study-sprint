@@ -47,6 +47,7 @@ test('planFits: every reason to refuse a plan', () => {
   assert.equal(planFits(plan, 'a', { ...st, state: 1 }, 2, 3, NOW), false);         // not in review before
   assert.equal(planFits(plan, 'a', st, 3, 3, NOW), false);                          // FSRS sent it to relearning
   assert.equal(planFits(plan, 'a', st, 2, 1, NOW), false);                          // Again: no plan for it
+  for (const r of [2, 3, 4]) for (const bad of [NaN, 0, -1, undefined]) assert.equal(planFits({ ...plan, days: { ...plan.days, [r]: bad } }, 'a', st, 2, 3, NOW), false, `days[${r}] = ${bad}`);
   for (const bad of [NaN, Infinity, 0, -3, undefined]) assert.equal(planFits({ ...plan, days: { ...plan.days, 3: bad } }, 'a', st, 2, 3, NOW), false);
 });
 
@@ -186,5 +187,27 @@ test('rate: with a plan whose three days collapse, the saved days are ordered an
   assert.ok(days[0] < days[1] && days[1] < days[2], days.join());
   const shown = m.previewIntervals(st, { ...OPTS, ownPlan: plan }, NOW, 'a');
   assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), days);
+  m.useOwnPlan(null);
+});
+
+test('property: with fuzz only, or fuzz and evening out, Hard < Good < Easy and the labels are the saved days', { skip }, async () => {
+  const m = await sched();
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 150; i++) {
+    const S = 2 + Math.floor(rnd() * 400), v = () => 1 + Math.floor(rnd() * 3 * S);
+    const st = { cardId: 'a', state: 2, due: NOW, stability: S, difficulty: 1 + rnd() * 9, elapsedDays: S, scheduledDays: S, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - S * DAY };
+    const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: v(), 3: v(), 4: v() } };
+    const cap = i % 5 === 0 ? 3 + Math.floor(rnd() * 40) : 36500;
+    for (const extra of [{ fuzz: true, fsrsVersion: 7 }, { fuzz: true, balance: { load: new Map() } }, { fuzz: false }]) {
+      const load = extra.balance && new Map([[0, 1]]);
+      const o = { ...OPTS, maxInterval: cap, ...extra, ...(load ? { balance: { load } } : {}), ownPlan: plan };
+      const before = load && [...load];
+      const shown = m.previewIntervals(st, o, NOW, 'a');
+      if (load) assert.deepEqual([...load], before, 'preview does not touch the load');
+      const saved = [2, 3, 4].map(r => m.rate('a', st, r, { ...o, balance: load && { load: new Map(load) } }, NOW).scheduledDays);
+      assert.ok(saved[0] < saved[1] && saved[1] < saved[2], `${JSON.stringify(extra)} S=${S} cap=${cap}: ${saved}`);
+      if (extra.fuzz === false || extra.balance || extra.fsrsVersion === 7) assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), saved);
+    }
+  }
   m.useOwnPlan(null);
 });

@@ -156,21 +156,25 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // (the ratio of its fuzzed gap to its exact gap) is applied to Own's days too. The max interval, evening out and the exam limit still
   // apply below. Without a plan (the normal case) nothing here changes.
   const plan = opts.ownPlan;
+  let planned = false;                          // Own's plan set the gap (evening out was already done for it)
   if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
-    const fsrsDays = card.scheduled_days;
     const { clampOwnDays, orderOwnDays } = ownTools;
-    // Each rating is clamped against FSRS's exact gap, then the three are put in order (Hard < Good < Easy) so the buttons and the saved
-    // date agree: every rating works out the same three numbers.
-    const exactCard = r => opts.fsrsVersion === 7
-      ? rate7(cardId, state, r, { ...opts, fuzz: false }, now, sixAfter(state, opts, now))
-      : scheduler({ ...opts, fuzz: false }).next(toLibrary(state, now), new Date(now), r).card;
-    const exactDays = {}, clamped = {};
+    // The final gap (clamped, then fuzzed or evened out) is worked out for Hard, Good and Easy the same way every time, and only then are the
+    // three put in order (Hard < Good < Easy). So every rating works out the same three numbers: the buttons and the saved date agree.
+    // Evening out only reads the load here (the card is added to it below, once, for the rating that was pressed).
+    const fsrsCard = (r, o) => r === rating && o === opts ? card : opts.fsrsVersion === 7
+      ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
+      : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
+    const finalDays = {};
     for (const r of [2, 3, 4]) {
-      exactDays[r] = exactCard(r).scheduled_days;
-      clamped[r] = clampOwnDays(plan.days[r], exactDays[r], opts.maxInterval);
+      const exact = fsrsCard(r, { ...opts, fuzz: false }).scheduled_days;
+      let d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
+      if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
+      if (balanced && d >= 3) d = pickDay(d, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, r) });
+      finalDays[r] = d;
     }
-    let days = orderOwnDays(clamped, opts.maxInterval)[rating];
-    if (opts.fuzz && !balanced && exactDays[rating] > 0) days = clampOwnDays(days * (fsrsDays / exactDays[rating]), exactDays[rating], opts.maxInterval);
+    const days = orderOwnDays(finalDays, opts.maxInterval)[rating];
+    planned = true;
     card.scheduled_days = days;
     card.due = new Date(now + days * DAY);
   }
@@ -178,7 +182,7 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const load = opts.balance?.load;
   let counted = false;                          // did balancing add this card to the load?
   if (balanced && card.state === 2 && card.scheduled_days >= 3) {
-    const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, rating) });
+    const d = planned ? card.scheduled_days : pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, rating) });
     card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
     card.scheduled_days = d;
     load?.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
