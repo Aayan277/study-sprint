@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
 import { existsSync } from 'node:fs';
-import { OWN_BAND_LOW, OWN_BAND_HIGH, OWN_MAX_DAYS, clampOwnDays, planFits, freezePlan, PLAN_MS } from '../js/own-plan.js';
+import { OWN_BAND_LOW, OWN_BAND_HIGH, OWN_MAX_DAYS, clampOwnDays, orderOwnDays, planFits, freezePlan, PLAN_MS } from '../js/own-plan.js';
 
 const local = process.env.TS_FSRS_PATH || new URL('../node_modules/ts-fsrs/dist/index.mjs', import.meta.url).pathname;
 const skip = existsSync(local) ? false : 'ts-fsrs 5.4.2 is not installed';
@@ -25,6 +25,16 @@ test('clampOwnDays: inside the band it stays, outside it is held at 0.25x and 4x
   assert.equal(clampOwnDays(100000, 2000, 1000), 1000);           // maxInterval is lower than the cap
   assert.equal(clampOwnDays(0.2, 1, 36500), 1);
   assert.equal(clampOwnDays(12.4, 10, 36500), 12);
+});
+
+test('orderOwnDays: Hard < Good < Easy; bumped up by 1, lowered below the cap, never under 1', () => {
+  const o = (h, g, e, cap = 36500) => Object.values(orderOwnDays({ 2: h, 3: g, 4: e }, cap));
+  assert.deepEqual(o(5, 9, 20), [5, 9, 20]);              // already in order: untouched
+  assert.deepEqual(o(5, 5, 5), [5, 6, 7]);
+  assert.deepEqual(o(5, 3, 4), [5, 6, 7]);
+  assert.deepEqual(o(3650, 3650, 3650, 36500), [3648, 3649, 3650]);   // the cap stops the bump: the earlier ones go down
+  assert.deepEqual(o(30, 30, 30, 30), [28, 29, 30]);      // maxInterval is the cap
+  assert.deepEqual(o(1, 1, 1, 2), [1, 1, 2]);             // no room: never below 1
 });
 
 test('planFits: every reason to refuse a plan', () => {
@@ -62,7 +72,7 @@ test('freezePlan waits at most the freeze time (300 ms by default)', async () =>
 // ---------- inside the scheduler ----------
 async function sched() {
   const m = await import('../js/srs.js');
-  m.useOwnPlan({ planFits, clampOwnDays });           // (Review hands these over when an Own session starts)
+  m.useOwnPlan({ planFits, clampOwnDays, orderOwnDays });           // (Review hands these over when an Own session starts)
   return m;
 }
 async function reviewCard(rate, opts = OPTS) {
@@ -166,4 +176,15 @@ test('the study path does not load own-plan.js: srs.js and review.js only import
   const st = { cardId: 'a', state: 2, due: NOW, stability: 20, difficulty: 5, elapsedDays: 20, scheduledDays: 20, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - 20 * DAY };
   const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: 5, 3: 5, 4: 5 } };
   assert.deepEqual(m.rate('a', st, 3, { ...OPTS, ownPlan: plan }, NOW), m.rate('a', st, 3, OPTS, NOW));
+});
+
+test('rate: with a plan whose three days collapse, the saved days are ordered and match previewIntervals', { skip }, async () => {
+  const m = await sched();
+  const st = { cardId: 'a', state: 2, due: NOW, stability: 20, difficulty: 5, elapsedDays: 20, scheduledDays: 20, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - 20 * DAY };
+  const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: 40, 3: 40, 4: 40 } };
+  const days = [2, 3, 4].map(r => m.rate('a', st, r, { ...OPTS, ownPlan: plan }, NOW).scheduledDays);
+  assert.ok(days[0] < days[1] && days[1] < days[2], days.join());
+  const shown = m.previewIntervals(st, { ...OPTS, ownPlan: plan }, NOW, 'a');
+  assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), days);
+  m.useOwnPlan(null);
 });

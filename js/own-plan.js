@@ -26,6 +26,16 @@ export function clampOwnDays(ownDays, fsrsDays, maxInterval) {
   return Math.max(1, Math.round(d));
 }
 
+// The three clamped day counts { 2: Hard, 3: Good, 4: Easy } put in order like FSRS: Hard < Good < Easy. A gap that is not above the one before
+// is bumped up by 1 day; if that would pass the cap (3,650 or maxInterval), the earlier ones are lowered instead, never below 1.
+export function orderOwnDays(days, maxInterval) {
+  const cap = Math.min(OWN_MAX_DAYS, Number.isFinite(maxInterval) && maxInterval > 0 ? maxInterval : OWN_MAX_DAYS);
+  const good = Math.max(days[3], days[2] + 1);
+  const easy = Math.min(cap, Math.max(days[4], good + 1));
+  const g = Math.min(good, easy - 1);
+  return { 2: Math.max(1, Math.min(days[2], g - 1)), 3: Math.max(1, g), 4: Math.max(1, easy) };
+}
+
 // Waits for a plan, but at most `ms` (300 ms). `prep` is the promise from the plan request; `settled` is what the caller does with the
 // outcome (it counts a missing plan as a failed plan, and passes back the plan to use, or null). Never rejects: an error is a missing plan.
 // -> a promise of the frozen plan, or null (FSRS schedules the card)

@@ -255,6 +255,8 @@ export async function renderDeck(el, deckId) {
   const reviewFirst = !soon || counts.total > 0;
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
+  const prepBtn = soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : '';
+  const reviewBtn = s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review${counts.total ? ` · ${counts.total}` : ''}</a>` : '';
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
     <div class="screen-head" style="--deck:${esc(deck.color)}">
@@ -263,8 +265,7 @@ export async function renderDeck(el, deckId) {
         ${exam ? `<p class="exam-line"><span class="${badgeNear(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
-        ${soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : ''}
-        ${s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review${counts.total ? ` · ${counts.total}` : ''}</a>` : ''}
+        ${reviewFirst && s.total ? reviewBtn + prepBtn : prepBtn + reviewBtn}
         ${s.total ? '<button class="btn ghost small" type="button" id="testBtn">Practice test</button>' : '<a class="btn ghost small" href="#/import/' + esc(deck.id) + '">Import</a>'}
         <div class="more-wrap">
           <button class="icon-btn more-btn" type="button" id="deckMore" aria-haspopup="menu" aria-expanded="false" aria-controls="deckMenu" aria-label="More for ${esc(deck.name)}">${icon('more')}</button>

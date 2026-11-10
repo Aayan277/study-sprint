@@ -138,7 +138,7 @@ function seven(cardId, state, opts, now) {
 }
 
 // Own model (opt-in): the rules for using its plan (js/own-plan.js) are handed over by Review when an Own session starts, so nobody who has
-// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays }
+// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays, orderOwnDays }
 let ownTools = null;
 export const useOwnPlan = tools => { ownTools = tools; };
 
@@ -158,14 +158,19 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   const plan = opts.ownPlan;
   if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
     const fsrsDays = card.scheduled_days;
-    const { clampOwnDays } = ownTools;
-    let days = clampOwnDays(plan.days[rating], fsrsDays, opts.maxInterval);
-    if (opts.fuzz && !balanced) {
-      const exact = opts.fsrsVersion === 7
-        ? rate7(cardId, state, rating, { ...opts, fuzz: false }, now, sixAfter(state, opts, now))
-        : scheduler({ ...opts, fuzz: false }).next(toLibrary(state, now), new Date(now), rating).card;
-      if (exact.scheduled_days > 0) days = clampOwnDays(days * (fsrsDays / exact.scheduled_days), exact.scheduled_days, opts.maxInterval);
+    const { clampOwnDays, orderOwnDays } = ownTools;
+    // Each rating is clamped against FSRS's exact gap, then the three are put in order (Hard < Good < Easy) so the buttons and the saved
+    // date agree: every rating works out the same three numbers.
+    const exactCard = r => opts.fsrsVersion === 7
+      ? rate7(cardId, state, r, { ...opts, fuzz: false }, now, sixAfter(state, opts, now))
+      : scheduler({ ...opts, fuzz: false }).next(toLibrary(state, now), new Date(now), r).card;
+    const exactDays = {}, clamped = {};
+    for (const r of [2, 3, 4]) {
+      exactDays[r] = exactCard(r).scheduled_days;
+      clamped[r] = clampOwnDays(plan.days[r], exactDays[r], opts.maxInterval);
     }
+    let days = orderOwnDays(clamped, opts.maxInterval)[rating];
+    if (opts.fuzz && !balanced && exactDays[rating] > 0) days = clampOwnDays(days * (fsrsDays / exactDays[rating]), exactDays[rating], opts.maxInterval);
     card.scheduled_days = days;
     card.due = new Date(now + days * DAY);
   }
