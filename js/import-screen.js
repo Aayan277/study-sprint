@@ -79,6 +79,7 @@ export async function renderImport(el, arg) {
     suggest: false,        // "Suggest cards" is on: the text is read for definitions, lists and facts, and the preview shows suggestions to tick
     sugJob: null,          // the job finding the suggestions ({ cancel })
     sugSeq: 0,             // which run is the latest (an older one that finishes late says nothing)
+    pasteTimer: 0,         // the wait before pasted text is read again after typing
     sugTimer: 0,           // the wait before suggestions are found again after the text changed
     sugStats: null,        // { words, byKind, total, shown, cut } of the suggestions on the screen
     restoreSug: null,      // changes made to the suggestions, brought back with the draft, to put on the new ones
@@ -279,13 +280,12 @@ function wireTabs() {
 
 // ---------- paste box ----------
 function wirePaste() {
-  let timer = 0;
-  // Re-detect shortly after typing or pasting stops.
+  // Re-detect shortly after typing or pasting stops (S.pasteTimer, so "Use an AI chat instead" can cancel a wait that is still running).
   $('pasteBox').addEventListener('input', () => {
-    clearTimeout(timer);
+    clearTimeout(S.pasteTimer);
     S.noCloze = false;                 // new text: cloze lines count again
     saveDraft($('pasteBox').value);
-    timer = setTimeout(() => { if ($('pasteBox')?.isConnected) showText($('pasteBox').value); }, 250);        // (not after the screen was left)
+    S.pasteTimer = setTimeout(() => { if ($('pasteBox')?.isConnected) showText($('pasteBox').value); }, 250);        // (not after the screen was left)
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
@@ -298,7 +298,7 @@ function wirePaste() {
     }
   });
   $('clearBtn').addEventListener('click', () => {
-    clearTimeout(timer);
+    clearTimeout(S.pasteTimer);
     setSuggest(false);
     S.blocks = false; S.aiMade = false; S.aiPending = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
     $('pasteBox').value = '';
@@ -1129,6 +1129,7 @@ function wireSuggest() {
   // The same AI view as for a PDF, with the pasted text in parts. Nothing is sent from here.
   $('sugAi').addEventListener('click', () => {
     const text = $('pasteBox').value;
+    clearTimeout(S.pasteTimer);        // a re-detect still waiting from the last keystroke would bring the preview back over the AI view
     setSuggest(false);
     showResult(null);
     S.part = 0;

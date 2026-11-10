@@ -480,6 +480,9 @@ ok(noRoom.err?.noSpace && noRoom.err.msg === 'Not enough space on this device to
 // ---------- 8b. book-keeping: nothing needs to read every file's bytes ----------
 const book = await run(async () => {
   const db = await import('./js/db.js'), media = await import('./js/media.js');
+  // The imports above each started the 2-minute "Undo can still need the files" hold (db.holdMedia). Let it run out, as it would
+  // for a person: move the clock on 3 minutes for this block (put back at the end).
+  const realNow = Date.now; Date.now = () => realNow.call(Date) + 3 * 60000;
   const kind = m => (m.type.startsWith('audio/') ? 'sounds' : 'pictures');
   const actual = async () => { const out = { pictures: 0, sounds: 0 }; for (const id of await db.mediaKeys()) { const m = await db.getMedia(id); out[kind(m)] += m.size; } return out; };
   const t1 = await db.mediaTotals(), a1 = await actual();
@@ -501,6 +504,7 @@ const book = await run(async () => {
   IDBObjectStore.prototype.get = function (k) { if (this.name === 'media') asked.push(k); return realGet.call(this, k); };
   const bk = await db.exportAll({ sounds: false });
   IDBObjectStore.prototype.get = realGet;
+  Date.now = realNow;
   return { same1: JSON.stringify(t1) === JSON.stringify(a1), same2: t2.sounds === t1.sounds + 777, pending: pending.includes(s.id), removedFresh: removedFresh.includes(s.id), stillThere,
     pendingAfter: pendingAfter.includes(s.id), removedOld: removedOld.includes(s.id), gone, same3: JSON.stringify(t3) === JSON.stringify(a3) && t3.sounds === t1.sounds,
     readSound: asked.some(k => soundIds.has(k)), exported: !bk.media.some(m => m.type.startsWith('audio/')) };
