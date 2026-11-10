@@ -371,3 +371,16 @@ Conclusion: `all` at a low lr (3e-5) stays best. `head` is the safest at a high 
 - Check-set loss started at 0.2860 and reached 0.2867, 0.2864 and 0.2861 after epochs 1–3, so it never beat the start.
 - It stopped after 3 of 8 epochs, and the best checkpoint was the init itself.
 - Conclusion: no gain from longer training at these settings. A6 stays the model. The A6+A6L average was not run, because the two are the same weights.
+
+## 8. Part B: what happens when a user turns Own (A6) on (offline, validation split only)
+
+The test split is used up; every Part B run uses `--split val`. Half A and half B of the val users are split by `fnv1a('own-val-half|' + id) & 1` (0 = A, 1 = B). Half A chooses thresholds and the band; half B confirms once, with the settings frozen (experiment B7).
+
+### Threshold rule (fixed before any B4 result was looked at)
+
+Among the "watch first" rule variants in the grid (N_live 50, 100, 200, 300, 500 × level 95% or 99% × 1 or 2 consecutive Better checks), choose the FASTEST variant (smallest median day of the first Better, ties to fewer records) whose false-Better rate is at most 5% under BOTH nulls:
+
+1. the sign-flip null on real half-A users (each card's loss differences flipped, 20 draws per user), and
+2. the simulator control in the FSRS world with the true chance as the second model (any Better is wrong).
+
+The rate is the share of (user, draw) pairs, or of control learners, whose first check says Better. Users who never reach the checks count as no Better. The shipped setting (N_LIVE 300, MIN_SCORED 1000, MIN_DAYS 7, 2 Better checks on different days at most 7 days apart) is reported against the same rule: pass or fail. If no variant meets both limits, the report says so and no variant is chosen.
