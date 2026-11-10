@@ -18,21 +18,84 @@ import { fit, splitHistories, clipWeights, forgettingCurve, initState, nextState
 import { createOwnModel, StateStore } from '../../js/own-model.js';
 import { OwnFeatures } from '../../js/own-features.js';
 import { pAt, intervalDays, headFinite } from '../../js/own-curve.js';
+import { OWN_BAND_LOW, OWN_BAND_HIGH, clampOwnDays, OWN_MAX_DAYS } from '../../js/own-plan.js';
 import { fnv1a } from '../../js/rwkv-features.js';
 import { ts, DEFAULT_W, BOUNDS, fsrsCardsFromRows } from './eval-core.mjs';
 import { BOOT, mean, bootstrapMeanCI } from './eval-lib.mjs';
 
 // Bump when a change to this file changes what a run computes: it is part of the resume key (replay.mjs), so old records are not reused. The app files the replay uses (js/own-model.js, js/own-curve.js, js/fsrs-fit.js) are covered by the hash in replay.mjs.
-export const REPLAY_VERSION = 3;
+export const REPLAY_VERSION = 5;
 export const FSRS_TARGETS = [0.80, 0.85, 0.90, 0.95];
 export const OWN_TARGETS = [0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.92];
-export const TRUTHS = ['own', 'fsrs'];
+export const TRUTHS = ['own', 'fsrs'];                 // the default truths of a run and of the report
+export const ALL_TRUTHS = ['own', 'fsrs', 'mix'];      // every truth simulate accepts (mix: the mean of the two models' p)
 export const SCHEDS = ['fsrs', 'own'];
 export const OWN_SCHEDS = ['head', 'fade'];   // head: the curve right after the answer; fade: note memory faded over the gap, other query features as of the answer
 export const DEFAULTS = {
   days: 180, maxCards: 800, seed: 0, maxDays: 36500, snapshotEvery: 7, retryMinutes: 10, maxRetries: 3, activeDays: 90, ownSched: 'fade',
   ownTargets: OWN_TARGETS, fsrsTargets: FSRS_TARGETS
 };
+// ---------- new pieces of version 4 (pure helpers) ----------
+// The app's band: Own's interval is kept within lo..hi times FSRS-6's interval and at most `cap` days (js/own-verdict.js has none; the app clamp is 0.25-4x, 3650 d).
+export const APP_BAND = { lo: OWN_BAND_LOW, hi: OWN_BAND_HIGH, cap: OWN_MAX_DAYS };
+// '0.25,4' -> { lo, hi, cap: 3650 }; 'none' or nothing -> null (no band).
+export function parseBand(text) {
+  if (text === undefined || text === null || text === 'none') return null;
+  const g = String(text).split(',').map(Number);
+  if (g.length !== 2 || !(g[0] > 0) || !(g[1] >= g[0]) || !Number.isFinite(g[1])) throw new Error('--band must be lo,hi (0 < lo <= hi) or none.');
+  return { lo: g[0], hi: g[1], cap: APP_BAND.cap };
+}
+// d: Own's interval in days, f: FSRS-6's for the same card state -> the interval the app would use. The low end is at least 1 day, the high end at least the low end.
+export function bandClamp(d, f, band) {
+  if (band.lo === APP_BAND.lo && band.hi === APP_BAND.hi && band.cap === APP_BAND.cap) return clampOwnDays(d, f);   // the app's own clamp
+  const lo = Math.max(1, Math.round(band.lo * f)), hi = Math.max(lo, Math.round(band.hi * f));
+  return Math.min(band.cap, d < lo ? lo : d > hi ? hi : d);
+}
+// null when the split may be replayed, else the reason it may not. The test users are used up: refused, with no override.
+export function splitProblem(split) {
+  if (split === 'test') return 'Refusing to run on the test users: they are used up and never run here. Use --split val or train.';
+  return ['train', 'val'].includes(split) ? null : 'Use --split val or train.';
+}
+// The two halves of the val users: 'A' = fnv1a('own-val-half|' + id) & 1 is 0, 'B' = 1.
+export const halfOf = id => ((fnv1a('own-val-half|' + id) & 1) === 0 ? 'A' : 'B');
+// Review-rate periods, as simulated day numbers (day 1 is the backlog day and is in none of them).
+export const PERIODS = [[2, 7], [8, 28], [29, 90], [91, 180], [181, 365]];
+export const periodIndex = k => PERIODS.findIndex(([a, b]) => k >= a && k <= b);
+// how many days of each period a run of `days` days covers
+export const periodDays = days => PERIODS.map(([a, b]) => Math.max(0, Math.min(days, b) - a + 1));
+// log2(Own interval / FSRS interval) in half-steps from -6 to +6; the end bins take everything beyond.
+export const LOG2_LO = -6, LOG2_HI = 6, LOG2_STEP = 0.5, LOG2_BINS = (LOG2_HI - LOG2_LO) / LOG2_STEP;
+export const log2Bin = (own, fsrs) => clip(Math.floor((Math.log2(own / fsrs) - LOG2_LO) / LOG2_STEP), 0, LOG2_BINS - 1);
+// the intervals a scheduler gave: their spread, the shares at the ends and how often an interval got shorter after a successful review
+export class IntervalTracker {
+  constructor(maxDays) { this.maxDays = maxDays; this.all = []; this.prev = new Map(); this.shrinkOf = new Map(); this.comparable = 0; this.shrinks = 0; }
+  // card key, the interval just given, count: whether it enters the numbers (day-1 and warm-up intervals are only remembered)
+  pass(key, d, count) {
+    if (count) {
+      this.all.push(d);
+      const p = this.prev.get(key);
+      if (p !== undefined) { this.comparable++; if (d < p) { this.shrinks++; this.shrinkOf.set(key, (this.shrinkOf.get(key) || 0) + 1); } }
+    }
+    this.prev.set(key, d);
+  }
+  lapse(key) { this.prev.delete(key); }     // after a failed review the next pass has nothing to be compared with
+  summary(cards) {
+    const a = Float64Array.from(this.all).sort(), n = a.length, q = x => (n ? a[Math.min(n - 1, Math.floor(x * n))] : NaN);
+    let ge365 = 0, ge3650 = 0, atMax = 0, one = 0;
+    for (const d of a) { if (d >= 365) ge365++; if (d >= 3650) ge3650++; if (d >= this.maxDays) atMax++; if (d === 1) one++; }
+    let cards2 = 0;
+    for (const v of this.shrinkOf.values()) if (v >= 2) cards2++;
+    return { n, p10: q(0.1), p50: q(0.5), p90: q(0.9), p99: q(0.99), ge365, ge3650, atMax, one, comparable: this.comparable, shrinks: this.shrinks, cardsShrink2: cards2, cards };
+  }
+}
+// shares from the counts of IntervalTracker.summary (NaN when nothing was counted)
+export function ivShares(iv) {
+  const r = (a, b) => (b > 0 ? a / b : NaN);
+  return { ge365: r(iv.ge365, iv.n), ge3650: r(iv.ge3650, iv.n), atMax: r(iv.atMax, iv.n), one: r(iv.one, iv.n), shrink: r(iv.shrinks, iv.comparable), cardsShrink2: r(iv.cardsShrink2, iv.cards) };
+}
+// the share of Own intervals where the band changed the interval
+export const bandShare = run => (run.bandTotal > 0 ? run.bandBinds / run.bandTotal : NaN);
+
 // the R values a scheduler is swept over (opts.targets, when given, is used for both)
 export const gridOf = (o, sched) => o.targets || (sched === 'own' ? o.ownTargets : o.fsrsTargets);
 export const runKey = (truth, sched, R) => `${truth}|${sched}|${R.toFixed(2)}`;
@@ -100,13 +163,16 @@ const median = xs => { if (!xs.length) return NaN; const a = Float64Array.from(x
 // The user's eval cutoff day: exactly eval's (the day by which 80% of the later-day scored reviews have happened).
 export function cutoffOf(rows) { return splitHistories(fsrsCardsFromRows(rows), 0.8).cutoff; }
 
-// loaded: { id, rows } (eval's loadLearner). opts: { params, size, seed, maxCards, activeDays, fitFsrs, weights (skips the fit), maxDays }
-// -> the warm state. Only rows up to the cutoff day are read after the cutoff is found.
+// loaded: { id, rows } (eval's loadLearner). opts: { params, size, seed, maxCards, activeDays, fitFsrs, weights (skips the fit), maxDays,
+//   startAt (cold start: only the first startAt reviews warm the memory and the simulation starts the day of the last of them),
+//   newPerDay ('real' | N: also collect the cards the user first reviewed after the start, for simulate to introduce) }
+// -> the warm state. Only rows up to the cutoff day are read after the cutoff is found (the new-card list, when asked for, also reads the first answer of each later card).
 export function warmUp(loaded, opts) {
   const o = { ...DEFAULTS, fitFsrs: true, ...opts };
-  const cutoff = cutoffOf(loaded.rows);
+  let cutoff = cutoffOf(loaded.rows);
   const pre = [];
   for (const r of loaded.rows) if (r.day <= cutoff) pre.push(r);
+  if (o.startAt && o.startAt < pre.length) { pre.length = o.startAt; cutoff = pre[pre.length - 1].day; }
   const warm = { user: String(loaded.id), seed: o.seed, maxDays: o.maxDays, cutoff, warmRows: pre.length };
 
   // FSRS-6: weights from the pre-cutoff reviews (the way eval's fsrs6_fitted does), then every card's memory replayed
@@ -163,53 +229,87 @@ export function warmUp(loaded, opts) {
     return { key, noteKey: lr.noteKey, deckKey: lr.deckKey, lastDay: f.lastDay, lastT: own.feats.cards.get(key).prevT, s: f.s, d: f.d, after: afters.get(key) };
   });
   warm.model = model;
+  warm.newCards = [];
+  if (o.newPerDay) {
+    // cards new to the simulation, in real order, with their real first rating; 'real': on the day the user really started them, N: N per day
+    // every card answered up to the cutoff day counts as seen, also one first answered later on that day than the cut row (--start-at): it is not warmed, and not new either
+    const seen = new Set();
+    for (const r of loaded.rows) if (r.day <= cutoff) seen.add(r.cardKey);
+    for (const r of loaded.rows) {
+      if (r.day <= cutoff || r.scored === false || seen.has(r.cardKey)) continue;
+      seen.add(r.cardKey);
+      warm.newCards.push({ key: r.cardKey, noteKey: r.noteKey, deckKey: r.deckKey, rating: r.rating, day: r.day });
+    }
+    if (o.newPerDay !== 'real') warm.newCards.forEach((c, i) => { c.day = cutoff + 1 + Math.floor(i / o.newPerDay); });
+  }
   return warm;
 }
 
 // ---------- one run ----------
-// run: { truth: 'own'|'fsrs', sched: 'fsrs'|'own', R }. opts: { days, seed, snapshotEvery, retryMinutes, maxRetries, ownSched, onReview(info) }.
+// run: { truth: 'own'|'fsrs'|'mix', sched: 'fsrs'|'own', R }. opts: { days, seed, snapshotEvery, retryMinutes, maxRetries, ownSched, band, paired, onReview(info) }.
+// truth mix: p is the mean of Own's and FSRS-6's p. band: { lo, hi, cap } clamps Own's interval (see bandClamp). paired: also histogram log2(Own interval / FSRS interval)
+// of every counted pass. New cards (warm.newCards) are introduced on their day: the first answer is the real first rating, then the usual repeat after a failure.
+// Extra results: periods [{ lo, hi, days, reviews }], iv (IntervalTracker.summary of the intervals given after day 1), bandBinds / bandTotal, paired { hist, n },
+// firstReviews (first answers of new cards; in totalReviews, not in reviews), newCards.
 // Starts from a clone of the warm state (the warm state is not changed). Days cutoff+1 .. cutoff+days.
 // Headline counts (reviews, mean p, lapses) start on day cutoff+2; day 1 is reported as day1Reviews. totalReviews is everything.
 // Returns { reviews, totalReviews, day1Reviews, scheduled, scheduledP, retries, retryP, meanP, lapses, kEnd, kAvg, perCard, cards,
 //           ownIntervals, ownOneDay, ownFallbacks }.
 export function simulate(warm, run, opts = {}) {
   const o = { ...DEFAULTS, ...opts }, { truth, sched, R } = run, seed = opts.seed ?? warm.seed;
-  if (!TRUTHS.includes(truth) || !SCHEDS.includes(sched)) throw new Error('truth and sched must be own or fsrs');
+  if (!ALL_TRUTHS.includes(truth) || !SCHEDS.includes(sched)) throw new Error('truth must be own, fsrs or mix and sched own or fsrs');
   if (!OWN_SCHEDS.includes(o.ownSched)) throw new Error('ownSched must be head or fade');
   const own = warm.own.clone(), w = warm.w, fsrsInterval = fsrsIntervals(w, warm.maxDays), ms = warm.ms, model = warm.model;
   const cards = warm.cards.map(c => ({ ...c, n: 0, due: 0, fails: 0 }));
-  const owned = truth === 'own';
-  let fallbacks = 0, ownIntervals = 0, ownOneDay = 0;
-  // the next gap in whole days after a pass; `count` says whether to count it in the share of Own intervals at 1 day
-  const intervalOf = (c, after, count) => {
-    if (sched === 'own' && after) {
-      let d = null;
-      if (o.ownSched === 'fade') d = model.fadedDays(after.next, after.fq, R, warm.maxDays);
-      else {
-        if (after.head === undefined) after.head = model.headOf(after.next, after.fq);
-        if (headFinite(after.head)) d = ownInterval(after.head, R, warm.maxDays);
-      }
-      if (d !== null) {
-        d = clip(d, 1, warm.maxDays);
-        if (count) { ownIntervals++; if (d === 1) ownOneDay++; }
-        return d;
-      }
+  const needOwn = truth !== 'fsrs', band = o.band || null, paired = !!o.paired;
+  let fallbacks = 0, ownIntervals = 0, ownOneDay = 0, bandBinds = 0, bandTotal = 0, firstReviews = 0;
+  const tracker = new IntervalTracker(sched === 'own' && band ? band.cap : warm.maxDays), periodReviews = PERIODS.map(() => 0);
+  const hist = new Array(LOG2_BINS).fill(0);
+  let pairedN = 0;
+  // Own's whole-day interval from the states right after the answer (null when the head is not made of real numbers)
+  const ownRaw = after => {
+    let d = null;
+    if (o.ownSched === 'fade') d = model.fadedDays(after.next, after.fq, R, warm.maxDays);
+    else {
+      if (after.head === undefined) after.head = model.headOf(after.next, after.fq);
+      if (headFinite(after.head)) d = ownInterval(after.head, R, warm.maxDays);
     }
-    if (sched === 'own') fallbacks++;       // a head that is not made of real numbers: leave the card to FSRS, like the app does
-    return clip(fsrsInterval(c.s, R), 1, warm.maxDays);
+    return d === null ? null : clip(d, 1, warm.maxDays);
+  };
+  // the next gap in whole days after a pass; `count` says whether the interval enters the counts (shares, spread, shrinks, band, paired)
+  const intervalOf = (c, after, count) => {
+    const f = clip(fsrsInterval(c.s, R), 1, warm.maxDays);
+    const raw = after && (sched === 'own' || paired) ? ownRaw(after) : null;
+    if (paired && count && raw !== null) { hist[log2Bin(raw, f)]++; pairedN++; }
+    let d = f;
+    if (sched === 'own') {
+      if (raw !== null) {
+        d = raw;
+        if (band) { const b = bandClamp(d, f, band); if (count) { bandTotal++; if (b !== d) bandBinds++; } d = b; }
+        if (count) { ownIntervals++; if (d === 1) ownOneDay++; }
+      } else fallbacks++;                   // a head that is not made of real numbers: leave the card to FSRS, like the app does
+    }
+    tracker.pass(c.key, d, count);
+    return d;
   };
   for (const c of cards) c.due = Math.max(warm.cutoff + 1, c.lastDay + intervalOf(c, c.after, false));
 
   const pFsrs = (c, day, t) => { const td = day - c.lastDay; return forgettingCurve(w, td > 0 ? td : Math.max(0, (t - c.lastT) / DAY_MS), c.s, true); };
+  // the truth's chance of passing; the row must have been begun when the truth needs Own
+  const truthP = (c, row, day, t) => (truth === 'own' ? own.p(row) : truth === 'fsrs' ? pFsrs(c, day, t) : (own.p(row) + pFsrs(c, day, t)) / 2);
   const knowledge = day => {
     let sum = 0;
     const t = day * DAY_MS + DAY_START_MS;
     for (const c of cards) {
-      if (owned) { const row = { cardKey: c.key, noteKey: c.noteKey, deckKey: c.deckKey, t, day, rating: 3, ms, gapSec: (t - c.lastT) / 1000 }; own.begin(row); sum += own.p(row); }
-      else sum += pFsrs(c, day, t);
+      let row = null;
+      if (needOwn) { row = { cardKey: c.key, noteKey: c.noteKey, deckKey: c.deckKey, t, day, rating: 3, ms, gapSec: (t - c.lastT) / 1000 }; own.begin(row); }
+      sum += truthP(c, row, day, t);
     }
     return sum / cards.length;
   };
+  const intro = new Map();                 // day -> new cards to start that day
+  for (const nc of warm.newCards || []) if (nc.day > warm.cutoff && nc.day <= warm.cutoff + o.days) { if (!intro.has(nc.day)) intro.set(nc.day, []); intro.get(nc.day).push(nc); }
+  let newCount = 0;
 
   let day1 = 0, reviews = 0, lapses = 0, sumP = 0, scheduled = 0, schedP = 0, retries = 0, retryP = 0, k = 0;
   const snaps = [];
@@ -217,29 +317,38 @@ export function simulate(warm, run, opts = {}) {
   for (k = 1; k <= o.days && total; k++) {
     const day = warm.cutoff + k;
     let now = day * DAY_MS + DAY_START_MS;
+    for (const nc of intro.get(day) || []) { cards.push({ key: nc.key, noteKey: nc.noteKey, deckKey: nc.deckKey, lastDay: day, lastT: now, s: 0, d: 0, after: null, n: 0, due: day, fails: 0, isNew: true, firstRating: nc.rating }); newCount++; }
     const queue = cards.filter(c => c.due <= day).sort((a, b) => a.due - b.due || cmp(a.key, b.key));
     const wait = [];                       // failed cards waiting for their repeat, by time then key
     let qi = 0;
     const review = (c, retry) => {
-      const row = { cardKey: c.key, noteKey: c.noteKey, deckKey: c.deckKey, t: now, day, rating: 3, ms, gapSec: Math.max(0, (now - c.lastT) / 1000) };
+      const first = c.isNew === true;
+      const row = { cardKey: c.key, noteKey: c.noteKey, deckKey: c.deckKey, t: now, day, rating: first ? c.firstRating : 3, ms, gapSec: first ? 0 : Math.max(0, (now - c.lastT) / 1000) };
       own.begin(row);
-      const p = owned ? own.p(row) : pFsrs(c, day, now);
-      if (!(p >= 0 && p <= 1)) throw new Error(`truth gave p = ${p}`);
-      const u = crnU(seed, warm.user, c.key, c.n), ok = u < p;
-      row.rating = ok ? 3 : 1;
-      const td = Math.max(0, day - c.lastDay);
-      ({ s: c.s, d: c.d } = nextState(w, c.s, c.d, td, row.rating, true));
+      let p = NaN, u = NaN, ok;
+      if (first) ok = c.firstRating > 1;           // the real first answer decides; the learning step after a failure is the usual repeat
+      else {
+        p = truthP(c, row, day, now);
+        if (!(p >= 0 && p <= 1)) throw new Error(`truth gave p = ${p}`);
+        u = crnU(seed, warm.user, c.key, c.n); ok = u < p;
+        row.rating = ok ? 3 : 1;
+      }
+      if (first) { ({ s: c.s, d: c.d } = initState(w, row.rating, true)); c.isNew = false; }
+      else ({ s: c.s, d: c.d } = nextState(w, c.s, c.d, Math.max(0, day - c.lastDay), row.rating, true));
       c.lastDay = day;
-      const after = own.commit(row, sched === 'own' && ok);
-      o.onReview?.({ card: c.key, n: c.n, u, p, ok, day, t: now, retry });
+      const after = own.commit(row, ok && (sched === 'own' || paired));
+      o.onReview?.({ card: c.key, n: c.n, u, p, ok, day, t: now, retry, first });
       c.n++; c.lastT = now;
-      if (k === 1) day1++;
+      if (k > 1) { const pi = periodIndex(k); if (pi >= 0) periodReviews[pi]++; }
+      if (first) firstReviews++;
+      else if (k === 1) day1++;
       else {
         reviews++; sumP += p;
         if (retry) { retries++; retryP += p; } else { scheduled++; schedP += p; }
         if (!ok) lapses++;
       }
       if (ok) { c.due = day + intervalOf(c, after, k > 1); c.fails = 0; return; }
+      tracker.lapse(c.key);
       c.fails++;
       if (c.fails > o.maxRetries) { c.due = day + 1; c.fails = 0; return; }
       const at = now + o.retryMinutes * MINUTE_MS;
@@ -258,19 +367,22 @@ export function simulate(warm, run, opts = {}) {
     if (k % o.snapshotEvery === 0 || k === o.days) snaps.push(knowledge(day + 1));
   }
   return {
-    reviews, totalReviews: reviews + day1, day1Reviews: day1, scheduled, scheduledP: scheduled ? schedP / scheduled : NaN, retries, retryP: retries ? retryP / retries : NaN,
+    reviews, totalReviews: reviews + day1 + firstReviews, day1Reviews: day1, scheduled, scheduledP: scheduled ? schedP / scheduled : NaN, retries, retryP: retries ? retryP / retries : NaN,
     meanP: reviews ? sumP / reviews : NaN, lapses, kEnd: snaps.length ? snaps[snaps.length - 1] : NaN, kAvg: snaps.length ? mean(snaps) : NaN,
-    perCard: total ? reviews / total : NaN, cards: total, ownIntervals, ownOneDay, ownFallbacks: fallbacks
+    perCard: total ? reviews / total : NaN, cards: total, ownIntervals, ownOneDay, ownFallbacks: fallbacks,
+    firstReviews, newCards: newCount, bandBinds, bandTotal, iv: tracker.summary(cards.length),
+    periods: PERIODS.map(([lo, hi], i) => ({ lo, hi, days: periodDays(o.days)[i], reviews: periodReviews[i] })),
+    ...(paired ? { paired: { hist, n: pairedN } } : {})
   };
 }
 
 // ---------- one user, all runs ----------
-// ctx: { params, size, model, seed, days, maxCards, activeDays, ownSched, fitFsrs, weights, targets | ownTargets + fsrsTargets }
+// ctx: { params, size, model, seed, days, maxCards, activeDays, ownSched, fitFsrs, weights, targets | ownTargets + fsrsTargets, truths, band, paired, newPerDay, startAt }
 export function replayUser(loaded, ctx = {}) {
   const t0 = performance.now(), o = { ...DEFAULTS, ...ctx };
   const warm = warmUp(loaded, o);
   const res = { user: String(loaded.id), ok: true, cutoff: warm.cutoff, warmRows: warm.warmRows, cardsSeen: warm.cardsSeen, cardsActive: warm.cardsActive, cards: warm.cards.length, fitStatus: warm.fitStatus, fitSeconds: warm.fitSeconds ?? null, medianMs: warm.ms, runs: {} };
-  for (const truth of TRUTHS) for (const sched of SCHEDS) for (const R of gridOf(o, sched)) {
+  for (const truth of o.truths || TRUTHS) for (const sched of SCHEDS) for (const R of gridOf(o, sched)) {
     const r = simulate(warm, { truth, sched, R }, o);
     for (const v of [r.reviews, r.kAvg, r.kEnd, r.reviews ? r.meanP : 0]) if (r.cards && !Number.isFinite(v)) { res.ok = false; res.error = `a run gave a value that is not a number (${truth} ${sched} ${R})`; }
     res.runs[runKey(truth, sched, R)] = r;
@@ -354,6 +466,7 @@ export function bootstrapMedianCI(xs, { resamples = BOOT.resamples, seed = BOOT.
   return { median: median2(xs), lo: at(a), hi: at(1 - a), n };
 }
 
+const TRUTH_LABEL = { own: 'Own model', fsrs: 'FSRS-6', mix: 'mean of Own and FSRS-6' };
 const f1 = x => (Number.isFinite(x) ? x.toFixed(1) : 'n/a'), f3 = x => (Number.isFinite(x) ? x.toFixed(3) : 'n/a');
 const pct = x => (Number.isFinite(x) ? `${x >= 0 ? '+' : ''}${x.toFixed(1)}%` : 'n/a');
 const share = x => (Number.isFinite(x) ? `${(x * 100).toFixed(0)}%` : 'n/a');
@@ -382,8 +495,9 @@ export function summarizeReplay(records, meta = {}) {
   }
   const runsOf = (truth, sched, R) => ok.map(r => r.runs[runKey(truth, sched, R)]).filter(Boolean);
   const stat = (rs, f) => meanFinite(rs.map(f));
-  for (const truth of TRUTHS) {
-    lines.push(`## Truth: ${truth === 'own' ? 'Own model' : 'FSRS-6'}`, '', '| Scheduler | R | Reviews per user (day 2+) | Per card | Total (with day 1) | Day 1 | Mean p, scheduled | Retries | Mean p, retries | Own intervals at 1 day | Knowledge at the end | Knowledge, time-average | Lapses per user |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  for (const truth of meta.truths || TRUTHS) {
+    const tl = TRUTH_LABEL[truth];
+    lines.push(`## Truth: ${tl}`, '', '| Scheduler | R | Reviews per user (day 2+) | Per card | Total (with day 1) | Day 1 | Mean p, scheduled | Retries | Mean p, retries | Own intervals at 1 day | Knowledge at the end | Knowledge, time-average | Lapses per user |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     const T = data.truths[truth] = { table: {}, headline: {}, atOwn: {} };
     for (const sched of SCHEDS) for (const R of grids[sched]) {
       const rs = runsOf(truth, sched, R);
@@ -396,7 +510,7 @@ export function summarizeReplay(records, meta = {}) {
       T.table[`${sched}|${R.toFixed(2)}`] = row;
       lines.push(`| ${sched === 'own' ? 'Own' : 'FSRS-6'} | ${R.toFixed(2)} | ${f1(row.reviews)} | ${f1(row.perCard)} | ${f1(row.totalReviews)} | ${f1(row.day1Reviews)} | ${f3(row.scheduledP)} | ${f1(row.retries)} | ${f3(row.retryP)} | ${sched === 'own' ? share(row.oneDay) : '-'} | ${f3(row.kEnd)} | ${f3(row.kAvg)} | ${f1(row.lapses)} |`);
     }
-    lines.push('', `Headline, truth ${truth === 'own' ? 'Own' : 'FSRS-6'}: change in reviews for Own against FSRS-6 at matched knowledge, Own's reviews read at FSRS-6's knowledge. For each user, Own's ${grids.own.length} points (time-averaged knowledge, reviews) are made monotone in knowledge (sorted by R, running maximum) and joined by straight lines; reviews are read at the knowledge FSRS-6 reaches with the given R. Negative means Own needs fewer reviews. The headline covers only users inside the range: users whose Own points do not reach FSRS-6's knowledge are left out of that row (counted below), so the users shown can differ from all users.`, '',
+    lines.push('', `Headline, truth ${tl}: change in reviews for Own against FSRS-6 at matched knowledge, Own's reviews read at FSRS-6's knowledge. For each user, Own's ${grids.own.length} points (time-averaged knowledge, reviews) are made monotone in knowledge (sorted by R, running maximum) and joined by straight lines; reviews are read at the knowledge FSRS-6 reaches with the given R. Negative means Own needs fewer reviews. The headline covers only users inside the range: users whose Own points do not reach FSRS-6's knowledge are left out of that row (counted below), so the users shown can differ from all users.`, '',
       '| FSRS-6 at R | Users covered | Left out: Own stays below / above / FSRS-6 0 reviews | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|---|');
     for (const R0 of [0.85, 0.90]) {
       if (!has(grids.fsrs, R0)) continue;
@@ -409,7 +523,7 @@ export function summarizeReplay(records, meta = {}) {
       lines.push(`| ${R0.toFixed(2)} | ${d.length} of ${ok.length} | ${ok.length - d.length}: ${below} / ${above} / ${zeroFsrs} | ${pct(m.mean)} | [${pct(m.lo)}, ${pct(m.hi)}] | ${pct(md.median)} | [${pct(md.lo)}, ${pct(md.hi)}] |`);
     }
     const mid = grids.own.slice().sort((a, b) => a - b).slice(1, -1);
-    lines.push('', `The other direction, truth ${truth === 'own' ? 'Own' : 'FSRS-6'}: Own's middle points (the ${mid.length} Own R values that are neither the lowest nor the highest), with FSRS-6's reviews read off FSRS-6's monotone curve at Own's knowledge. This too covers only users whose Own knowledge lies inside FSRS-6's range.`, '',
+    lines.push('', `The other direction, truth ${tl}: Own's middle points (the ${mid.length} Own R values that are neither the lowest nor the highest), with FSRS-6's reviews read off FSRS-6's monotone curve at Own's knowledge. This too covers only users whose Own knowledge lies inside FSRS-6's range.`, '',
       '| Own at R | Users covered | Left out: Own below / above FSRS-6\'s range / FSRS-6 0 reviews | Mean change | 95% CI (bootstrap over users) | Median change | 95% CI |', '|---|---|---|---|---|---|---|');
     for (const R of mid) {
       const d = ok.map(r => matchedPctAtOwn(r, truth, R, grids)).filter(x => x !== null);

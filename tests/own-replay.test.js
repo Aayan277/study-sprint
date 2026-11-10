@@ -4,8 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLearner } from '../tools/own-model/common.mjs';
 import { loadShippedParams } from '../tools/own-model/eval-core.mjs';
-import { warmUp, simulate, replayUser, crnU, cutoffOf, interpAt, curveOf, matchedPct, matchedPctAtOwn, matchedSideAtOwn, summarizeReplay, runKey, FSRS_TARGETS, OWN_TARGETS, TRUTHS, SCHEDS, REPLAY_VERSION } from '../tools/own-model/replay-core.mjs';
+import { warmUp, simulate, replayUser, crnU, cutoffOf, interpAt, curveOf, matchedPct, matchedPctAtOwn, matchedSideAtOwn, summarizeReplay, parseBand, bandClamp, splitProblem, halfOf, IntervalTracker, ivShares, bandShare, periodIndex, periodDays, PERIODS, log2Bin, LOG2_BINS, runKey, FSRS_TARGETS, OWN_TARGETS, TRUTHS, SCHEDS, REPLAY_VERSION } from '../tools/own-model/replay-core.mjs';
 import { runPool } from '../tools/own-model/replay-pool.mjs';
+import { fnv1a } from '../js/rwkv-features.js';
 import { createOwnModel } from '../js/own-model.js';
 import { pAt, largestDayAtLeast, intervalDays } from '../js/own-curve.js';
 
@@ -213,7 +214,7 @@ test('interpolation and the matched-knowledge headline on hand-made numbers; the
 });
 
 test('replay version is a number and the pool marks a crashed or silent worker as failed and carries on', async () => {
-  assert.ok(Number.isInteger(REPLAY_VERSION) && REPLAY_VERSION >= 3);
+  assert.ok(Number.isInteger(REPLAY_VERSION) && REPLAY_VERSION >= 4);
   const specs = ['a', 'crash', 'b', 'silent', 'c', 'd', 'e'].map(key => ({ key }));
   const got = [];
   await runPool(specs, (r, n) => got.push({ ...r, n }), { workerUrl: new URL('./own-pool.child.mjs', import.meta.url), workerData: {}, jobs: 2 });
@@ -265,4 +266,124 @@ test('users left out of the headline are counted by reason: Own below / above, F
   assert.deepEqual([B.users, B.below, B.above, B.zeroFsrs, B.leftOut], [1, 1, 1, 1, 3]);
   assert.match(markdown, /\| 3: 1 \/ 1 \/ 1 \|/);
   assert.match(markdown, /Left out: Own below \/ above FSRS-6's range \/ FSRS-6 0 reviews/);
+});
+
+test('band: parsing, the clamp to 0.25-4x of the FSRS interval and the 3650-day cap', () => {
+  assert.equal(parseBand('none'), null); assert.equal(parseBand(undefined), null);
+  assert.deepEqual(parseBand('0.25,4'), { lo: 0.25, hi: 4, cap: 3650 });
+  for (const bad of ['1', '0,4', '2,1', 'a,b', '0.25,4,5']) assert.throws(() => parseBand(bad), /--band/);
+  const b = parseBand('0.25,4');
+  assert.equal(bandClamp(5, 10, b), 5);          // inside 3..40
+  assert.equal(bandClamp(1, 10, b), 3);          // below: 0.25 x 10 = 2.5 rounds to 3
+  assert.equal(bandClamp(100, 10, b), 40);
+  assert.equal(bandClamp(1, 1, b), 1); assert.equal(bandClamp(9, 1, b), 4);
+  assert.equal(bandClamp(5000, 2000, b), 3650, 'the cap wins over a wide band');
+  assert.equal(bandClamp(3, 2, parseBand('1,1')), 2);
+});
+
+test('half split: fnv1a of own-val-half|id, low bit 0 = A, 1 = B; the two halves cover everyone', () => {
+  const ids = Array.from({ length: 200 }, (_, i) => String(i * 7 + 1));
+  for (const id of ids) assert.equal(halfOf(id), (fnv1a('own-val-half|' + id) & 1) === 0 ? 'A' : 'B');
+  const a = ids.filter(id => halfOf(id) === 'A').length;
+  assert.ok(a > 60 && a < 140, `A has ${a} of 200`);
+  assert.equal(halfOf('12'), halfOf('12'));
+});
+
+test('periods, log2 ratio bins and the interval tracker count what they should', () => {
+  assert.deepEqual([1, 2, 7, 8, 28, 29, 90, 91, 180, 181, 365, 366].map(periodIndex), [-1, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, -1]);
+  assert.deepEqual(periodDays(60), [6, 21, 32, 0, 0]); assert.deepEqual(periodDays(180), [6, 21, 62, 90, 0]); assert.equal(PERIODS.length, 5);
+  assert.equal(log2Bin(10, 10), LOG2_BINS / 2);           // ratio 1 -> log2 0 -> first bin at or above 0
+  assert.equal(log2Bin(20, 10), LOG2_BINS / 2 + 2);       // ratio 2 -> +1 -> two half-steps up
+  assert.equal(log2Bin(5, 10), LOG2_BINS / 2 - 2);
+  assert.equal(log2Bin(1, 100000), 0); assert.equal(log2Bin(100000, 1), LOG2_BINS - 1, 'the ends take everything beyond');
+  const t = new IntervalTracker(3650);
+  t.pass('a', 10, false);                 // remembered, not counted
+  t.pass('a', 8, true);                   // shrinks (10 -> 8)
+  t.pass('a', 12, true);                  // grows
+  t.pass('a', 9, true);                   // shrinks (12 -> 9): a is now a card with 2 shrinks
+  t.pass('b', 5, true);                   // nothing to compare with
+  t.pass('b', 5, true);                   // equal is not a shrink
+  t.lapse('b'); t.pass('b', 1, true);     // after a lapse nothing to compare with
+  t.pass('c', 3650, true); t.pass('c', 400, true); t.pass('d', 365, true); t.pass('e', 364, true);
+  const v = t.summary(4);
+  assert.deepEqual([v.n, v.comparable, v.shrinks, v.cardsShrink2], [10, 5, 3, 1]);
+  assert.deepEqual([v.ge365, v.ge3650, v.atMax, v.one], [3, 1, 1, 1]);
+  const sh = ivShares(v);
+  assert.equal(sh.shrink, 0.6); assert.equal(sh.cardsShrink2, 0.25); assert.equal(sh.one, 0.1); assert.equal(sh.ge365, 0.3);
+  assert.ok(Number.isNaN(ivShares(new IntervalTracker(10).summary(0)).shrink));
+  // percentiles: nearest rank on the sorted intervals
+  const q = new IntervalTracker(100);
+  for (let i = 1; i <= 100; i++) q.pass('k' + i, i, true);
+  const qs = q.summary(100);
+  assert.deepEqual([qs.p10, qs.p50, qs.p90, qs.p99], [11, 51, 91, 100]);
+  assert.equal(bandShare({ bandBinds: 1, bandTotal: 4 }), 0.25); assert.ok(Number.isNaN(bandShare({ bandBinds: 0, bandTotal: 0 })));
+});
+
+test('version 4 runs: mix truth, paired histogram, band, period counts, new cards and cold start', () => {
+  const warm = warmUp(learner(0), { ...O, newPerDay: 'real' });
+  const base = { ...O, days: 40 };
+  let firstLater = 0;
+  const mix = simulate(warm, { truth: 'mix', sched: 'own', R: 0.9 }, { ...base, paired: true, onReview: i => { if (i.first && i.day > warm.cutoff + 1) firstLater++; } });
+  assert.ok(Number.isFinite(mix.kAvg) && mix.kAvg > 0 && mix.kAvg <= 1 && mix.reviews > 0);
+  assert.equal(mix.paired.hist.length, LOG2_BINS);
+  assert.equal(mix.paired.hist.reduce((a, b) => a + b, 0), mix.paired.n);
+  assert.equal(mix.paired.n, mix.iv.n, 'every counted pass is paired');
+  assert.equal(mix.periods.reduce((a, p) => a + p.reviews, 0), mix.reviews + firstLater, 'periods hold every review from day 2, first answers of new cards included');
+  assert.deepEqual(mix.periods.map(p => p.days), periodDays(40));
+  assert.equal(mix.totalReviews, mix.reviews + mix.day1Reviews + mix.firstReviews);
+  assert.ok(simulate(warm, { truth: 'mix', sched: 'fsrs', R: 0.9 }, base).paired === undefined, 'no histogram unless asked');
+  // the paired histogram does not depend on which scheduler runs the cards only through the card states; with FSRS scheduling it is still filled
+  const pf = simulate(warm, { truth: 'fsrs', sched: 'fsrs', R: 0.9 }, { ...base, paired: true });
+  assert.ok(pf.paired.n > 0 && pf.ownIntervals === 0);
+  // band: with 1,1 Own's interval equals FSRS-6's wherever it is read
+  const tight = simulate(warm, { truth: 'own', sched: 'own', R: 0.9 }, { ...base, band: parseBand('1,1') });
+  assert.equal(tight.bandTotal, tight.ownIntervals); assert.ok(tight.bandBinds > 0 && tight.bandBinds <= tight.bandTotal);
+  const free = simulate(warm, { truth: 'own', sched: 'own', R: 0.9 }, base);
+  assert.equal(free.bandTotal, 0);
+  const app = simulate(warm, { truth: 'own', sched: 'own', R: 0.9 }, { ...base, band: parseBand('0.25,4') });
+  assert.ok(app.bandBinds <= app.bandTotal && app.iv.n > 0);
+  // new cards: introduced once, at most the real list, first answers counted apart
+  assert.ok(warm.newCards.length > 0 && warm.newCards.every(c => c.day > warm.cutoff && c.rating >= 1 && c.rating <= 4));
+  const nr = simulate(warm, { truth: 'own', sched: 'fsrs', R: 0.9 }, { ...base, days: 80 });
+  assert.ok(nr.newCards > 0 && nr.firstReviews === nr.newCards, `${nr.newCards} new, ${nr.firstReviews} first answers`);
+  const w2 = warmUp(learner(0), { ...O, newPerDay: 2 });
+  assert.deepEqual(w2.newCards.map(c => c.day).slice(0, 5), [1, 2, 3, 4, 5].map(i => warm.cutoff + 1 + ((i - 1) >> 1)));
+  assert.deepEqual(w2.newCards.map(c => c.key), warm.newCards.map(c => c.key), 'the same cards in the same order');
+  const none = simulate(warmUp(learner(0), O), { truth: 'own', sched: 'fsrs', R: 0.9 }, base);
+  assert.equal(none.newCards, 0); assert.equal(none.firstReviews, 0);
+  // cold start: fewer warm rows, the start day moves back to the day of the Nth review
+  const full = warmUp(learner(0), O), cold = warmUp(learner(0), { ...O, startAt: 200 });
+  assert.equal(cold.warmRows, 200); assert.ok(cold.cutoff < full.cutoff && cold.warmRows < full.warmRows);
+  assert.ok(simulate(cold, { truth: 'own', sched: 'own', R: 0.9 }, base).reviews >= 0);
+  assert.equal(warmUp(learner(0), { ...O, startAt: 10 ** 9 }).warmRows, full.warmRows, 'a start beyond the history changes nothing');
+  assert.throws(() => simulate(warm, { truth: 'nope', sched: 'own', R: 0.9 }, base), /truth/);
+  const rec = replayUser(learner(0), { ...O, days: 30, targets: [0.9], truths: ['mix'], paired: true, band: parseBand('0.25,4'), newPerDay: 'real' });
+  assert.equal(rec.ok, true); assert.deepEqual(Object.keys(rec.runs).sort(), ['mix|fsrs|0.90', 'mix|own|0.90']);
+});
+
+test('the test split is refused, with no override', () => {
+  assert.match(splitProblem('test'), /Refusing/);
+  assert.equal(splitProblem('val'), null); assert.equal(splitProblem('train'), null);
+  assert.ok(splitProblem('other'));
+});
+
+test('start-at with new cards: a card first answered later on the start day is neither warmed nor new', () => {
+  const full = learner(0), cut = 200;
+  const dayOf = full.rows[cut - 1].day;
+  // a card whose first row is after the cut but on the same day as the cut row
+  const lateSame = full.rows.slice(cut).find(r => r.day === dayOf && !full.rows.slice(0, cut).some(q => q.cardKey === r.cardKey));
+  if (!lateSame) return;   // this made-up learner has no such card; the case below is built by hand instead
+  const warm = warmUp(full, { ...O, startAt: cut, newPerDay: 'real' });
+  assert.ok(!warm.newCards.some(c => c.key === lateSame.cardKey), 'not introduced as new');
+  assert.ok(!warm.cards.some(c => c.key === lateSame.cardKey), 'not warmed');
+});
+
+test('start-at with new cards: a hand-made same-day card is not introduced as new later', () => {
+  const base = learner(0), DAYMS = 86400000, cut = 200;
+  const rows = base.rows.map(r => ({ ...r })), last = rows[cut - 1];
+  const extra = { ...last, cardKey: 'late-same-day', noteKey: 'late-note', t: last.t + 1000, scored: true, rating: 3 };
+  const again = { ...last, cardKey: 'late-same-day', noteKey: 'late-note', day: last.day + 2, t: last.t + 2 * DAYMS, scored: true, rating: 3 };
+  const all = [...rows.slice(0, cut), extra, ...rows.slice(cut), again].sort((a, b) => a.t - b.t);
+  const warm = warmUp({ ...base, rows: all }, { ...O, startAt: all.indexOf(last) + 1, newPerDay: 'real' });
+  assert.ok(!warm.newCards.some(c => c.key === 'late-same-day'));
 });
