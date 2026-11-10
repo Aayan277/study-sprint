@@ -8,6 +8,11 @@ import { esc, icon, openSheet, closeSheet } from './ui.js';
 // One entry per release, newest first. items: plain text, 1-3 short lines; [] = nothing to announce this release.
 // Add an entry for every release when APP_VERSION is bumped (tests/whats-new.test.js fails otherwise).
 export const NOTES = [
+  { version: '4.65', items: [
+    'Undo after deleting cards, a deck or an import.',
+    'Settings, Add a card and Practice test are shorter: extra options sit under More.',
+    'A + button on phones to add cards, bigger tap areas, and less text on screen.',
+  ] },
   { version: '4.64', items: [
     'On a computer, Tab now reaches Review first on a deck page, and your own model always gives Hard, Good and Easy different gaps.',
   ] },
