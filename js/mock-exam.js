@@ -510,8 +510,7 @@ async function drawResults({ fresh = false } = {}) {
   const flagged = state.flags.filter(Boolean).length;
   const missed = missedIds(qs, score.per);
   const limitMs = run.cfg.limit * 60000;
-  const timeLine = state.auto ? 'Time ran out, so the test was submitted.' : limitMs ? `${clock(state.elapsed)} of ${clock(limitMs)} used.` : `Finished in ${clock(state.elapsed)}.`;
-  const weakest = tags.length > 1 && tags[0].pct < 100 ? tags[0] : null;
+  const timeLine = state.auto ? 'Time ran out, so the test was submitted.' : limitMs ? `${clock(state.elapsed)} of ${clock(limitMs)} used.` : '';
   const trend = state.prev == null ? '' : score.pct === state.prev ? `Same as last time (${state.prev}%).` : `${score.pct > state.prev ? 'Up' : 'Down'} ${Math.abs(score.pct - state.prev)} points from last time (${state.prev}%).`;
   const root = deckPath(decks, run.deckId);
   const rel = id => { const p = deckPath(decks, id); return id === run.deckId ? `${decks.find(d => d.id === id)?.name || 'Deleted deck'} (cards in this deck)` : !p ? 'Deleted deck' : root && p.startsWith(root + ' › ') ? p.slice(root.length + 3) : p; };
@@ -525,9 +524,8 @@ async function drawResults({ fresh = false } = {}) {
       ${ring(score.pct / 100, 112, 10, `<b>${score.pct}%</b>`, 't-ring')}
       <div style="min-width:0">
         <p class="res-score mono"><span class="res-n">${score.correct}</span><small> of ${score.total} right</small></p>
-        <p class="res-line">${esc(timeLine)}</p>
+        ${timeLine ? `<p class="res-line">${esc(timeLine)}</p>` : ''}
         ${trend ? `<p class="res-line muted">${esc(trend)}</p>` : ''}
-        ${weakest ? `<p class="res-line muted">Weakest: ${esc(tagLabel(weakest.key))} (${weakest.pct}%).</p>` : ''}
       </div>
     </div>
     <div class="stats4">
@@ -543,7 +541,7 @@ async function drawResults({ fresh = false } = {}) {
       <button class="btn ghost" id="tSetup" type="button">Change setup</button>
       <button class="btn ghost" id="tDone2" type="button">Done</button>
     </div>
-    <div id="tSched" aria-live="polite">${run.cfg.counts ? '<p class="sched-note">Saving your answers to the schedule…</p>' : '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>'}</div>
+    <div id="tSched" aria-live="polite">${run.cfg.counts ? '<p class="sched-note">Saving your answers to the schedule…</p>' : ''}</div>
     ${tags.length ? `<section class="t-sec"><h2>Score by tag</h2>${bars(tags.slice(0, SHOWN_TAGS), tagLabel)}
       ${tags.length > SHOWN_TAGS ? `<details class="t-more"><summary>Show all ${tags.length} tags</summary>${bars(tags.slice(SHOWN_TAGS), tagLabel)}</details>` : ''}
 </section>` : ''}
@@ -586,7 +584,6 @@ async function drawResults({ fresh = false } = {}) {
 function reviewRow(x, k, res, flag) {
   const card = T.cards.get(x.cardId);
   const status = res.ok ? 'Correct' : res.answered ? 'Wrong' : 'Not answered';
-  const given = res.answered ? esc(res.given) : '<i>Not answered</i>';
   return `<li class="t-item ${res.ok ? 'ok' : 'no'}" data-ok="${res.ok ? 1 : 0}" data-flag="${flag ? 1 : 0}">
     <div class="t-item-h"><span class="t-n mono">${k + 1}</span>
       <span class="t-badge ${res.ok ? 'ok' : 'no'}">${icon(res.ok ? 'check' : 'x')}<span>${status}</span></span>
@@ -595,7 +592,7 @@ function reviewRow(x, k, res, flag) {
     <div class="m">${mathHTML(x.prompt)}</div>
     ${x.occ && card ? `<div class="occ-mini">${occlusionHTML(card, 'back', { zoom: false })}</div>` : ''}
     ${x.kind === 'tf' ? `<div class="t-line"><span>Statement</span> <span>${mathHTML(x.shown)}</span></div>` : ''}
-    <div class="t-line ${res.ok ? 'ok' : 'no'}"><span>Your answer</span> <span>${x.kind === 'tf' && res.answered ? esc(res.given) : res.answered && x.kind !== 'mc' ? esc(res.given) : res.answered ? mathHTML(res.given, { inline: true }) : given}</span></div>
+    ${res.answered ? `<div class="t-line ${res.ok ? 'ok' : 'no'}"><span>Your answer</span> <span>${x.kind !== 'mc' ? esc(res.given) : mathHTML(res.given, { inline: true })}</span></div>` : ''}
     ${res.ok ? '' : `<div class="t-line r"><span>Correct answer</span> <span>${mathHTML(correctText(x))}</span></div>`}
   </li>`;
 }

@@ -19,7 +19,7 @@ ok((await page.textContent('.tab[aria-current=page]')).trim() === 'Today', 'Toda
 ok(JSON.stringify(await page.$$eval('.tab', t => t.map(x => x.textContent.trim()))) === '["Today","Decks","Play","Stats"]', 'tabs: Today, Decks, Play, Stats');
 ok((await page.getAttribute('#startBtn', 'aria-label')).includes('12 cards') && (await page.getAttribute('#startBtn', 'aria-label')).includes('min'), 'Start shows 12 cards and a time estimate');
 ok(+(await page.textContent('[data-count=new]')) === 12 && +(await page.textContent('[data-count=due]')) === 0, 'counts: 12 new, 0 due');
-ok((await page.textContent('.streak')).includes('0') && (await page.textContent('.streak')).includes('Study today to start one'), 'no streak yet');
+ok((await page.textContent('.streak')).includes('0') && !(await page.textContent('.streak')).includes('Study today'), 'no streak yet');
 ok(await page.evaluate(() => { const g = document.querySelector('.today-hero .goal'); return !!g && getComputedStyle(g).display === 'none'; }), "Original: Today's goal line (Clinical's) is in the page but hidden");
 await noHScroll('today'); await page.screenshot({ path: SP + '/t-today.png', fullPage: true });
 
@@ -85,7 +85,7 @@ await run(async () => {
 await page.reload(); await page.waitForSelector('.exam-new');
 const planLine = (await page.locator('[data-newplan=Nx]').textContent()).replace(/\s+/g, ' ').trim();
 // 6 days left, 30 unstarted: 30 ÷ (6 − 4) = 15 a day
-ok(/15 new a day/.test(planLine) && /30 unstarted cards/.test(planLine), 'Today shows "15 new a day" for 30 unstarted cards and 6 days left: ' + planLine);
+ok(/15 new a day/.test(planLine) && / · by /.test(planLine) && !/unstarted/.test(planLine), 'Today shows "15 new a day" for 30 unstarted cards and 6 days left: ' + planLine);
 ok((await page.locator('[data-newplan=Nx] [data-setnew]').textContent()).includes('Set to 15 a day'), 'with a button to set it');
 ok(await page.locator('[data-newplan=B]').count() === 1 && await page.locator('.exam-row:has([data-newplan=B]) .on-track').count() === 1, 'a deck whose limit already covers it says On track (no button)');
 await page.click('[data-setnew=Nx]'); await page.waitForSelector('#sheet[open] #snYes');

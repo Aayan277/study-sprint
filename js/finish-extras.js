@@ -23,7 +23,7 @@ export function pairsHTML(pairs, cardsById, label = c => String(c?.front ?? ''))
 async function pairsPanel({ cardIds, entries = [] }) {
   if (!cardIds?.length) return '';
   const { loadPairs, cardLabel } = await import('./compare-sheet.js');
-  // A practice-only Play round (Settings: "Count Play answers as reviews" off) saves nothing, so this round's own
+  // A practice-only Play round (Settings: "Count Play and test answers as reviews" off) saves nothing, so this round's own
   // mix-ups come from its answer entries. Entries that were saved (decision is anything else) are already in the log.
   const extraLogs = entries.filter(e => e.decision === 'practice' && e.mixedWith && e.card?.id)
     .map(e => ({ cardId: e.card.id, mixedWith: e.mixedWith, timestamp: e.at || Date.now(), source: 'play' }));

@@ -767,6 +767,7 @@
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .confirm .sheet-actions{justify-content:flex-start}
   /* typed learning steps: a box sized for a few short gaps, the Reset button beside it */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] .steps-input{max-width:420px}
+  :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] .steps-editor .steps-input{max-width:260px}
   /* Sync's sign-in form: fields as wide as an address needs, buttons their own size */
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] #syncForm{max-width:440px}
   :root[data-ui="clinical"][data-ui="clinical"][data-ui="clinical"] main[data-route="settings"] #syncForm .sheet-actions{justify-content:flex-start}

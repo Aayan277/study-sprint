@@ -149,7 +149,7 @@ const iso = n => { const d = new Date(2026, 9, 14 + n); return `${d.getFullYear(
 await setDeck(p, 'Chem', { examDate: iso(9) });
 await go(p, '#/deck/Chem', '#prepBtn');
 // (UI audit M7: with cards due, "Review · N" is the main button and Exam prep the second; Exam prep is main only when nothing is due: e2e-uipolish)
-ok(await p.locator('.head-actions #reviewBtn.primary').count() === 1 && /^Review · \d+$/.test((await p.textContent('#reviewBtn')).trim()), 'exam within 14 days, cards due: "Review · N" is the main button');
+ok(await p.locator('.head-actions #reviewBtn.primary').count() === 1 && (await p.textContent('#reviewBtn')).trim() === 'Review' && /^Review, \d+ cards?$/.test(await p.getAttribute('#reviewBtn', 'aria-label')), 'exam within 14 days, cards due: "Review" is the main button, its label has the count');
 ok(await p.locator('#prepBtn.ghost').count() === 1 && await p.locator('#prepBtn.primary').count() === 0, 'and Exam prep steps back to the second button');
 ok(await p.locator('.exam-line #prepBtn').count() === 0, 'no second Exam prep link in the sentence');
 ok(!(await p.isVisible('#editDeck')) && !(await p.isVisible('#addSub')) && !(await p.isVisible('#exportDeck')), 'Edit, Add subdeck and Export are tucked away');

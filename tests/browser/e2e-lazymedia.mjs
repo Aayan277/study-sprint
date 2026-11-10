@@ -157,6 +157,7 @@ await B.waitForFunction(() => /Export without them/.test(document.querySelector(
 ok(/pictures and sounds aren't on this device yet, so they aren't included\. Connect to the internet/.test(await B.textContent('#backupNote')), 'offline: the backup says what is missing: ' + await B.textContent('#backupNote'));
 let backup = await exportBackup(B, 'lazy-offline.json');
 ok(backup.media.length === heldBeforeExport && backup.media.length < 60, `"Export without them" saves what the device holds (${backup.media.length} pictures)`);
+await B.waitForFunction(() => /not included/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
 ok(/not included/.test(await B.textContent('#toast')), 'and the toast says some were left out: ' + await B.textContent('#toast'));
 // online: it downloads the missing ones, then exports everything
 await B.context().setOffline(false);
@@ -181,7 +182,8 @@ ok(Object.keys(names).length === 60, `Anki export fetched the missing pictures f
 
 // a restore from a backup replaces the cards without delete markers: the list of files cards used is started again
 await run(B, async () => { const db = await import('./js/db.js'); await db.setSetting('mediaRefs', { userId: 'x', ids: ['pic-1', 'old-pic'] }); await db.importAll(await db.exportAll()); });
-ok(await run(B, async () => (await (await import('./js/db.js')).getSettings()).mediaRefs === undefined), 'a restore (without "everywhere") forgets the list of files cards used, so no file is marked for it');
+// (a background sync may already have saved a fresh list for the current account: what matters is that the old one is gone)
+ok(await run(B, async () => { const r = (await (await import('./js/db.js')).getSettings()).mediaRefs; return r == null || (r.userId !== 'x' && !r.ids?.includes('old-pic')); }), 'a restore (without "everywhere") forgets the list of files cards used, so no file is marked for it');
 const D = await device('D');
 await run(D, async () => (await import('./js/db.js')).deleteDeck('sample'));
 await signIn(D, false);

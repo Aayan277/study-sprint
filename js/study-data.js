@@ -171,7 +171,7 @@ export function countFor(data, deckIds) {
 // i.e. reviews due today plus today's new cards up to the new-cards-per-day limit (`left` is what deckCounts says
 // Review would show now, learning steps included, so the total follows the queue).
 //   done      cards finished today in these decks (all decks when none are chosen): a Review answer, or a Play answer
-//             that changed the schedule (Play with "Count Play answers as reviews" on). A card still in its learning
+//             that changed the schedule (Play with "Count Play and test answers as reviews" on). A card still in its learning
 //             steps for today is in `left`, so it is not also counted as done.
 //   left      cards still to go           total  done + left (0 = nothing was due today)
 //   state     'todo' (work left), 'done' (finished today's work) or 'nothing' (nothing was due at all today)

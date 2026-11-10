@@ -35,7 +35,7 @@ const pasteDeck = async (p, name, lines) => {
   await p.selectOption('#deckSel', '__new'); await p.fill('#newName', name);
   await p.click('#saveBtn'); await p.waitForSelector('.crow');
 };
-const openSuggest = async p => { await p.click('#deckMore'); await p.click('#autoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 }); };
+const openSuggest = async p => { await p.click('#brTags'); await p.click('#toolAutoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 }); };
 const noHScroll = async (p, what) => ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && (() => { const s = document.getElementById('sheet'); return !s || s.scrollWidth <= s.clientWidth + 1; })()), 'no sideways scroll: ' + what);
 const addLabel = p => p.textContent('#atAdd');
 
@@ -51,11 +51,14 @@ const original = await tagsById(p);
 await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
 await p.click('.deck-open'); await p.waitForSelector('.crow');
 await p.click('#deckMore');
-ok(await p.isVisible('#autoTag') && (await p.textContent('#autoTag')).includes('Suggest tags') && await p.getAttribute('#autoTag', 'role') === 'menuitem', 'the ⋯ menu has Suggest tags');
+ok(!(await p.$('#autoTag')), 'the ⋯ menu no longer has Suggest tags (it lives in Tools only)');
+await p.keyboard.press('Escape');
+await p.click('#brTags');
+ok(await p.isVisible('#toolAutoTag') && (await p.textContent('#toolAutoTag')).includes('Suggest tags'), 'Browse → Tools has Suggest tags');
 await p.keyboard.press('Escape');
 
 // ---- 2. the sheet ----
-await p.click('#deckMore'); await p.click('#autoTag');
+await p.click('#brTags'); await p.click('#toolAutoTag');
 await p.waitForSelector('#atProg, .tag-sugs li');
 await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
 const rows = p.locator('.tag-sugs li');
@@ -159,11 +162,11 @@ ok(JSON.stringify(Object.keys(undone).sort().map(k => [k, undone[k]])) === JSON.
 await p.screenshot({ path: SP + '/at-after-undo.png' });
 
 // ---- 6. the keyboard path ----
-await p.focus('#deckMore');
+await p.focus('#brTags');
 await p.keyboard.press('Enter');
-await p.waitForSelector('#deckMenu:not([hidden])');
-for (let i = 0; i < 8 && await p.evaluate(() => document.activeElement.id) !== 'autoTag'; i++) await p.keyboard.press('ArrowDown');
-ok(await p.evaluate(() => document.activeElement.id) === 'autoTag', 'arrow keys reach Suggest tags');
+await p.waitForSelector('#toolAutoTag');
+for (let i = 0; i < 40 && await p.evaluate(() => document.activeElement.id) !== 'toolAutoTag'; i++) await p.keyboard.press('Tab');
+ok(await p.evaluate(() => document.activeElement.id) === 'toolAutoTag', 'Tab reaches Suggest tags in Tools');
 await p.keyboard.press('Enter');
 await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
 ok(await p.evaluate(() => !!document.activeElement.closest('#sheet')), 'focus is inside the sheet');
@@ -203,7 +206,7 @@ await p.evaluate(async () => {
   await db.addDeckWithCards({ id: 'tiny', name: 'Tiny', color: '#3E63DD', created: Date.now() + 6 }, [1, 2, 3].map(i => ({ id: 't' + i, deckId: 'tiny', front: 'f' + i, back: 'b' + i, created: i })));
 });
 await p.goto('http://localhost:8123/#/deck/es'); await p.waitForSelector('.crow');
-await p.click('#deckMore'); await p.click('#autoTag');
+await p.click('#brTags'); await p.click('#toolAutoTag');
 await p.waitForSelector('#atMsg', { timeout: 30000 });
 ok((await p.textContent('#atMsg')).startsWith('No clear topics found in these cards.') && await p.isDisabled('#atAdd'), 'a vocabulary deck: "No clear topics found…" and nothing to add');
 await p.keyboard.press('Escape');
@@ -211,14 +214,14 @@ await p.keyboard.press('Escape');
 const GEO = fixture('geology').cards.map(c => ({ id: 'g' + c.id, deckId: 'geo', front: c.front, back: c.back, created: 1 }));
 await p.evaluate(async cards => { const db = await import('./js/db.js'); await db.addDeckWithCards({ id: 'geo', name: 'Geology', color: '#3E63DD', created: Date.now() + 7 }, cards); }, GEO);
 await p.goto('http://localhost:8123/#/deck/geo'); await p.waitForSelector('.crow');
-await p.click('#deckMore'); await p.click('#autoTag');
+await p.click('#brTags'); await p.click('#toolAutoTag');
 await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
 ok((await p.textContent('#atBody')).startsWith('No tag stood out enough') && await p.isVisible('#atLess'), 'no sure tag: "No tag stood out enough to tick", and the other possible tags below');
 ok(await p.locator('.tag-sugs .pick:checked').count() === 0 && await p.isDisabled('#atAdd'), 'none is ticked, so Add is off');
 await p.keyboard.press('Escape');
 await p.goto('http://localhost:8123/#/deck/tiny'); await p.waitForSelector('.crow');
-await p.click('#deckMore');
-ok(await p.isHidden('#autoTag').catch(() => true) && !(await p.$('#autoTag')), 'a deck with fewer than 10 cards has no Suggest tags item');
+await p.click('#brTags');
+ok(await p.isDisabled('#toolAutoTag'), 'a deck with fewer than 10 cards has Suggest tags switched off in Tools');
 await p.keyboard.press('Escape');
 
 // ---- 9. a phone-sized screen ----
@@ -257,7 +260,7 @@ await p.evaluate(async () => {
   await db.addDeckWithCards({ id: 'long', name: 'Long', color: '#3E63DD', created: Date.now() }, cards);
 });
 await p.goto('http://localhost:8123/#/deck/long'); await p.waitForSelector('.crow');
-await p.click('#deckMore'); await p.click('#autoTag');
+await p.click('#brTags'); await p.click('#toolAutoTag');
 await p.waitForSelector('#atProg, #atMsg, .tag-sugs li');
 const prog = await p.textContent('#atProg').catch(() => '');
 ok(prog === '' || /^Reading 6,000 cards… \d+%$/.test(prog), 'while it reads: "' + prog + '"');
@@ -272,7 +275,7 @@ await p.evaluate(async () => {
   await db.addDeckWithCards({ id: 'huge', name: 'Huge', color: '#3E63DD', created: Date.now() }, cards);
 });
 await p.goto('http://localhost:8123/#/deck/huge'); await p.waitForSelector('.crow', { timeout: 60000 });
-await p.click('#deckMore'); await p.click('#autoTag');
+await p.click('#brTags'); await p.click('#toolAutoTag');
 await p.waitForSelector('#atStop', { timeout: 10000 });
 await p.click('#atStop');
 await p.waitForSelector('#atMsg');

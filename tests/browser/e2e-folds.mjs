@@ -1,5 +1,6 @@
 // Folded long screens: Settings (Advanced scheduling, Danger zone), Stats on a computer (nothing folded),
 // and the card filter's groups. (Stats on a phone and Play's Customise are checked in e2e-stats and e2e-play-exam.)
+process.env.NO_OPEN_FOLDS = '1';          // this file checks the real first visit: the "More settings" folds start closed
 import { chromium } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -18,10 +19,24 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#advanced');
   const vis = async sel => p.isVisible(sel);
   // always shown
-  const shown = { theme: '#skins', mode: 'input[name=mode] >> nth=0', oled: '#oled', retention: '#ret', newPerDay: '#npd', reviewsPerDay: '#rpd', sync: '#syncBox', backup: '#exportBtn', restore: 'label.file-btn' };
+  const shown = { theme: '#skins', mode: 'input[name=mode] >> nth=0', retention: '#ret', newPerDay: '#npd', reviewsPerDay: '#rpd', sync: '#syncBox', backup: '#exportBtn', restore: 'label.file-btn' };
   for (const [k, sel] of Object.entries(shown)) ok(k === 'mode' ? await p.locator('.chip').first().isVisible() : await vis(sel), `${name}: ${k} is shown without opening anything`);
   // folded
   ok(!(await p.getAttribute('#advanced', 'open') !== null) && !(await vis('#leech')) && !(await vis('#timerSec')) && !(await vis('#lsteps')), `${name}: leeches, Play timer and steps are folded inside Advanced scheduling`);
+  ok(!(await vis('#oled')) && !(await vis('#compactDecks')) && !(await vis('input[name=ui]')) && !(await vis('#learnOrderChips')) && !(await vis('#singleKeys')) && !(await vis('#glossBtn')) && !(await vis('#installRow')), `${name}: the niche options are folded in "More settings"`);
+  ok(await p.locator('summary:has-text("More settings")').count() >= 3 && await vis('#playCounts') && await vis('#remTime'), `${name}: each section has a More settings fold; Reminders and the Play switch stay visible`);
+  ok(await p.evaluate(() => { const ids = ['moreAppear', 'moreStudy', 'moreData']; return ids.every(i => document.getElementById(i)?.classList.contains('advanced') && document.getElementById(i).tagName === 'DETAILS'); }), `${name}: the folds look like Advanced scheduling`);
+  // (assumes headless Chromium reports storage as not persisted and offers no install prompt, so the backup warning shows)
+  ok(await vis('#whereNote') && /this browser only/.test(await p.textContent('#whereNote')) && await vis('#storageWarn') && /Make a backup/.test(await p.textContent('#storageWarn')) && !/Install the app/.test(await p.textContent('#storageWarn')) && !(await p.evaluate(() => document.getElementById('moreData').open)), `${name}: the data-loss notes are visible with More settings closed (saved in this browser only; make a backup; headless Chrome offers no install)`);
+  ok(await p.locator('#helpRow').count() === 0 && await p.locator('#helpTop').count() === 1, `${name}: only one Help button`);
+  await p.click('#moreAppear > summary');
+  ok(await vis('#oled') && await vis('input[name=ui] >> nth=0') && await vis('#glossaryUnderline'), `${name}: opening More settings shows them`);
+  // (the open state is saved on the "toggle" event, which fires a moment after the click)
+  await p.waitForFunction(() => { try { return localStorage.getItem('study-sprint-fold-settings-moreAppear') === '1'; } catch { return true; } }, null, { timeout: 5000 }).catch(() => {});
+  await p.reload(); await p.waitForSelector('#advanced');
+  ok(await vis('#oled') && !(await vis('#glossBtn')), `${name}: an opened More settings stays open after a reload, the others stay closed`);
+  await p.evaluate(async () => { const m = await import('./js/settings.js'); m.revealSetting('glossBtn'); });
+  ok(await vis('#glossBtn'), `${name}: a link to a setting opens its fold`);
   ok(!(await vis('#resetBtn')) && (await p.textContent('#dangerZone > summary')).trim() === 'Danger zone', `${name}: Reset all data is behind "Danger zone"`);
   ok(await p.evaluate(() => { const d = document.getElementById('dangerZone'); return d.closest('section').querySelector('h2').textContent === 'Your data' && d.nextElementSibling === null; }), `${name}: Danger zone is the last thing in Your data`);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: no sideways scroll`);
@@ -75,6 +90,35 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   ok(opts.length === 15 && opts.includes("typing") && opts[0] === 'all' && opts.includes('leech') && opts.includes('dupes') && opts.includes('flag4') && opts.includes('buried'), 'every filter is still there (' + opts.length + ')');
   await p.selectOption('#brFilter', 'new'); ok(await p.inputValue('#brFilter') === 'new', 'a grouped filter still works');
   await p.screenshot({ path: SP + '/folds-filter.png' });
+  await p.context().close();
+}
+
+// Settings drawn again and again leaves at most one live 'install-change' listener (the old ones let go once their screen is gone).
+{
+  const p = await open(1440, 900);
+  await p.addInitScript(() => {
+    const live = new Set(); window.__live = live;
+    const add = EventTarget.prototype.addEventListener, rem = EventTarget.prototype.removeEventListener;
+    EventTarget.prototype.addEventListener = function (t, f, ...r) { if (t === 'install-change' && this === window) live.add(f); return add.call(this, t, f, ...r); };
+    EventTarget.prototype.removeEventListener = function (t, f, ...r) { if (t === 'install-change' && this === window) live.delete(f); return rem.call(this, t, f, ...r); };
+  });
+  await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#storageWarn');
+  for (let i = 0; i < 3; i++) {
+    await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck, .empty');
+    await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#storageWarn');
+  }
+  await p.evaluate(() => { const m = import('./js/settings.js'); return m.then(x => x.renderSettings(x.settingsView())); }).catch(() => {});
+  await p.waitForSelector('#storageWarn');
+  // Old listeners let go when the event next fires; after one event, only the live Settings screen's listener is left, and it acts once.
+  const ran = await p.evaluate(() => {
+    const w = document.getElementById('storageWarn'); let sets = 0;
+    const mo = new MutationObserver(rs => { sets += rs.length; }); mo.observe(w, { childList: true });
+    window.dispatchEvent(new Event('install-change'));
+    const recs = mo.takeRecords(); mo.disconnect();
+    return { n: sets + recs.length, live: window.__live.size };
+  });
+  ok(ran.live === 1, `Settings drawn several times: one live install-change listener is left after an event (${ran.live})`);
+  ok(ran.n <= 1, `an install-change event updates the storage note at most once (${ran.n})`);
   await p.context().close();
 }
 await browser.close();

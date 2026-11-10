@@ -9,7 +9,7 @@ import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic, typeInFieldHTML, readTypeIn, wireTypeIn } from './card-editor.js';
+import { basicParts, moreOptionsHTML, watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic, typeInFieldHTML, readTypeIn, wireTypeIn } from './card-editor.js';
 import { ownTypeIn, setTypeIn, typeFacts, isTypingCard } from './type-in.js';
 import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
 import { cleanFields } from './note-fields.js';
@@ -20,7 +20,7 @@ import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlu
 import { plainText, mathHTML, spokenRow } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher, undoOpts } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
 
@@ -128,7 +128,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
     B.visible = list;
+    // On a deck's page the deck summary already has the count: say it only while a filter or search narrows the list.
     $('brCount').textContent = list.length === cards.length ? plural(list.length, 'card') : `Showing ${list.length} of ${plural(cards.length, 'card')}`;
+    $('brCount').hidden = !!deckId && list.length === cards.length;
     const now = Date.now();
     $('brList').innerHTML = list.length ? list.slice(0, B.shown).map(({ card, state }) => {
       const st = cardStatus(card, state, now);
@@ -329,7 +331,7 @@ export async function openCardPanel(card, ctx) {
 
     <div class="field"><span id="flagLbl">Flag</span>${flagButtons(card.flag || 0)}</div>
     <div class="field"><span>Move to deck</span>${moveRow(decks, card.deckId)}</div>
-    <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review this card once first, then you can set its due date.</p>'}</div>
+    <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review it once first</p>'}</div>
 
     <div id="ceMixed" class="mixed-with" hidden></div>
 
@@ -363,9 +365,9 @@ export async function openCardPanel(card, ctx) {
     if (act === 'bury') guardedGo(() => toggleBury(card, save));
     if (act === 'duplicate') guardedGo(() => duplicateAndEdit(card, ctx));
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => guardedGo(() => db.clearStates([card.id]).then(() => again('Reset to new', 'reset'))));
-    if (act === 'delete' && partner) askDeletePair(card, partner, again);
-    else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
-      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete'))));
+    if (act === 'delete' && partner) askDeletePair(card, partner, again, ctx);
+    else if (act === 'delete') confirmIn('ceConfirm', (isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text).'
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture).' : 'Delete this card and its history?') + UNDO_NOTE, 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(snap => deleted(snap, 'Card deleted', ctx, again))));
   }));
   wireFlags(f => guardedGo(() => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag')));
   wireMove(deckId => guardedGo(() => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move')));
@@ -462,8 +464,8 @@ async function openCardEdit(card, ctx) {
 // full panel again with fresh data.
 function cardOps(card, ctx) {
   const { statesById, refresh = async () => {}, onAction, closeAfter = [] } = ctx;
-  const again = async (msg, act) => {
-    if (msg) toast(msg);
+  const again = async (msg, act, opts) => {
+    if (msg) toast(msg, opts);
     await refresh();
     const fresh = (await db.get('cards', card.id));
     const st = await db.get('cardStates', card.id);
@@ -504,14 +506,17 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
 // pair: the other card when this one has a reverse card (or is one), else null
 // Does this card's deck (or a deck above it) type the answers? (Review's panel and Play pass no decks: read them.)
 const deckTypes = async (card, ctx) => !!effectiveDeck(ctx.decks || await db.getAll('decks'), card.deckId)?.typeAnswers;
+const editParts = card => basicParts('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' });
+// Does a card have an option set that "More options" hides? Then the fold opens by itself.
+const moreNonDefault = (card, pair) => ownTypeIn(card) !== null || !!card.noteFields?.length
+  || (!isClozeCard(card) && !hasMasks(card) && (!!pair || isStructured(card) || !!card.noteExtra || acceptedOf(card).length > 0));
 const cardFieldsHTML = (card, maxN = 0, pair = null, deckDefault = false) => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') + noteFieldsEditHTML('ce', card.noteFields) : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
-      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
-      ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
-      ${noteFieldsEditHTML('ce', card.noteFields)}`}
-      ${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
+      ${editParts(card).main.join('')}`}
       <label class="field"><span>Tags</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
-      ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
+      ${moreOptionsHTML('ce', `${isClozeCard(card) || hasMasks(card) ? '' : editParts(card).chips + editParts(card).hook + reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) }) + noteFieldsEditHTML('ce', card.noteFields)}
+      ${isClozeCard(card) ? noteFieldsEditHTML('ce', card.noteFields) : ''}${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
+      ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other answers</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" placeholder="a, b" autocomplete="off"></label>` : ''}`, moreNonDefault(card, pair))}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" role="alert" hidden></p>`;
 // The form's error: read out, linked to the field it is about (aria-invalid + aria-describedby) and the cursor goes there. Without `field`, the
@@ -636,14 +641,19 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
   }
   return go();
 }
+// After a delete: the toast offers Undo, which puts the cards back with their schedules and history (db.restoreSnapshot), then refreshes.
+function deleted(snap, msg, ctx, again) {
+  db.holdMedia();
+  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
+}
 // Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
-function askDeletePair(card, partner, again) {
-  $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.</p><div class="sheet-actions">
+function askDeletePair(card, partner, again, ctx) {
+  $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.${UNDO_NOTE}</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
-  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete'))));
-  $('cfOnly').addEventListener('click', () => guardedGo(async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); }));
+  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(snap => deleted(snap, 'Both cards deleted', ctx, again))));
+  $('cfOnly').addEventListener('click', () => guardedGo(async () => { const snap = await db.deleteCards([card.id]); snap.cards.push(partner); await db.saveCards([unpaired(partner)]); return deleted(snap, 'Card deleted', ctx, again); }));
   $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 
@@ -811,14 +821,17 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'reverse') bulkReverse(selected, done);
     if (act === 'typing') bulkTyping(selected, done);
-    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
-      await db.deleteCards(selected.map(c => c.id));
+    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history?${UNDO_NOTE}`, `Delete ${plural(n, 'card')}`, async () => {
+      const snap = await db.deleteCards(selected.map(c => c.id));
+      db.holdMedia();
       // A card whose partner is deleted becomes an ordinary card again.
       const gone = new Set(selected.map(c => c.id)), notes = new Set(selected.filter(isPair).map(c => c.noteId));
       const left = notes.size ? (await db.getAll('cards')).filter(c => isPair(c) && notes.has(c.noteId) && !gone.has(c.id)) : [];
-      if (left.length) await db.saveCards(left.map(unpaired));
+      if (left.length) { snap.cards.push(...left); await db.saveCards(left.map(unpaired)); }
       clear();
-      return done(`Deleted ${plural(n, 'card')}`);
+      closeSheet();
+      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
+      return refresh();
     });
   }));
   // Find and replace: shows how many cards would change as you type.
@@ -1019,27 +1032,37 @@ function wireLinkTool(cards, { scope, refresh }) {
 
 // ---------- adding one card ----------
 // prefill (optional): { front, back, onAdded } opens a Basic card with that text; it saves only on Add, then closes and runs onAdded.
-export function openAddCard({ decks, deckId, refresh, prefill = null }) {
+// The deck an Add card or an import went into last (this device; the Add cards screen shares it).
+const LAST_ADD_DECK = 'study-sprint-import-last';
+const lastAddDeck = () => { try { return localStorage.getItem(LAST_ADD_DECK) || ''; } catch { return ''; } };
+// The + in the phone header: the sheet opens on the last-used deck, with every deck to pick from. No decks yet: the Add cards screen.
+export async function openAddFromHeader({ refresh = () => {} } = {}) {
+  const decks = (await db.getDecks()).sort((a, b) => a.created - b.created);
+  if (!decks.length) { navGo('#/import'); return false; }
+  const last = lastAddDeck();
+  openAddCard({ decks, defaultDeck: decks.some(d => d.id === last) ? last : decks[0].id, refresh });
+  return true;
+}
+export function openAddCard({ decks, deckId, defaultDeck = '', refresh, prefill = null }) {
   if (!decks.length) { toast('Make a deck first'); return; }
-  const target = deckId || decks[0].id;
+  const target = deckId || defaultDeck || decks[0].id;
   // A deck with subdecks asks which one (starting with the deck itself).
   const choices = deckChoices(decks, deckId ? subtreeIds(decks, deckId) : null);
   const kind = prefill ? 'basic' : lastKind();
+  const addParts = basicParts('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' });
   openSheet(`
     <h2 id="sheetTitle">${prefill ? 'Add a comparison card' : 'Add a card'}</h2>
     <form id="acForm" class="sheet-in ac-form" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
       <div class="kind-body">
-        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
-          ${basicFields('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' })}
-          ${reverseSwitchHTML('ac')}
-        </div>
+        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>${addParts.main.join('')}</div>
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}
       <label class="field"><span>Tags</span><input id="acTags" autocomplete="off" placeholder="e.g. renal cardio"></label>
+      ${moreOptionsHTML('ac', `<div id="acMoreBasic" ${kind !== 'basic' ? 'hidden' : ''}>${addParts.chips}${addParts.hook}${reverseSwitchHTML('ac')}</div>
+      ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}`)}
       <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>
@@ -1105,6 +1128,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       return;
     } finally { adding = false; }
     if (prefill) { closeSheet(); toast('Comparison card added'); refresh(); prefill.onAdded?.(); return; }
+    try { localStorage.setItem(LAST_ADD_DECK, deck); } catch { /* fine without */ }
     // Stay open for the next card, like Anki.
     $('acErr').hidden = true;
     if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }
@@ -1151,6 +1175,7 @@ function dueIn(state, days, now = Date.now()) {
   return { ...state, due: days === 0 ? now : daysAgoStart(-days, now), scheduledDays: days };
 }
 // Ask "are you sure?" inside the panel instead of a browser pop-up.
+const UNDO_NOTE = ' You can undo this for a few seconds.';
 function confirmIn(boxId, text, yes, onYes) {
   $(boxId).innerHTML = `<div class="confirm"><p>${esc(text)}</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn danger solid" type="button" id="cfYes">${esc(yes)}</button></div></div>`;

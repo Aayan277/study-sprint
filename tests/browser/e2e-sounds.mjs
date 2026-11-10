@@ -442,7 +442,7 @@ ok(bk.v === 2 && bk.audio > 0 && bk.named && bk.ok === null, `Backup with sounds
 ok(bk.v2 === 1 && bk.audio2 === 0 && bk.ok2 === null && bk.cards2, `Backup without sounds: version 1, no sounds in it (cards still list them), checks out`);
 await page.goto(APP + '#/settings'); await page.waitForSelector('#bkSoundsRow:not([hidden])');
 ok(/Include sounds \(\d+(\.\d)? [KM]B\)/.test(await page.textContent('#bkSoundsTitle')) && await page.isChecked('#bkSounds'), `Settings: "Include sounds (…)" is on for a small total (${await page.textContent('#bkSoundsTitle')})`);
-await page.waitForFunction(() => /On this device: pictures .* · sounds .*free/.test(document.querySelector('#mediaLine')?.textContent || ''));
+await page.waitForFunction(() => /^Pictures .* · sounds .*free/.test(document.querySelector('#mediaLine')?.textContent || ''));
 ok(true, 'Settings → Your data: ' + await page.textContent('#mediaLine'));
 await page.screenshot({ path: SP + '/snd-settings-375.png', fullPage: true });
 await page.uncheck('#bkSounds');
@@ -480,6 +480,11 @@ ok(noRoom.err?.noSpace && noRoom.err.msg === 'Not enough space on this device to
 // ---------- 8b. book-keeping: nothing needs to read every file's bytes ----------
 const book = await run(async () => {
   const db = await import('./js/db.js'), media = await import('./js/media.js');
+  // The imports above each started the 2-minute "Undo can still need the files" hold (db.holdMedia). Let it run out, as it would
+  // for a person: move the clock on 3 minutes for this block (put back at the end).
+  const realNow = Date.now, realGet0 = IDBObjectStore.prototype.get; let offset = 3 * 60000, held, afterHold, result;
+  Date.now = () => realNow.call(Date) + offset;
+  try {
   const kind = m => (m.type.startsWith('audio/') ? 'sounds' : 'pictures');
   const actual = async () => { const out = { pictures: 0, sounds: 0 }; for (const id of await db.mediaKeys()) { const m = await db.getMedia(id); out[kind(m)] += m.size; } return out; };
   const t1 = await db.mediaTotals(), a1 = await actual();
@@ -492,6 +497,14 @@ const book = await run(async () => {
   const pendingAfter = (await db.mediaToUpload()).map(m => m.id);
   const removedOld = await db.cleanMedia(Date.now());                        // old, unused and on the server: removed, and listed so the server can drop it
   const gone = !(await db.getMedia(s.id));
+  // A delete holds the clean-up for 2 minutes (so Undo finds the files): while it holds nothing is removed; later the file goes.
+  const s2 = await media.saveSound({ name: 'h.wav', type: 'audio/wav', data: new Uint8Array(55).fill(2).buffer });
+  await db.putMedia({ ...(await db.getMedia(s2.id)), created: Date.now() - 2 * 3600000, uploaded: true });
+  db.holdMedia();                                                            // (what a delete does)
+  held = await db.cleanMedia(Date.now());
+  const heldStill = !!(await db.getMedia(s2.id));
+  offset += 3 * 60000;
+  afterHold = await db.cleanMedia(Date.now());
   const t3 = await db.mediaTotals(), a3 = await actual();
   // A backup without sounds never reads the sounds' bytes
   const cards = await db.getAll('cards');
@@ -501,14 +514,17 @@ const book = await run(async () => {
   IDBObjectStore.prototype.get = function (k) { if (this.name === 'media') asked.push(k); return realGet.call(this, k); };
   const bk = await db.exportAll({ sounds: false });
   IDBObjectStore.prototype.get = realGet;
-  return { same1: JSON.stringify(t1) === JSON.stringify(a1), same2: t2.sounds === t1.sounds + 777, pending: pending.includes(s.id), removedFresh: removedFresh.includes(s.id), stillThere,
+  result = { held: held.length === 0 && heldStill, afterHold: afterHold.includes(s2.id), same1: JSON.stringify(t1) === JSON.stringify(a1), same2: t2.sounds === t1.sounds + 777, pending: pending.includes(s.id), removedFresh: removedFresh.includes(s.id), stillThere,
     pendingAfter: pendingAfter.includes(s.id), removedOld: removedOld.includes(s.id), gone, same3: JSON.stringify(t3) === JSON.stringify(a3) && t3.sounds === t1.sounds,
     readSound: asked.some(k => soundIds.has(k)), exported: !bk.media.some(m => m.type.startsWith('audio/')) };
+  } finally { Date.now = realNow; IDBObjectStore.prototype.get = realGet0; }
+  return result;
 });
 ok(book.same1 && book.same2 && book.same3, 'Book-keeping: the totals record matches the real sizes, and follows an add and a removal');
 ok(book.pending && !book.pendingAfter, 'Book-keeping: a new sound is listed to upload, and is not once it is marked uploaded');
 ok(!book.removedFresh && book.stillThere, 'Clean-up: a sound added in the last hour is kept even if no card uses it');
 ok(book.removedOld && book.gone, 'Clean-up: an old unused sound is removed and listed for the server');
+ok(book.held && book.afterHold, 'Clean-up: right after a delete (hold on) nothing is removed; after the hold has run out the unused sound is removed');
 ok(book.exported && !book.readSound, "A backup without sounds never read a sound's bytes");
 
 // ---------- 9. sync: sounds like pictures, and a server that still has the old file-type list ----------
@@ -527,7 +543,7 @@ const seed = await A.evaluate(async () => {
   ]);
   return { pic, s1, s2 };
 });
-await A.goto(APP + '#/settings'); await A.waitForSelector('#syncBox > *');
+await A.goto(APP + '#/settings'); await A.waitForSelector('#syncBox > :not([hidden])');
 await A.fill('#syncEmail', 'me@example.com'); await A.fill('#syncPw', 'secret123'); await A.click('#syncCreate');
 await A.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 ok(fake.files.has(`${[...fake.users.values()][0].id}/${seed.pic}`), 'Sync with the old file-type list: the picture still goes up');
@@ -550,7 +566,7 @@ ok(fake.files.has(`${uid}/${seed.s1}`) && fake.files.get(`${uid}/${seed.s2}`).ty
 const ab = await A.evaluate(async id => (await (await import('./js/db.js')).getMedia(id)), seed.s1);
 ok(ab.uploaded === true && !('blocked' in ab), 'Sync: the sound is marked uploaded and not blocked any more');
 // a second device downloads them
-await B.goto(APP + '#/settings'); await B.waitForSelector('#syncBox > *');
+await B.goto(APP + '#/settings'); await B.waitForSelector('#syncBox > :not([hidden])');
 await B.fill('#syncEmail', 'me@example.com'); await B.fill('#syncPw', 'secret123'); await B.click('#syncForm button[type=submit]');
 await B.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 await B.waitForFunction(async ([a, b]) => { const db = await import('./js/db.js'); return !!(await db.getMedia(a)) && !!(await db.getMedia(b)); }, [seed.s1, seed.s2], { timeout: 15000 });

@@ -4,10 +4,11 @@
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
 // Play is practice only by default: nothing is saved to the review log or the schedule. With the synced setting
-// "Count Play answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
+// "Count Play and test answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
 // schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
+import { helpLink } from './help.js';
 import { loneIds, unpaired } from './reverse.js';
 import {
   questionFor, isFrontOnly, playableCards, canMultipleChoice, pickDistractors, weightedQueue, timeLimit, scoreAnswer,
@@ -230,13 +231,8 @@ export async function renderPlay(el) {
       <div class="start-row">
         <button class="btn primary" type="button" id="startBtn">Start round</button>
         ${best ? `<span class="mode-best">Best for this setup <b class="mono">${best.toLocaleString()}</b></span>` : ''}
+        ${helpLink('play-scoring', '?', 'How scoring works in Play')}
       </div>
-
-      <details class="how-score"><summary>ⓘ How scoring works</summary>
-        <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). No time limit: no speed bonus.</p>
-        <p>Survival: the timer shrinks 3% a question, down to 2s. Lightning: always timed, 60 seconds in all, a wrong answer costs 3s, and the clock pauses while you read an answer.</p>
-        <p>Typing gets ${TYPING_TIME}× the time. Hard: 6 options, −50 per miss, ×1.25 points, no typo forgiveness. Flash: the question hides after the set seconds, ×1.2 points.</p>
-        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
       `}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }
@@ -557,7 +553,7 @@ const countsAsReviews = () => playCountsAsReviews(data?.settings);
 // Save one answer (only when Play counts as reviews, see above): always to the review log (source 'play', so stats and a
 // future FSRS optimizer can tell it from a Review), and to the review schedule when the auto-grading rules allow it (see autograde.js).
 async function record(round, entry) {
-  // Practice only (the default, Settings > "Count Play answers as reviews" off): nothing is saved. No schedule or FSRS
+  // Practice only (the default, Settings > "Count Play and test answers as reviews" off): nothing is saved. No schedule or FSRS
   // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
   // The round's own score, bests and results come from the round itself, not from the log.
   if (!countsAsReviews()) { entry.decision = 'practice'; return; }
@@ -575,7 +571,7 @@ async function sameCard(entry) {
 }
 
 // A typed answer the check marked wrong was right: count it right in the round (accuracy, grade, Missed list). The score,
-// streak, lives and clock stay as they were. With "Count Play answers as reviews" on, the schedule and the stats are fixed too.
+// streak, lives and clock stay as they were. With "Count Play and test answers as reviews" on, the schedule and the stats are fixed too.
 // Returns the corrected entry, or null when nothing changed.
 async function markRight(round, entry) {
   if (!canOverride(round, entry) || !(await sameCard(entry))) return null;
@@ -697,7 +693,7 @@ function next() {
 async function scheduleSummary(round) {
   await round.saving;                          // wait for the last answers to finish saving
   if (!round.log.length) return '';
-  if (!countsAsReviews()) return '<p class="sched-note">Practice only: your schedule and stats are unchanged.</p>';
+  if (!countsAsReviews()) return '';
   return scheduleSummaryHTML(round.log);
 }
 

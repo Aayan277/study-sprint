@@ -92,8 +92,8 @@ export function settingsRowHTML() {
   const text = mode === 'installed' ? 'You are using the installed app.'
     : mode === 'prompt' ? 'Put Study Sprint on your home screen or desktop. It opens in one tap and works offline.'
     : mode === 'ios' ? `${STEPS} It opens in one tap and works offline.`
-    : 'Open your browser’s menu and choose Install app or Add to Home Screen. Some browsers don’t offer this.';
-  return `<div><b>Install app</b><p id="installText">${text}</p></div>
+    : '';
+  return `<div><b>Install app</b>${text ? `<p id="installText">${text}</p>` : ''}</div>
     ${mode === 'prompt' ? `<button class="btn ghost small" type="button" id="installBtn">${icon('download')} Install</button>` : ''}`;
 }
 export function wireSettingsRow(row) {

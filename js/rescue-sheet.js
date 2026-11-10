@@ -6,6 +6,7 @@
 
 import * as db from './db.js';
 import { dayStart } from './days.js';
+import { helpLink } from './help.js';
 import { rescueBacklog } from './queue.js';
 import { dismissRescueToday } from './study-data.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
@@ -40,8 +41,7 @@ export function openRescueSheet({ data, state, offer = null, onChange = () => {}
     ${offer
       ? `<p>You have <b>${plural(state.backlog, 'overdue card')}</b>. Instead of all at once, you get about <b>${quota} overdue</b> cards a day, most overdue first, on top of your usual ${state.typical} or so. Cards for an exam are never held back.</p>`
       : `<p>Day <b>${data.rescue?.k ?? '?'} of ${days}</b>${data.rescue ? ` · ${plural(data.rescue.remaining, 'overdue card')} left` : ''}. Cards you skip are not lost: a missed day just means more the next day.</p>`}
-    <label class="adv-row switch-row"><span><b>Pause new cards until caught up</b>
-      <span>No new cards start while the plan runs, so the overdue ones come first. Decks with an exam still get theirs.</span></span>
+    <label class="adv-row switch-row"><span><b>Pause new cards until caught up</b> ${helpLink('catch-up', '?', 'About pausing new cards')}</span>
       <input id="rsPause" type="checkbox" class="switch" ${pauseNew ? 'checked' : ''}></label>
     <p class="rs-warn" id="rsWarn" role="status" ${warn ? '' : 'hidden'}>${esc(warn)}</p>
     <div class="sheet-actions ${offer ? '' : 'stack'}">

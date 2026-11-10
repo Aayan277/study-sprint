@@ -148,7 +148,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await settingsPage(p);
   ok(few < 400, `${tag}: a small history (${few} rows)`);
   ok((await p.locator('#optRow b').first().textContent()) === 'Personal parameters', `${tag}: the Advanced scheduling row is called Personal parameters`);
-  ok((await p.textContent('#optStatus')) === 'Using the standard FSRS settings.', `${tag}: it says the standard settings are in use`);
+  ok((await p.textContent('#optStatus')) === '', `${tag}: no status line while the standard settings are in use (nothing to say)`);
   ok(await p.isDisabled('#optOpen'), `${tag}: Optimize… is off`);
   ok((await p.textContent('#optWhy')) === `Available after 400 reviews (you have ${few}).`, `${tag}: the reason is shown: ` + await p.textContent('#optWhy'));
   ok(await p.locator('#optReset').count() === 0, `${tag}: no Reset link while the standard settings are in use`);
@@ -227,7 +227,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   await p.click('#optNo');
   ok(!(await p.isVisible('#optConfirm')) && (await saved(p)).w !== null, `${tag}: Cancel keeps the weights`);
   await p.click('#optReset'); await p.click('#optYes');
-  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === 'Using the standard FSRS settings.');
+  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === '');
   const reset = await saved(p);
   ok(reset.w === null && reset.version === 'fsrs-6', `${tag}: Reset saves w: null`);
   ok((await goodButton(p)) === goodBefore, `${tag}: the Review button is back to ${goodBefore}`);
@@ -243,7 +243,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   const open1 = await goodButton(p);
   ok(open1 !== open0 && open1 === goodAfter, `${tag}: the open Review session was planned again with them (${open0} → ${open1})`);
   await settingsPage(p); await p.click('#optReset'); await p.click('#optYes');
-  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === 'Using the standard FSRS settings.');
+  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === '');
 
   // ---------- Reset to default pressed while a run is going: the run does not undo it ----------
   await openSheet(p);
@@ -275,7 +275,7 @@ for (const [w, h, scheme] of [[375, 780, 'dark'], [1440, 900, 'light']]) {
   ok(JSON.stringify((await saved(p)).w) === JSON.stringify(rival.w), `${tag}: the other device's weights are kept`);
   await p.click('#optClose');
   await settingsPage(p); await p.click('#optReset'); await p.click('#optYes');
-  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === 'Using the standard FSRS settings.');
+  await p.waitForFunction(() => document.getElementById('optStatus')?.textContent === '');
 
   // ---------- a big history: Cancel, then a full run that must not freeze the page ----------
   const total = await seed(p, [['D', 5000, null]], 0);

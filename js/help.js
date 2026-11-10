@@ -35,10 +35,11 @@ export const SECTIONS = [
       <p>Lots of new cards today means lots of reviews over the next few days. If Today feels too long, lower New cards per day.</p>` },
     { id: 'missed', q: 'What if I miss a day?', a: `
       <p>Nothing is lost: cards you didn’t review wait for you. One missed day a week (the week runs Monday to Sunday) is covered by a streak freeze, so a single slip doesn’t end your streak (two missed days in a row still do). Back after a longer break? Today offers to spread the overdue cards over 2 or 3 days (<b>Spread them out</b>).</p>` },
+    { id: 'catch-up', q: 'What does Pause new cards until caught up do?', a: `
+      <p>While the catch-up plan runs, no new cards start, so the overdue ones come first. Decks with an exam still get their new cards. Most overdue cards come first, on top of your usual reviews, and cards for an exam are never held back.</p>` },
     { id: 'custom-study', q: 'What can I do in Today → Options and Custom study?', a: `
       <p><b>Options</b> on Today picks which decks you study (each chip shows what’s due · new), how you answer (flip or type), and opens <b>Custom study…</b>. Custom study is for extra work beyond today’s cards:</p>
       <ul>
-        <li><b>By tag or question ID</b>: study just the cards you pick.</li>
         <li><b>More new cards today</b>: raise today’s new-card limit with the + and − buttons, then <b>Add</b>.</li>
         <li><b>Postpone reviews</b>: push chosen reviews to later.</li>
         <li><b>Review ahead</b>: study cards that aren’t due yet; each is rescheduled from today.</li>
@@ -48,11 +49,16 @@ export const SECTIONS = [
     { id: 'review-counts', q: 'What are the New, Learn and Due numbers at the top of Review?', a: `
       <p><b>New</b> is cards you haven’t seen yet, <b>Learn</b> is cards still on their short learning steps, and <b>Due</b> is reviews that are waiting. The one you’re working on is underlined, and the numbers go down as you answer.</p>` },
     { id: 'compare', q: 'What is Compare?', a: `
-      <p>When two cards keep getting mixed up, the end of a session, the leech helper and a card’s page in Browse offer <b>Compare</b>: it shows them side by side, with how many times you mixed them up recently, and can add a card that sets them apart. <b>Not confused</b> hides the pair until you mix them up twice more (on this device).</p>` },
+      <p>When two cards keep getting mixed up, the end of a session, the leech helper and a card’s page in Browse offer <b>Compare</b>: it shows them side by side, with how many times you mixed them up recently, and can add a card that sets them apart. The sheet notes how many times you mixed them up in the last few weeks. <b>Not confused</b> hides the pair until you mix them up twice more (on this device).</p>` },
     { id: 'play', q: 'What are Play and Practice test? Do they change my schedule?', a: `
-      <p><b>Play</b> turns a deck into timed game rounds for cramming. By default it’s practice only: it doesn’t change when cards are due, your stats or your streak (to change that, turn on Settings → Study → Count Play answers as reviews). <b>Practice test</b>, on a deck’s page, is a calm mock exam that’s marked at the end.</p>` },
+      <p><b>Play</b> turns a deck into timed game rounds for cramming. By default it’s practice only: it doesn’t change when cards are due, your stats or your streak (to change that, turn on Settings → Study → Count Play and test answers as reviews). <b>Practice test</b>, on a deck’s page, is a calm mock exam that’s marked at the end.</p>` },
+    { id: 'test-counts', q: 'Do Practice test answers count as reviews?', a: `
+      <p>By default a Practice test changes nothing in your schedule or stats. Play and Practice test share one switch: <b>Settings → Study → Count Play and test answers as reviews</b>. When it is on, due cards are graded by your answers and missed cards come back sooner.</p>` },
     { id: 'play-scoring', q: 'How does scoring work in Play?', a: `
-      <p>In <b>Play</b>, tap <b>How scoring works</b> under the start button. A right answer scores 100, plus up to 100 for speed, times your streak (up to ×1.5). In Lightning the clock pauses while you read an answer. Your best score for a setup shows on the Play screen once you have one.</p>
+      <p>A right answer scores 100, plus up to 100 for speed, times your streak (up to ×1.5). With no time limit there is no speed bonus.</p>
+      <p><b>Survival</b>: the timer shrinks 3% a question, down to 2 seconds. <b>Lightning</b>: always timed, 60 seconds in all, a wrong answer costs 3 seconds, and the clock pauses while you read an answer.</p>
+      <p>Typing gets extra time. <b>Hard</b>: 6 options, −50 per miss, ×1.25 points, no typo forgiveness. <b>Flash</b>: the question hides after the set seconds, ×1.2 points.</p>
+      <p>Play is practice only by default: answers don’t change when cards are due or your stats. Turn on <b>Count Play and test answers as reviews</b> in Settings to change that; then answers on due cards count as their review, and so do new cards in a deck with an exam. Your best score for a setup shows on the Play screen once you have one.</p>
       <p>Multiple choice needs at least 4 cards in the deck to offer wrong answers, which is why it is greyed out on smaller decks.</p>` },
     { id: 'accuracy', q: 'What does Accuracy mean on the finish screen?', a: `
       <p>Accuracy counts every rating except <b>Again</b>. Hard, Good and Easy all count as remembered.</p>` },
@@ -69,11 +75,11 @@ export const SECTIONS = [
       <p>Tap <b>Import</b> (on the Decks screen or on a deck’s page), or <b>Add cards</b> in the sidebar on a computer. Paste one card per line, with the front and back separated by a dash, tab, colon, <code>|</code>, <code>=</code> or comma, for example ${code('Mitosis - cell division into 2 identical cells')}. Quizlet exports and tables from Notion, Excel or Google Sheets work too, and so do .csv and .xlsx files and Anki decks (.apkg).</p>
       <p>Notes written in paragraphs don’t split into cards by themselves. Tap <b>Suggest cards</b> and the app picks out definitions, lists, key terms and dates for you to tick and check (it works on your device), or use <b>Make cards with Claude</b> for an AI version.</p>` },
     { id: 'tags', q: 'Can the app tag my cards for me?', a: `
-      <p>Tags on a card are separated by spaces or commas. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck, tap ⋯ → <b>Suggest tags</b> (or in Browse, Tools → <b>Suggest tags for these cards</b>). The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
+      <p>Tags on a card are separated by spaces or commas. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck’s card list (or Browse), tap <b>Tools</b> → <b>Suggest tags for these cards</b>. The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
     { id: 'tools', q: 'What is in Browse → Tools?', a: `
       <p>Tools works on the cards in the list you’re looking at: <b>Find by tag or question ID</b>, rename or remove a tag everywhere in the list, <b>Suggest tags for these cards</b> (needs 10 or more cards), and <b>Link cloze cards</b>, which turns older separate fill-in-the-blank cards into one note.</p>` },
     { id: 'reverse', q: 'What is a reverse card?', a: `
-      <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. Turn on <b>Both directions</b> when you add or edit a card: it also asks the back and expects the front, each direction has its own schedule, and Review shows one of the two a day. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one.</p>` },
+      <p>A reverse card asks the back and expects the front, with its own schedule, so you can know a term but not its definition. Turn on <b>Both directions</b> when you add or edit a card: it also asks the back and expects the front, each direction has its own schedule, and Review shows one of the two a day. In Browse a pair shows “Has a reverse card” with <b>Open the other direction</b>. Cloze, image-occlusion, step-by-step and elements cards can’t have one. You find it under <b>More options</b> when you add or edit a card.</p>` },
     { id: 'anki-import', q: 'What happens to my Anki deck when I import it?', a: `
       <p>Subdecks stay subdecks (“Psych 101::Unit 1” becomes a subdeck inside the deck you add them to); turn that off and everything goes in one deck. Anki notes with more than two fields keep the extras while <b>Keep the other fields</b> is on. Importing the same deck again updates the cards you already have. Cards you may have edited here are left alone unless you turn on <b>Overwrite … you may have edited here too</b>. Each of those rows says “Kept as you edited it”, or “Overwrites your edits” when that switch is on.</p>` },
     { id: 'typing', q: 'Can I type my answers instead of flipping?', a: `
@@ -99,7 +105,12 @@ export const SECTIONS = [
   ] },
   { title: 'Your data and account', items: [
     { id: 'account', q: 'Do I need an account?', a: `
-      <p>No. Everything works without one, offline too. An account only matters if you want the same cards on more than one device, like your phone and your laptop. It’s free: Settings → Sync → Create account.</p>` },
+      <p>No. Everything works without one, offline too. An account only matters if you want the same cards on more than one device, like your phone and your laptop. It’s free: Settings → Sync → Create account.</p>
+      <p>New here? Type your email and a password, then tap <b>Create account</b>. We email you a link to confirm it; open it, then sign in. Each account only ever sees its own data.</p>` },
+    { id: 'keep-media', q: 'What does “Keep all pictures and sounds on this device” do?', a: `
+      <p>Settings → Sync → More settings. <b>Off</b>: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account’s monthly download allowance. <b>On</b>: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi), and it keeps a full copy in case your account ever loses them.</p>` },
+    { id: 'more-settings', q: 'Where did some settings go?', a: `
+      <p>Each Settings section has a <b>More settings</b> fold with the less-used options: Style, OLED black, Card text alignment and the display switches under Appearance; Learning cards, Single-key shortcuts and Glossary under Study; Install app and Storage under Your data; and the picture and account tools under Sync. Open or close a fold and it stays that way on this device.</p>` },
     { id: 'safe', q: 'Is my data safe? Where is it kept?', a: `
       <p>Without an account, your cards are stored only in this browser on this device. Nobody else can see them, not even the developer. They can be lost if you clear your browser’s data or lose the device. On iPhone and iPad, Safari may also clear them if you don’t open Study Sprint for about a week. Adding it to your Home Screen avoids that, and <b>Settings → Your data → Export backup</b> saves everything to a file you can keep.</p>
       <p>With an account, a copy is also kept on the app’s server (Supabase), and each account can only read its own data. Details are on the <a href="privacy.html">Privacy</a> page.</p>` },
@@ -118,7 +129,7 @@ export const SECTIONS = [
   { title: 'Settings and Stats', items: [
     { id: 'steps', q: 'How do I type learning steps?', a: `
       <p><b>Learning steps</b> are the short gaps while a card is new: you see it again after each one, until it moves on to normal reviews. <b>Relearning steps</b> are the gaps after you press Again on a normal review.</p>
-      <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m). The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
+      <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m), for example <b>1m 10m</b> or <b>30m 1d</b>. The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
     { id: 'learn-order', q: 'Where do learning cards go in a session?', a: `
       <p>Learning cards are the ones the <b>Learn</b> number at the top of Review counts: cards on their short learning steps, or relearning after you pressed Again, that are due today. A learning step of a day or more counts too once it has come due. New cards you haven’t answered yet are not learning cards.</p>
       <p>Settings → Study → <b>Learning cards</b> chooses where they go:</p>
@@ -162,7 +173,7 @@ export const SECTIONS = [
     { id: 'stats-calendar', q: 'How does the Study calendar work?', a: `
       <p>Each square in the <b>Study calendar</b> is a day; darker means more answers. Tap a day to read its numbers, or use <b>Pick a day</b> to do it without a mouse. A diagonal hatch is a day covered by a streak freeze, and a day off you planned is marked too.</p>` },
     { id: 'streak-freeze', q: 'What is a streak freeze?', a: `
-      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. To rest on purpose, tap <b>Plan a day off</b>. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
+      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. Two missed days in a row still break it. To rest on purpose, tap <b>Plan a day off</b>: a planned day off never breaks your streak and doesn’t add to it. You can plan up to 14 days, starting tomorrow and up to 60 days ahead. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
     { id: 'readiness', q: 'What does Exam readiness mean?', a: `
       <p>On Stats, pick a course. <b>Exam readiness</b> is the share of its cards you would still remember (90% or better) on exam day if you stopped reviewing now. Without an exam date it shows <b>Readiness today</b>, and <b>Add exam date</b> lets you set one. It’s an estimate: <b>How sure is this?</b> says what it’s based on. You can turn the header off with Exam readiness in Stats in Settings → Appearance.</p>` },
     { id: 'retention-planner', q: 'How does Help me choose pick a retention?', a: `

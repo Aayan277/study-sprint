@@ -22,6 +22,11 @@ function mapRequests(ctx) {
 // messages also catch workers. A test that triggers one on purpose sets `ctx.expectCspViolations = true` (e2e-csp.mjs).
 const CSP_TEXT = /^CSP-VIOLATION|Content[ -]Security[ -]Policy|Refused to (load|connect|execute|apply|create|frame|run|evaluate|start)/i;
 function watchCsp(ctx) {
+  // Settings keeps its "More settings" folds closed for a new visitor and remembers what you opened. Most tests are about the
+  // controls inside them, so every window starts with those folds open (set NO_OPEN_FOLDS=1 to see the real first visit).
+  if (!process.env.NO_OPEN_FOLDS) ctx.addInitScript(() => {
+    try { for (const k of ['moreAppear', 'moreStudy', 'moreData', 'moreSync']) if (localStorage.getItem('study-sprint-fold-settings-' + k) === null) localStorage.setItem('study-sprint-fold-settings-' + k, '1'); } catch { /* no storage */ }
+  }).catch(() => {});
   ctx.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', e => console.error(`CSP-VIOLATION ${e.violatedDirective} blocked ${e.blockedURI} at ${e.sourceFile || document.URL}:${e.lineNumber}`));
   }).catch(() => {});
@@ -55,7 +60,10 @@ export const realChromium = { launch: launchMapped };
 // Almost every test wants the old behaviour (the sample deck is there on first load), so `chromium` here
 // gives every new browser window the "skip onboarding" flag in localStorage (the app also accepts
 // ?skipOnboarding in the address). e2e-onboarding.mjs uses `realChromium` to see the real first run.
-const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-skip-whatsnew', '1'); } catch { /* fine */ } };
+const SKIP = () => { try { localStorage.setItem('study-sprint-skip-onboarding', '1'); localStorage.setItem('study-sprint-skip-whatsnew', '1');
+  // "More options" (Add a card, card editor) and "Customise" (Practice test) start open here, unless a test saved its own choice: most tests are about
+  // the controls inside them. e2e-addprac.mjs removes these to test the folds themselves.
+  for (const k of ['study-sprint-fold-card-more', 'study-sprint-fold-test-custom']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '1'); } catch { /* fine */ } };
 // Signing in on a device that has cards of its own asks first ("Add these N cards to your account" / "Start fresh" / "Cancel"), and a
 // test that meets that question unexpectedly should fail, not have it tapped away. A test that builds a device with cards and then
 // signs in on purpose to merge them opts in: `chromium.launch({ autoAddCards: true })` (all its windows) or

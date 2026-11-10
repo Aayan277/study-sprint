@@ -9,12 +9,14 @@ import { plainText } from './format.js';
 import { recallAt, examInfo, countdown } from './exam.js';
 import { personalW20 } from './sched-settings.js';
 import {
-  COUNTS, MAX_QUESTIONS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
+  COUNTS, DEFAULT_CFG, MAX_QUESTIONS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
 } from './mock-exam-logic.js';
 import * as store from './mock-exam-store.js';
 import { saveRun, inProgress, clearSaved, savePrefs } from './mock-exam-store.js';
 import { go as navGo } from './nav.js';
-import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
+import { openSheet, closeSheet, esc, plural, toast, $, icon, foldOpen, saveFold } from './ui.js';
+import { playCountsAsReviews } from './autograde.js';
+import { helpLink } from './help.js';
 
 // The cards a test can use: visible cards (no suspended or buried ones), as plain text like Play, a card whose reverse partner is
 // gone asked as an ordinary card.
@@ -30,7 +32,8 @@ const poolFor = (data, cards, deckId) => { const inside = subtreeIds(data.decks,
 // Returns false (with a message) when no question fits the choices.
 export async function beginTest(deckId, cfgIn, { stay = false, data: loaded = null } = {}) {
   const { data, cards } = loaded || await load();
-  const cfg = cleanCfg(cfgIn);
+  // "Count answers as reviews" is one setting for Play and tests (Settings → Study); a test follows it, not its own saved copy.
+  const cfg = cleanCfg({ ...cfgIn, counts: playCountsAsReviews(data.settings) });
   const now = Date.now(), w20 = personalW20(data.settings);
   const stateOf = c => data.statesById.get(c.id);
   const { questions } = buildTest(poolFor(data, cards, deckId), cfg, {
@@ -57,6 +60,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
   let id = choices.some(d => d.id === deckId) ? deckId : (choices.find(d => poolFor(data, cards, d.id).length) || choices[0]).id;
   let cfg = cleanCfg(prefs[id]);
   let pool = [], tags = [], perKind = {};
+  let customOpen = foldOpen('test-custom');       // what the person chose (saved); a setup that is not the default also shows the fold, without saving that
 
   const prepare = () => {
     pool = poolFor(data, cards, id);
@@ -73,6 +77,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     const saved = inProgress();
     const recent = recentResults(history, id, 4);
     const exam = examInfo(effectiveDeck(data.decks, id));
+    // Choices inside Customise that differ from the default: the fold shows by itself, so a changed filter is never hidden.
+    const nonDefault = cfg.tags.length > 0 || cfg.limit !== DEFAULT_CFG.limit || cfg.order !== DEFAULT_CFG.order || Object.keys(KINDS).some(k => perKind[k] && !cfg.kinds.includes(k));
+    const shown = customOpen || nonDefault;
     const radio = (name, value, label, checked, extra = '') =>
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
     openSheet(`
@@ -84,10 +91,13 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
           <div class="pt-resume-b"><button class="btn primary small" type="button" id="ptResume">Resume</button><button class="btn ghost small" type="button" id="ptDiscard">Discard</button></div></div>` : ''}
         <label class="field"><span>Deck</span>
           <select id="ptDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === id ? 'selected' : ''}>${esc(d.label)} (${poolFor(data, cards, d.id).length})</option>`).join('')}</select></label>
-        ${tags.length > 1 ? `<fieldset><legend>Only these tags</legend>
-          <div class="chips" role="group" aria-label="Narrow by tag">${tags.map(t => `<button type="button" class="tchip" data-tag="${esc(t.tag)}" aria-pressed="${cfg.tags.includes(t.tag)}">${esc(t.label)} <small>${t.n}</small></button>`).join('')}</div></fieldset>` : ''}
         <fieldset><legend>Questions</legend>
           <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? 'All' : n, cfg.count === n)).join('')}</div></fieldset>
+        <button class="fold-toggle" type="button" id="ptCustomBtn" aria-expanded="${shown}" aria-controls="ptCustomBody">
+          <span>Customise</span>${icon('chevron')}</button>
+        <div id="ptCustomBody" ${shown ? '' : 'hidden'}>
+        ${tags.length > 1 ? `<fieldset><legend>Only these tags</legend>
+          <div class="chips" role="group" aria-label="Narrow by tag">${tags.map(t => `<button type="button" class="tchip" data-tag="${esc(t.tag)}" aria-pressed="${cfg.tags.includes(t.tag)}">${esc(t.label)} <small>${t.n}</small></button>`).join('')}</div></fieldset>` : ''}
         <fieldset><legend>Question types</legend>
           <div class="chips">${Object.entries(KINDS).map(([k, label]) => `<label class="chip"><input type="checkbox" name="kind" value="${k}" ${cfg.kinds.includes(k) && perKind[k] ? 'checked' : ''} ${perKind[k] ? '' : 'disabled'}><span>${label}</span></label>`).join('')}</div>
           <p class="note" id="ptKindNote"></p></fieldset>
@@ -98,10 +108,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
           <fieldset><legend>Order</legend>
             <div class="chips">${Object.entries(ORDERS).map(([k, label]) => radio('order', k, label, cfg.order === k)).join('')}</div></fieldset>
         </div>
-        <label class="adv-row switch-row"><span><b id="ptCountsLbl">Count answers as reviews</b>
-          <span id="ptCountsHelp">Off: a practice test changes nothing in your schedule or stats. On: answers count like Play answers do when Play counts as reviews (due cards are graded, missed cards come back sooner).</span></span>
-          <input id="ptCounts" type="checkbox" class="switch" aria-labelledby="ptCountsLbl" aria-describedby="ptCountsHelp" ${cfg.counts ? 'checked' : ''}></label>
+        </div>
         <p class="pt-note" id="ptNote" role="status" aria-live="polite"></p>
+        <p class="pt-counts" id="ptCountsLine"><b>Counts as reviews: ${playCountsAsReviews(data.settings) ? 'on' : 'off'}</b> ${helpLink('test-counts', '?', 'About counting test answers as reviews')}</p>
         ${recent.length ? `<section class="pt-hist" aria-label="Recent results"><h3>Recent results</h3><ul>${recent.map(r => `<li><span>${new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b class="mono">${r.pct}%</b><span class="mono">${r.correct}/${r.total}</span>${r.secs ? `<span class="mono">${clock(r.secs * 1000)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
         <div class="sheet-actions"><button class="btn ghost" type="button" id="ptCancel">Cancel</button><button class="btn primary" type="submit" id="ptStart">Start test</button></div>
       </form>`);
@@ -115,12 +124,12 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     const { able } = askable(narrowed, { ...cfg, tags: [] });
     const n = cfg.count === 'all' ? Math.min(able.length, MAX_QUESTIONS) : Math.min(cfg.count, able.length);
     $('ptNote').textContent = able.length
-      ? `${plural(n, 'question')} from ${plural(able.length, 'card')}${cfg.limit ? `, ${cfg.limit} minutes` : ', no time limit'}.${narrowed.length > able.length ? ` ${narrowed.length - able.length} cards can't be asked with these question types.` : ''}`
+      ? (narrowed.length > able.length ? `${narrowed.length - able.length} cards can't be asked with these question types.` : '')
       : 'No cards fit these choices. Try another deck, other tags or more question types.';
     $('ptStart').disabled = !able.length;
-    const off = Object.keys(KINDS).filter(k => !perKind[k]);
-    $('ptKindNote').textContent = off.length ? `${off.map(k => KINDS[k]).join(' and ')} ${off.length > 1 ? 'need' : 'needs'} cards that fit (multiple choice and true or false need 4 different answers in the deck).` : '';
-    $('ptKindNote').hidden = !off.length;
+    const off = ['mc', 'tf'].some(k => !perKind[k]);
+    $('ptKindNote').textContent = off ? 'Needs 4 different answers' : '';
+    $('ptKindNote').hidden = !off;
   };
 
   const read = () => {
@@ -130,7 +139,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     const get = name => f.querySelector(`input[name=${name}]:checked`)?.value;
     cfg = cleanCfg({
       count: get('count') === 'all' ? 'all' : +get('count'), kinds: kinds.length ? kinds : cfg.kinds, limit: +get('limit'), order: get('order'),
-      counts: $('ptCounts').checked, tags: [...f.querySelectorAll('[data-tag][aria-pressed=true]')].map(b => b.dataset.tag)
+      counts: cfg.counts, tags: [...f.querySelectorAll('[data-tag][aria-pressed=true]')].map(b => b.dataset.tag)
     });
     if (!checked.length) f.querySelectorAll('input[name=kind]').forEach(i => { i.checked = cfg.kinds.includes(i.value) && !i.disabled; });       // at least one stays on
   };
@@ -147,6 +156,12 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
       if (!b) return;
       b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
       read(); refresh();
+    });
+    $('ptCustomBtn').addEventListener('click', () => {
+      customOpen = $('ptCustomBtn').getAttribute('aria-expanded') !== 'true';      // from what is showing now
+      $('ptCustomBtn').setAttribute('aria-expanded', String(customOpen));
+      $('ptCustomBody').hidden = !customOpen;
+      saveFold('test-custom', customOpen);
     });
     $('ptCancel').addEventListener('click', closeSheet);
     $('ptResume')?.addEventListener('click', () => { const s = inProgress(); closeSheet(); if (s) navGo(`#/test/${encodeURIComponent(s.run.deckId)}`); });

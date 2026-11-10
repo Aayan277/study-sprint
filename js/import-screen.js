@@ -17,7 +17,7 @@ import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
-import { $, esc, plural, toast, dismissToast, icon } from './ui.js';
+import { $, esc, plural, toast, dismissToast, icon, undoOpts } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
 import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, pagesToMarkdown, textPages, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
@@ -79,6 +79,7 @@ export async function renderImport(el, arg) {
     suggest: false,        // "Suggest cards" is on: the text is read for definitions, lists and facts, and the preview shows suggestions to tick
     sugJob: null,          // the job finding the suggestions ({ cancel })
     sugSeq: 0,             // which run is the latest (an older one that finishes late says nothing)
+    pasteTimer: 0,         // the wait before pasted text is read again after typing
     sugTimer: 0,           // the wait before suggestions are found again after the text changed
     sugStats: null,        // { words, byKind, total, shown, cut } of the suggestions on the screen
     restoreSug: null,      // changes made to the suggestions, brought back with the draft, to put on the new ones
@@ -218,6 +219,7 @@ export async function renderImport(el, arg) {
     </div>`;
 
   $('back').addEventListener('click', () => navBack('#/decks'));
+  placeSaveBar();
   wireDeckPicker();
   wireTabs();
   wirePaste();
@@ -278,13 +280,12 @@ function wireTabs() {
 
 // ---------- paste box ----------
 function wirePaste() {
-  let timer = 0;
-  // Re-detect shortly after typing or pasting stops.
+  // Re-detect shortly after typing or pasting stops (S.pasteTimer, so "Use an AI chat instead" can cancel a wait that is still running).
   $('pasteBox').addEventListener('input', () => {
-    clearTimeout(timer);
+    clearTimeout(S.pasteTimer);
     S.noCloze = false;                 // new text: cloze lines count again
     saveDraft($('pasteBox').value);
-    timer = setTimeout(() => { if ($('pasteBox')?.isConnected) showText($('pasteBox').value); }, 250);        // (not after the screen was left)
+    S.pasteTimer = setTimeout(() => { if ($('pasteBox')?.isConnected) showText($('pasteBox').value); }, 250);        // (not after the screen was left)
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
@@ -297,7 +298,7 @@ function wirePaste() {
     }
   });
   $('clearBtn').addEventListener('click', () => {
-    clearTimeout(timer);
+    clearTimeout(S.pasteTimer);
     setSuggest(false);
     S.blocks = false; S.aiMade = false; S.aiPending = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
     $('pasteBox').value = '';
@@ -1021,7 +1022,7 @@ function refreshFlags() {
 
 // Leaving the screen while suggestions are being found stops the job (the worker would otherwise run on to its end).
 addEventListener('hashchange', () => setTimeout(() => {
-  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); S.sugJob?.cancel(); S.sugJob = null; }
+  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); clearTimeout(S.pasteTimer); S.sugJob?.cancel(); S.sugJob = null; }
 }, 300));
 
 // ---------- suggest cards ----------
@@ -1128,6 +1129,7 @@ function wireSuggest() {
   // The same AI view as for a PDF, with the pasted text in parts. Nothing is sent from here.
   $('sugAi').addEventListener('click', () => {
     const text = $('pasteBox').value;
+    clearTimeout(S.pasteTimer);        // a re-detect still waiting from the last keystroke would bring the preview back over the AI view
     setSuggest(false);
     showResult(null);
     S.part = 0;
@@ -1459,7 +1461,17 @@ async function save() {
       gone && `${plural(gone, 'card')} ${gone === 1 ? 'was' : 'were'} deleted meanwhile and left out`].filter(Boolean);
     const said = left.length ? `${added}. ${left.join('. ')}` : added;
     if (bigNote) toast(`${said}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' }, hold: true });
-    else toast(said, left.length ? { ms: 6000 } : undefined);
+    else if (cards.length || updated) {
+      // Undo takes out exactly what this import added (and puts back the cards it changed), then shows the deck list.
+      const undo = outcomes.undo;
+      db.holdMedia();          // the pictures of an updated card stay until the Undo toast is gone (see the clean-up in db.js)
+      const opts = undoOpts(async () => {
+        await db.undoImport(undo);
+        navReplace('#/decks');
+        toast('Import undone');
+      });
+      toast(said, left.length ? { ...opts, ms: 12000 } : opts);
+    } else toast(said, left.length ? { ms: 6000 } : undefined);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;
@@ -1473,6 +1485,19 @@ async function save() {
     saveBtn.disabled = false;
     if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
+}
+
+// Where the Add button sits. On a PC it is the bar at the bottom of the page (sticky above the page's end). On a phone or tablet a
+// bar stuck to the bottom of the screen covered the "Preview" heading and the "Found…" line whenever they were near the fold, so
+// there the button goes after the option switches (Update the cards…, Overwrite…, and the rest), under the "Found…" line, and sticks under the header while the list scrolls (css: .savebar in #preview).
+function placeSaveBar() {
+  const bar = $('savebar'), mq = matchMedia('(max-width:1023.98px)');
+  const place = () => {
+    if (!bar.isConnected) { mq.removeEventListener('change', place); return; }
+    if (mq.matches) $('subRow').after(bar); else $('preview').after(bar);
+  };
+  place();
+  mq.addEventListener('change', place);
 }
 
 // Updating a card saves its pictures and sounds again (new ids). Where a saved card already holds the very same file (same type and bytes),

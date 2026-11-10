@@ -36,7 +36,7 @@ await run(async () => {
 await page.goto(APP + '#/deck/pairs'); await page.waitForSelector('.crow');
 await page.click('#brAdd'); await page.waitForSelector('#acForm');
 ok(await page.isVisible('#acRevRow') && !(await page.isChecked('#acRevOn')), 'Add card: the Both directions switch is there, and off');
-ok((await page.textContent('#acRevRow')).includes('Both directions') && (await page.textContent('#acRevRow')).includes('Also asks the back and expects the front. Each direction has its own schedule; Review shows one of the two a day.'), 'the switch says what it does');
+ok((await page.textContent('#acRevRow')).includes('Both directions') && !(await page.textContent('#acRevRow')).includes('Also asks') && await page.getAttribute('#acRevRow a.help-link', 'href') === '#/help/reverse', 'the switch has just its label, and a ? link to the explanation in Help');
 await page.click('#acModeSteps', { force: true });
 ok(!(await page.isVisible('#acRevRow')) && (await page.textContent('#acRevNote')).includes("Step-by-step and elements cards can't be reversed."), 'with Answer in steps on, the switch gives way to a note');
 await page.click('#acModeText', { force: true });

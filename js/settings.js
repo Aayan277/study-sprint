@@ -21,7 +21,7 @@ import { clearDismissals } from './study-data.js';
 import { SYNCED_SETTINGS } from './sync-data.js';
 import { configureShortcuts } from './shortcuts.js';
 import * as fx from './fx.js';
-import { settingsRowHTML, wireSettingsRow } from './install.js';
+import { settingsRowHTML, wireSettingsRow, installMode } from './install.js';
 import { settingsHTML as remindersHTML, wireSettings as wireReminders } from './reminders.js';
 import { refreshBadgeNow } from './badge.js';
 import { examList } from './ics.js';
@@ -40,7 +40,18 @@ import { LEARN_ORDERS, cleanLearnOrder } from './queue.js';
 // ---------- settings ----------
 // Settings redrawn in place go into the screen's .view box (its width and padding come from that box: see styles.css).
 // null when there is none: the redraw is skipped rather than drawn straight into #screen.
+// One "More settings" fold per section (same look as Advanced scheduling). Open or closed is remembered on this device.
+const moreFold = (id, inner) => `<details class="advanced more-fold" id="${id}" ${foldOpen('settings-' + id) ? 'open' : ''}><summary>More settings</summary>${inner}</details>`;
+// Open the fold (if any) that holds a setting, so a link or a test that targets it by id finds it visible.
+export function revealSetting(id) {
+  const el = document.getElementById(id);
+  for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+  return el;
+}
 export const settingsView = () => $('screen').querySelector(':scope > .view');
+const storageWarnText = () => ['prompt', 'ios'].includes(installMode())
+  ? 'Saved on this device only. Install the app to your home screen so the browser keeps it safe.'
+  : 'The browser may clear this data. Make a backup now and then so nothing is lost.';
 export async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
@@ -62,17 +73,18 @@ export async function renderSettings(el) {
 
     <section class="section" aria-labelledby="appearTitle">
       <h2 id="appearTitle">Appearance</h2>
-      <p class="note">These settings apply to this device only. <a href="#/help/device-only">Which settings sync?</a></p>
-      <h3 class="set-sub" id="uiTitle">Style</h3>
-      <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
-        ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-      </div>
+      <p class="note">${helpLink('device-only', '?', 'Which settings apply to this device only')}</p>
       <h3 class="set-sub" id="thTitle">${accentTitle(ui)}</h3>
       <div class="skins" id="skins">${skinButtonsHTML(skin)}</div>
       <h3 class="set-sub" id="apTitle">Light or dark</h3>
       <div class="chips" role="radiogroup" aria-labelledby="apTitle">
         ${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my device']].map(([v, l]) =>
           `<label class="chip"><input type="radio" name="mode" value="${v}" ${mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      </div>
+      ${moreFold('moreAppear', `
+      <h3 class="set-sub" id="uiTitle">Style</h3>
+      <div class="chips" role="radiogroup" aria-labelledby="uiTitle" id="uiChips">
+        ${UIS.map(([v, l]) => `<label class="chip"><input type="radio" name="ui" value="${v}" ${ui === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
       <label class="adv-row switch-row"><span><b>OLED black</b></span>
         <input id="oled" type="checkbox" class="switch" ${oled ? 'checked' : ''}></label>
@@ -91,7 +103,7 @@ export async function renderSettings(el) {
       <label class="adv-row switch-row"><span><b>Exam readiness in Stats</b></span>
         <input id="statsReadiness" type="checkbox" class="switch" ${app.settings.statsReadiness !== false ? 'checked' : ''}></label>
       <label class="adv-row switch-row"><span><b>Glossary underlines</b></span>
-        <input id="glossaryUnderline" type="checkbox" class="switch" ${app.settings.glossaryUnderline !== false ? 'checked' : ''}></label>
+        <input id="glossaryUnderline" type="checkbox" class="switch" ${app.settings.glossaryUnderline !== false ? 'checked' : ''}></label>`)}
     </section>
 
     <section class="section" aria-labelledby="studyTitle">
@@ -108,6 +120,14 @@ export async function renderSettings(el) {
         <div><b>Reviews per day</b></div>
         <input id="rpd" class="num-box" type="number" inputmode="numeric" min="1" max="9999" placeholder="No limit" value="${Number.isFinite(app.settings.reviewLimit) ? app.settings.reviewLimit : ''}" aria-label="Reviews per day (blank for no limit)">
       </div>
+      <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play and test answers as reviews</b> ${helpLink('test-counts', '?', 'About counting Play and test answers as reviews')}</span>
+        <input id="playCounts" aria-labelledby="playCountsLbl" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
+      <div class="set-row column">
+        <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b></div>
+        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(app.settings.targetRetention * 100)}" aria-label="Target retention">
+        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
+      </div>
+      ${moreFold('moreStudy', `
       <div class="adv-row" id="learnOrderRow"><b id="learnOrderLbl">Learning cards</b> ${helpLink('learn-order', '?', 'About where learning cards go')}
         <div class="chips" role="radiogroup" aria-labelledby="learnOrderLbl" id="learnOrderChips">
           ${LEARN_ORDERS.map(v => `<label class="chip"><input type="radio" name="learnOrder" value="${v}" ${cleanLearnOrder(app.settings.learnOrder) === v ? 'checked' : ''}><span>${{ before: 'Before reviews', mixed: 'Mixed with reviews', after: 'After reviews' }[v]}</span></label>`).join('')}
@@ -115,37 +135,30 @@ export async function renderSettings(el) {
       </div>
       <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
         <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play answers as reviews</b> ${helpLink('play', '?', 'About counting Play answers as reviews')}</span>
-        <input id="playCounts" aria-labelledby="playCountsLbl" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
-      <div class="set-row column">
-        <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b></div>
-        <input id="ret" type="range" min="75" max="97" step="1" value="${Math.round(app.settings.targetRetention * 100)}" aria-label="Target retention">
-        <div><button class="btn ghost small" type="button" id="retHelp">Help me choose</button></div>
-      </div>
       <div class="set-row">
         <div><b>Glossary</b><p id="glossSub">${termCount(app.settings) ? `${termCount(app.settings)} term${termCount(app.settings) === 1 ? '' : 's'}` : ''}</p></div>
         <button class="btn ghost small" type="button" id="glossBtn">Open</button>
-      </div>
+      </div>`)}
       ${remindersHTML({ time: app.settings.reminderTime || '19:00', exams: examList(decks).length, badgeOn: app.settings.appBadge === true })}
       <details class="advanced" id="advanced" ${foldOpen('settings-advanced') ? 'open' : ''}>
         <summary>Advanced scheduling</summary>
         <div class="adv-row steps-editor" data-key="learningSteps" data-kind="learning">
           <label for="lsteps"><b>Learning steps</b></label>
           <div class="steps-input">
-            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="${SCHED_DEFAULTS.learningSteps}" aria-describedby="lstepsFmt lstepsExplain">
+            <input id="lsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.learningSteps)}" placeholder="1m 10m" aria-describedby="lstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
+            ${helpLink('steps', '?', 'How to type learning steps')}
           </div>
-          <span class="steps-hint" id="lstepsFmt">Separate with spaces: <b>m</b> minutes, <b>h</b> hours, <b>d</b> days · ${helpLink('steps', 'More')}</span>
           <ul class="steps-explain" id="lstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
         <div class="adv-row steps-editor" data-key="relearningSteps" data-kind="relearning">
           <label for="rsteps"><b>Relearning steps</b></label>
           <div class="steps-input">
-            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="${SCHED_DEFAULTS.relearningSteps}" aria-describedby="rstepsFmt rstepsExplain">
+            <input id="rsteps" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(app.settings.relearningSteps)}" placeholder="10m" aria-describedby="rstepsExplain">
             <button class="btn ghost small" type="button" data-reset>Reset</button>
+            ${helpLink('steps', '?', 'How to type relearning steps')}
           </div>
-          <span class="steps-hint" id="rstepsFmt">Separate with spaces: <b>m</b> minutes, <b>h</b> hours, <b>d</b> days · ${helpLink('steps', 'More')}</span>
           <ul class="steps-explain" id="rstepsExplain" aria-live="polite"></ul>
           <span class="err" role="alert" hidden></span>
         </div>
@@ -163,7 +176,7 @@ export async function renderSettings(el) {
         </div>
         <details class="advanced" id="ownSection"><summary>Own model</summary><div id="ownBody"></div></details>
         <div class="adv-row opt-row" id="optRow"><b id="optLbl">Personal parameters</b>
-          <span id="optStatus">${esc(personal.status)}</span>
+          <span id="optStatus">${personal.using || usesFsrs7(app.settings) ? esc(personal.status) : ''}</span>
           <div class="opt-actions">
             <button class="btn ghost small" type="button" id="optOpen" ${personal.canOptimize ? '' : 'disabled'} aria-describedby="optStatus${personal.canOptimize ? '' : ' optWhy'}">Optimize…</button>
             <button class="btn ghost small" type="button" id="healthOpen">Check how well it fits you</button>
@@ -216,13 +229,13 @@ export async function renderSettings(el) {
 
     <section class="section" aria-labelledby="dataTitle">
       <h2 id="dataTitle">Your data</h2>
+      ${moreFold('moreData', `
       <div class="set-row" id="installRow">${settingsRowHTML()}</div>
       <div class="set-row">
-        <div><b>Storage</b><p>${persisted
-          ? 'Saved permanently on this device.'
-          : 'Saved on this device. Install the app to your home screen so the browser keeps it safe.'}</p>
+        <div><b>${persisted ? 'Storage' : 'Pictures and sounds'}</b>${persisted ? '<p>Saved permanently on this device.</p>' : ''}
           <p class="note" id="mediaLine"></p></div>
-      </div>
+      </div>`)}
+      ${persisted ? '' : `<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">${storageWarnText()}</p></div></div>`}
       <div class="set-row" id="usageRow" hidden>
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
@@ -237,7 +250,7 @@ export async function renderSettings(el) {
         <div><b>Restore</b><p>Load a backup file. It replaces everything on this device.</p></div>
         <label class="btn ghost small file-btn">Import backup<input type="file" id="importIn" accept=".json,application/json"></label>
       </div>
-      <p class="note"><span id="whereNote"></span></p>
+      <p class="note" id="whereRow" hidden><span id="whereNote"></span></p>
       <details class="danger-zone" id="dangerZone">
         <summary>Danger zone</summary>
         <div class="set-row">
@@ -249,10 +262,6 @@ export async function renderSettings(el) {
 
     <section class="section" aria-labelledby="aboutTitle">
       <h2 id="aboutTitle">About</h2>
-      <div class="set-row" id="helpRow">
-        <div><b>Help and questions</b></div>
-        <a class="btn ghost small" href="#/help">Open Help</a>
-      </div>
       <div class="set-row" id="newRow">
         <div><b>What’s new</b></div>
         <button class="btn ghost small" type="button" id="newBtn">See what’s new</button>
@@ -264,6 +273,15 @@ export async function renderSettings(el) {
     </section>`;
 
   wireSettingsRow($('installRow'));
+  // The Storage wording depends on whether the app is installed: follow it while Settings is on screen, and let go once it is left.
+  const w = $('storageWarn');
+  if (w) {
+    const onInstall = () => {
+      if (!w.isConnected) { removeEventListener('install-change', onInstall); return; }
+      w.textContent = storageWarnText();
+    };
+    addEventListener('install-change', onInstall);
+  }
   wireReminders(el, { decks, settings: app.settings });
   // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
   $('setNav').addEventListener('click', e => {
@@ -422,6 +440,7 @@ export async function renderSettings(el) {
     } catch (err) { console.error(err); toast("Couldn't open that. Check your connection and try again."); }
   });
   rememberFold($('advanced'), 'settings-advanced');
+  for (const id of ['moreAppear', 'moreStudy', 'moreData']) rememberFold($(id), 'settings-' + id);
   wireAdvanced(el);
 }
 
@@ -554,7 +573,7 @@ async function fillMediaInfo() {
     const size = n => (n ? sizeText(n) : '0 KB');
     const lack = await sync.missingMedia().catch(() => null);
     if (!$('mediaLine')) return;
-    $('mediaLine').textContent = `On this device: pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.${lack ? ' ' + notDownloadedLine({ pictures: lack.pictures.length, sounds: lack.sounds.length }) : ''}`;
+    $('mediaLine').textContent = `Pictures ${size(totals.pictures)} · sounds ${size(totals.sounds)}${free}.${lack ? ' ' + notDownloadedLine({ pictures: lack.pictures.length, sounds: lack.sounds.length }) : ''}`;
     $('bkSoundsRow').hidden = !totals.sounds;
     if (totals.sounds) {
       $('bkSoundsTitle').textContent = `Include sounds (${sizeText(totals.sounds)})`;
@@ -742,12 +761,11 @@ export async function drawSync() {
   if (!box) return;
   const acct = await sync.account();
   if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
-  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.'
-    : 'Your data is saved in this browser only (sign in to Sync above to share it between devices).';
+  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.' : 'Your data is saved in this browser only.';
+  $('whereRow').hidden = false;
   drawUsage();
   if (!acct) {
     box.innerHTML = `
-      <p class="note" style="margin-top:0"><b>Optional.</b> Study Sprint works fully without an account, offline too: your cards stay in this browser. An account lets you use the same cards on your phone and laptop. It’s free, and each account only ever sees its own data.</p>
       <div class="pend-box" id="pendBox" hidden></div>
       <form id="syncForm" novalidate>
         <label class="field"><span>Email</span>
@@ -763,8 +781,7 @@ export async function drawSync() {
           <button class="btn primary" type="submit">Sign in</button>
         </div>
       </form>
-      <p class="note">New here? Type your email and a password, then tap <b>Create account</b>. We email you a link to confirm it.
-        <button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
+      <p class="note"><button class="link inline-btn" type="button" id="forgotBtn">Forgot password?</button></p>`;
     // A sign-up waiting for its email link (kept on this device for 7 days): the address comes back filled in, with a way to ask again.
     const wait = (await db.getSettings()).pendingSignup;
     if (!box.isConnected) return;
@@ -857,13 +874,6 @@ export async function drawSync() {
         <p class="note" id="damagedNote" hidden></p></div>
       <button class="btn ghost small" type="button" id="syncNowBtn">Sync now</button>
     </div>
-    <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
-      <span>Off: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account's monthly download allowance. On: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi), and it keeps a full copy in case your account ever loses them.</span></span>
-      <input id="keepAllMedia" type="checkbox" class="switch" ${app.settings.keepAllMedia ? 'checked' : ''}></label>
-    <div class="set-row">
-      <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
-      <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
-    </div>
     <div class="set-row">
       <div><b>Password</b></div>
       <button class="btn ghost small" type="button" id="pwBtn">Change…</button>
@@ -872,6 +882,14 @@ export async function drawSync() {
       <div><b>Sign out</b><p>Stops syncing on this device. You choose whether to keep this device's copy.</p></div>
       <button class="btn ghost small" type="button" id="signOutBtn">Sign out…</button>
     </div>
+    ${moreFold('moreSync', `
+    <label class="adv-row switch-row" id="keepAllRow"><span><b>Keep all pictures and sounds on this device</b>
+      ${helpLink('keep-media', '?', 'About keeping all pictures and sounds')}</span>
+      <input id="keepAllMedia" type="checkbox" class="switch" ${app.settings.keepAllMedia ? 'checked' : ''}></label>
+    <div class="set-row">
+      <div><b>Re-upload everything</b><p>Only if your synced data was lost or restored on the server. Sends everything on this device again.</p></div>
+      <button class="btn ghost small" type="button" id="resendBtn">Re-upload…</button>
+    </div>
     <div class="set-row">
       <div><b>Delete my account</b><p>Permanently deletes your account and everything stored in it on the server. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delAcctBtn">Delete my account</button>
@@ -879,7 +897,8 @@ export async function drawSync() {
     <div class="set-row">
       <div><b>Delete my synced data</b><p>Removes your cards, progress, settings, pictures and sounds from the server. Your account (your email address) stays until you use Delete my account. Your devices keep their own copy.</p></div>
       <button class="btn danger small" type="button" id="delServerBtn">Delete…</button>
-    </div>`;
+    </div>`)}`;
+  rememberFold($('moreSync'), 'settings-moreSync');
   showSyncStatus(acct.lastSync);
   drawDamaged();
   $('syncNowBtn').addEventListener('click', () => sync.syncNow({ retry: true }));

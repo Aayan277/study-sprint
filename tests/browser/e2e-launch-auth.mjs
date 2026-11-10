@@ -26,8 +26,7 @@ const clear = async () => { await A.reload(); await A.waitForSelector('#syncEmai
 await A.goto(APP + '#/decks'); await A.waitForSelector('.deck');
 await A.goto(APP + '#/settings/sync'); await A.waitForSelector('#syncEmail');
 const box = await A.textContent('#syncBox');
-ok(/Optional\./.test(box) && /works fully without an account/.test(box), 'the signed-out Sync box says it is optional');
-ok(/New here\? Type your email/.test(box), 'and explains how to start');
+ok(!!(await A.$('#syncForm #syncEmail')) && !!(await A.$('#syncForm #syncPw')) && /Sign in|Create account/.test(await A.textContent('#syncForm')), 'the signed-out Sync box shows the sign-in form (the long "optional" paragraph was removed on purpose; Help explains it)');
 const pos = await A.evaluate(() => ({ top: document.getElementById('syncTitle').getBoundingClientRect().top, h: innerHeight, focus: document.activeElement?.id }));
 ok(pos.top >= 0 && pos.top < pos.h, '#/settings/sync scrolls the Sync heading into view: ' + Math.round(pos.top));
 ok(pos.focus === 'syncTitle', 'and focuses the heading, not the email box: ' + pos.focus);

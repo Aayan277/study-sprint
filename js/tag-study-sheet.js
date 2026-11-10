@@ -28,7 +28,7 @@ export async function openTagStudySheet({ onChange = () => {}, returnFocus = '' 
   if (!tagged) {
     openSheet(`
       <h2 id="sheetTitle">Study by tag or question ID</h2>
-      <p class="note">No cards have tags yet. Anki decks like AnKing bring their tags.</p>
+      <p class="note">No cards have tags yet.</p>
       <div class="sheet-actions"><button class="btn primary" type="button" id="tsClose">Close</button></div>`);
     $('tsClose').addEventListener('click', closeSheet);
     return;

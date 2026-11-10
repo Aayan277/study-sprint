@@ -224,6 +224,7 @@ main:focus{outline:none}
 .icon-btn[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--surface-2)}
 @media (hover:hover) and (pointer:fine){.icon-btn:hover{color:var(--text);border-color:var(--line);background:var(--surface-2)}}
 .icon-btn svg{width:22px;height:22px}
+#addBtn[hidden]{display:none}
 main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-inset-bottom,0px))}
 
 /* Docked glass tab bar with an indicator over the current tab */
@@ -1215,6 +1216,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pt-resume{padding:12px 14px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
 .pt-resume p{margin:0 0 var(--s-2);font-size:var(--fs-sm)}
 .pt-resume-b{display:flex;gap:var(--s-2)}
+.pt-counts{margin:0}
 .pt-note{margin:0;font-size:var(--fs-sm);font-weight:600}
 .pt-hist h3{margin:0 0 var(--s-2);font-size:var(--fs-sm);color:var(--text-2);font-weight:600}
 .pt-hist ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
@@ -2269,7 +2271,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 }
 @media (min-width:1024px){
   html[data-rail="on"]{--side:72px}
-  #gearBtn{display:none}                              /* Settings lives in the sidebar footer instead */
+  #gearBtn,#addBtn{display:none}                              /* Settings lives in the sidebar footer instead */
   .tabs{display:flex;flex-direction:column;overflow:hidden}
   .tabs-in{flex:none;width:100%}
   .tab[data-tab]{min-width:0}
@@ -2345,7 +2347,6 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 @media (hover:hover) and (pointer:fine){.side-set:hover,.side-help:hover{background:var(--surface-2);color:var(--text)}}
   .side-help{width:32px;padding:0;justify-content:center}
   .side-help span{display:none}
-  .side-ver{margin-left:2px;font:500 var(--fs-2xs)/1 var(--f-num);color:var(--text-3)}
   .side-ib{all:unset;box-sizing:border-box;display:grid;place-items:center;width:32px;height:32px;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer}
   #sideMode{margin-left:auto}
   @media (hover:hover) and (pointer:fine){.side-ib:hover{background:var(--surface-2);color:var(--text)}}
@@ -2384,7 +2385,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   html[data-rail="on"] .side-new .ico{width:16px;height:16px}
   html[data-rail="on"] .side-foot{padding:10px 0 12px;justify-items:center;gap:4px}
   html[data-rail="on"] .side-streak{padding:4px}
-  html[data-rail="on"] .side-st,html[data-rail="on"] .side-sync,html[data-rail="on"] .side-ver{display:none}
+  html[data-rail="on"] .side-st,html[data-rail="on"] .side-sync{display:none}
   html[data-rail="on"] .side-tools{flex-direction:column;gap:4px;margin:0}
   html[data-rail="on"] #sideMode{margin-left:0}
   html[data-rail="on"] .side-set,html[data-rail="on"] .side-help{width:32px;padding:0;justify-content:center;font-size:0;gap:0}
@@ -2752,8 +2753,8 @@ main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > spa
 .step-btn:disabled{opacity:.35;cursor:default}
 @media (hover:hover) and (pointer:fine){.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}}
 @media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
-/* The Basic form grew (steps switch, its hint, memory hook): the fixed body height grows with it so switching card types does not jump */
-.ac-form .kind-body{min-height:43.5rem}
+/* Basic is short now (the steps switch, hook and the rest sit under More options): the body is only as tall as Front and Back */
+.ac-form .kind-body{min-height:17rem}
 
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}
@@ -3306,3 +3307,42 @@ main h2[tabindex="-1"]{outline:none}
 .own-badge{margin-left:0}
 .own-badge.better{color:var(--accent-text);background:var(--accent-tint);box-shadow:inset 0 0 0 1px var(--accent-line)}
 .own-lock{margin:0;font-size:var(--fs-sm)}
+
+/* ---- Round 6: tap sizes on phones and touch screens (the PC look is not changed) ----
+   Settings "?" help links: a small round 24px "?" next to its label, with a see-through 44px tap area on touch.
+   Clinical has no tap boxes of its own, so its small controls are made 44px here. */
+@media (max-width:599.98px){
+  .help-link{display:inline-grid;vertical-align:middle;position:relative;box-sizing:border-box;width:24px;height:24px;min-width:24px;min-height:24px;margin-left:6px;border:1px solid var(--line-strong);border-radius:50%;text-decoration:none;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;line-height:1}
+  .adv-row:has(> b + .help-link){grid-template-columns:auto minmax(0,1fr);column-gap:0;align-items:center}
+  .adv-row:has(> b + .help-link) > :not(b):not(.help-link){grid-column:1 / -1}
+  .adv-row:has(> b + .help-link) > .help-link{justify-self:start}
+  .switch-row > span:has(> .help-link){display:flex;align-items:center}
+  .prow textarea{min-height:44px}
+  html[data-ui="clinical"] .chip span{min-height:44px}
+  html[data-ui="clinical"] .fmt-tools button{min-width:44px!important;min-height:44px!important}
+  html[data-ui="clinical"] .rv-speak{width:44px;height:44px}
+  html[data-ui="clinical"] .link{min-height:44px!important}
+  html[data-ui="clinical"] .hud .link,html[data-ui="clinical"] .t-hud .link,html[data-ui="clinical"] .exam-add .link{display:inline-flex;align-items:center}
+  html[data-ui="clinical"] .prow .icon-btn{width:44px;height:44px}
+}
+.exam-line-link{padding:0 4px;min-height:24px}
+@media (pointer:coarse){
+  .help-link{z-index:1}
+  .help-link::before{content:"";position:absolute;inset:-11px}   /* 24px ring + 1px border each side + 22px = a 44px tap area */
+  .steps-input .help-link::before{left:-7px;right:-15px}                       /* next to the Reset button: the tap area stops short of it (8px gap) */
+  .sheet-x{width:44px;height:44px}
+  .exam-line-link{min-height:44px;display:inline-flex;align-items:center}
+  .pt-form .chip span{min-width:44px;justify-content:center}
+}
+/* Import on a phone or tablet: the Add button sits under the "Found…" line (js/import-screen.js placeSaveBar) and sticks under the header, so it never covers the preview heading or the found line */
+@media (max-width:1023.98px){
+  #preview > .savebar{position:sticky;top:calc(var(--top-h,57px) + 4px);bottom:auto;z-index:4;margin:var(--s-2) 0 var(--s-3);padding:var(--s-2) 0;background:var(--bg)}
+}
+@media (max-width:1023.98px) and (max-height:260px){#preview > .savebar{position:static}}
+
+/* A "?" help link next to a heading (not inside it, so the heading's name stays clean) */
+.ys-h{display:flex;align-items:center;gap:6px;margin:0 0 var(--s-2)}
+.ys .ys-h h3{margin:0}
+.sheet-head.has-help h2{flex:0 1 auto}
+.sheet-head .help-link{position:relative;margin-left:0;display:inline-grid;place-items:center;box-sizing:border-box;width:24px;height:24px;margin-top:6px;border:1px solid var(--line-strong);border-radius:50%;text-decoration:none;color:var(--text-2);font-size:var(--fs-xs);font-weight:600;line-height:1}
+.sheet-head.has-help .sheet-x{margin-left:auto}

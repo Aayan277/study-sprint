@@ -69,6 +69,15 @@ export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   if (hold) { toastLeave = () => { hideToast(); toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
+// The options for a toast with an Undo link (about 10 seconds): toast('Card deleted', undoOpts(async () => { ...put it back... })).
+// A failure in onUndo is shown instead of lost.
+export const undoOpts = onUndo => ({
+  ms: 10000,
+  link: { href: '#', label: 'Undo', onClick: async () => {
+    try { await onUndo(); } catch (err) { console.error(err); toast("Couldn't undo. Nothing was changed."); }
+  } }
+});
+
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
 // (styles.css hides them when <body> has the class "focus"). Each screen turns it on when a round starts
 // and off when the round ends; going to any other screen also turns it off (see route() in app.js).
@@ -275,7 +284,12 @@ export function openSheet(html, { side = false } = {}) {
   }
   const head = document.createElement('div');
   head.className = 'sheet-head';
-  if (title) head.appendChild(title);
+  if (title) {
+    // A "?" help link written right after the title sits beside it in the header (outside the title, so the dialog's name stays the title).
+    const help = title.nextElementSibling;          // (read before the title is moved, or there is no next sibling any more)
+    head.appendChild(title);
+    if (help?.matches('a.help-link')) { head.classList.add('has-help'); head.appendChild(help); }
+  }
   head.insertAdjacentHTML('beforeend', `<button type="button" class="sheet-x" aria-label="Close">${icon('x')}</button>`);
   const body = document.createElement('div');
   body.className = 'sheet-in';
@@ -288,7 +302,7 @@ export function openSheet(html, { side = false } = {}) {
   if (!sheetOverlay) sheetOverlay = openOverlay(backDismiss);      // Back (or an edge swipe) closes the sheet (or asks, with unsaved work)
   // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
   // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
-  if (document.activeElement?.classList.contains('sheet-x')) d.focus();
+  if (document.activeElement?.closest('.sheet-head')) d.focus();       // (the × or a moved-in "?" help link)
   document.body.classList.toggle('has-side', asSide);
   return d;
 }
@@ -332,7 +346,7 @@ export function initSheet() {
   });
   let drag = null;
   d.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x')) return;
+    if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x, a, button')) return;
     drag = { id: e.pointerId, y: e.clientY, t: e.timeStamp, dy: 0 };
     e.target.closest('.sheet-head').setPointerCapture(e.pointerId);        // on the header, not the dialog: the click that follows a tap must not land on the dialog itself
     d.style.transition = 'none';

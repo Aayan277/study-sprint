@@ -331,12 +331,12 @@ test('restDaySet reads the setting and ignores junk', () => {
 test('streakText: the line and the freeze note', () => {
   const text = s => streakText(s, NOW);
   assert.deepEqual(text(walkOf([0, 1, 2])), { line: 'Kept for today', sub: '1 freeze ready this week' });
-  assert.equal(text(walkOf([1, 2])).line, 'Study today to keep it');
-  assert.equal(text(walkOf([])).line, 'Study today to start one');
+  assert.equal(text(walkOf([1, 2])).line, '');
+  assert.equal(text(walkOf([])).line, '');
   assert.equal(text(walkOf([])).sub, '');
   assert.equal(text(walkOf([1, 2], [0])).line, 'Rest day · your streak is safe');
   const used = text(walkOf([2, 3, 4]));
-  assert.equal(used.line, 'Freeze used yesterday · study today to keep it');
+  assert.equal(used.line, 'Freeze used yesterday');
   assert.match(used.sub, /^Freeze used \w+/);
   assert.match(text(walkOf([0, 2, 3, 4])).sub, /^Freeze used /);
   assert.equal(text(walkOf([0, 2, 3, 4])).line, 'Kept for today');
@@ -384,7 +384,7 @@ test('freeze stays on the EARLIEST missed day of the week (owner decision): a la
   const broken = streakFromDays(new Set(run.filter(n => n !== 3 && n !== 1).map(k)), FRI);
   assert.equal(broken.days, 0);
   assert.deepEqual(broken.frozen, []);
-  assert.deepEqual(streakText(broken, FRI), { line: 'Study today to start one', sub: '' });
+  assert.deepEqual(streakText(broken, FRI), { line: '', sub: '' });
   // the best streak still sees Tue covered inside the older run
   const perDay = new Map(run.filter(n => n !== 3 && n !== 1).map(n => [k(n), 1]));
   assert.ok(streakRuns(perDay, FRI).frozen.has(k(3)));
@@ -400,7 +400,7 @@ test('streakText: no "freeze ready" note when yesterday used last week\'s freeze
   const s = streakFromDays(new Set([2, 3, 4].map(keyM)), MON);        // Sat, Fri, Thu studied; Sun covered
   assert.deepEqual(s.frozen, [keyM(1)]);
   const t = streakText(s, MON);
-  assert.equal(t.line, 'Freeze used yesterday · study today to keep it');
+  assert.equal(t.line, 'Freeze used yesterday');
   assert.equal(t.sub, '');                                             // missing today would break it, so no "1 freeze ready"
 });
 

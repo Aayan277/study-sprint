@@ -1,7 +1,7 @@
 // The Decks tab: list of decks, one deck's cards, and the create / edit / delete sheet.
 
 import * as db from './db.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold, showFieldError, clearFieldError } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, ring, foldOpen, saveFold, showFieldError, clearFieldError, undoOpts } from './ui.js';
 import { loadAll, countFor, hasReviewLimit } from './study-data.js';
 import { startStudy } from './today.js';
 import { dayEnd } from './days.js';
@@ -256,13 +256,13 @@ export async function renderDeck(el, deckId) {
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   const prepBtn = soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : '';
-  const reviewBtn = s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review${counts.total ? ` · ${counts.total}` : ''}</a>` : '';
+  const reviewBtn = s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}" aria-label="Review${counts.total ? `, ${plural(counts.total, 'card')}` : ''}">Review</a>` : '';
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
     <div class="screen-head" style="--deck:${esc(deck.color)}">
       <div>${parents.length ? `<span class="eyebrow crumbs">${parents.map(p => `<a href="#/deck/${esc(p.id)}">${esc(p.name)}</a>`).join(' › ')}</span>`
         : deck.course ? `<span class="eyebrow mono">${esc(deck.course)}</span>` : ''}<h1>${esc(deck.name)}</h1>
-        ${exam ? `<p class="exam-line"><span class="${badgeNear(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link" type="button" id="prepBtn" style="padding:0 2px;min-height:0">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link" type="button" id="mockBtn" style="padding:0 2px;min-height:0">Take a mock exam</button>' : ''}</p>`
+        ${exam ? `<p class="exam-line"><span class="${badgeNear(exam)}">${esc(countdown(exam))}</span>${soon ? '' : ' <button class="link exam-line-link" type="button" id="prepBtn">Exam prep</button>'}${exam.daysLeft <= MOCK_DAYS && s.total ? ' <button class="link exam-line-link" type="button" id="mockBtn">Take a mock exam</button>' : ''}</p>`
           : `<p class="exam-line"><button class="exam-chip" type="button" id="addExam">${icon('calendar')} Add exam date</button></p>`}</div>
       <div class="head-actions">
         ${reviewFirst && s.total && document.documentElement.dataset.ui !== 'clinical' ? reviewBtn + prepBtn : prepBtn + reviewBtn}
@@ -275,7 +275,6 @@ export async function renderDeck(el, deckId) {
             ${s.total ? `<button type="button" role="menuitem" tabindex="-1" id="importHere">${icon('upload')} Import cards</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
-            ${cards.length >= 10 ? `<button type="button" role="menuitem" tabindex="-1" id="autoTag">${icon('tag')} Suggest tags</button>` : ''}
           </div>
         </div>
       </div>
@@ -299,11 +298,6 @@ export async function renderDeck(el, deckId) {
   $('importHere')?.addEventListener('click', () => navGo(`#/import/${deck.id}`));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
-  // Topic tags worked out from the cards' text (js/autotag-sheet.js loads when first needed); nothing is added until you confirm.
-  $('autoTag')?.addEventListener('click', async () => {
-    try { (await import('./autotag-sheet.js')).openAutotagSheet({ deckId: deck.id, refresh: () => renderDeck(el, deckId) }); }
-    catch { toast("Couldn't open this. Check your connection and try again."); }
-  });
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
@@ -576,8 +570,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="field"><span>Course code</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date</span>
-        <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
-        ${parentNow && effectiveDeck(decks, parentNow).examDate ? `<small class="note" style="margin:4px 0 0">Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).</small>` : ''}</label>
+        <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}"></label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
@@ -668,7 +661,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <div class="confirm" role="alertdialog" aria-labelledby="delMsg">
         <p id="delMsg"><b>Delete “${esc(deck.name)}”?</b><br>${subs
           ? `It has ${plural(subs, 'subdeck')}. Deleting everything removes ${plural(total, 'card')} and all their review history; keeping the subdecks removes this deck's own ${plural(own, 'card')} and moves ${kids === 1 ? 'its subdeck' : `its ${kids} subdecks`} ${up}.`
-          : `This removes ${plural(own, 'card')} and all their review history.`} It can't be undone.</p>
+          : `This removes ${plural(own, 'card')} and all their review history.`} You can undo this for a few seconds.</p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="delNo">Keep it</button>
           ${subs ? '<button class="btn danger" type="button" id="delKeep">Delete, keep subdecks</button>' : ''}
@@ -677,15 +670,29 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       </div>`;
     $('delNo').focus();
     $('delNo').addEventListener('click', () => { closeSheet(); openDeckEditor(deck, onDone); });
-    const done = () => { closeSheet(); toast(`Deleted “${deck.name}”`); drawSidebar(); onDone('deleted'); };
+    // Undo puts back every deck, card, schedule and review that the delete removed, and any subdeck that was moved up (db.restoreSnapshot).
+    const done = snap => {
+      closeSheet();
+      db.holdMedia();
+      toast(`Deleted “${deck.name}”`, undoOpts(async () => {
+        await db.restoreSnapshot(snap);
+        toast(`Restored “${deck.name}”`);
+        drawSidebar();
+        navGo(`#/deck/${deck.id}`);          // (the screen that opened the editor may be gone by now: show the deck itself)
+      }));
+      drawSidebar(); onDone('deleted');
+    };
     $('delYes').addEventListener('click', async () => {
-      for (const id of tree) await db.deleteDeck(id);
-      done();
+      const snaps = [];
+      for (const id of tree) snaps.push(await db.deleteDeck(id));
+      done(db.mergeSnapshots(...snaps));
     });
     $('delKeep')?.addEventListener('click', async () => {
-      for (const d of decks.filter(x => x.parentId === deck.id)) await db.saveDeck({ ...d, parentId: deck.parentId || '' });
-      await db.deleteDeck(deck.id);
-      done();
+      const moved = decks.filter(x => x.parentId === deck.id);
+      for (const d of moved) await db.saveDeck({ ...d, parentId: deck.parentId || '' });
+      const snap = await db.deleteDeck(deck.id);
+      snap.decks.push(...moved);          // the subdecks as they were, so Undo puts them back inside
+      done(snap);
     });
   });
 }

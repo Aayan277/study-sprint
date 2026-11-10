@@ -82,8 +82,8 @@ await noHScroll(p, 'today nothing due 375'); await p.screenshot({ path: SP + '/v
 // Settings: no Daily goal stepper, a Play switch (off), synced
 await go(p, '#/settings', '#playCounts');
 ok(await p.locator('#dgIn, #dgMinus, #dgPlus').count() === 0 && !(await p.textContent('#screen')).includes('Daily goal'), 'Settings has no Daily goal stepper');
-ok(await p.$eval('#playCounts', e => !e.checked), 'Settings: "Count Play answers as reviews" is off by default');
-ok((await p.textContent('.switch-row:has(#playCounts)')).trim().startsWith('Count Play answers as reviews') && await p.locator('.switch-row:has(#playCounts) a[href="#/help/play"][aria-label]').count() === 1, 'with just its label and a ? link to Help (the explanation lives there)');
+ok(await p.$eval('#playCounts', e => !e.checked), 'Settings: "Count Play and test answers as reviews" is off by default');
+ok((await p.textContent('.switch-row:has(#playCounts)')).trim().startsWith('Count Play and test answers as reviews') && await p.locator('.switch-row:has(#playCounts) a[href="#/help/test-counts"][aria-label]').count() === 1, 'with just its label and a ? link to Help (the explanation lives there)');
 await p.click('#playCounts');
 ok(await p.evaluate(async () => (await (await import('./js/db.js')).getSettings()).playCountsAsReviews) === true, 'switching it on saves the setting');
 ok(await p.evaluate(async () => (await import('./js/sync-data.js')).SYNCED_SETTINGS.includes('playCountsAsReviews')), 'and it is a synced setting');
@@ -101,17 +101,17 @@ for (const scheme of ['light', 'dark']) {
   const n0 = +(await p.textContent('.th-big')).match(/\d+/)?.[0];
   await study(p, 4); await reload(p);
   rt = await ringText(p);
-  let side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
-  ok(rt === `4/${n0}` && side.includes(`4 of ${n0} today`), `${scheme} 1440: Today ring ${rt} and the sidebar "${side.match(/\d+ of \d+ today/)?.[0]}" agree`);
+  let side = (await p.getAttribute('#sideStreak', 'aria-label')).replace(/\s+/g, ' ');
+  ok(rt === `4/${n0}` && side.includes(`4 of ${n0} cards today`), `${scheme} 1440: Today ring ${rt} and the sidebar "${side.match(/\d+ of \d+ cards today/)?.[0]}" agree`);
   await go(p, '#/decks', '.deck');
-  ok((await p.textContent('#sideStreak')).includes(`4 of ${n0} today`), `${scheme}: the sidebar keeps the same numbers on other screens`);
+  ok((await p.getAttribute('#sideStreak', 'aria-label')).includes(`4 of ${n0} cards today`), `${scheme}: the sidebar keeps the same numbers on other screens`);
   await study(p, 999); await go(p, '#/today', '.th-done'); await theme(p);
-  side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
-  ok(side.includes(`${n0} of ${n0} today`), `${scheme} 1440: all done reads ${n0} of ${n0} in the sidebar`);
+  side = (await p.getAttribute('#sideStreak', 'aria-label')).replace(/\s+/g, ' ');
+  ok(side.includes(`${n0} of ${n0} cards today`), `${scheme} 1440: all done reads ${n0} of ${n0} in the sidebar`);
   await p.screenshot({ path: SP + `/v49-today-done-1440-${scheme}.png` });
   await p.context().close(); p = await open(1440, 900, scheme);
   await nothingDue(p); await reload(p);
-  side = (await p.textContent('#sideStreak')).replace(/\s+/g, ' ');
+  side = (await p.getAttribute('#sideStreak', 'aria-label')).replace(/\s+/g, ' ');
   ok(side.includes('Nothing due today') && !side.includes('0 of 0'), `${scheme} 1440: nothing due reads "Nothing due today" in the sidebar`);
   await p.screenshot({ path: SP + `/v49-today-nothing-1440-${scheme}.png` });
   await p.context().close();

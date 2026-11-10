@@ -106,7 +106,7 @@ export async function renderToday(el) {
         <div class="th-main">
           ${ring(tr.frac, 84, 8, tr.state !== 'todo' ? icon('check', 'ring-check') : `<b class="mono">${tr.done}</b><small class="mono">/${tr.total}</small>`)}
           <div class="th-text">
-            <b class="th-big">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
+            <b class="th-big${tr.state === 'todo' ? ' sr-only' : ''}">${tr.state === 'todo' ? `${c.total.toLocaleString('en')} to go` : tr.state === 'done' ? 'All done for today' : 'Nothing due today'}</b>
             ${tr.state === 'nothing' ? '' : `<span class="th-sub"><b data-count="due">${c.due.toLocaleString('en')}</b> due · <b data-count="new">${c.fresh.toLocaleString('en')}</b> new</span>`}
             ${tr.state === 'nothing' ? '' : `<span class="goal"><span class="goal-t"><b>${tr.done}</b> done today</span><span class="goal-bar" aria-hidden="true"><i style="width:${Math.round(tr.frac * 100)}%"></i></span></span>`}
           </div>
@@ -222,7 +222,7 @@ export async function renderToday(el) {
     const by = new Date(info.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     // A button only when setting this deck's limit is enough; otherwise say which limit holds it back.
     const plan = !unstarted || info.daysLeft < 1 ? '' : `<p class="exam-new" data-newplan="${esc(deck.id)}">
-      <span><b>${n} new a day</b> to start all ${plural(unstarted, 'unstarted card')} by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}.</span>
+      <span><b>${n} new a day</b> · by ${esc(by)}${n > 60 ? ' (that is a lot: start sooner if you can)' : ''}</span>
       ${ok ? '' : blocked ? `<span class="small" data-blocked>${esc(blocked)}</span>`
         : `<button class="btn ghost small" type="button" data-setnew="${esc(deck.id)}">Set to ${n} a day</button>`}</p>`;
     // One bar per exam: the cards started out of all the cards in the deck and its subdecks, with "On track" beside it.
@@ -373,10 +373,6 @@ export async function renderToday(el) {
     openSheet(`
       <h2 id="sheetTitle">Custom study</h2>
       <div class="cs-opt">
-        <b>By tag or question ID</b>
-        <button class="btn primary small" type="button" id="csTagBtn">Choose…</button>
-      </div>
-      <div class="cs-opt">
         <b>More new cards today</b>
         <div class="cs-row">
           <div class="stepper">
@@ -389,11 +385,11 @@ export async function renderToday(el) {
       </div>
       <div class="cs-opt">
         <b id="csAheadLbl">Review ahead</b>
-        <p class="note">Cards are rescheduled from today.</p>
         <div class="chips" role="group" aria-labelledby="csAheadLbl">
           ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
             `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
         </div>
+        <p class="note">Reschedules these cards from today.</p>
         <button class="btn primary small" type="button" id="csAheadBtn"></button>
       </div>
       <div class="cs-opt">
@@ -433,11 +429,7 @@ export async function renderToday(el) {
       toast(`${plural(extra, 'extra new card')} for today`);
       renderToday(el);
     });
-    // Two sheets of their own, loaded when first needed.
-    $('csTagBtn').addEventListener('click', async () => {
-      try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: () => renderToday(el) }); }
-      catch { toast("Couldn't open this. Check your connection and try again."); }
-    });
+    // A sheet of its own, loaded when first needed.
     $('csPostBtn').addEventListener('click', async () => {
       try { (await import('./postpone-sheet.js')).openPostponeSheet({ data, cards, onChange: () => renderToday(el) }); }
       catch { toast("Couldn't open this. Check your connection and try again."); }

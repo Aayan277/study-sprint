@@ -49,7 +49,7 @@ c = await counts(p);
 ok(c.decks.length === 1 && c.decks[0].name === 'Cell Biology' && c.decks[0].course === 'BIOL 201' && c.decks[0].examDate === examISO, 'the deck is made with its code and exam date');
 ok((await p.textContent('h1')).includes('Cell Biology'), 'step 3 names the deck');
 const opts = await p.$$eval('.wl-opt-t', e => e.map(x => x.textContent));
-ok(JSON.stringify(opts.map(x => x.replace(/\s*Fastest.*$/, ''))) === '["Try it with sample cards","Paste your notes","Import a file or Anki deck"]' && opts[0].includes('Fastest'), 'step 3 has the three choices, the sample first and labelled honestly: ' + opts);
+ok(JSON.stringify(opts.map(x => x.trim())) === '["Try it with sample cards","Paste your notes","Import a file or Anki deck"]', 'step 3 has the three choices, the sample first, with no badge: ' + opts);
 ok(await p.locator('#wlSkip').isVisible(), 'step 3 can be skipped');
 await noHScroll(p, 'add cards'); await p.screenshot({ path: SP + '/onb-3.png' });
 // Back keeps what was typed and doesn't make a second deck

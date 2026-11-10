@@ -9,8 +9,8 @@ const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) pro
 
 // Math.random is seeded in the page, so the order of questions is the same every run.
 const SEED = `(() => { let s = 20261014; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })();`;
-const open = async ({ w = 375, h = 800, scheme = 'dark' } = {}) => {
-  const touch = w < 600;
+const open = async ({ w = 375, h = 800, scheme = 'dark', forceTouch = false } = {}) => {
+  const touch = w < 600 || forceTouch;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, serviceWorkers: 'block', isMobile: touch, hasTouch: touch, colorScheme: scheme });
   await ctx.clock.setFixedTime(new Date(2026, 9, 14, 12));
   await ctx.addInitScript(SEED);
@@ -83,6 +83,8 @@ const cols = await p.evaluate(() => [...document.querySelectorAll('#sheet .cmp-c
 ok(cols.length === 2 && cols[0].text.includes('Alpha') && cols[0].text.includes('Apple') && cols[1].text.includes('Beta') && cols[1].text.includes('Banana'), 'two columns with front and back of each card');
 ok(cols[1].t > cols[0].t && Math.abs(cols[0].l - cols[1].l) < 4, 'stacked under 600px');
 ok((await p.locator('#sheet button').allTextContents()).map(t => t.trim()).filter(t => ['Review these', 'Make a comparison card', 'Not confused'].includes(t)).length === 3, 'Review these, Make a comparison card and Not confused');
+ok((await p.textContent('#sheetTitle')).trim() === 'Compare' && await p.locator('#sheet a.help-link[aria-label="About Compare"]').count() === 1 && await p.evaluate(() => !document.querySelector('#sheetTitle a')), 'the "?" help link sits beside the Compare title, not inside it (the dialog is named "Compare")');
+ok(await p.evaluate(() => document.activeElement === document.getElementById('sheet')), 'opening Compare puts the focus on the dialog itself, not on the moved-in "?" help link');
 await noHScroll(p, 375, 'compare 375'); await p.screenshot({ path: SP + '/mx-compare-375-dark.png' });
 
 // v4.9: Review these (was "Drill these", a Play round): a Review session of exactly the two cards, no Play round
@@ -256,6 +258,40 @@ for (const [w, scheme] of [[375, 'light'], [1440, 'dark'], [1440, 'light']]) {
   }
   await noHScroll(p, w, `compare ${w} ${scheme}`);
   await p.screenshot({ path: SP + `/mx-compare-${w}-${scheme}.png` });
+  await p.context().close();
+}
+
+// A real tap (touch screen) on the "?" in the Compare header (ui.js moves it into .sheet-head) opens its help: the swipe-to-close drag must not take the tap.
+{
+  const p = await open({ w: 390, h: 844 });
+  await seed4(p, false);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'); const m = await import('./js/compare-sheet.js');
+    await m.openCompare(await db.get('cards', 'mx0'), await db.get('cards', 'mx1'));
+  });
+  await p.waitForSelector('#sheet .cmp');
+  await p.evaluate(() => { window.__captured = 0; const o = Element.prototype.setPointerCapture; Element.prototype.setPointerCapture = function (id) { window.__captured++; return o.call(this, id); }; });
+  await p.tap('#sheet .sheet-head a.help-link[aria-label="About Compare"]');
+  await p.waitForFunction(() => location.hash === '#/help/compare', null, { timeout: 5000 }).catch(() => {});
+  ok(await p.evaluate(() => location.hash) === '#/help/compare', 'touch: tapping the "?" in the Compare sheet opens #/help/compare');
+  ok(await p.evaluate(() => window.__captured) === 0, 'touch: the "?" sits in the sheet header, and the swipe-to-close drag does not capture the pointer (Safari sends the click to the captured header)');
+  await p.context().close();
+}
+
+// On a touch screen 600px and wider, the "?" tap area (::before, inset -11px) must stay around the "?" and not cover the close button.
+{
+  const p = await open({ w: 800, h: 900, forceTouch: true });
+  await seed4(p, false);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'); const m = await import('./js/compare-sheet.js');
+    await m.openCompare(await db.get('cards', 'mx0'), await db.get('cards', 'mx1'));
+  });
+  await p.waitForSelector('#sheet .cmp');
+  ok(await p.evaluate(() => {
+    const x = document.querySelector('#sheet .sheet-x'), r = x.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && (hit === x || x.contains(hit)) && !hit.closest('.help-link');
+  }), 'touch 800px: the centre of the close button hits the button, not the "?" help link');
   await p.context().close();
 }
 

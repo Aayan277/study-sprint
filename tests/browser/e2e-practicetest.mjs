@@ -60,12 +60,13 @@ ok(await page.inputValue('#ptDeck') === 'pt', 'the sheet starts on this deck');
 ok((await page.textContent('#ptDeck option:checked')).includes('(16)'), 'the deck counts its subdeck: 16 cards');
 ok(await page.locator('input[name=kind]:checked').count() === 3 && await page.isDisabled('input[name=kind][value=cloze]'), 'question types default to a mix of all that fit (no cloze cards here, so that one is off)');
 ok(await page.isChecked('input[name=limit][value="0"]') && await page.isChecked('input[name=order][value=random]'), 'no time limit and random order by default');
-ok(!(await page.isChecked('#ptCounts')), '"Count answers as reviews" is off by default');
-ok((await page.textContent('#ptNote')).includes('16 cards') || (await page.textContent('#ptNote')).includes('questions from'), 'a line says how many questions: ' + (await page.textContent('#ptNote')).trim());
+ok(!(await page.$('#ptCounts')), 'the sheet has no switch of its own for counting answers as reviews (one setting in Settings serves Play and tests)');
+ok(!/questions from|no time limit/.test(await page.textContent('#ptNote')), 'no "N questions from N cards" line any more: ' + (await page.textContent('#ptNote')).trim());
+ok(await page.isVisible('#ptDeck') && await page.isVisible('#ptStart') && await page.locator('input[name=count]').count() > 0, 'Deck, number of questions and Start are on the sheet');
 await page.screenshot({ path: SP + '/pt-setup.png' });
 // narrow by tag
 await page.click('[data-tag="chem"]');
-ok((await page.textContent('#ptNote')).includes('10 cards'), 'narrowing to "chem" leaves 10 cards (6 + 4 in the subdeck)');
+ok(await page.getAttribute('[data-tag="chem"]', 'aria-pressed') === 'true' && (await page.textContent('[data-tag="chem"] small')).trim() === '10' && !(await page.isDisabled('#ptStart')), 'narrowing to "chem" leaves 10 cards (6 + 4 in the subdeck)');
 await page.click('[data-tag="chem"]');
 // 10 questions, no typed answers
 await page.locator('.chip:has(input[name=count][value="10"])').click();
@@ -127,7 +128,7 @@ ok(await page.locator('#tReview > li:not([hidden])').count() === 4, 'Wrong only 
 ok(await page.getAttribute('#tWrong', 'aria-pressed') === 'true', 'the filter button says it is on');
 await page.click('#tAll');
 ok(await page.locator('#tReview > li:not([hidden])').count() === 10, 'All shows everything again');
-ok((await page.textContent('#tSched')).includes('Practice only'), 'the results say nothing changed in the schedule');
+ok((await page.textContent('#tSched')).trim() === '', 'practice only: the results show no schedule note');
 ok((await page.textContent('#tReview li:nth-child(3)')).includes('Flagged'), 'a flagged question is marked in the list');
 await page.screenshot({ path: SP + '/pt-results.png', fullPage: true });
 await noHScroll('results (desktop)');
@@ -208,7 +209,8 @@ await page.click('#tDone2'); await page.waitForSelector('#testBtn');
 
 // ---------- count answers as reviews: on ----------
 const preOn = await snapshot();
-await startFromDeck('pt', async () => { await page.locator('.chip:has(input[name=count][value="10"])').click(); ok(!(await page.isChecked('input[name=kind][value=typing]')), 'the sheet remembers the last choices for the deck (typed was switched off)'); await page.locator('.chip:has(input[name=kind][value=typing])').click(); await page.locator('.chip:has(input[name=kind][value=mc])').click(); await page.locator('.chip:has(input[name=kind][value=tf])').click(); await page.locator('.chip:has(input[name=order][value=weak])').click(); await page.click('#ptCounts'); });
+await page.evaluate(async () => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', true); });
+await startFromDeck('pt', async () => { await page.locator('.chip:has(input[name=count][value="10"])').click(); ok(!(await page.isChecked('input[name=kind][value=typing]')), 'the sheet remembers the last choices for the deck (typed was switched off)'); await page.locator('.chip:has(input[name=kind][value=typing])').click(); await page.locator('.chip:has(input[name=kind][value=mc])').click(); await page.locator('.chip:has(input[name=kind][value=tf])').click(); await page.locator('.chip:has(input[name=order][value=weak])').click(); });
 r = await run();
 ok(r.cfg.counts === true && r.cfg.order === 'weak', 'counting and Weakest first are saved with the test');
 ok(r.questions.every(q => q.kind === 'typing' || q.kind === 'cloze'), 'only typed questions this time');
@@ -243,7 +245,7 @@ ok(await page.locator('[data-mock="pt"]').count() === 0, 'with the exam 12 days 
 
 
 // ---------- Change setup on the results page, and on the "no test" page ----------
-const setPrefs = cfg => page.evaluate(async c => { const db = await import('./js/db.js'); await db.setSetting('testPrefs', { pt: { count: 10, kinds: ['mc', 'typing', 'tf'], limit: 0, order: 'random', counts: false, tags: [], ...c } }); }, cfg);
+const setPrefs = cfg => page.evaluate(async c => { const db = await import('./js/db.js'); await db.setSetting('playCountsAsReviews', c.counts === true); await db.setSetting('testPrefs', { pt: { count: 10, kinds: ['mc', 'typing', 'tf'], limit: 0, order: 'random', counts: false, tags: [], ...c } }); }, cfg);
 const submitAll = async () => { await page.click('#tSubmit'); if (await page.isVisible('#tAskYes')) await page.click('#tAskYes'); await page.waitForSelector('#tReview'); };
 await setPrefs({ kinds: ['mc'] });
 await startFromDeck('pt');

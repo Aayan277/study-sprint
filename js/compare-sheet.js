@@ -11,6 +11,7 @@ import { mixPairs, pairKey, dismissPair, loadDismissed, saveDismissed, MIX_WINDO
 import { daysAgoStart } from './stats-calc.js';
 import { formatHTML } from './format.js';
 import { imgHTML } from './media.js';
+import { helpLink } from './help.js';
 import { openSheet, closeSheet, esc, plural, toast, $ } from './ui.js';
 
 export { cardLabel };     // (finish-extras and the card panel use it)
@@ -38,8 +39,7 @@ export async function openCompare(a, b, { onDismiss = () => {}, onDone = () => {
   const { pairs } = await loadPairs();
   const pair = pairs.find(p => p.key === pairKey(a.id, b.id));
   openSheet(`
-    <h2 id="sheetTitle">Compare</h2>
-    ${pair ? `<p class="note cmp-note">You’ve mixed these two up ${plural(pair.count, 'time')} in the last ${MIX_WINDOW_DAYS} days.</p>` : ''}
+    <h2 id="sheetTitle">Compare</h2>${helpLink('compare', '?', 'About Compare')}
     <div class="cmp">${side(a)}${side(b)}</div>
     <div class="sheet-actions stack">
       <button class="btn primary" type="button" id="cmpDrill">Review these</button>

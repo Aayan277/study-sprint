@@ -129,7 +129,7 @@ async function paint(loaded) {
   st.setAttribute('aria-label', `${streak.days}-day streak${note}. ${tr.state === 'nothing' ? 'Nothing due today' : `${tr.done} of ${tr.total} cards today`}`);
   st.dataset.tip = `${streak.days}-day streak${note ? ' · ' + note.slice(2) : ''} · ${ringText}`;
   st.innerHTML = `${ring(tr.frac, 30, 3, icon('flame'))}
-    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b><span>${ringText}</span></span>`;
+    <span class="side-st"><b>${streak.days}-day streak${usedRecently ? icon('snow', 'side-snow') : ''}</b>${tr.state === 'nothing' ? `<span>${ringText}</span>` : ''}</span>`;
   await drawSync();
 }
 
@@ -217,11 +217,10 @@ function showTip(el) {
   tip.style.top = `${r.top + r.height / 2 - tip.offsetHeight / 2}px`;
 }
 
-// version: the app version shown next to Settings.
-export function initSidebar({ version = '' } = {}) {
+// (the app version is shown only in Settings)
+export function initSidebar() {
   const nav = document.querySelector('nav.tabs');
   if (!nav) return;
-  $('sideVer').textContent = `v${version}`;
   for (const t of nav.querySelectorAll('.tab')) t.dataset.tip ||= t.textContent.trim();
   placeNav();
   drawModeButton();

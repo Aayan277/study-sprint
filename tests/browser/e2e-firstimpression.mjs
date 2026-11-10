@@ -34,8 +34,8 @@ let p = await open(real);
 await p.goto(URL); await p.waitForSelector('#wlNext'); await p.click('#wlNext');
 await p.fill('#wlName', 'Cell Biology'); await p.click('#wlForm button[type=submit]'); await p.waitForSelector('#wlSample');
 const firstOpt = await p.$eval('.wl-opts > :first-child', e => ({ id: e.id, t: e.textContent }));
-ok(firstOpt.id === 'wlSample' && /sample cards/i.test(firstOpt.t) && /Fastest/.test(firstOpt.t), 'step 3 puts "Try it with sample cards" first, labelled Fastest');
-ok(/psychology/i.test(await p.textContent('#wlSample .wl-opt-d')) && /Cell Biology/.test(await p.textContent('#wlSample .wl-opt-d')), 'the label says the cards are psychology and that the course deck stays ready');
+ok(firstOpt.id === 'wlSample' && /sample cards/i.test(firstOpt.t) && !/Fastest/.test(firstOpt.t), 'step 3 puts "Try it with sample cards" first, with no badge');
+ok(await p.locator('#wlSample .wl-opt-d').count() === 0, 'the sample option has no description line');
 await p.click('#wlSample'); await p.waitForSelector('#showBtn');
 for (const r of [1, 3, 4]) { await p.click('#showBtn'); await p.click('.rate.r' + r); await p.waitForTimeout(80); }
 await p.waitForSelector('.fr-when');
@@ -81,6 +81,7 @@ ok((await p.getAttribute('.inst-icon', 'src')) === 'icons/icon-192.png', 'instal
 // the settings row
 await p.click('#gearBtn'); await p.waitForSelector('#installRow');
 ok(await p.locator('#installBtn').isVisible(), 'Settings has an Install app row with a button');
+ok(/Install the app to your home screen/.test(await p.textContent('#storageWarn')), 'installable: the storage warning tells the user to install the app');
 await p.click('#installBtn'); await p.waitForTimeout(150);
 ok(await p.evaluate(() => window.__prompted) === 1, 'the Settings button starts the browser install');
 await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
@@ -125,6 +126,7 @@ for (const [how, init] of [['navigator.standalone', () => Object.defineProperty(
   ok(await p.locator('.inst:not(.remind)').count() === 0, 'installed (' + how + '): no install card');
   await p.click('#gearBtn'); await p.waitForSelector('#installRow');
   ok(/installed app/.test(await p.textContent('#installRow')) && await p.locator('#installBtn').count() === 0, 'installed (' + how + '): Settings says so, with no Install button');
+  { const w = await p.textContent('#storageWarn'); ok(/Make a backup/.test(w) && !/Install/.test(w), 'installed (' + how + '): the storage warning asks for a backup, not for an install'); }
   await p.context().close();
 }
 

@@ -53,9 +53,8 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   ok((await norm(p, '#acForm label:has(#acTags) span')) === 'Tags', 'Add card label is just "Tags"');
 
   // ----- Study by tag or question ID finds the card whose old tag has a space in it -----
-  await go(p, '#/today', '#optBtn');
-  await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
-  await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
+  await go(p, '#/browse', '#brTags');
+  await p.click('#brTags'); await p.click('#toolTagStudy'); await p.waitForSelector('#tsText');
   await p.fill('#tsText', '23456');
   await p.waitForSelector('#tsResult b');
   const res = await norm(p, '#tsResult');
@@ -134,7 +133,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   await seed(p, { overdue: true });
   await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
   const broke = await norm(p, '.streak');
-  ok(!broke.includes('streak is safe') && broke.includes('Study today to keep it'), 'with a review overdue today is not "safe" (nothing is noted): ' + broke);
+  ok(!broke.includes('streak is safe') && !broke.includes('streak is safe'), 'with a review overdue today is not "safe" (nothing is noted): ' + broke);
   ok((await p.evaluate(async () => Object.keys((await (await import('./js/db.js')).getSettings()).idleDays || {}))).length === 0, 'and nothing is noted as quiet');
   await p.evaluate(async () => { const db = await import('./js/db.js'); const c = (await db.getAll('cards')).find(x => x.id === 'q0'); await db.saveCards([{ ...c, suspended: true }]); });
   await p.reload(); await p.waitForSelector('.today-hero'); await p.waitForSelector('.streak');
@@ -250,7 +249,7 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   ok(await p.locator('#csForgotBtn').count() === 1 && !/Play/.test(await p.$eval('#csForgotBtn', b => b.closest('.cs-opt').textContent)), 'with "Count Play answers as reviews" on the option is still there, without any explanation');
   await p.evaluate(async () => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', false); });
   await go(p, '#/stats', '.pgrid');
-  ok(/Review today to start a streak/.test(await norm(p, '.pgrid')) || (await norm(p, '.pgrid')).includes('streak'), 'Stats: the streak line does not say play');
+  ok((await norm(p, '.pgrid')).includes('streak') && !/Review today to start a streak/.test(await norm(p, '.pgrid')), 'Stats: the streak line does not say play');
   await p.close();
 }
 

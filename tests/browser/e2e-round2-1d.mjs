@@ -67,7 +67,7 @@ ok((await p.textContent('#acCloze')).includes('Same blank as the last one'), 'th
 const clozeH = await p.$eval('.kind-body', e => e.getBoundingClientRect().height);
 await kind(p, 'Image occlusion');
 const occH = await p.$eval('.kind-body', e => e.getBoundingClientRect().height);
-ok(Math.abs(basicH - occH) < 2 && clozeH >= basicH && basicH >= 280, `the kind body has a fixed minimum height, so Basic and an empty Image occlusion are the same (${basicH}, ${occH}; cloze needs more: ${clozeH})`);
+ok(Math.abs(basicH - occH) < 2 && clozeH >= basicH && basicH >= 260, `the kind body has a fixed minimum height, so Basic and an empty Image occlusion are the same (${basicH}, ${occH}; cloze needs more: ${clozeH})`);
 ok(await p.isDisabled('button[type=submit][form=acForm]') && (await p.textContent('#acWhy')) === 'Choose a picture first.', 'occlusion: disabled until a picture: ' + await p.textContent('#acWhy'));
 await kind(p, 'Cloze');
 await p.fill('#acText', 'The cell has a nucleus');

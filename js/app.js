@@ -25,7 +25,7 @@ import { initUpdates, showUpdateRequired } from './update.js';
 import { fetchMinClient, rememberMinClient, cachedMinClient, isTooOld, holdSync, syncHeld, setSyncGate } from './app-config.js';
 
 // Shown in Settings → About, so you can tell whether your phone has the newest version.
-const APP_VERSION = '4.64';
+const APP_VERSION = '4.65';
 
 let settings = { ...db.DEFAULT_SETTINGS };
 let updates = null;       // the update watcher (js/update.js), set up with the service worker at the bottom of this file
@@ -195,6 +195,7 @@ async function route() {
   document.querySelectorAll('[data-tab]').forEach(t => {
     if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
+  $('addBtn').hidden = name !== 'today' && name !== 'decks';       // the phone header's + (the sidebar has Add cards on a PC)
   markCurrent();                // the deck page open now, in the sidebar's list
   // After a Review or Play round, or an import, the sidebar's counts are out of date (Today hands over its own fresh data).
   // (A round that finished has already redrawn it; one left half-way, or an import, has not.)
@@ -269,6 +270,15 @@ let lastHash = '#/today';
 // Tapping the gear while Settings is open closes it and returns to the previous screen.
 // (The gear in the phone header and the Settings link in the desktop sidebar both count.)
 function wireGear() {
+  // The phone header's +: the Add a card sheet for the deck used last (no decks yet: the Add cards screen, as the sidebar does).
+  $('addBtn').addEventListener('click', async () => {
+    try {
+      // The screen behind is redrawn when the sheet closes (redrawing it now would close the sheet, which stays open for the next card).
+      let stale = false;
+      if (await (await lazy('./browse.js')).openAddFromHeader({ refresh: () => { stale = true; } })) $('sheet').addEventListener('close', () => { if (stale && (currentRoute === 'today' || currentRoute === 'decks')) route(); }, { once: true });
+    }
+    catch { toast("Couldn't open this. Check your connection and try again."); }
+  });
   // Tapping the Play tab on a Play screen that is already showing (e.g. the results) starts a fresh setup:
   // the address does not change, so there is no hashchange to do it.
   document.addEventListener('click', e => {
