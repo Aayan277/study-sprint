@@ -53,10 +53,10 @@ await seed(p);
 await setup(p, 'pr');
 await playRound(p, 0);                                   // all wrong: score 0, so not a best
 const order = await p.evaluate(() => {
-  const seq = ['.res-head', '.stats4', '.res-actions', '.sched-note', '#resultsMore', '.missed'].map(s => document.querySelector(s));
+  const seq = ['.res-head', '.stats4', '.res-actions', '#resultsMore', '.missed'].map(s => document.querySelector(s));
   return seq.every(Boolean) && seq.every((e, i) => !i || (seq[i - 1].compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING));
 });
-ok(order, 'results order: head, stats, actions, schedule note, #resultsMore, missed');
+ok(order, 'results order: head, stats, actions, #resultsMore, missed (a practice-only round has no schedule note)');
 const total = await p.locator('.missed .miss').count();
 ok(total >= 4, 'an all-wrong round misses several cards: ' + total);
 ok((await p.locator('.missed .miss:visible').count()) === 3, 'only the first 3 misses are shown');

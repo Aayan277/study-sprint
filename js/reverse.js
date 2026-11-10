@@ -96,7 +96,7 @@ export function healPairs(cards) {
 }
 
 // ---------- Play ----------
-// Play asks a pair's cards in the direction each one stands for, so that with "Count Play answers as reviews" on, the
+// Play asks a pair's cards in the direction each one stands for, so that with "Count Play and test answers as reviews" on, the
 // right schedule is graded:
 //   front → back and typing   the forward card (front asks); the reverse card sits out
 //   back → front              the reverse card, asked front → back (its front is the forward card's back); the forward card sits out

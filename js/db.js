@@ -290,24 +290,24 @@ export async function addImport({ decks = [], cards = [], reviewLog = [], cardSt
   // For undoImport: what this save added, and the rows it replaced.
   const undo = { decks: [], cards: [], cardStates: [], reviewLog: [], before: emptySnapshot() };
   await inTx(tx, async () => {
+    // The new rows are put without waiting for each one (a big import has tens of thousands). They are new, so there is nothing
+    // to keep as a "before" copy: Undo just removes them. Only the review log needs the keys it was given.
     for (const [name, rows] of Object.entries({ decks, cards, reviewLog, cardStates })) {
       const os = tx.objectStore(name);
-      for (const r of rows) {
-        const id = r[SYNC_ID[name]];
-        const prev = name !== 'reviewLog' && id !== undefined ? await done(os.get(id)) : undefined;
-        const key = await done(os.put(stamp(name, r, now)));
-        if (prev) undo.before[name].push(prev);
-        else undo[name].push(name === 'reviewLog' ? key : id);
-      }
+      const list = undo[name];
+      if (name === 'reviewLog') for (const r of rows) os.put(stamp(name, r, now)).onsuccess = e => list.push(e.target.result);
+      else for (const r of rows) { os.put(stamp(name, r, now)); list.push(r[SYNC_ID[name]]); }
     }
+    // Cards changed in place: read them all at once, then save the changes. The old rows are what Undo puts back.
     const os = tx.objectStore('cards');
-    for (const u of updates) {
-      const cur = await done(os.get(u.id));
-      if (!cur) { outcomes.push({ id: u.id, kind: 'gone', row: null }); continue; }
+    const current = await Promise.all(updates.map(u => done(os.get(u.id))));
+    updates.forEach((u, i) => {
+      const cur = current[i];
+      if (!cur) { outcomes.push({ id: u.id, kind: 'gone', row: null }); return; }
       const { kind, row } = u.apply(cur);
       if (row) { os.put(stamp('cards', row, now)); undo.before.cards.push(cur); }
       outcomes.push({ id: u.id, kind, row });
-    }
+    });
   });
   scheduleChanges++;
   changed();
@@ -407,7 +407,6 @@ export function mergeSnapshots(...snaps) {
   for (const sn of snaps) for (const k of Object.keys(out)) out[k].push(...(sn?.[k] || []));
   return out;
 }
-export const snapshotSize = snap => snap.cards.length;
 // Pictures and sounds that only the deleted cards used are removed by the daily clean-up once they are an hour old
 // (cleanMedia). Right after a delete, keep it from running, so an Undo always finds them.
 let mediaHeldUntil = 0;

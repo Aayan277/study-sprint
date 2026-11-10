@@ -5,6 +5,7 @@
 #                        a cloze note with blanks c1 and c2
 #   anki-update-v2.apkg  the same notes, changed: Alpha's text, Gamma's front, the cloze text (and a third blank, c3), the same picture;
 #                        Beta is untouched; a new note, Epsilon
+#   anki-update-v3.apkg  the same as v2, but Alpha's picture is a different one (green instead of red), for the Undo of an update (e2e-undo.mjs)
 import sys, os, json, sqlite3, zipfile, tempfile, zlib, struct
 
 out = sys.argv[1]
@@ -40,7 +41,7 @@ V2 = [
     ('gEpsilon', 1001, ['Epsilon', 'fifth letter'], 1),
 ]
 
-def make(path, notes):
+def make(path, notes, colour=(200, 60, 60)):
     work = tempfile.mkdtemp()
     db = sqlite3.connect(os.path.join(work, 'collection.anki2'))
     db.executescript('''
@@ -62,8 +63,9 @@ def make(path, notes):
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_STORED) as z:
         z.write(os.path.join(work, 'collection.anki2'), 'collection.anki2')
         z.writestr('media', json.dumps({'0': 'pic.png'}))
-        z.writestr('0', png(120, 90, (200, 60, 60)))
+        z.writestr('0', png(120, 90, colour))
     print(path, os.path.getsize(path))
 
 make(os.path.join(out, 'anki-update-v1.apkg'), V1)
 make(os.path.join(out, 'anki-update-v2.apkg'), V2)
+make(os.path.join(out, 'anki-update-v3.apkg'), V2, (60, 180, 80))

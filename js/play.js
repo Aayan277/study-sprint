@@ -4,7 +4,7 @@
 //   Extras:    Hard (6 options, lookalike traps, −50 for wrong, ×1.25), Flash (prompt vanishes, ×1.2)
 // The rules themselves (scoring, timers, wrong options) live in game.js.
 // Play is practice only by default: nothing is saved to the review log or the schedule. With the synced setting
-// "Count Play answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
+// "Count Play and test answers as reviews" on, every answer is saved to the log (source 'play') and feeds the review
 // schedule following the auto-grading rules in autograde.js.
 
 import * as db from './db.js';
@@ -553,7 +553,7 @@ const countsAsReviews = () => playCountsAsReviews(data?.settings);
 // Save one answer (only when Play counts as reviews, see above): always to the review log (source 'play', so stats and a
 // future FSRS optimizer can tell it from a Review), and to the review schedule when the auto-grading rules allow it (see autograde.js).
 async function record(round, entry) {
-  // Practice only (the default, Settings > "Count Play answers as reviews" off): nothing is saved. No schedule or FSRS
+  // Practice only (the default, Settings > "Count Play and test answers as reviews" off): nothing is saved. No schedule or FSRS
   // change, no review-log row (so no stats, heatmap, streak, readiness or Today ring), no new card started, no leech.
   // The round's own score, bests and results come from the round itself, not from the log.
   if (!countsAsReviews()) { entry.decision = 'practice'; return; }
@@ -571,7 +571,7 @@ async function sameCard(entry) {
 }
 
 // A typed answer the check marked wrong was right: count it right in the round (accuracy, grade, Missed list). The score,
-// streak, lives and clock stay as they were. With "Count Play answers as reviews" on, the schedule and the stats are fixed too.
+// streak, lives and clock stay as they were. With "Count Play and test answers as reviews" on, the schedule and the stats are fixed too.
 // Returns the corrected entry, or null when nothing changed.
 async function markRight(round, entry) {
   if (!canOverride(round, entry) || !(await sameCard(entry))) return null;

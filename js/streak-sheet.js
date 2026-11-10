@@ -63,10 +63,10 @@ export async function openStreakSheet({ onChange = () => {}, returnFocus = '' } 
           <li><i class="k-on"></i>Studied</li><li><i class="k-frz">${icon('snow')}</i>Streak freeze</li><li><i class="k-rest">${icon('moon')}</i>Day off</li>
         </ul>
         <section aria-labelledby="ysFrz">
-          <h3 id="ysFrz">Streak freeze ${helpLink('streak-freeze', '?', 'About the streak freeze')}</h3>
+          <div class="ys-h"><h3 id="ysFrz">Streak freeze</h3>${helpLink('streak-freeze', '?', 'About the streak freeze')}</div>
         </section>
         <section aria-labelledby="ysRest">
-          <h3 id="ysRest">Days off ${helpLink('streak-freeze', '?', 'About days off')}</h3>
+          <div class="ys-h"><h3 id="ysRest">Days off</h3>${helpLink('streak-freeze', '?', 'About days off')}</div>
           ${upcoming.length ? `<ul class="ys-list" aria-label="Days off planned">${upcoming.map(k => `
             <li><span>${icon('moon')}${esc(niceDay(k))}${k === today ? ' <small>today</small>' : ''}</span>
               ${k > today ? `<button class="link" type="button" data-rm="${esc(k)}" aria-label="Remove the day off on ${esc(niceDay(k))}">Remove</button>` : ''}</li>`).join('')}</ul>`

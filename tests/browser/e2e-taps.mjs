@@ -38,9 +38,15 @@ for (const clinical of [false, true]) {
   await page.goto(APP + '#/settings'); await page.waitForSelector('.help-link');
   await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; }));
   await all44('settings', '.help-link', 'Settings "?" links', { minW: 44 });
-  const ring = await page.evaluate(() => { const e = document.querySelector('.help-link'), c = getComputedStyle(e), r = e.getBoundingClientRect(), p = e.previousElementSibling; const pr = p?.getBoundingClientRect(); return { w: r.width, h: r.height, radius: c.borderRadius, border: c.borderTopWidth, sameLine: pr ? Math.abs((r.top + r.height / 2) - (pr.top + pr.height / 2)) < 8 : null, ml: c.marginLeft }; });
+  const ring = await page.evaluate(() => { const e = document.querySelector('b + .help-link'), c = getComputedStyle(e), r = e.getBoundingClientRect(), p = e.previousElementSibling; const pr = p?.getBoundingClientRect(); return { w: r.width, h: r.height, radius: c.borderRadius, border: c.borderTopWidth, sameLine: pr ? Math.abs((r.top + r.height / 2) - (pr.top + pr.height / 2)) < 8 : null, ml: c.marginLeft }; });
   ok(ring.w === 24 && ring.h === 24 && ring.radius === '50%' && ring.border === '1px' && ring.sameLine === true && ring.ml === '6px', `${name}: "?" is a 24px ring next to its label ` + JSON.stringify(ring));
-  await all44('settings', '.steps-hint a', 'Settings "More" links', { minW: 20 });
+  // The enlarged tap area of a "?" never sits over the Reset button next to it (centre and edges of Reset hit Reset itself).
+  const resetHits = await page.evaluate(() => [...document.querySelectorAll('.steps-input [data-reset]')].flatMap(b => {
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
+    return [[.5, .5], [.04, .5], [.96, .5], [.5, .08], [.5, .92]].map(([x, y]) => { const e = document.elementFromPoint(r.left + r.width * x, r.top + r.height * y); return e === b || b.contains(e); });
+  }));
+  ok(resetHits.length >= 10 && resetHits.every(Boolean), `${name}: the "?" tap area does not cover the Reset button beside it (${resetHits.length} points)`);
   if (clinical) await all44('settings', '.chip span', 'option chips');
   await page.goto(APP + '#/deck/sample'); await page.waitForSelector('#prepBtn');
   await all44('deck', '#prepBtn, #mockBtn', 'Exam prep and mock exam buttons', { minW: 40 });

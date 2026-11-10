@@ -137,6 +137,17 @@ for (const [styleName, theme] of Object.entries(THEMES)) for (const [size, vp, m
   await closeSheet(p);
   await p.waitForTimeout(400); await p.reload(); await p.waitForSelector('#testBtn'); await p.click('#testBtn'); await p.waitForSelector('#ptForm');
   ok(await p.getAttribute('#ptCustomBtn', 'aria-expanded') === 'true', `${T}: Customise stays open on this device`);
+  // A saved setup that is not the default opens Customise by itself (not saved as a choice); the counting line is always outside it.
+  await closeSheet(p);
+  await p.evaluate(() => localStorage.setItem('study-sprint-fold-test-custom', '0'));
+  await p.waitForTimeout(100); await p.reload(); await p.waitForSelector('#testBtn'); await p.click('#testBtn'); await p.waitForSelector('#ptForm'); await p.selectOption('#ptDeck', 'bio');
+  ok(await p.getAttribute('#ptCustomBtn', 'aria-expanded') === 'true' && await visible(p, 'input[name=order]'), `${T}: a deck with a saved non-default order opens Customise by itself`);
+  ok(await p.evaluate(() => localStorage.getItem('study-sprint-fold-test-custom')) === '0', `${T}: opening by itself is not saved as a choice`);
+  ok(await visible(p, '#ptCountsLine') && /Counts as reviews: (on|off)/.test(await p.textContent('#ptCountsLine')) && !(await p.evaluate(() => !!document.querySelector('#ptCustomBody #ptCountsLine'))) && !!(await p.$('#ptCountsLine a.help-link[aria-label]')), `${T}: "Counts as reviews" and its "?" show outside Customise`);
+  await p.click('#ptCustomBtn');
+  ok(await p.evaluate(() => localStorage.getItem('study-sprint-fold-test-custom')) === '0' && await p.getAttribute('#ptCustomBtn', 'aria-expanded') === 'false', `${T}: closing it by hand works`);
+  await p.selectOption('#ptDeck', 'chem');
+  ok(await p.getAttribute('#ptCustomBtn', 'aria-expanded') === 'false' && await visible(p, '#ptCountsLine'), `${T}: a deck with the default setup keeps it closed, counting line still shown`);
 
   // one shared setting
   const shared = async on => { await closeSheet(p); await p.evaluate(async v => { await (await import('./js/db.js')).setSetting('playCountsAsReviews', v); }, on); };

@@ -64,6 +64,7 @@ await p.click('#streakBtn'); await p.waitForSelector('#sheet[open] .ys');
 ok((await norm(p, '#sheetTitle')) === 'Your streak', 'the sheet is titled "Your streak"');
 ok(await p.locator('#sheet .wd.frz').count() === 1 && await p.locator('#sheet .wd.on').count() === 5, 'the 7-day row: 5 studied, 1 covered');
 ok(/streak freeze used/.test(await p.getAttribute('#sheet .wd.frz', 'title')), 'the covered day is named in its title: ' + await p.getAttribute('#sheet .wd.frz', 'title'));
+ok(await p.evaluate(() => !document.querySelector('#sheet h3 a')), 'the "?" links sit beside the streak headings, not inside them');
 ok(!(await norm(p, '#sheet')).includes('One missed day a week is covered') && await p.locator('#sheet a[aria-label="About the streak freeze"]').count() === 1, 'the sheet points to Help for the freeze instead of explaining it');
 await noHScroll(p, 'the sheet at 375');
 ok(await p.evaluate(() => { const s = document.querySelector('#sheet'); return s.scrollWidth <= s.clientWidth + 1; }), 'the sheet itself does not scroll sideways');

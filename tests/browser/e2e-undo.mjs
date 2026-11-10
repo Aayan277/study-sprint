@@ -115,6 +115,51 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.context().close();
 }
 
+// ---------- Undo of an import that updated cards: old field values and the old picture come back ----------
+{
+  const SP = process.argv[2];
+  const page = await open(null);
+  const importFile = async (file, deckSel, name) => {
+    await page.goto(APP + '#/decks'); await page.waitForSelector('.deck');
+    await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+    await page.setInputFiles('#fileIn', SP + '/files/' + file);
+    await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+    await page.waitForSelector('#preview[data-guids]');
+    await page.selectOption('#deckSel', deckSel);
+    if (name) await page.fill('#newName', name); else await page.waitForSelector('#updRow:not([hidden])');
+    return page;
+  };
+  const imported = () => page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    return { cards: (await db.getAll('cards')).filter(c => c.ankiGuid).sort((a, b) => (a.id < b.id ? -1 : 1)), media: (await db.mediaKeys()).sort() };
+  });
+  await importFile('anki-update-v1.apkg', '__new', 'Undo update');
+  await page.click('#saveBtn'); await page.waitForSelector('.crow');
+  const deckId = await page.evaluate(async () => (await (await import('./js/db.js')).getDecks()).find(d => d.name === 'Undo update').id);
+  const first = await imported();
+  const alpha = first.cards.find(c => c.front === 'Alpha');
+  ok(first.cards.length === 6 && alpha.backImage && first.media.includes(alpha.backImage), 'update-undo: the first import has 6 cards and Alpha has its picture');
+  // The old picture is old enough for the daily clean-up to remove it once nothing uses it.
+  await page.evaluate(async id => { const db = await import('./js/db.js'); const m = await db.getMedia(id); await db.putMedia({ ...m, created: 1 }); }, alpha.backImage);
+
+  await importFile('anki-update-v3.apkg', deckId);
+  await page.click('#saveBtn'); await page.waitForFunction(() => /Updated/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+  ok((await page.textContent('#toast')).includes('Updated'), 'update-undo: the second import updated cards');
+  const mid = await imported();
+  const alphaNew = mid.cards.find(c => c.id === alpha.id);
+  ok(alphaNew.front === 'Alpha (revised)' && alphaNew.backImage && alphaNew.backImage !== alpha.backImage, 'update-undo: Alpha has new text and a different picture');
+  const cleaned = await page.evaluate(async () => (await import('./js/db.js')).cleanMedia(Date.now() + 5 * 3600e3));
+  ok(cleaned.length === 0 && (await imported()).media.includes(alpha.backImage), 'update-undo: while the Undo toast can be used, the clean-up keeps the old picture');
+  await undoClick(page);
+  await page.waitForFunction(() => /#\/decks/.test(location.hash));
+  const back = await imported();
+  const alphaBack = back.cards.find(c => c.id === alpha.id);
+  ok(back.cards.length === 6 && alphaBack.front === 'Alpha' && alphaBack.backImage === alpha.backImage, 'update-undo: Undo brings back the old text and the old picture link, and the new notes are gone');
+  ok(back.media.includes(alpha.backImage) && !!(await page.evaluate(async id => (await (await import('./js/db.js')).getMedia(id))?.data?.byteLength > 0, alpha.backImage)), 'update-undo: the old picture is still stored');
+  ok(JSON.stringify(back.cards.map(strip)) === JSON.stringify(first.cards.map(strip)), 'update-undo: every imported card has exactly its old values again');
+  await page.context().close();
+}
+
 // ---------- with sync: the delete has already been sent when Undo is pressed ----------
 {
   const fake = fakeSupabase();

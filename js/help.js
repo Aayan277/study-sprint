@@ -40,7 +40,6 @@ export const SECTIONS = [
     { id: 'custom-study', q: 'What can I do in Today → Options and Custom study?', a: `
       <p><b>Options</b> on Today picks which decks you study (each chip shows what’s due · new), how you answer (flip or type), and opens <b>Custom study…</b>. Custom study is for extra work beyond today’s cards:</p>
       <ul>
-        <li><b>By tag or question ID</b>: study just the cards you pick.</li>
         <li><b>More new cards today</b>: raise today’s new-card limit with the + and − buttons, then <b>Add</b>.</li>
         <li><b>Postpone reviews</b>: push chosen reviews to later.</li>
         <li><b>Review ahead</b>: study cards that aren’t due yet; each is rescheduled from today.</li>
@@ -76,7 +75,7 @@ export const SECTIONS = [
       <p>Tap <b>Import</b> (on the Decks screen or on a deck’s page), or <b>Add cards</b> in the sidebar on a computer. Paste one card per line, with the front and back separated by a dash, tab, colon, <code>|</code>, <code>=</code> or comma, for example ${code('Mitosis - cell division into 2 identical cells')}. Quizlet exports and tables from Notion, Excel or Google Sheets work too, and so do .csv and .xlsx files and Anki decks (.apkg).</p>
       <p>Notes written in paragraphs don’t split into cards by themselves. Tap <b>Suggest cards</b> and the app picks out definitions, lists, key terms and dates for you to tick and check (it works on your device), or use <b>Make cards with Claude</b> for an AI version.</p>` },
     { id: 'tags', q: 'Can the app tag my cards for me?', a: `
-      <p>Tags on a card are separated by spaces or commas. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck, tap ⋯ → <b>Suggest tags</b> (or in Browse, Tools → <b>Suggest tags for these cards</b>). The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
+      <p>Tags on a card are separated by spaces or commas. To rename or remove a tag on every card in the list you’re looking at, use Browse → <b>Tools</b>. To get tags suggested: open a deck’s card list (or Browse), tap <b>Tools</b> → <b>Suggest tags for these cards</b>. The app reads your cards on your device and suggests topics. Only the ones it’s confident about start ticked; check the others and tick any you want. You can rename a tag or untick single cards, and nothing changes until you tap Add. Changed your mind? Tap Undo.</p>` },
     { id: 'tools', q: 'What is in Browse → Tools?', a: `
       <p>Tools works on the cards in the list you’re looking at: <b>Find by tag or question ID</b>, rename or remove a tag everywhere in the list, <b>Suggest tags for these cards</b> (needs 10 or more cards), and <b>Link cloze cards</b>, which turns older separate fill-in-the-blank cards into one note.</p>` },
     { id: 'reverse', q: 'What is a reverse card?', a: `

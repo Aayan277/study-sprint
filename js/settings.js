@@ -231,12 +231,12 @@ export async function renderSettings(el) {
       <div class="set-row">
         <div><b>Storage</b><p>${persisted
           ? 'Saved permanently on this device.'
-          : 'Saved on this device only.'}</p>
+          : 'Saved on this device only. Install the app to your home screen so the browser keeps it safe.'}</p>
           <p class="note" id="mediaLine"></p></div>
-      </div>
+      </div>`)}
       <div class="set-row" id="usageRow" hidden>
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
-      </div>`)}
+      </div>
       <div class="set-row">
         <div><b>Back up</b><p class="note ${backup.nudge ? 'usage-line warn' : ''}" id="backupNote">${esc(backup.text)}</p></div>
         <button class="btn ghost small" type="button" id="exportBtn">Export backup</button>
@@ -750,8 +750,8 @@ export async function drawSync() {
   if (!box) return;
   const acct = await sync.account();
   if (!box.isConnected) return;       // Settings was redrawn meanwhile: that drawing handles it
-  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.' : '';
-  $('whereRow').hidden = !acct;
+  $('whereNote').textContent = acct ? 'Your data is saved in this browser and synced to your account.' : 'Your data is saved in this browser only.';
+  $('whereRow').hidden = false;
   drawUsage();
   if (!acct) {
     box.innerHTML = `

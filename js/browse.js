@@ -366,8 +366,8 @@ export async function openCardPanel(card, ctx) {
     if (act === 'duplicate') guardedGo(() => duplicateAndEdit(card, ctx));
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => guardedGo(() => db.clearStates([card.id]).then(() => again('Reset to new', 'reset'))));
     if (act === 'delete' && partner) askDeletePair(card, partner, again, ctx);
-    else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text).'
-      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture).' : 'Delete this card and its history?', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(snap => deleted(snap, 'Card deleted', ctx, again))));
+    else if (act === 'delete') confirmIn('ceConfirm', (isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text).'
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture).' : 'Delete this card and its history?') + UNDO_NOTE, 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(snap => deleted(snap, 'Card deleted', ctx, again))));
   }));
   wireFlags(f => guardedGo(() => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag')));
   wireMove(deckId => guardedGo(() => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move')));
@@ -821,7 +821,7 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'reverse') bulkReverse(selected, done);
     if (act === 'typing') bulkTyping(selected, done);
-    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history?`, `Delete ${plural(n, 'card')}`, async () => {
+    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history?${UNDO_NOTE}`, `Delete ${plural(n, 'card')}`, async () => {
       const snap = await db.deleteCards(selected.map(c => c.id));
       db.holdMedia();
       // A card whose partner is deleted becomes an ordinary card again.
@@ -1175,6 +1175,7 @@ function dueIn(state, days, now = Date.now()) {
   return { ...state, due: days === 0 ? now : daysAgoStart(-days, now), scheduledDays: days };
 }
 // Ask "are you sure?" inside the panel instead of a browser pop-up.
+const UNDO_NOTE = ' You can undo this for a few seconds.';
 function confirmIn(boxId, text, yes, onYes) {
   $(boxId).innerHTML = `<div class="confirm"><p>${esc(text)}</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn danger solid" type="button" id="cfYes">${esc(yes)}</button></div></div>`;

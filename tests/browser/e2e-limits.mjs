@@ -50,6 +50,7 @@ const unsent = page => run(page, async () => (await (await import('./js/db.js'))
   await A.waitForFunction(() => /150 MB of 180 MB/.test(document.querySelector('#usageLine')?.textContent || ''));
   ok(await A.$eval('#usageLine', e => e.classList.contains('warn')), 'from 80% the usage line is amber');
   ok((await A.textContent('#usageNote')).includes('Pictures and sounds: 150 MB of 180 MB.'), 'with the amber warning: ' + await A.textContent('#usageNote'));
+  ok(await A.evaluate(() => !document.querySelector('#usageRow').closest('details') && document.querySelector('#usageNote').offsetParent !== null), 'the account-space warning is not inside a fold');
   await A.locator('#usageRow').scrollIntoViewIfNeeded(); await A.screenshot({ path: SP + '/limits-amber.png' });
 
   // full at 180 MB: a new picture waits, the card change still syncs

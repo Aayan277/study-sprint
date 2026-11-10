@@ -157,6 +157,7 @@ await B.waitForFunction(() => /Export without them/.test(document.querySelector(
 ok(/pictures and sounds aren't on this device yet, so they aren't included\. Connect to the internet/.test(await B.textContent('#backupNote')), 'offline: the backup says what is missing: ' + await B.textContent('#backupNote'));
 let backup = await exportBackup(B, 'lazy-offline.json');
 ok(backup.media.length === heldBeforeExport && backup.media.length < 60, `"Export without them" saves what the device holds (${backup.media.length} pictures)`);
+await B.waitForFunction(() => /not included/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
 ok(/not included/.test(await B.textContent('#toast')), 'and the toast says some were left out: ' + await B.textContent('#toast'));
 // online: it downloads the missing ones, then exports everything
 await B.context().setOffline(false);

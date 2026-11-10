@@ -570,8 +570,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <label class="field"><span>Course code</span>
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date</span>
-        <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
-</label>
+        <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}"></label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>
@@ -662,7 +661,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
       <div class="confirm" role="alertdialog" aria-labelledby="delMsg">
         <p id="delMsg"><b>Delete “${esc(deck.name)}”?</b><br>${subs
           ? `It has ${plural(subs, 'subdeck')}. Deleting everything removes ${plural(total, 'card')} and all their review history; keeping the subdecks removes this deck's own ${plural(own, 'card')} and moves ${kids === 1 ? 'its subdeck' : `its ${kids} subdecks`} ${up}.`
-          : `This removes ${plural(own, 'card')} and all their review history.`}</p>
+          : `This removes ${plural(own, 'card')} and all their review history.`} You can undo this for a few seconds.</p>
         <div class="sheet-actions">
           <button class="btn ghost" type="button" id="delNo">Keep it</button>
           ${subs ? '<button class="btn danger" type="button" id="delKeep">Delete, keep subdecks</button>' : ''}

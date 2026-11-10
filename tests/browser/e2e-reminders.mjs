@@ -113,7 +113,7 @@ const badgeCalls = page => page.evaluate(() => window.__badge);
   ok(await page.evaluate(() => document.documentElement.dataset.ui === 'clinical'), 'Clinical style is on');
   await page.locator('#remTitle').scrollIntoViewIfNeeded();
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll (Clinical)');
-  ok(await page.locator('#appBadge').count() === 0 && (await page.textContent('#badgeRow')).includes('installed app'), 'in a browser tab the badge switch is replaced by a "works in the installed app" note');
+  ok(await page.locator('#appBadge').count() === 0 && /Install the app to use this/.test(await page.textContent('#badgeRow')), 'in a browser tab the badge switch is replaced by an "Install the app to use this" note');
   await page.screenshot({ path: SP + '/rem-settings-clinical.png', fullPage: true });
   await page.goto('http://localhost:8123/#/today'); await page.waitForSelector('#startBtn');
   await page.click('#startBtn'); await page.waitForSelector('#flash');

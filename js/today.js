@@ -389,6 +389,7 @@ export async function renderToday(el) {
           ${[[1, 'Tomorrow'], [3, '3 days'], [7, '1 week'], [14, '2 weeks']].map(([d, l]) =>
             `<button type="button" class="tchip" data-days="${d}" aria-pressed="${d === days}">${l}</button>`).join('')}
         </div>
+        <p class="note">Reschedules these cards from today.</p>
         <button class="btn primary small" type="button" id="csAheadBtn"></button>
       </div>
       <div class="cs-opt">

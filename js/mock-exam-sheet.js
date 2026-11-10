@@ -9,7 +9,7 @@ import { plainText } from './format.js';
 import { recallAt, examInfo, countdown } from './exam.js';
 import { personalW20 } from './sched-settings.js';
 import {
-  COUNTS, MAX_QUESTIONS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
+  COUNTS, DEFAULT_CFG, MAX_QUESTIONS, LIMITS, KINDS, ORDERS, cleanCfg, cleanPrefs, tagChoices, narrowByTags, askable, buildTest, newRun, newState, recentResults, cleanHistory, clock
 } from './mock-exam-logic.js';
 import * as store from './mock-exam-store.js';
 import { saveRun, inProgress, clearSaved, savePrefs } from './mock-exam-store.js';
@@ -60,7 +60,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
   let id = choices.some(d => d.id === deckId) ? deckId : (choices.find(d => poolFor(data, cards, d.id).length) || choices[0]).id;
   let cfg = cleanCfg(prefs[id]);
   let pool = [], tags = [], perKind = {};
-  let customOpen = foldOpen('test-custom');
+  let customOpen = foldOpen('test-custom');       // what the person chose (saved); a setup that is not the default also shows the fold, without saving that
 
   const prepare = () => {
     pool = poolFor(data, cards, id);
@@ -77,6 +77,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
     const saved = inProgress();
     const recent = recentResults(history, id, 4);
     const exam = examInfo(effectiveDeck(data.decks, id));
+    // Choices inside Customise that differ from the default: the fold shows by itself, so a changed filter is never hidden.
+    const nonDefault = cfg.tags.length > 0 || cfg.limit !== DEFAULT_CFG.limit || cfg.order !== DEFAULT_CFG.order || Object.keys(KINDS).some(k => perKind[k] && !cfg.kinds.includes(k));
+    const shown = customOpen || nonDefault;
     const radio = (name, value, label, checked, extra = '') =>
       `<label class="chip"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${extra}><span>${label}</span></label>`;
     openSheet(`
@@ -90,9 +93,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
           <select id="ptDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === id ? 'selected' : ''}>${esc(d.label)} (${poolFor(data, cards, d.id).length})</option>`).join('')}</select></label>
         <fieldset><legend>Questions</legend>
           <div class="chips">${COUNTS.map(n => radio('count', n, n === 'all' ? 'All' : n, cfg.count === n)).join('')}</div></fieldset>
-        <button class="fold-toggle" type="button" id="ptCustomBtn" aria-expanded="${customOpen}" aria-controls="ptCustomBody">
+        <button class="fold-toggle" type="button" id="ptCustomBtn" aria-expanded="${shown}" aria-controls="ptCustomBody">
           <span>Customise</span>${icon('chevron')}</button>
-        <div id="ptCustomBody" ${customOpen ? '' : 'hidden'}>
+        <div id="ptCustomBody" ${shown ? '' : 'hidden'}>
         ${tags.length > 1 ? `<fieldset><legend>Only these tags</legend>
           <div class="chips" role="group" aria-label="Narrow by tag">${tags.map(t => `<button type="button" class="tchip" data-tag="${esc(t.tag)}" aria-pressed="${cfg.tags.includes(t.tag)}">${esc(t.label)} <small>${t.n}</small></button>`).join('')}</div></fieldset>` : ''}
         <fieldset><legend>Question types</legend>
@@ -105,9 +108,9 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
           <fieldset><legend>Order</legend>
             <div class="chips">${Object.entries(ORDERS).map(([k, label]) => radio('order', k, label, cfg.order === k)).join('')}</div></fieldset>
         </div>
-        <p style="margin:0"><b>Counts as reviews: ${playCountsAsReviews(data.settings) ? 'on' : 'off'}</b> ${helpLink('test-counts', '?', 'About counting test answers as reviews')}</p>
         </div>
         <p class="pt-note" id="ptNote" role="status" aria-live="polite"></p>
+        <p style="margin:0" id="ptCountsLine"><b>Counts as reviews: ${playCountsAsReviews(data.settings) ? 'on' : 'off'}</b> ${helpLink('test-counts', '?', 'About counting test answers as reviews')}</p>
         ${recent.length ? `<section class="pt-hist" aria-label="Recent results"><h3>Recent results</h3><ul>${recent.map(r => `<li><span>${new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b class="mono">${r.pct}%</b><span class="mono">${r.correct}/${r.total}</span>${r.secs ? `<span class="mono">${clock(r.secs * 1000)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
         <div class="sheet-actions"><button class="btn ghost" type="button" id="ptCancel">Cancel</button><button class="btn primary" type="submit" id="ptStart">Start test</button></div>
       </form>`);
@@ -155,7 +158,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
       read(); refresh();
     });
     $('ptCustomBtn').addEventListener('click', () => {
-      customOpen = $('ptCustomBtn').getAttribute('aria-expanded') !== 'true';
+      customOpen = $('ptCustomBtn').getAttribute('aria-expanded') !== 'true';      // from what is showing now
       $('ptCustomBtn').setAttribute('aria-expanded', String(customOpen));
       $('ptCustomBody').hidden = !customOpen;
       saveFold('test-custom', customOpen);

@@ -39,7 +39,7 @@ export async function openCompare(a, b, { onDismiss = () => {}, onDone = () => {
   const { pairs } = await loadPairs();
   const pair = pairs.find(p => p.key === pairKey(a.id, b.id));
   openSheet(`
-    <h2 id="sheetTitle">Compare ${helpLink('compare', '?', 'About Compare')}</h2>
+    <h2 id="sheetTitle">Compare</h2>${helpLink('compare', '?', 'About Compare')}
     <div class="cmp">${side(a)}${side(b)}</div>
     <div class="sheet-actions stack">
       <button class="btn primary" type="button" id="cmpDrill">Review these</button>

@@ -1463,6 +1463,7 @@ async function save() {
     else if (cards.length || updated) {
       // Undo takes out exactly what this import added (and puts back the cards it changed), then shows the deck list.
       const undo = outcomes.undo;
+      db.holdMedia();          // the pictures of an updated card stay until the Undo toast is gone (see the clean-up in db.js)
       const opts = undoOpts(async () => {
         await db.undoImport(undo);
         navReplace('#/decks');
@@ -1487,12 +1488,12 @@ async function save() {
 
 // Where the Add button sits. On a PC it is the bar at the bottom of the page (sticky above the page's end). On a phone or tablet a
 // bar stuck to the bottom of the screen covered the "Preview" heading and the "Found…" line whenever they were near the fold, so
-// there the button goes right under the "Found…" line and sticks under the header while the list scrolls (css: .savebar in #preview).
+// there the button goes after the option switches (Update the cards…, Overwrite…, and the rest), under the "Found…" line, and sticks under the header while the list scrolls (css: .savebar in #preview).
 function placeSaveBar() {
   const bar = $('savebar'), mq = matchMedia('(max-width:1023.98px)');
   const place = () => {
     if (!bar.isConnected) { mq.removeEventListener('change', place); return; }
-    if (mq.matches) $('sugNote').after(bar); else $('preview').after(bar);
+    if (mq.matches) $('subRow').after(bar); else $('preview').after(bar);
   };
   place();
   mq.addEventListener('change', place);
