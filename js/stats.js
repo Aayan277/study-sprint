@@ -121,7 +121,7 @@ function retSplitHTML(res, hasLogs) {
   return RS_PERIODS.map(d => {
     const r = res[d];
     return `<div class="rs-group" role="group" aria-label="Last ${d} days">
-      <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
+      <div class="rs-head"><b>Last ${d} days</b><span class="muted small">${d === RS_PERIODS[0] && Number.isFinite(r.target) ? `target ${Math.round(r.target * 100)}%` : ''}</span></div>
       ${rowHTML(`Young <small>(&lt;${YOUNG_DAYS}d)</small>`, r.young, r.target)}
       ${rowHTML(`Mature <small>(${YOUNG_DAYS}d+)</small>`, r.mature, r.target)}
     </div>`;
@@ -370,7 +370,6 @@ export async function renderStats(el) {
       <div class="card pc-streak">
         <h2>${course ? 'Overall streak' : 'Day streak'}</h2>
         <div class="big">${streak.days}<small>${streak.days === 1 ? 'day' : 'days'}</small></div>
-        ${streak.studiedToday ? '' : `<p>${streak.days === 0 ? `${settings.playCountsAsReviews === true ? 'Review or play' : 'Review'} today to start a streak.` : 'Study today to keep it going.'}</p>`}
         ${weekDotsHTML(streak.week)}
         <p class="frz-note"><button class="link" type="button" id="planRest">Plan a day off</button></p>
       </div>`,
@@ -579,7 +578,7 @@ export async function renderStats(el) {
   const showDetail = async () => {
     if (!q('mDetail')) return;                         // Mastery is hidden
     const c = selected && cards.find(x => x.id === selected);
-    if (!c) { q('mDetail').innerHTML = '<p class="muted">Tap a square to see that card.</p>'; return; }
+    if (!c) { q('mDetail').innerHTML = ''; return; }
     const st = statesById.get(c.id);
     const lvl = cardLevel(st);
     const last10 = (await db.getCardLogs(c.id)).filter(isAnswerLog).slice(-10);

@@ -134,7 +134,7 @@ const q = await open();
 await q.evaluate(() => { location.hash = '#/today'; }); await q.waitForSelector('#optBtn');
 await q.click('#optBtn'); await q.click('#customBtn'); await q.click('#csTagBtn');
 await q.waitForSelector('#tsClose');
-ok((await q.textContent('#sheet')).includes('No cards have tags yet. Anki decks like AnKing bring their tags.'), 'no tags: friendly message');
+ok((await q.textContent('#sheet')).includes('No cards have tags yet.'), 'no tags: friendly message');
 await q.context().close();
 
 // ----- Browse > Tools: tags as folders -----

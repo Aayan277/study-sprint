@@ -49,7 +49,7 @@ for (const sel of ['input[name=fmt][value=classic]', 'input[name=qtype][value=ty
 await page.click('#startBtn'); await page.waitForSelector('#pInput');
 await wrongRound();
 await page.waitForSelector('.stamp');
-ok((await page.textContent('.sched-note')).includes('Practice only'), 'the results say it was practice only');
+ok(await page.locator('.sched-note').count() === 0, 'practice only: the results show no schedule note');
 ok(await page.locator('#drillBtn').count() === 1, 'Drill missed is offered');
 await page.click('#drillBtn'); await page.waitForSelector('#pInput');
 await wrongRound();

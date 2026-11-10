@@ -2345,7 +2345,6 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 @media (hover:hover) and (pointer:fine){.side-set:hover,.side-help:hover{background:var(--surface-2);color:var(--text)}}
   .side-help{width:32px;padding:0;justify-content:center}
   .side-help span{display:none}
-  .side-ver{margin-left:2px;font:500 var(--fs-2xs)/1 var(--f-num);color:var(--text-3)}
   .side-ib{all:unset;box-sizing:border-box;display:grid;place-items:center;width:32px;height:32px;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer}
   #sideMode{margin-left:auto}
   @media (hover:hover) and (pointer:fine){.side-ib:hover{background:var(--surface-2);color:var(--text)}}
@@ -2384,7 +2383,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
   html[data-rail="on"] .side-new .ico{width:16px;height:16px}
   html[data-rail="on"] .side-foot{padding:10px 0 12px;justify-items:center;gap:4px}
   html[data-rail="on"] .side-streak{padding:4px}
-  html[data-rail="on"] .side-st,html[data-rail="on"] .side-sync,html[data-rail="on"] .side-ver{display:none}
+  html[data-rail="on"] .side-st,html[data-rail="on"] .side-sync{display:none}
   html[data-rail="on"] .side-tools{flex-direction:column;gap:4px;margin:0}
   html[data-rail="on"] #sideMode{margin-left:0}
   html[data-rail="on"] .side-set,html[data-rail="on"] .side-help{width:32px;padding:0;justify-content:center;font-size:0;gap:0}

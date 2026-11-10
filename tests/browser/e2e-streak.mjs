@@ -64,7 +64,7 @@ await p.click('#streakBtn'); await p.waitForSelector('#sheet[open] .ys');
 ok((await norm(p, '#sheetTitle')) === 'Your streak', 'the sheet is titled "Your streak"');
 ok(await p.locator('#sheet .wd.frz').count() === 1 && await p.locator('#sheet .wd.on').count() === 5, 'the 7-day row: 5 studied, 1 covered');
 ok(/streak freeze used/.test(await p.getAttribute('#sheet .wd.frz', 'title')), 'the covered day is named in its title: ' + await p.getAttribute('#sheet .wd.frz', 'title'));
-ok((await norm(p, '#sheet')).includes('One missed day a week is covered'), 'the sheet explains the freeze');  // (the sheet keeps its explanation; only the Stats card lost its sentence)
+ok(!(await norm(p, '#sheet')).includes('One missed day a week is covered') && await p.locator('#sheet a[aria-label="About the streak freeze"]').count() === 1, 'the sheet points to Help for the freeze instead of explaining it');
 await noHScroll(p, 'the sheet at 375');
 ok(await p.evaluate(() => { const s = document.querySelector('#sheet'); return s.scrollWidth <= s.clientWidth + 1; }), 'the sheet itself does not scroll sideways');
 await p.screenshot({ path: SP + '/streak-sheet-375-dark.png' });
@@ -229,7 +229,7 @@ await seed(f, [1, 2, 3, 4, 5], { rest: [1, 2] });
 await f.ctx.clock.setFixedTime(new Date(2026, 9, 17, 12));    // now Sat 17 Oct: Wed 14 was missed, Thu and Fri were days off
 await f.reload(); await f.waitForSelector('#streakBtn');
 const moved = await norm(f, '.streak');
-ok(/^5\s*day streak/.test(moved) && moved.includes('Study today to keep it'), 'two days later, with two days off in between, the streak is still 5: ' + moved);
+ok(/^5\s*day streak/.test(moved) && !moved.includes('Study today'), 'two days later, with two days off in between, the streak is still 5: ' + moved);
 ok(await f.locator('.streak .frz-pill').count() === 1, 'and Wednesday was covered by the freeze: ' + await norm(f, '.frz-pill'));
 // without the days off the same gap breaks it
 await f.evaluate(async () => { await (await import('./js/db.js')).setSetting('restDays', {}); });
@@ -251,7 +251,7 @@ await g.reload(); await g.waitForSelector('#streakBtn');
 const second = await norm(g, '.streak');
 // v4.2.1 (owner decision): the week's freeze stays on the EARLIEST missed day (Tue 13), so the newer miss (Thu 15) ends
 // the streak at once. Before, the freeze moved to Thu and the streak was 1 ("Freeze used yesterday").
-ok(/^0\s*day streak/.test(second) && second.includes('Study today to start one') && !second.includes('Freeze used') && !second.includes('freeze ready'),
+ok(/^0\s*day streak/.test(second) && !second.includes('Study today') && !second.includes('Freeze used') && !second.includes('freeze ready'),
   'a second miss in the same week ends the streak, the freeze stays on the first miss: ' + second);
 
 // ============================ backup and sync keep the days off ============================

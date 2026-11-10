@@ -139,7 +139,7 @@ const streakText = await p.textContent('#sideStreak');
 ok(/3-day streak/.test(streakText) && (await p.getAttribute('#sideStreak', 'aria-label')).startsWith('3-day streak'), 'footer: "3-day streak" from the log');
 ok((await box(p, '#sideStreak .ring')).w === 30, 'the goal ring is 30px');
 ok(await p.$eval('#sideStreak .ring-fg', e => !!e).catch(() => false), 'the ring shows today\'s answers over the daily goal');
-ok(/1 of \d+ today/.test(streakText), 'and says how many answers: ' + streakText.replace(/\s+/g, ' ').trim());
+ok(/1 of \d+ cards today/.test(await p.getAttribute('#sideStreak', 'aria-label')) && !/ of \d+ today/.test(streakText), 'the answers count is in the label for screen readers, not repeated as text: ' + streakText.replace(/\s+/g, ' ').trim());
 await go(p, '#/today', '#startBtn');
 
 // sync status
@@ -157,11 +157,11 @@ await p.waitForFunction(() => /Sign in/.test(document.getElementById('sideSync')
 ok(true, 'signing out brings "Sign in to sync" back');
 
 // Settings: the link, the version, going back
-const ver = (await p.textContent('#sideVer')).trim();
+ok(await p.locator('#sideVer').count() === 0, 'the sidebar footer has no version label (Settings has it)');
 await go(p, '#/decks', '.deck');
 await p.click('#sideSet'); await p.waitForSelector('#skins');
 ok((await p.getAttribute('#sideSet', 'aria-current')) === 'page' && (await p.getAttribute('#sideSet', 'aria-label')) === 'Close settings', 'Settings link: highlighted, and "Close settings" while open');
-ok(ver === 'v' + (await p.textContent('#aboutRow b')).match(/(\d+(?:\.\d+)+)/)[1], `Settings → About shows the app version (${ver})`);
+ok(/(\d+(?:\.\d+)+)/.test(await p.textContent('#aboutRow b')), 'Settings → About shows the app version');
 await p.click('#sideSet'); await p.waitForSelector('.deck');
 ok(p.url().endsWith('#/decks') && (await p.getAttribute('#sideSet', 'aria-label')) === 'Settings', 'clicking it again closes Settings and goes back');
 
@@ -193,7 +193,7 @@ await p.waitForSelector('.stats4');
 await p.waitForFunction(() => document.querySelector('.side-deck[data-key=eco] .side-due').classList.contains('zero'));
 const afterRound = +(await p.textContent('#sideBadge > [aria-hidden]'));
 ok(before.eco === '6' && afterRound === before.badge - 6, `after a round the count drops (Today ${before.badge} to ${afterRound}) and Microeconomics shows no due`);
-ok(/7 of/.test(await p.textContent('#sideStreak')), 'and the ring counts the answers');
+ok(/7 of/.test(await p.getAttribute('#sideStreak', 'aria-label')), 'and the ring counts the answers (in its label)');
 await go(p, '#/today', '#startBtn');
 
 // the badge hides at 0

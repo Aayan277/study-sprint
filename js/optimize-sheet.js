@@ -266,7 +266,6 @@ function draw(force = false) {
         <div class="opt-bar" id="optBar" role="progressbar" aria-label="Optimizing" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct()}"><i style="width:${pct()}%"></i></div>
         <p class="opt-phase"><span id="optLive" aria-live="polite" data-phase="${run.phase}" data-quarter="${Math.floor(pct() / 25)}">${esc(phaseLine())}</span> <span id="optPct" class="mono" aria-hidden="true">${run.phase === 'finding' ? pct() + '%' : ''}</span></p>
         ${run.note ? `<p class="opt-note" id="optNote">${esc(run.note)}</p>` : ''}
-        <p class="opt-note">You can close this; it keeps going.</p>
         <div class="sheet-actions"><button type="button" class="btn ghost" id="optCancel">Cancel</button></div>
       </div>`);
     $('optCancel').addEventListener('click', cancelRun);

@@ -18,7 +18,7 @@ await page.evaluate(async () => { const db = await import('./js/db.js'); const c
   await db.addLog({ cardId: cs[0].id, timestamp: now - 3600000, source: 'review', correct: false, rating: 1, ms: 4200, state: 2 }); });
 await page.click('.deck-open'); await page.waitForSelector('.crow');
 ok((await page.locator('.crow').count()) === 12, 'deck page lists all 12 cards');
-ok((await page.textContent('#brCount')) === '12 cards', 'count shown');
+ok(await page.locator('#brCount').isHidden(), 'deck page: no count above the list while nothing is filtered');
 await noHScroll('card list'); await page.screenshot({ path: SP + '/b-list.png' });
 
 // search, filter, sort

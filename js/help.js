@@ -35,6 +35,8 @@ export const SECTIONS = [
       <p>Lots of new cards today means lots of reviews over the next few days. If Today feels too long, lower New cards per day.</p>` },
     { id: 'missed', q: 'What if I miss a day?', a: `
       <p>Nothing is lost: cards you didn’t review wait for you. One missed day a week (the week runs Monday to Sunday) is covered by a streak freeze, so a single slip doesn’t end your streak (two missed days in a row still do). Back after a longer break? Today offers to spread the overdue cards over 2 or 3 days (<b>Spread them out</b>).</p>` },
+    { id: 'catch-up', q: 'What does Pause new cards until caught up do?', a: `
+      <p>While the catch-up plan runs, no new cards start, so the overdue ones come first. Decks with an exam still get their new cards. Most overdue cards come first, on top of your usual reviews, and cards for an exam are never held back.</p>` },
     { id: 'custom-study', q: 'What can I do in Today → Options and Custom study?', a: `
       <p><b>Options</b> on Today picks which decks you study (each chip shows what’s due · new), how you answer (flip or type), and opens <b>Custom study…</b>. Custom study is for extra work beyond today’s cards:</p>
       <ul>
@@ -48,11 +50,14 @@ export const SECTIONS = [
     { id: 'review-counts', q: 'What are the New, Learn and Due numbers at the top of Review?', a: `
       <p><b>New</b> is cards you haven’t seen yet, <b>Learn</b> is cards still on their short learning steps, and <b>Due</b> is reviews that are waiting. The one you’re working on is underlined, and the numbers go down as you answer.</p>` },
     { id: 'compare', q: 'What is Compare?', a: `
-      <p>When two cards keep getting mixed up, the end of a session, the leech helper and a card’s page in Browse offer <b>Compare</b>: it shows them side by side, with how many times you mixed them up recently, and can add a card that sets them apart. <b>Not confused</b> hides the pair until you mix them up twice more (on this device).</p>` },
+      <p>When two cards keep getting mixed up, the end of a session, the leech helper and a card’s page in Browse offer <b>Compare</b>: it shows them side by side, with how many times you mixed them up recently, and can add a card that sets them apart. The sheet notes how many times you mixed them up in the last few weeks. <b>Not confused</b> hides the pair until you mix them up twice more (on this device).</p>` },
     { id: 'play', q: 'What are Play and Practice test? Do they change my schedule?', a: `
       <p><b>Play</b> turns a deck into timed game rounds for cramming. By default it’s practice only: it doesn’t change when cards are due, your stats or your streak (to change that, turn on Settings → Study → Count Play answers as reviews). <b>Practice test</b>, on a deck’s page, is a calm mock exam that’s marked at the end.</p>` },
     { id: 'play-scoring', q: 'How does scoring work in Play?', a: `
-      <p>In <b>Play</b>, tap <b>How scoring works</b> under the start button. A right answer scores 100, plus up to 100 for speed, times your streak (up to ×1.5). In Lightning the clock pauses while you read an answer. Your best score for a setup shows on the Play screen once you have one.</p>
+      <p>A right answer scores 100, plus up to 100 for speed, times your streak (up to ×1.5). With no time limit there is no speed bonus.</p>
+      <p><b>Survival</b>: the timer shrinks 3% a question, down to 2 seconds. <b>Lightning</b>: always timed, 60 seconds in all, a wrong answer costs 3 seconds, and the clock pauses while you read an answer.</p>
+      <p>Typing gets extra time. <b>Hard</b>: 6 options, −50 per miss, ×1.25 points, no typo forgiveness. <b>Flash</b>: the question hides after the set seconds, ×1.2 points.</p>
+      <p>Play is practice only by default: answers don’t change when cards are due or your stats. Turn on <b>Count Play answers as reviews</b> in Settings to change that; then answers on due cards count as their review, and so do new cards in a deck with an exam. Your best score for a setup shows on the Play screen once you have one.</p>
       <p>Multiple choice needs at least 4 cards in the deck to offer wrong answers, which is why it is greyed out on smaller decks.</p>` },
     { id: 'accuracy', q: 'What does Accuracy mean on the finish screen?', a: `
       <p>Accuracy counts every rating except <b>Again</b>. Hard, Good and Easy all count as remembered.</p>` },
@@ -162,7 +167,7 @@ export const SECTIONS = [
     { id: 'stats-calendar', q: 'How does the Study calendar work?', a: `
       <p>Each square in the <b>Study calendar</b> is a day; darker means more answers. Tap a day to read its numbers, or use <b>Pick a day</b> to do it without a mouse. A diagonal hatch is a day covered by a streak freeze, and a day off you planned is marked too.</p>` },
     { id: 'streak-freeze', q: 'What is a streak freeze?', a: `
-      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. To rest on purpose, tap <b>Plan a day off</b>. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
+      <p>One streak freeze a week covers a missed day. It keeps your streak but doesn’t add to the count. Two missed days in a row still break it. To rest on purpose, tap <b>Plan a day off</b>: a planned day off never breaks your streak and doesn’t add to it. You can plan up to 14 days, starting tomorrow and up to 60 days ahead. Studying any deck keeps the streak going (on a course’s Stats, the streak still counts all decks). A snowflake next to the streak means a freeze was used; a freeze that is only ready shows nothing.</p>` },
     { id: 'readiness', q: 'What does Exam readiness mean?', a: `
       <p>On Stats, pick a course. <b>Exam readiness</b> is the share of its cards you would still remember (90% or better) on exam day if you stopped reviewing now. Without an exam date it shows <b>Readiness today</b>, and <b>Add exam date</b> lets you set one. It’s an estimate: <b>How sure is this?</b> says what it’s based on. You can turn the header off with Exam readiness in Stats in Settings → Appearance.</p>` },
     { id: 'retention-planner', q: 'How does Help me choose pick a retention?', a: `

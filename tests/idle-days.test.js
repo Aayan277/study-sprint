@@ -43,7 +43,7 @@ test('today: with nothing due and not studied the streak line says it is safe', 
   assert.deepEqual([s.days, s.studiedToday, s.idleToday, s.restToday], [2, false, true, false]);
   assert.equal(streakText(s, NOW).line, 'Nothing due today: your streak is safe');
   assert.equal(walk([1, 2], []).idleToday, false);
-  assert.equal(streakText(walk([1, 2]), NOW).line, 'Study today to keep it');
+  assert.equal(streakText(walk([1, 2]), NOW).line, '');
   // Studied after all: a normal day. A planned day off stays the reason when both apply.
   assert.equal(walk([0, 1], [0]).idleToday, false);
   assert.equal(streakText(walk([0, 1], [0]), NOW).line, 'Kept for today');
@@ -180,5 +180,5 @@ test('a long streak keeps its quiet days: the 3650-day prune does not cut it', a
 test('the "Nothing due today" line needs the ring to still say nothing: loadStreak drops idleToday otherwise', () => {
   const s = streakFromDays(new Set([k(1), k(2)]), T, { idle: new Set([k(0)]) });
   assert.equal(streakText(s, T).line, 'Nothing due today: your streak is safe');
-  assert.equal(streakText({ ...s, idleToday: false }, T).line, 'Study today to keep it');
+  assert.equal(streakText({ ...s, idleToday: false }, T).line, '');
 });

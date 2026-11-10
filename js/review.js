@@ -487,7 +487,7 @@ function examCapNote(state, opts, ivl, cardId, now) {
   if (!(opts.maxDue > now)) return '';
   const free = previewIntervals(state, { ...opts, maxDue: null }, now, cardId);
   if (![Rating.Hard, Rating.Good, Rating.Easy].some(r => formatInterval(free[r]) !== formatInterval(ivl[r]))) return '';
-  return `<p class="rate-note" id="rateNote">Capped by your exam on ${new Date(opts.maxDue).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</p>`;
+  return `<p class="rate-note" id="rateNote">Exam ${new Date(opts.maxDue).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</p>`;
 }
 
 function rateButtonsHTML() {
@@ -925,7 +925,7 @@ async function finish(el) {
       <div><div class="v">${spentText}</div><div class="l">Time spent</div></div>
       <div><div class="v">${dueTomorrow}</div><div class="l">Due tomorrow</div></div>
     </div>
-    ${endedEarly || reviewed > cardsDone ? `<p class="note">${endedEarly ? 'Cards you didn’t get to stay due. ' : ''}${reviewed > cardsDone ? `${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.` : ''}</p>` : ''}
+    ${reviewed > cardsDone ? `<p class="note">${plural(reviewed, 'answer')} on ${plural(cardsDone, 'card')}.</p>` : ''}
     <div class="res-actions">
       ${goOn
         ? `<button class="btn primary" type="button" id="keepBtn" aria-label="${goOn.word}: ${plural(goOn.total, 'card')}">${goOn.word} · ${plural(goOn.total, 'card')}</button>

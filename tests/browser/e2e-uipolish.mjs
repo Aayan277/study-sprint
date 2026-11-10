@@ -86,7 +86,7 @@ for (const ui of ['clinical', 'original']) {
   await setUp(inDays(10), 20);
   await answerSide();
   const iv = await ivls();
-  ok(await p.locator('#rateNote').count() === 1 && /^Capped by your exam on /.test((await p.textContent('#rateNote')).trim()), 'H3: a card the exam cap moved: "' + (await p.textContent('#rateNote')).trim() + '"');
+  ok(await p.locator('#rateNote').count() === 1 && /^Exam \S+ \S+$/.test((await p.textContent('#rateNote')).trim()), 'H3: a card the exam cap moved: "' + (await p.textContent('#rateNote')).trim() + '"');
   ok(iv[1] === iv[2] && iv[2] === iv[3], 'H3: Hard, Good and Easy show the same gap, so the line is needed (' + iv.join(' / ') + ')');
   const shown = new Date(Date.now() - 4 * 3600000 + 10 * DAY).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   ok((await p.textContent('#rateNote')).includes(shown), 'H3: the line names the exam day (' + shown + ')');
@@ -167,7 +167,7 @@ for (const ui of ['original', 'clinical']) {
   await p.click('#deckMore'); await p.waitForSelector('#deckMenu:not([hidden])'); await p.mouse.move(2, 2);
   const opened = await edgeOf('#deckMore');
   ok(closed >= 3 && opened >= 3 && opened >= closed - 0.01, `M1b (${ui}, dark): the open ⋯ button's edge is ${opened.toFixed(2)}:1, at least the closed one's (${closed.toFixed(2)}:1) and 3:1`);
-  await p.evaluate(() => { const h = document.createElement('div'); h.style.cssText = 'position:fixed;left:300px;top:300px;padding:20px'; h.innerHTML = '<button class="snd-btn" id="sndProbe" type="button">s</button>'; document.querySelector('main').appendChild(h); });
+  await p.evaluate(() => { const h = document.createElement('div'); h.style.cssText = 'position:fixed;left:700px;top:780px;padding:20px'; h.innerHTML = '<button class="snd-btn" id="sndProbe" type="button">s</button>'; document.querySelector('main').appendChild(h); });
   const rest = await edgeOf('#sndProbe');
   const restColor = await p.evaluate(() => getComputedStyle(document.querySelector('#sndProbe')).borderTopColor);
   await p.hover('#sndProbe');
@@ -210,7 +210,7 @@ for (const [vp, label] of [[PHONE, '390'], [{ viewport: { width: 320, height: 64
   await seedDecks(p);
   await p.evaluate(async d => { const db = await import('./js/db.js'); const deck = await db.getDeck('B'); await db.saveDeck({ ...deck, examDate: d }); }, inDays(9));
   await go(p, '#/deck/B', '#reviewBtn');
-  ok((await p.textContent('#reviewBtn')).trim() === 'Review · 4' && await p.$eval('#reviewBtn', b => b.classList.contains('primary')), `M7 (${label}): cards due, exam within 14 days: "Review · 4" is the main button`);
+  ok((await p.textContent('#reviewBtn')).trim() === 'Review' && (await p.getAttribute('#reviewBtn', 'aria-label')) === 'Review, 4 cards' && await p.$eval('#reviewBtn', b => b.classList.contains('primary')), `M7 (${label}): cards due, exam within 14 days: "Review · 4" is the main button`);
   ok(await p.$eval('#prepBtn', b => b.classList.contains('ghost')) && await p.locator('.head-actions #prepBtn').count() === 1, `M7 (${label}): Exam prep is still there, as the second button`);
   ok(await p.locator('.head-actions a[href^="#/import"]').count() === 0, `M7 (${label}): no Import button in the header row`);
   const rows = await p.$$eval('.screen-head .head-actions > *:not(#reviewBtn)', els => [...new Set(els.map(e => Math.round(e.getBoundingClientRect().top)))].length);
@@ -239,7 +239,7 @@ for (const [vp, label] of [[PHONE, '390'], [{ viewport: { width: 320, height: 64
 {
   // no exam, cards due: Review is main, Practice test beside the ⋯
   const p = await open(PHONE); await seedDecks(p); await go(p, '#/deck/B', '#reviewBtn');
-  ok((await p.textContent('#reviewBtn')).trim() === 'Review · 4' && await p.$eval('#reviewBtn', b => b.classList.contains('primary')) && await p.locator('#prepBtn').count() === 0, 'M7: no exam: "Review · 4" is the main button');
+  ok((await p.textContent('#reviewBtn')).trim() === 'Review' && (await p.getAttribute('#reviewBtn', 'aria-label')) === 'Review, 4 cards' && await p.$eval('#reviewBtn', b => b.classList.contains('primary')) && await p.locator('#prepBtn').count() === 0, 'M7: no exam: "Review · 4" is the main button');
   await p.context().close();
 }
 
