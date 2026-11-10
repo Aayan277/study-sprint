@@ -260,5 +260,29 @@ for (const [w, scheme] of [[375, 'light'], [1440, 'dark'], [1440, 'light']]) {
   await p.context().close();
 }
 
+// A real tap (touch screen) on the "?" in the Compare header opens its help: the swipe-to-close drag must not take the tap.
+{
+  const p = await open({ w: 390, h: 844 });
+  await seed4(p, false);
+  await p.evaluate(async () => {
+    const db = await import('./js/db.js'); const m = await import('./js/compare-sheet.js');
+    await m.openCompare(await db.get('cards', 'mx0'), await db.get('cards', 'mx1'));
+  });
+  await p.waitForSelector('#sheet .cmp');
+  await p.tap('#sheet a.help-link[aria-label="About Compare"]');
+  await p.waitForFunction(() => location.hash === '#/help/compare', null, { timeout: 5000 }).catch(() => {});
+  ok(await p.evaluate(() => location.hash) === '#/help/compare', 'touch: tapping the "?" in the Compare sheet opens #/help/compare');
+  // The same tap on a link that really is inside the sheet header (where the swipe-to-close drag starts): put one there on purpose.
+  await p.goto('http://localhost:8123/#/decks'); await p.waitForSelector('.deck');
+  await p.evaluate(async () => { const db = await import('./js/db.js'); await (await import('./js/compare-sheet.js')).openCompare(await db.get('cards', 'mx0'), await db.get('cards', 'mx1')); });
+  await p.waitForSelector('#sheet .cmp');
+  await p.evaluate(() => { document.querySelector('#sheet .sheet-head').insertAdjacentHTML('beforeend', '<a id="headLink" class="help-link" href="#/help/compare" aria-label="Test help link">?</a>'); });
+  await p.evaluate(() => { window.__captured = 0; const o = Element.prototype.setPointerCapture; Element.prototype.setPointerCapture = function (id) { window.__captured++; return o.call(this, id); }; });
+  await p.tap('#headLink');
+  await p.waitForFunction(() => location.hash === '#/help/compare', null, { timeout: 5000 }).catch(() => {});
+  ok(await p.evaluate(() => location.hash) === '#/help/compare' && await p.evaluate(() => window.__captured) === 0, 'touch: tapping a link in the sheet header opens it and the swipe-to-close drag does not capture the pointer (Safari sends the click to the captured header)');
+  await p.context().close();
+}
+
 ok(errors.length === 0, 'no page or console errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
 await browser.close();

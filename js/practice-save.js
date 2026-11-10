@@ -1,6 +1,6 @@
 // Saving a practice answer as a review: the one code path Play (play.js) and the Practice test (mock-exam.js) share.
-// Nothing here decides whether to save: the caller does (Play: the setting "Count Play and test answers as reviews"; the test: its own
-// "Count answers as reviews" switch). Once it does, an answer is written to the review log and, when the auto-grading rules allow
+// Nothing here decides whether to save: the caller does (Play: the setting "Count Play and test answers as reviews"; the test: the same setting).
+// Once it does, an answer is written to the review log and, when the auto-grading rules allow
 // it (autograde.js), to the card's schedule. The log row's source says where it came from: 'play' or 'test'.
 
 import * as db from './db.js';

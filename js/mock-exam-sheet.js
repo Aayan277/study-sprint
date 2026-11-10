@@ -110,7 +110,7 @@ export async function openTestSheet(deckId, { mock = false, onStart = null } = {
         </div>
         </div>
         <p class="pt-note" id="ptNote" role="status" aria-live="polite"></p>
-        <p style="margin:0" id="ptCountsLine"><b>Counts as reviews: ${playCountsAsReviews(data.settings) ? 'on' : 'off'}</b> ${helpLink('test-counts', '?', 'About counting test answers as reviews')}</p>
+        <p class="pt-counts" id="ptCountsLine"><b>Counts as reviews: ${playCountsAsReviews(data.settings) ? 'on' : 'off'}</b> ${helpLink('test-counts', '?', 'About counting test answers as reviews')}</p>
         ${recent.length ? `<section class="pt-hist" aria-label="Recent results"><h3>Recent results</h3><ul>${recent.map(r => `<li><span>${new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b class="mono">${r.pct}%</b><span class="mono">${r.correct}/${r.total}</span>${r.secs ? `<span class="mono">${clock(r.secs * 1000)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
         <div class="sheet-actions"><button class="btn ghost" type="button" id="ptCancel">Cancel</button><button class="btn primary" type="submit" id="ptStart">Start test</button></div>
       </form>`);

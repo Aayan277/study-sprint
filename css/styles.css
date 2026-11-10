@@ -1216,6 +1216,7 @@ main[data-route="test"] fieldset{margin-bottom:var(--s-4)}
 .pt-resume{padding:12px 14px;border-radius:var(--r-md);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
 .pt-resume p{margin:0 0 var(--s-2);font-size:var(--fs-sm)}
 .pt-resume-b{display:flex;gap:var(--s-2)}
+.pt-counts{margin:0}
 .pt-note{margin:0;font-size:var(--fs-sm);font-weight:600}
 .pt-hist h3{margin:0 0 var(--s-2);font-size:var(--fs-sm);color:var(--text-2);font-weight:600}
 .pt-hist ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
@@ -3330,7 +3331,6 @@ main h2[tabindex="-1"]{outline:none}
   .help-link::before{content:"";position:absolute;inset:-11px}   /* 24px ring + 1px border each side + 22px = a 44px tap area */
   .steps-input .help-link::before{left:-7px;right:-15px}                       /* next to the Reset button: the tap area stops short of it (8px gap) */
   .sheet-x{width:44px;height:44px}
-  .steps-hint a{display:inline-flex;align-items:center;min-height:44px}
   .exam-line-link{min-height:44px;display:inline-flex;align-items:center}
   .pt-form .chip span{min-width:44px;justify-content:center}
 }

@@ -346,7 +346,7 @@ export function initSheet() {
   });
   let drag = null;
   d.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x')) return;
+    if (e.pointerType === 'mouse' || d.classList.contains('side') || !e.target.closest('.sheet-head') || e.target.closest('.sheet-x, a, button')) return;
     drag = { id: e.pointerId, y: e.clientY, t: e.timeStamp, dy: 0 };
     e.target.closest('.sheet-head').setPointerCapture(e.pointerId);        // on the header, not the dialog: the click that follows a tap must not land on the dialog itself
     d.style.transition = 'none';

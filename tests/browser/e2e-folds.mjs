@@ -26,8 +26,8 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   ok(!(await vis('#oled')) && !(await vis('#compactDecks')) && !(await vis('input[name=ui]')) && !(await vis('#learnOrderChips')) && !(await vis('#singleKeys')) && !(await vis('#glossBtn')) && !(await vis('#installRow')), `${name}: the niche options are folded in "More settings"`);
   ok(await p.locator('summary:has-text("More settings")').count() >= 3 && await vis('#playCounts') && await vis('#remTime'), `${name}: each section has a More settings fold; Reminders and the Play switch stay visible`);
   ok(await p.evaluate(() => { const ids = ['moreAppear', 'moreStudy', 'moreData']; return ids.every(i => document.getElementById(i)?.classList.contains('advanced') && document.getElementById(i).tagName === 'DETAILS'); }), `${name}: the folds look like Advanced scheduling`);
-  ok(await vis('#whereNote') && /this browser only/.test(await p.textContent('#whereNote')) && /Install the app to your home screen/.test(await p.evaluate(() => document.getElementById('moreData').textContent)), `${name}: the data-loss notes are there (saved in this browser only; install the app so the browser keeps it safe)`);
-    ok(await p.locator('#helpRow').count() === 0 && await p.locator('#helpTop').count() === 1, `${name}: only one Help button`);
+  ok(await vis('#whereNote') && /this browser only/.test(await p.textContent('#whereNote')) && await vis('#storageWarn') && /Install the app to your home screen/.test(await p.textContent('#storageWarn')) && !(await p.evaluate(() => document.getElementById('moreData').open)), `${name}: the data-loss notes are visible with More settings closed (saved in this browser only; install the app so the browser keeps it safe)`);
+  ok(await p.locator('#helpRow').count() === 0 && await p.locator('#helpTop').count() === 1, `${name}: only one Help button`);
   await p.click('#moreAppear > summary');
   ok(await vis('#oled') && await vis('input[name=ui] >> nth=0') && await vis('#glossaryUnderline'), `${name}: opening More settings shows them`);
   await p.reload(); await p.waitForSelector('#advanced');

@@ -648,7 +648,7 @@ function deleted(snap, msg, ctx, again) {
 }
 // Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
 function askDeletePair(card, partner, again, ctx) {
-  $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.</p><div class="sheet-actions">
+  $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.${UNDO_NOTE}</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });

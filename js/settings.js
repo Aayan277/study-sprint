@@ -229,11 +229,10 @@ export async function renderSettings(el) {
       ${moreFold('moreData', `
       <div class="set-row" id="installRow">${settingsRowHTML()}</div>
       <div class="set-row">
-        <div><b>Storage</b><p>${persisted
-          ? 'Saved permanently on this device.'
-          : 'Saved on this device only. Install the app to your home screen so the browser keeps it safe.'}</p>
+        <div><b>Storage</b>${persisted ? '<p>Saved permanently on this device.</p>' : ''}
           <p class="note" id="mediaLine"></p></div>
       </div>`)}
+      ${persisted ? '' : '<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">Saved on this device only. Install the app to your home screen so the browser keeps it safe.</p></div></div>'}
       <div class="set-row" id="usageRow" hidden>
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>

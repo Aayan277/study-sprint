@@ -160,6 +160,34 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   await page.context().close();
 }
 
+// ---------- Undo of an import with "Bring over my Anki progress" on: the imported review history goes too ----------
+{
+  const SP = process.argv[2];
+  const page = await open(null);
+  const counts = () => page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const ids = new Set((await db.getAll('cards')).filter(c => c.ankiGuid).map(c => c.id));
+    return { cards: ids.size, logs: (await db.getAll('reviewLog')).length, states: (await db.getAll('cardStates')).length,
+      importedStates: (await db.getAll('cardStates')).filter(s => ids.has(s.cardId)).length };
+  });
+  const before = await counts();
+  await page.goto(APP + '#/import'); await page.waitForSelector('#tab-file'); await page.click('#tab-file');
+  await page.setInputFiles('#fileIn', SP + '/files/anki-sched-new.apkg');
+  await page.waitForFunction(() => document.querySelector('#found')?.textContent.includes('Anki'), null, { timeout: 30000 });
+  await page.waitForSelector('#preview[data-guids]');
+  ok(await page.isVisible('#progRow') && await page.isChecked('#ankiProg'), 'progress-undo: "Bring over my Anki progress" is shown and on');
+  await page.selectOption('#deckSel', '__new'); await page.fill('#newName', 'Undo progress');
+  await page.click('#saveBtn'); await page.waitForSelector('.crow');
+  await page.waitForFunction(() => /with Anki progress/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 30000 });
+  const after = await counts();
+  ok(after.cards > before.cards && after.logs > before.logs && after.states > before.states && after.importedStates > 0, `progress-undo: the import added cards (${after.cards - before.cards}), review rows (${after.logs - before.logs}) and schedules (${after.states - before.states})`);
+  await undoClick(page);
+  await page.waitForFunction(() => /#\/decks/.test(location.hash));
+  const back = await counts();
+  ok(back.cards === before.cards && back.logs === before.logs && back.states === before.states && back.importedStates === before.importedStates, `progress-undo: Undo takes the review history and schedules back out (reviewLog ${before.logs} -> ${after.logs} -> ${back.logs}, cardStates ${before.states} -> ${after.states} -> ${back.states})`);
+  await page.context().close();
+}
+
 // ---------- with sync: the delete has already been sent when Undo is pressed ----------
 {
   const fake = fakeSupabase();
