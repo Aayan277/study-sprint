@@ -302,7 +302,7 @@ export function openSheet(html, { side = false } = {}) {
   if (!sheetOverlay) sheetOverlay = openOverlay(backDismiss);      // Back (or an edge swipe) closes the sheet (or asks, with unsaved work)
   // The browser focuses the first thing it finds, which would be the ×. Start on the sheet itself instead: a screen
   // reader reads its title, Tab goes to the first control, and no keyboard pops up on a phone before you ask.
-  if (document.activeElement?.classList.contains('sheet-x')) d.focus();
+  if (document.activeElement?.closest('.sheet-head')) d.focus();       // (the × or a moved-in "?" help link)
   document.body.classList.toggle('has-side', asSide);
   return d;
 }

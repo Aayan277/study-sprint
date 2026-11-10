@@ -49,6 +49,7 @@ export function revealSetting(id) {
   return el;
 }
 export const settingsView = () => $('screen').querySelector(':scope > .view');
+const storageWarnText = () => ['prompt', 'ios'].includes(installMode()) ? 'Saved on this device only. Install the app to your home screen so the browser keeps it safe.' : 'The browser may clear this data. Make a backup now and then so nothing is lost.';
 export async function renderSettings(el) {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   // Personal parameters row (Advanced scheduling): the saved weights, and a cheap count of the log (never the whole log).
@@ -232,7 +233,7 @@ export async function renderSettings(el) {
         <div><b>${persisted ? 'Storage' : 'Pictures and sounds'}</b>${persisted ? '<p>Saved permanently on this device.</p>' : ''}
           <p class="note" id="mediaLine"></p></div>
       </div>`)}
-      ${persisted ? '' : `<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">${['prompt', 'ios'].includes(installMode()) ? 'Saved on this device only. Install the app to your home screen so the browser keeps it safe.' : 'The browser may clear this data. Make a backup now and then so nothing is lost.'}</p></div></div>`}
+      ${persisted ? '' : `<div class="set-row" id="storageWarnRow"><div><b>Storage</b><p class="note usage-line warn" id="storageWarn">${storageWarnText()}</p></div></div>`}
       <div class="set-row" id="usageRow" hidden>
         <div><b>Account space</b><p class="usage-line" id="usageLine"></p><p class="note" id="usageNote" hidden></p><p class="note usage-line warn" id="cardsNote" hidden></p></div>
       </div>
@@ -270,6 +271,9 @@ export async function renderSettings(el) {
     </section>`;
 
   wireSettingsRow($('installRow'));
+  // The Storage wording depends on whether the app is installed: follow it while Settings is on screen, and let go once it is left.
+  const onInstall = () => { const w = $('storageWarn'); if (w?.isConnected) w.textContent = storageWarnText(); else removeEventListener('install-change', onInstall); };
+  addEventListener('install-change', onInstall);
   wireReminders(el, { decks, settings: app.settings });
   // The jump links scroll their section into view (the hash is the app's route, so no real anchor jump).
   $('setNav').addEventListener('click', e => {

@@ -1022,7 +1022,7 @@ function refreshFlags() {
 
 // Leaving the screen while suggestions are being found stops the job (the worker would otherwise run on to its end).
 addEventListener('hashchange', () => setTimeout(() => {
-  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); S.sugJob?.cancel(); S.sugJob = null; }
+  if (S && !document.getElementById('pasteBox')) { clearTimeout(S.sugTimer); clearTimeout(S.pasteTimer); S.sugJob?.cancel(); S.sugJob = null; }
 }, 300));
 
 // ---------- suggest cards ----------

@@ -84,6 +84,7 @@ ok(cols.length === 2 && cols[0].text.includes('Alpha') && cols[0].text.includes(
 ok(cols[1].t > cols[0].t && Math.abs(cols[0].l - cols[1].l) < 4, 'stacked under 600px');
 ok((await p.locator('#sheet button').allTextContents()).map(t => t.trim()).filter(t => ['Review these', 'Make a comparison card', 'Not confused'].includes(t)).length === 3, 'Review these, Make a comparison card and Not confused');
 ok((await p.textContent('#sheetTitle')).trim() === 'Compare' && await p.locator('#sheet a.help-link[aria-label="About Compare"]').count() === 1 && await p.evaluate(() => !document.querySelector('#sheetTitle a')), 'the "?" help link sits beside the Compare title, not inside it (the dialog is named "Compare")');
+ok(await p.evaluate(() => document.activeElement === document.getElementById('sheet')), 'opening Compare puts the focus on the dialog itself, not on the moved-in "?" help link');
 await noHScroll(p, 375, 'compare 375'); await p.screenshot({ path: SP + '/mx-compare-375-dark.png' });
 
 // v4.9: Review these (was "Drill these", a Play round): a Review session of exactly the two cards, no Play round
