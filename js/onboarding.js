@@ -155,8 +155,7 @@ function drawAdd(el, api) {
       <h1 tabindex="-1">Add cards to ${esc(flow.name)}</h1>
       <div class="wl-opts">
         <button class="wl-opt fr-first" type="button" id="wlSample">
-          <span class="wl-opt-t">Try it with sample cards <span class="fr-tag">Fastest · 30 s</span></span>
-          <span class="wl-opt-d">Review 3 psychology cards to feel how it works. Your ${esc(flow.name)} deck stays ready for your own cards.</span>${icon('chevron')}</button>
+          <span class="wl-opt-t">Try it with sample cards</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlPaste">
           <span class="wl-opt-t">Paste your notes</span>${icon('chevron')}</button>
         <button class="wl-opt" type="button" id="wlFile">

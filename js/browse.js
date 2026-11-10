@@ -128,7 +128,9 @@ export async function mountBrowser(box, { deckId, onChange = () => {}, filter, d
     $('brMain').hidden = cards.length === 0;
     const list = browseCards(cards, statesById, B);
     B.visible = list;
+    // On a deck's page the deck summary already has the count: say it only while a filter or search narrows the list.
     $('brCount').textContent = list.length === cards.length ? plural(list.length, 'card') : `Showing ${list.length} of ${plural(cards.length, 'card')}`;
+    $('brCount').hidden = !!deckId && list.length === cards.length;
     const now = Date.now();
     $('brList').innerHTML = list.length ? list.slice(0, B.shown).map(({ card, state }) => {
       const st = cardStatus(card, state, now);

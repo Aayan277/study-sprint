@@ -82,7 +82,7 @@ await p.waitForSelector('.res-head', { timeout: 15000 });
 const stats = await p.$$eval('.stats4 .v', v => v.map(x => x.textContent.trim()));
 ok(stats[0] === '100%' && stats[3] === '10/10', 'results count the fixed answer as right: ' + stats.join(' | '));
 ok((await p.textContent('.missed')).includes('Clean round'), 'nothing is missed');
-ok((await p.textContent('.sched-note')).includes('Practice only'), 'results still say Practice only');
+ok(await p.locator('.sched-note').count() === 0, 'results show no schedule note when the round is practice only');
 await p.screenshot({ path: SP + '/po-results-375-dark.png', fullPage: true });
 // "Play again": a new round accepts it from the start
 await p.click('#againBtn'); await p.waitForSelector('#pInput');

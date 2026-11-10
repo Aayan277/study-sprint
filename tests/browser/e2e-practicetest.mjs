@@ -127,7 +127,7 @@ ok(await page.locator('#tReview > li:not([hidden])').count() === 4, 'Wrong only 
 ok(await page.getAttribute('#tWrong', 'aria-pressed') === 'true', 'the filter button says it is on');
 await page.click('#tAll');
 ok(await page.locator('#tReview > li:not([hidden])').count() === 10, 'All shows everything again');
-ok((await page.textContent('#tSched')).includes('Practice only'), 'the results say nothing changed in the schedule');
+ok((await page.textContent('#tSched')).trim() === '', 'practice only: the results show no schedule note');
 ok((await page.textContent('#tReview li:nth-child(3)')).includes('Flagged'), 'a flagged question is marked in the list');
 await page.screenshot({ path: SP + '/pt-results.png', fullPage: true });
 await noHScroll('results (desktop)');

@@ -256,7 +256,7 @@ export async function renderDeck(el, deckId) {
   const shared = sharedLimitNote(today, deck, kids, item.depth, counts);
 
   const prepBtn = soon ? `<button class="btn ${reviewFirst ? 'ghost' : 'primary'} small" type="button" id="prepBtn">Exam prep</button>` : '';
-  const reviewBtn = s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}">Review${counts.total ? ` · ${counts.total}` : ''}</a>` : '';
+  const reviewBtn = s.total ? `<a class="btn ${reviewFirst ? 'primary' : 'ghost'} small" id="reviewBtn" href="#/review/${esc(deck.id)}" aria-label="Review${counts.total ? `, ${plural(counts.total, 'card')}` : ''}">Review</a>` : '';
   el.innerHTML = `
     <button class="back" type="button" id="back">‹ <span class="back-t">${parent ? esc(parent.name) : 'Decks'}</span></button>
     <div class="screen-head" style="--deck:${esc(deck.color)}">
@@ -577,7 +577,7 @@ export async function openDeckEditor(deck, onDone, { parentId = '' } = {}) {
         <input id="deckCourse" maxlength="20" placeholder="e.g. BIOL 201" value="${esc(deck?.course || '')}" autocapitalize="characters"></label>
       <label class="field"><span>Exam date</span>
         <input id="deckExam" type="date" value="${esc(deck?.examDate || '')}">
-        ${parentNow && effectiveDeck(decks, parentNow).examDate ? `<small class="note" style="margin:4px 0 0">Blank = the date of the deck it's inside (${esc(effectiveDeck(decks, parentNow).examDate)}).</small>` : ''}</label>
+</label>
       ${places.length ? `<label class="field"><span>Inside</span>
         <select id="deckParent" class="select"><option value="">Nothing (a top-level deck)</option>${places.map(c => `<option value="${esc(c.id)}" ${c.id === parentNow ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>` : '<input type="hidden" id="deckParent" value="">'}
       <div class="field"><span id="colorLabel">Color</span>

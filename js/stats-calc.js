@@ -177,9 +177,8 @@ export function streakText(streak, now = Date.now()) {
   if (streak.studiedToday) line = 'Kept for today';
   else if (streak.days && streak.restToday) line = 'Rest day · your streak is safe';
   else if (streak.days && streak.idleToday) line = 'Nothing due today: your streak is safe';
-  else if (streak.days && streak.frozen[0] === yesterday) line = 'Freeze used yesterday · study today to keep it';
-  else if (streak.days) line = 'Study today to keep it';
-  else line = 'Study today to start one';
+  else if (streak.days && streak.frozen[0] === yesterday) line = 'Freeze used yesterday';
+  else line = '';
   let sub = '';
   if (streak.freeze.usedOn) sub = `Freeze used ${WEEKDAY_NAME().format(new Date(`${streak.freeze.usedOn}T12:00:00`))}`;
   else if (streak.days && streak.frozen[0] !== yesterday) sub = '1 freeze ready this week';   // (missing today would break it anyway after a freeze yesterday)

@@ -19,8 +19,8 @@ export async function openShareDeck(deck, decks, deckCards) {
     <p style="margin:0">Sends a copy of ${plural(cards.length, 'card')}${hasMedia ? ', with their pictures and sounds' : ''}. Includes tags and memory hooks. Your progress stays here; your friend's progress is their own.</p>
     <p class="note">Nothing is uploaded and nothing syncs. The file goes straight from this device to the person you pick.</p>
     <div class="export-opts">
-      <button class="btn primary export-opt" type="button" id="shGo"><b>Share deck</b><span>A Study Sprint and Anki deck file (.apkg).</span></button>
-      ${hasMedia ? '' : '<button class="btn ghost export-opt" type="button" id="shCsv"><b>Share as a spreadsheet (.csv)</b><span>Text only, with tags. Opens in Excel or Google Sheets.</span></button>'}
+      <button class="btn primary export-opt" type="button" id="shGo"><b>Share deck</b></button>
+      ${hasMedia ? '' : '<button class="btn ghost export-opt" type="button" id="shCsv"><b>Share as a spreadsheet (.csv)</b></button>'}
     </div>
     <p class="note" id="shStatus" role="status" aria-live="polite" hidden></p>
     <p class="err" id="shErr" hidden></p>
