@@ -106,7 +106,7 @@ const sentences = await page.$$eval('#ownBody p, #ownBody .note, #ownBody .steps
 ok(sentences.length === 0, 'no visible sentences in the section while all is well: ' + sentences);
 await page.addStyleTag({ content: '#ownBody .sr-only{display:none!important}' });          // (words only a screen reader hears are not on screen: they are checked in e2e-own-fixes)
 const text = (await page.innerText('#ownBody')).split('\n').map(s => s.trim()).filter(Boolean);
-const allowed = [/^Model file$/, /^\?$/, /^Load model file…$/, /^test\.own · [0-9a-f]{6}$/, /^Own model$/, /^Scheduling$/, /^(FSRS|Own|FSRS \(paused\)|Building memory…)$/, /^Verdict$/, /^Not enough reviews yet$/, /^[\d,]+ of [\d,]+( · [\d,]+ of [\d,]+)*( days)?$/, /^Check now$/, /^Remove model…$/];
+const allowed = [/^Model file$/, /^\?$/, /^Load model file…$/, /^test\.own · [0-9a-f]{6}$/, /^Use my own model$/, /^Scheduling$/, /^(FSRS|Own|FSRS \(paused\)|Building memory…)$/, /^Verdict$/, /^Not enough reviews yet$/, /^[\d,]+ of [\d,]+( · [\d,]+ of [\d,]+)*( days)?$/, /^Check now$/, /^Remove model…$/];
 const stray = text.filter(t => !allowed.some(a => a.test(t)));
 ok(stray.length === 0, 'only labels, buttons and numbers on screen' + (stray.length ? ': ' + stray.join(' | ') : ''));
 // the help answer exists

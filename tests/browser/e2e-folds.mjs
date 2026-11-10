@@ -1,5 +1,6 @@
 // Folded long screens: Settings (Advanced scheduling, Danger zone), Stats on a computer (nothing folded),
 // and the card filter's groups. (Stats on a phone and Play's Customise are checked in e2e-stats and e2e-play-exam.)
+process.env.NO_OPEN_FOLDS = '1';          // this file checks the real first visit: the "More settings" folds start closed
 import { chromium } from './pw.mjs';
 const SP = process.argv[2];
 const browser = await chromium.launch();
@@ -18,10 +19,20 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   await p.goto('http://localhost:8123/#/settings'); await p.waitForSelector('#advanced');
   const vis = async sel => p.isVisible(sel);
   // always shown
-  const shown = { theme: '#skins', mode: 'input[name=mode] >> nth=0', oled: '#oled', retention: '#ret', newPerDay: '#npd', reviewsPerDay: '#rpd', sync: '#syncBox', backup: '#exportBtn', restore: 'label.file-btn' };
+  const shown = { theme: '#skins', mode: 'input[name=mode] >> nth=0', retention: '#ret', newPerDay: '#npd', reviewsPerDay: '#rpd', sync: '#syncBox', backup: '#exportBtn', restore: 'label.file-btn' };
   for (const [k, sel] of Object.entries(shown)) ok(k === 'mode' ? await p.locator('.chip').first().isVisible() : await vis(sel), `${name}: ${k} is shown without opening anything`);
   // folded
   ok(!(await p.getAttribute('#advanced', 'open') !== null) && !(await vis('#leech')) && !(await vis('#timerSec')) && !(await vis('#lsteps')), `${name}: leeches, Play timer and steps are folded inside Advanced scheduling`);
+  ok(!(await vis('#oled')) && !(await vis('#compactDecks')) && !(await vis('input[name=ui]')) && !(await vis('#learnOrderChips')) && !(await vis('#singleKeys')) && !(await vis('#glossBtn')) && !(await vis('#installRow')), `${name}: the niche options are folded in "More settings"`);
+  ok(await p.locator('summary:has-text("More settings")').count() >= 3 && await vis('#playCounts') && await vis('#remTime'), `${name}: each section has a More settings fold; Reminders and the Play switch stay visible`);
+  ok(await p.evaluate(() => { const ids = ['moreAppear', 'moreStudy', 'moreData']; return ids.every(i => document.getElementById(i)?.classList.contains('advanced') && document.getElementById(i).tagName === 'DETAILS'); }), `${name}: the folds look like Advanced scheduling`);
+  ok(await p.locator('#helpRow').count() === 0 && await p.locator('#helpTop').count() === 1, `${name}: only one Help button`);
+  await p.click('#moreAppear > summary');
+  ok(await vis('#oled') && await vis('input[name=ui] >> nth=0') && await vis('#glossaryUnderline'), `${name}: opening More settings shows them`);
+  await p.reload(); await p.waitForSelector('#advanced');
+  ok(await vis('#oled') && !(await vis('#glossBtn')), `${name}: an opened More settings stays open after a reload, the others stay closed`);
+  await p.evaluate(async () => { const m = await import('./js/settings.js'); m.revealSetting('glossBtn'); });
+  ok(await vis('#glossBtn'), `${name}: a link to a setting opens its fold`);
   ok(!(await vis('#resetBtn')) && (await p.textContent('#dangerZone > summary')).trim() === 'Danger zone', `${name}: Reset all data is behind "Danger zone"`);
   ok(await p.evaluate(() => { const d = document.getElementById('dangerZone'); return d.closest('section').querySelector('h2').textContent === 'Your data' && d.nextElementSibling === null; }), `${name}: Danger zone is the last thing in Your data`);
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: no sideways scroll`);

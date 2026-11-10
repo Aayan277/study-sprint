@@ -42,16 +42,16 @@ for (const [w, h] of [[375, 740], [1280, 800]]) {
   await p.goto(APP + '#/help/nope'); await p.waitForSelector('h1:has-text("Help")');
   ok(await p.locator('details.help-q[open]').count() === 0, tag + 'an unknown id opens nothing');
   // entry points
-  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpRow');
+  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpTop');
   await p.click('#helpTop'); await p.waitForSelector('h1:has-text("Help")');
   ok(p.url().endsWith('#/help'), tag + 'the top of Settings has a Help button');
-  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpRow');
-  await p.click('#helpRow a'); await p.waitForSelector('h1:has-text("Help")');
-  ok(p.url().endsWith('#/help'), tag + 'Settings → About has Open Help');
-  await p.goBack(); await p.waitForSelector('#helpRow');
+  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpTop');
+  ok(await p.locator('#helpRow').count() === 0 && await p.locator('#screen a[href="#/help"]').count() === 1, tag + 'Settings has just one Help button (none in About)');
+  await p.click('#helpTop'); await p.waitForSelector('h1:has-text("Help")');
+  await p.goBack(); await p.waitForSelector('#helpTop');
   ok(p.url().endsWith('#/settings'), tag + 'Back returns to Settings');
   await p.goto(APP + '#/help'); await p.waitForSelector('h1:has-text("Help")');
-  await p.click('.back'); await p.waitForSelector('#helpRow');
+  await p.click('.back'); await p.waitForSelector('#helpTop');
   ok(p.url().endsWith('#/settings'), tag + 'the ‹ Settings link goes to Settings');
   await p.goto(APP + '#/help'); await p.waitForSelector('h1:has-text("Help")');
   ok(await p.locator('a[href="#/welcome/again"]').count() === 1 && await p.locator('.help-foot a[href="privacy.html"]').count() === 1, tag + 'footer: welcome tour, Privacy, Terms');
@@ -71,7 +71,7 @@ for (const [ui, mode] of [['original', 'light'], ['clinical', 'dark']]) {
 // The labels the answers quote exist in the app
 {
   const p = await open(375, 740);
-  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpRow');
+  await p.goto(APP + '#/settings'); await p.waitForSelector('#helpTop');
   const s = await p.textContent('main, #screen');
   for (const label of ['Target retention', 'New cards per day', 'Count Play and test answers as reviews', 'Export backup', 'Import backup', 'Your data', 'Sync', 'Single-key shortcuts', 'Glossary', 'Glossary underlines', 'Card text alignment', 'Compact deck list', 'Rating feedback', 'Smooth transitions', 'Exam readiness in Stats', 'Learning steps', 'Relearning steps', 'Maximum interval', 'Spread out due dates', 'Easy days', 'Play timer', 'Leech after', 'Scheduler', 'Check how well it fits you', 'Ignore reviews before', 'Add to my calendar']) ok(s.includes(label), `Settings has "${label}"`);
   await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');

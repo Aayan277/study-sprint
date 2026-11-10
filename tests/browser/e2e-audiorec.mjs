@@ -188,7 +188,7 @@ const copy = await run(async () => {
 ok(copy?.n === 1 && copy.size === size1 && copy.type === (await mediaOf(kept.id)).type, `Anki export → import: the copy has one back sound of the same size and type (${JSON.stringify(copy)})`);
 
 // ---------- 7. sync ----------
-await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *');
+await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])');
 await page.fill('#syncEmail', 'me@example.com'); await page.fill('#syncPw', 'secret123'); await page.click('#syncCreate');
 await page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 20000 });
 const uid = [...fake.users.values()][0].id;

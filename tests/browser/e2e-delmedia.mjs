@@ -17,7 +17,7 @@ async function setup() {
   page.on('pageerror', e => errors.push(`pageerror ${e.stack}`));
   page.on('console', m => { if (m.type() === 'error' && !/status of (400|401|422|429|404)|Sync failed|Failed to load resource|Could not remove/.test(m.text())) errors.push(`console ${m.text()}`); });
   await page.goto(APP + '#/decks'); await page.waitForSelector('.deck');
-  await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *');
+  await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])');
   await page.fill('#syncEmail', 'me@example.com'); await page.fill('#syncPw', 'secret123'); await page.click('#syncCreate');
   await page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
   await page.evaluate(async () => {

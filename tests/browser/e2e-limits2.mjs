@@ -22,7 +22,7 @@ async function device(name, fake, { route } = {}) {
   return page;
 }
 const run = (page, fn, arg) => page.evaluate(fn, arg);
-const openSettings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *'); };
+const openSettings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])'); };
 const signInUI = async (page, { create = false, email = 'me@example.com', pw = 'secret123' } = {}) => {
   await openSettings(page); await page.fill('#syncEmail', email); await page.fill('#syncPw', pw);
   await page.click(create ? '#syncCreate' : '#syncForm button[type=submit]');

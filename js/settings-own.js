@@ -75,7 +75,7 @@ export async function wireOwn(root) {
           <input type="file" id="ownFile" accept=".own" hidden tabindex="-1" aria-label="Model file">
           ${L ? `<span class="own-name mono" id="ownName">${esc(st.name)} · ${esc(st.shortSha)}</span>` : ''}
         </div></div>
-      <label class="adv-row switch-row"><span><b>Own model</b></span>
+      <label class="adv-row switch-row"><span><b>Use my own model</b></span>
         <input id="ownOn" type="checkbox" class="switch" ${st.on ? 'checked' : ''} ${L && !busy ? '' : 'disabled'}></label>
       ${L ? `
       <div class="adv-row"><b>Scheduling</b><span class="own-line"><span id="ownSched" role="status">${esc(schedLabel(st))}</span></span>

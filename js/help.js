@@ -106,7 +106,12 @@ export const SECTIONS = [
   ] },
   { title: 'Your data and account', items: [
     { id: 'account', q: 'Do I need an account?', a: `
-      <p>No. Everything works without one, offline too. An account only matters if you want the same cards on more than one device, like your phone and your laptop. It’s free: Settings → Sync → Create account.</p>` },
+      <p>No. Everything works without one, offline too. An account only matters if you want the same cards on more than one device, like your phone and your laptop. It’s free: Settings → Sync → Create account.</p>
+      <p>New here? Type your email and a password, then tap <b>Create account</b>. We email you a link to confirm it; open it, then sign in. Each account only ever sees its own data.</p>` },
+    { id: 'keep-media', q: 'What does “Keep all pictures and sounds on this device” do?', a: `
+      <p>Settings → Sync → More settings. <b>Off</b>: a picture or sound downloads the first time a card needs it, which saves your mobile data and the account’s monthly download allowance. <b>On</b>: this device downloads all of them while syncing, so every card works offline (best on Wi-Fi), and it keeps a full copy in case your account ever loses them.</p>` },
+    { id: 'more-settings', q: 'Where did some settings go?', a: `
+      <p>Each Settings section has a <b>More settings</b> fold with the less-used options: Style, OLED black, Card text alignment and the display switches under Appearance; Learning cards, Single-key shortcuts and Glossary under Study; Install app and Storage under Your data; and the picture and account tools under Sync. Open or close a fold and it stays that way on this device.</p>` },
     { id: 'safe', q: 'Is my data safe? Where is it kept?', a: `
       <p>Without an account, your cards are stored only in this browser on this device. Nobody else can see them, not even the developer. They can be lost if you clear your browser’s data or lose the device. On iPhone and iPad, Safari may also clear them if you don’t open Study Sprint for about a week. Adding it to your Home Screen avoids that, and <b>Settings → Your data → Export backup</b> saves everything to a file you can keep.</p>
       <p>With an account, a copy is also kept on the app’s server (Supabase), and each account can only read its own data. Details are on the <a href="privacy.html">Privacy</a> page.</p>` },
@@ -125,7 +130,7 @@ export const SECTIONS = [
   { title: 'Settings and Stats', items: [
     { id: 'steps', q: 'How do I type learning steps?', a: `
       <p><b>Learning steps</b> are the short gaps while a card is new: you see it again after each one, until it moves on to normal reviews. <b>Relearning steps</b> are the gaps after you press Again on a normal review.</p>
-      <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m). The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
+      <p>Type the gaps separated by spaces: <b>m</b> = minutes, <b>h</b> = hours, <b>d</b> = days. The defaults are the grey text in each box (1m 10m and 10m), for example <b>1m 10m</b> or <b>30m 1d</b>. The list under the box spells out what each button does as you type, and <b>Reset</b> puts the default back.</p>` },
     { id: 'learn-order', q: 'Where do learning cards go in a session?', a: `
       <p>Learning cards are the ones the <b>Learn</b> number at the top of Review counts: cards on their short learning steps, or relearning after you pressed Again, that are due today. A learning step of a day or more counts too once it has come due. New cards you haven’t answered yet are not learning cards.</p>
       <p>Settings → Study → <b>Learning cards</b> chooses where they go:</p>

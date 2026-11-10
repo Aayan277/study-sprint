@@ -17,7 +17,7 @@ async function device(name, fake) {
   return page;
 }
 const run = (page, fn, arg) => page.evaluate(fn, arg);
-const settings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *'); };
+const settings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])'); };
 const signIn = async (page, create) => {
   await settings(page);
   await page.fill('#syncEmail', 'me@example.com'); await page.fill('#syncPw', 'secret123'); await page.click(create ? '#syncCreate' : '#syncForm button[type=submit]');
