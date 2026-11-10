@@ -10,7 +10,7 @@
 import { formatHTML, htmlToMarks, toggleWrap, toggleBullets, hasFormatting } from './format.js';
 import { hasMath, wrapMath, maskMath } from './math.js';
 import { parseSteps, joinSteps, stepsRoundTrip, parseElements, joinElements, elementsRoundTrip } from './steps.js';
-import { esc, toast } from './ui.js';
+import { esc, toast, icon, foldOpen, saveFold } from './ui.js';
 import { toolbarTarget } from './a11y.js';
 import { addImage, addImageInfo, imgHTML, OCCLUSION_SIDE, saveSound, MAX_SOUNDS, sizeText } from './media.js';
 import { canPlayType } from './audio.js';
@@ -277,24 +277,49 @@ const stepRowHTML = (i, text = '', n = 3, word = 'Step') => `<li class="step-row
         <button type="button" class="step-btn" data-step="del" ${n <= 2 ? 'disabled' : ''} aria-label="Delete ${word.toLowerCase()} ${i + 1}" title="Delete ${word.toLowerCase()}">×</button>
       </span></li>`;
 
-export function basicFields(p, { front = '', back = '', frontImage = null, backImage = null, hook = '', frontPh = '', backPh = '' } = {}) {
+// The basic card form in two parts: `main` (Front, and Back or the steps) and `more` (the Answer chips and the Memory hook), for
+// forms that keep the rest under "More options" (moreOptionsHTML). basicFields puts them back in one string, in the old order.
+export function basicFields(p, o = {}) {
+  const { main, chips, hook } = basicParts(p, o);
+  return main[0] + chips + main[1] + hook;
+}
+export function basicParts(p, { front = '', back = '', frontImage = null, backImage = null, hook = '', frontPh = '', backPh = '' } = {}) {
   const st = parseSteps(back, { mask: maskMath }), el = st ? null : parseElements(back, { mask: maskMath });
   const mode = st ? 'steps' : el ? 'elements' : 'text';
   const parsed = st || el, rows = st ? st.steps : el ? el.items : ['', ''], word = NOUN[mode] || 'Step';
-  return `${cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh })}
-      <div class="chips answer-mode" role="radiogroup" aria-label="Answer">
+  const chips = `<div class="chips answer-mode" role="radiogroup" aria-label="Answer">
         <span class="answer-mode-l">Answer</span>
         ${MODES.map(([k, l, id]) => `<label class="chip"><input type="radio" name="${p}Mode" id="${p}Mode${id}" value="${k}" data-mode-for="${p}" ${k === mode ? 'checked' : ''}><span>${l}</span></label>`).join('')}
-      </div>
+      </div>`;
+  const top = cardTextField(p + 'Front', 'Front', front, { rows: 2, image: frontImage, placeholder: frontPh });
+  const rest = `
       <div id="${p}BackWrap" ${parsed ? 'hidden' : ''}>${cardTextField(p + 'Back', 'Back', back, { rows: 3, image: backImage, placeholder: backPh })}</div>
       <div class="steps-ed" id="${p}Steps" data-mode="${mode === 'text' ? 'steps' : mode}" data-cur="${mode}" ${parsed ? '' : 'hidden'}>
         <label class="field"><span id="${p}IntroL">${mode === 'elements' ? 'Rule or intro' : 'Intro'}</span><textarea id="${p}Intro" rows="2">${esc(parsed?.intro || '')}</textarea></label>
         <ol class="step-list" id="${p}StepList" aria-label="${word}s">${rows.map((t, i) => stepRowHTML(i, t, rows.length, word)).join('')}</ol>
         <button type="button" class="btn ghost small" data-step-add="${p}" id="${p}StepAdd">+ Add ${word.toLowerCase()}</button>
         <label class="field" id="${p}FinalWrap" ${mode === 'elements' ? 'hidden' : ''}><span>Final answer</span><textarea id="${p}Final" rows="2">${esc(st?.final || '')}</textarea></label>
-      </div>
-      ${cardTextField(p + 'Hook', 'Memory hook', hook, { rows: 2, images: false, placeholder: 'e.g. a rhyme or picture' })}`;
+      </div>`;
+  return { main: [top, rest], chips, hook: cardTextField(p + 'Hook', 'Memory hook', hook, { rows: 2, images: false, placeholder: 'e.g. a rhyme or picture' }) };
 }
+
+// ---------- "More options" ----------
+// The rarely used controls of the Add card sheet and the card editor sit under one fold (the same button as Play's Customise).
+// `open`: forced open because a hidden option is not at its default (an editor that has a Memory hook, say); otherwise this device's
+// last choice is used. The choice is only saved when the person taps the button, so an automatic opening is not remembered.
+export const moreOptionsHTML = (p, inner, open = false) => {
+  const on = open || foldOpen('card-more');
+  return `<button class="fold-toggle" type="button" id="${p}MoreBtn" aria-expanded="${on}" aria-controls="${p}More"><span>More options</span>${icon('chevron')}</button>
+      <div id="${p}More" class="more-opts" ${on ? '' : 'hidden'}>${inner}</div>`;
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('.fold-toggle[id$="MoreBtn"]');
+  if (!b) return;
+  const open = b.getAttribute('aria-expanded') !== 'true';
+  b.setAttribute('aria-expanded', String(open));
+  document.getElementById(b.getAttribute('aria-controls')).hidden = !open;
+  saveFold('card-more', open);
+});
 // 'text', 'steps' or 'elements'
 export const answerMode = p => document.querySelector(`input[name="${p}Mode"]:checked`)?.value || 'text';
 export const stepsOn = p => answerMode(p) !== 'text';
@@ -445,10 +470,10 @@ export function whyNotAdd(p) {
   }
   const front = readCardText(p + 'Front').trim() || readCardImage(p + 'Front') || readCardSounds(p + 'Front')[0];
   const stepsWhy = stepsProblem(p);
-  if (stepsOn(p)) return !front ? 'Add a front to save the card.' : stepsWhy;
+  if (stepsOn(p)) return !front ? 'Needs a front' : stepsWhy;
   const back = readCardText(p + 'Back').trim() || readCardImage(p + 'Back') || readCardSounds(p + 'Back')[0];
   if (front && back) return '';
-  return !front && !back ? 'Add a front and a back to save the card.' : !front ? 'Add a front to save the card.' : 'Add a back to save the card.';
+  return !front && !back ? 'Needs front and back' : !front ? 'Needs a front' : 'Needs a back';
 }
 // Keep the form's Add button and the reason line (#{p}Why) in step with the form: aria-disabled, with the reason, until it can save.
 // Typing, picking a type, a picture added or removed, boxes drawn: all of them change the form, so it watches the form itself.
@@ -558,6 +583,8 @@ document.addEventListener('change', e => {
   if (!p) return;
   const kind = e.target.value;
   document.getElementById(p + 'Basic').hidden = kind !== 'basic';
+  const moreBasic = document.getElementById(p + 'MoreBasic');
+  if (moreBasic) moreBasic.hidden = kind !== 'basic';
   document.getElementById(p + 'Cloze').hidden = kind !== 'cloze';
   const occ = document.getElementById(p + 'Occ');
   if (occ) occ.hidden = kind !== 'occlusion';

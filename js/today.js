@@ -373,10 +373,6 @@ export async function renderToday(el) {
     openSheet(`
       <h2 id="sheetTitle">Custom study</h2>
       <div class="cs-opt">
-        <b>By tag or question ID</b>
-        <button class="btn primary small" type="button" id="csTagBtn">Choose…</button>
-      </div>
-      <div class="cs-opt">
         <b>More new cards today</b>
         <div class="cs-row">
           <div class="stepper">
@@ -432,11 +428,7 @@ export async function renderToday(el) {
       toast(`${plural(extra, 'extra new card')} for today`);
       renderToday(el);
     });
-    // Two sheets of their own, loaded when first needed.
-    $('csTagBtn').addEventListener('click', async () => {
-      try { (await import('./tag-study-sheet.js')).openTagStudySheet({ onChange: () => renderToday(el) }); }
-      catch { toast("Couldn't open this. Check your connection and try again."); }
-    });
+    // A sheet of its own, loaded when first needed.
     $('csPostBtn').addEventListener('click', async () => {
       try { (await import('./postpone-sheet.js')).openPostponeSheet({ data, cards, onChange: () => renderToday(el) }); }
       catch { toast("Couldn't open this. Check your connection and try again."); }

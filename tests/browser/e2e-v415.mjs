@@ -53,9 +53,8 @@ const go = async (p, hash, sel) => { await p.goto('about:blank'); await p.goto(U
   ok((await norm(p, '#acForm label:has(#acTags) span')) === 'Tags', 'Add card label is just "Tags"');
 
   // ----- Study by tag or question ID finds the card whose old tag has a space in it -----
-  await go(p, '#/today', '#optBtn');
-  await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
-  await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
+  await go(p, '#/browse', '#brTags');
+  await p.click('#brTags'); await p.click('#toolTagStudy'); await p.waitForSelector('#tsText');
   await p.fill('#tsText', '23456');
   await p.waitForSelector('#tsResult b');
   const res = await norm(p, '#tsResult');

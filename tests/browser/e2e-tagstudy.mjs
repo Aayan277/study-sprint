@@ -31,20 +31,20 @@ const seed = p => p.evaluate(async ([UW, AM]) => {
 const suspended = p => p.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.suspended).map(c => c.id).sort());
 const noHScroll = async (p, w, what) => ok(await p.evaluate(x => document.documentElement.scrollWidth <= x, w), 'no sideways scroll: ' + what);
 const openSheetFromToday = async p => {
-  await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForSelector('#optBtn');
-  await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
-  await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
+  await p.evaluate(() => { location.hash = '#/browse'; }); await p.waitForSelector('#brTags');
+  await p.click('#brTags'); await p.click('#toolTagStudy'); await p.waitForSelector('#tsText');
 };
 
 // ----- Today > Custom study > By tag or question ID -----
 let p = await open();
 await seed(p);
 await p.evaluate(() => { location.hash = '#/today'; }); await p.waitForSelector('#optBtn');
-await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csTagBtn');
-const firstOpt = await p.$eval('#sheet .cs-opt', d => d.textContent.replace(/\s+/g, ' '));
-ok(/By tag or question ID/.test(firstOpt) && !/question bank/.test(firstOpt), 'Custom study starts with By tag or question ID: ' + firstOpt);
+await p.click('#optBtn'); await p.click('#customBtn'); await p.waitForSelector('#csPostBtn');
+ok(!(await p.$('#csTagBtn')) && !/By tag or question ID/.test(await p.textContent('#sheet')), 'Custom study no longer has By tag or question ID (it lives in Browse → Tools)');
 ok(/Postpone reviews/.test(await p.textContent('#sheet')), 'Custom study has Postpone reviews');
-await p.click('#csTagBtn'); await p.waitForSelector('#tsText');
+await p.keyboard.press('Escape');
+await p.evaluate(() => { location.hash = '#/browse'; }); await p.waitForSelector('#brTags');
+await p.click('#brTags'); await p.click('#toolTagStudy'); await p.waitForSelector('#tsText');
 ok((await p.textContent('#sheetTitle')).trim() === 'Study by tag or question ID', 'the sheet opens');
 ok((await p.textContent('#sheet')).includes('In all decks'), 'it says it looks in all decks');
 ok((await p.getAttribute('#tsText', 'placeholder')).startsWith('e.g. 12345, 23456 34567'), 'placeholder shows an example');
@@ -131,8 +131,8 @@ await p.keyboard.press('Escape');
 
 // no tags at all
 const q = await open();
-await q.evaluate(() => { location.hash = '#/today'; }); await q.waitForSelector('#optBtn');
-await q.click('#optBtn'); await q.click('#customBtn'); await q.click('#csTagBtn');
+await q.evaluate(() => { location.hash = '#/browse'; }); await q.waitForSelector('#brTags');
+await q.click('#brTags'); await q.click('#toolTagStudy');
 await q.waitForSelector('#tsClose');
 ok((await q.textContent('#sheet')).includes('No cards have tags yet.'), 'no tags: friendly message');
 await q.context().close();

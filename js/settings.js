@@ -115,7 +115,7 @@ export async function renderSettings(el) {
       </div>
       <label class="adv-row switch-row"><span><b id="singleKeysLbl">Single-key shortcuts</b> ${helpLink('shortcuts', '?', 'About single-key shortcuts')}</span>
         <input id="singleKeys" aria-labelledby="singleKeysLbl" type="checkbox" class="switch" ${app.settings.singleKeys !== false ? 'checked' : ''}></label>
-      <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play answers as reviews</b> ${helpLink('play', '?', 'About counting Play answers as reviews')}</span>
+      <label class="adv-row switch-row"><span><b id="playCountsLbl">Count Play and test answers as reviews</b> ${helpLink('test-counts', '?', 'About counting Play and test answers as reviews')}</span>
         <input id="playCounts" aria-labelledby="playCountsLbl" type="checkbox" class="switch" ${app.settings.playCountsAsReviews === true ? 'checked' : ''}></label>
       <div class="set-row column">
         <div><b>Target retention: <span id="retOut" class="mono">${Math.round(app.settings.targetRetention * 100)}%</span></b></div>

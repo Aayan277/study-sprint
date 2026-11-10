@@ -275,7 +275,6 @@ export async function renderDeck(el, deckId) {
             ${s.total ? `<button type="button" role="menuitem" tabindex="-1" id="importHere">${icon('upload')} Import cards</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="exportDeck">${icon('download')} Export</button>` : ''}
             ${cards.length ? `<button type="button" role="menuitem" tabindex="-1" id="shareDeck">${icon('share')} Share</button>` : ''}
-            ${cards.length >= 10 ? `<button type="button" role="menuitem" tabindex="-1" id="autoTag">${icon('tag')} Suggest tags</button>` : ''}
           </div>
         </div>
       </div>
@@ -299,11 +298,6 @@ export async function renderDeck(el, deckId) {
   $('importHere')?.addEventListener('click', () => navGo(`#/import/${deck.id}`));
   $('exportDeck')?.addEventListener('click', () => openExport(deck, decks, cards));
   $('shareDeck')?.addEventListener('click', async () => { (await import('./share-deck.js')).openShareDeck(deck, decks, cards); });
-  // Topic tags worked out from the cards' text (js/autotag-sheet.js loads when first needed); nothing is added until you confirm.
-  $('autoTag')?.addEventListener('click', async () => {
-    try { (await import('./autotag-sheet.js')).openAutotagSheet({ deckId: deck.id, refresh: () => renderDeck(el, deckId) }); }
-    catch { toast("Couldn't open this. Check your connection and try again."); }
-  });
   $('reviewBtn')?.addEventListener('click', e => { e.preventDefault(); startStudy({ deckIds: [deck.id], deckId: deck.id }); });
   $('prepBtn')?.addEventListener('click', () => startStudy({ deckIds: [deck.id], deckId: deck.id, kind: 'prep' }));
   $('addExam')?.addEventListener('click', () => openExamSheet(deck.id, () => renderDeck(el, deckId)));
