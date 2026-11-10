@@ -13,7 +13,7 @@ export function planFits(plan, cardId, state, nextState, rating, now) {
   return !!plan && plan.cardId === cardId && plan.lastReview === (state?.lastReview ?? null)
     && Math.abs(now - plan.at) < PLAN_MAX_AGE_MS
     && state?.state === 2 && nextState === 2
-    && Number.isFinite(plan.days?.[rating]) && plan.days[rating] > 0;
+    && [2, 3, 4].includes(rating) && [2, 3, 4].every(r => Number.isFinite(plan.days?.[r]) && plan.days[r] > 0);
 }
 
 // Own's days, held between 0.25x and 4x of FSRS's days, and at most 3,650 days (or maxInterval when that is lower).
@@ -24,6 +24,17 @@ export function clampOwnDays(ownDays, fsrsDays, maxInterval) {
   const lo = Math.min(hi, OWN_BAND_LOW * fsrsDays);
   const d = Math.max(lo, Math.min(hi, ownDays));
   return Math.max(1, Math.round(d));
+}
+
+// The three clamped day counts { 2: Hard, 3: Good, 4: Easy } put in order like FSRS: Hard < Good < Easy. A gap that is not above the one before
+// is bumped up by 1 day; if that would pass the cap (3,650 or maxInterval), the earlier ones are lowered instead, never below 1.
+// (With a cap under 3 days there is no room for three different gaps, so ties remain.)
+export function orderOwnDays(days, maxInterval) {
+  const cap = Math.floor(Math.min(OWN_MAX_DAYS, Number.isFinite(maxInterval) && maxInterval > 0 ? maxInterval : OWN_MAX_DAYS));
+  const good = Math.max(days[3], days[2] + 1);
+  const easy = Math.min(cap, Math.max(days[4], good + 1));
+  const g = Math.min(good, easy - 1);
+  return { 2: Math.max(1, Math.min(days[2], g - 1)), 3: Math.max(1, g), 4: Math.max(1, easy) };
 }
 
 // Waits for a plan, but at most `ms` (300 ms). `prep` is the promise from the plan request; `settled` is what the caller does with the

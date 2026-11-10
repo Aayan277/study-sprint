@@ -4,8 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
+import { dayStart } from '../js/days.js';
 import { existsSync } from 'node:fs';
-import { OWN_BAND_LOW, OWN_BAND_HIGH, OWN_MAX_DAYS, clampOwnDays, planFits, freezePlan, PLAN_MS } from '../js/own-plan.js';
+import { OWN_BAND_LOW, OWN_BAND_HIGH, OWN_MAX_DAYS, clampOwnDays, orderOwnDays, planFits, freezePlan, PLAN_MS } from '../js/own-plan.js';
 
 const local = process.env.TS_FSRS_PATH || new URL('../node_modules/ts-fsrs/dist/index.mjs', import.meta.url).pathname;
 const skip = existsSync(local) ? false : 'ts-fsrs 5.4.2 is not installed';
@@ -27,6 +28,16 @@ test('clampOwnDays: inside the band it stays, outside it is held at 0.25x and 4x
   assert.equal(clampOwnDays(12.4, 10, 36500), 12);
 });
 
+test('orderOwnDays: Hard < Good < Easy; bumped up by 1, lowered below the cap, never under 1', () => {
+  const o = (h, g, e, cap = 36500) => Object.values(orderOwnDays({ 2: h, 3: g, 4: e }, cap));
+  assert.deepEqual(o(5, 9, 20), [5, 9, 20]);              // already in order: untouched
+  assert.deepEqual(o(5, 5, 5), [5, 6, 7]);
+  assert.deepEqual(o(5, 3, 4), [5, 6, 7]);
+  assert.deepEqual(o(3650, 3650, 3650, 36500), [3648, 3649, 3650]);   // the cap stops the bump: the earlier ones go down
+  assert.deepEqual(o(30, 30, 30, 30), [28, 29, 30]);      // maxInterval is the cap
+  assert.deepEqual(o(1, 1, 1, 2), [1, 1, 2]);             // no room: never below 1
+});
+
 test('planFits: every reason to refuse a plan', () => {
   const plan = { cardId: 'a', lastReview: 100, at: NOW, days: { 2: 5, 3: 9, 4: 14 } }, st = { state: 2, lastReview: 100 };
   assert.equal(planFits(plan, 'a', st, 2, 3, NOW + 1000), true);
@@ -37,6 +48,7 @@ test('planFits: every reason to refuse a plan', () => {
   assert.equal(planFits(plan, 'a', { ...st, state: 1 }, 2, 3, NOW), false);         // not in review before
   assert.equal(planFits(plan, 'a', st, 3, 3, NOW), false);                          // FSRS sent it to relearning
   assert.equal(planFits(plan, 'a', st, 2, 1, NOW), false);                          // Again: no plan for it
+  for (const r of [2, 3, 4]) for (const bad of [NaN, 0, -1, undefined]) assert.equal(planFits({ ...plan, days: { ...plan.days, [r]: bad } }, 'a', st, 2, 3, NOW), false, `days[${r}] = ${bad}`);
   for (const bad of [NaN, Infinity, 0, -3, undefined]) assert.equal(planFits({ ...plan, days: { ...plan.days, 3: bad } }, 'a', st, 2, 3, NOW), false);
 });
 
@@ -62,7 +74,7 @@ test('freezePlan waits at most the freeze time (300 ms by default)', async () =>
 // ---------- inside the scheduler ----------
 async function sched() {
   const m = await import('../js/srs.js');
-  m.useOwnPlan({ planFits, clampOwnDays });           // (Review hands these over when an Own session starts)
+  m.useOwnPlan({ planFits, clampOwnDays, orderOwnDays });           // (Review hands these over when an Own session starts)
   return m;
 }
 async function reviewCard(rate, opts = OPTS) {
@@ -166,4 +178,46 @@ test('the study path does not load own-plan.js: srs.js and review.js only import
   const st = { cardId: 'a', state: 2, due: NOW, stability: 20, difficulty: 5, elapsedDays: 20, scheduledDays: 20, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - 20 * DAY };
   const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: 5, 3: 5, 4: 5 } };
   assert.deepEqual(m.rate('a', st, 3, { ...OPTS, ownPlan: plan }, NOW), m.rate('a', st, 3, OPTS, NOW));
+});
+
+test('rate: with a plan whose three days collapse, the saved days are ordered and match previewIntervals', { skip }, async () => {
+  const m = await sched();
+  const st = { cardId: 'a', state: 2, due: NOW, stability: 20, difficulty: 5, elapsedDays: 20, scheduledDays: 20, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - 20 * DAY };
+  const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: 40, 3: 40, 4: 40 } };
+  const days = [2, 3, 4].map(r => m.rate('a', st, r, { ...OPTS, ownPlan: plan }, NOW).scheduledDays);
+  assert.ok(days[0] < days[1] && days[1] < days[2], days.join());
+  const shown = m.previewIntervals(st, { ...OPTS, ownPlan: plan }, NOW, 'a');
+  assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), days);
+  m.useOwnPlan(null);
+});
+
+test('property: with fuzz, evening out and an exam, Hard < Good < Easy and the labels are the saved days', { skip }, async () => {
+  const m = await sched();
+  const { dayKey } = await import('../js/stats-calc.js');
+  const { examClamp } = await import('../js/exam.js');
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 200; i++) {
+    const S = 2 + Math.floor(rnd() * 400), v = () => 1 + Math.floor(rnd() * 3 * S);
+    const st = { cardId: 'a', state: 2, due: NOW, stability: S, difficulty: 1 + rnd() * 9, elapsedDays: S, scheduledDays: S, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - S * DAY };
+    const examDays = 5 + Math.floor(rnd() * 120), maxDue = i % 2 ? new Date(2026, 9, 12 + examDays).getTime() : null;      // an exam some days away, or none
+    const near = maxDue && i % 4 === 1 ? examDays - 1 - (i % 8 === 1 ? 1 : 0) : null;              // a plan collapsed onto the last days before the exam
+    const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: near ? { 2: near, 3: near, 4: near } : { 2: v(), 3: v(), 4: v() } };
+    const cap = i % 5 === 0 ? 3 + Math.floor(rnd() * 40) : 36500;
+    for (const extra of [{ fuzz: true, fsrsVersion: 7 }, { fuzz: true, balance: { load: 1 } }, { fuzz: false }]) {
+      const mkLoad = () => new Map(Array.from({ length: 140 }, (_, d) => [dayKey(NOW + d * DAY), (d * 7 + 3) % 6]));
+      const load = extra.balance && mkLoad();
+      const o = { ...OPTS, maxInterval: cap, maxDue, ...extra, ...(load ? { balance: { load } } : {}), ownPlan: plan };
+      const before = load && [...load];
+      const shown = m.previewIntervals(st, o, NOW, 'a');
+      if (load) assert.deepEqual([...load], before, 'preview does not touch the load');
+      const saved = [2, 3, 4].map(r => m.rate('a', st, r, { ...o, balance: load && { load: mkLoad() } }, NOW));
+      const days = saved.map(c => Math.round((dayStart(c.due) - dayStart(NOW)) / DAY));
+      const sd = saved.map(c => c.scheduledDays);
+      if (cap >= 3) assert.ok(sd[0] < sd[1] && sd[1] < sd[2], `${JSON.stringify(extra)} S=${S} cap=${cap} maxDue=${maxDue}: ${sd}`);
+      assert.ok(days[0] <= days[1] && days[1] <= days[2], `calendar days ${days}`);
+      for (const c of saved) { const again = { due: new Date(c.due), scheduled_days: c.scheduledDays, stability: c.stability, fsrs7: c.fsrs7 }; examClamp(again, NOW, o, load && mkLoad()); assert.equal(again.due.getTime(), c.due, 'the exam limit moves a planned card no further'); }
+      if (extra.fuzz === false || extra.balance || extra.fsrsVersion === 7) assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), saved.map(c => (c.due - NOW) / DAY));
+    }
+  }
+  m.useOwnPlan(null);
 });

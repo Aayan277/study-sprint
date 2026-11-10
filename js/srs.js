@@ -8,8 +8,9 @@
 
 import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
+import { dayStart, dayEnd } from './days.js';
 import { dayKey } from './stats-calc.js';
-import { examGainFrom, examClamp, recallAt } from './exam.js';
+import { examGainFrom, examClamp, recallAt, finalWindow } from './exam.js';
 import { W7_DEFAULT } from './fsrs7-model.js';
 import { rate7, preview7, prepare7 } from './srs7.js';     // FSRS-7 (setting fsrsVersion 7): our own port, no library to load; see srs7.js
 
@@ -138,7 +139,7 @@ function seven(cardId, state, opts, now) {
 }
 
 // Own model (opt-in): the rules for using its plan (js/own-plan.js) are handed over by Review when an Own session starts, so nobody who has
-// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays }
+// not loaded a model file loads that file. Until then a plan is ignored (FSRS schedules). tools: { planFits, clampOwnDays, orderOwnDays }
 let ownTools = null;
 export const useOwnPlan = tools => { ownTools = tools; };
 
@@ -156,24 +157,46 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
   // (the ratio of its fuzzed gap to its exact gap) is applied to Own's days too. The max interval, evening out and the exam limit still
   // apply below. Without a plan (the normal case) nothing here changes.
   const plan = opts.ownPlan;
+  let planned = false;                          // Own's plan set the gap (evening out was already done for it)
   if (plan && ownTools && ownTools.planFits(plan, cardId, state, card.state, rating, now) && Number.isFinite(opts.maxInterval) && opts.maxInterval > 0) {
-    const fsrsDays = card.scheduled_days;
-    const { clampOwnDays } = ownTools;
-    let days = clampOwnDays(plan.days[rating], fsrsDays, opts.maxInterval);
-    if (opts.fuzz && !balanced) {
-      const exact = opts.fsrsVersion === 7
-        ? rate7(cardId, state, rating, { ...opts, fuzz: false }, now, sixAfter(state, opts, now))
-        : scheduler({ ...opts, fuzz: false }).next(toLibrary(state, now), new Date(now), rating).card;
-      if (exact.scheduled_days > 0) days = clampOwnDays(days * (fsrsDays / exact.scheduled_days), exact.scheduled_days, opts.maxInterval);
+    const { clampOwnDays, orderOwnDays } = ownTools;
+    // The final gap (clamped, then fuzzed or evened out) is worked out for Hard, Good and Easy the same way every time, and only then are the
+    // three put in order (Hard < Good < Easy). So every rating works out the same three numbers: the buttons and the saved date agree.
+    // Evening out only reads the load here (the card is added to it below, once, for the rating that was pressed).
+    const fsrsCard = (r, o) => r === rating && o === opts ? card : opts.fsrsVersion === 7
+      ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
+      : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
+    const finalDays = {}, exactCards = {};
+    // The exam limit (examClamp, which only reads the load) applied to a gap of d days, on a copy of the rating's own card.
+    const examDay = (r, d) => examClamp({ ...exactCards[r], due: new Date(now + d * DAY), scheduled_days: d }, now, opts, opts.balance?.load).scheduled_days;
+    let moved = false;                            // did the exam limit move any of the three?
+    for (const r of [2, 3, 4]) {
+      exactCards[r] = fsrsCard(r, { ...opts, fuzz: false });
+      const exact = exactCards[r].scheduled_days;
+      let d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
+      if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
+      if (balanced && d >= 3) d = pickDay(d, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, r) });
+      const e = examDay(r, d);
+      if (e !== d) { moved = true; d = e; }
+      finalDays[r] = d;
     }
-    card.scheduled_days = days;
-    card.due = new Date(now + days * DAY);
+    // When the exam applies, all three are deliberately kept inside its window (before exam day); ties remain only if the window is too small.
+    const win = opts.maxDue > now ? finalWindow(Math.round((opts.maxDue - dayStart(now)) / DAY), 1) : null;
+    const order = () => orderOwnDays(finalDays, moved && win ? Math.min(opts.maxInterval, win.last) : opts.maxInterval);
+    let ordered = order();
+    // Ordering can bump a gap into a day the exam would move: then cap all three to the window, so the examClamp below is a no-op here.
+    if (win && !moved && [2, 3, 4].some(r => examDay(r, ordered[r]) !== ordered[r])) { moved = true; ordered = order(); }
+    const days = ordered[rating];
+    // Two due-time rules: a gap the exam placed is due at 6am that day (as examClamp does); any other gap is due the same time of day.
+    if (moved && win && days >= win.first && days <= win.last) { card.due = new Date(dayEnd(now, days - 1) + 2 * 3600000); card.scheduled_days = days; }
+    else { card.scheduled_days = days; card.due = new Date(now + days * DAY); }
+    planned = true;
   }
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
   let counted = false;                          // did balancing add this card to the load?
   if (balanced && card.state === 2 && card.scheduled_days >= 3) {
-    const d = pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, rating) });
+    const d = planned ? card.scheduled_days : pickDay(card.scheduled_days, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, rating) });
     card.due = new Date(card.due.getTime() + (d - card.scheduled_days) * DAY);
     card.scheduled_days = d;
     load?.set(dayKey(card.due.getTime()), (load.get(dayKey(card.due.getTime())) || 0) + 1);
