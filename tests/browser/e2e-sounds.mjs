@@ -442,7 +442,7 @@ ok(bk.v === 2 && bk.audio > 0 && bk.named && bk.ok === null, `Backup with sounds
 ok(bk.v2 === 1 && bk.audio2 === 0 && bk.ok2 === null && bk.cards2, `Backup without sounds: version 1, no sounds in it (cards still list them), checks out`);
 await page.goto(APP + '#/settings'); await page.waitForSelector('#bkSoundsRow:not([hidden])');
 ok(/Include sounds \(\d+(\.\d)? [KM]B\)/.test(await page.textContent('#bkSoundsTitle')) && await page.isChecked('#bkSounds'), `Settings: "Include sounds (…)" is on for a small total (${await page.textContent('#bkSoundsTitle')})`);
-await page.waitForFunction(() => /On this device: pictures .* · sounds .*free/.test(document.querySelector('#mediaLine')?.textContent || ''));
+await page.waitForFunction(() => /^Pictures .* · sounds .*free/.test(document.querySelector('#mediaLine')?.textContent || ''));
 ok(true, 'Settings → Your data: ' + await page.textContent('#mediaLine'));
 await page.screenshot({ path: SP + '/snd-settings-375.png', fullPage: true });
 await page.uncheck('#bkSounds');
@@ -527,7 +527,7 @@ const seed = await A.evaluate(async () => {
   ]);
   return { pic, s1, s2 };
 });
-await A.goto(APP + '#/settings'); await A.waitForSelector('#syncBox > *');
+await A.goto(APP + '#/settings'); await A.waitForSelector('#syncBox > :not([hidden])');
 await A.fill('#syncEmail', 'me@example.com'); await A.fill('#syncPw', 'secret123'); await A.click('#syncCreate');
 await A.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 ok(fake.files.has(`${[...fake.users.values()][0].id}/${seed.pic}`), 'Sync with the old file-type list: the picture still goes up');
@@ -550,7 +550,7 @@ ok(fake.files.has(`${uid}/${seed.s1}`) && fake.files.get(`${uid}/${seed.s2}`).ty
 const ab = await A.evaluate(async id => (await (await import('./js/db.js')).getMedia(id)), seed.s1);
 ok(ab.uploaded === true && !('blocked' in ab), 'Sync: the sound is marked uploaded and not blocked any more');
 // a second device downloads them
-await B.goto(APP + '#/settings'); await B.waitForSelector('#syncBox > *');
+await B.goto(APP + '#/settings'); await B.waitForSelector('#syncBox > :not([hidden])');
 await B.fill('#syncEmail', 'me@example.com'); await B.fill('#syncPw', 'secret123'); await B.click('#syncForm button[type=submit]');
 await B.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 await B.waitForFunction(async ([a, b]) => { const db = await import('./js/db.js'); return !!(await db.getMedia(a)) && !!(await db.getMedia(b)); }, [seed.s1, seed.s2], { timeout: 15000 });

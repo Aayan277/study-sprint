@@ -26,7 +26,7 @@ const cardIds = () => run(async () => (await (await import('./js/db.js')).getAll
 const pending = () => run(async () => (await import('./js/sync.js')).pendingChanges());
 const settle = async () => { for (let i = 0; i < 6; i++) { const l = await syncNow(); if (l.state === 'done' && !l.sent && !l.applied) return l; } return syncNow(); };
 
-await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *');
+await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])');
 await page.fill('#syncEmail', 'me@example.com'); await page.fill('#syncPw', 'secret123'); await page.click('#syncCreate');
 await page.waitForFunction(() => /^Synced/.test(document.querySelector('#syncStatus')?.textContent || ''), null, { timeout: 15000 });
 await settle();

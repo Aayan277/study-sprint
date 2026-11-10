@@ -11,7 +11,7 @@ import * as db from './db.js';
 import { dailyReminderICS, examsICS, DEFAULT_TIME } from './ics.js';
 import { sessionFinished, shouldShowCard as installCardShows } from './install.js';
 import { badgeRow, needsPermission, askPermission, refreshBadgeNow } from './badge.js';
-import { icon, toast, esc, plural } from './ui.js';
+import { icon, toast, esc } from './ui.js';
 
 const DISMISSED = 'study-sprint-remind-dismissed';
 const get = k => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
@@ -100,13 +100,12 @@ export function settingsHTML({ time, exams, badgeOn }) {
   return `
       <h3 class="set-sub" id="remTitle">Reminders</h3>
       <div class="set-row" id="remRow">
-        <div><b><label for="remTime">Daily reminder</label></b>
-          <p id="remHelp">Calendar alert at this time</p></div>
-        <div class="steps-input rem-actions">${timeInput('remTime', time).replace('aria-label="Reminder time"', 'aria-describedby="remHelp"')}
+        <div><b>Daily reminder</b></div>
+        <div class="steps-input rem-actions">${timeInput('remTime', time)}
           <button class="btn ghost small" type="button" id="remAdd">${icon('calendar')} Add to my calendar</button></div>
       </div>
       ${exams ? `<div class="set-row" id="examRemRow">
-        <div><b>Exam dates</b><p>${plural(exams, 'exam')} on your courses, each with an alert 3 days before and one on the day.</p></div>
+        <div><b>Exam dates</b></div>
         <button class="btn ghost small" type="button" id="examAdd">${icon('calendar')} Add exams to my calendar</button>
       </div>` : ''}
       ${row === 'switch' ? `<label class="adv-row switch-row" id="badgeRow"><span><b>Cards due on the app icon</b>
@@ -114,7 +113,7 @@ export function settingsHTML({ time, exams, badgeOn }) {
         <input id="appBadge" type="checkbox" class="switch" ${badgeOn ? 'checked' : ''}></label>
         <p class="note" id="badgeNote" role="status" hidden></p>`
       : row === 'install' ? `<div class="set-row" id="badgeRow"><div><b>Cards due on the app icon</b>
-        <p>Works in the installed app. Add Study Sprint to your Home Screen or install it, then open it from there to show today's card count on its icon.</p></div></div>` : ''}`;
+        <p>Install the app to use this</p></div></div>` : ''}`;
 }
 
 // root: the Settings screen. getDecks: () => decks (for the exam file).

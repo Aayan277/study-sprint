@@ -30,7 +30,7 @@ const snapshot = page => run(page, async () => {
   const [decks, cards, logs, states, settings] = await Promise.all([db.getDecks(), db.getAll('cards'), db.getAll('reviewLog'), db.getAll('cardStates'), db.getSettings()]);
   return { decks: decks.map(d => d.name).sort(), cards: cards.length, cardIds: cards.map(c => c.id), logs: logs.map(l => l.uid), states: Object.fromEntries(states.map(s => [s.cardId, s])), settings, signedIn: !!settings.syncAuth };
 });
-const openSettings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > *'); };
+const openSettings = async page => { await page.goto(APP + '#/decks'); await page.waitForSelector('.deck, .empty'); await page.goto(APP + '#/settings'); await page.waitForSelector('#syncBox > :not([hidden])'); };
 const signInUI = async (page, { create = false, email = 'me@example.com', pw = 'secret123' } = {}) => {
   await openSettings(page);
   await page.fill('#syncEmail', email); await page.fill('#syncPw', pw);
