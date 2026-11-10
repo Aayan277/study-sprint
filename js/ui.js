@@ -285,9 +285,9 @@ export function openSheet(html, { side = false } = {}) {
   const head = document.createElement('div');
   head.className = 'sheet-head';
   if (title) {
-    head.appendChild(title);
     // A "?" help link written right after the title sits beside it in the header (outside the title, so the dialog's name stays the title).
-    const help = title.nextElementSibling;
+    const help = title.nextElementSibling;          // (read before the title is moved, or there is no next sibling any more)
+    head.appendChild(title);
     if (help?.matches('a.help-link')) { head.classList.add('has-help'); head.appendChild(help); }
   }
   head.insertAdjacentHTML('beforeend', `<button type="button" class="sheet-x" aria-label="Close">${icon('x')}</button>`);

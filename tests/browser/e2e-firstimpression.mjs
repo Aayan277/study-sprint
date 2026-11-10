@@ -81,6 +81,7 @@ ok((await p.getAttribute('.inst-icon', 'src')) === 'icons/icon-192.png', 'instal
 // the settings row
 await p.click('#gearBtn'); await p.waitForSelector('#installRow');
 ok(await p.locator('#installBtn').isVisible(), 'Settings has an Install app row with a button');
+ok(/Install the app to your home screen/.test(await p.textContent('#storageWarn')), 'installable: the storage warning tells the user to install the app');
 await p.click('#installBtn'); await p.waitForTimeout(150);
 ok(await p.evaluate(() => window.__prompted) === 1, 'the Settings button starts the browser install');
 await p.goto(URL + '#/today'); await p.waitForSelector('.today-hero');
@@ -125,6 +126,7 @@ for (const [how, init] of [['navigator.standalone', () => Object.defineProperty(
   ok(await p.locator('.inst:not(.remind)').count() === 0, 'installed (' + how + '): no install card');
   await p.click('#gearBtn'); await p.waitForSelector('#installRow');
   ok(/installed app/.test(await p.textContent('#installRow')) && await p.locator('#installBtn').count() === 0, 'installed (' + how + '): Settings says so, with no Install button');
+  { const w = await p.textContent('#storageWarn'); ok(/Make a backup/.test(w) && !/Install/.test(w), 'installed (' + how + '): the storage warning asks for a backup, not for an install'); }
   await p.context().close();
 }
 

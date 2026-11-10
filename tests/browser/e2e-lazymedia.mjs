@@ -183,7 +183,7 @@ ok(Object.keys(names).length === 60, `Anki export fetched the missing pictures f
 // a restore from a backup replaces the cards without delete markers: the list of files cards used is started again
 await run(B, async () => { const db = await import('./js/db.js'); await db.setSetting('mediaRefs', { userId: 'x', ids: ['pic-1', 'old-pic'] }); await db.importAll(await db.exportAll()); });
 // (a background sync may already have saved a fresh list for the current account: what matters is that the old one is gone)
-ok(await run(B, async () => { const r = (await (await import('./js/db.js')).getSettings()).mediaRefs; return r == null || (r.userId !== 'x' && !r.ids.includes('old-pic')); }), 'a restore (without "everywhere") forgets the list of files cards used, so no file is marked for it');
+ok(await run(B, async () => { const r = (await (await import('./js/db.js')).getSettings()).mediaRefs; return r == null || (r.userId !== 'x' && !r.ids?.includes('old-pic')); }), 'a restore (without "everywhere") forgets the list of files cards used, so no file is marked for it');
 const D = await device('D');
 await run(D, async () => (await import('./js/db.js')).deleteDeck('sample'));
 await signIn(D, false);
