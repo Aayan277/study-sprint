@@ -1050,3 +1050,24 @@ test('typing cards travel with the card and the deck as they are', () => {
   const deck = { id: 'd', name: 'D', typeAnswers: true, updatedAt: 5 };
   assert.equal(recordFromRow(rowFromRecord('decks', deck)).typeAnswers, true);
 });
+
+test('Undo of a delete: the restored row is newer than the delete marker, so every device takes it back', () => {
+  const deletedAt = NOW, restoredAt = NOW + 5000;
+  const marker = tombstone('cards', 'c1', deletedAt);
+  // a device that already got the delete holds the marker: the restored card (saved as a new change) wins
+  const restored = rowFromRecord('cards', stamp('cards', { id: 'c1', front: 'x', tags: ['a'] }, restoredAt));
+  assert.equal(decide({ ...restored, deleted: false }, marker.deletedAt), 'put');
+  // the same row arriving where the delete never did is simply added
+  assert.equal(decide({ ...restored, deleted: false }, 0), 'put');
+  // the old delete arriving after the undo (a slow device) does not win
+  assert.equal(decide({ ...rowFromTombstone(marker), deleted: true }, restoredAt), 'skip');
+  // a restored row that has come from the server is not sent back (syncedAt), one saved here is
+  const back = { id: 'c1', updatedAt: restoredAt };
+  assert.equal(needsPush(back, deletedAt), true);
+  assert.equal(needsPush({ ...back, syncedAt: restoredAt }, deletedAt), false);
+  // the restored copy drops the old "already sent" mark, so it is sent again
+  const { syncedAt, ...rest } = { id: 'c1', updatedAt: deletedAt - 1, syncedAt: deletedAt - 1 };
+  assert.equal(needsPush(stamp('cards', rest, restoredAt), deletedAt), true);
+  // the delete marker that was waiting to be sent is removed by the restore, so it is never sent after the card
+  assert.equal(tombstoneNeedsPush({ ...marker, synced: true }, 0), false);
+});

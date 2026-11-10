@@ -287,23 +287,82 @@ export async function addImport({ decks = [], cards = [], reviewLog = [], cardSt
   const tx = db.transaction(['decks', 'cards', 'reviewLog', 'cardStates'], 'readwrite');
   const now = Date.now();
   const outcomes = [];
+  // For undoImport: what this save added, and the rows it replaced.
+  const undo = { decks: [], cards: [], cardStates: [], reviewLog: [], before: emptySnapshot() };
   await inTx(tx, async () => {
     for (const [name, rows] of Object.entries({ decks, cards, reviewLog, cardStates })) {
       const os = tx.objectStore(name);
-      rows.forEach(r => os.put(stamp(name, r, now)));
+      for (const r of rows) {
+        const id = r[SYNC_ID[name]];
+        const prev = name !== 'reviewLog' && id !== undefined ? await done(os.get(id)) : undefined;
+        const key = await done(os.put(stamp(name, r, now)));
+        if (prev) undo.before[name].push(prev);
+        else undo[name].push(name === 'reviewLog' ? key : id);
+      }
     }
     const os = tx.objectStore('cards');
     for (const u of updates) {
       const cur = await done(os.get(u.id));
       if (!cur) { outcomes.push({ id: u.id, kind: 'gone', row: null }); continue; }
       const { kind, row } = u.apply(cur);
-      if (row) os.put(stamp('cards', row, now));
+      if (row) { os.put(stamp('cards', row, now)); undo.before.cards.push(cur); }
       outcomes.push({ id: u.id, kind, row });
     }
   });
   scheduleChanges++;
   changed();
+  outcomes.undo = undo;          // for undoImport (a property of the list, so callers that only read the outcomes are unaffected)
   return outcomes;
+}
+
+// Undo a saved import: the decks, cards, schedules and history it added are removed (with delete markers, like any delete), and
+// cards it changed in place (a re-imported Anki deck) get their old rows back. A new deck is only removed if nothing else is in
+// it now. Returns the number of cards removed.
+export async function undoImport(undo) {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  let removed = 0;
+  await inTx(tx, async () => {
+    const cards = tx.objectStore('cards');
+    for (const id of undo.cards) {
+      if (await done(cards.getKey(id)) !== undefined) removed++;
+      deleteCardIn(tx, id, now);
+    }
+    for (const id of undo.cardStates) deleteStateIn(tx, id, now);
+    for (const key of undo.reviewLog) {
+      const row = await done(tx.objectStore('reviewLog').get(key));
+      if (!row) continue;
+      if (row.uid) markDeleted(tx, 'reviewLog', row.uid, now);
+      tx.objectStore('reviewLog').delete(key);
+    }
+    // Rows the import replaced come back as they were.
+    for (const name of ['decks', 'cards', 'cardStates']) {
+      for (const row of undo.before[name]) {
+        const { syncedAt, ...rest } = row;
+        tx.objectStore(name).put(stamp(name, rest, now));
+        tx.objectStore('deleted').delete(tombstoneKey(name, row[SYNC_ID[name]]));
+      }
+    }
+    // New decks: the deepest first; one stays when a card (or a deck) that is not from the import is in it.
+    const mine = new Set(undo.decks);
+    const all = await done(tx.objectStore('decks').getAll());
+    const left = new Set(all.map(d => d.id));
+    const parentOf = new Map(all.map(d => [d.id, d.parentId]));
+    const depth = id => { let n = 0; for (let p = parentOf.get(id); p && n < 50; p = parentOf.get(p)) n++; return n; };
+    for (const id of [...mine].sort((a, b) => depth(b) - depth(a))) {
+      if (!left.has(id)) continue;
+      const hasCard = (await done(cards.index('deckId').count(id))) > 0;
+      const hasKid = all.some(d => d.parentId === id && left.has(d.id));
+      if (hasCard || hasKid) continue;
+      tx.objectStore('decks').delete(id);
+      markDeleted(tx, 'decks', id, now);
+      left.delete(id);
+    }
+  });
+  scheduleChanges++;
+  changed();
+  return removed;
 }
 
 // Read pictures and sounds one at a time inside ONE read transaction (so a long comparison does not open a transaction per file):
@@ -316,39 +375,100 @@ export async function withMediaReader(fn) {
 
 // Delete a deck plus everything that belongs to it: its cards, their schedules and their review history.
 // All in one transaction, so it can't half-finish.
+// Returns what was removed (see restoreSnapshot), so the delete can be undone.
 export async function deleteDeck(deckId) {
   const db = await openDB();
   const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
   const now = Date.now();
   const cards = tx.objectStore('cards');
+  const snap = emptySnapshot();
+  tx.objectStore('decks').get(deckId).onsuccess = e => { if (e.target.result) snap.decks.push(e.target.result); };
   tx.objectStore('decks').delete(deckId);
   markDeleted(tx, 'decks', deckId, now);
   cards.index('deckId').getAllKeys(deckId).onsuccess = e => {
-    for (const cardId of e.target.result) deleteCardIn(tx, cardId, now);
+    for (const cardId of e.target.result) deleteCardIn(tx, cardId, now, snap);
   };
   await finished(tx);
+  scheduleChanges++;
   changed();
+  return snap;
+}
+
+// ---------- undoing a delete ----------
+// A delete leaves a snapshot of everything it removed: { decks, cards, cardStates, reviewLog } (the rows exactly as they were stored,
+// review-log rows with their local id and uid). restoreSnapshot puts them back. Syncing: a delete is sent like any other, so an
+// undo must work whether or not that has already happened. The restored rows are saved as NEW changes (updatedAt = now, which is
+// newer than the delete marker) and the local delete markers are removed, so the next sync sends the rows again and every device
+// that already deleted them takes them back (a newer row beats an older delete marker: decide() in sync-merge.js). A device that
+// has not seen the delete yet just gets the rows. So nothing has to be held back or delayed, and an undo still works if the app was closed.
+export const emptySnapshot = () => ({ decks: [], cards: [], cardStates: [], reviewLog: [] });
+export function mergeSnapshots(...snaps) {
+  const out = emptySnapshot();
+  for (const sn of snaps) for (const k of Object.keys(out)) out[k].push(...(sn?.[k] || []));
+  return out;
+}
+export const snapshotSize = snap => snap.cards.length;
+// Pictures and sounds that only the deleted cards used are removed by the daily clean-up once they are an hour old
+// (cleanMedia). Right after a delete, keep it from running, so an Undo always finds them.
+let mediaHeldUntil = 0;
+export const holdMedia = (ms = 120000) => { mediaHeldUntil = Math.max(mediaHeldUntil, Date.now() + ms); };
+
+// Put a snapshot back. A card whose deck is gone (and not in the snapshot) is left out. Returns how many cards came back.
+export async function restoreSnapshot(snap) {
+  const db = await openDB();
+  const tx = db.transaction(['decks', 'cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
+  const now = Date.now();
+  let cardsBack = 0;
+  await inTx(tx, async () => {
+    const stampBack = (name, row, at) => { const { syncedAt, ...rest } = row; return stamp(name, { ...rest }, at); };
+    const tomb = (name, id) => tx.objectStore('deleted').delete(tombstoneKey(name, id));
+    for (const d of snap.decks) { tx.objectStore('decks').put(stampBack('decks', d, now)); tomb('decks', d.id); }
+    const backDecks = new Set(snap.decks.map(d => d.id));
+    const ok = new Set();
+    for (const c of snap.cards) {
+      const deckOk = !c.deckId || backDecks.has(c.deckId) || await done(tx.objectStore('decks').getKey(c.deckId)) !== undefined;
+      if (!deckOk) continue;
+      ok.add(c.id);
+      tx.objectStore('cards').put(stampBack('cards', c, now)); tomb('cards', c.id);
+      cardsBack++;
+    }
+    for (const st of snap.cardStates) {
+      if (!ok.has(st.cardId) && !(await done(tx.objectStore('cards').getKey(st.cardId)))) continue;
+      tx.objectStore('cardStates').put(stampBack('cardStates', st, now)); tomb('cardStates', st.cardId);
+    }
+    for (const l of snap.reviewLog) {
+      if (!ok.has(l.cardId) && !(await done(tx.objectStore('cards').getKey(l.cardId)))) continue;
+      tx.objectStore('reviewLog').put(stampBack('reviewLog', l, now)); if (l.uid) tomb('reviewLog', l.uid);
+    }
+  });
+  scheduleChanges++;
+  changed();
+  return cardsBack;
 }
 
 // Delete one card with its schedule and every review-log row, leaving deleted markers. Inside a transaction
 // that includes cards, cardStates, reviewLog and deleted.
-function deleteCardIn(tx, cardId, now) {
+// snap (optional): collects the rows removed, for an Undo (restoreSnapshot).
+function deleteCardIn(tx, cardId, now, snap) {
+  if (snap) tx.objectStore('cards').get(cardId).onsuccess = e => { if (e.target.result) snap.cards.push(e.target.result); };
   tx.objectStore('cards').delete(cardId);
   markDeleted(tx, 'cards', cardId, now);
-  deleteStateIn(tx, cardId, now);
+  deleteStateIn(tx, cardId, now, snap);
   tx.objectStore('reviewLog').index('cardId').openCursor(cardId).onsuccess = ev => {
     const cur = ev.target.result;
     if (!cur) return;
+    if (snap) snap.reviewLog.push(cur.value);
     if (cur.value.uid) markDeleted(tx, 'reviewLog', cur.value.uid, now);
     cur.delete();
     cur.continue();
   };
 }
 // Remove a card's schedule (if it has one), leaving a deleted marker.
-function deleteStateIn(tx, cardId, now) {
+function deleteStateIn(tx, cardId, now, snap) {
   const states = tx.objectStore('cardStates');
-  states.getKey(cardId).onsuccess = e => {
+  (snap ? states.get(cardId) : states.getKey(cardId)).onsuccess = e => {
     if (e.target.result === undefined) return;
+    if (snap) snap.cardStates.push(e.target.result);
     states.delete(cardId);
     markDeleted(tx, 'cardStates', cardId, now);
   };
@@ -485,15 +605,17 @@ export async function getDayCounts({ exactSince = -Infinity } = {}) {
 }
 
 // ---------- card list actions ----------
-// Delete cards with their schedules and review history, all in one go.
+// Delete cards with their schedules and review history, all in one go. Returns what was removed (see restoreSnapshot).
 export async function deleteCards(cardIds) {
   const db = await openDB();
   const tx = db.transaction(['cards', 'cardStates', 'reviewLog', 'deleted'], 'readwrite');
   const now = Date.now();
-  for (const id of cardIds) deleteCardIn(tx, id, now);
+  const snap = emptySnapshot();
+  for (const id of cardIds) deleteCardIn(tx, id, now, snap);
   await finished(tx);
   scheduleChanges++;
   changed();
+  return snap;
 }
 
 // Save a cloze note: every card of the note in one transaction, with the same change time.
@@ -1240,6 +1362,7 @@ export async function discardMedia(ids) {
 // Remove pictures and sounds no card uses any more (replaced, removed, or their card deleted). Ones added in the
 // last hour are kept (their card may not be saved yet). Returns the removed ones that the server has.
 export async function cleanMedia(now = Date.now()) {
+  if (Date.now() < mediaHeldUntil) return [];          // a delete can still be undone (holdMedia)
   const db = await openDB();
   const tx = db.transaction(['cards', 'media', 'settings'], 'readwrite');
   const removed = [];
