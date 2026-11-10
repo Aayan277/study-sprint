@@ -8,8 +8,9 @@
 
 import { fsrs, generatorParameters, createEmptyCard, Rating, default_w, CLAMP_PARAMETERS, W17_W18_Ceiling, clipParameters } from 'https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.mjs';
 import { pickDay } from './balance.js';
+import { dayStart, dayEnd } from './days.js';
 import { dayKey } from './stats-calc.js';
-import { examGainFrom, examClamp, recallAt } from './exam.js';
+import { examGainFrom, examClamp, recallAt, finalWindow } from './exam.js';
 import { W7_DEFAULT } from './fsrs7-model.js';
 import { rate7, preview7, prepare7 } from './srs7.js';     // FSRS-7 (setting fsrsVersion 7): our own port, no library to load; see srs7.js
 
@@ -166,17 +167,24 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
       ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
       : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
     const finalDays = {};
+    let moved = false;                            // did the exam limit move any of the three?
     for (const r of [2, 3, 4]) {
-      const exact = fsrsCard(r, { ...opts, fuzz: false }).scheduled_days;
+      const exactCard = fsrsCard(r, { ...opts, fuzz: false });
+      const exact = exactCard.scheduled_days;
       let d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
       if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
       if (balanced && d >= 3) d = pickDay(d, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, r) });
+      // The exam limit (examClamp, which only reads the load) is applied to each rating's own memory, on a copy of the card.
+      const sim = examClamp({ ...exactCard, due: new Date(now + d * DAY), scheduled_days: d }, now, opts, opts.balance?.load);
+      if (sim.scheduled_days !== d) { moved = true; d = sim.scheduled_days; }
       finalDays[r] = d;
     }
-    const days = orderOwnDays(finalDays, opts.maxInterval)[rating];
+    // When the exam moved a gap, all three must stay in the exam window (before exam day); ties remain only if the window is too small.
+    const win = opts.maxDue > now ? finalWindow(Math.round((opts.maxDue - dayStart(now)) / DAY), 1) : null;
+    const days = orderOwnDays(finalDays, moved && win ? Math.min(opts.maxInterval, win.last) : opts.maxInterval)[rating];
+    if (moved && win && days >= win.first && days <= win.last) { card.due = new Date(dayEnd(now, days - 1) + 2 * 3600000); card.scheduled_days = days; }
+    else { card.scheduled_days = days; card.due = new Date(now + days * DAY); }
     planned = true;
-    card.scheduled_days = days;
-    card.due = new Date(now + days * DAY);
   }
   capInterval(card, now, opts.maxInterval);
   const load = opts.balance?.load;
