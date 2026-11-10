@@ -30,6 +30,8 @@ for (const [w, h, name] of [[375, 812, 'phone'], [1440, 900, 'computer']]) {
   ok(await p.locator('#helpRow').count() === 0 && await p.locator('#helpTop').count() === 1, `${name}: only one Help button`);
   await p.click('#moreAppear > summary');
   ok(await vis('#oled') && await vis('input[name=ui] >> nth=0') && await vis('#glossaryUnderline'), `${name}: opening More settings shows them`);
+  // (the open state is saved on the "toggle" event, which fires a moment after the click)
+  await p.waitForFunction(() => { try { return localStorage.getItem('study-sprint-fold-settings-moreAppear') === '1'; } catch { return true; } }, null, { timeout: 5000 }).catch(() => {});
   await p.reload(); await p.waitForSelector('#advanced');
   ok(await vis('#oled') && !(await vis('#glossBtn')), `${name}: an opened More settings stays open after a reload, the others stay closed`);
   await p.evaluate(async () => { const m = await import('./js/settings.js'); m.revealSetting('glossBtn'); });
