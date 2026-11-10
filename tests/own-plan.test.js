@@ -194,15 +194,17 @@ test('rate: with a plan whose three days collapse, the saved days are ordered an
 test('property: with fuzz, evening out and an exam, Hard < Good < Easy and the labels are the saved days', { skip }, async () => {
   const m = await sched();
   const { dayKey } = await import('../js/stats-calc.js');
+  const { examClamp } = await import('../js/exam.js');
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 200; i++) {
     const S = 2 + Math.floor(rnd() * 400), v = () => 1 + Math.floor(rnd() * 3 * S);
     const st = { cardId: 'a', state: 2, due: NOW, stability: S, difficulty: 1 + rnd() * 9, elapsedDays: S, scheduledDays: S, learningSteps: 0, reps: 3, lapses: 0, lastReview: NOW - S * DAY };
-    const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: { 2: v(), 3: v(), 4: v() } };
+    const examDays = 5 + Math.floor(rnd() * 120), maxDue = i % 2 ? new Date(2026, 9, 12 + examDays).getTime() : null;      // an exam some days away, or none
+    const near = maxDue && i % 4 === 1 ? examDays - 1 - (i % 8 === 1 ? 1 : 0) : null;              // a plan collapsed onto the last days before the exam
+    const plan = { cardId: 'a', lastReview: st.lastReview, at: NOW, days: near ? { 2: near, 3: near, 4: near } : { 2: v(), 3: v(), 4: v() } };
     const cap = i % 5 === 0 ? 3 + Math.floor(rnd() * 40) : 36500;
-    const maxDue = i % 2 ? new Date(2026, 9, 12 + 5 + Math.floor(rnd() * 120)).getTime() : null;      // an exam some days away, or none
     for (const extra of [{ fuzz: true, fsrsVersion: 7 }, { fuzz: true, balance: { load: 1 } }, { fuzz: false }]) {
-      const mkLoad = () => new Map([[dayKey(NOW + 40 * DAY), 3], [dayKey(NOW + 57 * DAY), 2], [dayKey(NOW + 58 * DAY), 1]]);
+      const mkLoad = () => new Map(Array.from({ length: 140 }, (_, d) => [dayKey(NOW + d * DAY), (d * 7 + 3) % 6]));
       const load = extra.balance && mkLoad();
       const o = { ...OPTS, maxInterval: cap, maxDue, ...extra, ...(load ? { balance: { load } } : {}), ownPlan: plan };
       const before = load && [...load];
@@ -213,6 +215,7 @@ test('property: with fuzz, evening out and an exam, Hard < Good < Easy and the l
       const sd = saved.map(c => c.scheduledDays);
       if (cap >= 3) assert.ok(sd[0] < sd[1] && sd[1] < sd[2], `${JSON.stringify(extra)} S=${S} cap=${cap} maxDue=${maxDue}: ${sd}`);
       assert.ok(days[0] <= days[1] && days[1] <= days[2], `calendar days ${days}`);
+      for (const c of saved) { const again = { due: new Date(c.due), scheduled_days: c.scheduledDays, stability: c.stability, fsrs7: c.fsrs7 }; examClamp(again, NOW, o, load && mkLoad()); assert.equal(again.due.getTime(), c.due, 'the exam limit moves a planned card no further'); }
       if (extra.fuzz === false || extra.balance || extra.fsrsVersion === 7) assert.deepEqual([2, 3, 4].map(r => shown[r] / DAY), saved.map(c => (c.due - NOW) / DAY));
     }
   }

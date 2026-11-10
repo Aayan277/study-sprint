@@ -166,22 +166,28 @@ export function rate(cardId, state, rating, opts, now = Date.now()) {
     const fsrsCard = (r, o) => r === rating && o === opts ? card : opts.fsrsVersion === 7
       ? rate7(cardId, state, r, o, now, sixAfter(state, opts, now))
       : scheduler(o).next(toLibrary(state, now), new Date(now), r).card;
-    const finalDays = {};
+    const finalDays = {}, exactCards = {};
+    // The exam limit (examClamp, which only reads the load) applied to a gap of d days, on a copy of the rating's own card.
+    const examDay = (r, d) => examClamp({ ...exactCards[r], due: new Date(now + d * DAY), scheduled_days: d }, now, opts, opts.balance?.load).scheduled_days;
     let moved = false;                            // did the exam limit move any of the three?
     for (const r of [2, 3, 4]) {
-      const exactCard = fsrsCard(r, { ...opts, fuzz: false });
-      const exact = exactCard.scheduled_days;
+      exactCards[r] = fsrsCard(r, { ...opts, fuzz: false });
+      const exact = exactCards[r].scheduled_days;
       let d = clampOwnDays(plan.days[r], exact, opts.maxInterval);
       if (opts.fuzz && !balanced && exact > 0) d = clampOwnDays(d * (fsrsCard(r, opts).scheduled_days / exact), exact, opts.maxInterval);
       if (balanced && d >= 3) d = pickDay(d, { ...opts.balance, maxDays: opts.maxInterval, now, random: seededRandom(cardId, state, r) });
-      // The exam limit (examClamp, which only reads the load) is applied to each rating's own memory, on a copy of the card.
-      const sim = examClamp({ ...exactCard, due: new Date(now + d * DAY), scheduled_days: d }, now, opts, opts.balance?.load);
-      if (sim.scheduled_days !== d) { moved = true; d = sim.scheduled_days; }
+      const e = examDay(r, d);
+      if (e !== d) { moved = true; d = e; }
       finalDays[r] = d;
     }
-    // When the exam moved a gap, all three must stay in the exam window (before exam day); ties remain only if the window is too small.
+    // When the exam applies, all three are deliberately kept inside its window (before exam day); ties remain only if the window is too small.
     const win = opts.maxDue > now ? finalWindow(Math.round((opts.maxDue - dayStart(now)) / DAY), 1) : null;
-    const days = orderOwnDays(finalDays, moved && win ? Math.min(opts.maxInterval, win.last) : opts.maxInterval)[rating];
+    const order = () => orderOwnDays(finalDays, moved && win ? Math.min(opts.maxInterval, win.last) : opts.maxInterval);
+    let ordered = order();
+    // Ordering can bump a gap into a day the exam would move: then cap all three to the window, so the examClamp below is a no-op here.
+    if (win && !moved && [2, 3, 4].some(r => examDay(r, ordered[r]) !== ordered[r])) { moved = true; ordered = order(); }
+    const days = ordered[rating];
+    // Two due-time rules: a gap the exam placed is due at 6am that day (as examClamp does); any other gap is due the same time of day.
     if (moved && win && days >= win.first && days <= win.last) { card.due = new Date(dayEnd(now, days - 1) + 2 * 3600000); card.scheduled_days = days; }
     else { card.scheduled_days = days; card.due = new Date(now + days * DAY); }
     planned = true;
