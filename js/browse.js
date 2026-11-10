@@ -20,7 +20,7 @@ import { planOcclusionSave, occRemovalText, hasMasks, groupIndex } from './occlu
 import { plainText, mathHTML, spokenRow } from './format.js';
 import { soundsHTML } from './audio.js';
 import { ancestors, subtreeIds, deckPath, deckChoices, effectiveDeck } from './deck-tree.js';
-import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher } from './ui.js';
+import { $, esc, plural, toast, openSheet, closeSheet, icon, showFieldError, guardSheet, formSnapshot, askClose, guardedGo, sheetDirty, setDraftStasher, undoOpts } from './ui.js';
 import { singleKeysOn, stripKeys } from './shortcuts.js';
 import { go as navGo } from './nav.js';
 
@@ -365,9 +365,9 @@ export async function openCardPanel(card, ctx) {
     if (act === 'bury') guardedGo(() => toggleBury(card, save));
     if (act === 'duplicate') guardedGo(() => duplicateAndEdit(card, ctx));
     if (act === 'reset') confirmIn('ceConfirm', 'Reset this card to new? Its schedule starts over (its answer history is kept).', 'Reset', () => guardedGo(() => db.clearStates([card.id]).then(() => again('Reset to new', 'reset'))));
-    if (act === 'delete' && partner) askDeletePair(card, partner, again);
-    else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text). This can’t be undone.'
-      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture). This can’t be undone.' : 'Delete this card and its history? This can’t be undone.', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(() => again('Card deleted', 'delete'))));
+    if (act === 'delete' && partner) askDeletePair(card, partner, again, ctx);
+    else if (act === 'delete') confirmIn('ceConfirm', isClozeCard(card) ? 'Delete this card and its history? The note’s other cards stay (edit the note to take the blank out of its text).'
+      : hasMasks(card) ? 'Delete this card and its history? The picture’s other cards stay (take the box out when you edit the picture).' : 'Delete this card and its history?', 'Delete card', () => guardedGo(() => db.deleteCards([card.id]).then(snap => deleted(snap, 'Card deleted', ctx, again))));
   }));
   wireFlags(f => guardedGo(() => save({ flag: f }, f ? `${FLAGS.find(x => x.id === f).name} flag` : 'Flag removed', 'flag')));
   wireMove(deckId => guardedGo(() => save({ deckId }, `Moved to ${deckPath(decks, deckId)}`, 'move')));
@@ -464,8 +464,8 @@ async function openCardEdit(card, ctx) {
 // full panel again with fresh data.
 function cardOps(card, ctx) {
   const { statesById, refresh = async () => {}, onAction, closeAfter = [] } = ctx;
-  const again = async (msg, act) => {
-    if (msg) toast(msg);
+  const again = async (msg, act, opts) => {
+    if (msg) toast(msg, opts);
     await refresh();
     const fresh = (await db.get('cards', card.id));
     const st = await db.get('cardStates', card.id);
@@ -638,14 +638,19 @@ async function saveWithReverse(card, pair, both, sides, shared, ops, msg) {
   }
   return go();
 }
+// After a delete: the toast offers Undo, which puts the cards back with their schedules and history (db.restoreSnapshot), then refreshes.
+function deleted(snap, msg, ctx, again) {
+  db.holdMedia();
+  return again(msg, 'delete', undoOpts(async () => { await db.restoreSnapshot(snap); toast(snap.cards.length === 1 ? 'Card restored' : 'Cards restored'); await (ctx.refresh || (async () => {}))(); }));
+}
 // Deleting one card of a pair: both, or just this one (the other turns into an ordinary card).
-function askDeletePair(card, partner, again) {
+function askDeletePair(card, partner, again, ctx) {
   $('ceConfirm').innerHTML = `<div class="confirm"><p>This card has a reverse card.</p><div class="sheet-actions">
     <button class="btn ghost" type="button" id="cfNo">Cancel</button><button class="btn ghost" type="button" id="cfOnly">Only this one</button>
     <button class="btn danger solid" type="button" id="cfBoth">Delete both</button></div></div>`;
   $('cfNo').addEventListener('click', () => { $('ceConfirm').innerHTML = ''; });
-  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(() => again('Both cards deleted', 'delete'))));
-  $('cfOnly').addEventListener('click', () => guardedGo(async () => { await db.saveCards([unpaired(partner)]); await db.deleteCards([card.id]); return again('Card deleted', 'delete'); }));
+  $('cfBoth').addEventListener('click', () => guardedGo(() => db.deleteCards([card.id, partner.id]).then(snap => deleted(snap, 'Both cards deleted', ctx, again))));
+  $('cfOnly').addEventListener('click', () => guardedGo(async () => { const snap = await db.deleteCards([card.id]); snap.cards.push(partner); await db.saveCards([unpaired(partner)]); return deleted(snap, 'Card deleted', ctx, again); }));
   $('cfBoth').scrollIntoView({ block: 'nearest' });
 }
 
@@ -813,14 +818,17 @@ function openBulkActions(selected, { decks, statesById, refresh, clear }) {
     if (act === 'reset') confirmIn('ceConfirm', `Reset ${plural(studied.length, 'card')} to new? Their schedules start over (history is kept).`, 'Reset', () => db.clearStates(studied.map(c => c.id)).then(() => done(`Reset ${plural(studied.length, 'card')}`)));
     if (act === 'reverse') bulkReverse(selected, done);
     if (act === 'typing') bulkTyping(selected, done);
-    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history? This can’t be undone.`, `Delete ${plural(n, 'card')}`, async () => {
-      await db.deleteCards(selected.map(c => c.id));
+    if (act === 'delete') confirmIn('ceConfirm', `Delete ${plural(n, 'card')} and their history?`, `Delete ${plural(n, 'card')}`, async () => {
+      const snap = await db.deleteCards(selected.map(c => c.id));
+      db.holdMedia();
       // A card whose partner is deleted becomes an ordinary card again.
       const gone = new Set(selected.map(c => c.id)), notes = new Set(selected.filter(isPair).map(c => c.noteId));
       const left = notes.size ? (await db.getAll('cards')).filter(c => isPair(c) && notes.has(c.noteId) && !gone.has(c.id)) : [];
-      if (left.length) await db.saveCards(left.map(unpaired));
+      if (left.length) { snap.cards.push(...left); await db.saveCards(left.map(unpaired)); }
       clear();
-      return done(`Deleted ${plural(n, 'card')}`);
+      closeSheet();
+      toast(`Deleted ${plural(n, 'card')}`, undoOpts(async () => { await db.restoreSnapshot(snap); toast(`Restored ${plural(n, 'card')}`); await refresh(); }));
+      return refresh();
     });
   }));
   // Find and replace: shows how many cards would change as you type.

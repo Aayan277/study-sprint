@@ -17,7 +17,7 @@ import { examOptions } from './exam.js';
 import { DECK_COLORS } from './decks.js';
 import { FIRST_REVIEW_KEY } from './onboarding.js';
 import { sizeText } from './media.js';
-import { $, esc, plural, toast, dismissToast, icon } from './ui.js';
+import { $, esc, plural, toast, dismissToast, icon, undoOpts } from './ui.js';
 import { replace as navReplace, back as navBack } from './nav.js';
 import { sharedKind } from './share-logic.js';
 import { readDocument, isDocFile, pagesToText, pagesToMarkdown, textPages, splitParts, docPrompt, charCount, hasText, AI_SITES, MAX_BYTES, tooBigMessage } from './doc-import.js';
@@ -218,6 +218,7 @@ export async function renderImport(el, arg) {
     </div>`;
 
   $('back').addEventListener('click', () => navBack('#/decks'));
+  placeSaveBar();
   wireDeckPicker();
   wireTabs();
   wirePaste();
@@ -1459,7 +1460,16 @@ async function save() {
       gone && `${plural(gone, 'card')} ${gone === 1 ? 'was' : 'were'} deleted meanwhile and left out`].filter(Boolean);
     const said = left.length ? `${added}. ${left.join('. ')}` : added;
     if (bigNote) toast(`${said}. ${bigNote}`, { link: { href: '#/settings', label: 'Settings' }, hold: true });
-    else toast(said, left.length ? { ms: 6000 } : undefined);
+    else if (cards.length || updated) {
+      // Undo takes out exactly what this import added (and puts back the cards it changed), then shows the deck list.
+      const undo = outcomes.undo;
+      const opts = undoOpts(async () => {
+        await db.undoImport(undo);
+        navReplace('#/decks');
+        toast('Import undone');
+      });
+      toast(said, left.length ? { ...opts, ms: 12000 } : opts);
+    } else toast(said, left.length ? { ms: 6000 } : undefined);
     // replace() so the back gesture from the deck doesn't land on this finished import.
     // Coming from the first-run start, the first review of the new cards is next.
     let first = null;
@@ -1473,6 +1483,19 @@ async function save() {
     saveBtn.disabled = false;
     if (saveBtn.isConnected) refreshFlags();     // puts the button's label back
   }
+}
+
+// Where the Add button sits. On a PC it is the bar at the bottom of the page (sticky above the page's end). On a phone or tablet a
+// bar stuck to the bottom of the screen covered the "Preview" heading and the "Found…" line whenever they were near the fold, so
+// there the button goes right under the "Found…" line and sticks under the header while the list scrolls (css: .savebar in #preview).
+function placeSaveBar() {
+  const bar = $('savebar'), mq = matchMedia('(max-width:1023.98px)');
+  const place = () => {
+    if (!bar.isConnected) { mq.removeEventListener('change', place); return; }
+    if (mq.matches) $('sugNote').after(bar); else $('preview').after(bar);
+  };
+  place();
+  mq.addEventListener('change', place);
 }
 
 // Updating a card saves its pictures and sounds again (new ids). Where a saved card already holds the very same file (same type and bytes),

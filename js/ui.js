@@ -69,6 +69,15 @@ export function toast(msg, { link = null, hold = false, ms = 0 } = {}) {
   if (hold) { toastLeave = () => { hideToast(); toastLeave = null; }; window.addEventListener('hashchange', toastLeave, { once: true }); }
 }
 
+// The options for a toast with an Undo link (about 10 seconds): toast('Card deleted', undoOpts(async () => { ...put it back... })).
+// A failure in onUndo is shown instead of lost.
+export const undoOpts = onUndo => ({
+  ms: 10000,
+  link: { href: '#', label: 'Undo', onClick: async () => {
+    try { await onUndo(); } catch (err) { console.error(err); toast("Couldn't undo. Nothing was changed."); }
+  } }
+});
+
 // Focus mode: while a Review or Play round is running, the header and tab bar get out of the way on phones
 // (styles.css hides them when <body> has the class "focus"). Each screen turns it on when a round starts
 // and off when the round ends; going to any other screen also turns it off (see route() in app.js).
