@@ -9,7 +9,7 @@ import { hasFolders, tagTree, tagTreeHTML, wireTagTree } from './tag-tree.js';
 import { acceptedOf, parseAccepted } from './accept.js';
 import { daysAgoStart } from './stats-calc.js';
 import { formatInterval } from './queue.js';
-import { watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic, typeInFieldHTML, readTypeIn, wireTypeIn } from './card-editor.js';
+import { basicParts, moreOptionsHTML, watchAdd, readCardText, setCardText, readCardImage, readCardSounds, setCardSounds, noteKinds, clozeFields, readKind, lastKind, occlusionFields, readOcclusion, resetOcclusion, basicFields, readBack, stepsProblem, stepsOn, clearBasic, typeInFieldHTML, readTypeIn, wireTypeIn } from './card-editor.js';
 import { ownTypeIn, setTypeIn, typeFacts, isTypingCard } from './type-in.js';
 import { isPair, canReverse, reverseOf, reverseSwitchHTML, pairPlan, isStructured, unpaired, syncPairChanges, loneIds } from './reverse.js';
 import { cleanFields } from './note-fields.js';
@@ -329,7 +329,7 @@ export async function openCardPanel(card, ctx) {
 
     <div class="field"><span id="flagLbl">Flag</span>${flagButtons(card.flag || 0)}</div>
     <div class="field"><span>Move to deck</span>${moveRow(decks, card.deckId)}</div>
-    <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review this card once first, then you can set its due date.</p>'}</div>
+    <div class="field"><span>Set due date</span>${studied ? dueRow() : '<p class="note" style="margin:0">Review it once first</p>'}</div>
 
     <div id="ceMixed" class="mixed-with" hidden></div>
 
@@ -504,14 +504,17 @@ const noteMaxN = async card => (card.noteId && hasMasks(card)
 // pair: the other card when this one has a reverse card (or is one), else null
 // Does this card's deck (or a deck above it) type the answers? (Review's panel and Play pass no decks: read them.)
 const deckTypes = async (card, ctx) => !!effectiveDeck(ctx.decks || await db.getAll('decks'), card.deckId)?.typeAnswers;
+const editParts = card => basicParts('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' });
+// Does a card have an option set that "More options" hides? Then the fold opens by itself.
+const moreNonDefault = (card, pair) => ownTypeIn(card) !== null || !!card.noteFields?.length
+  || (!isClozeCard(card) && !hasMasks(card) && (!!pair || isStructured(card) || !!card.noteExtra || acceptedOf(card).length > 0));
 const cardFieldsHTML = (card, maxN = 0, pair = null, deckDefault = false) => `
-      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') + noteFieldsEditHTML('ce', card.noteFields) : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
-      ${basicFields('ce', { front: card.front, back: card.back, frontImage: card.frontImage, backImage: card.backImage, hook: card.noteExtra || '' })}
-      ${reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) })}
-      ${noteFieldsEditHTML('ce', card.noteFields)}`}
-      ${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
+      ${isClozeCard(card) ? clozeFields('ce', card.noteText, card.noteExtra || '') + (card.frontSounds?.length || card.backSounds?.length ? `<div class="field"><span>Sounds</span>${soundsHTML(card.frontSounds)}${soundsHTML(card.backSounds)}</div>` : '') : hasMasks(card) ? occlusionFields('ce', card, '', { maxN }) : `
+      ${editParts(card).main.join('')}`}
       <label class="field"><span>Tags</span><input id="ceTags" value="${esc((card.tags || []).join(', '))}" autocomplete="off"></label>
-      ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other accepted answers (separated by commas)</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" autocomplete="off"></label>` : ''}
+      ${moreOptionsHTML('ce', `${isClozeCard(card) || hasMasks(card) ? '' : editParts(card).chips + editParts(card).hook + reverseSwitchHTML('ce', { on: !!pair, blocked: isStructured(card) }) + noteFieldsEditHTML('ce', card.noteFields)}
+      ${isClozeCard(card) ? noteFieldsEditHTML('ce', card.noteFields) : ''}${typeInFieldHTML('ce', { value: ownTypeIn(card), deckDefault })}
+      ${acceptedOf(card).length && !isClozeCard(card) && !hasMasks(card) ? `<label class="field"><span>Other answers</span><input id="ceAccept" value="${esc(acceptedOf(card).join(', '))}" placeholder="a, b" autocomplete="off"></label>` : ''}`, moreNonDefault(card, pair))}
       <div id="ceFormConfirm"></div>
       <p class="err" id="ceErr" role="alert" hidden></p>`;
 // The form's error: read out, linked to the field it is about (aria-invalid + aria-describedby) and the cursor goes there. Without `field`, the
@@ -1019,27 +1022,37 @@ function wireLinkTool(cards, { scope, refresh }) {
 
 // ---------- adding one card ----------
 // prefill (optional): { front, back, onAdded } opens a Basic card with that text; it saves only on Add, then closes and runs onAdded.
-export function openAddCard({ decks, deckId, refresh, prefill = null }) {
+// The deck an Add card or an import went into last (this device; the Add cards screen shares it).
+const LAST_ADD_DECK = 'study-sprint-import-last';
+const lastAddDeck = () => { try { return localStorage.getItem(LAST_ADD_DECK) || ''; } catch { return ''; } };
+// The + in the phone header: the sheet opens on the last-used deck, with every deck to pick from. No decks yet: the Add cards screen.
+export async function openAddFromHeader({ refresh = () => {} } = {}) {
+  const decks = (await db.getDecks()).sort((a, b) => a.created - b.created);
+  if (!decks.length) { navGo('#/import'); return false; }
+  const last = lastAddDeck();
+  openAddCard({ decks, defaultDeck: decks.some(d => d.id === last) ? last : decks[0].id, refresh });
+  return true;
+}
+export function openAddCard({ decks, deckId, defaultDeck = '', refresh, prefill = null }) {
   if (!decks.length) { toast('Make a deck first'); return; }
-  const target = deckId || decks[0].id;
+  const target = deckId || defaultDeck || decks[0].id;
   // A deck with subdecks asks which one (starting with the deck itself).
   const choices = deckChoices(decks, deckId ? subtreeIds(decks, deckId) : null);
   const kind = prefill ? 'basic' : lastKind();
+  const addParts = basicParts('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' });
   openSheet(`
     <h2 id="sheetTitle">${prefill ? 'Add a comparison card' : 'Add a card'}</h2>
     <form id="acForm" class="sheet-in ac-form" style="padding:0">
       ${choices.length < 2 ? '' : `<label class="field"><span>Deck</span><select id="acDeck" class="select">${choices.map(d => `<option value="${esc(d.id)}" ${d.id === target ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>`}
       ${noteKinds('ac', kind)}
       <div class="kind-body">
-        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>
-          ${basicFields('ac', { frontPh: 'e.g. Mitosis', backPh: 'e.g. Division into two identical cells' })}
-          ${reverseSwitchHTML('ac')}
-        </div>
+        <div id="acBasic" ${kind !== 'basic' ? 'hidden' : ''}>${addParts.main.join('')}</div>
         <div id="acCloze" ${kind === 'cloze' ? '' : 'hidden'}>${clozeFields('ac')}</div>
         ${occlusionFields('ac', null, '', { hidden: kind !== 'occlusion' })}
       </div>
-      ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}
       <label class="field"><span>Tags</span><input id="acTags" autocomplete="off" placeholder="e.g. renal cardio"></label>
+      ${moreOptionsHTML('ac', `<div id="acMoreBasic" ${kind !== 'basic' ? 'hidden' : ''}>${addParts.chips}${addParts.hook}${reverseSwitchHTML('ac')}</div>
+      ${typeInFieldHTML('ac', { deckDefault: !!effectiveDeck(decks, target)?.typeAnswers })}`)}
       <p class="err" id="acErr" role="alert" hidden></p>
       <div class="sheet-actions">
         <p class="ac-why" id="acWhy" aria-live="polite"></p>
@@ -1105,6 +1118,7 @@ export function openAddCard({ decks, deckId, refresh, prefill = null }) {
       return;
     } finally { adding = false; }
     if (prefill) { closeSheet(); toast('Comparison card added'); refresh(); prefill.onAdded?.(); return; }
+    try { localStorage.setItem(LAST_ADD_DECK, deck); } catch { /* fine without */ }
     // Stay open for the next card, like Anki.
     $('acErr').hidden = true;
     if (kindNow === 'occlusion') { resetOcclusion('ac'); $('acOccChoose').focus(); }

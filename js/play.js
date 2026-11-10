@@ -236,7 +236,7 @@ export async function renderPlay(el) {
         <p>Right answer: <b>100</b> plus up to <b>100</b> for speed, times your streak (up to <b>×1.5</b>). No time limit: no speed bonus.</p>
         <p>Survival: the timer shrinks 3% a question, down to 2s. Lightning: always timed, 60 seconds in all, a wrong answer costs 3s, and the clock pauses while you read an answer.</p>
         <p>Typing gets ${TYPING_TIME}× the time. Hard: 6 options, −50 per miss, ×1.25 points, no typo forgiveness. Flash: the question hides after the set seconds, ×1.2 points.</p>
-        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play answers as reviews' in Settings to change that."}</p></details>
+        <p>${countsAsReviews() ? 'Answers on due cards count as their review, and so do new cards in a deck with an exam.' : "Practice only: answers here don't change when cards are due or your stats. Turn on 'Count Play and test answers as reviews' in Settings to change that."}</p></details>
       `}`;
 
     if (!cards.length) { wireEmptyStart(el); return; }

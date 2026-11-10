@@ -127,7 +127,7 @@ for (const width of [390, 320]) {
   await p.evaluate(() => sessionStorage.removeItem('study-sprint-import-draft'));
   await go(p, '#/import', '#pasteBox'); await p.fill('#pasteBox', BIO.map(c => `${c.front} - ${c.back}`).join('\n'));
   await p.waitForSelector('#preview:not([hidden])'); await p.selectOption('#deckSel', '__new'); await p.fill('#newName', 'Biology mixed'); await p.click('#saveBtn'); await p.waitForSelector('.crow');
-  await p.click('#deckMore'); await p.click('#autoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
+  await p.click('#brTags'); await p.click('#toolAutoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 });
   await noSideways(p, `${width}px: Suggest tags with results`);
   { const [w, h] = await sizeOf(p, '.tag-sugs .tag-name'); ok(h >= 44, `${width}px: a suggested tag's name box is at least 44px tall (${w}x${h})`); }
   ok(await p.evaluate(() => { const l = document.querySelector('#tagFolder').getBoundingClientRect(), t = document.querySelector('.tag-sugs').getBoundingClientRect(); return t.top - l.bottom >= 8; }), `${width}px: the tag list is not jammed against the folder box`);

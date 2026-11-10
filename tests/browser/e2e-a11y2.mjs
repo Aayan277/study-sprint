@@ -88,7 +88,7 @@ p = await open();
 await seed(p);
 await p.goto(APP + '#/deck/axB'); await p.waitForSelector('#testBtn');
 await p.click('#testBtn'); await p.waitForSelector('#ptForm');
-ok((await attr(p, '#ptCounts', 'aria-labelledby')) === 'ptCountsLbl' && (await refText(p, '#ptCounts', 'aria-describedby'))[0]?.startsWith('Off:') && (await refText(p, '#ptCounts', 'aria-labelledby'))[0] === 'Count answers as reviews', 'Practice test: "Count answers as reviews" has its label and description wired to the switch');
+ok(!(await p.$('#ptCounts')) && await p.getAttribute('#ptForm a.help-link', 'aria-label') === 'About counting test answers as reviews', 'Practice test: no second "Count answers as reviews" switch; a "?" help link with a name explains the shared setting');
 await p.click('#ptStart'); await p.waitForSelector('#tPrompt');
 ok(await p.evaluate(() => ['tPrev', 'tFlag'].every(id => document.getElementById(id).querySelector('kbd.key-hint')?.getAttribute('aria-hidden') === 'true')) && await p.evaluate(() => document.querySelector('#tNext kbd.key-hint')?.getAttribute('aria-hidden') === 'true'), 'Practice test: the key hints on Previous, Flag and Next are aria-hidden');
 ok(await attr(p, '#tPrev', 'aria-keyshortcuts') === 'P' && await attr(p, '#tFlag', 'aria-keyshortcuts') === 'F' && await attr(p, '#tNext', 'aria-keyshortcuts') === 'N', 'Practice test: Previous, Flag and Next list their aria-keyshortcuts');
@@ -201,7 +201,7 @@ p = await open();
   await p.waitForSelector('#preview:not([hidden])');
   await p.selectOption('#deckSel', '__new'); await p.fill('#newName', 'Bio tags');
   await p.click('#saveBtn'); await p.waitForSelector('.crow');
-  await p.click('#deckMore'); await p.click('#autoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 }); }
+  await p.click('#brTags'); await p.click('#toolAutoTag'); await p.waitForSelector('.tag-sugs li', { timeout: 30000 }); }
 { const names = await p.evaluate(() => [...document.querySelectorAll('.tag-sugs li')].map(li => ({ tag: li.querySelector('.tag-name').value, label: li.querySelector('button[aria-controls]').getAttribute('aria-label') })));
   ok(names.length > 1 && names.every(n => n.label === 'Cards tagged ' + n.tag) && new Set(names.map(n => n.label)).size === names.length, 'Suggest tags: every Cards button is named "Cards tagged <tag>" (' + names.length + ' rows)');
   await p.fill('.tag-sugs li:first-child .tag-name', 'renamed-tag');

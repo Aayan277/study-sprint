@@ -224,6 +224,7 @@ main:focus{outline:none}
 .icon-btn[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--surface-2)}
 @media (hover:hover) and (pointer:fine){.icon-btn:hover{color:var(--text);border-color:var(--line);background:var(--surface-2)}}
 .icon-btn svg{width:22px;height:22px}
+#addBtn[hidden]{display:none}
 main{max-width:720px;margin:0 auto;padding:16px 16px calc(92px + env(safe-area-inset-bottom,0px))}
 
 /* Docked glass tab bar with an indicator over the current tab */
@@ -2269,7 +2270,7 @@ dialog.occ-ed::backdrop{background:var(--scrim)}
 }
 @media (min-width:1024px){
   html[data-rail="on"]{--side:72px}
-  #gearBtn{display:none}                              /* Settings lives in the sidebar footer instead */
+  #gearBtn,#addBtn{display:none}                              /* Settings lives in the sidebar footer instead */
   .tabs{display:flex;flex-direction:column;overflow:hidden}
   .tabs-in{flex:none;width:100%}
   .tab[data-tab]{min-width:0}
@@ -2752,8 +2753,8 @@ main[data-route="settings"] :is(.set-row > div:first-child > b,.switch-row > spa
 .step-btn:disabled{opacity:.35;cursor:default}
 @media (hover:hover) and (pointer:fine){.step-btn[data-step="del"]:hover:not(:disabled){color:var(--again)}}
 @media (min-width:600px){.step-row{grid-template-columns:28px minmax(0,1fr) auto}.step-tools{grid-column:auto}}
-/* The Basic form grew (steps switch, its hint, memory hook): the fixed body height grows with it so switching card types does not jump */
-.ac-form .kind-body{min-height:43.5rem}
+/* Basic is short now (the steps switch, hook and the rest sit under More options): the body is only as tall as Front and Back */
+.ac-form .kind-body{min-height:17rem}
 
 /* ---------- 33. Mix-ups: "You mix these up" on the finish screens, the Compare sheet, "Often mixed up with" (js/compare-sheet.js, js/finish-extras.js) ---------- */
 .mixups{margin-top:var(--s-6)}

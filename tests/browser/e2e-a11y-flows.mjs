@@ -225,8 +225,8 @@ ok(await toolStops() === 1, 'Toolbar: still one Tab stop');
 { const s = await snap('#acForm .fmt-tools'); ok(/toolbar "Formatting"/.test(s) && /button "Bold"/.test(s), 'Toolbar: ARIA snapshot'); }
 
 // ---------- 20. Both directions: help text is a description, not part of the name ----------
-{ const s = await snap('#acBasic .rev-switch'); console.log('   ', s.replace(/\n/g, ' | '));
-  ok(/checkbox "Both directions"/.test(s) && /description/i.test(s) || await page.evaluate(() => document.getElementById('acRevOn').getAttribute('aria-describedby') === 'acRevHelp' && document.getElementById('acRevOn').getAttribute('aria-labelledby') === 'acRevLbl'), 'Both directions: name is just the label; help text is the description'); }
+{ if (await page.getAttribute('#acMoreBtn', 'aria-expanded') !== 'true') await page.click('#acMoreBtn'); const s = await snap('#acForm .rev-switch'); console.log('   ', s.replace(/\n/g, ' | '));
+  ok(/checkbox "Both directions"/.test(s) && await page.evaluate(() => !document.getElementById('acRevOn').hasAttribute('aria-describedby') && document.getElementById('acRevOn').getAttribute('aria-labelledby') === 'acRevLbl' && document.querySelector('#acRevRow a.help-link')?.getAttribute('aria-label') === 'About both directions'), 'Both directions: name is just the label; the explanation is a "?" help link'); }
 // Add card: disabled-looking button is reachable and linked to its reason
 ok(await attr('#acForm button[type=submit], button[type=submit][form=acForm]', 'aria-describedby') === 'acWhy' && (await page.textContent('#acWhy')).length > 0, 'Add card: the button is linked to the reason it cannot add yet');
 

@@ -73,7 +73,7 @@ for (const [ui, mode] of [['original', 'light'], ['clinical', 'dark']]) {
   const p = await open(375, 740);
   await p.goto(APP + '#/settings'); await p.waitForSelector('#helpRow');
   const s = await p.textContent('main, #screen');
-  for (const label of ['Target retention', 'New cards per day', 'Count Play answers as reviews', 'Export backup', 'Import backup', 'Your data', 'Sync', 'Single-key shortcuts', 'Glossary', 'Glossary underlines', 'Card text alignment', 'Compact deck list', 'Rating feedback', 'Smooth transitions', 'Exam readiness in Stats', 'Learning steps', 'Relearning steps', 'Maximum interval', 'Spread out due dates', 'Easy days', 'Play timer', 'Leech after', 'Scheduler', 'Check how well it fits you', 'Ignore reviews before', 'Add to my calendar']) ok(s.includes(label), `Settings has "${label}"`);
+  for (const label of ['Target retention', 'New cards per day', 'Count Play and test answers as reviews', 'Export backup', 'Import backup', 'Your data', 'Sync', 'Single-key shortcuts', 'Glossary', 'Glossary underlines', 'Card text alignment', 'Compact deck list', 'Rating feedback', 'Smooth transitions', 'Exam readiness in Stats', 'Learning steps', 'Relearning steps', 'Maximum interval', 'Spread out due dates', 'Easy days', 'Play timer', 'Leech after', 'Scheduler', 'Check how well it fits you', 'Ignore reviews before', 'Add to my calendar']) ok(s.includes(label), `Settings has "${label}"`);
   await p.goto(APP + '#/decks'); await p.waitForSelector('.deck');
   ok(await p.locator('a:has-text("Import")').count() > 0, 'the Decks screen has Import');
   await p.goto(APP + '#/import'); await p.waitForSelector('#claudeBtn');

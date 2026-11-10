@@ -113,9 +113,8 @@ export const playPool = (cards, qtype) => cards.filter(c => playRole(c, qtype) !
 // The "Both directions" switch for the Add card and Edit card forms (inserted after the basic fields). p is the form's
 // id prefix. The note under it shows instead while "Answer in steps" is on.
 export function reverseSwitchHTML(p, { on = false, blocked = false } = {}) {
-  return `<label class="adv-row switch-row rev-switch" id="${p}RevRow" ${blocked ? 'hidden' : ''}><span><b id="${p}RevLbl">Both directions</b>
-        <span class="sr-only" id="${p}RevHelp">Also asks the back and expects the front. Each direction has its own schedule; Review shows one of the two a day.</span></span>
-        <input type="checkbox" class="switch" id="${p}RevOn" aria-labelledby="${p}RevLbl" aria-describedby="${p}RevHelp" ${on ? 'checked' : ''}></label>
+  return `<label class="adv-row switch-row rev-switch" id="${p}RevRow" ${blocked ? 'hidden' : ''}><span><b id="${p}RevLbl">Both directions</b> <a href="#/help/reverse" class="help-link" aria-label="About both directions">?</a></span>
+        <input type="checkbox" class="switch" id="${p}RevOn" aria-labelledby="${p}RevLbl" ${on ? 'checked' : ''}></label>
       <p class="note" id="${p}RevNote" ${blocked ? '' : 'hidden'}>Step-by-step and elements cards can't be reversed.</p>`;
 }
 

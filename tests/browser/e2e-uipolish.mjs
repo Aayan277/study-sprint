@@ -513,7 +513,7 @@ for (const ui of ['original', 'clinical']) {
   const p = await open(PHONE);
   await p.evaluate(async () => { const db = await import('./js/db.js'); const pairs = 'la cocina|kitchen,el dormitorio|bedroom,el baño|bathroom,la sala|living room,el comedor|dining room,el jardín|garden,el garaje|garage,la puerta|door,la ventana|window,el techo|roof,la pared|wall,la escalera|stairs'.split(',');
     await db.addDeckWithCards({ id: 'es', name: 'Spanish', color: '#3E63DD', created: Date.now() + 5 }, pairs.map((x, i) => ({ id: 'es' + i, deckId: 'es', front: x.split('|')[0], back: x.split('|')[1], created: i + 1 }))); });
-  await go(p, '#/deck/es', '.crow'); await p.click('#deckMore'); await p.click('#autoTag');
+  await go(p, '#/deck/es', '.crow'); await p.click('#brTags'); await p.click('#toolAutoTag');
   await p.waitForSelector('#atMsg', { timeout: 30000 });
   ok(!(await p.isVisible('#atAdd')) && (await p.textContent('#atCancel')).trim() === 'Close', 'L7: no "Add tags" button and the other button says Close');
   await p.context().close();
