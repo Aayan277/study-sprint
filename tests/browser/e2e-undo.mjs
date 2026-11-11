@@ -230,5 +230,49 @@ const undoClick = async page => { await page.waitForSelector('#toast:not([hidden
   ok(await A.evaluate(async cid => !!(await (await import('./js/db.js')).get('cards', cid)), id), 'sync: B’s Undo brings the card back on A');
   await A.context().close(); await B.context().close();
 }
+// ---------- the leech coach (Review finish / Play results): Delete and "Split, delete the original" can be undone ----------
+{
+  const page = await open(null);
+  const setup = () => page.evaluate(async () => {
+    const db = await import('./js/db.js'); const now = Date.now();
+    await db.addDeckWithCards({ id: 'lc', name: 'Coach', color: '#46A758', created: now }, [
+      { id: 'LC1', deckId: 'lc', front: 'Primary colours', back: 'red; green; blue', tags: ['lc', 'leech'], suspended: true, created: now },
+      { id: 'LC2', deckId: 'lc', front: 'Ribosome', back: 'Makes proteins', tags: ['lc', 'leech'], suspended: true, created: now }]);
+    for (const id of ['LC1', 'LC2']) {
+      await db.saveReview({ cardId: id, due: now + 86400000, stability: 4, difficulty: 5, reps: 3, lapses: 2, state: 2, lastReview: now }, { cardId: id, timestamp: now - 1000, source: 'review', rating: 1, correct: false, state: 2 });
+      await db.saveReview({ cardId: id, due: now + 86400000 * 2, stability: 5, difficulty: 5, reps: 4, lapses: 2, state: 2, lastReview: now }, { cardId: id, timestamp: now, source: 'review', rating: 3, correct: true, state: 2 });
+    }
+    const m = await import('./js/leech-coach.js');
+    const slot = document.createElement('div'); slot.id = 'coachSlot'; (document.querySelector('main') || document.body).prepend(slot);
+    slot.innerHTML = await m.coachHTML(['LC1', 'LC2']); m.wireCoach(slot);
+  });
+  await setup();
+  const before = await dump(page, ['LC1', 'LC2']);
+  ok(before.logs.length === 4, 'coach set up: 2 cards, 4 review rows');
+  // Delete, then Undo
+  await page.click('.coach-row[data-id=LC2] [data-act=delete]'); await page.waitForSelector('.coach-confirm .confirm');
+  ok(/You can undo this/.test(await page.textContent('.coach-row[data-id=LC2] .coach-confirm')), 'coach Delete says it can be undone, not that it can’t');
+  await page.click('.coach-confirm [data-yes]');
+  await page.waitForFunction(() => !document.querySelector('.coach-row[data-id=LC2]'));
+  ok(await page.evaluate(async () => { const db = await import('./js/db.js'); return !(await db.get('cards', 'LC2')) && !(await db.get('cardStates', 'LC2')) && !(await db.getCardLogs('LC2')).length; }), 'coach Delete removes the card, its state and its log rows');
+  ok(/Card deleted/.test(await page.textContent('#toast')), 'the toast says "Card deleted" with an Undo link');
+  await undoClick(page);
+  await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
+  const mid = await dump(page, ['LC1', 'LC2']);
+  ok(same(before, mid), 'Undo brings the card, its schedule and both log rows back exactly');
+  // Split, delete the original, then Undo
+  await page.click('.coach-row[data-id=LC1] [data-act=split]'); await page.waitForSelector('#splitForm');
+  await page.check('input[name=splitOrig][value=delete]');
+  await page.click('#splitForm button[type=submit], #sheet button[form=splitForm]'); await page.waitForSelector('#cfYes');
+  ok(/You can undo this/.test(await page.textContent('#splitConfirm')), 'the split sheet confirm says it can be undone');
+  await page.click('#cfYes'); await page.waitForFunction(() => !document.querySelector('#sheet[open]'));
+  ok(await page.evaluate(async () => { const db = await import('./js/db.js'); const all = await db.getAll('cards'); return !all.some(c => c.id === 'LC1') && all.filter(c => c.front === 'Primary colours').length === 3; }), 'Split and delete: the original is gone and 3 new cards exist');
+  await undoClick(page);
+  await page.waitForFunction(() => /Card restored/.test(document.querySelector('#toast')?.textContent || ''));
+  const after = await dump(page, ['LC1', 'LC2']);
+  ok(same(before, after), 'Undo restores the original with its schedule and history');
+  ok(await page.evaluate(async () => (await (await import('./js/db.js')).getAll('cards')).filter(c => c.front === 'Primary colours').length === 1), 'Undo removes the split parts: only the original is left');
+  await page.context().close();
+}
 if (errors.length) { console.log('FAIL errors: ' + errors.join(' | ')); process.exitCode = 1; } else ok(true, 'no page errors');
 await browser.close();

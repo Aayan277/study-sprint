@@ -9,7 +9,7 @@
 // Cards that are gone (deleted, synced away) are skipped.
 
 import * as db from './db.js';
-import { openSheet, closeSheet, esc, toast, $, showFieldError, clearFieldError } from './ui.js';
+import { openSheet, closeSheet, esc, toast, $, showFieldError, clearFieldError, undoOpts } from './ui.js';
 import { plainText } from './format.js';
 import { isPair, unpaired } from './reverse.js';
 import { partnerOf, pairsFor } from './confusion.js';
@@ -21,6 +21,17 @@ async function unpairPartner(card) {
   if (!isPair(card)) return;
   const left = (await db.getAll('cards')).filter(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId);
   if (left.length) await db.saveCards(left.map(unpaired));
+}
+
+// Deletes the card (its schedule and history too) and returns what was removed, for an Undo. A paired card's partner is
+// saved as it was before it turned into an ordinary card, so the Undo brings the pair back (as in All cards).
+async function deleteWithSnapshot(card) {
+  const partner = isPair(card) ? (await db.getAll('cards')).filter(c => c.id !== card.id && isPair(c) && c.noteId === card.noteId) : [];
+  const snap = await db.deleteCards([card.id]);
+  snap.cards.push(...partner);
+  await unpairPartner(card);
+  db.holdMedia();
+  return snap;
 }
 
 // ---------- the panel ----------
@@ -79,7 +90,7 @@ export function wireCoach(slot) {
     if (!btn) return;
     const row = btn.closest('.coach-row'), id = row.dataset.id, act = btn.dataset.act;
     const card = await cardOf(id);
-    const done = msg => { if (msg) toast(msg); dropRow(row, slot); };
+    const done = (msg, opts) => { if (msg) toast(msg, opts); dropRow(row, slot); };
     if (!card) return done('That card is gone');
     if (act === 'later') { dropRow(row, slot); return toast('Okay. You’ll find it under Leeches in All cards.', { link: { href: '#/browse/leech', label: 'Open Leeches' }, hold: true }); }      // (stays until you leave the screen: 7 seconds is too short to reach the link with a keyboard or switch; WCAG 2.2.1)
     if (act === 'park') { await db.saveCards([parked(card)]); return done('Kept suspended. It’s under Suspended in All cards.'); }
@@ -94,14 +105,14 @@ export function wireCoach(slot) {
 // The inline "are you sure?": Cancel takes the focus when it shows, and gives it back to the button that asked.
 function askDelete(row, card, done, opener) {
   const box = row.querySelector('.coach-confirm');
-  box.innerHTML = `<div class="confirm"><p>Delete this card and its history? This can’t be undone.</p><div class="sheet-actions">
+  box.innerHTML = `<div class="confirm"><p>Delete this card and its history? You can undo this for a few seconds.</p><div class="sheet-actions">
     <button class="btn ghost small" type="button" data-no>Cancel</button><button class="btn danger solid small" type="button" data-yes>Delete</button></div></div>`;
   const no = box.querySelector('[data-no]'), yes = box.querySelector('[data-yes]');
   no.addEventListener('click', () => { box.innerHTML = ''; opener?.focus(); });
   yes.addEventListener('click', async () => {
     if (yes.disabled) return;
     yes.disabled = true;                                  // a double tap must not delete twice
-    try { await db.deleteCards([card.id]); await unpairPartner(card); done('Card deleted'); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
+    try { const snap = await deleteWithSnapshot(card); done('Card deleted', undoOpts(async () => { await db.restoreSnapshot(snap); toast('Card restored'); })); } catch (err) { console.error(err); yes.disabled = false; toast("Couldn't delete the card. Try again."); }
   });
   no.focus();
   yes.scrollIntoView({ block: 'nearest' });
@@ -190,9 +201,13 @@ function openSplit(card, done) {
       const made = splitCards(fresh, read(), { newId: db.newId });
       const keep = document.querySelector('input[name=splitOrig]:checked')?.value === 'keep';
       await db.saveCards([...made, ...(keep ? [parked(fresh)] : [])]);
-      if (!keep) { await db.deleteCards([fresh.id]); await unpairPartner(fresh); }
+      const snap = keep ? null : await deleteWithSnapshot(fresh);
       closeSheet();
-      done(`Split into ${made.length} cards${keep ? '. The original stays suspended.' : '.'}`);
+      done(`Split into ${made.length} cards${keep ? '. The original stays suspended.' : '.'}`, snap ? undoOpts(async () => {
+        await db.restoreSnapshot(snap);                    // the original comes back with its history; the new cards go
+        await db.deleteCards(made.map(c => c.id));
+        toast('Card restored');
+      }) : undefined);
     } catch (err) {
       console.error(err);
       busy = false; buttons().forEach(b => { b.disabled = false; });
@@ -209,7 +224,7 @@ function openSplit(card, done) {
     }
     clearFieldError(null, $('splitErr'));
     if (document.querySelector('input[name=splitOrig]:checked')?.value !== 'delete') return go();
-    $('splitConfirm').innerHTML = `<div class="confirm"><p>Delete the original card and its history? This can’t be undone.</p><div class="sheet-actions">
+    $('splitConfirm').innerHTML = `<div class="confirm"><p>Delete the original card and its history? You can undo this for a few seconds.</p><div class="sheet-actions">
       <button class="btn ghost small" type="button" id="cfNo">Cancel</button><button class="btn danger solid small" type="button" id="cfYes">Split and delete it</button></div></div>`;
     $('cfNo').addEventListener('click', () => { $('splitConfirm').innerHTML = ''; submitBtn()?.focus(); });
     $('cfYes').addEventListener('click', go);
