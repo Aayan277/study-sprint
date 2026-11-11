@@ -76,7 +76,7 @@ await nothingDue(p); await reload(p);
 ok((await p.textContent('.th-big')).trim() === 'Nothing due today', 'nothing due: "Nothing due today"');
 rt = await ringText(p);
 ok(await p.locator('.ring-check').count() === 1 && await p.$eval('.today-hero .ring', e => e.classList.contains('is-full')) && !rt.includes('/'), `nothing due: the ring is full with a check, not 0/0 (${rt})`);
-ok(!(await p.textContent('#screen')).includes('0/0') && /next card is due in/.test(await p.textContent('.th-done')), 'nothing due: no 0/0 and the next due time is shown');
+ok(!(await p.textContent('#screen')).includes('0/0') && /Next due in/.test(await p.textContent('.th-done')), 'nothing due: no 0/0 and the next due time is shown');
 await noHScroll(p, 'today nothing due 375'); await p.screenshot({ path: SP + '/v49-today-nothing-375-dark.png' });
 
 // Settings: no Daily goal stepper, a Play switch (off), synced
@@ -142,7 +142,7 @@ await p.click('#endBtn'); await p.waitForSelector('.finish-next');
 await nothingDue(p); await go(p, '#/today', '.th-done');
 ok((await playLinks()).length === 0, 'Today (All done): no Play link');
 const done = (await p.textContent('.th-done')).replace(/\s+/g, ' ');
-ok((await p.textContent('.today-hero .th-big')).trim() === 'Nothing due today' && /next card is due in/.test(done) && (await p.textContent('.th-done #customLink')).trim() === 'Extra study', 'Nothing due: "Nothing due today", the next due time and an Extra study button: ' + done.slice(0, 90));
+ok((await p.textContent('.today-hero .th-big')).trim() === 'Nothing due today' && /Next due in/.test(done) && (await p.textContent('.th-done #customLink')).trim() === 'Extra study', 'Nothing due: "Nothing due today", the next due time and an Extra study button: ' + done.slice(0, 90));
 await p.click('#customLink'); await p.waitForSelector('#sheet .cs-opt');
 ok((await p.textContent('#sheet h2')).trim() === 'Custom study', 'Extra study opens the Custom study sheet');
 await p.keyboard.press('Escape'); await p.waitForTimeout(300);

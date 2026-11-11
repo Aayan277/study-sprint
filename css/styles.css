@@ -3361,3 +3361,8 @@ main h2[tabindex="-1"]{outline:none}
 :root .paste-only #deckSection,
 :root .paste-only #pane-paste .pane-actions{display:none}
 :root .paste-only-more{display:block;margin:10px 0 0;min-height:44px;color:var(--accent-text)}
+
+/* 4.66 WP-C */
+.help-search{margin:0 0 14px}
+.help-search .deck-search{flex:none;width:100%;max-width:520px}
+#helpNone{margin:0 0 14px}

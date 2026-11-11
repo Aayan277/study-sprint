@@ -67,7 +67,7 @@ const pageBio = await num(p, '.deck-summary .due b');
 ok([todayBio, sideBio, tileBio, pageBio].every(x => x === 9), `Biology is 9 due on Today, the sidebar, the Decks tile and its page: ${todayBio}/${sideBio}/${tileBio}/${pageBio}`);
 const summary = (await p.textContent('.deck-summary')).replace(/\s+/g, ' ');
 ok(/9 due today/.test(summary) && /6 new today/.test(summary) && /15 cards/.test(summary), 'the deck page reads "9 due today · 6 new today · 15 cards": ' + summary.slice(0, 80));
-ok(!(await p.isVisible('.held-note')), 'nothing is held back, so no "wait until tomorrow" line');
+ok(!(await p.isVisible('.held-note')), 'nothing is held back, so no "held to tomorrow" line');
 const kidDue = await p.$$eval('.subdecks-page .subdeck', rows => rows.map(r => [r.querySelector('.sd-name').textContent, +r.querySelector('.due b').textContent, +r.querySelectorAll('.sd-counts b')[1].textContent]));
 ok(JSON.stringify(kidDue) === JSON.stringify([['Unit 1', 4, 3], ['Unit 2', 2, 0], ['Unit 3', 0, 1]]), 'subdeck rows: ' + JSON.stringify(kidDue));
 ok(kidDue.reduce((n, r) => n + r[1], 0) + 3 === pageBio, 'subdecks + the 3 of its own = the parent');
@@ -93,12 +93,12 @@ ok(JSON.stringify(t2) === '[5,4,9]', 'with a limit of 5 and 4 the numbers are 5,
 await go(p, '#/deck/Chem', '.deck-summary');
 ok(await num(p, '.deck-summary .due b') === 4, 'Chemistry page: 4 due');
 const held = (await p.textContent('.held-note')).replace(/\s+/g, ' ');
-ok(/2 wait until tomorrow/.test(held) && /daily limit/.test(held), 'it says what waits: ' + held);
+ok(/2 held to tomorrow/.test(held) && /daily limit/.test(held), 'it says what waits: ' + held);
 await go(p, '#/deck/Bio', '.deck-summary');
 ok(await num(p, '.deck-summary .due b') === 5, 'Biology page: 5 due');
-ok(/4 wait until tomorrow/.test(await p.textContent('.held-note')), 'Biology: 4 wait until tomorrow');
+ok(/4 held to tomorrow/.test(await p.textContent('.held-note')), 'Biology: 4 held to tomorrow');
 const shared = (await p.textContent('.subdecks-page .note')).replace(/\s+/g, ' ');
-ok(/Daily limits are shared/.test(shared) && /Biology's 5 due/.test(shared), 'the shared-limit note: ' + shared);
+ok(/Shared limit: 5 due a day/.test(shared), 'the shared-limit note: ' + shared);
 await go(p, '#/decks', '.deck');
 ok(await num(p, '.deck:has-text("Biology") > .deck-open .due b') === 5, 'the Decks tile says 5 too');
 await setDeck(p, 'Bio', { reviewPerDay: null }); await setDeck(p, 'Chem', { reviewPerDay: null });
@@ -113,7 +113,7 @@ await p.evaluate(async () => {
 await go(p, '#/deck/U2', '.deck-summary');
 ok(await num(p, '.deck-summary .due b') === 3, 'Unit 2: its 2 cards and one cloze card are due');
 const held2 = (await p.textContent('.held-note')).replace(/\s+/g, ' ');
-ok(/2 wait until tomorrow/.test(held2) && /one card per note a day/.test(held2), 'the other two cloze cards wait: ' + held2);
+ok(/2 held to tomorrow/.test(held2) && /one card per note a day/.test(held2), 'the other two cloze cards wait: ' + held2);
 
 // ======================= A4: the deck tree column =======================
 await go(p, '#/deck/Bio', '.crow');

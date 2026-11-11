@@ -201,7 +201,7 @@ export function todayRing(data, deckIds, counts, now = Date.now()) {
 export function nextDueText(data, cards) {
   const ids = new Set(cards.map(x => x.id));
   const next = Math.min(...[...data.statesById.values()].filter(s => ids.has(s.cardId) && s.state !== NEW).map(s => Math.min(s.due, data.exam.caps.get(s.cardId) ?? Infinity)));
-  return Number.isFinite(next) ? `The next card is due in <b>${formatInterval(Math.max(0, next - Date.now()))}</b>.` : '';
+  return Number.isFinite(next) ? `Next due in <b>${formatInterval(Math.max(0, next - Date.now()))}</b>` : '';
 }
 
 // ---------- Custom study sessions ----------

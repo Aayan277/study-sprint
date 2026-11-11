@@ -131,7 +131,7 @@ await p.evaluate(async () => {
 await go(p, '#/today', '#streakBtn'); await go(p, '#/stats', '.pgrid'); await p.waitForSelector('.cal-grid i.rest');
 ok(await p.locator('.cal-grid i.rest').count() === 1 && /day off/.test(await p.getAttribute('.cal-grid i.rest', 'title')), 'a past day off is a dotted cell titled "day off": ' + await p.getAttribute('.cal-grid i.rest', 'title'));
 ok((await norm(p, '.cal-card')).includes('Streak freeze') && (await norm(p, '.cal-card')).includes('Day off'), 'the calendar legend lists Streak freeze and Day off');
-ok(/best streak 5 days/.test(await norm(p, '.cal-card .mhead')), 'the best streak counts the covered day: ' + await norm(p, '.cal-card .mhead'));
+ok(/best 5\b/.test(await norm(p, '.cal-card .mhead')), 'the best streak counts the covered day: ' + await norm(p, '.cal-card .mhead'));
 await noHScroll(p, 'Stats at 375');
 await p.evaluate(() => document.querySelector('.pgrid').scrollIntoView());
 await p.screenshot({ path: SP + '/streak-stats-375-dark.png' });

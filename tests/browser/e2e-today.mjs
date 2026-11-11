@@ -104,7 +104,7 @@ await page.screenshot({ path: SP + '/t-exam-new.png', fullPage: true }); await n
 await run(async () => { await (await import('./js/db.js')).setSetting('newPerDay', 10); });
 await page.reload(); await page.waitForSelector('[data-newplan=Nx]');
 let nx = await page.locator('[data-newplan=Nx]').textContent();
-ok(/Raise New cards per day in Settings to 15/.test(nx) && await page.locator('[data-setnew=Nx]').count() === 0 && await page.locator('.exam-row:has([data-newplan=Nx]) .on-track').count() === 0, 'the overall limit holds it back: a note, no button: ' + nx.replace(/\s+/g, ' '));
+ok(/Settings limit too low \(needs 15\)/.test(nx) && await page.locator('[data-setnew=Nx]').count() === 0 && await page.locator('.exam-row:has([data-newplan=Nx]) .on-track').count() === 0, 'the overall limit holds it back: a note, no button: ' + nx.replace(/\s+/g, ' '));
 await run(async () => {
   const db = await import('./js/db.js'); const now = Date.now(), D = 86400000;
   await db.setSetting('newPerDay', 20);
@@ -117,8 +117,8 @@ await run(async () => {
   await db.addDeckWithCards({ id: 'Cq', name: 'Under', parentId: 'Pq', color: '#46A758', created: now + 9, newPerDay: 4 }, cards('Cq', 'cq'));
 });
 await page.reload(); await page.waitForSelector('[data-newplan=Cc]');
-ok(/Parent limits it to 6/.test(await page.locator('[data-newplan=Cc]').textContent()) && await page.locator('[data-setnew=Cc]').count() === 0, 'a parent deck\'s limit holds it back: a note, no button');
-ok(/subdeck's own limit/.test(await page.locator('[data-newplan=Pq]').textContent()) && await page.locator('[data-setnew=Pq]').count() === 0, 'a subdeck\'s limit holds it back: a note, no button');
+ok(/Parent's limit: 6 a day/.test(await page.locator('[data-newplan=Cc]').textContent()) && await page.locator('[data-setnew=Cc]').count() === 0, 'a parent deck\'s limit holds it back: a note, no button');
+ok(/subdeck's limit holds it back/.test(await page.locator('[data-newplan=Pq]').textContent()) && await page.locator('[data-setnew=Pq]').count() === 0, 'a subdeck\'s limit holds it back: a note, no button');
 await run(async () => { const db = await import('./js/db.js'); for (const id of ['Cc', 'Pp', 'Cq', 'Pq']) await db.deleteDeck(id); });
 await run(async () => { await (await import('./js/db.js')).deleteDeck('Nx'); });
 await page.reload(); await page.waitForSelector('.tdeck');
@@ -129,7 +129,7 @@ await run(async () => {
   await db.putMany('cardStates', st.map(s => ({ ...s, due: Date.now() + 3 * 86400000 }))); await db.setSetting('newPerDay', 0);
 });
 await page.reload(); await page.waitForSelector('.th-done');
-ok(/^(All done for today|Nothing due today)$/.test((await page.textContent('.th-big')).trim()) && (await page.textContent('.th-done')).includes('next card is due in'), 'done state shows when the next card is due');
+ok(/^(All done for today|Nothing due today)$/.test((await page.textContent('.th-big')).trim()) && (await page.textContent('.th-done')).includes('Next due in'), 'done state shows when the next card is due');
 // v4.9: the game is only on the Play page, so the done state no longer suggests it; a quiet Custom study link instead
 ok(await page.locator('.th-done a[href="#/play"], .th-done [href*="play"]').count() === 0 && await page.locator('#startBtn').count() === 0, 'done state has no Play link');
 ok((await page.textContent('.th-done #customLink')).trim() === 'Extra study', 'done state has a calm Extra study button (v4.10, was a Custom study link)');
