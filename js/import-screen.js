@@ -300,11 +300,11 @@ function wirePaste() {
   });
   // Pasting something new (the AI's answer, say) ends "read as pages".
   // (Only when the paste replaces most of the box: a bit pasted into the text keeps it read as pages.)
-  $('pasteBox').addEventListener('paste', () => {
+  $('pasteBox').addEventListener('paste', e => {
     const b = $('pasteBox');
     if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) {
-      S.blocks = false;
-      if (S.aiPending) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
+      S.blocks = false; S.aiAnswer = false;
+      if (S.aiPending && !isOurPrompt(e.clipboardData?.getData('text') || '')) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
       saveDraft(b.value);
     }
   });
@@ -398,7 +398,7 @@ async function explainJson(file) {
 const docWord = (n, what) => (what === 'PDF' ? plural(n, 'page') : plural(n, 'slide'));
 
 function hideDoc() {
-  S.doc = null; S.aiMade = false; S.blocks = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
+  S.doc = null; S.aiAnswer = false; S.aiMade = false; S.blocks = false; $('aiNote').hidden = true; $('proseNote').hidden = true;
   $('docBox').hidden = true; $('aiView').hidden = true; $('docStatus').hidden = true;
 }
 
@@ -422,7 +422,7 @@ async function readDoc(file) {
     if (stale()) return;
     S.doc = { pages, name: file.name, what };
     S.withNotes = true; $('docNotes').checked = true;
-    S.aiMade = false; S.blocks = false; $('aiNote').hidden = true;
+    S.aiMade = false; S.aiAnswer = false; S.blocks = false; $('aiNote').hidden = true;
     status.hidden = true;
     $('fileName').textContent = file.name;
     $('docNotesRow').hidden = !pages.some(p => p.notes);
@@ -455,7 +455,7 @@ function wireDoc() {
   // The text with its headings and bold terms marked goes in the paste box, and the suggestions are found from it.
   $('docSuggest').addEventListener('click', () => {
     if (!S.doc || !hasText(S.doc.pages)) return;
-    S.aiMade = false; S.blocks = false; S.noCloze = false;
+    S.aiMade = false; S.aiAnswer = false; S.blocks = false; S.noCloze = false;
     $('aiNote').hidden = true; $('aiView').hidden = true;
     $('pasteBox').value = pagesToMarkdown(S.doc.pages, S.withNotes);
     $('tab-paste').click();
@@ -464,7 +464,7 @@ function wireDoc() {
   $('docRaw').addEventListener('click', () => {
     if (!S.doc || !hasText(S.doc.pages)) return;
     setSuggest(false);
-    S.aiMade = false; S.blocks = true; S.noCloze = false;
+    S.aiMade = false; S.aiAnswer = false; S.blocks = true; S.noCloze = false;
     $('aiNote').hidden = true;
     $('pasteBox').value = pagesToText(S.doc.pages, S.withNotes);
     $('tab-paste').click();
@@ -1101,7 +1101,7 @@ function setSuggest(on) {
 function startSuggest() {
   const text = $('pasteBox').value;
   if (!text.trim()) { toast('Paste some text first'); return; }
-  S.aiMade = false; S.aiPending = false; S.blocks = false; S.noCloze = false;
+  S.aiMade = false; S.aiAnswer = false; S.aiPending = false; S.blocks = false; S.noCloze = false;
   $('aiNote').hidden = true; $('claudeNote').hidden = true; $('proseNote').hidden = true; $('aiView').hidden = true;
   setSuggest(true);
   S.pasted = text;

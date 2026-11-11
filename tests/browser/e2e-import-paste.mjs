@@ -76,6 +76,10 @@ await p.evaluate(() => { navigator.clipboard.writeText('Turn the study material 
 await p.click('#pasteAnsBtn');
 await p.waitForTimeout(150);
 ok((await p.inputValue('#pasteBox')) === 'my notes about cells', 'text that starts with the prompt\'s opening line is not taken as an answer either');
+// our own prompt pasted by hand is not tagged ai-made
+await p.fill('#pasteBox', 'my notes about cells'); await p.click('#claudeBtn');
+await p.evaluate(async () => { const b = document.getElementById('pasteBox'), dt = new DataTransfer(); dt.setData('text', await navigator.clipboard.readText()); b.select(); b.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt })); });
+ok(await p.isHidden('#aiNote'), 'our own prompt pasted by hand is not tagged ai-made');
 await p.context().close();
 
 // pasted by hand after the clipboard could not be read: the cards still get the ai-made tag
@@ -101,6 +105,12 @@ await stubClip(p, 'ok', 'Gamma\tThree');
 await p.waitForSelector('#aiView:not([hidden])'); await p.click('#aiBack');
 await p.waitForFunction(() => document.getElementById('pasteBox').value.includes('Gamma'));
 ok((await p.inputValue('#pasteBox')) === 'Alpha\tOne\nBeta\tTwo\nGamma\tThree', 'part 2\'s answer is added after part 1\'s: ' + JSON.stringify(await p.inputValue('#pasteBox')));
+// new notes after an answer: the next answer replaces them, it is not added to them
+await p.fill('#pasteBox', Array.from({ length: 40 }, (_, i) => 'Fresh ' + para(i)).join('\n\n'));
+await p.click('#suggestBtn'); await p.waitForSelector('#sugAi'); await p.click('#sugAi'); await p.waitForSelector('#aiView:not([hidden])');
+await stubClip(p, 'ok', 'Delta\tFour');
+await p.click('#aiBack'); await p.waitForFunction(() => document.getElementById('pasteBox').value.startsWith('Delta'));
+ok((await p.inputValue('#pasteBox')) === 'Delta\tFour', 'new notes after an answer: the next answer replaces them: ' + JSON.stringify((await p.inputValue('#pasteBox')).slice(0, 40)));
 await p.context().close();
 
 // Clear while a read is still waiting: the late answer does not fill the box
