@@ -70,17 +70,17 @@ ok((await text(p, '.stamp')) === 'D' && (await p.locator('.stamp.quiet').count()
 ok((await text(p, '.res-grade')).startsWith('Keep practicing'), 'a D that is not a best says what it is');
 
 // A D that is a first best: "First score", "Grade D", no "Keep practicing"
-await p.click('#menuBtn'); await p.waitForSelector('#startBtn');
+await p.click('#playMoreBtn'); await p.click('#menuBtn'); await p.waitForSelector('#startBtn');
 await playRound(p, 1);
 ok((await text(p, '.stamp')) === 'D', 'one right in ten is a D');
-ok((await text(p, '.newbest')) === 'First score for this setup', 'the first score for a setup says so');
+ok((await text(p, '.newbest')) === 'First score', 'the first score for a setup says so');
 ok((await text(p, '.res-grade')).startsWith('Grade D') && !(await p.content()).includes('Keep practicing'), 'a D best shows "Grade D", no "Keep practicing"');
 await p.screenshot({ path: SP + '/pr-results-375-dark-D.png', fullPage: true });
 
 // Beat it: "New best"
 await p.evaluate(async () => { const db = await import('./js/db.js'); const s = await db.getSettings(); const b = {}; for (const k in s.playBest) b[k] = 1; await db.setSetting('playBest', b); });
 await p.click('#againBtn'); await p.waitForSelector('#pCard'); await answerAll(p, 10);
-ok((await text(p, '.newbest')) === 'New best for this setup', 'beating an earlier score says "New best"');
+ok((await text(p, '.newbest')) === 'New best', 'beating an earlier score says "New best"');
 ok(/^[SAB]$/.test(await text(p, '.stamp')) && !(await p.locator('.stamp.quiet').count()), 'an S, A or B gets the full stamp');
 await p.screenshot({ path: SP + '/pr-results-375-dark-best.png', fullPage: true });
 

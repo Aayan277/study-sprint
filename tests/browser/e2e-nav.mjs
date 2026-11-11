@@ -171,7 +171,7 @@ for (const style of ['original', 'clinical']) {
   await back(p);       // a second Back while it is showing ends the round, like Esc again (a way out where there is no Esc key)
   await p.waitForSelector('.res-head'); await p.waitForTimeout(400);
   ok(/Accuracy/i.test(await p.textContent('#screen')), tag + 'play: a second Back while asking ends the round, with the score kept (same as Quit)');
-  await p.click('#menuBtn'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
+  await p.click('#playMoreBtn'); await p.click('#menuBtn'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(400);
   ok(await hash(p) === '#/play', tag + 'play: back on Play setup');
   await back(p);
   ok(left(p), tag + 'play: after quitting, Back leaves the app (Play was a tab)');

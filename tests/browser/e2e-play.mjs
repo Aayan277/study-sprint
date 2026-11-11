@@ -18,7 +18,7 @@ const pick = (o, v) => page.evaluate(([v]) => {
   return opts.findIndex(b => b.querySelector('.lbl').textContent === v);
 }, [v]);
 // Leave a round: Quit asks first when there are answers to keep (End round -> the results -> the menu).
-const quit = async () => { await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) { await page.click('#endYes'); await page.waitForSelector('#menuBtn'); await page.click('#menuBtn'); } await page.waitForSelector('#startBtn'); };
+const quit = async () => { await page.click('#quitBtn'); if (await page.isVisible('#endAsk')) { await page.click('#endYes'); await page.waitForSelector('#playMoreBtn'); await page.click('#playMoreBtn'); await page.click('#menuBtn'); } await page.waitForSelector('#startBtn'); };
 const setup = async (sel) => { for (const s of sel) await page.$eval(s, el => el.click()); };
 const waitQuestion = () => page.waitForFunction(() => document.querySelector('#feedback')?.innerHTML === '' && document.querySelector('#pPrompt')?.textContent);
 
@@ -46,7 +46,7 @@ ok(!(await focusOn()), 'focus mode is off on the Play result screen');
 const res = { stamp: await page.textContent('.stamp'), score: await page.textContent('.res-score'), acc: await page.textContent('.stats4 .v') };
 console.log('   classic result:', JSON.stringify(res));
 ok(res.acc === '100%' && /^[SA]$/.test(res.stamp.trim()), 'all right gives 100% and an S/A stamp');
-ok((await page.textContent('.newbest')).trim() === 'First score for this setup', 'the first score for a setup says so, not "New best"');
+ok((await page.textContent('.newbest')).trim() === 'First score', 'the first score for a setup says so, not "New best"');
 ok(!(await page.textContent('.res-grade')).includes('Keep practicing') && /^Grade [SAB]/.test((await page.textContent('.res-grade')).trim()), 'a best shows "Grade X" in the head');
 await page.screenshot({ path: SP + '/p-results.png', fullPage: true }); await noHScroll('results');
 
@@ -67,10 +67,10 @@ ok(await page.isHidden('#endAsk') && await page.isVisible('#pCard'), 'Keep playi
 await page.keyboard.press('Escape');
 ok(await page.isVisible('#endAsk'), 'Esc asks too');
 await page.keyboard.press('Escape');
-await page.waitForSelector('#menuBtn');
+await page.waitForSelector('#playMoreBtn');
 ok(await page.isVisible('.res-grade'), 'Esc again ends the round and shows its results');
-await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
-ok((await page.textContent('.mode-best')).includes('Best for this setup'), 'best score shown on setup');
+await page.click('#playMoreBtn'); await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
+ok((await page.textContent('.mode-best')).includes('Best'), 'best score shown on setup');
 
 // Survival, back -> front, Hard: 6 options, three wrong answers end it
 await setup(['input[name=fmt][value=survival]', 'input[name=qtype][value=back]', 'input[name=diff][value=hard]']);
@@ -115,8 +115,8 @@ ok((await page.textContent('.fb-mark')).includes('Out of time'), 'timer runs out
 await page.focus('#quitBtn'); await page.keyboard.press('Enter');
 await page.waitForSelector('#endAsk', { state: 'visible', timeout: 3000 });
 await page.keyboard.press('Enter');             // (focus is on "End round")
-ok(await page.waitForSelector('#menuBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button asks, and Enter ends the round with its results');
-await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
+ok(await page.waitForSelector('#playMoreBtn', { timeout: 3000 }).then(() => true, () => false), 'Enter on the focused Quit button asks, and Enter ends the round with its results');
+await page.click('#playMoreBtn'); await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 ok((await page.evaluate(async () => (await (await import('./js/db.js')).getSettings()).timer)) === 3, 'timer setting saved');
 // Back (a swipe or the Back key) asks like Quit; Back again while it is showing ends the round, like Esc again (a way out with no Esc key)
 await page.click('#startBtn'); await page.waitForSelector('#pCard');
@@ -124,8 +124,8 @@ await page.keyboard.press('1'); await page.waitForSelector('.fb');
 await page.evaluate(() => history.back());
 await page.waitForSelector('#endAsk', { state: 'visible', timeout: 3000 });
 await page.evaluate(() => history.back());
-ok(await page.waitForSelector('#menuBtn', { timeout: 3000 }).then(() => true, () => false), 'Back again while "End this round?" is showing ends the round and shows its results');
-await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
+ok(await page.waitForSelector('#playMoreBtn', { timeout: 3000 }).then(() => true, () => false), 'Back again while "End this round?" is showing ends the round and shows its results');
+await page.click('#playMoreBtn'); await page.click('#menuBtn'); await page.waitForSelector('#startBtn');
 
 // Lightning: wrong answer costs 3s
 await setup(['input[name=fmt][value=lightning]']);

@@ -510,10 +510,10 @@ async function drawResults({ fresh = false } = {}) {
   const flagged = state.flags.filter(Boolean).length;
   const missed = missedIds(qs, score.per);
   const limitMs = run.cfg.limit * 60000;
-  const timeLine = state.auto ? 'Time ran out, so the test was submitted.' : limitMs ? `${clock(state.elapsed)} of ${clock(limitMs)} used.` : '';
-  const trend = state.prev == null ? '' : score.pct === state.prev ? `Same as last time (${state.prev}%).` : `${score.pct > state.prev ? 'Up' : 'Down'} ${Math.abs(score.pct - state.prev)} points from last time (${state.prev}%).`;
+  const timeLine = state.auto ? "Time's up: submitted" : limitMs ? `${clock(state.elapsed)} of ${clock(limitMs)} used.` : '';
+  const trend = state.prev == null ? '' : score.pct === state.prev ? `Same as last (${state.prev}%)` : `${score.pct > state.prev ? '+' : '-'}${Math.abs(score.pct - state.prev)} since last (${state.prev}%)`;
   const root = deckPath(decks, run.deckId);
-  const rel = id => { const p = deckPath(decks, id); return id === run.deckId ? `${decks.find(d => d.id === id)?.name || 'Deleted deck'} (cards in this deck)` : !p ? 'Deleted deck' : root && p.startsWith(root + ' › ') ? p.slice(root.length + 3) : p; };
+  const rel = id => { const p = deckPath(decks, id); return id === run.deckId ? `${decks.find(d => d.id === id)?.name || 'Deleted deck'} (this deck)` : !p ? 'Deleted deck' : root && p.startsWith(root + ' › ') ? p.slice(root.length + 3) : p; };
   const bars = (list, label) => `<ul class="t-bars">${list.map(g => `<li class="t-bar-row"><span class="t-bar-l">${esc(label(g.key))}</span>
       <span class="t-bar-t" aria-hidden="true"><i class="${g.pct >= 80 ? 'hi' : g.pct >= 50 ? 'mid' : 'lo'}" style="width:${g.pct}%"></i></span>
       <span class="t-bar-v mono">${g.pct}% <small>${g.correct}/${g.total}</small></span></li>`).join('')}</ul>`;
@@ -536,10 +536,14 @@ async function drawResults({ fresh = false } = {}) {
     </div>
     <div class="res-actions">
       ${missed.length ? `<button class="btn primary" id="tDrill" type="button">Drill missed (${missed.length})</button>` : ''}
-      <button class="btn ${missed.length ? 'ghost' : 'primary'}" id="tRetake" type="button">Retake these questions</button>
+      ${missed.length ? '' : '<button class="btn primary" id="tRetake" type="button">Retake these questions</button>'}
+      <button class="btn ghost" id="tDone2" type="button">Done</button>
+    </div>
+    <button class="fold-toggle res-more-toggle" type="button" id="tMoreBtn" aria-expanded="false" aria-controls="tMore"><span>More</span>${icon('chevron')}</button>
+    <div id="tMore" class="more-opts res-more" hidden>
+      ${missed.length ? '<button class="btn ghost" id="tRetake" type="button">Retake these questions</button>' : ''}
       <button class="btn ghost" id="tNewSet" type="button">New set of questions</button>
       <button class="btn ghost" id="tSetup" type="button">Change setup</button>
-      <button class="btn ghost" id="tDone2" type="button">Done</button>
     </div>
     <div id="tSched" aria-live="polite">${run.cfg.counts ? '<p class="sched-note">Saving your answers to the schedule…</p>' : ''}</div>
     ${tags.length ? `<section class="t-sec"><h2>Score by tag</h2>${bars(tags.slice(0, SHOWN_TAGS), tagLabel)}
@@ -570,6 +574,12 @@ async function drawResults({ fresh = false } = {}) {
   $('tNewSet').addEventListener('click', async () => { $('tNewSet').disabled = true; if (!(await (await import('./mock-exam-sheet.js')).beginTest(run.deckId, run.cfg, { stay: true }))) $('tNewSet').disabled = false; else renderTest(el, run.deckId); });
   // (Start builds the test and draws it here: the address does not change, so there is no route change to do it.)
   $('tSetup').addEventListener('click', async () => (await import('./mock-exam-sheet.js')).openTestSheet(run.deckId, { onStart: id => renderTest(el, id) }));
+  $('tMoreBtn').addEventListener('click', e => {
+    e.stopPropagation();                  // (the Add card sheet's "More options" handler listens on the document for ids ending in MoreBtn)
+    const open = e.currentTarget.getAttribute('aria-expanded') !== 'true';
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    $('tMore').hidden = !open;
+  });
   $('tDone2').addEventListener('click', () => { const id = run.deckId; stopTest(); clearSaved(); navReplace(`#/deck/${encodeURIComponent(id)}`); });
   if (fresh) {
     $('tResTitle').focus({ preventScroll: true });

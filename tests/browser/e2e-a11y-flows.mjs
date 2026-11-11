@@ -12,7 +12,7 @@ const URL = 'http://localhost:8123/';
 const active = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.tagName.toLowerCase()) : ''; });
 const attr = (sel, a) => page.getAttribute(sel, a);
 // After End round: the results screen -> its menu button -> Play's setup again.
-const leaveResults = async () => { await page.waitForSelector('#menuBtn, #startBtn'); if (await page.locator('#menuBtn').count()) await page.click('#menuBtn'); await page.waitForSelector('#startBtn'); };
+const leaveResults = async () => { await page.waitForSelector('#playMoreBtn, #startBtn'); if (await page.locator('#playMoreBtn').count()) { await page.click('#playMoreBtn'); await page.click('#menuBtn'); } await page.waitForSelector('#startBtn'); };
 const snap = sel => page.locator(sel).first().ariaSnapshot();
 
 await page.goto(URL + '#/decks'); await page.waitForSelector('.deck');
