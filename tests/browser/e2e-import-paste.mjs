@@ -76,10 +76,18 @@ await p.evaluate(() => { navigator.clipboard.writeText('Turn the study material 
 await p.click('#pasteAnsBtn');
 await p.waitForTimeout(150);
 ok((await p.inputValue('#pasteBox')) === 'my notes about cells', 'text that starts with the prompt\'s opening line is not taken as an answer either');
-// our own prompt pasted by hand is not tagged ai-made
-await p.fill('#pasteBox', 'my notes about cells'); await p.click('#claudeBtn');
-await p.evaluate(async () => { const b = document.getElementById('pasteBox'), dt = new DataTransfer(); dt.setData('text', await navigator.clipboard.readText()); b.select(); b.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt })); });
+// our own prompt pasted by hand is not tagged ai-made; other text is
+await stubEcho(p);
+const handPaste = async () => p.evaluate(async () => { const b = document.getElementById('pasteBox'), dt = new DataTransfer(); dt.setData('text', window.__pasteText ?? await navigator.clipboard.readText()); b.select(); b.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt })); });
+await p.fill('#pasteBox', Array.from({ length: 40 }, (_, i) => `Paragraph ${i}. ` + 'The cell cycle has phases and checkpoints that decide whether a cell divides. '.repeat(14)).join('\n\n'));
+await p.click('#suggestBtn'); await p.waitForSelector('#sugAi'); await p.click('#sugAi'); await p.waitForSelector('#aiView:not([hidden])');
+await p.click('#aiParts [data-part]');
+await p.waitForFunction(() => /Copied/.test(document.getElementById('aiCur').textContent));
+await handPaste();
 ok(await p.isHidden('#aiNote'), 'our own prompt pasted by hand is not tagged ai-made');
+await p.evaluate(() => { window.__pasteText = 'Alpha\tOne'; });
+await handPaste();
+ok(await p.isVisible('#aiNote'), 'other text pasted by hand is tagged ai-made');
 await p.context().close();
 
 // pasted by hand after the clipboard could not be read: the cards still get the ai-made tag

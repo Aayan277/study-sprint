@@ -304,7 +304,7 @@ function wirePaste() {
     const b = $('pasteBox');
     if (b.selectionEnd - b.selectionStart >= b.value.length * 0.8) {
       S.blocks = false; S.aiAnswer = false;
-      if (S.aiPending && !isOurPrompt(e.clipboardData?.getData('text') || '')) { S.aiMade = true; S.aiPending = false; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
+      if (S.aiPending && !isOurPrompt(e.clipboardData?.getData('text') || '')) { S.aiMade = true; S.aiPending = false; S.aiAnswer = aiParts.length >= 2 && !$('aiView').hidden; $('aiNote').hidden = false; }          // the AI's answer replaced the notes
       saveDraft(b.value);
     }
   });
@@ -471,7 +471,7 @@ function wireDoc() {
     showText($('pasteBox').value);
     $('pasteBox').scrollIntoView({ block: 'nearest' });
   });
-  $('docAi').addEventListener('click', () => { S.part = 0; showAiView(S.doc.pages, true); $('aiView').scrollIntoView({ block: 'nearest' }); });
+  $('docAi').addEventListener('click', () => { S.part = 0; S.aiAnswer = false; showAiView(S.doc.pages, true); $('aiView').scrollIntoView({ block: 'nearest' }); });
   // Copy a part (its own button), or copy the chosen part and follow the link to the AI site (the link opens by itself).
   $('aiParts').addEventListener('click', async e => {
     const b = e.target.closest('[data-part]'); if (!b) return;
