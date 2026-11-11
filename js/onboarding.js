@@ -171,7 +171,7 @@ function drawAdd(el, api) {
     try { sessionStorage.setItem(FIRST_REVIEW_KEY, deck); } catch { /* fine without */ }
     await leave(api, `#/import/${deck}${tab ? '/' + tab : ''}`);
   };
-  $('wlPaste').addEventListener('click', () => toImport(''));
+  $('wlPaste').addEventListener('click', () => toImport('paste'));
   $('wlFile').addEventListener('click', () => toImport('file'));
   $('wlSample').addEventListener('click', async () => {
     $('wlSample').disabled = true;

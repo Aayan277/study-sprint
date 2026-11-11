@@ -93,7 +93,7 @@ export async function renderImport(el, arg) {
     <button class="back" type="button" id="back">‹ ${decks.some(d => d.id === deckId) ? 'Deck' : 'Decks'}</button>
     <div class="screen-head"><div><h1>Add cards</h1></div></div>
 
-    <section class="section">
+    <section class="section" id="deckSection">
       <label class="field"><span>Add to deck</span>
         <select id="deckSel">
           ${choices.map(d => `<option value="${esc(d.id)}" data-name="${esc(d.label)}" ${d.id === S.deckId ? 'selected' : ''}>${d.id === last ? 'Last used: ' : ''}${esc(d.label)}</option>`).join('')}
@@ -113,14 +113,14 @@ export async function renderImport(el, arg) {
       <textarea id="pasteBox" rows="8" spellcheck="false" aria-label="Paste your cards or notes"
         placeholder="Mitosis - cell division into 2 identical cells&#10;Meiosis - division into 4 gametes"></textarea>
       <div class="pane-actions">
-        <button class="btn ghost small" type="button" id="suggestBtn">Suggest cards</button>
+        <button class="btn primary small" type="button" id="suggestBtn">Suggest cards</button>
         <button class="btn ghost small" type="button" id="claudeBtn">Make cards with Claude</button>
-        <button class="btn ghost small" type="button" id="clearBtn">Clear</button>
+        <button class="btn ghost small push-end" type="button" id="clearBtn">Clear</button>
       </div>
       <p class="note" id="proseNote" hidden>This looks like notes or an article, not cards. <button class="link" type="button" id="proseSuggest">Suggest cards from it</button></p>
       <p class="note sug-status" id="sugStatus" hidden><span id="sugStatusText">Finding cards…</span> <button class="btn ghost small" type="button" id="sugStop">Stop</button></p>
       <p class="note" id="aiNote" hidden>Paste the AI's answer in the box above. The cards get an <b>ai-made</b> tag, so you can find them and check them.</p>
-      <p class="note" id="claudeNote" hidden>Copied a prompt with your notes. Paste it into a chat at <a href="https://claude.ai/new" target="_blank" rel="noopener">claude.ai</a>, then paste Claude's answer back in the box above (replacing your notes).</p>
+      <p class="note" id="claudeNote" hidden>Prompt copied. Paste it into <a href="https://claude.ai/new" target="_blank" rel="noopener">claude.ai</a>, then bring back the answer. <button class="btn primary small" type="button" id="pasteAnsBtn">Paste Claude's answer</button></p>
     </section>
 
     <section class="pane" id="pane-file" role="tabpanel" aria-labelledby="tab-file" hidden>
@@ -149,7 +149,7 @@ export async function renderImport(el, arg) {
         <input id="sheetUrl" type="url" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Google Sheets link">
         <button class="btn primary small" type="submit">Load</button>
       </form>
-      <p class="note">In Google Sheets, tap <b>Share</b> and set it to <b>Anyone with the link</b> (or use File → Share → Publish to web), then paste the link here. Column A becomes the front and column B the back; you can change that below.</p>
+      <p class="note">Share → Anyone with the link, then paste it. A = front, B = back</p>
     </section>
 
     <section class="ai-view" id="aiView" hidden aria-labelledby="aiTitle">
@@ -160,7 +160,7 @@ export async function renderImport(el, arg) {
       <div class="pane-actions" id="aiSites">
         ${AI_SITES.map(a => `<a class="btn ghost small" href="${a.url}" target="_blank" rel="noopener" data-site="${a.id}">Copy and open ${a.name}</a>`).join('')}
       </div>
-      <div class="pane-actions"><button class="btn primary small" type="button" id="aiBack">I have the answer</button></div>
+      <div class="pane-actions"><button class="btn primary small" type="button" id="aiBack">Paste the answer</button></div>
     </section>
 
     <p class="err" id="loadErr" role="alert" hidden></p>
@@ -229,6 +229,7 @@ export async function renderImport(el, arg) {
   wirePreview();
   wireSuggest();
   if (firstTab === 'file') $('tab-file').click();
+  if (firstTab === 'paste') wirePasteOnly(el);
   await loadDeckFronts();
   if (shared) await takeShared();
   else if (firstTab !== 'file' && $('pasteBox')) {
@@ -241,6 +242,16 @@ export async function renderImport(el, arg) {
     else showText(d.text);
     toast(DRAFT_TOAST);
   }
+}
+
+// First run (from the welcome screen): only the paste box shows, with the paste button, until "More ways to add" is pressed.
+// The preview and the save bar still show once there is text.
+function wirePasteOnly(el) {
+  const more = document.createElement('button');
+  more.type = 'button'; more.className = 'link paste-only-more'; more.id = 'moreWays'; more.textContent = 'More ways to add';
+  $('pane-paste').after(more);
+  el.classList.add('paste-only');
+  more.addEventListener('click', () => { el.classList.remove('paste-only'); more.remove(); $('pasteBox').focus(); });
 }
 
 // ---------- choosing the deck ----------
@@ -469,12 +480,42 @@ function wireDoc() {
     if (!e.target.closest('[data-site]')) return;
     markCopied(await copyPart());
   });
-  $('aiBack').addEventListener('click', () => {
+  $('aiBack').addEventListener('click', pasteAnswer);
+  $('pasteAnsBtn').addEventListener('click', pasteAnswer);
+  // One primary button in the paste area: the answer button while the Claude note or the AI view shows, else Suggest cards.
+  const syncPrimary = () => {
+    const answer = !$('claudeNote').hidden || !$('aiView').hidden;
+    $('suggestBtn').classList.toggle('primary', !answer);
+    $('suggestBtn').classList.toggle('ghost', answer);
+  };
+  const mo = new MutationObserver(syncPrimary);
+  for (const id of ['claudeNote', 'aiView']) mo.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  syncPrimary();
+}
+
+// "Paste Claude's answer": reads the clipboard into the box and shows the cards. When the browser can't, or there is nothing
+// there, the person is taken to the box to paste it themselves. (The state S is checked after the wait: the screen may be gone.)
+async function pasteAnswer() {
+  clearTimeout(S.pasteTimer);
+  setSuggest(false);
+  const s = S;
+  let text = '';
+  try { text = (await navigator.clipboard.readText()) || ''; } catch { text = ''; }
+  if (S !== s || !$('pasteBox')?.isConnected) return;
+  if (text.trim()) {
     $('tab-paste').click();
-    $('aiView').hidden = true;
-    $('aiNote').hidden = false;
-    $('pasteBox').focus();
-  });
+    $('pasteBox').value = text;
+    S.blocks = false; S.aiMade = true; S.aiPending = false;
+    $('aiNote').hidden = false; $('aiView').hidden = true; $('claudeNote').hidden = true;
+    saveDraft(text);
+    showText(text);
+    return;
+  }
+  $('tab-paste').click();
+  $('aiView').hidden = true;
+  $('aiNote').hidden = false;
+  $('pasteBox').focus();
+  toast('Paste the answer here');
 }
 
 // The AI view: the material in prompt-sized parts to copy into the person's own chat. It is for a PDF or slides (pages) and for pasted
@@ -490,15 +531,15 @@ function showAiView(pages, fromDoc = aiFromDoc, markAi = true) {
   saveDraft($('pasteBox').value);
   S.part = Math.min(S.part, aiParts.length - 1);
   $('aiHow').textContent = aiParts.length > 1
-    ? `This is a lot of text, so it is in ${aiParts.length} parts. Copy a part, paste it into a chat, and send it. Do the next part in the same chat.`
-    : 'Copy the prompt, paste it into a chat, and send it. Then paste the answer back here.';
+    ? `${aiParts.length} parts: send each in the same chat`
+    : 'Copy, send, paste the answer back';
   $('aiParts').innerHTML = aiParts.map((p, i) => `
     <li><span><b>Part ${i + 1} of ${aiParts.length}</b> <span class="muted">${esc(p.label)}, ${p.text.length.toLocaleString('en')} characters</span></span>
       <button class="btn ghost small" type="button" data-part="${i}">Copy<span class="sr-only"> part ${i + 1} of ${aiParts.length}</span></button></li>`).join('');
   $('aiCur').textContent = curText();
   $('aiView').hidden = false;
 }
-const curText = () => `The buttons below copy Part ${S.part + 1} of ${aiParts.length}, then open the site.`;
+const curText = () => `Buttons copy part ${S.part + 1} of ${aiParts.length}`;
 const copyPart = () => copyText(docPrompt(aiParts[S.part].text, S.part + 1, aiParts.length));
 function markCopied(ok) {
   if (!ok) { toast("Couldn't copy. Your browser blocked it."); return; }
@@ -917,7 +958,7 @@ function refreshFlags() {
   $('soundRow').hidden = !snd.files.length;
   if (!$('soundRow').hidden) {
     $('ankiSounds').checked = S.bringSounds;
-    $('soundInfo').textContent = `About ${sizeText(snd.bytes)}. Kept on this device, synced like pictures and kept in backups.`;
+    $('soundInfo').textContent = `About ${sizeText(snd.bytes)}`;
   }
   if (S.bringSounds && snd.notes) parts.push(`${plural(snd.notes, 'note')} ${snd.notes === 1 ? 'has' : 'have'} sounds, which come along too.`);
   if (!S.bringSounds && snd.files.length) parts.push(`<span class="warn">Sounds are left out (Bring sounds is off).${S.freeNote ? ` ${esc(S.freeNote)}` : ''}</span>`);
